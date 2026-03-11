@@ -7,6 +7,7 @@ import { Instance } from "../../src/project/instance"
 import { Provider } from "../../src/provider/provider"
 import { ProviderTransform } from "../../src/provider/transform"
 import { ModelsDev } from "../../src/provider/models"
+import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
 import type { Agent } from "../../src/agent/agent"
 import type { MessageV2 } from "../../src/session/message-v2"
@@ -185,7 +186,7 @@ function createChatStream(text: string) {
 
 async function loadFixture(providerID: string, modelID: string) {
   const fixturePath = path.join(import.meta.dir, "../tool/fixtures/models-api.json")
-  const data = (await Bun.file(fixturePath).json()) as Record<string, ModelsDev.Provider>
+  const data = await Filesystem.readJson<Record<string, ModelsDev.Provider>>(fixturePath)
   const provider = data[providerID]
   if (!provider) {
     throw new Error(`Missing provider in fixture: ${providerID}`)
@@ -306,7 +307,6 @@ describe("session.llm.stream", () => {
         expect(url.pathname.startsWith("/v1/")).toBe(true)
         expect(url.pathname.endsWith("/chat/completions")).toBe(true)
         expect(headers.get("Authorization")).toBe("Bearer test-key")
-        expect(headers.get("User-Agent") ?? "").toMatch(/^opencode\//)
 
         expect(body.model).toBe(resolved.api.id)
         expect(body.temperature).toBe(0.4)
@@ -314,12 +314,7 @@ describe("session.llm.stream", () => {
         expect(body.stream).toBe(true)
 
         const maxTokens = (body.max_tokens as number | undefined) ?? (body.max_output_tokens as number | undefined)
-        const expectedMaxTokens = ProviderTransform.maxOutputTokens(
-          resolved.api.npm,
-          ProviderTransform.options({ model: resolved, sessionID }),
-          resolved.limit.output,
-          LLM.OUTPUT_TOKEN_MAX,
-        )
+        const expectedMaxTokens = ProviderTransform.maxOutputTokens(resolved)
         expect(maxTokens).toBe(expectedMaxTokens)
 
         const reasoning = (body.reasoningEffort as string | undefined) ?? (body.reasoning_effort as string | undefined)
@@ -442,12 +437,7 @@ describe("session.llm.stream", () => {
         expect((body.reasoning as { effort?: string } | undefined)?.effort).toBe("high")
 
         const maxTokens = body.max_output_tokens as number | undefined
-        const expectedMaxTokens = ProviderTransform.maxOutputTokens(
-          resolved.api.npm,
-          ProviderTransform.options({ model: resolved, sessionID }),
-          resolved.limit.output,
-          LLM.OUTPUT_TOKEN_MAX,
-        )
+        const expectedMaxTokens = ProviderTransform.maxOutputTokens(resolved)
         expect(maxTokens).toBe(expectedMaxTokens)
       },
     })
@@ -565,14 +555,7 @@ describe("session.llm.stream", () => {
 
         expect(capture.url.pathname.endsWith("/messages")).toBe(true)
         expect(body.model).toBe(resolved.api.id)
-        expect(body.max_tokens).toBe(
-          ProviderTransform.maxOutputTokens(
-            resolved.api.npm,
-            ProviderTransform.options({ model: resolved, sessionID }),
-            resolved.limit.output,
-            LLM.OUTPUT_TOKEN_MAX,
-          ),
-        )
+        expect(body.max_tokens).toBe(ProviderTransform.maxOutputTokens(resolved))
         expect(body.temperature).toBe(0.4)
         expect(body.top_p).toBe(0.9)
       },
@@ -677,14 +660,7 @@ describe("session.llm.stream", () => {
         expect(capture.url.pathname).toBe(pathSuffix)
         expect(config?.temperature).toBe(0.3)
         expect(config?.topP).toBe(0.8)
-        expect(config?.maxOutputTokens).toBe(
-          ProviderTransform.maxOutputTokens(
-            resolved.api.npm,
-            ProviderTransform.options({ model: resolved, sessionID }),
-            resolved.limit.output,
-            LLM.OUTPUT_TOKEN_MAX,
-          ),
-        )
+        expect(config?.maxOutputTokens).toBe(ProviderTransform.maxOutputTokens(resolved))
       },
     })
   })

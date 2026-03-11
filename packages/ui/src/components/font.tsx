@@ -26,6 +26,8 @@ import ubuntuMono from "../assets/fonts/ubuntu-mono-nerd-font.woff2"
 import ubuntuMonoBold from "../assets/fonts/ubuntu-mono-nerd-font-bold.woff2"
 import iosevka from "../assets/fonts/iosevka-nerd-font.woff2"
 import iosevkaBold from "../assets/fonts/iosevka-nerd-font-bold.woff2"
+import geistMono from "../assets/fonts/GeistMonoNerdFontMono-Regular.woff2"
+import geistMonoBold from "../assets/fonts/GeistMonoNerdFontMono-Bold.woff2"
 
 type MonoFont = {
   family: string
@@ -88,6 +90,11 @@ export const MONO_NERD_FONTS = [
     family: "Iosevka Nerd Font",
     regular: iosevka,
     bold: iosevkaBold,
+  },
+  {
+    family: "GeistMono Nerd Font",
+    regular: geistMono,
+    bold: geistMonoBold,
   },
 ] satisfies MonoFont[]
 

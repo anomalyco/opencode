@@ -1,0 +1,511 @@
+---
+title: خوادم MCP
+description: أضف أدوات MCP محلية وبعيدة.
+---
+
+يمكنك إضافة أدوات خارجية إلى OpenCode باستخدام _Model Context Protocol_، أو MCP. يدعم OpenCode خوادم محلية وبعيدة.
+
+بعد إضافتها، تصبح أدوات MCP متاحة تلقائيا للـ LLM إلى جانب الأدوات المضمنة.
+
+---
+
+#### تنبيهات
+
+عند استخدام خادم MCP فإنه يضيف إلى السياق. وقد يتراكم ذلك بسرعة إذا كان لديك الكثير من الأدوات. لذلك نوصي بالتحلّي بالحذر عند اختيار خوادم MCP التي تستخدمها.
+
+:::tip
+تضيف خوادم MCP إلى سياقك، لذا احرص على اختيار ما تفعّله منها بعناية.
+:::
+
+تميل بعض خوادم MCP، مثل خادم GitHub MCP، إلى إضافة الكثير من الرموز (tokens) وقد تتجاوز حد السياق بسهولة.
+
+---
+
+## التمكين
+
+يمكنك تعريف خوادم MCP في [إعدادات OpenCode](https://opencode.ai/docs/config/) ضمن `mcp`. أضف كل خادم MCP باسم فريد. ويمكنك الإشارة إلى ذلك الخادم بالاسم عند توجيه الطلب إلى الـ LLM.
+
+```jsonc title="opencode.jsonc" {6}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "name-of-mcp-server": {
+      // ...
+      "enabled": true,
+    },
+    "name-of-other-mcp-server": {
+      // ...
+    },
+  },
+}
+```
+
+يمكنك أيضا تعطيل خادم عبر ضبط `enabled` على `false`. يفيد ذلك إذا أردت تعطيله مؤقتا دون إزالته من إعداداتك.
+
+---
+
+### تجاوز القيم الافتراضية البعيدة
+
+يمكن للمنظمات توفير خوادم MCP الافتراضية عبر نقطة النهاية `.well-known/opencode` الخاصة بها. قد تكون هذه الخوادم معطّلة افتراضيا، مما يتيح للمستخدمين تفعيل ما يحتاجونه فقط.
+
+لتفعيل خادم معيّن من الإعدادات البعيدة الخاصة بمؤسستك، أضفه إلى إعداداتك المحلية مع `enabled: true`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "jira": {
+      "type": "remote",
+      "url": "https://jira.example.com/mcp",
+      "enabled": true
+    }
+  }
+}
+```
+
+تتغلب قيم إعداداتك المحلية على القيم الافتراضية البعيدة. راجع [أولوية الإعدادات](/docs/config#precedence-order) لمزيد من التفاصيل.
+
+---
+
+## محلي
+
+أضف خوادم MCP المحلية عبر ضبط `type` على `"local"` ضمن كائن `mcp`.
+
+```jsonc title="opencode.jsonc" {15}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-local-mcp-server": {
+      "type": "local",
+      // Or ["bun", "x", "my-mcp-command"]
+      "command": ["npx", "-y", "my-mcp-command"],
+      "enabled": true,
+      "environment": {
+        "MY_ENV_VAR": "my_env_var_value",
+      },
+    },
+  },
+}
+```
+
+الأمر `command` هو الطريقة التي يتم بها تشغيل خادم MCP المحلي. ويمكنك أيضا تمرير قائمة بمتغيرات البيئة.
+
+على سبيل المثال، إليك كيفية إضافة خادم MCP التجريبي [`@modelcontextprotocol/server-everything`](https://www.npmjs.com/package/@modelcontextprotocol/server-everything).
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "mcp_everything": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-everything"],
+    },
+  },
+}
+```
+
+ولاستخدامه يمكنني إضافة `use the mcp_everything tool` إلى طلباتي.
+
+```txt "mcp_everything"
+use the mcp_everything tool to add the number 3 and 4
+```
+
+---
+
+#### الخيارات
+
+فيما يلي جميع الخيارات المتاحة لتهيئة خادم MCP محلي.
+
+| الخيار        | النوع   | مطلوب | الوصف                                                                            |
+| ------------- | ------- | ----- | -------------------------------------------------------------------------------- |
+| `type`        | String  | Y     | نوع اتصال خادم MCP، ويجب أن يكون `"local"`.                                      |
+| `command`     | Array   | Y     | الأمر والوسائط اللازمة لتشغيل خادم MCP.                                          |
+| `environment` | Object  |       | متغيرات البيئة التي يتم تعيينها عند تشغيل الخادم.                                |
+| `enabled`     | Boolean |       | تفعيل خادم MCP أو تعطيله عند بدء التشغيل.                                        |
+| `timeout`     | Number  |       | المهلة بالمللي ثانية لجلب الأدوات من خادم MCP. القيمة الافتراضية 5000 (5 ثوانٍ). |
+
+---
+
+## بعيد
+
+أضف خوادم MCP البعيدة عبر ضبط `type` على `"remote"`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-remote-mcp": {
+      "type": "remote",
+      "url": "https://my-mcp-server.com",
+      "enabled": true,
+      "headers": {
+        "Authorization": "Bearer MY_API_KEY"
+      }
+    }
+  }
+}
+```
+
+يمثل `url` عنوان URL لخادم MCP البعيد، وباستخدام خيار `headers` يمكنك تمرير قائمة من الرؤوس (headers).
+
+---
+
+#### الخيارات
+
+| الخيار    | النوع   | مطلوب | الوصف                                                                            |
+| --------- | ------- | ----- | -------------------------------------------------------------------------------- |
+| `type`    | String  | Y     | نوع اتصال خادم MCP، ويجب أن يكون `"remote"`.                                     |
+| `url`     | String  | Y     | عنوان URL لخادم MCP البعيد.                                                      |
+| `enabled` | Boolean |       | تفعيل خادم MCP أو تعطيله عند بدء التشغيل.                                        |
+| `headers` | Object  |       | الرؤوس التي يتم إرسالها مع الطلب.                                                |
+| `oauth`   | Object  |       | إعدادات مصادقة OAuth. راجع قسم [OAuth](#oauth) أدناه.                            |
+| `timeout` | Number  |       | المهلة بالمللي ثانية لجلب الأدوات من خادم MCP. القيمة الافتراضية 5000 (5 ثوانٍ). |
+
+---
+
+## OAuth
+
+يتولى OpenCode تلقائيا معالجة مصادقة OAuth لخوادم MCP البعيدة. عندما يتطلب خادم ما المصادقة، سيقوم OpenCode بما يلي:
+
+1. اكتشاف استجابة 401 وبدء تدفق OAuth
+2. استخدام **Dynamic Client Registration (RFC 7591)** إذا كان الخادم يدعمه
+3. تخزين الرموز (tokens) بشكل آمن للطلبات المستقبلية
+
+---
+
+### تلقائي
+
+بالنسبة لمعظم خوادم MCP التي تدعم OAuth، لا تحتاج إلى إعدادات خاصة. ما عليك سوى تهيئة الخادم البعيد:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-oauth-server": {
+      "type": "remote",
+      "url": "https://mcp.example.com/mcp"
+    }
+  }
+}
+```
+
+إذا كان الخادم يتطلب المصادقة، فسيطلب منك OpenCode المصادقة عند أول محاولة لاستخدامه. وإذا لم يحدث ذلك، يمكنك [تشغيل التدفق يدويا](#authenticating) باستخدام `opencode mcp auth <server-name>`.
+
+---
+
+### مُسجَّل مسبقا
+
+إذا كانت لديك بيانات اعتماد العميل من موفّر خادم MCP، يمكنك تهيئتها:
+
+```json title="opencode.json" {7-11}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-oauth-server": {
+      "type": "remote",
+      "url": "https://mcp.example.com/mcp",
+      "oauth": {
+        "clientId": "{env:MY_MCP_CLIENT_ID}",
+        "clientSecret": "{env:MY_MCP_CLIENT_SECRET}",
+        "scope": "tools:read tools:execute"
+      }
+    }
+  }
+}
+```
+
+---
+
+### المصادقة
+
+يمكنك تشغيل المصادقة يدويا أو إدارة بيانات الاعتماد.
+
+صادِق مع خادم MCP معيّن:
+
+```bash
+opencode mcp auth my-oauth-server
+```
+
+اعرض جميع خوادم MCP وحالة المصادقة الخاصة بها:
+
+```bash
+opencode mcp list
+```
+
+احذف بيانات الاعتماد المخزنة:
+
+```bash
+opencode mcp logout my-oauth-server
+```
+
+سيفتح أمر `mcp auth` متصفحك للتفويض. بعد إكمال التفويض، سيخزّن OpenCode الرموز بشكل آمن في `~/.local/share/opencode/mcp-auth.json`.
+
+---
+
+#### تعطيل OAuth
+
+إذا أردت تعطيل OAuth التلقائي لخادم ما (على سبيل المثال، للخوادم التي تستخدم مفاتيح API بدلا من ذلك)، فاضبط `oauth` على `false`:
+
+```json title="opencode.json" {7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-api-key-server": {
+      "type": "remote",
+      "url": "https://mcp.example.com/mcp",
+      "oauth": false,
+      "headers": {
+        "Authorization": "Bearer {env:MY_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+---
+
+#### خيارات OAuth
+
+| الخيار         | النوع           | الوصف                                                                    |
+| -------------- | --------------- | ------------------------------------------------------------------------ |
+| `oauth`        | Object \| false | كائن إعدادات OAuth، أو `false` لتعطيل الاكتشاف التلقائي لـ OAuth.        |
+| `clientId`     | String          | معرّف عميل OAuth. إذا لم يُحدَّد، ستتم محاولة التسجيل الديناميكي للعميل. |
+| `clientSecret` | String          | سرّ عميل OAuth، إذا كان مطلوبا من خادم التفويض.                          |
+| `scope`        | String          | نطاقات OAuth المطلوبة أثناء التفويض.                                     |
+
+#### تصحيح الأخطاء
+
+إذا فشل خادم MCP بعيد في المصادقة، يمكنك تشخيص المشكلة باستخدام:
+
+```bash
+# عرض حالة المصادقة لجميع الخوادم القادرة على OAuth
+opencode mcp auth list
+
+# تصحيح الاتصال وتدفق OAuth لخادم محدد
+opencode mcp debug my-oauth-server
+```
+
+يعرض أمر `mcp debug` حالة المصادقة الحالية، ويختبر اتصال HTTP، ويحاول تنفيذ تدفق اكتشاف OAuth.
+
+---
+
+## الإدارة
+
+تتوفر خوادم MCP لديك كأدوات داخل OpenCode إلى جانب الأدوات المضمنة. لذا يمكنك إدارتها عبر إعدادات OpenCode مثل أي أداة أخرى.
+
+---
+
+### عام
+
+هذا يعني أنه يمكنك تفعيلها أو تعطيلها على مستوى عام.
+
+```json title="opencode.json" {14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-mcp-foo": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command-foo"]
+    },
+    "my-mcp-bar": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command-bar"]
+    }
+  },
+  "tools": {
+    "my-mcp-foo": false
+  }
+}
+```
+
+يمكننا أيضا استخدام نمط glob لتعطيل جميع خوادم MCP المطابقة.
+
+```json title="opencode.json" {14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-mcp-foo": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command-foo"]
+    },
+    "my-mcp-bar": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command-bar"]
+    }
+  },
+  "tools": {
+    "my-mcp*": false
+  }
+}
+```
+
+هنا نستخدم نمط glob `my-mcp*` لتعطيل جميع خوادم MCP.
+
+---
+
+### لكل وكيل
+
+إذا كان لديك عدد كبير من خوادم MCP فقد ترغب في تفعيلها لكل وكيل على حدة وتعطيلها على المستوى العام. للقيام بذلك:
+
+1. عطّلها كأداة على المستوى العام.
+2. في [إعدادات الوكيل](/docs/agents#tools)، فعّل خادم MCP كأداة.
+
+```json title="opencode.json" {11, 14-18}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-mcp": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command"],
+      "enabled": true
+    }
+  },
+  "tools": {
+    "my-mcp*": false
+  },
+  "agent": {
+    "my-agent": {
+      "tools": {
+        "my-mcp*": true
+      }
+    }
+  }
+}
+```
+
+---
+
+#### أنماط Glob
+
+يستخدم نمط glob أنماطا بسيطة من مطابقة glob:
+
+- `*` يطابق صفرا أو أكثر من أي محرف (على سبيل المثال، `"my-mcp*"` يطابق `my-mcp_search` و`my-mcp_list` وغيرها.)
+- `?` يطابق محرفا واحدا بالضبط
+- جميع المحارف الأخرى تُطابق حرفيا
+
+:::note
+تُسجَّل أدوات خادم MCP مع اسم الخادم كبادئة، لذا لتعطيل جميع أدوات خادم ما استخدم ببساطة:
+
+```
+"mymcpservername_*": false
+```
+
+:::
+
+---
+
+## أمثلة
+
+فيما يلي أمثلة لبعض خوادم MCP الشائعة. يمكنك إرسال PR إذا أردت توثيق خوادم أخرى.
+
+---
+
+### Sentry
+
+أضف [خادم MCP الخاص بـ Sentry](https://mcp.sentry.dev) للتفاعل مع مشاريع Sentry والقضايا (issues) الخاصة بك.
+
+```json title="opencode.json" {4-8}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "sentry": {
+      "type": "remote",
+      "url": "https://mcp.sentry.dev/mcp",
+      "oauth": {}
+    }
+  }
+}
+```
+
+بعد إضافة الإعدادات، قم بالمصادقة مع Sentry:
+
+```bash
+opencode mcp auth sentry
+```
+
+سيؤدي ذلك إلى فتح نافذة متصفح لإكمال تدفق OAuth وربط OpenCode بحساب Sentry الخاص بك.
+
+بعد المصادقة، يمكنك استخدام أدوات Sentry في طلباتك للاستعلام عن القضايا والمشاريع وبيانات الأخطاء.
+
+```txt "use sentry"
+Show me the latest unresolved issues in my project. use sentry
+```
+
+---
+
+### Context7
+
+أضف [خادم MCP الخاص بـ Context7](https://github.com/upstash/context7) للبحث في المستندات.
+
+```json title="opencode.json" {4-7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp"
+    }
+  }
+}
+```
+
+إذا كنت قد سجلت للحصول على حساب مجاني، يمكنك استخدام مفتاح API للحصول على حدود أعلى لمعدل الطلبات.
+
+```json title="opencode.json" {7-9}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp",
+      "headers": {
+        "CONTEXT7_API_KEY": "{env:CONTEXT7_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+هنا نفترض أنك عيّنت متغير البيئة `CONTEXT7_API_KEY`.
+
+أضف `use context7` إلى طلباتك لاستخدام خادم MCP الخاص بـ Context7.
+
+```txt "use context7"
+Configure a Cloudflare Worker script to cache JSON API responses for five minutes. use context7
+```
+
+بدلا من ذلك، يمكنك إضافة شيء مثل هذا إلى [AGENTS.md](/docs/rules/).
+
+```md title="AGENTS.md"
+When you need to search docs, use `context7` tools.
+```
+
+---
+
+### Grep by Vercel
+
+أضف خادم MCP الخاص بـ [Grep by Vercel](https://grep.app) للبحث في مقتطفات الشيفرة على GitHub.
+
+```json title="opencode.json" {4-7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "gh_grep": {
+      "type": "remote",
+      "url": "https://mcp.grep.app"
+    }
+  }
+}
+```
+
+وبما أننا سمّينا خادم MCP الخاص بنا `gh_grep`، يمكنك إضافة `use the gh_grep tool` إلى طلباتك لجعل الوكيل يستخدمه.
+
+```txt "use the gh_grep tool"
+What's the right way to set a custom domain in an SST Astro component? use the gh_grep tool
+```
+
+بدلا من ذلك، يمكنك إضافة شيء مثل هذا إلى [AGENTS.md](/docs/rules/).
+
+```md title="AGENTS.md"
+If you are unsure how to do something, use `gh_grep` to search code examples from GitHub.
+```

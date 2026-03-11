@@ -1,8 +1,10 @@
 import { getFilename } from "@opencode-ai/util/path"
 import { type AgentPartInput, type FilePartInput, type Part, type TextPartInput } from "@opencode-ai/sdk/v2/client"
 import type { FileSelection } from "@/context/file"
+import { encodeFilePath } from "@/context/file/path"
 import type { AgentPart, FileAttachmentPart, ImageAttachmentPart, Prompt } from "@/context/prompt"
 import { Identifier } from "@/utils/id"
+import { createCommentMetadata, formatCommentNote } from "@/utils/comment-note"
 
 type PromptRequestPart = (TextPartInput | FilePartInput | AgentPartInput) & { id: string }
 
@@ -27,32 +29,18 @@ type BuildRequestPartsInput = {
   sessionDirectory: string
 }
 
-const absolute = (directory: string, path: string) =>
-  path.startsWith("/") ? path : (directory + "/" + path).replace("//", "/")
-
-const encodeFilePath = (filepath: string): string =>
-  filepath
-    .split("/")
-    .map((segment) => encodeURIComponent(segment))
-    .join("/")
+const absolute = (directory: string, path: string) => {
+  if (path.startsWith("/")) return path
+  if (/^[A-Za-z]:[\\/]/.test(path) || /^[A-Za-z]:$/.test(path)) return path
+  if (path.startsWith("\\\\") || path.startsWith("//")) return path
+  return `${directory.replace(/[\\/]+$/, "")}/${path}`
+}
 
 const fileQuery = (selection: FileSelection | undefined) =>
   selection ? `?start=${selection.startLine}&end=${selection.endLine}` : ""
 
 const isFileAttachment = (part: Prompt[number]): part is FileAttachmentPart => part.type === "file"
 const isAgentAttachment = (part: Prompt[number]): part is AgentPart => part.type === "agent"
-
-const commentNote = (path: string, selection: FileSelection | undefined, comment: string) => {
-  const start = selection ? Math.min(selection.startLine, selection.endLine) : undefined
-  const end = selection ? Math.max(selection.startLine, selection.endLine) : undefined
-  const range =
-    start === undefined || end === undefined
-      ? "this file"
-      : start === end
-        ? `line ${start}`
-        : `lines ${start} through ${end}`
-  return `The user made the following comment regarding ${range} of ${path}: ${comment}`
-}
 
 const toOptimisticPart = (part: PromptRequestPart, sessionID: string, messageID: string): Part => {
   if (part.type === "text") {
@@ -154,8 +142,15 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
       {
         id: Identifier.ascending("part"),
         type: "text",
-        text: commentNote(item.path, item.selection, comment),
+        text: formatCommentNote({ path: item.path, selection: item.selection, comment }),
         synthetic: true,
+        metadata: createCommentMetadata({
+          path: item.path,
+          selection: item.selection,
+          comment,
+          preview: item.preview,
+          origin: item.commentOrigin,
+        }),
       } satisfies PromptRequestPart,
       filePart,
     ]

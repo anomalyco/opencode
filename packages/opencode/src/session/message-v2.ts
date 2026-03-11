@@ -6,16 +6,30 @@ import { Identifier } from "../id/id"
 import { LSP } from "../lsp"
 import { Snapshot } from "@/snapshot"
 import { fn } from "@/util/fn"
-import { Storage } from "@/storage/storage"
+import { Database, eq, desc, inArray } from "@/storage/db"
+import { MessageTable, PartTable } from "./session.sql"
 import { ProviderTransform } from "@/provider/transform"
 import { STATUS_CODES } from "http"
+import { Storage } from "@/storage/storage"
+import { ProviderError } from "@/provider/error"
 import { iife } from "@/util/iife"
 import { type SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
 
 export namespace MessageV2 {
+  export function isMedia(mime: string) {
+    return mime.startsWith("image/") || mime === "application/pdf"
+  }
+
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
   export const AbortedError = NamedError.create("MessageAbortedError", z.object({ message: z.string() }))
+  export const StructuredOutputError = NamedError.create(
+    "StructuredOutputError",
+    z.object({
+      message: z.string(),
+      retries: z.number(),
+    }),
+  )
   export const AuthError = NamedError.create(
     "ProviderAuthError",
     z.object({
@@ -35,6 +49,33 @@ export namespace MessageV2 {
     }),
   )
   export type APIError = z.infer<typeof APIError.Schema>
+  export const ContextOverflowError = NamedError.create(
+    "ContextOverflowError",
+    z.object({ message: z.string(), responseBody: z.string().optional() }),
+  )
+
+  export const OutputFormatText = z
+    .object({
+      type: z.literal("text"),
+    })
+    .meta({
+      ref: "OutputFormatText",
+    })
+
+  export const OutputFormatJsonSchema = z
+    .object({
+      type: z.literal("json_schema"),
+      schema: z.record(z.string(), z.any()).meta({ ref: "JSONSchema" }),
+      retryCount: z.number().int().min(0).default(2),
+    })
+    .meta({
+      ref: "OutputFormatJsonSchema",
+    })
+
+  export const Format = z.discriminatedUnion("type", [OutputFormatText, OutputFormatJsonSchema]).meta({
+    ref: "OutputFormat",
+  })
+  export type OutputFormat = z.infer<typeof Format>
 
   const PartBase = z.object({
     id: z.string(),
@@ -159,6 +200,7 @@ export namespace MessageV2 {
   export const CompactionPart = PartBase.extend({
     type: z.literal("compaction"),
     auto: z.boolean(),
+    overflow: z.boolean().optional(),
   }).meta({
     ref: "CompactionPart",
   })
@@ -207,6 +249,7 @@ export namespace MessageV2 {
     snapshot: z.string().optional(),
     cost: z.number(),
     tokens: z.object({
+      total: z.number().optional(),
       input: z.number(),
       output: z.number(),
       reasoning: z.number(),
@@ -309,6 +352,7 @@ export namespace MessageV2 {
     time: z.object({
       created: z.number(),
     }),
+    format: Format.optional(),
     summary: z
       .object({
         title: z.string().optional(),
@@ -361,6 +405,8 @@ export namespace MessageV2 {
         NamedError.Unknown.Schema,
         OutputLengthError.Schema,
         AbortedError.Schema,
+        StructuredOutputError.Schema,
+        ContextOverflowError.Schema,
         APIError.Schema,
       ])
       .optional(),
@@ -379,6 +425,7 @@ export namespace MessageV2 {
     summary: z.boolean().optional(),
     cost: z.number(),
     tokens: z.object({
+      total: z.number().optional(),
       input: z.number(),
       output: z.number(),
       reasoning: z.number(),
@@ -387,6 +434,7 @@ export namespace MessageV2 {
         write: z.number(),
       }),
     }),
+    structured: z.any().optional(),
     variant: z.string().optional(),
     finish: z.string().optional(),
   }).meta({
@@ -417,7 +465,16 @@ export namespace MessageV2 {
       "message.part.updated",
       z.object({
         part: Part,
-        delta: z.string().optional(),
+      }),
+    ),
+    PartDelta: BusEvent.define(
+      "message.part.delta",
+      z.object({
+        sessionID: z.string(),
+        messageID: z.string(),
+        partID: z.string(),
+        field: z.string(),
+        delta: z.string(),
       }),
     ),
     PartRemoved: BusEvent.define(
@@ -436,7 +493,11 @@ export namespace MessageV2 {
   })
   export type WithParts = z.infer<typeof WithParts>
 
-  export function toModelMessages(input: WithParts[], model: Provider.Model): ModelMessage[] {
+  export function toModelMessages(
+    input: WithParts[],
+    model: Provider.Model,
+    options?: { stripMedia?: boolean },
+  ): ModelMessage[] {
     const result: UIMessage[] = []
     const toolNames = new Set<string>()
     // Track media from tool results that need to be injected as user messages
@@ -510,13 +571,21 @@ export namespace MessageV2 {
               text: part.text,
             })
           // text/plain and directory files are converted into text parts, ignore them
-          if (part.type === "file" && part.mime !== "text/plain" && part.mime !== "application/x-directory")
-            userMessage.parts.push({
-              type: "file",
-              url: part.url,
-              mediaType: part.mime,
-              filename: part.filename,
-            })
+          if (part.type === "file" && part.mime !== "text/plain" && part.mime !== "application/x-directory") {
+            if (options?.stripMedia && isMedia(part.mime)) {
+              userMessage.parts.push({
+                type: "text",
+                text: `[Attached ${part.mime}: ${part.filename ?? "file"}]`,
+              })
+            } else {
+              userMessage.parts.push({
+                type: "file",
+                url: part.url,
+                mediaType: part.mime,
+                filename: part.filename,
+              })
+            }
+          }
 
           if (part.type === "compaction") {
             userMessage.parts.push({
@@ -566,14 +635,12 @@ export namespace MessageV2 {
             toolNames.add(part.tool)
             if (part.state.status === "completed") {
               const outputText = part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output
-              const attachments = part.state.time.compacted ? [] : (part.state.attachments ?? [])
+              const attachments = part.state.time.compacted || options?.stripMedia ? [] : (part.state.attachments ?? [])
 
               // For providers that don't support media in tool results, extract media files
               // (images, PDFs) to be sent as a separate user message
-              const isMediaAttachment = (a: { mime: string }) =>
-                a.mime.startsWith("image/") || a.mime === "application/pdf"
-              const mediaAttachments = attachments.filter(isMediaAttachment)
-              const nonMediaAttachments = attachments.filter((a) => !isMediaAttachment(a))
+              const mediaAttachments = attachments.filter((a) => isMedia(a.mime))
+              const nonMediaAttachments = attachments.filter((a) => !isMedia(a.mime))
               if (!supportsMediaInToolResults && mediaAttachments.length > 0) {
                 media.push(...mediaAttachments)
               }
@@ -662,23 +729,65 @@ export namespace MessageV2 {
   }
 
   export const stream = fn(Identifier.schema("session"), async function* (sessionID) {
-    const list = await Array.fromAsync(await Storage.list(["message", sessionID]))
-    for (let i = list.length - 1; i >= 0; i--) {
-      yield await get({
-        sessionID,
-        messageID: list[i][2],
-      })
+    const size = 50
+    let offset = 0
+    while (true) {
+      const rows = Database.use((db) =>
+        db
+          .select()
+          .from(MessageTable)
+          .where(eq(MessageTable.session_id, sessionID))
+          .orderBy(desc(MessageTable.time_created))
+          .limit(size)
+          .offset(offset)
+          .all(),
+      )
+      if (rows.length === 0) break
+
+      const ids = rows.map((row) => row.id)
+      const partsByMessage = new Map<string, MessageV2.Part[]>()
+      if (ids.length > 0) {
+        const partRows = Database.use((db) =>
+          db
+            .select()
+            .from(PartTable)
+            .where(inArray(PartTable.message_id, ids))
+            .orderBy(PartTable.message_id, PartTable.id)
+            .all(),
+        )
+        for (const row of partRows) {
+          const part = {
+            ...row.data,
+            id: row.id,
+            sessionID: row.session_id,
+            messageID: row.message_id,
+          } as MessageV2.Part
+          const list = partsByMessage.get(row.message_id)
+          if (list) list.push(part)
+          else partsByMessage.set(row.message_id, [part])
+        }
+      }
+
+      for (const row of rows) {
+        const info = { ...row.data, id: row.id, sessionID: row.session_id } as MessageV2.Info
+        yield {
+          info,
+          parts: partsByMessage.get(row.id) ?? [],
+        }
+      }
+
+      offset += rows.length
+      if (rows.length < size) break
     }
   })
 
-  export const parts = fn(Identifier.schema("message"), async (messageID) => {
-    const result = [] as MessageV2.Part[]
-    for (const item of await Storage.list(["part", messageID])) {
-      const read = await Storage.read<MessageV2.Part>(item)
-      result.push(read)
-    }
-    result.sort((a, b) => (a.id > b.id ? 1 : -1))
-    return result
+  export const parts = fn(Identifier.schema("message"), async (message_id) => {
+    const rows = Database.use((db) =>
+      db.select().from(PartTable).where(eq(PartTable.message_id, message_id)).orderBy(PartTable.id).all(),
+    )
+    return rows.map(
+      (row) => ({ ...row.data, id: row.id, sessionID: row.session_id, messageID: row.message_id }) as MessageV2.Part,
+    )
   })
 
   export const get = fn(
@@ -687,8 +796,11 @@ export namespace MessageV2 {
       messageID: Identifier.schema("message"),
     }),
     async (input): Promise<WithParts> => {
+      const row = Database.use((db) => db.select().from(MessageTable).where(eq(MessageTable.id, input.messageID)).get())
+      if (!row) throw new Error(`Message not found: ${input.messageID}`)
+      const info = { ...row.data, id: row.id, sessionID: row.session_id } as MessageV2.Info
       return {
-        info: await Storage.read<MessageV2.Info>(["message", input.sessionID, input.messageID]),
+        info,
         parts: await parts(input.messageID),
       }
     },
@@ -705,17 +817,11 @@ export namespace MessageV2 {
         msg.parts.some((part) => part.type === "compaction")
       )
         break
-      if (msg.info.role === "assistant" && msg.info.summary && msg.info.finish) completed.add(msg.info.parentID)
+      if (msg.info.role === "assistant" && msg.info.summary && msg.info.finish && !msg.info.error)
+        completed.add(msg.info.parentID)
     }
     result.reverse()
     return result
-  }
-
-  const isOpenAiErrorRetryable = (e: APICallError) => {
-    const status = e.statusCode
-    if (!status) return e.isRetryable
-    // openai sometimes returns 404 for models that are actually available
-    return status === 404 || e.isRetryable
   }
 
   export function fromError(e: unknown, ctx: { providerID: string }) {
@@ -751,52 +857,59 @@ export namespace MessageV2 {
           { cause: e },
         ).toObject()
       case APICallError.isInstance(e):
-        const message = iife(() => {
-          let msg = e.message
-          if (msg === "") {
-            if (e.responseBody) return e.responseBody
-            if (e.statusCode) {
-              const err = STATUS_CODES[e.statusCode]
-              if (err) return err
-            }
-            return "Unknown error"
-          }
-          const transformed = ProviderTransform.error(ctx.providerID, e)
-          if (transformed !== msg) {
-            return transformed
-          }
-          if (!e.responseBody || (e.statusCode && msg !== STATUS_CODES[e.statusCode])) {
-            return msg
-          }
+        const parsed = ProviderError.parseAPICallError({
+          providerID: ctx.providerID,
+          error: e,
+        })
+        if (parsed.type === "context_overflow") {
+          return new MessageV2.ContextOverflowError(
+            {
+              message: parsed.message,
+              responseBody: parsed.responseBody,
+            },
+            { cause: e },
+          ).toObject()
+        }
 
-          try {
-            const body = JSON.parse(e.responseBody)
-            // try to extract common error message fields
-            const errMsg = body.message || body.error || body.error?.message
-            if (errMsg && typeof errMsg === "string") {
-              return `${msg}: ${errMsg}`
-            }
-          } catch {}
-
-          return `${msg}: ${e.responseBody}`
-        }).trim()
-
-        const metadata = e.url ? { url: e.url } : undefined
         return new MessageV2.APIError(
           {
-            message,
-            statusCode: e.statusCode,
-            isRetryable: ctx.providerID.startsWith("openai") ? isOpenAiErrorRetryable(e) : e.isRetryable,
-            responseHeaders: e.responseHeaders,
-            responseBody: e.responseBody,
-            metadata,
+            message: parsed.message,
+            statusCode: parsed.statusCode,
+            isRetryable: parsed.isRetryable,
+            responseHeaders: parsed.responseHeaders,
+            responseBody: parsed.responseBody,
+            metadata: parsed.metadata,
           },
           { cause: e },
         ).toObject()
       case e instanceof Error:
         return new NamedError.Unknown({ message: e.toString() }, { cause: e }).toObject()
       default:
-        return new NamedError.Unknown({ message: JSON.stringify(e) }, { cause: e })
+        try {
+          const parsed = ProviderError.parseStreamError(e)
+          if (parsed) {
+            if (parsed.type === "context_overflow") {
+              return new MessageV2.ContextOverflowError(
+                {
+                  message: parsed.message,
+                  responseBody: parsed.responseBody,
+                },
+                { cause: e },
+              ).toObject()
+            }
+            return new MessageV2.APIError(
+              {
+                message: parsed.message,
+                isRetryable: parsed.isRetryable,
+                responseBody: parsed.responseBody,
+              },
+              {
+                cause: e,
+              },
+            ).toObject()
+          }
+        } catch {}
+        return new NamedError.Unknown({ message: JSON.stringify(e) }, { cause: e }).toObject()
     }
   }
 }

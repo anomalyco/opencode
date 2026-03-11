@@ -1,25 +1,30 @@
-import {
-  type Config,
-  type Path,
-  type PermissionRequest,
-  type Project,
-  type ProviderAuthResponse,
-  type ProviderListResponse,
-  type QuestionRequest,
-  createOpencodeClient,
+import type {
+  Config,
+  OpencodeClient,
+  Path,
+  PermissionRequest,
+  Project,
+  ProviderAuthResponse,
+  ProviderListResponse,
+  QuestionRequest,
+  Todo,
 } from "@opencode-ai/sdk/v2/client"
+import { showToast } from "@opencode-ai/ui/toast"
+import { getFilename } from "@opencode-ai/util/path"
+import { retry } from "@opencode-ai/util/retry"
 import { batch } from "solid-js"
 import { reconcile, type SetStoreFunction, type Store } from "solid-js/store"
-import { retry } from "@opencode-ai/util/retry"
-import { getFilename } from "@opencode-ai/util/path"
-import { showToast } from "@opencode-ai/ui/toast"
-import { cmp, normalizeProviderList } from "./utils"
 import type { State, VcsCache } from "./types"
+import { cmp, normalizeProviderList } from "./utils"
+import { formatServerError } from "@/utils/server-errors"
 
 type GlobalStore = {
   ready: boolean
   path: Path
   project: Project[]
+  session_todo: {
+    [sessionID: string]: Todo[]
+  }
   provider: ProviderListResponse
   provider_auth: ProviderAuthResponse
   config: Config
@@ -27,10 +32,12 @@ type GlobalStore = {
 }
 
 export async function bootstrapGlobal(input: {
-  globalSDK: ReturnType<typeof createOpencodeClient>
+  globalSDK: OpencodeClient
   connectErrorTitle: string
   connectErrorDescription: string
   requestFailedTitle: string
+  translate: (key: string, vars?: Record<string, string | number>) => string
+  formatMoreCount: (count: number) => string
   setGlobalStore: SetStoreFunction<GlobalStore>
 }) {
   const health = await input.globalSDK.global
@@ -83,8 +90,8 @@ export async function bootstrapGlobal(input: {
   const results = await Promise.allSettled(tasks)
   const errors = results.filter((r): r is PromiseRejectedResult => r.status === "rejected").map((r) => r.reason)
   if (errors.length) {
-    const message = errors[0] instanceof Error ? errors[0].message : String(errors[0])
-    const more = errors.length > 1 ? ` (+${errors.length - 1} more)` : ""
+    const message = formatServerError(errors[0], input.translate)
+    const more = errors.length > 1 ? input.formatMoreCount(errors.length - 1) : ""
     showToast({
       variant: "error",
       title: input.requestFailedTitle,
@@ -106,13 +113,14 @@ function groupBySession<T extends { id: string; sessionID: string }>(input: T[])
 
 export async function bootstrapDirectory(input: {
   directory: string
-  sdk: ReturnType<typeof createOpencodeClient>
+  sdk: OpencodeClient
   store: Store<State>
   setStore: SetStoreFunction<State>
   vcsCache: VcsCache
   loadSessions: (directory: string) => Promise<void> | void
+  translate: (key: string, vars?: Record<string, string | number>) => string
 }) {
-  input.setStore("status", "loading")
+  if (input.store.status !== "complete") input.setStore("status", "loading")
 
   const blockingRequests = {
     project: () => input.sdk.project.current().then((x) => input.setStore("project", x.data!.id)),
@@ -129,8 +137,11 @@ export async function bootstrapDirectory(input: {
   } catch (err) {
     console.error("Failed to bootstrap instance", err)
     const project = getFilename(input.directory)
-    const message = err instanceof Error ? err.message : String(err)
-    showToast({ title: `Failed to reload ${project}`, description: message })
+    showToast({
+      variant: "error",
+      title: `Failed to reload ${project}`,
+      description: formatServerError(err, input.translate),
+    })
     input.setStore("status", "partial")
     return
   }

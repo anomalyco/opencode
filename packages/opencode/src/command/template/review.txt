@@ -57,6 +57,8 @@ Use best judgement when processing input.
 **Performance** - Only flag if obviously problematic.
 - O(n²) on unbounded data, N+1 queries, blocking I/O on hot paths
 
+**Behavior Changes** - If a behavioral change is introduced, raise it (especially if it's possibly unintentional).
+
 ---
 
 ## Before You Flag Something

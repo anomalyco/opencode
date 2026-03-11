@@ -86,9 +86,9 @@
     background-color: var(--surface-hover);
   }
 
-  &:focus-within:not([data-readonly]) [data-slot="switch-control"] {
+  &:not([data-readonly]) [data-slot="switch-input"]:focus-visible ~ [data-slot="switch-control"] {
     border-color: var(--border-focus);
-    box-shadow: 0 0 0 2px var(--surface-focus);
+    box-shadow: var(--shadow-xs-border-focus);
   }
 
   &[data-checked] [data-slot="switch-control"] {

@@ -81,35 +81,52 @@ export function decodeFilePath(input: string) {
 }
 
 export function encodeFilePath(filepath: string): string {
-  return filepath
+  // Normalize Windows paths: convert backslashes to forward slashes
+  let normalized = filepath.replace(/\\/g, "/")
+
+  // Handle Windows absolute paths (D:/path -> /D:/path for proper file:// URLs)
+  if (/^[A-Za-z]:/.test(normalized)) {
+    normalized = "/" + normalized
+  }
+
+  // Encode each path segment (preserving forward slashes as path separators)
+  // Keep the colon in Windows drive letters (`/C:/...`) so downstream file URL parsers
+  // can reliably detect drives.
+  return normalized
     .split("/")
-    .map((segment) => encodeURIComponent(segment))
+    .map((segment, index) => {
+      if (index === 1 && /^[A-Za-z]:$/.test(segment)) return segment
+      return encodeURIComponent(segment)
+    })
     .join("/")
 }
 
 export function createPathHelpers(scope: () => string) {
   const normalize = (input: string) => {
     const root = scope()
-    const prefix = root.endsWith("/") ? root : root + "/"
 
     let path = unquoteGitPath(decodeFilePath(stripQueryAndHash(stripFileProtocol(input))))
 
-    if (path.startsWith(prefix)) {
-      path = path.slice(prefix.length)
-    }
-
-    if (path.startsWith(root)) {
+    // Separator-agnostic prefix stripping for Cygwin/native Windows compatibility
+    // Only case-insensitive on Windows (drive letter or UNC paths)
+    const windows = /^[A-Za-z]:/.test(root) || root.startsWith("\\\\")
+    const canonRoot = windows ? root.replace(/\\/g, "/").toLowerCase() : root.replace(/\\/g, "/")
+    const canonPath = windows ? path.replace(/\\/g, "/").toLowerCase() : path.replace(/\\/g, "/")
+    if (
+      canonPath.startsWith(canonRoot) &&
+      (canonRoot.endsWith("/") || canonPath === canonRoot || canonPath[canonRoot.length] === "/")
+    ) {
+      // Slice from original path to preserve native separators
       path = path.slice(root.length)
     }
 
-    if (path.startsWith("./")) {
+    if (path.startsWith("./") || path.startsWith(".\\")) {
       path = path.slice(2)
     }
 
-    if (path.startsWith("/")) {
+    if (path.startsWith("/") || path.startsWith("\\")) {
       path = path.slice(1)
     }
-
     return path
   }
 
