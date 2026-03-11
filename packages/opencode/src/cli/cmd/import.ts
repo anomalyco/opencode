@@ -86,7 +86,7 @@ export const ImportCommand = cmd({
     await bootstrap(process.cwd(), async () => {
       let exportData:
         | {
-            info: Session.Info
+            info: SDKSession
             messages: Array<{
               info: Message
               parts: Part[]
@@ -152,7 +152,7 @@ export const ImportCommand = cmd({
         return
       }
 
-      const row = { ...Session.toRow(exportData.info), project_id: Instance.project.id }
+      const row = Session.toRow({ ...exportData.info, projectID: Instance.project.id })
       Database.use((db) =>
         db
           .insert(SessionTable)
