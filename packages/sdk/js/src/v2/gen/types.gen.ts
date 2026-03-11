@@ -3321,9 +3321,6 @@ export type SessionDeleteMessageData = {
   body?: never
   path: {
     sessionID: string
-    /**
-     * Message ID
-     */
     messageID: string
   }
   query?: {
@@ -3359,9 +3356,6 @@ export type SessionMessageData = {
   body?: never
   path: {
     sessionID: string
-    /**
-     * Message ID
-     */
     messageID: string
   }
   query?: {
@@ -3400,13 +3394,7 @@ export type PartDeleteData = {
   body?: never
   path: {
     sessionID: string
-    /**
-     * Message ID
-     */
     messageID: string
-    /**
-     * Part ID
-     */
     partID: string
   }
   query?: {
@@ -3442,13 +3430,7 @@ export type PartUpdateData = {
   body?: Part
   path: {
     sessionID: string
-    /**
-     * Message ID
-     */
     messageID: string
-    /**
-     * Part ID
-     */
     partID: string
   }
   query?: {
