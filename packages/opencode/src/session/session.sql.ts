@@ -3,6 +3,7 @@ import { ProjectTable } from "../project/project.sql"
 import type { MessageV2 } from "./message-v2"
 import type { Snapshot } from "../snapshot"
 import type { PermissionNext } from "../permission/next"
+import type { ProjectID } from "../project/schema"
 import { Timestamps } from "../storage/schema.sql"
 
 type PartData = Omit<MessageV2.Part, "id" | "sessionID" | "messageID">
@@ -13,6 +14,7 @@ export const SessionTable = sqliteTable(
   {
     id: text().primaryKey(),
     project_id: text()
+      .$type<ProjectID>()
       .notNull()
       .references(() => ProjectTable.id, { onDelete: "cascade" }),
     workspace_id: text(),

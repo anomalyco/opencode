@@ -1,5 +1,6 @@
 import z from "zod"
 import { Identifier } from "@/id/id"
+import { ProjectID } from "@/project/schema"
 
 export const WorkspaceInfo = z.object({
   id: Identifier.schema("workspace"),
@@ -8,7 +9,7 @@ export const WorkspaceInfo = z.object({
   name: z.string().nullable(),
   directory: z.string().nullable(),
   extra: z.unknown().nullable(),
-  projectID: z.string(),
+  projectID: ProjectID.zod,
 })
 export type WorkspaceInfo = z.infer<typeof WorkspaceInfo>
 
