@@ -22,7 +22,9 @@ import { ModelsDev } from "../../provider/models"
 import { Instance } from "@/project/instance"
 import { bootstrap } from "../bootstrap"
 import { Session } from "../../session"
+import type { SessionID } from "../../session/schema"
 import { Identifier } from "../../id/id"
+import { MessageID } from "../../session/schema"
 import { Provider } from "../../provider/provider"
 import { Bus } from "../../bus"
 import { MessageV2 } from "../../session/message-v2"
@@ -481,7 +483,7 @@ export const GithubRunCommand = cmd({
       let octoRest: Octokit
       let octoGraph: typeof graphql
       let gitConfig: string
-      let session: { id: string; title: string; version: string }
+      let session: { id: SessionID; title: string; version: string }
       let shareId: string | undefined
       let exitCode = 0
       type PromptFiles = Awaited<ReturnType<typeof getUserPrompt>>["promptFiles"]
@@ -934,7 +936,7 @@ export const GithubRunCommand = cmd({
 
         const result = await SessionPrompt.prompt({
           sessionID: session.id,
-          messageID: Identifier.ascending("message"),
+          messageID: MessageID.ascending(),
           variant,
           model: {
             providerID,
@@ -988,7 +990,7 @@ export const GithubRunCommand = cmd({
         console.log("Requesting summary from agent...")
         const summary = await SessionPrompt.prompt({
           sessionID: session.id,
-          messageID: Identifier.ascending("message"),
+          messageID: MessageID.ascending(),
           variant,
           model: {
             providerID,

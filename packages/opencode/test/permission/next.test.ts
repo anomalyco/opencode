@@ -3,6 +3,7 @@ import os from "os"
 import { PermissionNext } from "../../src/permission/next"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
+import { SessionID } from "../../src/session/schema"
 
 // fromConfig tests
 
@@ -462,7 +463,7 @@ test("ask - resolves immediately when action is allow", async () => {
     directory: tmp.path,
     fn: async () => {
       const result = await PermissionNext.ask({
-        sessionID: "session_test",
+        sessionID: SessionID.make("session_test"),
         permission: "bash",
         patterns: ["ls"],
         metadata: {},
@@ -481,7 +482,7 @@ test("ask - throws RejectedError when action is deny", async () => {
     fn: async () => {
       await expect(
         PermissionNext.ask({
-          sessionID: "session_test",
+          sessionID: SessionID.make("session_test"),
           permission: "bash",
           patterns: ["rm -rf /"],
           metadata: {},
@@ -499,7 +500,7 @@ test("ask - returns pending promise when action is ask", async () => {
     directory: tmp.path,
     fn: async () => {
       const promise = PermissionNext.ask({
-        sessionID: "session_test",
+        sessionID: SessionID.make("session_test"),
         permission: "bash",
         patterns: ["ls"],
         metadata: {},
@@ -522,7 +523,7 @@ test("reply - once resolves the pending ask", async () => {
     fn: async () => {
       const askPromise = PermissionNext.ask({
         id: "permission_test1",
-        sessionID: "session_test",
+        sessionID: SessionID.make("session_test"),
         permission: "bash",
         patterns: ["ls"],
         metadata: {},
@@ -547,7 +548,7 @@ test("reply - reject throws RejectedError", async () => {
     fn: async () => {
       const askPromise = PermissionNext.ask({
         id: "permission_test2",
-        sessionID: "session_test",
+        sessionID: SessionID.make("session_test"),
         permission: "bash",
         patterns: ["ls"],
         metadata: {},
@@ -572,7 +573,7 @@ test("reply - always persists approval and resolves", async () => {
     fn: async () => {
       const askPromise = PermissionNext.ask({
         id: "permission_test3",
-        sessionID: "session_test",
+        sessionID: SessionID.make("session_test"),
         permission: "bash",
         patterns: ["ls"],
         metadata: {},
@@ -594,7 +595,7 @@ test("reply - always persists approval and resolves", async () => {
     fn: async () => {
       // Stored approval should allow without asking
       const result = await PermissionNext.ask({
-        sessionID: "session_test2",
+        sessionID: SessionID.make("session_test2"),
         permission: "bash",
         patterns: ["ls"],
         metadata: {},
@@ -613,7 +614,7 @@ test("reply - reject cancels all pending for same session", async () => {
     fn: async () => {
       const askPromise1 = PermissionNext.ask({
         id: "permission_test4a",
-        sessionID: "session_same",
+        sessionID: SessionID.make("session_same"),
         permission: "bash",
         patterns: ["ls"],
         metadata: {},
@@ -623,7 +624,7 @@ test("reply - reject cancels all pending for same session", async () => {
 
       const askPromise2 = PermissionNext.ask({
         id: "permission_test4b",
-        sessionID: "session_same",
+        sessionID: SessionID.make("session_same"),
         permission: "edit",
         patterns: ["foo.ts"],
         metadata: {},
@@ -655,7 +656,7 @@ test("ask - checks all patterns and stops on first deny", async () => {
     fn: async () => {
       await expect(
         PermissionNext.ask({
-          sessionID: "session_test",
+          sessionID: SessionID.make("session_test"),
           permission: "bash",
           patterns: ["echo hello", "rm -rf /"],
           metadata: {},
@@ -676,7 +677,7 @@ test("ask - allows all patterns when all match allow rules", async () => {
     directory: tmp.path,
     fn: async () => {
       const result = await PermissionNext.ask({
-        sessionID: "session_test",
+        sessionID: SessionID.make("session_test"),
         permission: "bash",
         patterns: ["echo hello", "ls -la", "pwd"],
         metadata: {},
