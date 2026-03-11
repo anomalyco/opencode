@@ -364,8 +364,8 @@ export function DialogSelectServer() {
       http: { url: normalized },
     }
     if (store.addServer.name.trim()) conn.displayName = store.addServer.name.trim()
-    if (store.addServer.username) conn.http.username = store.addServer.username
     if (store.addServer.password) conn.http.password = store.addServer.password
+    if (store.addServer.password && store.addServer.username) conn.http.username = store.addServer.username
     const result = await checkServerHealth(conn.http, fetcher)
     setStore("addServer", { adding: false })
     if (!result.healthy) {
