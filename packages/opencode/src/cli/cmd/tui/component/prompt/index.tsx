@@ -97,6 +97,29 @@ export function Prompt(props: PromptProps) {
   const pasteStyleId = syntax().getStyleId("extmark.paste")!
   let promptPartTypeId = 0
 
+  // Converts a visual column offset into a JavaScript string index so extmark
+  // ranges tracked in terminal display cells can be used safely with slice().
+  function toIndex(text: string, col: number) {
+    if (col <= 0) return 0
+    let width = 0
+    let idx = 0
+
+    for (const ch of text) {
+      if (width >= col) return idx
+      width += Bun.stringWidth(ch)
+      idx += ch.length
+      if (width >= col) return idx
+    }
+
+    return text.length
+  }
+
+  function replace(text: string, start: number, end: number, value: string) {
+    const from = toIndex(text, start)
+    const to = toIndex(text, end)
+    return text.slice(0, from) + value + text.slice(to)
+  }
+
   sdk.event.on(TuiEvent.PromptAppend.type, (evt) => {
     if (!input || input.isDestroyed) return
     input.insertText(evt.properties.text)
@@ -573,9 +596,7 @@ export function Prompt(props: PromptProps) {
       if (partIndex !== undefined) {
         const part = store.prompt.parts[partIndex]
         if (part?.type === "text" && part.text) {
-          const before = inputText.slice(0, extmark.start)
-          const after = inputText.slice(extmark.end)
-          inputText = before + part.text + after
+          inputText = replace(inputText, extmark.start, extmark.end, part.text)
         }
       }
     }
@@ -678,7 +699,7 @@ export function Prompt(props: PromptProps) {
   function pasteText(text: string, virtualText: string) {
     const currentOffset = input.visualCursor.offset
     const extmarkStart = currentOffset
-    const extmarkEnd = extmarkStart + virtualText.length
+    const extmarkEnd = extmarkStart + Bun.stringWidth(virtualText)
 
     input.insertText(virtualText + " ")
 
@@ -714,7 +735,7 @@ export function Prompt(props: PromptProps) {
     const extmarkStart = currentOffset
     const count = store.prompt.parts.filter((x) => x.type === "file" && x.mime.startsWith("image/")).length
     const virtualText = `[Image ${count + 1}]`
-    const extmarkEnd = extmarkStart + virtualText.length
+    const extmarkEnd = extmarkStart + Bun.stringWidth(virtualText)
     const textToInsert = virtualText + " "
 
     input.insertText(textToInsert)
