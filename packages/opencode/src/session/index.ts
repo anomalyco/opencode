@@ -24,6 +24,7 @@ import { Command } from "../command"
 import { Snapshot } from "@/snapshot"
 import { WorkspaceContext } from "../control-plane/workspace-context"
 import { ProjectID } from "../project/schema"
+import { WorkspaceID } from "../control-plane/schema"
 import { SessionID, MessageID } from "./schema"
 
 import type { Provider } from "@/provider/provider"
@@ -123,7 +124,7 @@ export namespace Session {
       id: SessionID.zod,
       slug: z.string(),
       projectID: ProjectID.zod,
-      workspaceID: z.string().optional(),
+      workspaceID: WorkspaceID.zod.optional(),
       directory: z.string(),
       parentID: SessionID.zod.optional(),
       summary: z
@@ -221,7 +222,7 @@ export namespace Session {
         parentID: SessionID.zod.optional(),
         title: z.string().optional(),
         permission: Info.shape.permission,
-        workspaceID: Identifier.schema("workspace").optional(),
+        workspaceID: WorkspaceID.zod.optional(),
       })
       .optional(),
     async (input) => {
@@ -297,7 +298,7 @@ export namespace Session {
     id?: SessionID
     title?: string
     parentID?: SessionID
-    workspaceID?: string
+    workspaceID?: WorkspaceID
     directory: string
     permission?: PermissionNext.Ruleset
   }) {
@@ -538,7 +539,7 @@ export namespace Session {
 
   export function* list(input?: {
     directory?: string
-    workspaceID?: string
+    workspaceID?: WorkspaceID
     roots?: boolean
     start?: number
     search?: string

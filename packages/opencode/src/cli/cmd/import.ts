@@ -2,6 +2,7 @@ import type { Argv } from "yargs"
 import type { Session as SDKSession, Message, Part } from "@opencode-ai/sdk/v2"
 import { Session } from "../../session"
 import { SessionID, MessageID } from "../../session/schema"
+import { WorkspaceID } from "../../control-plane/schema"
 import { cmd } from "./cmd"
 import { bootstrap } from "../bootstrap"
 import { Database } from "../../storage/db"
@@ -157,6 +158,7 @@ export const ImportCommand = cmd({
         ...exportData.info,
         id: SessionID.make(exportData.info.id),
         parentID: exportData.info.parentID ? SessionID.make(exportData.info.parentID) : undefined,
+        workspaceID: exportData.info.workspaceID ? WorkspaceID.make(exportData.info.workspaceID) : undefined,
         projectID: Instance.project.id,
         revert: exportData.info.revert
           ? { ...exportData.info.revert, messageID: MessageID.make(exportData.info.revert.messageID) }
