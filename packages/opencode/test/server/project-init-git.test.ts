@@ -19,7 +19,7 @@ afterEach(async () => {
 describe("project.initGit endpoint", () => {
   test("initializes git and reloads immediately", async () => {
     await using tmp = await tmpdir()
-    const app = Server.App()
+    const app = Server.Default()
     const seen: { directory?: string; payload: { type: string } }[] = []
     const fn = (evt: { directory?: string; payload: { type: string } }) => {
       seen.push(evt)
@@ -75,7 +75,7 @@ describe("project.initGit endpoint", () => {
 
   test("does not reload when the project is already git", async () => {
     await using tmp = await tmpdir({ git: true })
-    const app = Server.App()
+    const app = Server.Default()
     const seen: { directory?: string; payload: { type: string } }[] = []
     const fn = (evt: { directory?: string; payload: { type: string } }) => {
       seen.push(evt)

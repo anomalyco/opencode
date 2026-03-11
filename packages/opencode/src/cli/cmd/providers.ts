@@ -13,14 +13,9 @@ import { Instance } from "../../project/instance"
 import type { Hooks } from "@opencode-ai/plugin"
 import { Process } from "../../util/process"
 import { text } from "node:stream/consumers"
-import { setTimeout as sleep } from "node:timers/promises"
 
 type PluginAuth = NonNullable<Hooks["auth"]>
 
-/**
- * Handle plugin-based authentication flow.
- * Returns true if auth was handled, false if it should fall through to default handling.
- */
 async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string, methodName?: string): Promise<boolean> {
   let index = 0
   if (methodName) {
@@ -33,7 +28,7 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string, 
     }
     index = match
   } else if (plugin.auth.methods.length > 1) {
-    const selected = await prompts.select({
+    const method = await prompts.select({
       message: "Login method",
       options: [
         ...plugin.auth.methods.map((x, index) => ({
@@ -42,13 +37,12 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string, 
         })),
       ],
     })
-    if (prompts.isCancel(selected)) throw new UI.CancelledError()
-    index = parseInt(selected)
+    if (prompts.isCancel(method)) throw new UI.CancelledError()
+    index = parseInt(method)
   }
   const method = plugin.auth.methods[index]
 
-  // Handle prompts for all auth types
-  await sleep(10)
+  await new Promise((r) => setTimeout(r, 10))
   const inputs: Record<string, string> = {}
   if (method.prompts) {
     for (const prompt of method.prompts) {
@@ -171,11 +165,6 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string, 
   return false
 }
 
-/**
- * Build a deduplicated list of plugin-registered auth providers that are not
- * already present in models.dev, respecting enabled/disabled provider lists.
- * Pure function with no side effects; safe to test without mocking.
- */
 export function resolvePluginProviders(input: {
   hooks: Hooks[]
   existingProviders: Record<string, unknown>
@@ -203,19 +192,20 @@ export function resolvePluginProviders(input: {
   return result
 }
 
-export const AuthCommand = cmd({
-  command: "auth",
-  describe: "manage credentials",
+export const ProvidersCommand = cmd({
+  command: "providers",
+  aliases: ["auth"],
+  describe: "manage AI providers and credentials",
   builder: (yargs) =>
-    yargs.command(AuthLoginCommand).command(AuthLogoutCommand).command(AuthListCommand).demandCommand(),
+    yargs.command(ProvidersListCommand).command(ProvidersLoginCommand).command(ProvidersLogoutCommand).demandCommand(),
   async handler() {},
 })
 
-export const AuthListCommand = cmd({
+export const ProvidersListCommand = cmd({
   command: "list",
   aliases: ["ls"],
-  describe: "list providers",
-  async handler() {
+  describe: "list providers and credentials",
+  async handler(_args) {
     UI.empty()
     const authPath = path.join(Global.Path.data, "auth.json")
     const homedir = os.homedir()
@@ -231,7 +221,6 @@ export const AuthListCommand = cmd({
 
     prompts.outro(`${results.length} credentials`)
 
-    // Environment variables section
     const activeEnvVars: Array<{ provider: string; envVar: string }> = []
 
     for (const [providerID, provider] of Object.entries(database)) {
@@ -258,7 +247,7 @@ export const AuthListCommand = cmd({
   },
 })
 
-export const AuthLoginCommand = cmd({
+export const ProvidersLoginCommand = cmd({
   command: "login [url]",
   describe: "log in to a provider",
   builder: (yargs) =>
@@ -356,7 +345,7 @@ export const AuthLoginCommand = cmd({
               value: x.id,
               hint: {
                 opencode: "recommended",
-                anthropic: "Claude Max or API key",
+                anthropic: "API key",
                 openai: "ChatGPT Plus/Pro or API key",
               }[x.id],
             })),
@@ -409,7 +398,6 @@ export const AuthLoginCommand = cmd({
           if (prompts.isCancel(custom)) throw new UI.CancelledError()
           provider = custom.replace(/^@ai-sdk\//, "")
 
-          // Check if a plugin provides auth for this custom provider
           const customPlugin = await Plugin.list().then((x) => x.findLast((x) => x.auth?.provider === provider))
           if (customPlugin && customPlugin.auth) {
             const handled = await handlePluginAuth({ auth: customPlugin.auth }, provider, args.method)
@@ -461,10 +449,10 @@ export const AuthLoginCommand = cmd({
   },
 })
 
-export const AuthLogoutCommand = cmd({
+export const ProvidersLogoutCommand = cmd({
   command: "logout",
   describe: "log out from a configured provider",
-  async handler() {
+  async handler(_args) {
     UI.empty()
     const credentials = await Auth.all().then((x) => Object.entries(x))
     prompts.intro("Remove credential")

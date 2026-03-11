@@ -193,8 +193,7 @@ export function MessageTimeline(props: {
   onAutoScrollHandleScroll: () => void
   onMarkScrollGesture: (target?: EventTarget | null) => void
   hasScrollGesture: () => boolean
-  isDesktop: boolean
-  onScrollSpyScroll: () => void
+  onUserScroll: () => void
   onTurnBackfillScroll: () => void
   onAutoScrollInteraction: (event: MouseEvent) => void
   centered: boolean
@@ -205,8 +204,6 @@ export function MessageTimeline(props: {
   onLoadEarlier: () => void
   renderedUserMessages: UserMessage[]
   anchor: (id: string) => string
-  onRegisterMessage: (el: HTMLDivElement, id: string) => void
-  onUnregisterMessage: (id: string) => void
 }) {
   let touchGesture: number | undefined
 
@@ -574,9 +571,9 @@ export function MessageTimeline(props: {
             props.onScheduleScrollState(e.currentTarget)
             props.onTurnBackfillScroll()
             if (!props.hasScrollGesture()) return
+            props.onUserScroll()
             props.onAutoScrollHandleScroll()
             props.onMarkScrollGesture(e.currentTarget)
-            if (props.isDesktop) props.onScrollSpyScroll()
           }}
           onClick={props.onAutoScrollInteraction}
           class="relative min-w-0 w-full h-full"
@@ -763,14 +760,11 @@ export function MessageTimeline(props: {
                     <div
                       id={props.anchor(messageID)}
                       data-message-id={messageID}
-                      ref={(el) => {
-                        props.onRegisterMessage(el, messageID)
-                        onCleanup(() => props.onUnregisterMessage(messageID))
-                      }}
                       classList={{
                         "min-w-0 w-full max-w-full": true,
                         "md:max-w-200 2xl:max-w-[1000px]": props.centered,
                       }}
+                      style={{ "content-visibility": "auto", "contain-intrinsic-size": "auto 500px" }}
                     >
                       <Show when={commentCount() > 0}>
                         <div class="w-full px-4 md:px-5 pb-2">
