@@ -4,6 +4,18 @@
   "identifier": "ai.opencode.desktop.beta",
   "bundle": {
     "createUpdaterArtifacts": true,
+    "icon": [
+      "icons/beta/32x32.png",
+      "icons/beta/128x128.png",
+      "icons/beta/128x128@2x.png",
+      "icons/beta/icon.icns",
+      "icons/beta/icon.ico"
+    ],
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/beta/icon.ico"
+      }
+    },
     "linux": {
       "rpm": {
         "compression": {

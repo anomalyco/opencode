@@ -1,28 +1,30 @@
+import { AppIcon } from "@opencode-ai/ui/app-icon"
+import { Button } from "@opencode-ai/ui/button"
+import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
+import { Icon } from "@opencode-ai/ui/icon"
+import { IconButton } from "@opencode-ai/ui/icon-button"
+import { Keybind } from "@opencode-ai/ui/keybind"
+import { Popover } from "@opencode-ai/ui/popover"
+import { Spinner } from "@opencode-ai/ui/spinner"
+import { TextField } from "@opencode-ai/ui/text-field"
+import { showToast } from "@opencode-ai/ui/toast"
+import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
+import { getFilename } from "@opencode-ai/util/path"
+import { useParams } from "@solidjs/router"
 import { createEffect, createMemo, For, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
-import { useParams } from "@solidjs/router"
-import { useLayout } from "@/context/layout"
 import { useCommand } from "@/context/command"
+import { useGlobalSDK } from "@/context/global-sdk"
 import { useLanguage } from "@/context/language"
+import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
 import { useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
-import { useGlobalSDK } from "@/context/global-sdk"
-import { getFilename } from "@opencode-ai/util/path"
+import { useTerminal } from "@/context/terminal"
+import { focusTerminalById } from "@/pages/session/helpers"
 import { decode64 } from "@/utils/base64"
 import { Persist, persisted } from "@/utils/persist"
-
-import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Button } from "@opencode-ai/ui/button"
-import { AppIcon } from "@opencode-ai/ui/app-icon"
-import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
-import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
-import { Popover } from "@opencode-ai/ui/popover"
-import { TextField } from "@opencode-ai/ui/text-field"
-import { Keybind } from "@opencode-ai/ui/keybind"
-import { showToast } from "@opencode-ai/ui/toast"
 import { StatusPopover } from "../status-popover"
 
 const OPEN_APPS = [
@@ -35,6 +37,7 @@ const OPEN_APPS = [
   "terminal",
   "iterm2",
   "ghostty",
+  "warp",
   "xcode",
   "android-studio",
   "powershell",
@@ -45,32 +48,68 @@ type OpenApp = (typeof OPEN_APPS)[number]
 type OS = "macos" | "windows" | "linux" | "unknown"
 
 const MAC_APPS = [
-  { id: "vscode", label: "VS Code", icon: "vscode", openWith: "Visual Studio Code" },
+  {
+    id: "vscode",
+    label: "VS Code",
+    icon: "vscode",
+    openWith: "Visual Studio Code",
+  },
   { id: "cursor", label: "Cursor", icon: "cursor", openWith: "Cursor" },
   { id: "zed", label: "Zed", icon: "zed", openWith: "Zed" },
   { id: "textmate", label: "TextMate", icon: "textmate", openWith: "TextMate" },
-  { id: "antigravity", label: "Antigravity", icon: "antigravity", openWith: "Antigravity" },
+  {
+    id: "antigravity",
+    label: "Antigravity",
+    icon: "antigravity",
+    openWith: "Antigravity",
+  },
   { id: "terminal", label: "Terminal", icon: "terminal", openWith: "Terminal" },
   { id: "iterm2", label: "iTerm2", icon: "iterm2", openWith: "iTerm" },
   { id: "ghostty", label: "Ghostty", icon: "ghostty", openWith: "Ghostty" },
+  { id: "warp", label: "Warp", icon: "warp", openWith: "Warp" },
   { id: "xcode", label: "Xcode", icon: "xcode", openWith: "Xcode" },
-  { id: "android-studio", label: "Android Studio", icon: "android-studio", openWith: "Android Studio" },
-  { id: "sublime-text", label: "Sublime Text", icon: "sublime-text", openWith: "Sublime Text" },
+  {
+    id: "android-studio",
+    label: "Android Studio",
+    icon: "android-studio",
+    openWith: "Android Studio",
+  },
+  {
+    id: "sublime-text",
+    label: "Sublime Text",
+    icon: "sublime-text",
+    openWith: "Sublime Text",
+  },
 ] as const
 
 const WINDOWS_APPS = [
   { id: "vscode", label: "VS Code", icon: "vscode", openWith: "code" },
   { id: "cursor", label: "Cursor", icon: "cursor", openWith: "cursor" },
   { id: "zed", label: "Zed", icon: "zed", openWith: "zed" },
-  { id: "powershell", label: "PowerShell", icon: "powershell", openWith: "powershell" },
-  { id: "sublime-text", label: "Sublime Text", icon: "sublime-text", openWith: "Sublime Text" },
+  {
+    id: "powershell",
+    label: "PowerShell",
+    icon: "powershell",
+    openWith: "powershell",
+  },
+  {
+    id: "sublime-text",
+    label: "Sublime Text",
+    icon: "sublime-text",
+    openWith: "Sublime Text",
+  },
 ] as const
 
 const LINUX_APPS = [
   { id: "vscode", label: "VS Code", icon: "vscode", openWith: "code" },
   { id: "cursor", label: "Cursor", icon: "cursor", openWith: "cursor" },
   { id: "zed", label: "Zed", icon: "zed", openWith: "zed" },
-  { id: "sublime-text", label: "Sublime Text", icon: "sublime-text", openWith: "Sublime Text" },
+  {
+    id: "sublime-text",
+    label: "Sublime Text",
+    icon: "sublime-text",
+    openWith: "Sublime Text",
+  },
 ] as const
 
 type OpenOption = (typeof MAC_APPS)[number] | (typeof WINDOWS_APPS)[number] | (typeof LINUX_APPS)[number]
@@ -101,12 +140,12 @@ function useSessionShare(args: {
   globalSDK: ReturnType<typeof useGlobalSDK>
   currentSession: () =>
     | {
-        id: string
         share?: {
           url?: string
         }
       }
     | undefined
+  sessionID: () => string | undefined
   projectDirectory: () => string
   platform: ReturnType<typeof usePlatform>
 }) {
@@ -130,11 +169,11 @@ function useSessionShare(args: {
   })
 
   const shareSession = () => {
-    const session = args.currentSession()
-    if (!session || state.share) return
+    const sessionID = args.sessionID()
+    if (!sessionID || state.share) return
     setState("share", true)
     args.globalSDK.client.session
-      .share({ sessionID: session.id, directory: args.projectDirectory() })
+      .share({ sessionID, directory: args.projectDirectory() })
       .catch((error) => {
         console.error("Failed to share session", error)
       })
@@ -144,11 +183,11 @@ function useSessionShare(args: {
   }
 
   const unshareSession = () => {
-    const session = args.currentSession()
-    if (!session || state.unshare) return
+    const sessionID = args.sessionID()
+    if (!sessionID || state.unshare) return
     setState("unshare", true)
     args.globalSDK.client.session
-      .unshare({ sessionID: session.id, directory: args.projectDirectory() })
+      .unshare({ sessionID, directory: args.projectDirectory() })
       .catch((error) => {
         console.error("Failed to unshare session", error)
       })
@@ -192,6 +231,7 @@ export function SessionHeader() {
   const sync = useSync()
   const platform = usePlatform()
   const language = useLanguage()
+  const terminal = useTerminal()
 
   const projectDirectory = createMemo(() => decode64(params.dir) ?? "")
   const project = createMemo(() => {
@@ -206,14 +246,16 @@ export function SessionHeader() {
   })
   const hotkey = createMemo(() => command.keybind("file.open"))
 
-  const currentSession = createMemo(() => sync.data.session.find((s) => s.id === params.id))
+  const currentSession = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
-  const showShare = createMemo(() => shareEnabled() && !!currentSession())
+  const showShare = createMemo(() => shareEnabled() && !!params.id)
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const view = createMemo(() => layout.view(sessionKey))
   const os = createMemo(() => detectOS(platform))
 
-  const [exists, setExists] = createStore<Partial<Record<OpenApp, boolean>>>({ finder: true })
+  const [exists, setExists] = createStore<Partial<Record<OpenApp, boolean>>>({
+    finder: true,
+  })
 
   const apps = createMemo(() => {
     if (os() === "macos") return MAC_APPS
@@ -257,20 +299,50 @@ export function SessionHeader() {
     ] as const
   })
 
+  const toggleTerminal = () => {
+    const next = !view().terminal.opened()
+    view().terminal.toggle()
+    if (!next) return
+
+    const id = terminal.active()
+    if (!id) return
+    focusTerminalById(id)
+  }
+
   const [prefs, setPrefs] = persisted(Persist.global("open.app"), createStore({ app: "finder" as OpenApp }))
   const [menu, setMenu] = createStore({ open: false })
+  const [openRequest, setOpenRequest] = createStore({
+    app: undefined as OpenApp | undefined,
+  })
 
   const canOpen = createMemo(() => platform.platform === "desktop" && !!platform.openPath && server.isLocal())
-  const current = createMemo(() => options().find((o) => o.id === prefs.app) ?? options()[0])
+  const current = createMemo(
+    () =>
+      options().find((o) => o.id === prefs.app) ??
+      options()[0] ??
+      ({ id: "finder", label: fileManager().label, icon: fileManager().icon } as const),
+  )
+  const opening = createMemo(() => openRequest.app !== undefined)
+
+  const selectApp = (app: OpenApp) => {
+    if (!options().some((item) => item.id === app)) return
+    setPrefs("app", app)
+  }
 
   const openDir = (app: OpenApp) => {
+    if (opening() || !canOpen() || !platform.openPath) return
     const directory = projectDirectory()
     if (!directory) return
-    if (!canOpen()) return
 
     const item = options().find((o) => o.id === app)
     const openWith = item && "openWith" in item ? item.openWith : undefined
-    Promise.resolve(platform.openPath?.(directory, openWith)).catch((err: unknown) => showRequestError(language, err))
+    setOpenRequest("app", app)
+    platform
+      .openPath(directory, openWith)
+      .catch((err: unknown) => showRequestError(language, err))
+      .finally(() => {
+        setOpenRequest("app", undefined)
+      })
   }
 
   const copyPath = () => {
@@ -292,6 +364,7 @@ export function SessionHeader() {
   const share = useSessionShare({
     globalSDK,
     currentSession,
+    sessionID: () => params.id,
     projectDirectory,
     platform,
   })
@@ -315,7 +388,9 @@ export function SessionHeader() {
               <div class="flex min-w-0 flex-1 items-center gap-1.5 overflow-visible">
                 <Icon name="magnifying-glass" size="small" class="icon-base shrink-0 size-4" />
                 <span class="flex-1 min-w-0 text-12-regular text-text-weak truncate text-left">
-                  {language.t("session.header.search.placeholder", { project: name() })}
+                  {language.t("session.header.search.placeholder", {
+                    project: name(),
+                  })}
                 </span>
               </div>
 
@@ -357,14 +432,23 @@ export function SessionHeader() {
                       <div class="flex h-[24px] box-border items-center rounded-md border border-border-weak-base bg-surface-panel overflow-hidden">
                         <Button
                           variant="ghost"
-                          class="rounded-none h-full py-0 pr-3 pl-0.5 gap-1.5 border-none shadow-none"
+                          class="rounded-none h-full py-0 pr-3 pl-0.5 gap-1.5 border-none shadow-none disabled:!cursor-default"
+                          classList={{
+                            "bg-surface-raised-base-active": opening(),
+                          }}
                           onClick={() => openDir(current().id)}
+                          disabled={opening()}
                           aria-label={language.t("session.header.open.ariaLabel", { app: current().label })}
                         >
                           <div class="flex size-5 shrink-0 items-center justify-center">
-                            <AppIcon id={current().icon} class="size-4" />
+                            <Show
+                              when={opening()}
+                              fallback={<AppIcon id={current().icon} class={openIconSize(current().icon)} />}
+                            >
+                              <Spinner class="size-3.5 text-icon-base" />
+                            </Show>
                           </div>
-                          <span class="text-12-regular text-text-strong">Open</span>
+                          <span class="text-12-regular text-text-strong">{language.t("common.open")}</span>
                         </Button>
                         <div class="self-stretch w-px bg-border-weak-base" />
                         <DropdownMenu
@@ -377,7 +461,11 @@ export function SessionHeader() {
                             as={IconButton}
                             icon="chevron-down"
                             variant="ghost"
-                            class="rounded-none h-full w-[24px] p-0 border-none shadow-none data-[expanded]:bg-surface-raised-base-hover"
+                            disabled={opening()}
+                            class="rounded-none h-full w-[24px] p-0 border-none shadow-none data-[expanded]:bg-surface-raised-base-active disabled:!cursor-default"
+                            classList={{
+                              "bg-surface-raised-base-active": opening(),
+                            }}
                             aria-label={language.t("session.header.open.menu")}
                           />
                           <DropdownMenu.Portal>
@@ -388,13 +476,14 @@ export function SessionHeader() {
                                   value={current().id}
                                   onChange={(value) => {
                                     if (!OPEN_APPS.includes(value as OpenApp)) return
-                                    setPrefs("app", value as OpenApp)
+                                    selectApp(value as OpenApp)
                                   }}
                                 >
                                   <For each={options()}>
                                     {(o) => (
                                       <DropdownMenu.RadioItem
                                         value={o.id}
+                                        disabled={opening()}
                                         onSelect={() => {
                                           setMenu("open", false)
                                           openDir(o.id)
@@ -452,7 +541,10 @@ export function SessionHeader() {
                       variant: "ghost",
                       class:
                         "rounded-md h-[24px] px-3 border border-border-weak-base bg-surface-panel shadow-none data-[expanded]:bg-surface-base-active",
-                      classList: { "rounded-r-none": share.shareUrl() !== undefined },
+                      classList: {
+                        "rounded-r-none": share.shareUrl() !== undefined,
+                        "border-r-0": share.shareUrl() !== undefined,
+                      },
                       style: { scale: 1 },
                     }}
                     trigger={<span class="text-12-regular">{language.t("session.share.action.share")}</span>}
@@ -538,39 +630,39 @@ export function SessionHeader() {
                 </div>
               </Show>
               <div class="flex items-center gap-1">
-                <div class="hidden md:flex items-center gap-1 shrink-0">
-                  <TooltipKeybind
-                    title={language.t("command.terminal.toggle")}
-                    keybind={command.keybind("terminal.toggle")}
+                <TooltipKeybind
+                  title={language.t("command.terminal.toggle")}
+                  keybind={command.keybind("terminal.toggle")}
+                >
+                  <Button
+                    variant="ghost"
+                    class="group/terminal-toggle titlebar-icon w-8 h-6 p-0 box-border shrink-0"
+                    onClick={toggleTerminal}
+                    aria-label={language.t("command.terminal.toggle")}
+                    aria-expanded={view().terminal.opened()}
+                    aria-controls="terminal-panel"
                   >
-                    <Button
-                      variant="ghost"
-                      class="group/terminal-toggle titlebar-icon w-8 h-6 p-0 box-border"
-                      onClick={() => view().terminal.toggle()}
-                      aria-label={language.t("command.terminal.toggle")}
-                      aria-expanded={view().terminal.opened()}
-                      aria-controls="terminal-panel"
-                    >
-                      <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
-                        <Icon
-                          size="small"
-                          name={view().terminal.opened() ? "layout-bottom-partial" : "layout-bottom"}
-                          class="group-hover/terminal-toggle:hidden"
-                        />
-                        <Icon
-                          size="small"
-                          name="layout-bottom-partial"
-                          class="hidden group-hover/terminal-toggle:inline-block"
-                        />
-                        <Icon
-                          size="small"
-                          name={view().terminal.opened() ? "layout-bottom" : "layout-bottom-partial"}
-                          class="hidden group-active/terminal-toggle:inline-block"
-                        />
-                      </div>
-                    </Button>
-                  </TooltipKeybind>
+                    <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
+                      <Icon
+                        size="small"
+                        name={view().terminal.opened() ? "layout-bottom-partial" : "layout-bottom"}
+                        class="group-hover/terminal-toggle:hidden"
+                      />
+                      <Icon
+                        size="small"
+                        name="layout-bottom-partial"
+                        class="hidden group-hover/terminal-toggle:inline-block"
+                      />
+                      <Icon
+                        size="small"
+                        name={view().terminal.opened() ? "layout-bottom" : "layout-bottom-partial"}
+                        class="hidden group-active/terminal-toggle:inline-block"
+                      />
+                    </div>
+                  </Button>
+                </TooltipKeybind>
 
+                <div class="hidden md:flex items-center gap-1 shrink-0">
                   <TooltipKeybind
                     title={language.t("command.review.toggle")}
                     keybind={command.keybind("review.toggle")}

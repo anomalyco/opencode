@@ -22,6 +22,7 @@ import { SessionPrompt } from "./prompt"
 import { fn } from "@/util/fn"
 import { Command } from "../command"
 import { Snapshot } from "@/snapshot"
+import { WorkspaceContext } from "../control-plane/workspace-context"
 
 import type { Provider } from "@/provider/provider"
 import { PermissionNext } from "@/permission/next"
@@ -63,6 +64,7 @@ export namespace Session {
       id: row.id,
       slug: row.slug,
       projectID: row.project_id,
+      workspaceID: row.workspace_id ?? undefined,
       directory: row.directory,
       parentID: row.parent_id ?? undefined,
       title: row.title,
@@ -84,6 +86,7 @@ export namespace Session {
     return {
       id: info.id,
       project_id: info.projectID,
+      workspace_id: info.workspaceID,
       parent_id: info.parentID,
       slug: info.slug,
       directory: info.directory,
@@ -118,6 +121,7 @@ export namespace Session {
       id: Identifier.schema("session"),
       slug: z.string(),
       projectID: z.string(),
+      workspaceID: z.string().optional(),
       directory: z.string(),
       parentID: Identifier.schema("session").optional(),
       summary: z
@@ -215,6 +219,7 @@ export namespace Session {
         parentID: Identifier.schema("session").optional(),
         title: z.string().optional(),
         permission: Info.shape.permission,
+        workspaceID: Identifier.schema("workspace").optional(),
       })
       .optional(),
     async (input) => {
@@ -223,6 +228,7 @@ export namespace Session {
         directory: Instance.directory,
         title: input?.title,
         permission: input?.permission,
+        workspaceID: input?.workspaceID,
       })
     },
   )
@@ -238,6 +244,7 @@ export namespace Session {
       const title = getForkedTitle(original.title)
       const session = await createNext({
         directory: Instance.directory,
+        workspaceID: original.workspaceID,
         title,
       })
       const msgs = await messages({ sessionID: input.sessionID })
@@ -288,6 +295,7 @@ export namespace Session {
     id?: string
     title?: string
     parentID?: string
+    workspaceID?: string
     directory: string
     permission?: PermissionNext.Ruleset
   }) {
@@ -297,6 +305,7 @@ export namespace Session {
       version: Installation.VERSION,
       projectID: Instance.project.id,
       directory: input.directory,
+      workspaceID: input.workspaceID,
       parentID: input.parentID,
       title: input.title ?? createDefaultTitle(!!input.parentID),
       permission: input.permission,
@@ -527,6 +536,7 @@ export namespace Session {
 
   export function* list(input?: {
     directory?: string
+    workspaceID?: string
     roots?: boolean
     start?: number
     search?: string
@@ -535,6 +545,9 @@ export namespace Session {
     const project = Instance.project
     const conditions = [eq(SessionTable.project_id, project.id)]
 
+    if (WorkspaceContext.workspaceID) {
+      conditions.push(eq(SessionTable.workspace_id, WorkspaceContext.workspaceID))
+    }
     if (input?.directory) {
       conditions.push(eq(SessionTable.directory, input.directory))
     }
@@ -697,7 +710,9 @@ export namespace Session {
     async (input) => {
       // CASCADE delete handles parts automatically
       Database.use((db) => {
-        db.delete(MessageTable).where(eq(MessageTable.id, input.messageID)).run()
+        db.delete(MessageTable)
+          .where(and(eq(MessageTable.id, input.messageID), eq(MessageTable.session_id, input.sessionID)))
+          .run()
         Database.effect(() =>
           Bus.publish(MessageV2.Event.Removed, {
             sessionID: input.sessionID,
@@ -717,7 +732,9 @@ export namespace Session {
     }),
     async (input) => {
       Database.use((db) => {
-        db.delete(PartTable).where(eq(PartTable.id, input.partID)).run()
+        db.delete(PartTable)
+          .where(and(eq(PartTable.id, input.partID), eq(PartTable.session_id, input.sessionID)))
+          .run()
         Database.effect(() =>
           Bus.publish(MessageV2.Event.PartRemoved, {
             sessionID: input.sessionID,
@@ -748,7 +765,7 @@ export namespace Session {
         .run()
       Database.effect(() =>
         Bus.publish(MessageV2.Event.PartUpdated, {
-          part,
+          part: structuredClone(part),
         }),
       )
     })

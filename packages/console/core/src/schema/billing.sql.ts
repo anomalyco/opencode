@@ -2,7 +2,7 @@ import { bigint, boolean, index, int, json, mysqlEnum, mysqlTable, uniqueIndex, 
 import { timestamps, ulid, utc, workspaceColumns } from "../drizzle/types"
 import { workspaceIndexes } from "./workspace.sql"
 
-export const SubscriptionPlan = ["20", "100", "200"] as const
+export const BlackPlans = ["20", "100", "200"] as const
 export const BillingTable = mysqlTable(
   "billing",
   {
@@ -25,14 +25,18 @@ export const BillingTable = mysqlTable(
     subscription: json("subscription").$type<{
       status: "subscribed"
       seats: number
-      plan: "20" | "100" | "200"
+      plan: (typeof BlackPlans)[number]
       useBalance?: boolean
       coupon?: string
     }>(),
     subscriptionID: varchar("subscription_id", { length: 28 }),
-    subscriptionPlan: mysqlEnum("subscription_plan", SubscriptionPlan),
+    subscriptionPlan: mysqlEnum("subscription_plan", BlackPlans),
     timeSubscriptionBooked: utc("time_subscription_booked"),
     timeSubscriptionSelected: utc("time_subscription_selected"),
+    liteSubscriptionID: varchar("lite_subscription_id", { length: 28 }),
+    lite: json("lite").$type<{
+      useBalance?: boolean
+    }>(),
   },
   (table) => [
     ...workspaceIndexes(table),
@@ -55,6 +59,22 @@ export const SubscriptionTable = mysqlTable(
   (table) => [...workspaceIndexes(table), uniqueIndex("workspace_user_id").on(table.workspaceID, table.userID)],
 )
 
+export const LiteTable = mysqlTable(
+  "lite",
+  {
+    ...workspaceColumns,
+    ...timestamps,
+    userID: ulid("user_id").notNull(),
+    rollingUsage: bigint("rolling_usage", { mode: "number" }),
+    weeklyUsage: bigint("weekly_usage", { mode: "number" }),
+    monthlyUsage: bigint("monthly_usage", { mode: "number" }),
+    timeRollingUpdated: utc("time_rolling_updated"),
+    timeWeeklyUpdated: utc("time_weekly_updated"),
+    timeMonthlyUpdated: utc("time_monthly_updated"),
+  },
+  (table) => [...workspaceIndexes(table), uniqueIndex("workspace_user_id").on(table.workspaceID, table.userID)],
+)
+
 export const PaymentTable = mysqlTable(
   "payment",
   {
@@ -67,7 +87,7 @@ export const PaymentTable = mysqlTable(
     timeRefunded: utc("time_refunded"),
     enrichment: json("enrichment").$type<
       | {
-          type: "subscription"
+          type: "subscription" | "lite"
           couponID?: string
         }
       | {
@@ -93,8 +113,9 @@ export const UsageTable = mysqlTable(
     cacheWrite1hTokens: int("cache_write_1h_tokens"),
     cost: bigint("cost", { mode: "number" }).notNull(),
     keyID: ulid("key_id"),
+    sessionID: varchar("session_id", { length: 30 }),
     enrichment: json("enrichment").$type<{
-      plan: "sub"
+      plan: "sub" | "byok" | "lite"
     }>(),
   },
   (table) => [...workspaceIndexes(table), index("usage_time_created").on(table.workspaceID, table.timeCreated)],
