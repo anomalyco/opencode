@@ -437,8 +437,8 @@ function groupParts(parts: { messageID: string; part: PartType }[]) {
   return result
 }
 
-function partByID(parts: readonly PartType[], partID: string) {
-  return parts.find((part) => part.id === partID)
+function index<T extends { id: string }>(items: readonly T[]) {
+  return new Map(items.map((item) => [item.id, item] as const))
 }
 
 function renderable(part: PartType, showReasoningSummaries = true) {
@@ -474,6 +474,13 @@ export function AssistantParts(props: {
   const data = useData()
   const emptyParts: PartType[] = []
   const emptyTools: ToolPart[] = []
+  const msgs = createMemo(() => index(props.messages))
+  const part = createMemo(
+    () =>
+      new Map(
+        props.messages.map((message) => [message.id, index(list(data.store.part?.[message.id], emptyParts))] as const),
+      ),
+  )
 
   const grouped = createMemo(
     () =>
@@ -507,7 +514,7 @@ export function AssistantParts(props: {
                     const entry = entryAccessor()
                     if (entry.type !== "context") return emptyTools
                     return entry.refs
-                      .map((ref) => partByID(list(data.store.part?.[ref.messageID], emptyParts), ref.partID))
+                      .map((ref) => part().get(ref.messageID)?.get(ref.partID))
                       .filter((part): part is ToolPart => !!part && isContextGroupTool(part))
                   },
                   emptyTools,
@@ -527,23 +534,23 @@ export function AssistantParts(props: {
                 const message = createMemo(() => {
                   const entry = entryAccessor()
                   if (entry.type !== "part") return
-                  return props.messages.find((item) => item.id === entry.ref.messageID)
+                  return msgs().get(entry.ref.messageID)
                 })
-                const part = createMemo(() => {
+                const item = createMemo(() => {
                   const entry = entryAccessor()
                   if (entry.type !== "part") return
-                  return partByID(list(data.store.part?.[entry.ref.messageID], emptyParts), entry.ref.partID)
+                  return part().get(entry.ref.messageID)?.get(entry.ref.partID)
                 })
 
                 return (
                   <Show when={message()}>
-                    <Show when={part()}>
+                    <Show when={item()}>
                       <Part
-                        part={part()!}
+                        part={item()!}
                         message={message()!}
                         showAssistantCopyPartID={props.showAssistantCopyPartID}
                         turnDurationMs={props.turnDurationMs}
-                        defaultOpen={partDefaultOpen(part()!, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
+                        defaultOpen={partDefaultOpen(item()!, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
                       />
                     </Show>
                   </Show>
@@ -695,6 +702,7 @@ export function AssistantMessageDisplay(props: {
   showReasoningSummaries?: boolean
 }) {
   const emptyTools: ToolPart[] = []
+  const part = createMemo(() => index(props.parts))
   const grouped = createMemo(
     () =>
       groupParts(
@@ -723,7 +731,7 @@ export function AssistantMessageDisplay(props: {
                     const entry = entryAccessor()
                     if (entry.type !== "context") return emptyTools
                     return entry.refs
-                      .map((ref) => partByID(props.parts, ref.partID))
+                      .map((ref) => part().get(ref.partID))
                       .filter((part): part is ToolPart => !!part && isContextGroupTool(part))
                   },
                   emptyTools,
@@ -739,16 +747,16 @@ export function AssistantMessageDisplay(props: {
             </Match>
             <Match when={entryType() === "part"}>
               {(() => {
-                const part = createMemo(() => {
+                const item = createMemo(() => {
                   const entry = entryAccessor()
                   if (entry.type !== "part") return
-                  return partByID(props.parts, entry.ref.partID)
+                  return part().get(entry.ref.partID)
                 })
 
                 return (
-                  <Show when={part()}>
+                  <Show when={item()}>
                     <Part
-                      part={part()!}
+                      part={item()!}
                       message={props.message}
                       showAssistantCopyPartID={props.showAssistantCopyPartID}
                     />
