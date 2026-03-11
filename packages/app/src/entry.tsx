@@ -98,18 +98,6 @@ if (!(root instanceof HTMLElement) && import.meta.env.DEV) {
   throw new Error(getRootNotFoundError())
 }
 
-const platform: Platform = {
-  platform: "web",
-  version: pkg.version,
-  openLink,
-  back,
-  forward,
-  restart,
-  notify,
-  getDefaultServerUrl: async () => readDefaultServerUrl(),
-  setDefaultServerUrl: writeDefaultServerUrl,
-}
-
 const defaultUrl = iife(() => {
   const lsDefault = readDefaultServerUrl()
   if (lsDefault) return lsDefault
@@ -118,6 +106,18 @@ const defaultUrl = iife(() => {
     return `http://${import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "localhost"}:${import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"}`
   return location.origin
 })
+
+const platform: Platform = {
+  platform: "web",
+  version: pkg.version,
+  openLink,
+  back,
+  forward,
+  restart,
+  notify,
+  getDefaultServer: async () => ServerConnection.Key.make(defaultUrl),
+  setDefaultServer: writeDefaultServerUrl,
+}
 
 if (root instanceof HTMLElement) {
   const server: ServerConnection.Http = { type: "http", http: { url: defaultUrl } }
