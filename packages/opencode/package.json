@@ -109,6 +109,7 @@
     "decimal.js": "10.5.0",
     "diff": "catalog:",
     "drizzle-orm": "1.0.0-beta.16-ea816b6",
+    "effect": "catalog:",
     "fuzzysort": "3.1.0",
     "glob": "13.0.5",
     "google-auth-library": "10.5.0",

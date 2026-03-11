@@ -3,6 +3,9 @@
  * Uses `command -v` (POSIX standard) to check if the first token is a valid command.
  */
 
+import { Shell } from "@/shell/shell"
+import path from "path"
+
 /**
  * Shell reserved words that are valid shell syntax but never standalone commands.
  * `command -v` reports these as found, but they only make sense inside compound
@@ -248,14 +251,30 @@ function extractFirstToken(input: string): string | null {
 }
 
 /**
- * Check if a command exists using `command -v` (POSIX standard).
- * This checks builtins, functions, aliases, and executables in PATH.
+ * Check if a command exists using the user's preferred shell.
+ * This checks builtins, functions, aliases, and executables.
  */
 async function commandExists(cmd: string): Promise<boolean> {
   try {
-    // Escape single quotes for safe shell interpolation
+    const shellPath = Shell.preferred()
+    const shellName = (
+      process.platform === "win32" ? path.win32.basename(shellPath, ".exe") : path.basename(shellPath)
+    ).toLowerCase()
+
+    // Escape single quotes for safe shell interpolation in POSIX shells
     const escaped = `'${cmd.replace(/'/g, "'\\''")}'`
-    const { exited } = Bun.spawn(["sh", "-c", `command -v ${escaped}`], {
+
+    let args: string[]
+    if (shellName === "cmd") {
+      args = ["/c", `where ${cmd} >nul 2>nul || help ${cmd} >nul 2>nul`]
+    } else if (shellName === "powershell" || shellName === "pwsh") {
+      args = ["-NoProfile", "-Command", `if (Get-Command "${cmd}" -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }`]
+    } else {
+      // Use login shell for POSIX shells to catch aliases from .zshrc/.bash_profile
+      args = ["-l", "-c", `command -v ${escaped}`]
+    }
+
+    const { exited } = Bun.spawn([shellPath, ...args], {
       stdout: "ignore",
       stderr: "ignore",
     })

@@ -121,7 +121,6 @@ export namespace Server {
             if (opts?.cors?.includes(input)) {
               return input
             }
-            }
 
             return
           },
