@@ -1190,7 +1190,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
                   </div>
                 )
               }
-              return <ToolErrorCard tool={part().tool} error={error()} />
+              return <ToolErrorCard tool={part().tool} error={error()} defaultOpen={props.defaultOpen} />
             }}
           </Match>
           <Match when={true}>
