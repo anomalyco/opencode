@@ -14,6 +14,7 @@ import { Process } from "../util/process"
 import { git } from "../util/git"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
+import { FileWatcher } from "@/file/watcher"
 
 export namespace Worktree {
   const log = Log.create({ service: "worktree" })
@@ -361,7 +362,9 @@ export namespace Worktree {
 
     return () => {
       const start = async () => {
-        const populated = await git(["reset", "--hard"], { cwd: info.directory })
+        const populated = await FileWatcher.withPause(info.directory, () =>
+          git(["reset", "--hard"], { cwd: info.directory }),
+        )
         if (populated.exitCode !== 0) {
           const message = errorText(populated) || "Failed to populate worktree"
           log.error("worktree checkout failed", { directory: info.directory, message })

@@ -22,6 +22,42 @@ declare const OPENCODE_LIBC: string | undefined
 
 export namespace FileWatcher {
   const log = Log.create({ service: "file.watcher" })
+  const hold = new Map<string, number>()
+
+  function key(input: string) {
+    return path.resolve(input)
+  }
+
+  export function paused(file: string) {
+    const input = key(file)
+    for (const [dir, count] of hold) {
+      if (count < 1) continue
+      if (input === dir) return true
+      if (input.startsWith(dir + path.sep)) return true
+    }
+    return false
+  }
+
+  export function pause(dir: string) {
+    const id = key(dir)
+    hold.set(id, (hold.get(id) ?? 0) + 1)
+    let live = true
+    return () => {
+      if (!live) return
+      live = false
+      const count = hold.get(id) ?? 0
+      if (count <= 1) {
+        hold.delete(id)
+        return
+      }
+      hold.set(id, count - 1)
+    }
+  }
+
+  export function withPause<T>(dir: string, fn: () => Promise<T>) {
+    const done = pause(dir)
+    return fn().finally(done)
+  }
 
   export const Event = {
     Updated: BusEvent.define(
@@ -66,6 +102,7 @@ export namespace FileWatcher {
       const subscribe: ParcelWatcher.SubscribeCallback = (err, evts) => {
         if (err) return
         for (const evt of evts) {
+          if (paused(evt.path)) continue
           if (evt.type === "create") Bus.publish(Event.Updated, { file: evt.path, event: "add" })
           if (evt.type === "update") Bus.publish(Event.Updated, { file: evt.path, event: "change" })
           if (evt.type === "delete") Bus.publish(Event.Updated, { file: evt.path, event: "unlink" })
