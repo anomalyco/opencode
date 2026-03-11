@@ -309,41 +309,6 @@
   }
 }
 
-[data-component="tool-error"] {
-  display: flex;
-  align-items: start;
-  gap: 8px;
-
-  [data-slot="icon-svg"] {
-    color: var(--icon-critical-base);
-    margin-top: 4px;
-  }
-
-  [data-slot="message-part-tool-error-content"] {
-    display: flex;
-    align-items: start;
-    gap: 8px;
-  }
-
-  [data-slot="message-part-tool-error-title"] {
-    font-family: var(--font-family-sans);
-    font-size: var(--font-size-base);
-    font-style: normal;
-    font-weight: var(--font-weight-medium);
-    line-height: var(--line-height-large);
-    letter-spacing: var(--letter-spacing-normal);
-    color: var(--text-on-critical-base);
-    white-space: nowrap;
-  }
-
-  [data-slot="message-part-tool-error-message"] {
-    color: var(--text-on-critical-weak);
-    max-height: 240px;
-    overflow-y: auto;
-    word-break: break-word;
-  }
-}
-
 [data-component="tool-output"] {
   white-space: pre;
   padding: 0;
@@ -717,7 +682,6 @@
 [data-component="user-message"] [data-slot="user-message-text"],
 [data-component="text-part"],
 [data-component="reasoning-part"],
-[data-component="tool-error"],
 [data-component="tool-output"],
 [data-component="bash-output"],
 [data-component="edit-content"],
