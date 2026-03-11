@@ -149,6 +149,10 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
       - name: Cache apt packages
         if: contains(matrix.settings.host, 'ubuntu')
         uses: actions/cache@v4
