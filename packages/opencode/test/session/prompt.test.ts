@@ -1,6 +1,7 @@
 import path from "path"
 import { describe, expect, test } from "bun:test"
 import { fileURLToPath } from "url"
+import { Identifier } from "../../src/id/id"
 import { Instance } from "../../src/project/instance"
 import { Session } from "../../src/session"
 import { MessageV2 } from "../../src/session/message-v2"
@@ -208,4 +209,66 @@ describe("session.prompt agent variant", () => {
       else process.env.OPENAI_API_KEY = prev
     }
   })
+})
+
+describe("session.prompt loop exit", () => {
+  test(
+    "stops after the first finished assistant when the user id is provided externally",
+    async () => {
+      await using tmp = await tmpdir({
+        config: {},
+      })
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const session = await Session.create({ title: "loop exit" })
+          const messageID = Identifier.create("message", false, Date.now() + 60_000)
+          await Session.updateMessage({
+            id: messageID,
+            sessionID: session.id,
+            role: "user",
+            time: { created: Date.now() },
+            agent: "build",
+            model: { providerID: "missing", modelID: "missing" },
+            tools: {},
+          })
+          const reply = await Session.updateMessage({
+            id: Identifier.ascending("message"),
+            sessionID: session.id,
+            role: "assistant",
+            parentID: messageID,
+            modelID: "missing",
+            providerID: "missing",
+            mode: "build",
+            agent: "build",
+            path: {
+              cwd: tmp.path,
+              root: tmp.path,
+            },
+            cost: 0,
+            tokens: {
+              input: 0,
+              output: 0,
+              reasoning: 0,
+              cache: { read: 0, write: 0 },
+            },
+            time: {
+              created: Date.now(),
+              completed: Date.now(),
+            },
+            finish: "stop",
+          })
+
+          const result = await SessionPrompt.loop({ sessionID: session.id })
+          expect(result.info.role).toBe("assistant")
+          expect(result.info.id).toBe(reply.id)
+          if (result.info.role !== "assistant") return
+          expect(result.info.parentID).toBe(messageID)
+
+          await Session.remove(session.id)
+        },
+      })
+    },
+  )
 })
