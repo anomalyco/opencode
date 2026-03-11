@@ -35,7 +35,7 @@ export namespace Plugin {
       worktree: Instance.worktree,
       directory: Instance.directory,
       get serverUrl(): URL {
-        throw new Error("Server URL is no longer supported in plugins")
+        return Server.url ?? new URL("http://localhost:4096")
       },
       $: Bun.$,
     }

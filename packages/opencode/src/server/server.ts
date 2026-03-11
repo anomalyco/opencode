@@ -585,6 +585,9 @@ export namespace Server {
     return result
   }
 
+  /** @deprecated do not use this dumb shit */
+  export let url: URL
+
   export function listen(opts: {
     port: number
     hostname: string
@@ -592,6 +595,7 @@ export namespace Server {
     mdnsDomain?: string
     cors?: string[]
   }) {
+    url = new URL(`http://${opts.hostname}:${opts.port}`)
     const app = createApp(opts)
     const args = {
       hostname: opts.hostname,
