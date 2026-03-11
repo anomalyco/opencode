@@ -650,7 +650,26 @@ export namespace SessionPrompt {
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
       // Build system prompt, adding structured output instruction if needed
-      const system = [...(await SystemPrompt.environment(model)), ...(await InstructionPrompt.system())]
+      // First, check if this is the first message in the session for session.start hook
+      const existingMessages = await Session.messages({ sessionID })
+      const isFirstMessage = existingMessages.length <= 1 // Only the message just created
+
+      let sessionStartContext: string[] = []
+      if (isFirstMessage) {
+        await Plugin.trigger(
+          "session.start",
+          { sessionID, directory: session.directory, projectID: session.projectID },
+          { context: [] },
+        ).then((result) => {
+          sessionStartContext = result.context
+        })
+      }
+
+      const system = [
+        ...sessionStartContext,
+        ...(await SystemPrompt.environment(model)),
+        ...(await InstructionPrompt.system()),
+      ]
       const format = lastUser.format ?? { type: "text" }
       if (format.type === "json_schema") {
         system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
