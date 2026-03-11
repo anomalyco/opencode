@@ -45,7 +45,7 @@ description: Skill for tool tests.
         fn: async () => {
           const tool = await SkillTool.init()
           const skillPath = path.join(tmp.path, ".opencode", "skill", "tool-skill", "SKILL.md")
-          expect(tool.description).toContain(`<location>${pathToFileURL(skillPath).href}</location>`)
+          expect(tool.description).toContain(`**tool-skill**: Skill for tool tests.`)
         },
       })
     } finally {
