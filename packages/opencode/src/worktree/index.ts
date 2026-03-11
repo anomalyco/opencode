@@ -364,7 +364,7 @@ export namespace Worktree {
       const start = async () => {
         const populated = await FileWatcher.withPause(info.directory, () =>
           git(["reset", "--hard"], { cwd: info.directory }),
-        )
+        ) //during reset pause file watcher events since they cause cpu pressure and slow workspace creation
         if (populated.exitCode !== 0) {
           const message = errorText(populated) || "Failed to populate worktree"
           log.error("worktree checkout failed", { directory: info.directory, message })
