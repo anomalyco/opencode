@@ -837,6 +837,10 @@ export class Tool extends HeyApiClient {
     parameters?: {
       directory?: string
       workspace?: string
+      provider?: string
+      model?: string
+      agent?: string
+      sessionID?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -847,6 +851,10 @@ export class Tool extends HeyApiClient {
           args: [
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "query", key: "provider" },
+            { in: "query", key: "model" },
+            { in: "query", key: "agent" },
+            { in: "query", key: "sessionID" },
           ],
         },
       ],
@@ -869,6 +877,8 @@ export class Tool extends HeyApiClient {
       workspace?: string
       provider: string
       model: string
+      agent?: string
+      sessionID?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -881,6 +891,8 @@ export class Tool extends HeyApiClient {
             { in: "query", key: "workspace" },
             { in: "query", key: "provider" },
             { in: "query", key: "model" },
+            { in: "query", key: "agent" },
+            { in: "query", key: "sessionID" },
           ],
         },
       ],

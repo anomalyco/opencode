@@ -1953,6 +1953,10 @@ export type ToolIdsData = {
   path?: never
   query?: {
     directory?: string
+    provider?: string
+    model?: string
+    agent?: string
+    sessionID?: string
   }
   url: "/experimental/tool/ids"
 }
@@ -1982,6 +1986,8 @@ export type ToolListData = {
     directory?: string
     provider: string
     model: string
+    agent?: string
+    sessionID?: string
   }
   url: "/experimental/tool"
 }
