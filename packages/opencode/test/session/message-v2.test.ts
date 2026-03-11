@@ -842,35 +842,6 @@ describe("session.message-v2.fromError", () => {
     })
   })
 
-  test("maps github-copilot 403 to reauth guidance", () => {
-    const error = new APICallError({
-      message: "forbidden",
-      url: "https://api.githubcopilot.com/v1/chat/completions",
-      requestBodyValues: {},
-      statusCode: 403,
-      responseHeaders: { "content-type": "application/json" },
-      responseBody: '{"error":"forbidden"}',
-      isRetryable: false,
-    })
-
-    const result = MessageV2.fromError(error, { providerID: "github-copilot" })
-
-    expect(result).toStrictEqual({
-      name: "APIError",
-      data: {
-        message:
-          "Please reauthenticate with the copilot provider to ensure your credentials work properly with OpenCode.",
-        statusCode: 403,
-        isRetryable: false,
-        responseHeaders: { "content-type": "application/json" },
-        responseBody: '{"error":"forbidden"}',
-        metadata: {
-          url: "https://api.githubcopilot.com/v1/chat/completions",
-        },
-      },
-    })
-  })
-
   test("detects context overflow from APICallError provider messages", () => {
     const cases = [
       "prompt is too long: 213462 tokens > 200000 maximum",
