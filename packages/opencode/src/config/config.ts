@@ -1166,6 +1166,15 @@ export namespace Config {
           url: z.string().optional().describe("Enterprise URL"),
         })
         .optional(),
+      session_history_days: z
+        .number()
+        .int()
+        .min(0)
+        .max(3650)
+        .optional()
+        .describe(
+          "Number of days of session history to load in the TUI session picker. 0 disables the time filter entirely (default: 30)",
+        ),
       compaction: z
         .object({
           auto: z.boolean().optional().describe("Enable automatic compaction when context is full (default: true)"),

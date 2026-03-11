@@ -1464,6 +1464,10 @@ export type Config = {
      */
     url?: string
   }
+  /**
+   * Number of days of session history to load in the TUI session picker. 0 disables the time filter entirely (default: 30)
+   */
+  session_history_days?: number
   compaction?: {
     /**
      * Enable automatic compaction when context is full (default: true)
