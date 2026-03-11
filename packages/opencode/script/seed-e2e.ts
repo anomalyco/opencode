@@ -20,7 +20,7 @@ const seed = async () => {
     init: InstanceBootstrap,
     fn: async () => {
       const session = await Session.create({ title })
-      const messageID = MessageID.make(Identifier.descending("message"))
+      const messageID = MessageID.ascending()
       const partID = Identifier.descending("part")
       const message = {
         id: messageID,

@@ -25,7 +25,7 @@ describe("revert + compact workflow", () => {
 
         // Create a user message
         const userMsg1 = await Session.updateMessage({
-          id: MessageID.make(Identifier.ascending("message")),
+          id: MessageID.ascending(),
           role: "user",
           sessionID,
           agent: "default",
@@ -49,7 +49,7 @@ describe("revert + compact workflow", () => {
 
         // Create an assistant response message
         const assistantMsg1: MessageV2.Assistant = {
-          id: MessageID.make(Identifier.ascending("message")),
+          id: MessageID.ascending(),
           role: "assistant",
           sessionID,
           mode: "default",
@@ -86,7 +86,7 @@ describe("revert + compact workflow", () => {
 
         // Create another user message
         const userMsg2 = await Session.updateMessage({
-          id: MessageID.make(Identifier.ascending("message")),
+          id: MessageID.ascending(),
           role: "user",
           sessionID,
           agent: "default",
@@ -109,7 +109,7 @@ describe("revert + compact workflow", () => {
 
         // Create another assistant response
         const assistantMsg2: MessageV2.Assistant = {
-          id: MessageID.make(Identifier.ascending("message")),
+          id: MessageID.ascending(),
           role: "assistant",
           sessionID,
           mode: "default",
@@ -201,7 +201,7 @@ describe("revert + compact workflow", () => {
 
         // Create initial messages
         const userMsg = await Session.updateMessage({
-          id: MessageID.make(Identifier.ascending("message")),
+          id: MessageID.ascending(),
           role: "user",
           sessionID,
           agent: "default",
@@ -223,7 +223,7 @@ describe("revert + compact workflow", () => {
         })
 
         const assistantMsg: MessageV2.Assistant = {
-          id: MessageID.make(Identifier.ascending("message")),
+          id: MessageID.ascending(),
           role: "assistant",
           sessionID,
           mode: "default",

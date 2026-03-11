@@ -82,7 +82,7 @@ describe("step-finish token propagation via Bus event", () => {
         fn: async () => {
           const session = await Session.create({})
 
-          const messageID = MessageID.make(Identifier.ascending("message"))
+          const messageID = MessageID.ascending()
           await Session.updateMessage({
             id: messageID,
             sessionID: session.id,
