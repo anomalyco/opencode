@@ -14,6 +14,7 @@ import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
 import { ProviderTransform } from "@/provider/transform"
+import { InstructionPrompt } from "./instruction"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
@@ -174,11 +175,17 @@ export namespace SessionCompaction {
 Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next.
 The summary that you construct will be used so that another agent can read it and continue the work.
 
+IMPORTANT: If the system prompt contains project instructions (from AGENTS.md, CLAUDE.md, or similar instruction files), you MUST preserve any key rules, constraints, and behavioral guidelines in the "Active Project Instructions" section below. These instructions guide agent behavior and must carry forward across compaction boundaries. Without them, the next agent will lose critical context about how to behave.
+
 When constructing the summary, try to stick to this template:
 ---
 ## Goal
 
 [What goal(s) is the user trying to accomplish?]
+
+## Active Project Instructions
+
+[List any specific rules, guidelines, or behavioral instructions from AGENTS.md, CLAUDE.md, the system prompt, or user directives that were actively being followed during this conversation. Include items such as: git safety rules, coding conventions, reasoning requirements, file handling constraints, tool usage restrictions, or any other project-specific instructions that the next agent must continue to follow. If no special instructions were in effect, write "None".]
 
 ## Instructions
 
@@ -199,13 +206,17 @@ When constructing the summary, try to stick to this template:
 ---`
 
     const promptText = compacting.prompt ?? [defaultPrompt, ...compacting.context].join("\n\n")
+    // Include project instructions (AGENTS.md, CLAUDE.md) in the compaction system
+    // prompt so the summarizer knows which rules and guidelines are important to
+    // preserve in the summary. Without this, instruction context is silently lost.
+    const instructions = await InstructionPrompt.system()
     const result = await processor.process({
       user: userMessage,
       agent,
       abort: input.abort,
       sessionID: input.sessionID,
       tools: {},
-      system: [],
+      system: instructions,
       messages: [
         ...MessageV2.toModelMessages(messages, model, { stripMedia: true }),
         {
@@ -233,6 +244,39 @@ When constructing the summary, try to stick to this template:
     }
 
     if (result === "continue" && input.auto) {
+      // After compaction, inject project instructions as a synthetic message so they
+      // appear in the conversation context (not just the system prompt). This ensures
+      // the post-compaction agent has instructions reinforced in both places, similar
+      // to how Claude Code re-injects CLAUDE.md after compression.
+      if (instructions.length > 0) {
+        const instructionMsg = await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "user",
+          sessionID: input.sessionID,
+          time: { created: Date.now() },
+          agent: userMessage.agent,
+          model: userMessage.model,
+        })
+        await Session.updatePart({
+          id: Identifier.ascending("part"),
+          messageID: instructionMsg.id,
+          sessionID: input.sessionID,
+          type: "text",
+          synthetic: true,
+          text: [
+            "<system-reminder>",
+            "The conversation was just compacted. The following project instructions must continue to be followed:",
+            "",
+            ...instructions,
+            "</system-reminder>",
+          ].join("\n"),
+          time: {
+            start: Date.now(),
+            end: Date.now(),
+          },
+        })
+      }
+
       if (replay) {
         const original = replay.info as MessageV2.User
         const replayMsg = await Session.updateMessage({
