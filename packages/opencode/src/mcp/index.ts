@@ -116,6 +116,30 @@ export namespace MCP {
     })
   }
 
+  type CallToolResult = z.infer<typeof CallToolResultSchema>
+
+  function callToolErrorText(result: CallToolResult): string {
+    const content = Array.isArray(result.content) ? result.content : []
+    const lines = content
+      .map((item) => {
+        if (item && typeof item === "object") {
+          if ("text" in item && typeof item.text === "string") return item.text
+          if ("data" in item) {
+            try {
+              return JSON.stringify(item.data)
+            } catch {
+              return String(item.data)
+            }
+          }
+        }
+        return ""
+      })
+      .filter(Boolean)
+
+    const joined = lines.join("\n").trim()
+    return joined || "MCP tool returned isError=true"
+  }
+
   // Convert MCP tool definition to AI SDK Tool type
   async function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, timeout?: number): Promise<Tool> {
     const inputSchema = mcpTool.inputSchema
@@ -132,7 +156,7 @@ export namespace MCP {
       description: mcpTool.description ?? "",
       inputSchema: jsonSchema(schema),
       execute: async (args: unknown) => {
-        return client.callTool(
+        const result = await client.callTool(
           {
             name: mcpTool.name,
             arguments: (args || {}) as Record<string, unknown>,
@@ -143,6 +167,10 @@ export namespace MCP {
             timeout,
           },
         )
+        if (result.isError) {
+          throw new Error(callToolErrorText(result))
+        }
+        return result
       },
     })
   }
