@@ -153,9 +153,12 @@ export const ImportCommand = cmd({
         return
       }
 
-      const sessionID = SessionID.make(exportData.info.id)
-      const parentID = exportData.info.parentID ? SessionID.make(exportData.info.parentID) : undefined
-      const row = Session.toRow({ ...exportData.info, id: sessionID, parentID, projectID: Instance.project.id })
+      const row = Session.toRow({
+        ...exportData.info,
+        id: SessionID.make(exportData.info.id),
+        parentID: exportData.info.parentID ? SessionID.make(exportData.info.parentID) : undefined,
+        projectID: Instance.project.id,
+      })
       Database.use((db) =>
         db
           .insert(SessionTable)
@@ -170,7 +173,7 @@ export const ImportCommand = cmd({
             .insert(MessageTable)
             .values({
               id: msg.info.id,
-              session_id: sessionID,
+              session_id: row.id,
               time_created: msg.info.time?.created ?? Date.now(),
               data: msg.info,
             })
@@ -185,7 +188,7 @@ export const ImportCommand = cmd({
               .values({
                 id: part.id,
                 message_id: msg.info.id,
-                session_id: sessionID,
+                session_id: row.id,
                 data: part,
               })
               .onConflictDoNothing()

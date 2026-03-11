@@ -18,7 +18,7 @@ export const ExportCommand = cmd({
   },
   handler: async (args) => {
     await bootstrap(process.cwd(), async () => {
-      let sessionID = args.sessionID
+      let sessionID = args.sessionID ? SessionID.make(args.sessionID) : undefined
       process.stderr.write(`Exporting session: ${sessionID ?? "latest"}\n`)
 
       if (!sessionID) {
@@ -59,7 +59,7 @@ export const ExportCommand = cmd({
           throw new UI.CancelledError()
         }
 
-        sessionID = selectedSession as string
+        sessionID = selectedSession
 
         prompts.outro("Exporting session...", {
           output: process.stderr,
@@ -67,7 +67,7 @@ export const ExportCommand = cmd({
       }
 
       try {
-        const sessionInfo = await Session.get(SessionID.make(sessionID!))
+        const sessionInfo = await Session.get(sessionID!)
         const messages = await Session.messages({ sessionID: sessionInfo.id })
 
         const exportData = {
