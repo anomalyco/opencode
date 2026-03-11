@@ -129,10 +129,18 @@ function DiagnosticsDisplay(props: { diagnostics: Diagnostic[] }): JSX.Element {
 export interface MessageProps {
   message: MessageType
   parts: PartType[]
+  actions?: UserActions
   showAssistantCopyPartID?: string | null
   interrupted?: boolean
   queued?: boolean
   showReasoningSummaries?: boolean
+}
+
+export type SessionAction = (input: { sessionID: string; messageID: string }) => Promise<void> | void
+
+export type UserActions = {
+  fork?: SessionAction
+  revert?: SessionAction
 }
 
 export interface MessagePartProps {
@@ -676,6 +684,7 @@ export function Message(props: MessageProps) {
           <UserMessageDisplay
             message={userMessage() as UserMessage}
             parts={props.parts}
+            actions={props.actions}
             interrupted={props.interrupted}
             queued={props.queued}
           />
@@ -872,6 +881,7 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
 export function UserMessageDisplay(props: {
   message: UserMessage
   parts: PartType[]
+  actions?: UserActions
   interrupted?: boolean
   queued?: boolean
 }) {
@@ -879,6 +889,7 @@ export function UserMessageDisplay(props: {
   const dialog = useDialog()
   const i18n = useI18n()
   const [copied, setCopied] = createSignal(false)
+  const [busy, setBusy] = createSignal<"fork" | "revert" | undefined>()
 
   const textPart = createMemo(
     () => props.parts?.find((p) => p.type === "text" && !(p as TextPart).synthetic) as TextPart | undefined,
@@ -943,6 +954,22 @@ export function UserMessageDisplay(props: {
     await navigator.clipboard.writeText(content)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  const run = (kind: "fork" | "revert") => {
+    const act = kind === "fork" ? props.actions?.fork : props.actions?.revert
+    if (!act || busy()) return
+    setBusy(kind)
+    void Promise.resolve()
+      .then(() =>
+        act({
+          sessionID: props.message.sessionID,
+          messageID: props.message.id,
+        }),
+      )
+      .finally(() => {
+        if (busy() === kind) setBusy(undefined)
+      })
   }
 
   return (
@@ -1011,6 +1038,38 @@ export function UserMessageDisplay(props: {
                   </span>
                 </Show>
               </span>
+            </Show>
+            <Show when={props.actions?.fork}>
+              <Tooltip value={i18n.t("ui.message.forkMessage")} placement="top" gutter={4}>
+                <IconButton
+                  icon="fork"
+                  size="normal"
+                  variant="ghost"
+                  disabled={!!busy()}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    run("fork")
+                  }}
+                  aria-label={i18n.t("ui.message.forkMessage")}
+                />
+              </Tooltip>
+            </Show>
+            <Show when={props.actions?.revert}>
+              <Tooltip value={i18n.t("ui.message.revertMessage")} placement="top" gutter={4}>
+                <IconButton
+                  icon="reset"
+                  size="normal"
+                  variant="ghost"
+                  disabled={!!busy()}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    run("revert")
+                  }}
+                  aria-label={i18n.t("ui.message.revertMessage")}
+                />
+              </Tooltip>
             </Show>
             <Tooltip
               value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
