@@ -23,8 +23,7 @@ import { Instance } from "@/project/instance"
 import { bootstrap } from "../bootstrap"
 import { Session } from "../../session"
 import type { SessionID } from "../../session/schema"
-import { Identifier } from "../../id/id"
-import { MessageID } from "../../session/schema"
+import { MessageID, PartID } from "../../session/schema"
 import { Provider } from "../../provider/provider"
 import { Bus } from "../../bus"
 import { MessageV2 } from "../../session/message-v2"
@@ -945,13 +944,13 @@ export const GithubRunCommand = cmd({
           // agent is omitted - server will use default_agent from config or fall back to "build"
           parts: [
             {
-              id: Identifier.ascending("part"),
+              id: PartID.ascending(),
               type: "text",
               text: message,
             },
             ...files.flatMap((f) => [
               {
-                id: Identifier.ascending("part"),
+                id: PartID.ascending(),
                 type: "file" as const,
                 mime: f.mime,
                 url: `data:${f.mime};base64,${f.content}`,
@@ -999,7 +998,7 @@ export const GithubRunCommand = cmd({
           tools: { "*": false }, // Disable all tools to force text response
           parts: [
             {
-              id: Identifier.ascending("part"),
+              id: PartID.ascending(),
               type: "text",
               text: "Summarize the actions (tool calls & reasoning) you did for the user in 1-2 sentences.",
             },

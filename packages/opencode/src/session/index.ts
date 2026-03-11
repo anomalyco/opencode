@@ -7,7 +7,6 @@ import z from "zod"
 import { type ProviderMetadata } from "ai"
 import { Config } from "../config/config"
 import { Flag } from "../flag/flag"
-import { Identifier } from "../id/id"
 import { Installation } from "../installation"
 
 import { Database, NotFoundError, eq, and, or, gte, isNull, desc, like, inArray, lt } from "../storage/db"
@@ -25,7 +24,7 @@ import { Snapshot } from "@/snapshot"
 import { WorkspaceContext } from "../control-plane/workspace-context"
 import { ProjectID } from "../project/schema"
 import { WorkspaceID } from "../control-plane/schema"
-import { SessionID, MessageID } from "./schema"
+import { SessionID, MessageID, PartID } from "./schema"
 
 import type { Provider } from "@/provider/provider"
 import { PermissionNext } from "@/permission/next"
@@ -152,7 +151,7 @@ export namespace Session {
       revert: z
         .object({
           messageID: MessageID.zod,
-          partID: z.string().optional(),
+          partID: PartID.zod.optional(),
           snapshot: z.string().optional(),
           diff: z.string().optional(),
         })
@@ -269,7 +268,7 @@ export namespace Session {
         for (const part of msg.parts) {
           await updatePart({
             ...part,
-            id: Identifier.ascending("part"),
+            id: PartID.ascending(),
             messageID: cloned.id,
             sessionID: session.id,
           })
@@ -731,7 +730,7 @@ export namespace Session {
     z.object({
       sessionID: SessionID.zod,
       messageID: MessageID.zod,
-      partID: Identifier.schema("part"),
+      partID: PartID.zod,
     }),
     async (input) => {
       Database.use((db) => {
@@ -779,7 +778,7 @@ export namespace Session {
     z.object({
       sessionID: SessionID.zod,
       messageID: MessageID.zod,
-      partID: z.string(),
+      partID: PartID.zod,
       field: z.string(),
       delta: z.string(),
     }),

@@ -27,3 +27,15 @@ export const MessageID = messageIdSchema.pipe(
     zod: z.string().startsWith("msg").pipe(z.custom<MessageID>()),
   })),
 )
+
+const partIdSchema = Schema.String.pipe(Schema.brand("PartId"))
+
+export type PartID = typeof partIdSchema.Type
+
+export const PartID = partIdSchema.pipe(
+  withStatics((schema: typeof partIdSchema) => ({
+    make: (id: string) => schema.makeUnsafe(id),
+    ascending: (id?: string) => schema.makeUnsafe(Identifier.ascending("part", id)),
+    zod: z.string().startsWith("prt").pipe(z.custom<PartID>()),
+  })),
+)

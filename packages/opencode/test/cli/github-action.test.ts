@@ -1,12 +1,12 @@
 import { test, expect, describe } from "bun:test"
 import { extractResponseText, formatPromptTooLargeError } from "../../src/cli/cmd/github"
 import type { MessageV2 } from "../../src/session/message-v2"
-import { SessionID, MessageID } from "../../src/session/schema"
+import { SessionID, MessageID, PartID } from "../../src/session/schema"
 
 // Helper to create minimal valid parts
 function createTextPart(text: string): MessageV2.Part {
   return {
-    id: "1",
+    id: PartID.ascending(),
     sessionID: SessionID.make("s"),
     messageID: MessageID.make("m"),
     type: "text" as const,
@@ -16,7 +16,7 @@ function createTextPart(text: string): MessageV2.Part {
 
 function createReasoningPart(text: string): MessageV2.Part {
   return {
-    id: "1",
+    id: PartID.ascending(),
     sessionID: SessionID.make("s"),
     messageID: MessageID.make("m"),
     type: "reasoning" as const,
@@ -28,7 +28,7 @@ function createReasoningPart(text: string): MessageV2.Part {
 function createToolPart(tool: string, title: string, status: "completed" | "running" = "completed"): MessageV2.Part {
   if (status === "completed") {
     return {
-      id: "1",
+      id: PartID.ascending(),
       sessionID: SessionID.make("s"),
       messageID: MessageID.make("m"),
       type: "tool" as const,
@@ -45,7 +45,7 @@ function createToolPart(tool: string, title: string, status: "completed" | "runn
     }
   }
   return {
-    id: "1",
+    id: PartID.ascending(),
     sessionID: SessionID.make("s"),
     messageID: MessageID.make("m"),
     type: "tool" as const,
@@ -61,7 +61,7 @@ function createToolPart(tool: string, title: string, status: "completed" | "runn
 
 function createStepStartPart(): MessageV2.Part {
   return {
-    id: "1",
+    id: PartID.ascending(),
     sessionID: SessionID.make("s"),
     messageID: MessageID.make("m"),
     type: "step-start" as const,
@@ -70,7 +70,7 @@ function createStepStartPart(): MessageV2.Part {
 
 function createStepFinishPart(): MessageV2.Part {
   return {
-    id: "1",
+    id: PartID.ascending(),
     sessionID: SessionID.make("s"),
     messageID: MessageID.make("m"),
     type: "step-finish" as const,

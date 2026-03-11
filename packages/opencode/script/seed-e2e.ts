@@ -11,8 +11,7 @@ const seed = async () => {
   const { Instance } = await import("../src/project/instance")
   const { InstanceBootstrap } = await import("../src/project/bootstrap")
   const { Session } = await import("../src/session")
-  const { Identifier } = await import("../src/id/id")
-  const { MessageID } = await import("../src/session/schema")
+  const { MessageID, PartID } = await import("../src/session/schema")
   const { Project } = await import("../src/project/project")
 
   await Instance.provide({
@@ -21,7 +20,7 @@ const seed = async () => {
     fn: async () => {
       const session = await Session.create({ title })
       const messageID = MessageID.ascending()
-      const partID = Identifier.descending("part")
+      const partID = PartID.ascending()
       const message = {
         id: messageID,
         sessionID: session.id,
