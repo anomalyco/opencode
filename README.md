@@ -92,6 +92,27 @@
 
 ## 📦 安装使用
 
+### 直接安装
+
+在 [Release 页面](https://github.com/panyw5/opencode/releases) 下载最新版本的 OpenCode Desktop 应用。
+
+#### `已损坏` 错误处理
+
+MacOS 版本打开应用若出现`已损坏`警告，
+
+<p align="center">
+  <img src="image/README/1773199311694.png" width="32%" />
+</p>
+
+请打开 `terminal`，输入
+
+```
+cd /Applications
+xattr -d com.apple.quarantine OpenCode.app
+```
+
+
+
 ### 从源码构建
 
 ```bash
