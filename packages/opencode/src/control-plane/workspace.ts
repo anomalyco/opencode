@@ -6,9 +6,11 @@ import { Project } from "@/project/project"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { Log } from "@/util/log"
+import { ProjectID } from "@/project/schema"
 import { WorkspaceTable } from "./workspace.sql"
 import { getAdaptor } from "./adaptors"
 import { WorkspaceInfo } from "./types"
+import type { WorkspaceInfo as WorkspaceInfoType } from "./types"
 import { parseSSE } from "./sse"
 
 export namespace Workspace {
@@ -30,7 +32,7 @@ export namespace Workspace {
   export const Info = WorkspaceInfo.meta({
     ref: "Workspace",
   })
-  export type Info = z.infer<typeof Info>
+  export type Info = WorkspaceInfoType
 
   function fromRow(row: typeof WorkspaceTable.$inferSelect): Info {
     return {
@@ -48,7 +50,7 @@ export namespace Workspace {
     id: Identifier.schema("workspace").optional(),
     type: Info.shape.type,
     branch: Info.shape.branch,
-    projectID: Info.shape.projectID,
+    projectID: ProjectID.zod,
     extra: Info.shape.extra,
   })
 
@@ -65,7 +67,7 @@ export namespace Workspace {
       name: config.name ?? null,
       directory: config.directory ?? null,
       extra: config.extra ?? null,
-      projectID: input.projectID,
+      projectID: config.projectID,
     }
 
     Database.use((db) => {

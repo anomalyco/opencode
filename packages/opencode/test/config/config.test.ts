@@ -44,7 +44,7 @@ async function check(map: (dir: string) => string) {
         const cfg = await Config.get()
         expect(cfg.snapshot).toBe(true)
         expect(Instance.directory).toBe(Filesystem.resolve(tmp.path))
-        expect(Instance.project.id).not.toBe("global")
+        expect(String(Instance.project.id)).not.toBe("global")
       },
     })
   } finally {
