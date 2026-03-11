@@ -1,0 +1,130 @@
+---
+title: Teilen
+description: Teile OpenCode-Unterhaltungen per oeffentlichem Link.
+---
+
+Mit der Share-Funktion erstellst du oeffentliche Links zu OpenCode-Unterhaltungen.
+So kannst du einfacher mit dem Team zusammenarbeiten oder Hilfe einholen.
+
+:::note
+Geteilte Unterhaltungen sind fuer alle mit dem Link oeffentlich zugaenglich.
+:::
+
+---
+
+## Funktionsweise
+
+Wenn du eine Unterhaltung teilst, macht OpenCode Folgendes:
+
+1. Erstellt eine eindeutige oeffentliche URL fuer deine Sitzung
+2. Synchronisiert den Verlauf auf unsere Server
+3. Stellt die Unterhaltung unter `opncd.ai/s/<share-id>` bereit
+
+---
+
+## Teilen
+
+OpenCode hat drei Modi, die das Teilen steuern:
+
+---
+
+### Manuell (Standard)
+
+Standardmaessig nutzt OpenCode den manuellen Modus.
+Sitzungen werden nicht automatisch geteilt, du kannst sie aber mit `/share` veroeffentlichen:
+
+```
+/share
+```
+
+Dabei wird eine eindeutige URL erzeugt und in die Zwischenablage kopiert.
+
+Um den manuellen Modus explizit in der [Konfiguration](/docs/config) zu setzen:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "manual"
+}
+```
+
+---
+
+### Auto-Share
+
+Du kannst automatisches Teilen fuer neue Unterhaltungen aktivieren, indem du in der [Konfiguration](/docs/config) `share` auf `"auto"` setzt:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "auto"
+}
+```
+
+Mit aktiviertem Auto-Share wird jede neue Unterhaltung automatisch geteilt und ein Link erstellt.
+
+---
+
+### Deaktiviert
+
+Du kannst Teilen komplett deaktivieren, indem du in der [Konfiguration](/docs/config) `share` auf `"disabled"` setzt:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "disabled"
+}
+```
+
+Wenn das fuer ein Projekt teamweit gelten soll, lege es in der Projekt-`opencode.json` fest und committe die Datei.
+
+---
+
+## Teilen aufheben
+
+Um das Teilen zu beenden und den oeffentlichen Zugriff zu entfernen:
+
+```
+/unshare
+```
+
+Dadurch wird der Share-Link entfernt und die zugehoerigen Daten werden geloescht.
+
+---
+
+## Datenschutz
+
+Beim Teilen solltest du ein paar Punkte beachten.
+
+---
+
+### Datenaufbewahrung
+
+Geteilte Unterhaltungen bleiben veroeffentlicht, bis du sie explizit aufhebst.
+Das umfasst:
+
+- Vollstaendigen Unterhaltungsverlauf
+- Alle Nachrichten und Antworten
+- Sitzungsmetadaten
+
+---
+
+### Empfehlungen
+
+- Teile nur Unterhaltungen ohne sensible Informationen.
+- Pruefe Inhalte vor dem Teilen.
+- Hebe das Teilen wieder auf, wenn die Zusammenarbeit beendet ist.
+- Teile keine proprietaeren Codes oder vertraulichen Daten.
+- Deaktiviere Teilen komplett bei sensiblen Projekten.
+
+---
+
+## Für Unternehmen
+
+In Enterprise-Umgebungen kann die Share-Funktion:
+
+- **Deaktiviert** werden, um Compliance-Vorgaben einzuhalten
+- Auf **SSO-authentifizierte** Nutzer eingeschraenkt werden
+- **Self-hosted** auf eigener Infrastruktur betrieben werden
+
+[Mehr dazu](/docs/enterprise), wie du opencode in deiner Organisation einsetzt.

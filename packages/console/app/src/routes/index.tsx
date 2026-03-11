@@ -1,5 +1,5 @@
 import "./index.css"
-import { Title, Meta, Link } from "@solidjs/meta"
+import { Title, Meta } from "@solidjs/meta"
 //import { HttpHeader } from "@solidjs/start"
 import video from "../asset/lander/opencode-min.mp4"
 import videoPoster from "../asset/lander/opencode-poster.png"
@@ -14,6 +14,9 @@ import { Legal } from "~/component/legal"
 import { github } from "~/lib/github"
 import { createMemo } from "solid-js"
 import { config } from "~/config"
+import { useI18n } from "~/context/i18n"
+import { useLanguage } from "~/context/language"
+import { LocaleLinks } from "~/component/locale-links"
 
 function CopyStatus() {
   return (
@@ -25,6 +28,8 @@ function CopyStatus() {
 }
 
 export default function Home() {
+  const i18n = useI18n()
+  const language = useLanguage()
   const githubData = createAsync(() => github())
   const release = createMemo(() => githubData()?.release)
 
@@ -43,8 +48,8 @@ export default function Home() {
   return (
     <main data-page="opencode">
       {/*<HttpHeader name="Cache-Control" value="public, max-age=1, s-maxage=3600, stale-while-revalidate=86400" />*/}
-      <Title>OpenCode | The open source AI coding agent</Title>
-      <Link rel="canonical" href={config.baseUrl} />
+      <Title>{i18n.t("home.title")}</Title>
+      <LocaleLinks path="/" />
       <Meta property="og:image" content="/social-share.png" />
       <Meta name="twitter:image" content="/social-share.png" />
       <div data-component="container">
@@ -53,16 +58,17 @@ export default function Home() {
         <div data-component="content">
           <section data-component="hero">
             <div data-component="desktop-app-banner">
-              <span data-slot="badge">New</span>
+              <span data-slot="badge">{i18n.t("home.banner.badge")}</span>
               <div data-slot="content">
                 <span data-slot="text">
-                  Desktop app available in beta<span data-slot="platforms"> on macOS, Windows, and Linux</span>.
+                  {i18n.t("home.banner.text")}
+                  <span data-slot="platforms"> {i18n.t("home.banner.platforms")}</span>.
                 </span>
-                <a href="/download" data-slot="link">
-                  Download now
+                <a href={language.route("/download")} data-slot="link">
+                  {i18n.t("home.banner.downloadNow")}
                 </a>
-                <a href="/download" data-slot="link-mobile">
-                  Download the desktop beta now
+                <a href={language.route("/download")} data-slot="link-mobile">
+                  {i18n.t("home.banner.downloadBetaNow")}
                 </a>
               </div>
             </div>
@@ -73,16 +79,16 @@ export default function Home() {
               {/*   target="_blank">*/}
               {/*  What’s new in {release()?.name ?? "the latest release"}*/}
               {/*</a>*/}
-              <h1>The open source AI coding agent</h1>
+              <h1>{i18n.t("home.hero.title")}</h1>
               <p>
-                Free models included or connect any model from any provider, <span data-slot="br"></span>including
-                Claude, GPT, Gemini and more.
+                {i18n.t("home.hero.subtitle.a")} <span data-slot="br"></span>
+                {i18n.t("home.hero.subtitle.b")}
               </p>
             </div>
             <div data-slot="installation">
               <Tabs
                 as="section"
-                aria-label="Install options"
+                aria-label={i18n.t("home.install.ariaLabel")}
                 class="tabs"
                 data-component="tabs"
                 data-active="curl"
@@ -161,61 +167,61 @@ export default function Home() {
 
           <section data-component="video">
             <video src={video} autoplay playsinline loop muted preload="auto" poster={videoPoster}>
-              Your browser does not support the video tag.
+              {i18n.t("common.videoUnsupported")}
             </video>
           </section>
 
           <section data-component="what">
             <div data-slot="section-title">
-              <h3>What is OpenCode?</h3>
-              <p>OpenCode is an open source agent that helps you write code in your terminal, IDE, or desktop.</p>
+              <h3>{i18n.t("home.what.title")}</h3>
+              <p>{i18n.t("home.what.body")}</p>
             </div>
             <ul>
               <li>
                 <span>[*]</span>
                 <div>
-                  <strong>LSP enabled</strong> Automatically loads the right LSPs for the LLM
+                  <strong>{i18n.t("home.what.lsp.title")}</strong> {i18n.t("home.what.lsp.body")}
                 </div>
               </li>
               <li>
                 <span>[*]</span>
                 <div>
-                  <strong>Multi-session</strong> Start multiple agents in parallel on the same project
+                  <strong>{i18n.t("home.what.multiSession.title")}</strong> {i18n.t("home.what.multiSession.body")}
                 </div>
               </li>
               <li>
                 <span>[*]</span>
                 <div>
-                  <strong>Share links</strong> Share a link to any session for reference or to debug
+                  <strong>{i18n.t("home.what.shareLinks.title")}</strong> {i18n.t("home.what.shareLinks.body")}
                 </div>
               </li>
               <li>
                 <span>[*]</span>
                 <div>
-                  <strong>GitHub Copilot</strong> Log in with GitHub to use your Copilot account
+                  <strong>{i18n.t("home.what.copilot.title")}</strong> {i18n.t("home.what.copilot.body")}
                 </div>
               </li>
               <li>
                 <span>[*]</span>
                 <div>
-                  <strong>ChatGPT Plus/Pro</strong> Log in with OpenAI to use your ChatGPT Plus or Pro account
+                  <strong>{i18n.t("home.what.chatgptPlus.title")}</strong> {i18n.t("home.what.chatgptPlus.body")}
                 </div>
               </li>
               <li>
                 <span>[*]</span>
                 <div>
-                  <strong>Any model</strong> 75+ LLM providers through Models.dev, including local models
+                  <strong>{i18n.t("home.what.anyModel.title")}</strong> {i18n.t("home.what.anyModel.body")}
                 </div>
               </li>
               <li>
                 <span>[*]</span>
                 <div>
-                  <strong>Any editor</strong> Available as a terminal interface, desktop app, and IDE extension
+                  <strong>{i18n.t("home.what.anyEditor.title")}</strong> {i18n.t("home.what.anyEditor.body")}
                 </div>
               </li>
             </ul>
-            <a href="/docs">
-              <span>Read docs </span>
+            <a href={language.route("/docs")}>
+              <span>{i18n.t("home.what.readDocs")} </span>
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path
                   d="M6.5 12L17 12M13 16.5L17.5 12L13 7.5"
@@ -229,15 +235,17 @@ export default function Home() {
 
           <section data-component="growth">
             <div data-slot="section-title">
-              <h3>The open source AI coding agent</h3>
+              <h3>{i18n.t("home.growth.title")}</h3>
               <div>
                 <span>[*]</span>
-                <p>
-                  With over <strong>{config.github.starsFormatted.full}</strong> GitHub stars,{" "}
-                  <strong>{config.stats.contributors}</strong> contributors, and over{" "}
-                  <strong>{config.stats.commits}</strong> commits, OpenCode is used and trusted by over{" "}
-                  <strong>{config.stats.monthlyUsers}</strong> developers every month.
-                </p>
+                <p
+                  innerHTML={i18n.t("home.growth.body", {
+                    stars: config.github.starsFormatted.full,
+                    contributors: config.stats.contributors,
+                    commits: config.stats.commits,
+                    monthlyUsers: config.stats.monthlyUsers,
+                  })}
+                />
               </div>
 
               <div data-component="growth-stats">
@@ -289,7 +297,8 @@ export default function Home() {
                     </svg>
                   </div>
                   <span>
-                    <figure>Fig 1.</figure> <strong>{config.github.starsFormatted.compact}</strong> GitHub Stars
+                    <figure>{i18n.t("common.figure", { n: 1 })}</figure>{" "}
+                    <strong>{config.github.starsFormatted.compact}</strong> {i18n.t("home.growth.githubStars")}
                   </span>
                 </div>
 
@@ -592,7 +601,8 @@ export default function Home() {
                     </svg>
                   </div>
                   <span>
-                    <figure>Fig 2.</figure> <strong>{config.stats.contributors}</strong> Contributors
+                    <figure>{i18n.t("common.figure", { n: 2 })}</figure> <strong>{config.stats.contributors}</strong>{" "}
+                    {i18n.t("home.growth.contributors")}
                   </span>
                 </div>
 
@@ -634,7 +644,8 @@ export default function Home() {
                     </svg>
                   </div>
                   <span>
-                    <figure>Fig 3.</figure> <strong>{config.stats.monthlyUsers}</strong> Monthly Devs
+                    <figure>{i18n.t("common.figure", { n: 3 })}</figure> <strong>{config.stats.monthlyUsers}</strong>{" "}
+                    {i18n.t("home.growth.monthlyDevs")}
                   </span>
                 </div>
               </div>
@@ -643,13 +654,13 @@ export default function Home() {
 
           <section data-component="privacy">
             <div data-slot="privacy-title">
-              <h3>Built for privacy first</h3>
+              <h3>{i18n.t("home.privacy.title")}</h3>
               <div>
                 <span>[*]</span>
 
                 <p>
-                  OpenCode does not store any of your code or context data, so that it can operate in privacy sensitive
-                  environments. Learn more about <a href="/docs/enterprise/ ">privacy</a>.
+                  {i18n.t("home.privacy.body")} {i18n.t("home.privacy.learnMore")}{" "}
+                  <a href={language.route("/docs/enterprise/")}>{i18n.t("home.privacy.link")}</a>.
                 </p>
               </div>
             </div>
@@ -657,70 +668,63 @@ export default function Home() {
 
           <section data-component="faq">
             <div data-slot="section-title">
-              <h3>FAQ</h3>
+              <h3>{i18n.t("common.faq")}</h3>
             </div>
             <ul>
               <li>
-                <Faq question="What is OpenCode?">
-                  OpenCode is an open source agent that helps you write and run code with any AI model. It's available
-                  as a terminal-based interface, desktop app, or IDE extension.
+                <Faq question={i18n.t("home.faq.q1")}>{i18n.t("home.faq.a1")}</Faq>
+              </li>
+              <li>
+                <Faq question={i18n.t("home.faq.q2")}>
+                  {i18n.t("home.faq.a2.before")} <a href={language.route("/docs")}>{i18n.t("home.faq.a2.link")}</a>.
                 </Faq>
               </li>
               <li>
-                <Faq question="How do I use OpenCode?">
-                  The easiest way to get started is to read the <a href="/docs">intro</a>.
-                </Faq>
-              </li>
-              <li>
-                <Faq question="Do I need extra AI subscriptions to use OpenCode?">
-                  Not necessarily, OpenCode comes with a set of free models that you can use without creating an
-                  account. Aside from these, you can use any of the popular coding models by creating a{" "}
-                  <A href="/zen">Zen</A> account. While we encourage users to use Zen, OpenCode also works with all
-                  popular providers such as OpenAI, Anthropic, xAI etc. You can even connect your{" "}
-                  <a href="/docs/providers/#lm-studio" target="_blank">
-                    local models
+                <Faq question={i18n.t("home.faq.q3")}>
+                  {i18n.t("home.faq.a3.p1")} {i18n.t("home.faq.a3.p2.beforeZen")}{" "}
+                  <A href={language.route("/zen")}>{i18n.t("nav.zen")}</A>
+                  {i18n.t("home.faq.a3.p2.afterZen")} {i18n.t("home.faq.a3.p3")} {i18n.t("home.faq.a3.p4.beforeLocal")}{" "}
+                  <a href={language.route("/docs/providers/#lm-studio")} target="_blank">
+                    {i18n.t("home.faq.a3.p4.localLink")}
                   </a>
                   .
                 </Faq>
               </li>
               <li>
-                <Faq question="Can I use my existing AI subscriptions with OpenCode?">
-                  Yes, OpenCode supports subscription plans from all major providers. You can use your Claude Pro/Max,
-                  ChatGPT Plus/Pro, or GitHub Copilot subscriptions. <a href="/docs/providers/#directory">Learn more</a>
-                  .
+                <Faq question={i18n.t("home.faq.q4")}>
+                  {i18n.t("home.faq.a4.p1")}{" "}
+                  <a href={language.route("/docs/providers/#directory")}>{i18n.t("common.learnMore")}</a>.
                 </Faq>
               </li>
               <li>
-                <Faq question="Can I only use OpenCode in the terminal?">
-                  Not anymore! OpenCode is now available as an app for your <a href="/download">desktop</a> and{" "}
-                  <a href="/docs/web">web</a>!
+                <Faq question={i18n.t("home.faq.q5")}>
+                  {i18n.t("home.faq.a5.beforeDesktop")}{" "}
+                  <a href={language.route("/download")}>{i18n.t("home.faq.a5.desktop")}</a> {i18n.t("home.faq.a5.and")}{" "}
+                  <a href={language.route("/docs/web")}>{i18n.t("home.faq.a5.web")}</a>!
                 </Faq>
               </li>
               <li>
-                <Faq question="How much does OpenCode cost?">
-                  OpenCode is 100% free to use. It also comes with a set of free models. There might be additional costs
-                  if you connect any other provider.
+                <Faq question={i18n.t("home.faq.q6")}>{i18n.t("home.faq.a6")}</Faq>
+              </li>
+              <li>
+                <Faq question={i18n.t("home.faq.q7")}>
+                  {i18n.t("home.faq.a7.p1")} {i18n.t("home.faq.a7.p2.beforeModels")}{" "}
+                  <a href={language.route("/docs/zen/#privacy")}>{i18n.t("home.faq.a7.p2.modelsLink")}</a>{" "}
+                  {i18n.t("home.faq.a7.p2.and")}{" "}
+                  <a href={language.route("/docs/share/#privacy")}>{i18n.t("home.faq.a7.p2.shareLink")}</a>.
                 </Faq>
               </li>
               <li>
-                <Faq question="What about data and privacy?">
-                  Your data and information is only stored when you use our free models or create sharable links. Learn
-                  more about <a href="/docs/zen/#privacy">our models</a> and{" "}
-                  <a href="/docs/share/#privacy">share pages</a>.
-                </Faq>
-              </li>
-              <li>
-                <Faq question="Is OpenCode open source?">
-                  Yes, OpenCode is fully open source. The source code is public on{" "}
+                <Faq question={i18n.t("home.faq.q8")}>
+                  {i18n.t("home.faq.a8.p1")}{" "}
                   <a href={config.github.repoUrl} target="_blank">
-                    GitHub
+                    {i18n.t("nav.github")}
                   </a>{" "}
-                  under the{" "}
+                  {i18n.t("home.faq.a8.p2")}{" "}
                   <a href={`${config.github.repoUrl}?tab=MIT-1-ov-file#readme`} target="_blank">
-                    MIT License
+                    {i18n.t("home.faq.a8.mitLicense")}
                   </a>
-                  , meaning anyone can use, modify, or contribute to its development. Anyone from the community can file
-                  issues, submit pull requests, and extend functionality.
+                  {i18n.t("home.faq.a8.p3")}
                 </Faq>
               </li>
             </ul>
@@ -728,12 +732,8 @@ export default function Home() {
 
           <section data-component="zen-cta">
             <div data-slot="zen-cta-copy">
-              <strong>Access reliable optimized models for coding agents</strong>
-              <p>
-                Zen gives you access to a handpicked set of AI models that OpenCode has tested and benchmarked
-                specifically for coding agents. No need to worry about inconsistent performance and quality across
-                providers, use validated models that work.
-              </p>
+              <strong>{i18n.t("home.zenCta.title")}</strong>
+              <p>{i18n.t("home.zenCta.body")}</p>
               <div data-slot="model-logos">
                 <div>
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -810,13 +810,13 @@ export default function Home() {
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path
                       d="M12.0962 3L10.0998 5.6577H1.59858L3.59417 3H12.0972H12.0962ZM22.3162 18.3432L20.3215 21H11.8497L13.8425 18.3432H22.3162ZM23 3L9.492 21H1L14.508 3H23Z"
-                      fill="black"
+                      fill="currentColor"
                     />
                   </svg>
                 </div>
               </div>
-              <A href="/zen">
-                <span>Learn about Zen </span>
+              <A href={language.route("/zen")}>
+                <span>{i18n.t("home.zenCta.link")} </span>
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path
                     d="M6.5 12L17 12M13 16.5L17.5 12L13 7.5"

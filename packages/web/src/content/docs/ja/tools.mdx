@@ -1,0 +1,379 @@
+---
+title: ツール
+description: LLM が使用できるツールを管理します。
+---
+
+ツールを使用すると、LLM がコードベースでアクションを実行できるようになります。 OpenCode には一連の組み込みツールが付属していますが、[カスタムツール](/docs/custom-tools) または [MCP サーバー](/docs/mcp-servers) を使用して拡張できます。
+
+デフォルトでは、すべてのツールは**有効**になっており、実行するための権限は必要ありません。 [権限](/docs/permissions).
+
+---
+
+## 設定
+
+`permission` フィールドを使用してツールの動作を制御します。各ツールを許可、拒否、または承認を要求することができます。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "deny",
+    "bash": "ask",
+    "webfetch": "allow"
+  }
+}
+```
+
+ワイルドカードを使用して複数のツールを一度に制御することもできます。たとえば、MCP サーバーからのすべてのツールの承認を要求するには、次のようにします。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "mymcp_*": "ask"
+  }
+}
+```
+
+[アクセス許可の構成について詳しくは、](/docs/permissions) をご覧ください。
+
+---
+
+## 組み込み
+
+OpenCode で利用可能なすべての組み込みツールを次に示します。
+
+---
+
+### bash
+
+プロジェクト環境でシェルコマンドを実行します。
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": "allow"
+  }
+}
+```
+
+このツールを使用すると、LLM は `npm install`、`git status`、またはその他のシェルコマンドなどのターミナルコマンドを実行できます。
+
+---
+
+### edit
+
+正確な文字列置換を使用して既存のファイルを変更します。
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "allow"
+  }
+}
+```
+
+このツールは、完全に一致するテキストを置き換えることにより、ファイルを正確に編集します。これは、LLM がコードを変更する主な方法です。
+
+---
+
+### write
+
+新しいファイルを作成するか、既存のファイルを上書きします。
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "allow"
+  }
+}
+```
+
+これを使用して、LLM が新しいファイルを作成できるようにします。既存のファイルがすでに存在する場合は上書きされます。
+
+:::note
+`write` ツールは、すべてのファイル変更 (`edit`、`edit`、`write`、`patch`) をカバーする `multiedit` 権限によって制御されます。
+:::
+
+---
+
+### read
+
+コードベースからファイルの内容を読み取ります。
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "read": "allow"
+  }
+}
+```
+
+このツールはファイルを読み取り、その内容を返します。大きなファイルの特定の行範囲の読み取りをサポートします。
+
+---
+
+### grep
+
+正規表現を使用してファイルの内容を検索します。
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "grep": "allow"
+  }
+}
+```
+
+コードベース全体での高速コンテンツ検索。完全な正規表現構文とファイルパターンフィルタリングをサポートします。
+
+---
+
+### glob
+
+パターンマッチングによりファイルを検索します。
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "glob": "allow"
+  }
+}
+```
+
+`**/*.js` や `src/**/*.ts` などの glob パターンを使用してファイルを検索します。一致するファイルパスを変更時間順に並べて返します。
+
+---
+
+### list
+
+指定されたパス内のファイルとディレクトリを一覧表示します。
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "list": "allow"
+  }
+}
+```
+
+このツールはディレクトリの内容を一覧表示します。結果をフィルタリングするための glob パターンを受け入れます。
+
+---
+
+### lsp (実験的)
+
+構成された LSP サーバーと対話して、定義、参照、ホバー情報、呼び出し階層などのコードインテリジェンス機能を取得します。
+
+:::note
+このツールは、`OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (または `OPENCODE_EXPERIMENTAL=true`) の場合にのみ使用できます。
+:::
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "lsp": "allow"
+  }
+}
+```
+
+サポートされている操作には、`goToDefinition`、`findReferences`、`hover`、`documentSymbol`、`workspaceSymbol`、`goToImplementation`、`prepareCallHierarchy`、`incomingCalls`、および `outgoingCalls` が含まれます。
+
+プロジェクトで使用できる LSP サーバーを構成するには、「LSP Servers](/docs/lsp).
+
+---
+
+### patch
+
+ファイルにパッチを適用します。
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "allow"
+  }
+}
+```
+
+このツールは、コードベースにパッチファイルを適用します。さまざまなソースからの差分やパッチを適用するのに役立ちます。
+
+:::note
+`patch` ツールは、すべてのファイル変更 (`edit`、`edit`、`write`、`patch`) をカバーする `multiedit` 権限によって制御されます。
+:::
+
+---
+
+### skill
+
+[skill](/docs/skills) (`SKILL.md` ファイル) をロードし、会話でその内容を返します。
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "skill": "allow"
+  }
+}
+```
+
+---
+
+### todowrite
+
+コーディングセッション中に ToDo リストを管理します。
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "todowrite": "allow"
+  }
+}
+```
+
+タスクリストを作成および更新して、複雑な操作中の進行状況を追跡します。 LLM はこれを使用して、複数ステップのタスクを整理します。
+
+:::note
+このツールはデフォルトではサブエージェントに対して無効になっていますが、手動で有効にすることができます。 [詳細はこちら](/docs/agents/#permissions)
+:::
+
+---
+
+### todoread
+
+既存の ToDo リストを読み取ります。
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "todoread": "allow"
+  }
+}
+```
+
+現在の Todo リストの状態を読み取ります。どのタスクが保留中または完了しているかを追跡するために LLM によって使用されます。
+
+:::note
+このツールはデフォルトではサブエージェントに対して無効になっていますが、手動で有効にすることができます。 [詳細はこちら](/docs/agents/#permissions)
+:::
+
+---
+
+### webfetch
+
+Web コンテンツを取得します。
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "webfetch": "allow"
+  }
+}
+```
+
+LLM が Web ページをフェッチして読み取ることを許可します。ドキュメントの検索やオンラインリソースの調査に役立ちます。
+
+---
+
+### websearch
+
+ウェブで情報を検索してください。
+
+:::note
+このツールは、OpenCode プロバイダーを使用している場合、または `OPENCODE_ENABLE_EXA` 環境変数が真実の値 (`true` または `1` など) に設定されている場合にのみ使用できます。
+
+OpenCode の起動時に有効にするには:
+
+```bash
+OPENCODE_ENABLE_EXA=1 opencode
+```
+
+:::
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "websearch": "allow"
+  }
+}
+```
+
+Exa AI を使用して Web 検索を実行し、オンラインで関連情報を見つけます。トピックの調査、最新のイベントの検索、またはトレーニングデータのカットオフを超えた情報の収集に役立ちます。
+
+API キーは必要ありません。ツールは認証なしで Exa AI のホストされた MCP サービスに直接接続します。
+
+:::tip
+情報を見つける必要がある場合 (検出)、`websearch` を使用し、特定の URL からコンテンツを取得する必要がある場合 (取得) は `webfetch` を使用します。
+:::
+
+---
+
+### question
+
+実行中にユーザーに質問します。
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "question": "allow"
+  }
+}
+```
+
+このツールを使用すると、LLM はタスク中にユーザーに質問できるようになります。これは次の場合に役立ちます。
+
+- ユーザーの好みや要件を収集する
+- 曖昧な指示を明確にする
+- 実装の選択肢について決定を下す
+- どの方向に進むべきかについての選択肢を提供する
+
+各質問には、ヘッダー、質問テキスト、およびオプションのリストが含まれます。ユーザーは、提供されたオプションから選択するか、カスタムの回答を入力できます。複数の質問がある場合、ユーザーはすべての回答を送信する前に質問間を移動できます。
+
+---
+
+## カスタムツール
+
+カスタムツールを使用すると、LLM が呼び出すことができる独自の関数を定義できます。これらは設定ファイルで定義されており、任意のコードを実行できます。
+
+[カスタムツールの作成について詳しくは、](/docs/custom-tools) をご覧ください。
+
+---
+
+## MCPサーバー
+
+MCP (Model Context Protocol) サーバーを使用すると、外部ツールとサービスを統合できます。これには、データベースアクセス、API 統合、サードパーティサービスが含まれます。
+
+[MCP サーバーの設定について詳しくは、](/docs/mcp-servers) をご覧ください。
+
+---
+
+## 内部動作
+
+内部的には、`grep`、`glob`、`list` などのツールは内部で [ripgrep](https://github.com/BurntSushi/ripgrep) を使用します。デフォルトでは、ripgrep は `.gitignore` パターンを尊重します。つまり、`.gitignore` にリストされているファイルとディレクトリは検索とリストから除外されます。
+
+---
+
+### パターンを無視する
+
+通常は無視されるファイルを含めるには、プロジェクトのルートに `.ignore` ファイルを作成します。このファイルでは、特定のパスを明示的に許可できます。
+
+```text title=".ignore"
+!node_modules/
+!dist/
+!build/
+```
+
+たとえば、この `.ignore` ファイルを使用すると、ripgrep は、`node_modules/` にリストされている場合でも、`dist/`、`build/`、および `.gitignore` ディレクトリ内を検索できます。

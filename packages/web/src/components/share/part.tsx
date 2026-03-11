@@ -25,7 +25,7 @@ import { ContentDiff } from "./content-diff"
 import { ContentText } from "./content-text"
 import { ContentBash } from "./content-bash"
 import { ContentError } from "./content-error"
-import { formatDuration } from "../share/common"
+import { formatCount, formatDuration, formatNumber, normalizeLocale, useShareMessages } from "../share/common"
 import { ContentMarkdown } from "./content-markdown"
 import type { MessageV2 } from "opencode/session/message-v2"
 import type { Diagnostic } from "vscode-languageserver-types"
@@ -44,6 +44,7 @@ export interface PartProps {
 export function Part(props: PartProps) {
   const [copied, setCopied] = createSignal(false)
   const id = createMemo(() => props.message.id + "-" + props.index)
+  const messages = useShareMessages()
 
   return (
     <div
@@ -55,7 +56,7 @@ export function Part(props: PartProps) {
       data-copied={copied() ? true : undefined}
     >
       <div data-component="decoration">
-        <div data-slot="anchor" title="Link to this message">
+        <div data-slot="anchor" title={messages.link_to_message}>
           <a
             href={`#${id()}`}
             onClick={(e) => {
@@ -126,7 +127,7 @@ export function Part(props: PartProps) {
             <IconHashtag width={18} height={18} />
             <IconCheckCircle width={18} height={18} />
           </a>
-          <span data-slot="tooltip">Copied!</span>
+          <span data-slot="tooltip">{messages.copied}</span>
         </div>
         <div data-slot="bar"></div>
       </div>
@@ -143,11 +144,13 @@ export function Part(props: PartProps) {
             </div>
             {props.last && props.message.role === "assistant" && props.message.time.completed && (
               <Footer
-                title={DateTime.fromMillis(props.message.time.completed).toLocaleString(
-                  DateTime.DATETIME_FULL_WITH_SECONDS,
-                )}
+                title={DateTime.fromMillis(props.message.time.completed)
+                  .setLocale(normalizeLocale(messages.locale))
+                  .toLocaleString(DateTime.DATETIME_FULL_WITH_SECONDS)}
               >
-                {DateTime.fromMillis(props.message.time.completed).toLocaleString(DateTime.DATETIME_MED)}
+                {DateTime.fromMillis(props.message.time.completed)
+                  .setLocale(normalizeLocale(messages.locale))
+                  .toLocaleString(DateTime.DATETIME_MED)}
               </Footer>
             )}
           </div>
@@ -155,13 +158,13 @@ export function Part(props: PartProps) {
         {props.message.role === "assistant" && props.part.type === "reasoning" && (
           <div data-component="tool">
             <div data-component="tool-title">
-              <span data-slot="name">Thinking</span>
+              <span data-slot="name">{messages.thinking}</span>
             </div>
             <Show when={props.part.text}>
               <div data-component="assistant-reasoning">
-                <ResultsButton showCopy="Show details" hideCopy="Hide details">
+                <ResultsButton showCopy={messages.show_details} hideCopy={messages.hide_details}>
                   <div data-component="assistant-reasoning-markdown">
-                    <ContentMarkdown expand text={props.part.text || "Thinking..."} />
+                    <ContentMarkdown expand text={props.part.text || messages.thinking_pending} />
                   </div>
                 </ResultsButton>
               </div>
@@ -170,13 +173,7 @@ export function Part(props: PartProps) {
         )}
         {props.message.role === "user" && props.part.type === "file" && (
           <div data-component="attachment">
-            <div data-slot="copy">Attachment</div>
-            <div data-slot="filename">{props.part.filename}</div>
-          </div>
-        )}
-        {props.message.role === "user" && props.part.type === "file" && (
-          <div data-component="attachment">
-            <div data-slot="copy">Attachment</div>
+            <div data-slot="copy">{messages.attachment}</div>
             <div data-slot="filename">{props.part.filename}</div>
           </div>
         )}
@@ -188,7 +185,7 @@ export function Part(props: PartProps) {
         )}
         {props.part.type === "tool" && props.part.state.status === "error" && (
           <div data-component="tool" data-tool="error">
-            <ContentError>{formatErrorString(props.part.state.error)}</ContentError>
+            <ContentError>{formatErrorString(props.part.state.error, messages.error)}</ContentError>
             <Spacer />
           </div>
         )}
@@ -343,43 +340,45 @@ function getShikiLang(filename: string) {
   return type ? (overrides[type] ?? type) : "plaintext"
 }
 
-function getDiagnostics(diagnosticsByFile: Record<string, Diagnostic[]>, currentFile: string): JSX.Element[] {
+function getDiagnostics(
+  diagnosticsByFile: Record<string, Diagnostic[]>,
+  currentFile: string,
+  label: string,
+): JSX.Element[] {
   const result: JSX.Element[] = []
 
   if (diagnosticsByFile === undefined || diagnosticsByFile[currentFile] === undefined) return result
 
-  for (const diags of Object.values(diagnosticsByFile)) {
-    for (const d of diags) {
-      if (d.severity !== 1) continue
+  for (const d of diagnosticsByFile[currentFile]) {
+    if (d.severity !== 1) continue
 
-      const line = d.range.start.line + 1
-      const column = d.range.start.character + 1
+    const line = d.range.start.line + 1
+    const column = d.range.start.character + 1
 
-      result.push(
-        <pre>
-          <span data-color="red" data-marker="label">
-            Error
-          </span>
-          <span data-color="dimmed" data-separator>
-            [{line}:{column}]
-          </span>
-          <span>{d.message}</span>
-        </pre>,
-      )
-    }
+    result.push(
+      <pre>
+        <span data-color="red" data-marker="label">
+          {label}
+        </span>
+        <span data-color="dimmed" data-separator>
+          [{line}:{column}]
+        </span>
+        <span>{d.message}</span>
+      </pre>,
+    )
   }
 
   return result
 }
 
-function formatErrorString(error: string): JSX.Element {
+function formatErrorString(error: string, label: string): JSX.Element {
   const errorMarker = "Error: "
   const startsWithError = error.startsWith(errorMarker)
 
   return startsWithError ? (
     <pre>
       <span data-color="red" data-marker="label" data-separator>
-        Error
+        {label}
       </span>
       <span>{error.slice(errorMarker.length)}</span>
     </pre>
@@ -391,6 +390,7 @@ function formatErrorString(error: string): JSX.Element {
 }
 
 export function TodoWriteTool(props: ToolProps) {
+  const messages = useShareMessages()
   const priority: Record<Todo["status"], number> = {
     in_progress: 0,
     pending: 1,
@@ -406,9 +406,9 @@ export function TodoWriteTool(props: ToolProps) {
     <>
       <div data-component="tool-title">
         <span data-slot="name">
-          <Switch fallback="Updating plan">
-            <Match when={starting()}>Creating plan</Match>
-            <Match when={finished()}>Completing plan</Match>
+          <Switch fallback={messages.updating_plan}>
+            <Match when={starting()}>{messages.creating_plan}</Match>
+            <Match when={finished()}>{messages.completing_plan}</Match>
           </Switch>
         </span>
       </div>
@@ -429,6 +429,8 @@ export function TodoWriteTool(props: ToolProps) {
 }
 
 export function GrepTool(props: ToolProps) {
+  const messages = useShareMessages()
+
   return (
     <>
       <div data-component="tool-title">
@@ -439,7 +441,12 @@ export function GrepTool(props: ToolProps) {
         <Switch>
           <Match when={props.state.metadata?.matches && props.state.metadata?.matches > 0}>
             <ResultsButton
-              showCopy={props.state.metadata?.matches === 1 ? "1 match" : `${props.state.metadata?.matches} matches`}
+              showCopy={formatCount(
+                props.state.metadata?.matches || 0,
+                messages.locale,
+                messages.match_one,
+                messages.match_other,
+              )}
             >
               <ContentText expand compact text={props.state.output} />
             </ResultsButton>
@@ -482,6 +489,8 @@ export function ListTool(props: ToolProps) {
 }
 
 export function WebFetchTool(props: ToolProps) {
+  const messages = useShareMessages()
+
   return (
     <>
       <div data-component="tool-title">
@@ -491,7 +500,7 @@ export function WebFetchTool(props: ToolProps) {
       <div data-component="tool-result">
         <Switch>
           <Match when={props.state.metadata?.error}>
-            <ContentError>{formatErrorString(props.state.output)}</ContentError>
+            <ContentError>{formatErrorString(props.state.output, messages.error)}</ContentError>
           </Match>
           <Match when={props.state.output}>
             <ResultsButton>
@@ -505,6 +514,7 @@ export function WebFetchTool(props: ToolProps) {
 }
 
 export function ReadTool(props: ToolProps) {
+  const messages = useShareMessages()
   const filePath = createMemo(() => stripWorkingDirectory(props.state.input?.filePath, props.message.path.cwd))
 
   return (
@@ -518,10 +528,10 @@ export function ReadTool(props: ToolProps) {
       <div data-component="tool-result">
         <Switch>
           <Match when={props.state.metadata?.error}>
-            <ContentError>{formatErrorString(props.state.output)}</ContentError>
+            <ContentError>{formatErrorString(props.state.output, messages.error)}</ContentError>
           </Match>
           <Match when={typeof props.state.metadata?.preview === "string"}>
-            <ResultsButton showCopy="Show preview" hideCopy="Hide preview">
+            <ResultsButton showCopy={messages.show_preview} hideCopy={messages.hide_preview}>
               <ContentCode lang={getShikiLang(filePath() || "")} code={props.state.metadata?.preview} />
             </ResultsButton>
           </Match>
@@ -537,8 +547,11 @@ export function ReadTool(props: ToolProps) {
 }
 
 export function WriteTool(props: ToolProps) {
+  const messages = useShareMessages()
   const filePath = createMemo(() => stripWorkingDirectory(props.state.input?.filePath, props.message.path.cwd))
-  const diagnostics = createMemo(() => getDiagnostics(props.state.metadata?.diagnostics, props.state.input.filePath))
+  const diagnostics = createMemo(() =>
+    getDiagnostics(props.state.metadata?.diagnostics, props.state.input.filePath, messages.error),
+  )
 
   return (
     <>
@@ -554,10 +567,10 @@ export function WriteTool(props: ToolProps) {
       <div data-component="tool-result">
         <Switch>
           <Match when={props.state.metadata?.error}>
-            <ContentError>{formatErrorString(props.state.output)}</ContentError>
+            <ContentError>{formatErrorString(props.state.output, messages.error)}</ContentError>
           </Match>
           <Match when={props.state.input?.content}>
-            <ResultsButton showCopy="Show contents" hideCopy="Hide contents">
+            <ResultsButton showCopy={messages.show_contents} hideCopy={messages.hide_contents}>
               <ContentCode lang={getShikiLang(filePath() || "")} code={props.state.input?.content} />
             </ResultsButton>
           </Match>
@@ -568,8 +581,11 @@ export function WriteTool(props: ToolProps) {
 }
 
 export function EditTool(props: ToolProps) {
+  const messages = useShareMessages()
   const filePath = createMemo(() => stripWorkingDirectory(props.state.input.filePath, props.message.path.cwd))
-  const diagnostics = createMemo(() => getDiagnostics(props.state.metadata?.diagnostics, props.state.input.filePath))
+  const diagnostics = createMemo(() =>
+    getDiagnostics(props.state.metadata?.diagnostics, props.state.input.filePath, messages.error),
+  )
 
   return (
     <>
@@ -582,7 +598,7 @@ export function EditTool(props: ToolProps) {
       <div data-component="tool-result">
         <Switch>
           <Match when={props.state.metadata?.error}>
-            <ContentError>{formatErrorString(props.state.metadata?.message || "")}</ContentError>
+            <ContentError>{formatErrorString(props.state.metadata?.message || "", messages.error)}</ContentError>
           </Match>
           <Match when={props.state.metadata?.diff}>
             <div data-component="diff">
@@ -609,6 +625,8 @@ export function BashTool(props: ToolProps) {
 }
 
 export function GlobTool(props: ToolProps) {
+  const messages = useShareMessages()
+
   return (
     <>
       <div data-component="tool-title">
@@ -619,7 +637,12 @@ export function GlobTool(props: ToolProps) {
         <Match when={props.state.metadata?.count && props.state.metadata?.count > 0}>
           <div data-component="tool-result">
             <ResultsButton
-              showCopy={props.state.metadata?.count === 1 ? "1 result" : `${props.state.metadata?.count} results`}
+              showCopy={formatCount(
+                props.state.metadata?.count || 0,
+                messages.locale,
+                messages.result_one,
+                messages.result_other,
+              )}
             >
               <ContentText expand compact text={props.state.output} />
             </ResultsButton>
@@ -639,11 +662,12 @@ interface ResultsButtonProps extends ParentProps {
 }
 function ResultsButton(props: ResultsButtonProps) {
   const [show, setShow] = createSignal(false)
+  const messages = useShareMessages()
 
   return (
     <>
       <button type="button" data-component="button-text" data-more onClick={() => setShow((e) => !e)}>
-        <span>{show() ? props.hideCopy || "Hide results" : props.showCopy || "Show results"}</span>
+        <span>{show() ? props.hideCopy || messages.hide_results : props.showCopy || messages.show_results}</span>
         <span data-slot="icon">
           <Show when={show()} fallback={<IconChevronRight width={11} height={11} />}>
             <IconChevronDown width={11} height={11} />
@@ -668,10 +692,19 @@ function Footer(props: ParentProps<{ title: string }>) {
 }
 
 function ToolFooter(props: { time: number }) {
-  return props.time > MIN_DURATION && <Footer title={`${props.time}ms`}>{formatDuration(props.time)}</Footer>
+  const messages = useShareMessages()
+  return (
+    props.time > MIN_DURATION && (
+      <Footer title={`${formatNumber(props.time, messages.locale)}ms`}>
+        {formatDuration(props.time, messages.locale)}
+      </Footer>
+    )
+  )
 }
 
 function TaskTool(props: ToolProps) {
+  const messages = useShareMessages()
+
   return (
     <>
       <div data-component="tool-title">
@@ -679,7 +712,7 @@ function TaskTool(props: ToolProps) {
         <span data-slot="target">{props.state.input.description}</span>
       </div>
       <div data-component="tool-input">&ldquo;{props.state.input.prompt}&rdquo;</div>
-      <ResultsButton showCopy="Show output" hideCopy="Hide output">
+      <ResultsButton showCopy={messages.show_output} hideCopy={messages.hide_output}>
         <div data-component="tool-output">
           <ContentMarkdown expand text={props.state.output} />
         </div>
@@ -700,7 +733,7 @@ export function FallbackTool(props: ToolProps) {
             <>
               <div></div>
               <div>{arg[0]}</div>
-              <div>{arg[1]}</div>
+              <div>{String(arg[1] ?? "")}</div>
             </>
           )}
         </For>
@@ -720,10 +753,11 @@ export function FallbackTool(props: ToolProps) {
 
 // Converts nested objects/arrays into [path, value] pairs.
 // E.g. {a:{b:{c:1}}, d:[{e:2}, 3]} => [["a.b.c",1], ["d[0].e",2], ["d[1]",3]]
-function flattenToolArgs(obj: any, prefix: string = ""): Array<[string, any]> {
-  const entries: Array<[string, any]> = []
+function flattenToolArgs(obj: unknown, prefix: string = ""): Array<[string, unknown]> {
+  const entries: Array<[string, unknown]> = []
+  if (typeof obj !== "object" || obj === null) return entries
 
-  for (const [key, value] of Object.entries(obj)) {
+  for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
     const path = prefix ? `${prefix}.${key}` : key
 
     if (value !== null && typeof value === "object") {

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { NamedError } from "@opencode-ai/util/error"
 import { APICallError } from "ai"
+import { setTimeout as sleep } from "node:timers/promises"
 import { SessionRetry } from "../../src/session/retry"
 import { MessageV2 } from "../../src/session/message-v2"
 
@@ -99,7 +100,7 @@ describe("session.retry.retryable", () => {
 
   test("handles json messages without code", () => {
     const error = wrap(JSON.stringify({ error: { message: "no_kv_space" } }))
-    expect(SessionRetry.retryable(error)).toBe("Provider Server Error")
+    expect(SessionRetry.retryable(error)).toBe(`{"error":{"message":"no_kv_space"}}`)
   })
 
   test("does not throw on numeric error codes", () => {
@@ -110,6 +111,15 @@ describe("session.retry.retryable", () => {
 
   test("returns undefined for non-json message", () => {
     const error = wrap("not-json")
+    expect(SessionRetry.retryable(error)).toBeUndefined()
+  })
+
+  test("does not retry context overflow errors", () => {
+    const error = new MessageV2.ContextOverflowError({
+      message: "Input exceeds context window of this model",
+      responseBody: '{"error":{"code":"context_length_exceeded"}}',
+    }).toObject() as ReturnType<NamedError["toObject"]>
+
     expect(SessionRetry.retryable(error)).toBeUndefined()
   })
 })
@@ -126,7 +136,7 @@ describe("session.message-v2.fromError", () => {
             new ReadableStream({
               async pull(controller) {
                 controller.enqueue("Hello,")
-                await Bun.sleep(10000)
+                await sleep(10000)
                 controller.enqueue(" World!")
                 controller.close()
               },

@@ -1,0 +1,747 @@
+---
+title: Agentes
+description: Configure e use agentes especializados.
+---
+
+Agentes são assistentes de IA especializados que podem ser configurados para tarefas e fluxos de trabalho específicos. Eles permitem que você crie ferramentas focadas com prompts, modelos e acesso a ferramentas personalizados.
+
+:::tip
+Use o agente de planejamento (plan) para analisar código e revisar sugestões sem fazer alterações no código.
+:::
+
+Você pode alternar entre agentes durante uma sessão ou invocá-los com a menção `@`.
+
+---
+
+## Tipos
+
+Existem dois tipos de agentes no opencode; agentes primários e subagentes.
+
+---
+
+### Agentes primários
+
+Agentes primários são os principais assistentes com os quais você interage diretamente. Você pode alternar entre eles usando a tecla **Tab** ou sua tecla de atalho configurada `switch_agent`. Esses agentes lidam com sua conversa principal. O acesso às ferramentas é configurado por meio de permissões — por exemplo, Build tem todas as ferramentas habilitadas, enquanto Plan é restrito.
+
+:::tip
+Você pode usar a tecla **Tab** para alternar entre agentes primários durante uma sessão.
+:::
+
+opencode vem com dois agentes primários integrados, **Build** e **Plan**. Vamos
+ver isso abaixo.
+
+---
+
+### Subagentes
+
+Subagentes são assistentes especializados que agentes primários podem invocar para tarefas específicas. Você também pode invocá-los manualmente mencionando-os com **@** em suas mensagens.
+
+opencode vem com dois subagentes integrados, **General** e **Explore**. Vamos ver isso abaixo.
+
+---
+
+## Integrados
+
+opencode vem com dois agentes primários integrados e dois subagentes integrados.
+
+---
+
+### build
+
+_Modo_: `primary`
+
+Build é o agente primário **padrão** com todas as ferramentas habilitadas. Este é o agente padrão para trabalho de desenvolvimento onde você precisa de acesso total a operações de arquivo e comandos do sistema.
+
+---
+
+### plan
+
+_Modo_: `primary`
+
+Um agente restrito projetado para planejamento e análise. Usamos um sistema de permissões para lhe dar mais controle e evitar alterações não intencionais.
+Por padrão, todos os seguintes estão configurados para `ask`:
+
+- `file edits`: Todas as gravações, patches e edições
+- `bash`: Todos os comandos bash
+
+Este agente é útil quando você deseja que o LLM analise código, sugira alterações ou crie planos sem fazer modificações reais em seu código.
+
+---
+
+### general
+
+_Modo_: `subagent`
+
+Um agente de propósito geral para pesquisar questões complexas e executar tarefas em múltiplas etapas. Tem acesso total às ferramentas (exceto todo), portanto, pode fazer alterações em arquivos quando necessário. Use isso para executar várias unidades de trabalho em paralelo.
+
+---
+
+### explore
+
+_Modo_: `subagent`
+
+Um agente rápido e somente leitura para explorar bases de código. Não pode modificar arquivos. Use isso quando você precisar encontrar rapidamente arquivos por padrões, pesquisar código por palavras-chave ou responder perguntas sobre a base de código.
+
+---
+
+### compaction
+
+_Modo_: `primary`
+
+Agente de sistema oculto que compacta longos contextos em um resumo menor. Ele é executado automaticamente quando necessário e não é selecionável na interface.
+
+---
+
+### title
+
+_Modo_: `primary`
+
+Agente de sistema oculto que gera títulos curtos para sessões. Ele é executado automaticamente e não é selecionável na interface.
+
+---
+
+### summary
+
+_Modo_: `primary`
+
+Agente de sistema oculto que cria resumos de sessões. Ele é executado automaticamente e não é selecionável na interface.
+
+---
+
+## Uso
+
+1. Para agentes primários, use a tecla **Tab** para alternar entre eles durante uma sessão. Você também pode usar sua tecla de atalho configurada `switch_agent`.
+
+2. Subagentes podem ser invocados:
+   - **Automaticamente** por agentes primários para tarefas especializadas com base em suas descrições.
+   - Manualmente mencionando um subagente em sua mensagem. Por exemplo.
+
+     ```txt frame="none"
+     @general help me search for this function
+     ```
+
+3. **Navegação entre sessões**: Quando subagentes criam suas próprias sessões filhas, você pode navegar entre a sessão pai e todas as sessões filhas usando:
+   - **\<Leader>+Right** (ou sua tecla de atalho configurada `session_child_cycle`) para alternar para frente através de pai → child1 → child2 → ... → pai
+   - **\<Leader>+Left** (ou sua tecla de atalho configurada `session_child_cycle_reverse`) para alternar para trás através de pai ← child1 ← child2 ← ... ← pai
+
+   Isso permite que você mude perfeitamente entre a conversa principal e o trabalho especializado do subagente.
+
+---
+
+## Configuração
+
+Você pode personalizar os agentes integrados ou criar os seus próprios através da configuração. Os agentes podem ser configurados de duas maneiras:
+
+---
+
+### JSON
+
+Configure os agentes em seu arquivo de configuração `opencode.json`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "build": {
+      "mode": "primary",
+      "model": "anthropic/claude-sonnet-4-20250514",
+      "prompt": "{file:./prompts/build.txt}",
+      "tools": {
+        "write": true,
+        "edit": true,
+        "bash": true
+      }
+    },
+    "plan": {
+      "mode": "primary",
+      "model": "anthropic/claude-haiku-4-20250514",
+      "tools": {
+        "write": false,
+        "edit": false,
+        "bash": false
+      }
+    },
+    "code-reviewer": {
+      "description": "Revisa código para melhores práticas e potenciais problemas",
+      "mode": "subagent",
+      "model": "anthropic/claude-sonnet-4-20250514",
+      "prompt": "Você é um revisor de código. Foque em segurança, performance e manutenibilidade.",
+      "tools": {
+        "write": false,
+        "edit": false
+      }
+    }
+  }
+}
+```
+
+---
+
+### Markdown
+
+Você também pode definir agentes usando arquivos markdown. Coloque-os em:
+
+- Global: `~/.config/opencode/agents/`
+- Por projeto: `.opencode/agents/`
+
+```markdown title="~/.config/opencode/agents/review.md"
+---
+description: Revisa código para qualidade e melhores práticas
+mode: subagent
+model: anthropic/claude-sonnet-4-20250514
+temperature: 0.1
+tools:
+  write: false
+  edit: false
+  bash: false
+---
+
+Você está no modo de revisão de código. Foque em:
+
+- Qualidade do código e melhores práticas
+- Bugs potenciais e casos de borda
+- Implicações de desempenho
+- Considerações de segurança
+
+Forneça feedback construtivo sem fazer alterações diretas.
+```
+
+O nome do arquivo markdown se torna o nome do agente. Por exemplo, `review.md` cria um agente `review`.
+
+---
+
+## Opções
+
+Vamos analisar essas opções de configuração em detalhes.
+
+---
+
+### Descrição
+
+Use a opção `description` para fornecer uma breve descrição do que o agente faz e quando usá-lo.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "review": {
+      "description": "Revisa código para melhores práticas e potenciais problemas"
+    }
+  }
+}
+```
+
+Esta é uma opção de configuração **obrigatória**.
+
+---
+
+### Temperatura
+
+Controle a aleatoriedade e criatividade das respostas do LLM com a configuração `temperature`.
+
+Valores mais baixos tornam as respostas mais focadas e determinísticas, enquanto valores mais altos aumentam a criatividade e variabilidade.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "plan": {
+      "temperature": 0.1
+    },
+    "creative": {
+      "temperature": 0.8
+    }
+  }
+}
+```
+
+Os valores de temperatura geralmente variam de 0.0 a 1.0:
+
+- **0.0-0.2**: Respostas muito focadas e determinísticas, ideais para análise de código e planejamento
+- **0.3-0.5**: Respostas equilibradas com alguma criatividade, boas para tarefas de desenvolvimento gerais
+- **0.6-1.0**: Respostas mais criativas e variadas, úteis para brainstorming e exploração
+
+```json title="opencode.json"
+{
+  "agent": {
+    "analyze": {
+      "temperature": 0.1,
+      "prompt": "{file:./prompts/analysis.txt}"
+    },
+    "build": {
+      "temperature": 0.3
+    },
+    "brainstorm": {
+      "temperature": 0.7,
+      "prompt": "{file:./prompts/creative.txt}"
+    }
+  }
+}
+```
+
+Se nenhuma temperatura for especificada, o opencode usa padrões específicos do modelo; tipicamente 0 para a maioria dos modelos, 0.55 para modelos Qwen.
+
+---
+
+### Máximo de etapas
+
+Controle o número máximo de iterações que um agente pode realizar antes de ser forçado a responder apenas com texto. Isso permite que usuários que desejam controlar custos definam um limite nas ações do agente.
+
+Se isso não for definido, o agente continuará a iterar até que o modelo decida parar ou o usuário interrompa a sessão.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "quick-thinker": {
+      "description": "Raciocínio rápido com iterações limitadas",
+      "prompt": "Você é um pensador rápido. Resolva problemas com etapas mínimas.",
+      "steps": 5
+    }
+  }
+}
+```
+
+Quando o limite é alcançado, o agente recebe um prompt especial do sistema instruindo-o a responder com um resumo de seu trabalho e tarefas recomendadas restantes.
+
+:::caution
+O campo legado `maxSteps` está obsoleto. Use `steps` em vez disso.
+:::
+
+---
+
+### Desativar
+
+Defina como `true` para desativar o agente.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "review": {
+      "disable": true
+    }
+  }
+}
+```
+
+---
+
+### Prompt
+
+Especifique um arquivo de prompt do sistema personalizado para este agente com a configuração `prompt`. O arquivo de prompt deve conter instruções específicas para o propósito do agente.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "review": {
+      "prompt": "{file:./prompts/code-review.txt}"
+    }
+  }
+}
+```
+
+Este caminho é relativo ao local onde o arquivo de configuração está localizado. Portanto, isso funciona tanto para a configuração global do opencode quanto para a configuração específica do projeto.
+
+---
+
+### Modelo
+
+Use a configuração `model` para substituir o modelo para este agente. Útil para usar diferentes modelos otimizados para diferentes tarefas. Por exemplo, um modelo mais rápido para planejamento, um modelo mais capaz para implementação.
+
+:::tip
+Se você não especificar um modelo, os agentes primários usam o [modelo configurado globalmente](/docs/config#models) enquanto subagentes usarão o modelo do agente primário que invocou o subagente.
+:::
+
+```json title="opencode.json"
+{
+  "agent": {
+    "plan": {
+      "model": "anthropic/claude-haiku-4-20250514"
+    }
+  }
+}
+```
+
+O ID do modelo em sua configuração do opencode usa o formato `provider/model-id`. Por exemplo, se você estiver usando [OpenCode Zen](/docs/zen), você usaria `opencode/gpt-5.1-codex` para GPT 5.1 Codex.
+
+---
+
+### Ferramentas
+
+Controle quais ferramentas estão disponíveis neste agente com a configuração `tools`. Você pode habilitar ou desabilitar ferramentas específicas definindo-as como `true` ou `false`.
+
+```json title="opencode.json" {3-6,9-12}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tools": {
+    "write": true,
+    "bash": true
+  },
+  "agent": {
+    "plan": {
+      "tools": {
+        "write": false,
+        "bash": false
+      }
+    }
+  }
+}
+```
+
+:::note
+A configuração específica do agente substitui a configuração global.
+:::
+
+Você também pode usar curingas para controlar várias ferramentas ao mesmo tempo. Por exemplo, para desativar todas as ferramentas de um servidor MCP:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "readonly": {
+      "tools": {
+        "mymcp_*": false,
+        "write": false,
+        "edit": false
+      }
+    }
+  }
+}
+```
+
+[Saiba mais sobre ferramentas](/docs/tools).
+
+---
+
+### Permissões
+
+Você pode configurar permissões para gerenciar quais ações um agente pode realizar. Atualmente, as permissões para as ferramentas `edit`, `bash` e `webfetch` podem ser configuradas para:
+
+- `"ask"` — Solicitar aprovação antes de executar a ferramenta
+- `"allow"` — Permitir todas as operações sem aprovação
+- `"deny"` — Desativar a ferramenta
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "deny"
+  }
+}
+```
+
+Você pode substituir essas permissões por agente.
+
+```json title="opencode.json" {3-5,8-10}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "deny"
+  },
+  "agent": {
+    "build": {
+      "permission": {
+        "edit": "ask"
+      }
+    }
+  }
+}
+```
+
+Você também pode definir permissões em agentes Markdown.
+
+```markdown title="~/.config/opencode/agents/review.md"
+---
+description: Revisão de código sem edições
+mode: subagent
+permission:
+  edit: deny
+  bash:
+    "*": ask
+    "git diff": allow
+    "git log*": allow
+    "grep *": allow
+  webfetch: deny
+---
+
+Apenas analise o código e sugira alterações.
+```
+
+Você pode definir permissões para comandos bash específicos.
+
+```json title="opencode.json" {7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "build": {
+      "permission": {
+        "bash": {
+          "git push": "ask",
+          "grep *": "allow"
+        }
+      }
+    }
+  }
+}
+```
+
+Isso pode aceitar um padrão glob.
+
+```json title="opencode.json" {7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "build": {
+      "permission": {
+        "bash": {
+          "git *": "ask"
+        }
+      }
+    }
+  }
+}
+```
+
+E você também pode usar o curinga `*` para gerenciar permissões para todos os comandos.
+Como a última regra correspondente tem precedência, coloque o curinga `*` primeiro e regras específicas depois.
+
+```json title="opencode.json" {8}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "build": {
+      "permission": {
+        "bash": {
+          "*": "ask",
+          "git status *": "allow"
+        }
+      }
+    }
+  }
+}
+```
+
+[Saiba mais sobre permissões](/docs/permissions).
+
+---
+
+### Modo
+
+Controle o modo do agente com a configuração `mode`. A opção `mode` é usada para determinar como o agente pode ser usado.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "review": {
+      "mode": "subagent"
+    }
+  }
+}
+```
+
+A opção `mode` pode ser definida como `primary`, `subagent` ou `all`. Se nenhum `mode` for especificado, o padrão é `all`.
+
+---
+
+### Oculto
+
+Oculte um subagente do menu de autocompletar `@` com `hidden: true`. Útil para subagentes internos que devem ser invocados apenas programaticamente por outros agentes através da ferramenta Task.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "internal-helper": {
+      "mode": "subagent",
+      "hidden": true
+    }
+  }
+}
+```
+
+Isso afeta apenas a visibilidade do usuário no menu de autocompletar. Agentes ocultos ainda podem ser invocados pelo modelo através da ferramenta Task, se as permissões permitirem.
+
+:::note
+Aplica-se apenas a agentes `mode: subagent`.
+:::
+
+---
+
+### Permissões de tarefa
+
+Controle quais subagentes um agente pode invocar através da ferramenta Task com `permission.task`. Usa padrões globais para correspondência flexível.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "orchestrator": {
+      "mode": "primary",
+      "permission": {
+        "task": {
+          "*": "deny",
+          "orchestrator-*": "allow",
+          "code-reviewer": "ask"
+        }
+      }
+    }
+  }
+}
+```
+
+Quando definido como `deny`, o subagente é removido da descrição da ferramenta Task completamente, então o modelo não tentará invocá-lo.
+
+:::tip
+As regras são avaliadas em ordem, e a **última regra correspondente vence**. No exemplo acima, `orchestrator-planner` corresponde a ambos `*` (deny) e `orchestrator-*` (allow), mas como `orchestrator-*` vem depois de `*`, o resultado é `allow`.
+:::
+
+:::tip
+Os usuários sempre podem invocar qualquer subagente diretamente através do menu de autocompletar `@`, mesmo que as permissões de tarefa do agente o neguem.
+:::
+
+---
+
+### Cor
+
+Personalize a aparência visual do agente na interface com a opção `color`. Isso afeta como o agente aparece na interface.
+
+Use uma cor hex válida (por exemplo, `#FF5733`) ou cor de tema: `primary`, `secondary`, `accent`, `success`, `warning`, `error`, `info`.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "creative": {
+      "color": "#ff6b6b"
+    },
+    "code-reviewer": {
+      "color": "accent"
+    }
+  }
+}
+```
+
+---
+
+### Top P
+
+Controle a diversidade das respostas com a opção `top_p`. Alternativa à temperatura para controlar a aleatoriedade.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "brainstorm": {
+      "top_p": 0.9
+    }
+  }
+}
+```
+
+Os valores variam de 0.0 a 1.0. Valores mais baixos são mais focados, valores mais altos são mais diversos.
+
+---
+
+### Adicional
+
+Quaisquer outras opções que você especificar em sua configuração de agente serão **passadas diretamente** para o provedor como opções de modelo. Isso permite que você use recursos e parâmetros específicos do provedor.
+
+Por exemplo, com os modelos de raciocínio da OpenAI, você pode controlar o esforço de raciocínio:
+
+```json title="opencode.json" {6,7}
+{
+  "agent": {
+    "deep-thinker": {
+      "description": "Agente que usa alto esforço de raciocínio para problemas complexos",
+      "model": "openai/gpt-5",
+      "reasoningEffort": "high",
+      "textVerbosity": "low"
+    }
+  }
+}
+```
+
+Essas opções adicionais são específicas do modelo e do provedor. Verifique a documentação do seu provedor para parâmetros disponíveis.
+
+:::tip
+Execute `opencode models` para ver uma lista dos modelos disponíveis.
+:::
+
+---
+
+## Criando agentes
+
+Você pode criar novos agentes usando o seguinte comando:
+
+```bash
+opencode agent create
+```
+
+Este comando interativo irá:
+
+1. Perguntar onde salvar o agente; global ou específico do projeto.
+2. Descrição do que o agente deve fazer.
+3. Gerar um prompt de sistema apropriado e identificador.
+4. Permitir que você selecione quais ferramentas o agente pode acessar.
+5. Finalmente, criar um arquivo markdown com a configuração do agente.
+
+---
+
+## Casos de uso
+
+Aqui estão alguns casos de uso comuns para diferentes agentes.
+
+- **Agente Build**: Trabalho de desenvolvimento completo com todas as ferramentas habilitadas
+- **Agente Plan**: Análise e planejamento sem fazer alterações
+- **Agente Review**: Revisão de código com acesso somente leitura e ferramentas de documentação
+- **Agente Debug**: Focado em investigação com ferramentas bash e de leitura habilitadas
+- **Agente Docs**: Redação de documentação com operações de arquivo, mas sem comandos do sistema
+
+---
+
+## Exemplos
+
+Aqui estão alguns agentes de exemplo que você pode achar úteis.
+
+:::tip
+Você tem um agente que gostaria de compartilhar? [Envie um PR](https://github.com/anomalyco/opencode).
+:::
+
+---
+
+### Agente de documentação
+
+```markdown title="~/.config/opencode/agents/docs-writer.md"
+---
+description: Escreve e mantém a documentação do projeto
+mode: subagent
+tools:
+  bash: false
+---
+
+Você é um escritor técnico. Crie documentação clara e abrangente.
+
+Foque em:
+
+- Explicações claras
+- Estrutura adequada
+- Exemplos de código
+- Linguagem amigável ao usuário
+```
+
+---
+
+### Auditor de segurança
+
+```markdown title="~/.config/opencode/agents/security-auditor.md"
+---
+description: Realiza auditorias de segurança e identifica vulnerabilidades
+mode: subagent
+tools:
+  write: false
+  edit: false
+---
+
+Você é um especialista em segurança. Foque em identificar potenciais problemas de segurança.
+
+Procure por:
+
+- Vulnerabilidades de validação de entrada
+- Falhas de autenticação e autorização
+- Riscos de exposição de dados
+- Vulnerabilidades de dependência
+- Problemas de segurança de configuração
+```
