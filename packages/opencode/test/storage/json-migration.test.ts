@@ -11,7 +11,7 @@ import { ProjectTable } from "../../src/project/project.sql"
 import { ProjectID } from "../../src/project/schema"
 import { SessionTable, MessageTable, PartTable, TodoTable, PermissionTable } from "../../src/session/session.sql"
 import { SessionShareTable } from "../../src/share/share.sql"
-import { SessionID } from "../../src/session/schema"
+import { SessionID, MessageID } from "../../src/session/schema"
 
 // Test fixtures
 const fixtures = {
@@ -255,7 +255,7 @@ describe("JSON to SQLite migration", () => {
     const db = drizzle({ client: sqlite })
     const messages = db.select().from(MessageTable).all()
     expect(messages.length).toBe(1)
-    expect(messages[0].id).toBe("msg_test789ghi")
+    expect(messages[0].id).toBe(MessageID.make("msg_test789ghi"))
 
     const parts = db.select().from(PartTable).all()
     expect(parts.length).toBe(1)
@@ -295,7 +295,7 @@ describe("JSON to SQLite migration", () => {
     const db = drizzle({ client: sqlite })
     const messages = db.select().from(MessageTable).all()
     expect(messages.length).toBe(1)
-    expect(messages[0].id).toBe("msg_test789ghi")
+    expect(messages[0].id).toBe(MessageID.make("msg_test789ghi"))
     expect(messages[0].session_id).toBe(SessionID.make("ses_test456def"))
     expect(messages[0].data).not.toHaveProperty("id")
     expect(messages[0].data).not.toHaveProperty("sessionID")
@@ -303,7 +303,7 @@ describe("JSON to SQLite migration", () => {
     const parts = db.select().from(PartTable).all()
     expect(parts.length).toBe(1)
     expect(parts[0].id).toBe("prt_testabc123")
-    expect(parts[0].message_id).toBe("msg_test789ghi")
+    expect(parts[0].message_id).toBe(MessageID.make("msg_test789ghi"))
     expect(parts[0].session_id).toBe(SessionID.make("ses_test456def"))
     expect(parts[0].data).not.toHaveProperty("id")
     expect(parts[0].data).not.toHaveProperty("messageID")
@@ -336,7 +336,7 @@ describe("JSON to SQLite migration", () => {
     const db = drizzle({ client: sqlite })
     const messages = db.select().from(MessageTable).all()
     expect(messages.length).toBe(1)
-    expect(messages[0].id).toBe("msg_from_filename") // Uses filename, not JSON id
+    expect(messages[0].id).toBe(MessageID.make("msg_from_filename")) // Uses filename, not JSON id
     expect(messages[0].session_id).toBe(SessionID.make("ses_test456def"))
   })
 
@@ -375,7 +375,7 @@ describe("JSON to SQLite migration", () => {
     const parts = db.select().from(PartTable).all()
     expect(parts.length).toBe(1)
     expect(parts[0].id).toBe("prt_from_filename") // Uses filename, not JSON id
-    expect(parts[0].message_id).toBe("msg_realmsgid") // Uses parent dir, not JSON messageID
+    expect(parts[0].message_id).toBe(MessageID.make("msg_realmsgid")) // Uses parent dir, not JSON messageID
   })
 
   test("skips orphaned sessions (no parent project)", async () => {

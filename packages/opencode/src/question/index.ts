@@ -1,7 +1,7 @@
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { Identifier } from "@/id/id"
-import { SessionID } from "@/session/schema"
+import { SessionID, MessageID } from "@/session/schema"
 import { Instance } from "@/project/instance"
 import { Log } from "@/util/log"
 import z from "zod"
@@ -39,7 +39,7 @@ export namespace Question {
       questions: z.array(Info).describe("Questions to ask"),
       tool: z
         .object({
-          messageID: z.string(),
+          messageID: MessageID.zod,
           callID: z.string(),
         })
         .optional(),
@@ -98,7 +98,7 @@ export namespace Question {
   export async function ask(input: {
     sessionID: SessionID
     questions: Info[]
-    tool?: { messageID: string; callID: string }
+    tool?: { messageID: MessageID; callID: string }
   }): Promise<Answer[]> {
     const s = await state()
     const id = Identifier.ascending("question")

@@ -2,13 +2,13 @@ import { describe, test, expect } from "bun:test"
 import path from "path"
 import { Instance } from "../../src/project/instance"
 import { WebFetchTool } from "../../src/tool/webfetch"
-import { SessionID } from "../../src/session/schema"
+import { SessionID, MessageID } from "../../src/session/schema"
 
 const projectRoot = path.join(__dirname, "../..")
 
 const ctx = {
   sessionID: SessionID.make("ses_test"),
-  messageID: "",
+  messageID: MessageID.make(""),
   callID: "",
   agent: "build",
   abort: new AbortController().signal,
