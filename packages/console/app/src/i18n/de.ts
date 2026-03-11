@@ -417,6 +417,7 @@ export const dict = {
   "black.subscribe.success.chargeNotice": "Deine Karte wird belastet, sobald dein Abonnement aktiviert ist",
 
   "workspace.nav.zen": "Zen",
+  "workspace.nav.usage": "Nutzung",
   "workspace.nav.apiKeys": "API Keys",
   "workspace.nav.members": "Mitglieder",
   "workspace.nav.billing": "Abrechnung",

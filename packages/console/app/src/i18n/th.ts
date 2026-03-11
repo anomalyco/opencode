@@ -413,6 +413,7 @@ export const dict = {
   "black.subscribe.success.chargeNotice": "บัตรของคุณจะถูกเรียกเก็บเงินเมื่อการสมัครสมาชิกของคุณถูกเปิดใช้งาน",
 
   "workspace.nav.zen": "Zen",
+  "workspace.nav.usage": "การใช้งาน",
   "workspace.nav.apiKeys": "API Keys",
   "workspace.nav.members": "สมาชิก",
   "workspace.nav.billing": "การเรียกเก็บเงิน",

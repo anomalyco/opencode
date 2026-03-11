@@ -397,6 +397,7 @@ export const dict = {
   "black.subscribe.success.chargeNotice": "你的卡片將在訂閱啟用時扣款",
 
   "workspace.nav.zen": "Zen",
+  "workspace.nav.usage": "使用量",
   "workspace.nav.apiKeys": "API 金鑰",
   "workspace.nav.members": "成員",
   "workspace.nav.billing": "帳務",

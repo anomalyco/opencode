@@ -419,6 +419,7 @@ export const dict = {
   "black.subscribe.success.chargeNotice": "Tu tarjeta se cargará cuando tu suscripción se active",
 
   "workspace.nav.zen": "Zen",
+  "workspace.nav.usage": "Uso",
   "workspace.nav.apiKeys": "Claves API",
   "workspace.nav.members": "Miembros",
   "workspace.nav.billing": "Facturación",

@@ -410,6 +410,7 @@ export const dict = {
   "black.subscribe.success.chargeNotice": "구독이 활성화되면 카드에 청구됩니다",
 
   "workspace.nav.zen": "Zen",
+  "workspace.nav.usage": "사용량",
   "workspace.nav.apiKeys": "API 키",
   "workspace.nav.members": "멤버",
   "workspace.nav.billing": "결제",
