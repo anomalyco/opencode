@@ -400,13 +400,14 @@ export function Autocomplete(props: {
       return prev
     }
 
+    const limit = store.visible === "/" ? mixed.length : 100
     const result = fuzzysort.go(removeLineRange(searchValue), mixed, {
       keys: [
         (obj) => removeLineRange((obj.value ?? obj.display).trimEnd()),
         "description",
         (obj) => obj.aliases?.join(" ") ?? "",
       ],
-      limit: 10,
+      limit,
       scoreFn: (objResults) => {
         const displayResult = objResults[0]
         let score = objResults.score
