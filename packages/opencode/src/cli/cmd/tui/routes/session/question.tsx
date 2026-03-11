@@ -20,6 +20,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
   const single = createMemo(() => questions().length === 1 && questions()[0]?.multiple !== true)
   const tabs = createMemo(() => (single() ? 1 : questions().length + 1)) // questions + confirm tab (no confirm for single select)
   const [tabHover, setTabHover] = createSignal<number | "confirm" | null>(null)
+  const [actionHover, setActionHover] = createSignal<"enter" | "escape" | null>(null)
   const [store, setStore] = createStore({
     tab: 0,
     answers: [] as QuestionAnswer[],
@@ -120,6 +121,80 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
     pick(opt.label)
   }
 
+  function primary() {
+    if (store.editing) {
+      const text = textarea?.plainText?.trim() ?? ""
+      const prev = store.custom[store.tab]
+
+      if (!text) {
+        if (prev) {
+          const inputs = [...store.custom]
+          inputs[store.tab] = ""
+          setStore("custom", inputs)
+
+          const answers = [...store.answers]
+          answers[store.tab] = (answers[store.tab] ?? []).filter((x) => x !== prev)
+          setStore("answers", answers)
+        }
+        setStore("editing", false)
+        return
+      }
+
+      if (multi()) {
+        const inputs = [...store.custom]
+        inputs[store.tab] = text
+        setStore("custom", inputs)
+
+        const existing = store.answers[store.tab] ?? []
+        const next = [...existing]
+        if (prev) {
+          const index = next.indexOf(prev)
+          if (index !== -1) next.splice(index, 1)
+        }
+        if (!next.includes(text)) next.push(text)
+        const answers = [...store.answers]
+        answers[store.tab] = next
+        setStore("answers", answers)
+        setStore("editing", false)
+        return
+      }
+
+      pick(text, true)
+      setStore("editing", false)
+      return
+    }
+
+    if (confirm()) {
+      submit()
+      return
+    }
+
+    selectOption()
+  }
+
+  function secondary() {
+    if (store.editing) {
+      setStore("editing", false)
+      return
+    }
+
+    reject()
+  }
+
+  const primaryLabel = createMemo(() => {
+    if (store.editing) return "save"
+    if (confirm()) return "submit"
+    if (other()) {
+      if (!multi()) return "edit"
+      return input() && customPicked() ? "toggle" : "edit"
+    }
+    if (multi()) return "toggle"
+    if (single()) return "submit"
+    return "confirm"
+  })
+
+  const secondaryLabel = createMemo(() => (store.editing ? "cancel edit" : "dismiss"))
+
   const dialog = useDialog()
 
   useKeyboard((evt) => {
@@ -145,44 +220,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
       }
       if (evt.name === "return") {
         evt.preventDefault()
-        const text = textarea?.plainText?.trim() ?? ""
-        const prev = store.custom[store.tab]
-
-        if (!text) {
-          if (prev) {
-            const inputs = [...store.custom]
-            inputs[store.tab] = ""
-            setStore("custom", inputs)
-
-            const answers = [...store.answers]
-            answers[store.tab] = (answers[store.tab] ?? []).filter((x) => x !== prev)
-            setStore("answers", answers)
-          }
-          setStore("editing", false)
-          return
-        }
-
-        if (multi()) {
-          const inputs = [...store.custom]
-          inputs[store.tab] = text
-          setStore("custom", inputs)
-
-          const existing = store.answers[store.tab] ?? []
-          const next = [...existing]
-          if (prev) {
-            const index = next.indexOf(prev)
-            if (index !== -1) next.splice(index, 1)
-          }
-          if (!next.includes(text)) next.push(text)
-          const answers = [...store.answers]
-          answers[store.tab] = next
-          setStore("answers", answers)
-          setStore("editing", false)
-          return
-        }
-
-        pick(text, true)
-        setStore("editing", false)
+        primary()
         return
       }
       // Let textarea handle all other keys
@@ -208,11 +246,11 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
     if (confirm()) {
       if (evt.name === "return") {
         evt.preventDefault()
-        submit()
+        primary()
       }
       if (evt.name === "escape" || keybind.match("app_exit", evt)) {
         evt.preventDefault()
-        reject()
+        secondary()
       }
     } else {
       const opts = options()
@@ -240,12 +278,12 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
 
       if (evt.name === "return") {
         evt.preventDefault()
-        selectOption()
+        primary()
       }
 
       if (evt.name === "escape" || keybind.match("app_exit", evt)) {
         evt.preventDefault()
-        reject()
+        secondary()
       }
     }
   })
@@ -449,16 +487,31 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
               {"↑↓"} <span style={{ fg: theme.textMuted }}>select</span>
             </text>
           </Show>
-          <text fg={theme.text}>
-            enter{" "}
-            <span style={{ fg: theme.textMuted }}>
-              {confirm() ? "submit" : multi() ? "toggle" : single() ? "submit" : "confirm"}
-            </span>
-          </text>
+          <box
+            paddingLeft={1}
+            paddingRight={1}
+            backgroundColor={actionHover() === "enter" ? theme.backgroundElement : undefined}
+            onMouseOver={() => setActionHover("enter")}
+            onMouseOut={() => setActionHover(null)}
+            onMouseUp={() => primary()}
+          >
+            <text fg={theme.text}>
+              enter <span style={{ fg: theme.textMuted }}>{primaryLabel()}</span>
+            </text>
+          </box>
 
-          <text fg={theme.text}>
-            esc <span style={{ fg: theme.textMuted }}>dismiss</span>
-          </text>
+          <box
+            paddingLeft={1}
+            paddingRight={1}
+            backgroundColor={actionHover() === "escape" ? theme.backgroundElement : undefined}
+            onMouseOver={() => setActionHover("escape")}
+            onMouseOut={() => setActionHover(null)}
+            onMouseUp={() => secondary()}
+          >
+            <text fg={theme.text}>
+              esc <span style={{ fg: theme.textMuted }}>{secondaryLabel()}</span>
+            </text>
+          </box>
         </box>
       </box>
     </box>
