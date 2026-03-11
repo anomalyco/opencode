@@ -542,6 +542,7 @@ export const dict = {
   "workspace.billing.loading": "Laster...",
   "workspace.billing.addAction": "Legg til",
   "workspace.billing.addBalance": "Legg til saldo",
+  "workspace.billing.alipay": "Alipay",
   "workspace.billing.linkedToStripe": "Koblet til Stripe",
   "workspace.billing.manage": "Administrer",
   "workspace.billing.enable": "Aktiver fakturering",
@@ -635,7 +636,7 @@ export const dict = {
   "workspace.lite.subscription.selectProvider":
     'Velg "OpenCode Go" som leverandør i opencode-konfigurasjonen din for å bruke Go-modeller.',
   "workspace.lite.black.message":
-    'Du abonnerer for øyeblikket på OpenCode Black eller står på venteliste. Vennligst avslutt abonnementet først hvis du vil bytte til Go.',
+    "Du abonnerer for øyeblikket på OpenCode Black eller står på venteliste. Vennligst avslutt abonnementet først hvis du vil bytte til Go.",
   "workspace.lite.other.message":
     "Et annet medlem i dette arbeidsområdet abonnerer allerede på OpenCode Go. Kun ett medlem per arbeidsområde kan abonnere.",
   "workspace.lite.promo.description":

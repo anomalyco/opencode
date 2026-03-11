@@ -544,6 +544,7 @@ export const dict = {
   "workspace.billing.loading": "Caricamento...",
   "workspace.billing.addAction": "Aggiungi",
   "workspace.billing.addBalance": "Aggiungi Saldo",
+  "workspace.billing.alipay": "Alipay",
   "workspace.billing.linkedToStripe": "Collegato a Stripe",
   "workspace.billing.manage": "Gestisci",
   "workspace.billing.enable": "Abilita Fatturazione",

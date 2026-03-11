@@ -521,6 +521,7 @@ export const dict = {
   "workspace.billing.loading": "加载中...",
   "workspace.billing.addAction": "充值",
   "workspace.billing.addBalance": "充值余额",
+  "workspace.billing.alipay": "支付宝",
   "workspace.billing.linkedToStripe": "已关联 Stripe",
   "workspace.billing.manage": "管理",
   "workspace.billing.enable": "启用计费",
@@ -612,8 +613,7 @@ export const dict = {
   "workspace.lite.subscription.useBalance": "达到使用限额后使用您的可用余额",
   "workspace.lite.subscription.selectProvider":
     "在你的 opencode 配置中选择「OpenCode Go」作为提供商，即可使用 Go 模型。",
-  "workspace.lite.black.message":
-    '您当前已订阅 OpenCode Black 或在候补名单中。如需切换到 Go，请先取消订阅。',
+  "workspace.lite.black.message": "您当前已订阅 OpenCode Black 或在候补名单中。如需切换到 Go，请先取消订阅。",
   "workspace.lite.other.message": "此工作区中的另一位成员已经订阅了 OpenCode Go。每个工作区只有一名成员可以订阅。",
   "workspace.lite.promo.description":
     "OpenCode Go 是一个每月 $10 的订阅计划，提供对主流开源编码模型的稳定访问，并配备充足的使用额度。",

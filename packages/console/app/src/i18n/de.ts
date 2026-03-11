@@ -544,6 +544,7 @@ export const dict = {
   "workspace.billing.loading": "Lade...",
   "workspace.billing.addAction": "Hinzufügen",
   "workspace.billing.addBalance": "Guthaben aufladen",
+  "workspace.billing.alipay": "Alipay",
   "workspace.billing.linkedToStripe": "Mit Stripe verbunden",
   "workspace.billing.manage": "Verwalten",
   "workspace.billing.enable": "Abrechnung aktivieren",
@@ -637,7 +638,7 @@ export const dict = {
   "workspace.lite.subscription.selectProvider":
     'Wähle "OpenCode Go" als Anbieter in deiner opencode-Konfiguration, um Go-Modelle zu verwenden.',
   "workspace.lite.black.message":
-    'Du hast derzeit OpenCode Black abonniert oder stehst auf der Warteliste. Bitte kündige zuerst, wenn du zu Go wechseln möchtest.',
+    "Du hast derzeit OpenCode Black abonniert oder stehst auf der Warteliste. Bitte kündige zuerst, wenn du zu Go wechseln möchtest.",
   "workspace.lite.other.message":
     "Ein anderes Mitglied in diesem Workspace hat OpenCode Go bereits abonniert. Nur ein Mitglied pro Workspace kann abonnieren.",
   "workspace.lite.promo.description":

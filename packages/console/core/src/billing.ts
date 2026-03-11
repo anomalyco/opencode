@@ -265,7 +265,7 @@ export namespace Billing {
               customer_email: email!,
             }),
         currency: "usd",
-        payment_method_types: ["card"],
+        payment_method_types: ["card", "alipay"],
         tax_id_collection: {
           enabled: true,
         },

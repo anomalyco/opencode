@@ -545,6 +545,7 @@ export const dict = {
   "workspace.billing.loading": "Yükleniyor...",
   "workspace.billing.addAction": "Ekle",
   "workspace.billing.addBalance": "Bakiye Ekle",
+  "workspace.billing.alipay": "Alipay",
   "workspace.billing.linkedToStripe": "Stripe'a bağlı",
   "workspace.billing.manage": "Yönet",
   "workspace.billing.enable": "Faturalandırmayı Etkinleştir",

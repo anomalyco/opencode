@@ -537,6 +537,7 @@ export const dict = {
   "workspace.billing.loading": "로드 중...",
   "workspace.billing.addAction": "추가",
   "workspace.billing.addBalance": "잔액 추가",
+  "workspace.billing.alipay": "Alipay",
   "workspace.billing.linkedToStripe": "Stripe에 연결됨",
   "workspace.billing.manage": "관리",
   "workspace.billing.enable": "결제 활성화",
@@ -629,7 +630,7 @@ export const dict = {
   "workspace.lite.subscription.selectProvider":
     'Go 모델을 사용하려면 opencode 설정에서 "OpenCode Go"를 공급자로 선택하세요.',
   "workspace.lite.black.message":
-    '현재 OpenCode Black을 구독 중이거나 대기 명단에 등록되어 있습니다. Go로 전환하려면 먼저 구독을 취소해 주세요.',
+    "현재 OpenCode Black을 구독 중이거나 대기 명단에 등록되어 있습니다. Go로 전환하려면 먼저 구독을 취소해 주세요.",
   "workspace.lite.other.message":
     "이 워크스페이스의 다른 멤버가 이미 OpenCode Go를 구독 중입니다. 워크스페이스당 한 명의 멤버만 구독할 수 있습니다.",
   "workspace.lite.promo.description":
