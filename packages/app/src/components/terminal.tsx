@@ -364,13 +364,7 @@ export const Terminal = (props: TerminalProps) => {
           return true
         }
 
-        const config = settings.keybinds.get(TOGGLE_TERMINAL_ID) ?? DEFAULT_TOGGLE_TERMINAL_KEYBIND
-        const keybinds = parseKeybind(config)
-        if (!matchKeybind(keybinds, event)) return false
-
-        // Handle terminal toggle directly so it works even when terminal input has focus.
-        command.trigger(TOGGLE_TERMINAL_ID, "keybind")
-        return true
+        return false
       })
 
       const fit = new mod.FitAddon()
@@ -389,6 +383,17 @@ export const Terminal = (props: TerminalProps) => {
         handlePointerDown,
         handleLinkClick,
       })
+
+      const handleToggleKeybind = (event: KeyboardEvent) => {
+        const config = settings.keybinds.get(TOGGLE_TERMINAL_ID) ?? DEFAULT_TOGGLE_TERMINAL_KEYBIND
+        const keybinds = parseKeybind(config)
+        if (!matchKeybind(keybinds, event)) return
+        event.preventDefault()
+        event.stopPropagation()
+        command.trigger(TOGGLE_TERMINAL_ID, "keybind")
+      }
+      t.textarea?.addEventListener("keydown", handleToggleKeybind, true)
+      cleanups.push(() => t.textarea?.removeEventListener("keydown", handleToggleKeybind, true))
 
       if (local.autoFocus !== false) focusTerminal()
 
