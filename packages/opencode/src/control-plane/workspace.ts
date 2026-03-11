@@ -10,7 +10,6 @@ import { ProjectID } from "@/project/schema"
 import { WorkspaceTable } from "./workspace.sql"
 import { getAdaptor } from "./adaptors"
 import { WorkspaceInfo } from "./types"
-import type { WorkspaceInfo as WorkspaceInfoType } from "./types"
 import { parseSSE } from "./sse"
 
 export namespace Workspace {
@@ -32,7 +31,7 @@ export namespace Workspace {
   export const Info = WorkspaceInfo.meta({
     ref: "Workspace",
   })
-  export type Info = WorkspaceInfoType
+  export type Info = z.infer<typeof WorkspaceInfo>
 
   function fromRow(row: typeof WorkspaceTable.$inferSelect): Info {
     return {
@@ -67,7 +66,7 @@ export namespace Workspace {
       name: config.name ?? null,
       directory: config.directory ?? null,
       extra: config.extra ?? null,
-      projectID: config.projectID,
+      projectID: input.projectID,
     }
 
     Database.use((db) => {
