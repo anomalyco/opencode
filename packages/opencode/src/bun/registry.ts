@@ -6,9 +6,8 @@ import { BunProc } from "."
 export namespace PackageRegistry {
   const log = Log.create({ service: "bun" })
 
-
   export async function info(pkg: string, field: string, cwd?: string): Promise<string | null> {
-    const { code, stdout, stderr } = await Process.run([which(), "info", pkg, field], {
+    const { code, stdout, stderr } = await Process.run([BunProc.which(), "info", pkg, field], {
       cwd,
       env: {
         ...process.env,
