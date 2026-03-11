@@ -45,4 +45,10 @@ export const TuiEvent = {
       sessionID: z.string().regex(/^ses/).describe("Session ID to navigate to"),
     }),
   ),
+  AgentSet: BusEvent.define(
+    "tui.agent.set",
+    z.object({
+      name: z.string().describe("Name of the primary agent to activate in the TUI"),
+    }),
+  ),
 }

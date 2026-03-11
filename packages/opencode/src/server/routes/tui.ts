@@ -375,5 +375,29 @@ export const TuiRoutes = lazy(() =>
         return c.json(true)
       },
     )
+    .post(
+      "/set-agent",
+      describeRoute({
+        summary: "Set active TUI agent",
+        description: "Set the active primary agent in the TUI agent selector. Useful for plugins that perform agent handoffs.",
+        operationId: "tui.setAgent",
+        responses: {
+          200: {
+            description: "Agent set successfully",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator("json", TuiEvent.AgentSet.properties),
+      async (c) => {
+        await Bus.publish(TuiEvent.AgentSet, c.req.valid("json"))
+        return c.json(true)
+      },
+    )
     .route("/control", TuiControlRoutes),
 )

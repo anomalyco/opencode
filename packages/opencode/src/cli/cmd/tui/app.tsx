@@ -6,6 +6,7 @@ import { RouteProvider, useRoute } from "@tui/context/route"
 import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
 import { win32DisableProcessedInput, win32FlushInputBuffer, win32InstallCtrlCGuard } from "./win32"
 import { Installation } from "@/installation"
+import { Bus } from "@/bus"
 import { Flag } from "@/flag/flag"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderList } from "@tui/component/dialog-provider"
@@ -709,6 +710,14 @@ function App() {
       type: "session",
       sessionID: evt.properties.sessionID,
     })
+  })
+
+  Bus.subscribe(TuiEvent.AgentSet, (evt) => {
+    const { name } = evt.properties
+    const isPrimaryAgent = local.agent.list().some((x) => x.name === name)
+    if (isPrimaryAgent) {
+      local.agent.set(name)
+    }
   })
 
   sdk.event.on(SessionApi.Event.Deleted.type, (evt) => {
