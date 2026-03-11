@@ -12,15 +12,38 @@ function getOpenAIMetadata(message: { providerOptions?: SharedV2ProviderMetadata
 
 export function convertToOpenAICompatibleChatMessages(prompt: LanguageModelV2Prompt): OpenAICompatibleChatPrompt {
   const messages: OpenAICompatibleChatPrompt = []
+
+  const systemPrompt: string[] = []
+  for (const { role, content } of prompt) {
+    if (role === "system") {
+      systemPrompt.push(content)
+    }
+  }
+
+  const hasSystem = systemPrompt.length > 0
+  const hasOthers = prompt.some((m: LanguageModelV2Prompt[number]) => m.role !== "system")
+
+  if (hasSystem) {
+    if (hasOthers) {
+      messages.push({
+        role: "system",
+        content: systemPrompt.join("\n\n"),
+      })
+    } else {
+      // If there are only system messages, some APIs (like OpenAI) will fail.
+      // We convert them to a user message in this case.
+      messages.push({
+        role: "user",
+        content: systemPrompt.join("\n\n"),
+      })
+    }
+  }
+
   for (const { role, content, ...message } of prompt) {
     const metadata = getOpenAIMetadata({ ...message })
     switch (role) {
       case "system": {
-        messages.push({
-          role: "system",
-          content: content,
-          ...metadata,
-        })
+        // Handled above
         break
       }
 

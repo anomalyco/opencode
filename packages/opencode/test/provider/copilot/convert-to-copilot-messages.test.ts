@@ -2,7 +2,7 @@ import { convertToOpenAICompatibleChatMessages as convertToCopilotMessages } fro
 import { describe, test, expect } from "bun:test"
 
 describe("system messages", () => {
-  test("should convert system message content to string", () => {
+  test("should convert lone system message content to a user message", () => {
     const result = convertToCopilotMessages([
       {
         role: "system",
@@ -12,9 +12,22 @@ describe("system messages", () => {
 
     expect(result).toEqual([
       {
-        role: "system",
+        role: "user",
         content: "You are a helpful assistant with AGENTS.md instructions.",
       },
+    ])
+  })
+
+  test("should merge multiple system messages into one", () => {
+    const result = convertToCopilotMessages([
+      { role: "system", content: "System 1" },
+      { role: "system", content: "System 2" },
+      { role: "user", content: [{ type: "text", text: "Hello" }] },
+    ])
+
+    expect(result).toEqual([
+      { role: "system", content: "System 1\n\nSystem 2" },
+      { role: "user", content: "Hello" },
     ])
   })
 })
