@@ -617,7 +617,8 @@ export const dict = {
   "workspace.lite.black.message": "您当前已订阅 OpenCode Black 或在候补名单中。如需切换到 Go，请先取消订阅。",
   "workspace.lite.other.message": "此工作区中的另一位成员已经订阅了 OpenCode Go。每个工作区只有一名成员可以订阅。",
   "workspace.lite.promo.description":
-    "OpenCode Go 是一个每月 $10 的订阅计划，提供对主流开源编码模型的稳定访问，并配备充足的使用额度。",
+    "OpenCode Go 起价为 {{price}}，之后 $10/月，并提供对流行开放编码模型的可靠访问，同时享有充裕的使用限额。",
+  "workspace.lite.promo.price": "首月 $5",
   "workspace.lite.promo.modelsTitle": "包含模型",
   "workspace.lite.promo.footer":
     "该计划主要面向国际用户设计，模型部署在美国、欧盟和新加坡，以确保全球范围内的稳定访问体验。定价和使用额度可能会根据早期用户的使用情况和反馈持续调整与优化。",

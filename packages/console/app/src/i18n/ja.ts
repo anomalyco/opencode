@@ -643,7 +643,8 @@ export const dict = {
   "workspace.lite.other.message":
     "このワークスペースの別のメンバーが既に OpenCode Go を購読しています。ワークスペースにつき1人のメンバーのみが購読できます。",
   "workspace.lite.promo.description":
-    "OpenCode Goは月額$10のサブスクリプションプランで、人気のオープンコーディングモデルへの安定したアクセスを十分な利用枠で提供します。",
+    "OpenCode Goは{{price}}で始まり、その後は$10/月で、人気の高いオープンコーディングモデルへの安定したアクセスと余裕のある利用枠を提供します。",
+  "workspace.lite.promo.price": "初月$5",
   "workspace.lite.promo.modelsTitle": "含まれるもの",
   "workspace.lite.promo.footer":
     "このプランは主にグローバルユーザー向けに設計されており、米国、EU、シンガポールでホストされたモデルにより安定したグローバルアクセスを提供します。料金と利用制限は、初期の利用状況やフィードバックに基づいて変更される可能性があります。",

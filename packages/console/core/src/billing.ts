@@ -258,6 +258,7 @@ export namespace Billing {
         mode: "subscription",
         billing_address_collection: "required",
         line_items: [{ price: LiteData.priceID(), quantity: 1 }],
+        discounts: [{ coupon: LiteData.firstMonth50Coupon() }],
         ...(billing.customerID
           ? {
               customer: billing.customerID,

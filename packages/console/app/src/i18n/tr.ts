@@ -646,7 +646,8 @@ export const dict = {
   "workspace.lite.other.message":
     "Bu çalışma alanındaki başka bir üye zaten OpenCode Go abonesi. Çalışma alanı başına yalnızca bir üye abone olabilir.",
   "workspace.lite.promo.description":
-    "OpenCode Go, cömert kullanım limitleriyle popüler açık kodlama modellerine güvenilir erişim sağlayan aylık 10$'lık bir aboneliktir.",
+    "OpenCode Go {{price}} fiyatından başlar, sonrasında ayda 10$ olur ve cömert kullanım limitleriyle popüler açık kodlama modellerine güvenilir erişim sağlar.",
+  "workspace.lite.promo.price": "İlk ay $5",
   "workspace.lite.promo.modelsTitle": "Neler Dahil",
   "workspace.lite.promo.footer":
     "Plan öncelikle uluslararası kullanıcılar için tasarlanmıştır; modeller istikrarlı küresel erişim için ABD, AB ve Singapur'da barındırılmaktadır. Erken kullanımdan öğrendikçe ve geri bildirim topladıkça fiyatlandırma ve kullanım limitleri değişebilir.",

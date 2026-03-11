@@ -1,6 +1,6 @@
 import { action, useParams, useAction, useSubmission, json, query, createAsync } from "@solidjs/router"
 import { createStore } from "solid-js/store"
-import { createMemo, Show } from "solid-js"
+import { createMemo, For, Show } from "solid-js"
 import { Billing } from "@opencode-ai/console-core/billing.js"
 import { Database, eq, and, isNull } from "@opencode-ai/console-core/drizzle/index.js"
 import { BillingTable, LiteTable } from "@opencode-ai/console-core/schema/billing.sql.js"
@@ -271,7 +271,19 @@ export function LiteSection() {
           <div data-slot="section-title">
             <h2>{i18n.t("workspace.lite.title")}</h2>
           </div>
-          <p data-slot="promo-description">{i18n.t("workspace.lite.promo.description")}</p>
+          <p data-slot="promo-description">
+            <For
+              each={i18n
+                .t("workspace.lite.promo.description")
+                .split(/(\{\{price\}\})/g)
+                .filter(Boolean)}
+            >
+              {(part) => {
+                if (part === "{{price}}") return <strong>{i18n.t("workspace.lite.promo.price")}</strong>
+                return part
+              }}
+            </For>
+          </p>
           <h3 data-slot="promo-models-title">{i18n.t("workspace.lite.promo.modelsTitle")}</h3>
           <ul data-slot="promo-models">
             <li>Kimi K2.5</li>

@@ -635,7 +635,8 @@ export const dict = {
   "workspace.lite.other.message":
     "이 워크스페이스의 다른 멤버가 이미 OpenCode Go를 구독 중입니다. 워크스페이스당 한 명의 멤버만 구독할 수 있습니다.",
   "workspace.lite.promo.description":
-    "OpenCode Go는 넉넉한 사용 한도와 함께 인기 있는 오픈 코딩 모델에 대한 안정적인 액세스를 제공하는 월 $10의 구독입니다.",
+    "OpenCode Go는 {{price}}부터 시작하며, 이후 $10/월로 넉넉한 사용량 한도와 함께 인기 있는 오픈 코딩 모델에 대한 안정적인 액세스를 제공합니다.",
+  "workspace.lite.promo.price": "첫 달 $5",
   "workspace.lite.promo.modelsTitle": "포함 내역",
   "workspace.lite.promo.footer":
     "이 플랜은 주로 글로벌 사용자를 위해 설계되었으며, 안정적인 글로벌 액세스를 위해 미국, EU 및 싱가포르에 모델이 호스팅되어 있습니다. 가격 및 사용 한도는 초기 사용을 통해 학습하고 피드백을 수집함에 따라 변경될 수 있습니다.",
