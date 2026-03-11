@@ -171,6 +171,7 @@ export const ImportCommand = cmd({
       )
 
       for (const msg of exportData.messages) {
+        const { id: _mid, sessionID: _msid, ...msgData } = msg.info
         Database.use((db) =>
           db
             .insert(MessageTable)
@@ -178,13 +179,14 @@ export const ImportCommand = cmd({
               id: MessageID.make(msg.info.id),
               session_id: row.id,
               time_created: msg.info.time?.created ?? Date.now(),
-              data: msg.info as any,
+              data: msgData,
             })
             .onConflictDoNothing()
             .run(),
         )
 
         for (const part of msg.parts) {
+          const { id: _pid, sessionID: _psid, messageID: _pmid, ...partData } = part
           Database.use((db) =>
             db
               .insert(PartTable)
@@ -192,7 +194,7 @@ export const ImportCommand = cmd({
                 id: part.id,
                 message_id: MessageID.make(msg.info.id),
                 session_id: row.id,
-                data: part as any,
+                data: partData,
               })
               .onConflictDoNothing()
               .run(),

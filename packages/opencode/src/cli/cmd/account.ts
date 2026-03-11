@@ -11,11 +11,6 @@ const openBrowser = (url: string) => Effect.promise(() => open(url).catch(() => 
 
 const println = (msg: string) => Effect.sync(() => UI.println(msg))
 
-export const isActiveOrgChoice = (
-  active: Option.Option<{ id: AccountID; active_org_id: OrgID | null }>,
-  choice: { accountID: AccountID; orgID: OrgID },
-) => Option.isSome(active) && active.value.id === choice.accountID && active.value.active_org_id === choice.orgID
-
 const loginEffect = Effect.fn("login")(function* (url: string) {
   const service = yield* AccountService
 
@@ -104,10 +99,11 @@ const switchEffect = Effect.fn("switch")(function* () {
   if (groups.length === 0) return yield* println("Not logged in")
 
   const active = yield* service.active()
+  const activeOrgID = Option.flatMap(active, (a) => Option.fromNullishOr(a.active_org_id))
 
   const opts = groups.flatMap((group) =>
     group.orgs.map((org) => {
-      const isActive = isActiveOrgChoice(active, { accountID: group.account.id, orgID: org.id })
+      const isActive = Option.isSome(activeOrgID) && activeOrgID.value === org.id
       return {
         value: { orgID: org.id, accountID: group.account.id, label: org.name },
         label: isActive
@@ -136,10 +132,11 @@ const orgsEffect = Effect.fn("orgs")(function* () {
   if (!groups.some((group) => group.orgs.length > 0)) return yield* println("No orgs found")
 
   const active = yield* service.active()
+  const activeOrgID = Option.flatMap(active, (a) => Option.fromNullishOr(a.active_org_id))
 
   for (const group of groups) {
     for (const org of group.orgs) {
-      const isActive = isActiveOrgChoice(active, { accountID: group.account.id, orgID: org.id })
+      const isActive = Option.isSome(activeOrgID) && activeOrgID.value === org.id
       const dot = isActive ? UI.Style.TEXT_SUCCESS + "●" + UI.Style.TEXT_NORMAL : " "
       const name = isActive ? UI.Style.TEXT_HIGHLIGHT_BOLD + org.name + UI.Style.TEXT_NORMAL : org.name
       const email = UI.Style.TEXT_DIM + group.account.email + UI.Style.TEXT_NORMAL
