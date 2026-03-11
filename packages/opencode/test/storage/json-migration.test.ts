@@ -11,6 +11,7 @@ import { ProjectTable } from "../../src/project/project.sql"
 import { ProjectID } from "../../src/project/schema"
 import { SessionTable, MessageTable, PartTable, TodoTable, PermissionTable } from "../../src/session/session.sql"
 import { SessionShareTable } from "../../src/share/share.sql"
+import { SessionID } from "../../src/session/schema"
 
 // Test fixtures
 const fixtures = {
@@ -220,7 +221,7 @@ describe("JSON to SQLite migration", () => {
     const db = drizzle({ client: sqlite })
     const sessions = db.select().from(SessionTable).all()
     expect(sessions.length).toBe(1)
-    expect(sessions[0].id).toBe("ses_test456def")
+    expect(sessions[0].id).toBe(SessionID.make("ses_test456def"))
     expect(sessions[0].project_id).toBe(ProjectID.make("proj_test123abc"))
     expect(sessions[0].slug).toBe("test-session")
     expect(sessions[0].title).toBe("Test Session Title")
@@ -295,7 +296,7 @@ describe("JSON to SQLite migration", () => {
     const messages = db.select().from(MessageTable).all()
     expect(messages.length).toBe(1)
     expect(messages[0].id).toBe("msg_test789ghi")
-    expect(messages[0].session_id).toBe("ses_test456def")
+    expect(messages[0].session_id).toBe(SessionID.make("ses_test456def"))
     expect(messages[0].data).not.toHaveProperty("id")
     expect(messages[0].data).not.toHaveProperty("sessionID")
 
@@ -303,7 +304,7 @@ describe("JSON to SQLite migration", () => {
     expect(parts.length).toBe(1)
     expect(parts[0].id).toBe("prt_testabc123")
     expect(parts[0].message_id).toBe("msg_test789ghi")
-    expect(parts[0].session_id).toBe("ses_test456def")
+    expect(parts[0].session_id).toBe(SessionID.make("ses_test456def"))
     expect(parts[0].data).not.toHaveProperty("id")
     expect(parts[0].data).not.toHaveProperty("messageID")
     expect(parts[0].data).not.toHaveProperty("sessionID")
@@ -336,7 +337,7 @@ describe("JSON to SQLite migration", () => {
     const messages = db.select().from(MessageTable).all()
     expect(messages.length).toBe(1)
     expect(messages[0].id).toBe("msg_from_filename") // Uses filename, not JSON id
-    expect(messages[0].session_id).toBe("ses_test456def")
+    expect(messages[0].session_id).toBe(SessionID.make("ses_test456def"))
   })
 
   test("uses paths for part id and messageID when JSON has different values", async () => {
@@ -426,7 +427,7 @@ describe("JSON to SQLite migration", () => {
     const db = drizzle({ client: sqlite })
     const sessions = db.select().from(SessionTable).all()
     expect(sessions.length).toBe(1)
-    expect(sessions[0].id).toBe("ses_migrated")
+    expect(sessions[0].id).toBe(SessionID.make("ses_migrated"))
     expect(sessions[0].project_id).toBe(ProjectID.make(gitBasedProjectID)) // Uses directory, not stale JSON
   })
 
@@ -458,7 +459,7 @@ describe("JSON to SQLite migration", () => {
     const db = drizzle({ client: sqlite })
     const sessions = db.select().from(SessionTable).all()
     expect(sessions.length).toBe(1)
-    expect(sessions[0].id).toBe("ses_from_filename") // Uses filename, not JSON id
+    expect(sessions[0].id).toBe(SessionID.make("ses_from_filename")) // Uses filename, not JSON id
     expect(sessions[0].project_id).toBe(ProjectID.make("proj_test123abc"))
   })
 

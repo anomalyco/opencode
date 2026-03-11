@@ -1,5 +1,6 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
+import { SessionID } from "@/session/schema"
 import z from "zod"
 import { Log } from "../util/log"
 import { Identifier } from "../id/id"
@@ -24,7 +25,7 @@ export namespace Permission {
       id: z.string(),
       type: z.string(),
       pattern: z.union([z.string(), z.array(z.string())]).optional(),
-      sessionID: z.string(),
+      sessionID: SessionID.zod,
       messageID: z.string(),
       callID: z.string().optional(),
       message: z.string(),
@@ -43,7 +44,7 @@ export namespace Permission {
     Replied: BusEvent.define(
       "permission.replied",
       z.object({
-        sessionID: z.string(),
+        sessionID: SessionID.zod,
         permissionID: z.string(),
         response: z.string(),
       }),

@@ -5,9 +5,10 @@ import { EditTool } from "../../src/tool/edit"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import { FileTime } from "../../src/file/time"
+import { SessionID } from "../../src/session/schema"
 
 const ctx = {
-  sessionID: "test-edit-session",
+  sessionID: SessionID.make("ses_test-edit-session"),
   messageID: "",
   callID: "",
   agent: "build",

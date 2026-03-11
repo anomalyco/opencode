@@ -4,6 +4,7 @@ import fs from "fs/promises"
 import z from "zod"
 import { Filesystem } from "../util/filesystem"
 import { Identifier } from "../id/id"
+import { SessionID } from "./schema"
 import { MessageV2 } from "./message-v2"
 import { Log } from "../util/log"
 import { SessionRevert } from "./revert"
@@ -84,13 +85,13 @@ export namespace SessionPrompt {
     },
   )
 
-  export function assertNotBusy(sessionID: string) {
+  export function assertNotBusy(sessionID: SessionID) {
     const match = state()[sessionID]
     if (match) throw new Session.BusyError(sessionID)
   }
 
   export const PromptInput = z.object({
-    sessionID: Identifier.schema("session"),
+    sessionID: SessionID.zod,
     messageID: Identifier.schema("message").optional(),
     model: z
       .object({
@@ -254,7 +255,7 @@ export namespace SessionPrompt {
     return s[sessionID].abort.signal
   }
 
-  export function cancel(sessionID: string) {
+  export function cancel(sessionID: SessionID) {
     log.info("cancel", { sessionID })
     const s = state()
     const match = s[sessionID]
@@ -269,7 +270,7 @@ export namespace SessionPrompt {
   }
 
   export const LoopInput = z.object({
-    sessionID: Identifier.schema("session"),
+    sessionID: SessionID.zod,
     resume_existing: z.boolean().optional(),
   })
   export const loop = fn(LoopInput, async (input) => {
@@ -731,7 +732,7 @@ export namespace SessionPrompt {
     throw new Error("Impossible")
   })
 
-  async function lastModel(sessionID: string) {
+  async function lastModel(sessionID: SessionID) {
     for await (const item of MessageV2.stream(sessionID)) {
       if (item.info.role === "user" && item.info.model) return item.info.model
     }
@@ -1467,7 +1468,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
   }
 
   export const ShellInput = z.object({
-    sessionID: Identifier.schema("session"),
+    sessionID: SessionID.zod,
     agent: z.string(),
     model: z
       .object({
@@ -1719,7 +1720,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
   export const CommandInput = z.object({
     messageID: Identifier.schema("message").optional(),
-    sessionID: Identifier.schema("session"),
+    sessionID: SessionID.zod,
     agent: z.string().optional(),
     model: z.string().optional(),
     arguments: z.string(),

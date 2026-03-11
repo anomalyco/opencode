@@ -1,5 +1,6 @@
 import type { Argv } from "yargs"
 import { Session } from "../../session"
+import { SessionID } from "../../session/schema"
 import { cmd } from "./cmd"
 import { bootstrap } from "../bootstrap"
 import { UI } from "../ui"
@@ -66,8 +67,9 @@ export const ExportCommand = cmd({
       }
 
       try {
-        const sessionInfo = await Session.get(sessionID!)
-        const messages = await Session.messages({ sessionID: sessionID! })
+        const id = SessionID.make(sessionID!)
+        const sessionInfo = await Session.get(id)
+        const messages = await Session.messages({ sessionID: id })
 
         const exportData = {
           info: sessionInfo,
