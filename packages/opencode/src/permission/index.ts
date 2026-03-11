@@ -3,10 +3,10 @@ import { Bus } from "@/bus"
 import { SessionID, MessageID } from "@/session/schema"
 import z from "zod"
 import { Log } from "../util/log"
-import { Identifier } from "../id/id"
 import { Plugin } from "../plugin"
 import { Instance } from "../project/instance"
 import { Wildcard } from "../util/wildcard"
+import { PermissionID } from "./schema"
 
 export namespace Permission {
   const log = Log.create({ service: "permission" })
@@ -22,7 +22,7 @@ export namespace Permission {
 
   export const Info = z
     .object({
-      id: z.string(),
+      id: PermissionID.zod,
       type: z.string(),
       pattern: z.union([z.string(), z.array(z.string())]).optional(),
       sessionID: SessionID.zod,
@@ -45,7 +45,7 @@ export namespace Permission {
       "permission.replied",
       z.object({
         sessionID: SessionID.zod,
-        permissionID: z.string(),
+        permissionID: PermissionID.zod,
         response: z.string(),
       }),
     ),
@@ -118,7 +118,7 @@ export namespace Permission {
     const keys = toKeys(input.pattern, input.type)
     if (covered(keys, approvedForSession)) return
     const info: Info = {
-      id: Identifier.ascending("permission"),
+      id: PermissionID.ascending(),
       type: input.type,
       pattern: input.pattern,
       sessionID: input.sessionID,

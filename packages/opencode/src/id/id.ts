@@ -5,12 +5,12 @@ export namespace Identifier {
   const prefixes = {
     session: "ses",
     message: "msg",
-    permission: "per",
-    question: "que",
+    permission: "prm",
+    question: "qst",
     user: "usr",
     part: "prt",
     pty: "pty",
-    tool: "tool",
+    tool: "tol",
     workspace: "wrk",
   } as const
 

@@ -87,7 +87,7 @@ describe("Truncate", () => {
       expect(result.content).toContain("Grep")
       if (!result.truncated) throw new Error("expected truncated")
       expect(result.outputPath).toBeDefined()
-      expect(result.outputPath).toContain("tool_")
+      expect(result.outputPath).toContain("tol_")
 
       const written = await Filesystem.readText(result.outputPath!)
       expect(written).toBe(lines)
