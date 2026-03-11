@@ -21,6 +21,7 @@ export const dict = {
   "footer.github": "GitHub",
   "footer.docs": "Docs",
   "footer.changelog": "Changelog",
+  "footer.feishu": "Feishu",
   "footer.discord": "Discord",
   "footer.x": "X",
 
