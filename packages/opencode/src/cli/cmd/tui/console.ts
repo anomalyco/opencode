@@ -1,5 +1,7 @@
 import { dlopen, ptr } from "bun:ffi"
 
+// -- Windows (kernel32) -------------------------------------------------------
+
 const STD_INPUT_HANDLE = -10
 const ENABLE_PROCESSED_INPUT = 0x0001
 
@@ -13,15 +15,31 @@ const kernel = () =>
 
 let k32: ReturnType<typeof kernel> | undefined
 
+// -- POSIX (libc) -------------------------------------------------------------
+
+const libc = () =>
+  dlopen(process.platform === "darwin" ? "libSystem.B.dylib" : "libc.so.6", {
+    tcflush: { args: ["i32", "i32"], returns: "i32" },
+  })
+
+let lc: ReturnType<typeof libc> | undefined
+
+// -----------------------------------------------------------------------------
+
 function load() {
-  if (process.platform !== "win32") return false
   try {
-    k32 ??= kernel()
+    if (process.platform === "win32") k32 ??= kernel()
+    else lc ??= libc()
     return true
   } catch {
     return false
   }
 }
+
+// TCIFLUSH: discard received-but-unread input
+const TCIFLUSH = process.platform === "darwin" ? 1 : 0
+
+// -- Exports ------------------------------------------------------------------
 
 /**
  * Clear ENABLE_PROCESSED_INPUT on the console stdin handle.
@@ -41,15 +59,21 @@ export function win32DisableProcessedInput() {
 }
 
 /**
- * Discard any queued console input (mouse events, key presses, etc.).
+ * Discard any queued console/tty input (mouse events, key presses, etc.).
+ *
+ * On Windows this calls FlushConsoleInputBuffer via kernel32.
+ * On POSIX this calls tcflush(STDIN_FILENO, TCIFLUSH) via libc.
  */
-export function win32FlushInputBuffer() {
-  if (process.platform !== "win32") return
+export function flushInputBuffer() {
   if (!process.stdin.isTTY) return
   if (!load()) return
 
-  const handle = k32!.symbols.GetStdHandle(STD_INPUT_HANDLE)
-  k32!.symbols.FlushConsoleInputBuffer(handle)
+  if (process.platform === "win32") {
+    const handle = k32!.symbols.GetStdHandle(STD_INPUT_HANDLE)
+    k32!.symbols.FlushConsoleInputBuffer(handle)
+  } else {
+    lc!.symbols.tcflush(0, TCIFLUSH)
+  }
 }
 
 let unhook: (() => void) | undefined
