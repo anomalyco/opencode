@@ -516,6 +516,7 @@ export const dict = {
   "session.todo.collapse": "Contraer",
   "session.todo.expand": "Expandir",
 
+  "session.new.title": "Construye lo que quieras",
   "session.new.worktree.main": "Rama principal",
   "session.new.worktree.mainWithBranch": "Rama principal ({{branch}})",
   "session.new.worktree.create": "Crear nuevo árbol de trabajo",

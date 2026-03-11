@@ -464,7 +464,6 @@ export const dict = {
   "workspace.cost.deletedSuffix": "（已刪除）",
   "workspace.cost.empty": "所選期間沒有可用的使用資料。",
   "workspace.cost.subscriptionShort": "訂",
-  "workspace.cost.liteShort": "lite",
 
   "workspace.keys.title": "API 金鑰",
   "workspace.keys.subtitle": "管理你的 API 金鑰以存取 OpenCode 服務。",

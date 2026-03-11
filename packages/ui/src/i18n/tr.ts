@@ -98,6 +98,7 @@ export const dict = {
   "ui.tool.todos.read": "Görevleri oku",
   "ui.tool.questions": "Sorular",
   "ui.tool.agent": "{{type}} Ajan",
+  "ui.tool.agent.default": "Ajan",
 
   "ui.common.file.one": "dosya",
   "ui.common.file.other": "dosya",
