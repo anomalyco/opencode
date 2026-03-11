@@ -12,6 +12,6 @@ export const QuestionID = questionIdSchema.pipe(
   withStatics((schema: typeof questionIdSchema) => ({
     make: (id: string) => schema.makeUnsafe(id),
     ascending: (id?: string) => schema.makeUnsafe(Identifier.ascending("question", id)),
-    zod: z.string().startsWith("qst").pipe(z.custom<QuestionID>()),
+    zod: z.string().startsWith("que").pipe(z.custom<QuestionID>()),
   })),
 )
