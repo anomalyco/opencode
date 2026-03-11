@@ -7,6 +7,7 @@ import { Database, eq } from "@/storage/db"
 import { PermissionTable } from "@/session/session.sql"
 import { fn } from "@/util/fn"
 import { Log } from "@/util/log"
+import { ProjectID } from "@/project/schema"
 import { Wildcard } from "@/util/wildcard"
 import os from "os"
 import z from "zod"
@@ -90,7 +91,7 @@ export namespace PermissionNext {
   export type Reply = z.infer<typeof Reply>
 
   export const Approval = z.object({
-    projectID: z.string(),
+    projectID: ProjectID.zod,
     patterns: z.string().array(),
   })
 
