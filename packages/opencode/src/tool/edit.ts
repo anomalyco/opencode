@@ -280,6 +280,15 @@ export const BlockAnchorReplacer: Replacer = function* (content, find) {
     const { startLine, endLine } = candidates[0]
     const actualBlockSize = endLine - startLine + 1
 
+    // When anchors are non-unique (appear more than once in the file), use a
+    // stricter threshold to avoid false-positive matches on hallucinated content.
+    const firstLineCount = originalLines.filter((l) => l.trim() === firstLineSearch).length
+    const lastLineCount = originalLines.filter((l) => l.trim() === lastLineSearch).length
+    const singleCandidateThreshold =
+      firstLineCount > 1 || lastLineCount > 1
+        ? MULTIPLE_CANDIDATES_SIMILARITY_THRESHOLD
+        : SINGLE_CANDIDATE_SIMILARITY_THRESHOLD
+
     let similarity = 0
     let linesToCheck = Math.min(searchBlockSize - 2, actualBlockSize - 2) // Middle lines only
 
@@ -295,7 +304,7 @@ export const BlockAnchorReplacer: Replacer = function* (content, find) {
         similarity += (1 - distance / maxLen) / linesToCheck
 
         // Exit early when threshold is reached
-        if (similarity >= SINGLE_CANDIDATE_SIMILARITY_THRESHOLD) {
+        if (similarity >= singleCandidateThreshold) {
           break
         }
       }
@@ -304,7 +313,7 @@ export const BlockAnchorReplacer: Replacer = function* (content, find) {
       similarity = 1.0
     }
 
-    if (similarity >= SINGLE_CANDIDATE_SIMILARITY_THRESHOLD) {
+    if (similarity >= singleCandidateThreshold) {
       let matchStartIndex = 0
       for (let k = 0; k < startLine; k++) {
         matchStartIndex += originalLines[k].length + 1

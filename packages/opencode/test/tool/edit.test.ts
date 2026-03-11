@@ -1,7 +1,7 @@
 import { describe, test, expect } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
-import { EditTool } from "../../src/tool/edit"
+import { EditTool, replace } from "../../src/tool/edit"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import { FileTime } from "../../src/file/time"
@@ -448,6 +448,71 @@ describe("tool.edit", () => {
           expect(result.metadata.filediff.additions).toBeGreaterThan(0)
         },
       })
+    })
+
+    test("BlockAnchorReplacer rejects hallucinated content when last anchor is non-unique", () => {
+      // Repro from issue #14046: when the last anchor (e.g. `}`) appears many
+      // times in the file, a single-candidate match must still require content
+      // similarity rather than accepting with threshold 0.0.
+      const content = `class DatabaseConnection {
+  private pool: ConnectionPool
+
+  constructor(config: DbConfig) {
+    this.pool = new ConnectionPool(config)
+  }
+
+  async query(sql: string, params: unknown[]) {
+    const conn = await this.pool.acquire()
+    try {
+      const result = await conn.execute(sql, params)
+      return result.rows
+    } finally {
+      this.pool.release(conn)
+    }
+  }
+
+  async transaction<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
+    const conn = await this.pool.acquire()
+    const tx = await conn.beginTransaction()
+    try {
+      const result = await fn(tx)
+      await tx.commit()
+      return result
+    } catch (e) {
+      await tx.rollback()
+      throw e
+    } finally {
+      this.pool.release(conn)
+    }
+  }
+}`
+
+      // oldString has the correct first/last anchor lines but completely
+      // hallucinated middle content — replace() should throw, not silently apply.
+      const oldString = `  async query(sql: string, params: unknown[]) {
+    validateSqlInjection(sql)
+    const sanitized = escapeSqlParams(params)
+    const cache = QueryCache.get(sql)
+    if (cache) return cache
+    const response = await fetch("/api/query", { body: JSON.stringify({ sql, params: sanitized }) })
+    const data = await response.json()
+    QueryCache.set(sql, data)
+    return data
+  }`
+
+      const newString = `  async query(sql: string, params: unknown[]) {
+    validateSqlInjection(sql)
+    const sanitized = escapeSqlParams(params)
+    const cache = QueryCache.get(sql)
+    if (cache) return cache
+    logger.debug("Executing query", { sql })
+    const response = await fetch("/api/query", { body: JSON.stringify({ sql, params: sanitized }) })
+    const data = await response.json()
+    QueryCache.set(sql, data)
+    return data
+  }`
+
+      expect(() => replace(content, oldString, newString)).toThrow()
     })
   })
 
