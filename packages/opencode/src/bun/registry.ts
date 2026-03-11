@@ -1,5 +1,4 @@
 import semver from "semver"
-import { text } from "node:stream/consumers"
 import { Log } from "../util/log"
 import { Process } from "../util/process"
 import { BunProc } from "."
@@ -9,18 +8,21 @@ export namespace PackageRegistry {
 
 
   export async function info(pkg: string, field: string, cwd?: string): Promise<string | null> {
-    const result = await Process.run([BunProc.which(), "info", pkg, field], {
+    const { code, stdout, stderr } = await Process.run([which(), "info", pkg, field], {
       cwd,
-      env: { ...process.env, BUN_BE_BUN: "1" },
+      env: {
+        ...process.env,
+        BUN_BE_BUN: "1",
+      },
       nothrow: true,
     })
 
-    if (result.code !== 0) {
-      log.warn("bun info failed", { pkg, field, code: result.code, stderr: result.stderr.toString() })
+    if (code !== 0) {
+      log.warn("bun info failed", { pkg, field, code, stderr: stderr.toString() })
       return null
     }
 
-    const value = result.stdout.toString().trim()
+    const value = stdout.toString().trim()
     if (!value) return null
     return value
   }
