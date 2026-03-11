@@ -225,9 +225,17 @@ export namespace ProviderTransform {
       const shouldUseContentOptions = !useMessageLevelOptions && Array.isArray(msg.content) && msg.content.length > 0
 
       if (shouldUseContentOptions) {
-        const lastContent = msg.content[msg.content.length - 1]
-        if (lastContent && typeof lastContent === "object") {
-          lastContent.providerOptions = mergeDeep(lastContent.providerOptions ?? {}, providerOptions)
+        // Walk backwards to skip empty text parts — Anthropic rejects
+        // cache_control on empty text blocks.
+        let target: (typeof msg.content)[number] | undefined
+        for (let i = msg.content.length - 1; i >= 0; i--) {
+          const part = msg.content[i]
+          if (typeof part === "object" && part.type === "text" && part.text === "") continue
+          target = part
+          break
+        }
+        if (target && typeof target === "object") {
+          target.providerOptions = mergeDeep(target.providerOptions ?? {}, providerOptions)
           continue
         }
       }

@@ -1789,6 +1789,88 @@ describe("ProviderTransform.message - cache control on gateway", () => {
   })
 })
 
+describe("ProviderTransform.message - applyCaching skips empty text parts", () => {
+  // Uses openrouter + claude so applyCaching runs with content-level caching
+  // (providerID is not "anthropic"/"bedrock") and normalizeMessages does not
+  // filter (npm is not "@ai-sdk/anthropic").
+  const model = {
+    id: "openrouter/anthropic/claude-sonnet-4",
+    providerID: "openrouter",
+    api: {
+      id: "anthropic/claude-sonnet-4",
+      url: "https://openrouter.ai/api/v1",
+      npm: "@openrouter/ai-sdk-provider",
+    },
+    name: "Claude Sonnet 4 (OpenRouter)",
+    capabilities: {
+      temperature: true,
+      reasoning: true,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: true },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: { input: 0.003, output: 0.015, cache: { read: 0.0003, write: 0.00375 } },
+    limit: { context: 200_000, output: 8192 },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  test("cache_control is set on reasoning part, not trailing empty text", () => {
+    // Reproduces the aborted-message scenario: the LLM started a text block
+    // but produced no content, leaving [reasoning, text("")] in the DB.
+    // applyCaching must not decorate the empty text with cache_control.
+    const msgs = [
+      { role: "system", content: "You are a helpful assistant" },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "reasoning",
+            text: "Let me think about this...",
+            providerOptions: { anthropic: { signature: "EqoBCkgIARgC" } },
+          },
+          { type: "text", text: "" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {})
+
+    const parts = result.find((m: any) => m.role === "assistant")!.content as any[]
+    // The reasoning part should have cache_control
+    expect(parts[0].providerOptions).toBeDefined()
+    expect(parts[0].providerOptions.openrouter).toEqual({
+      cacheControl: { type: "ephemeral" },
+    })
+    // The empty text part must NOT have cache_control
+    expect(parts[1].providerOptions).toBeUndefined()
+  })
+
+  test("cache_control falls through to message-level when all content parts are empty text", () => {
+    const msgs = [
+      { role: "system", content: "You are a helpful assistant" },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "" }],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {})
+
+    const assistant = result.find((m: any) => m.role === "assistant")!
+    // No content part should have cache_control
+    expect((assistant.content as any[])[0].providerOptions).toBeUndefined()
+    // Falls through to message-level cache_control instead
+    expect(assistant.providerOptions).toBeDefined()
+    expect(assistant.providerOptions!.openrouter).toEqual({
+      cacheControl: { type: "ephemeral" },
+    })
+  })
+})
+
 describe("ProviderTransform.variants", () => {
   const createMockModel = (overrides: Partial<any> = {}): any => ({
     id: "test/test-model",
