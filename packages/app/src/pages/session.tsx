@@ -32,8 +32,9 @@ import { useLayout } from "@/context/layout"
 import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
+import { useTerminal } from "@/context/terminal"
 import { createSessionComposerState, SessionComposerRegion } from "@/pages/session/composer"
-import { createOpenReviewFile, createSizing } from "@/pages/session/helpers"
+import { createOpenReviewFile, createSizing, focusTerminalById } from "@/pages/session/helpers"
 import { MessageTimeline } from "@/pages/session/message-timeline"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
 import { resetSessionModel, syncSessionModel } from "@/pages/session/session-model-helpers"
@@ -267,6 +268,7 @@ export default function Page() {
   const sdk = useSDK()
   const prompt = usePrompt()
   const comments = useComments()
+  const terminal = useTerminal()
   const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
 
   createEffect(() => {
@@ -759,8 +761,11 @@ export default function Page() {
       return
     }
 
-    // Don't autofocus chat if desktop terminal panel is open
-    if (isDesktop() && view().terminal.opened()) return
+    // Prefer the open terminal over the composer when it can take focus
+    if (view().terminal.opened()) {
+      const id = terminal.active()
+      if (id && focusTerminalById(id)) return
+    }
 
     // Only treat explicit scroll keys as potential "user scroll" gestures.
     if (event.key === "PageUp" || event.key === "PageDown" || event.key === "Home" || event.key === "End") {
@@ -857,6 +862,36 @@ export default function Page() {
     </div>
   )
 
+  const reviewEmpty = (input: { loadingClass: string; emptyClass: string }) => {
+    if (store.changes === "turn") return emptyTurn()
+
+    if (hasReview() && !diffsReady()) {
+      return <div class={input.loadingClass}>{language.t("session.review.loadingChanges")}</div>
+    }
+
+    if (reviewEmptyKey() === "session.review.noVcs") {
+      return (
+        <div class={input.emptyClass}>
+          <div class="flex flex-col gap-3">
+            <div class="text-14-medium text-text-strong">Create a Git repository</div>
+            <div class="text-14-regular text-text-base max-w-md" style={{ "line-height": "var(--line-height-normal)" }}>
+              Track, review, and undo changes in this project
+            </div>
+          </div>
+          <Button size="large" disabled={ui.git} onClick={initGit}>
+            {ui.git ? "Creating Git repository..." : "Create Git repository"}
+          </Button>
+        </div>
+      )
+    }
+
+    return (
+      <div class={input.emptyClass}>
+        <div class="text-14-regular text-text-weak max-w-56">{language.t(reviewEmptyKey())}</div>
+      </div>
+    )
+  }
+
   const reviewContent = (input: {
     diffStyle: DiffStyle
     onDiffStyleChange?: (style: DiffStyle) => void
@@ -865,98 +900,25 @@ export default function Page() {
     emptyClass: string
   }) => (
     <Show when={!store.deferRender}>
-      <Switch>
-        <Match when={store.changes === "turn" && !!params.id}>
-          <SessionReviewTab
-            title={changesTitle()}
-            empty={emptyTurn()}
-            diffs={reviewDiffs}
-            view={view}
-            diffStyle={input.diffStyle}
-            onDiffStyleChange={input.onDiffStyleChange}
-            onScrollRef={(el) => setTree("reviewScroll", el)}
-            focusedFile={tree.activeDiff}
-            onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
-            onLineCommentUpdate={updateCommentInContext}
-            onLineCommentDelete={removeCommentFromContext}
-            lineCommentActions={reviewCommentActions()}
-            comments={comments.all()}
-            focusedComment={comments.focus()}
-            onFocusedCommentChange={comments.setFocus}
-            onViewFile={openReviewFile}
-            classes={input.classes}
-          />
-        </Match>
-        <Match when={hasReview()}>
-          <Show
-            when={diffsReady()}
-            fallback={<div class={input.loadingClass}>{language.t("session.review.loadingChanges")}</div>}
-          >
-            <SessionReviewTab
-              title={changesTitle()}
-              diffs={reviewDiffs}
-              view={view}
-              diffStyle={input.diffStyle}
-              onDiffStyleChange={input.onDiffStyleChange}
-              onScrollRef={(el) => setTree("reviewScroll", el)}
-              focusedFile={tree.activeDiff}
-              onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
-              onLineCommentUpdate={updateCommentInContext}
-              onLineCommentDelete={removeCommentFromContext}
-              lineCommentActions={reviewCommentActions()}
-              comments={comments.all()}
-              focusedComment={comments.focus()}
-              onFocusedCommentChange={comments.setFocus}
-              onViewFile={openReviewFile}
-              classes={input.classes}
-            />
-          </Show>
-        </Match>
-        <Match when={true}>
-          <SessionReviewTab
-            title={changesTitle()}
-            empty={
-              store.changes === "turn" ? (
-                emptyTurn()
-              ) : reviewEmptyKey() === "session.review.noVcs" ? (
-                <div class={input.emptyClass}>
-                  <div class="flex flex-col gap-3">
-                    <div class="text-14-medium text-text-strong">Create a Git repository</div>
-                    <div
-                      class="text-14-regular text-text-base max-w-md"
-                      style={{ "line-height": "var(--line-height-normal)" }}
-                    >
-                      Track, review, and undo changes in this project
-                    </div>
-                  </div>
-                  <Button size="large" disabled={ui.git} onClick={initGit}>
-                    {ui.git ? "Creating Git repository..." : "Create Git repository"}
-                  </Button>
-                </div>
-              ) : (
-                <div class={input.emptyClass}>
-                  <div class="text-14-regular text-text-weak max-w-56">{language.t(reviewEmptyKey())}</div>
-                </div>
-              )
-            }
-            diffs={reviewDiffs}
-            view={view}
-            diffStyle={input.diffStyle}
-            onDiffStyleChange={input.onDiffStyleChange}
-            onScrollRef={(el) => setTree("reviewScroll", el)}
-            focusedFile={tree.activeDiff}
-            onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
-            onLineCommentUpdate={updateCommentInContext}
-            onLineCommentDelete={removeCommentFromContext}
-            lineCommentActions={reviewCommentActions()}
-            comments={comments.all()}
-            focusedComment={comments.focus()}
-            onFocusedCommentChange={comments.setFocus}
-            onViewFile={openReviewFile}
-            classes={input.classes}
-          />
-        </Match>
-      </Switch>
+      <SessionReviewTab
+        title={changesTitle()}
+        empty={reviewEmpty(input)}
+        diffs={reviewDiffs}
+        view={view}
+        diffStyle={input.diffStyle}
+        onDiffStyleChange={input.onDiffStyleChange}
+        onScrollRef={(el) => setTree("reviewScroll", el)}
+        focusedFile={tree.activeDiff}
+        onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
+        onLineCommentUpdate={updateCommentInContext}
+        onLineCommentDelete={removeCommentFromContext}
+        lineCommentActions={reviewCommentActions()}
+        comments={comments.all()}
+        focusedComment={comments.focus()}
+        onFocusedCommentChange={comments.setFocus}
+        onViewFile={openReviewFile}
+        classes={input.classes}
+      />
     </Show>
   )
 

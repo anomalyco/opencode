@@ -402,9 +402,12 @@ function App() {
         const current = promptRef.current
         // Don't require focus - if there's any text, preserve it
         const currentPrompt = current?.current?.input ? current.current : undefined
+        const workspaceID =
+          route.data.type === "session" ? sync.session.get(route.data.sessionID)?.workspaceID : undefined
         route.navigate({
           type: "home",
           initialPrompt: currentPrompt,
+          workspaceID,
         })
         dialog.clear()
       },
