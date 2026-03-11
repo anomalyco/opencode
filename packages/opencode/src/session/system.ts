@@ -64,6 +64,8 @@ export namespace SystemPrompt {
     return [
       "Skills provide specialized instructions and workflows for specific tasks.",
       "Use the skill tool to load a skill when a task matches its description.",
+      // the agents seem to ingest the information about skills a bit better if we present a more verbose
+      // version of them here and a less verbose version in tool description, rather than vice versa.
       Skill.fmt(list, { structured: true }),
     ].join("\n")
   }
