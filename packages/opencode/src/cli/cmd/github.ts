@@ -291,7 +291,7 @@ export const GithubInstallCommand = cmd({
 
             // Get repo info
             const info = (await git(["remote", "get-url", "origin"], { cwd: Instance.worktree })).text().trim()
-            const parsed = parseGitHubRemote(info)
+            const parsed = await parseGitHubRemote(info)
             if (!parsed) {
               prompts.log.error(`Could not find git repository. Please run this command from a git repository.`)
               throw new UI.CancelledError()
