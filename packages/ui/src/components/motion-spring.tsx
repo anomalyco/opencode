@@ -1,9 +1,8 @@
 import { attachSpring, motionValue } from "motion"
 import type { SpringOptions } from "motion"
 import { createEffect, createSignal, onCleanup } from "solid-js"
-import { useReducedMotion } from "../hooks/use-reduced-motion"
 
-type Opt = Pick<SpringOptions, "visualDuration" | "bounce" | "stiffness" | "damping" | "mass" | "velocity">
+type Opt = Partial<Pick<SpringOptions, "visualDuration" | "bounce" | "stiffness" | "damping" | "mass" | "velocity">>
 const eq = (a: Opt | undefined, b: Opt | undefined) =>
   a?.visualDuration === b?.visualDuration &&
   a?.bounce === b?.bounce &&
@@ -14,41 +13,24 @@ const eq = (a: Opt | undefined, b: Opt | undefined) =>
 
 export function useSpring(target: () => number, options?: Opt | (() => Opt)) {
   const read = () => (typeof options === "function" ? options() : options)
-  const reduce = useReducedMotion()
   const [value, setValue] = createSignal(target())
   const source = motionValue(value())
   const spring = motionValue(value())
   let config = read()
-  let reduced = reduce()
-  let stop = reduced ? () => {} : attachSpring(spring, source, config)
-  let off = spring.on("change", (next) => setValue(next))
+  let stop = attachSpring(spring, source, config)
+  let off = spring.on("change", (next: number) => setValue(next))
 
   createEffect(() => {
-    const next = target()
-    if (reduced) {
-      source.set(next)
-      spring.set(next)
-      setValue(next)
-      return
-    }
-    source.set(next)
+    source.set(target())
   })
 
   createEffect(() => {
+    if (!options) return
     const next = read()
-    const skip = reduce()
-    if (eq(config, next) && reduced === skip) return
+    if (eq(config, next)) return
     config = next
-    reduced = skip
     stop()
-    stop = skip ? () => {} : attachSpring(spring, source, next)
-    if (skip) {
-      const value = target()
-      source.set(value)
-      spring.set(value)
-      setValue(value)
-      return
-    }
+    stop = attachSpring(spring, source, next)
     setValue(spring.get())
   })
 
