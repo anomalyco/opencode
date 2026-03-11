@@ -683,8 +683,34 @@ test("updates config and writes to file", async () => {
       const newConfig = { model: "updated/model" }
       await Config.update(newConfig as any)
 
-      const writtenConfig = await Filesystem.readJson(path.join(tmp.path, "config.json"))
+      const writtenConfig = await Filesystem.readJson(path.join(tmp.path, "opencode.json"))
       expect(writtenConfig.model).toBe("updated/model")
+    },
+  })
+})
+
+test("update writes to existing opencode.jsonc instead of creating config.json", async () => {
+  await using tmp = await tmpdir()
+  await Filesystem.write(
+    path.join(tmp.path, "opencode.jsonc"),
+    JSON.stringify({ $schema: "https://opencode.ai/config.json", model: "anthropic/claude-sonnet-4-20250514" }),
+  )
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await Config.update({ permission: { read: "allow" } } as any)
+
+      // Should update the existing opencode.jsonc
+      const updated = await Filesystem.readText(path.join(tmp.path, "opencode.jsonc"))
+      expect(updated).toContain('"permission"')
+      expect(updated).toContain('"read"')
+
+      // Should NOT create a separate config.json
+      const configJsonExists = await Filesystem.readText(path.join(tmp.path, "config.json")).then(
+        () => true,
+        () => false,
+      )
+      expect(configJsonExists).toBe(false)
     },
   })
 })

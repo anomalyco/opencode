@@ -1318,10 +1318,33 @@ export namespace Config {
     return global()
   }
 
+  function localConfigFile() {
+    const candidates = ["opencode.jsonc", "opencode.json"].map((file) => path.join(Instance.directory, file))
+    for (const file of candidates) {
+      if (existsSync(file)) return file
+    }
+    // Default to opencode.json when no project config file exists yet.
+    // Note: config.json is only a valid config filename in the global config
+    // directory, not in project directories.
+    return candidates[1]!
+  }
+
   export async function update(config: Info) {
-    const filepath = path.join(Instance.directory, "config.json")
-    const existing = await loadFile(filepath)
-    await Filesystem.writeJson(filepath, mergeDeep(existing, config))
+    const filepath = localConfigFile()
+    const before = await Filesystem.readText(filepath).catch((err: any) => {
+      if (err.code === "ENOENT") return "{}"
+      throw err
+    })
+
+    if (!filepath.endsWith(".jsonc")) {
+      const existing = parseConfig(before, filepath)
+      await Filesystem.writeJson(filepath, mergeDeep(existing, config))
+    } else {
+      const updated = patchJsonc(before, config)
+      parseConfig(updated, filepath)
+      await Filesystem.write(filepath, updated)
+    }
+
     await Instance.dispose()
   }
 
