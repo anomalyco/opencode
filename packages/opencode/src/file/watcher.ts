@@ -14,6 +14,7 @@ import type ParcelWatcher from "@parcel/watcher"
 import { Flag } from "@/flag/flag"
 import { readdir } from "fs/promises"
 import { git } from "@/util/git"
+import { Protected } from "./protected"
 
 const SUBSCRIBE_TIMEOUT_MS = 10_000
 
@@ -76,7 +77,7 @@ export namespace FileWatcher {
 
       if (Flag.OPENCODE_EXPERIMENTAL_FILEWATCHER) {
         const pending = w.subscribe(Instance.directory, subscribe, {
-          ignore: [...FileIgnore.PATTERNS, ...cfgIgnores],
+          ignore: [...FileIgnore.PATTERNS, ...cfgIgnores, ...Protected.paths()],
           backend,
         })
         const sub = await withTimeout(pending, SUBSCRIBE_TIMEOUT_MS).catch((err) => {
