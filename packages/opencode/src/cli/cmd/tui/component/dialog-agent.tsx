@@ -17,10 +17,12 @@ export function DialogAgent() {
     }),
   )
 
+  const currentAgent = local.agent.current()
+
   return (
     <DialogSelect
       title="Select agent"
-      current={local.agent.current().name}
+      current={currentAgent?.name}
       options={options()}
       onSelect={(option) => {
         local.agent.set(option.value)
