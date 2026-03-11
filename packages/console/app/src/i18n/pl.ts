@@ -416,6 +416,7 @@ export const dict = {
   "black.subscribe.success.chargeNotice": "Twoja karta zostanie obciążona po aktywacji subskrypcji",
 
   "workspace.nav.zen": "Zen",
+  "workspace.nav.go": "Go",
   "workspace.nav.usage": "Użycie",
   "workspace.nav.apiKeys": "Klucze API",
   "workspace.nav.members": "Członkowie",
@@ -624,7 +625,7 @@ export const dict = {
   "workspace.lite.time.minute": "minuta",
   "workspace.lite.time.minutes": "minut(y)",
   "workspace.lite.time.fewSeconds": "kilka sekund",
-  "workspace.lite.subscription.title": "Subskrypcja Go",
+  "workspace.lite.title": "OpenCode Go",
   "workspace.lite.subscription.message": "Subskrybujesz OpenCode Go.",
   "workspace.lite.subscription.manage": "Zarządzaj subskrypcją",
   "workspace.lite.subscription.rollingUsage": "Użycie kroczące",
@@ -634,10 +635,10 @@ export const dict = {
   "workspace.lite.subscription.useBalance": "Użyj dostępnego salda po osiągnięciu limitów użycia",
   "workspace.lite.subscription.selectProvider":
     'Wybierz "OpenCode Go" jako dostawcę w konfiguracji opencode, aby używać modeli Go.',
-  "workspace.lite.other.title": "Subskrypcja Go",
+  "workspace.lite.black.message":
+    'Obecnie subskrybujesz OpenCode Black lub jesteś na liście oczekujących. Jeśli chcesz przejść na Go, najpierw anuluj subskrypcję.',
   "workspace.lite.other.message":
     "Inny członek tego obszaru roboczego już subskrybuje OpenCode Go. Tylko jeden członek na obszar roboczy może subskrybować.",
-  "workspace.lite.promo.title": "OpenCode Go",
   "workspace.lite.promo.description":
     "OpenCode Go to subskrypcja za $10 miesięcznie, która zapewnia niezawodny dostęp do popularnych otwartych modeli do kodowania z hojnymi limitami użycia.",
   "workspace.lite.promo.modelsTitle": "Co zawiera",

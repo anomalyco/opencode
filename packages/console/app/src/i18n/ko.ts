@@ -410,6 +410,7 @@ export const dict = {
   "black.subscribe.success.chargeNotice": "구독이 활성화되면 카드에 청구됩니다",
 
   "workspace.nav.zen": "Zen",
+  "workspace.nav.go": "Go",
   "workspace.nav.usage": "사용량",
   "workspace.nav.apiKeys": "API 키",
   "workspace.nav.members": "멤버",
@@ -617,7 +618,7 @@ export const dict = {
   "workspace.lite.time.minute": "분",
   "workspace.lite.time.minutes": "분",
   "workspace.lite.time.fewSeconds": "몇 초",
-  "workspace.lite.subscription.title": "Go 구독",
+  "workspace.lite.title": "OpenCode Go",
   "workspace.lite.subscription.message": "현재 OpenCode Go를 구독 중입니다.",
   "workspace.lite.subscription.manage": "구독 관리",
   "workspace.lite.subscription.rollingUsage": "롤링 사용량",
@@ -627,10 +628,10 @@ export const dict = {
   "workspace.lite.subscription.useBalance": "사용 한도 도달 후에는 보유 잔액 사용",
   "workspace.lite.subscription.selectProvider":
     'Go 모델을 사용하려면 opencode 설정에서 "OpenCode Go"를 공급자로 선택하세요.',
-  "workspace.lite.other.title": "Go 구독",
+  "workspace.lite.black.message":
+    '현재 OpenCode Black을 구독 중이거나 대기 명단에 등록되어 있습니다. Go로 전환하려면 먼저 구독을 취소해 주세요.',
   "workspace.lite.other.message":
     "이 워크스페이스의 다른 멤버가 이미 OpenCode Go를 구독 중입니다. 워크스페이스당 한 명의 멤버만 구독할 수 있습니다.",
-  "workspace.lite.promo.title": "OpenCode Go",
   "workspace.lite.promo.description":
     "OpenCode Go는 넉넉한 사용 한도와 함께 인기 있는 오픈 코딩 모델에 대한 안정적인 액세스를 제공하는 월 $10의 구독입니다.",
   "workspace.lite.promo.modelsTitle": "포함 내역",

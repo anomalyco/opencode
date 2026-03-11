@@ -413,6 +413,7 @@ export const dict = {
   "black.subscribe.success.chargeNotice": "บัตรของคุณจะถูกเรียกเก็บเงินเมื่อการสมัครสมาชิกของคุณถูกเปิดใช้งาน",
 
   "workspace.nav.zen": "Zen",
+  "workspace.nav.go": "Go",
   "workspace.nav.usage": "การใช้งาน",
   "workspace.nav.apiKeys": "API Keys",
   "workspace.nav.members": "สมาชิก",
@@ -621,7 +622,7 @@ export const dict = {
   "workspace.lite.time.minute": "นาที",
   "workspace.lite.time.minutes": "นาที",
   "workspace.lite.time.fewSeconds": "ไม่กี่วินาที",
-  "workspace.lite.subscription.title": "การสมัครสมาชิก Go",
+  "workspace.lite.title": "OpenCode Go",
   "workspace.lite.subscription.message": "คุณได้สมัครสมาชิก OpenCode Go แล้ว",
   "workspace.lite.subscription.manage": "จัดการการสมัครสมาชิก",
   "workspace.lite.subscription.rollingUsage": "การใช้งานแบบหมุนเวียน",
@@ -631,10 +632,10 @@ export const dict = {
   "workspace.lite.subscription.useBalance": "ใช้ยอดคงเหลือของคุณหลังจากถึงขีดจำกัดการใช้งาน",
   "workspace.lite.subscription.selectProvider":
     'เลือก "OpenCode Go" เป็นผู้ให้บริการในการตั้งค่า opencode ของคุณเพื่อใช้โมเดล Go',
-  "workspace.lite.other.title": "การสมัครสมาชิก Go",
+  "workspace.lite.black.message":
+    'ขณะนี้คุณสมัครสมาชิก OpenCode Black หรืออยู่ในรายการรอ โปรดยกเลิกการสมัครก่อนหากต้องการเปลี่ยนไปใช้ Go',
   "workspace.lite.other.message":
     "สมาชิกคนอื่นใน Workspace นี้ได้สมัคร OpenCode Go แล้ว สามารถสมัครได้เพียงหนึ่งคนต่อหนึ่ง Workspace เท่านั้น",
-  "workspace.lite.promo.title": "OpenCode Go",
   "workspace.lite.promo.description":
     "OpenCode Go เป็นการสมัครสมาชิกราคา 10 ดอลลาร์ต่อเดือน ที่ให้การเข้าถึงโมเดลโอเพนโค้ดดิงยอดนิยมได้อย่างเสถียร ด้วยขีดจำกัดการใช้งานที่ครอบคลุม",
   "workspace.lite.promo.modelsTitle": "สิ่งที่รวมอยู่ด้วย",

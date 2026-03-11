@@ -411,6 +411,7 @@ export const dict = {
   "black.subscribe.success.chargeNotice": "Your card will be charged when your subscription is activated",
 
   "workspace.nav.zen": "Zen",
+  "workspace.nav.go": "Go",
   "workspace.nav.usage": "Usage",
   "workspace.nav.apiKeys": "API Keys",
   "workspace.nav.members": "Members",
@@ -619,7 +620,7 @@ export const dict = {
   "workspace.lite.time.minute": "minute",
   "workspace.lite.time.minutes": "minutes",
   "workspace.lite.time.fewSeconds": "a few seconds",
-  "workspace.lite.subscription.title": "Go Subscription",
+  "workspace.lite.title": "OpenCode Go",
   "workspace.lite.subscription.message": "You are subscribed to OpenCode Go.",
   "workspace.lite.subscription.manage": "Manage Subscription",
   "workspace.lite.subscription.rollingUsage": "Rolling Usage",
@@ -629,10 +630,10 @@ export const dict = {
   "workspace.lite.subscription.useBalance": "Use your available balance after reaching the usage limits",
   "workspace.lite.subscription.selectProvider":
     'Select "OpenCode Go" as the provider in your opencode configuration to use Go models.',
-  "workspace.lite.other.title": "Go Subscription",
+  "workspace.lite.black.message":
+    "You're currently subscribed to OpenCode Black or on the waitlist. Please unsubscribe first if you'd like to switch to Go.",
   "workspace.lite.other.message":
     "Another member in this workspace is already subscribed to OpenCode Go. Only one member per workspace can subscribe.",
-  "workspace.lite.promo.title": "OpenCode Go",
   "workspace.lite.promo.description":
     "OpenCode Go is a $10 per month subscription that provides reliable access to popular open coding models with generous usage limits.",
   "workspace.lite.promo.modelsTitle": "What's Included",

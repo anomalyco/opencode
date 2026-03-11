@@ -397,6 +397,7 @@ export const dict = {
   "black.subscribe.success.chargeNotice": "你的卡片將在訂閱啟用時扣款",
 
   "workspace.nav.zen": "Zen",
+  "workspace.nav.go": "Go",
   "workspace.nav.usage": "使用量",
   "workspace.nav.apiKeys": "API 金鑰",
   "workspace.nav.members": "成員",
@@ -602,7 +603,7 @@ export const dict = {
   "workspace.lite.time.minute": "分鐘",
   "workspace.lite.time.minutes": "分鐘",
   "workspace.lite.time.fewSeconds": "幾秒",
-  "workspace.lite.subscription.title": "Go 訂閱",
+  "workspace.lite.title": "OpenCode Go",
   "workspace.lite.subscription.message": "您已訂閱 OpenCode Go。",
   "workspace.lite.subscription.manage": "管理訂閱",
   "workspace.lite.subscription.rollingUsage": "滾動使用量",
@@ -612,9 +613,9 @@ export const dict = {
   "workspace.lite.subscription.useBalance": "達到使用限制後使用您的可用餘額",
   "workspace.lite.subscription.selectProvider":
     "在您的 opencode 設定中選擇「OpenCode Go」作為提供商，即可使用 Go 模型。",
-  "workspace.lite.other.title": "Go 訂閱",
+  "workspace.lite.black.message":
+    '您目前已訂閱 OpenCode Black 或在候補名單中。若要切換至 Go，請先取消訂閱。',
   "workspace.lite.other.message": "此工作區中的另一位成員已訂閱 OpenCode Go。每個工作區只能有一位成員訂閱。",
-  "workspace.lite.promo.title": "OpenCode Go",
   "workspace.lite.promo.description":
     "OpenCode Go 是一個每月 $10 的訂閱方案，提供對主流開放原始碼編碼模型的穩定存取，並配備充足的使用額度。",
   "workspace.lite.promo.modelsTitle": "包含模型",

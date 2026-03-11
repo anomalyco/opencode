@@ -421,6 +421,7 @@ export const dict = {
   "black.subscribe.success.chargeNotice": "С вашей карты будет списана оплата при активации подписки",
 
   "workspace.nav.zen": "Zen",
+  "workspace.nav.go": "Go",
   "workspace.nav.usage": "Использование",
   "workspace.nav.apiKeys": "API Ключи",
   "workspace.nav.members": "Участники",
@@ -630,7 +631,7 @@ export const dict = {
   "workspace.lite.time.minute": "минута",
   "workspace.lite.time.minutes": "минут",
   "workspace.lite.time.fewSeconds": "несколько секунд",
-  "workspace.lite.subscription.title": "Подписка Go",
+  "workspace.lite.title": "OpenCode Go",
   "workspace.lite.subscription.message": "Вы подписаны на OpenCode Go.",
   "workspace.lite.subscription.manage": "Управление подпиской",
   "workspace.lite.subscription.rollingUsage": "Скользящее использование",
@@ -640,10 +641,10 @@ export const dict = {
   "workspace.lite.subscription.useBalance": "Использовать доступный баланс после достижения лимитов",
   "workspace.lite.subscription.selectProvider":
     'Выберите "OpenCode Go" в качестве провайдера в настройках opencode для использования моделей Go.',
-  "workspace.lite.other.title": "Подписка Go",
+  "workspace.lite.black.message":
+    'Вы подписаны на OpenCode Black или находитесь в списке ожидания. Пожалуйста, сначала отмените подписку, если хотите перейти на Go.',
   "workspace.lite.other.message":
     "Другой участник в этом рабочем пространстве уже подписан на OpenCode Go. Только один участник в рабочем пространстве может оформить подписку.",
-  "workspace.lite.promo.title": "OpenCode Go",
   "workspace.lite.promo.description":
     "OpenCode Go — это подписка за $10 в месяц, которая предоставляет надежный доступ к популярным открытым моделям для кодинга с щедрыми лимитами использования.",
   "workspace.lite.promo.modelsTitle": "Что включено",

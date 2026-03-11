@@ -416,6 +416,7 @@ export const dict = {
   "black.subscribe.success.chargeNotice": "サブスクリプションが有効化された時点でカードに請求されます",
 
   "workspace.nav.zen": "Zen",
+  "workspace.nav.go": "Go",
   "workspace.nav.usage": "利用",
   "workspace.nav.apiKeys": "APIキー",
   "workspace.nav.members": "メンバー",
@@ -625,7 +626,7 @@ export const dict = {
   "workspace.lite.time.minute": "分",
   "workspace.lite.time.minutes": "分",
   "workspace.lite.time.fewSeconds": "数秒",
-  "workspace.lite.subscription.title": "Goサブスクリプション",
+  "workspace.lite.title": "OpenCode Go",
   "workspace.lite.subscription.message": "あなたは OpenCode Go を購読しています。",
   "workspace.lite.subscription.manage": "サブスクリプションの管理",
   "workspace.lite.subscription.rollingUsage": "ローリング利用量",
@@ -635,10 +636,10 @@ export const dict = {
   "workspace.lite.subscription.useBalance": "利用限度額に達したら利用可能な残高を使用する",
   "workspace.lite.subscription.selectProvider":
     "Go モデルを使用するには、opencode の設定で「OpenCode Go」をプロバイダーとして選択してください。",
-  "workspace.lite.other.title": "Goサブスクリプション",
+  "workspace.lite.black.message":
+    '現在 OpenCode Black を購読中、またはウェイティングリストに登録されています。Go に切り替える場合は、先に登録を解除してください。',
   "workspace.lite.other.message":
     "このワークスペースの別のメンバーが既に OpenCode Go を購読しています。ワークスペースにつき1人のメンバーのみが購読できます。",
-  "workspace.lite.promo.title": "OpenCode Go",
   "workspace.lite.promo.description":
     "OpenCode Goは月額$10のサブスクリプションプランで、人気のオープンコーディングモデルへの安定したアクセスを十分な利用枠で提供します。",
   "workspace.lite.promo.modelsTitle": "含まれるもの",

@@ -205,7 +205,7 @@ function LimitsGraph(props: { href: string }) {
 
 export default function Home() {
   const workspaceID = createAsync(() => checkLoggedIn())
-  const subscribeUrl = createMemo(() => (workspaceID() ? `/workspace/${workspaceID()}/billing` : "/auth"))
+  const subscribeUrl = createMemo(() => (workspaceID() ? `/workspace/${workspaceID()}/go` : "/auth"))
   const i18n = useI18n()
   const language = useLanguage()
   return (

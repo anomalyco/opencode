@@ -418,6 +418,7 @@ export const dict = {
   "black.subscribe.success.chargeNotice": "Seu cartão será cobrado quando sua assinatura for ativada",
 
   "workspace.nav.zen": "Zen",
+  "workspace.nav.go": "Go",
   "workspace.nav.usage": "Uso",
   "workspace.nav.apiKeys": "Chaves de API",
   "workspace.nav.members": "Membros",
@@ -626,7 +627,7 @@ export const dict = {
   "workspace.lite.time.minute": "minuto",
   "workspace.lite.time.minutes": "minutos",
   "workspace.lite.time.fewSeconds": "alguns segundos",
-  "workspace.lite.subscription.title": "Assinatura Go",
+  "workspace.lite.title": "OpenCode Go",
   "workspace.lite.subscription.message": "Você assina o OpenCode Go.",
   "workspace.lite.subscription.manage": "Gerenciar Assinatura",
   "workspace.lite.subscription.rollingUsage": "Uso Contínuo",
@@ -636,10 +637,10 @@ export const dict = {
   "workspace.lite.subscription.useBalance": "Use seu saldo disponível após atingir os limites de uso",
   "workspace.lite.subscription.selectProvider":
     'Selecione "OpenCode Go" como provedor na sua configuração do opencode para usar os modelos Go.',
-  "workspace.lite.other.title": "Assinatura Go",
+  "workspace.lite.black.message":
+    'Você está atualmente inscrito no OpenCode Black ou na lista de espera. Por favor, cancele a assinatura primeiro se desejar mudar para o Go.',
   "workspace.lite.other.message":
     "Outro membro neste workspace já assina o OpenCode Go. Apenas um membro por workspace pode assinar.",
-  "workspace.lite.promo.title": "OpenCode Go",
   "workspace.lite.promo.description":
     "O OpenCode Go é uma assinatura de $10 por mês que fornece acesso confiável a modelos abertos de codificação populares com limites de uso generosos.",
   "workspace.lite.promo.modelsTitle": "O que está incluído",

@@ -415,6 +415,7 @@ export const dict = {
   "black.subscribe.success.chargeNotice": "Kortet ditt vil bli belastet når abonnementet aktiveres",
 
   "workspace.nav.zen": "Zen",
+  "workspace.nav.go": "Go",
   "workspace.nav.usage": "Bruk",
   "workspace.nav.apiKeys": "API-nøkler",
   "workspace.nav.members": "Medlemmer",
@@ -623,7 +624,7 @@ export const dict = {
   "workspace.lite.time.minute": "minutt",
   "workspace.lite.time.minutes": "minutter",
   "workspace.lite.time.fewSeconds": "noen få sekunder",
-  "workspace.lite.subscription.title": "Go-abonnement",
+  "workspace.lite.title": "OpenCode Go",
   "workspace.lite.subscription.message": "Du abonnerer på OpenCode Go.",
   "workspace.lite.subscription.manage": "Administrer abonnement",
   "workspace.lite.subscription.rollingUsage": "Løpende bruk",
@@ -633,10 +634,10 @@ export const dict = {
   "workspace.lite.subscription.useBalance": "Bruk din tilgjengelige saldo etter å ha nådd bruksgrensene",
   "workspace.lite.subscription.selectProvider":
     'Velg "OpenCode Go" som leverandør i opencode-konfigurasjonen din for å bruke Go-modeller.',
-  "workspace.lite.other.title": "Go-abonnement",
+  "workspace.lite.black.message":
+    'Du abonnerer for øyeblikket på OpenCode Black eller står på venteliste. Vennligst avslutt abonnementet først hvis du vil bytte til Go.',
   "workspace.lite.other.message":
     "Et annet medlem i dette arbeidsområdet abonnerer allerede på OpenCode Go. Kun ett medlem per arbeidsområde kan abonnere.",
-  "workspace.lite.promo.title": "OpenCode Go",
   "workspace.lite.promo.description":
     "OpenCode Go er et abonnement til $10 per måned som gir pålitelig tilgang til populære åpne kodemodeller med rause bruksgrenser.",
   "workspace.lite.promo.modelsTitle": "Hva som er inkludert",

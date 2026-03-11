@@ -411,6 +411,7 @@ export const dict = {
   "black.subscribe.success.chargeNotice": "سيتم خصم المبلغ من بطاقتك عند تفعيل اشتراكك",
 
   "workspace.nav.zen": "Zen",
+  "workspace.nav.go": "Go",
   "workspace.nav.usage": "الاستخدام",
   "workspace.nav.apiKeys": "مفاتيح API",
   "workspace.nav.members": "الأعضاء",
@@ -617,7 +618,7 @@ export const dict = {
   "workspace.lite.time.minute": "دقيقة",
   "workspace.lite.time.minutes": "دقائق",
   "workspace.lite.time.fewSeconds": "بضع ثوان",
-  "workspace.lite.subscription.title": "اشتراك Go",
+  "workspace.lite.title": "OpenCode Go",
   "workspace.lite.subscription.message": "أنت مشترك في OpenCode Go.",
   "workspace.lite.subscription.manage": "إدارة الاشتراك",
   "workspace.lite.subscription.rollingUsage": "الاستخدام المتجدد",
@@ -627,10 +628,10 @@ export const dict = {
   "workspace.lite.subscription.useBalance": "استخدم رصيدك المتوفر بعد الوصول إلى حدود الاستخدام",
   "workspace.lite.subscription.selectProvider":
     'اختر "OpenCode Go" كمزود في إعدادات opencode الخاصة بك لاستخدام نماذج Go.',
-  "workspace.lite.other.title": "اشتراك Go",
+  "workspace.lite.black.message":
+    'أنت مشترك حاليًا في OpenCode Black أو في قائمة الانتظار. يرجى إلغاء الاشتراك أولاً إذا كنت ترغب في التبديل إلى Go.',
   "workspace.lite.other.message":
     "عضو آخر في مساحة العمل هذه مشترك بالفعل في OpenCode Go. يمكن لعضو واحد فقط لكل مساحة عمل الاشتراك.",
-  "workspace.lite.promo.title": "OpenCode Go",
   "workspace.lite.promo.description":
     "OpenCode Go هو اشتراك بسعر $10 شهريًا يوفر وصولاً موثوقًا إلى نماذج البرمجة المفتوحة الشائعة مع حدود استخدام سخية.",
   "workspace.lite.promo.modelsTitle": "ما يتضمنه",
