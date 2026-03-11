@@ -31,7 +31,7 @@ export namespace Workspace {
   export const Info = WorkspaceInfo.meta({
     ref: "Workspace",
   })
-  export type Info = z.infer<typeof WorkspaceInfo>
+  export type Info = z.infer<typeof Info>
 
   function fromRow(row: typeof WorkspaceTable.$inferSelect): Info {
     return {
