@@ -54,7 +54,7 @@ export class AccountRepo extends ServiceMap.Service<AccountRepo, AccountRepo.Ser
           catch: (cause) => new AccountRepoError({ message: "Database operation failed", cause }),
         })
 
-      const active = (db: DbClient) => {
+      const current = (db: DbClient) => {
         const state = db.select().from(AccountStateTable).where(eq(AccountStateTable.id, ACCOUNT_STATE_ID)).get()
         if (!state?.active_account_id) return
         const account = db.select().from(AccountTable).where(eq(AccountTable.id, state.active_account_id)).get()
@@ -74,8 +74,8 @@ export class AccountRepo extends ServiceMap.Service<AccountRepo, AccountRepo.Ser
           .run()
       }
 
-      const activeAccount = Effect.fn("AccountRepo.active")(() =>
-        query((db) => active(db)).pipe(Effect.map((row) => (row ? Option.some(decode(row)) : Option.none()))),
+      const active = Effect.fn("AccountRepo.active")(() =>
+        query((db) => current(db)).pipe(Effect.map((row) => (row ? Option.some(decode(row)) : Option.none()))),
       )
 
       const list = Effect.fn("AccountRepo.list")(() =>
@@ -147,7 +147,7 @@ export class AccountRepo extends ServiceMap.Service<AccountRepo, AccountRepo.Ser
       )
 
       return AccountRepo.of({
-        active: activeAccount,
+        active,
         list,
         remove,
         use,

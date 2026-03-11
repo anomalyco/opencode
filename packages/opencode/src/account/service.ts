@@ -23,7 +23,6 @@ import {
   PollSuccess,
   UserCode,
 } from "./schema"
-import * as Array from "effect/Array"
 
 export * from "./schema"
 
@@ -158,11 +157,13 @@ export class AccountService extends ServiceMap.Service<AccountService, AccountSe
         const response = yield* executeEffectOk(
           HttpClientRequest.post(`${row.url}/auth/device/token`).pipe(
             HttpClientRequest.acceptJson,
-            HttpClientRequest.schemaBodyJson(TokenRefreshRequest)({
-              grant_type: "refresh_token",
-              refresh_token: row.refresh_token,
-              client_id: clientId,
-            }),
+            HttpClientRequest.schemaBodyJson(TokenRefreshRequest)(
+              new TokenRefreshRequest({
+                grant_type: "refresh_token",
+                refresh_token: row.refresh_token,
+                client_id: clientId,
+              }),
+            ),
           ),
         )
 
@@ -273,7 +274,7 @@ export class AccountService extends ServiceMap.Service<AccountService, AccountSe
         const response = yield* executeEffectOk(
           HttpClientRequest.post(`${server}/auth/device/code`).pipe(
             HttpClientRequest.acceptJson,
-            HttpClientRequest.schemaBodyJson(ClientId)({ client_id: clientId }),
+            HttpClientRequest.schemaBodyJson(ClientId)(new ClientId({ client_id: clientId })),
           ),
         )
 
@@ -294,11 +295,13 @@ export class AccountService extends ServiceMap.Service<AccountService, AccountSe
         const response = yield* executeEffectOk(
           HttpClientRequest.post(`${input.server}/auth/device/token`).pipe(
             HttpClientRequest.acceptJson,
-            HttpClientRequest.schemaBodyJson(DeviceTokenRequest)({
-              grant_type: "urn:ietf:params:oauth:grant-type:device_code",
-              device_code: input.code,
-              client_id: clientId,
-            }),
+            HttpClientRequest.schemaBodyJson(DeviceTokenRequest)(
+              new DeviceTokenRequest({
+                grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+                device_code: input.code,
+                client_id: clientId,
+              }),
+            ),
           ),
         )
 
@@ -315,7 +318,7 @@ export class AccountService extends ServiceMap.Service<AccountService, AccountSe
         const [account, remoteOrgs] = yield* Effect.all([user, orgs], { concurrency: 2 })
 
         // TODO: When there are multiple orgs, let the user choose
-        const firstOrgID = remoteOrgs.length > 0 ? Option.some(remoteOrgs[0].id) : Option.none()
+        const firstOrgID = remoteOrgs.length > 0 ? Option.some(remoteOrgs[0].id) : Option.none<OrgID>()
 
         const now = yield* Clock.currentTimeMillis
         const expiry = now + Duration.toMillis(parsed.expires_in)

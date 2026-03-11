@@ -110,7 +110,7 @@ it.effect(
 
     const client = HttpClient.make((req) =>
       Effect.succeed(
-        req.url === "https://one.example.com/oauth/token"
+        req.url === "https://one.example.com/auth/device/token"
           ? json(req, {
               access_token: "at_new",
               refresh_token: "rt_new",
@@ -194,6 +194,7 @@ it.effect(
           ? json(req, {
               access_token: "at_1",
               refresh_token: "rt_1",
+              token_type: "Bearer",
               expires_in: 60,
             })
           : req.url === "https://one.example.com/api/user"
