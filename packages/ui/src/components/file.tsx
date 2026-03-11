@@ -491,6 +491,29 @@ function renderViewer<I extends RenderTarget>(opts: {
   opts.onReady()
 }
 
+function preserve(viewer: Viewer) {
+  const root = scrollParent(viewer.wrapper)
+  if (!root) return () => {}
+
+  const high = viewer.container.getBoundingClientRect().height
+  if (!high) return () => {}
+
+  const top = viewer.wrapper.getBoundingClientRect().top - root.getBoundingClientRect().top
+  const prev = viewer.container.style.minHeight
+  viewer.container.style.minHeight = `${Math.ceil(high)}px`
+
+  let done = false
+  return () => {
+    if (done) return
+    done = true
+    viewer.container.style.minHeight = prev
+
+    const next = viewer.wrapper.getBoundingClientRect().top - root.getBoundingClientRect().top
+    const delta = next - top
+    if (delta) root.scrollTop += delta
+  }
+}
+
 function scrollParent(el: HTMLElement): HTMLElement | undefined {
   let parent = el.parentElement
   while (parent) {
@@ -990,12 +1013,13 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
     return { ...perf, disableLineNumbers: true }
   })
 
-  const notify = () => {
+  const notify = (done?: VoidFunction) => {
     notifyRendered({
       viewer,
       isReady: (root) => root.querySelector("[data-line]") != null,
       settleFrames: 1,
       onReady: () => {
+        done?.()
         setSelectedLines(viewer.lastSelection)
         viewer.find.refresh({ reset: true })
         local.onRendered?.()
@@ -1016,6 +1040,9 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
     const virtualizer = virtuals.get()
     const beforeContents = typeof local.before?.contents === "string" ? local.before.contents : ""
     const afterContents = typeof local.after?.contents === "string" ? local.after.contents : ""
+    const done = preserve(viewer)
+
+    onCleanup(done)
 
     const cacheKey = (contents: string) => {
       if (!large()) return sampledChecksum(contents, contents.length)
@@ -1040,7 +1067,7 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
           containerWrapper: viewer.container,
         })
       },
-      onReady: notify,
+      onReady: () => notify(done),
     })
   })
 

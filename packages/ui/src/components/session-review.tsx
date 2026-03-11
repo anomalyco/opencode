@@ -60,6 +60,8 @@ export type SessionReviewCommentActions = {
 
 export type SessionReviewFocus = { file: string; id: string }
 
+type ReviewDiff = FileDiff & { preloaded?: PreloadMultiFileDiffResult<any> }
+
 export interface SessionReviewProps {
   title?: JSX.Element
   empty?: JSX.Element
@@ -83,7 +85,7 @@ export interface SessionReviewProps {
   classList?: Record<string, boolean | undefined>
   classes?: { root?: string; header?: string; container?: string }
   actions?: JSX.Element
-  diffs: (FileDiff & { preloaded?: PreloadMultiFileDiffResult<any> })[]
+  diffs: ReviewDiff[]
   onViewFile?: (file: string) => void
   readFile?: (path: string) => Promise<FileContent | undefined>
 }
@@ -146,8 +148,8 @@ export const SessionReview = (props: SessionReviewProps) => {
   const [opened, setOpened] = createSignal<SessionReviewFocus | null>(null)
 
   const open = () => props.open ?? store.open
-  const files = createMemo(() => props.diffs.map((d) => d.file))
-  const diffs = createMemo(() => new Map(props.diffs.map((d) => [d.file, d] as const)))
+  const files = createMemo(() => props.diffs.map((diff) => diff.file))
+  const diffs = createMemo(() => new Map(props.diffs.map((diff) => [diff.file, diff] as const)))
   const diffStyle = () => props.diffStyle ?? (props.split ? "split" : "unified")
   const hasDiffs = () => files().length > 0
 
@@ -282,8 +284,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                   {(file) => {
                     let wrapper: HTMLDivElement | undefined
 
-                    const diff = createMemo(() => diffs().get(file))
-                    const item = () => diff()!
+                    const item = createMemo(() => diffs().get(file)!)
 
                     const expanded = createMemo(() => open().includes(file))
                     const force = () => !!store.force[file]
