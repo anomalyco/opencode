@@ -23,6 +23,7 @@ import { fn } from "@/util/fn"
 import { Command } from "../command"
 import { Snapshot } from "@/snapshot"
 import { WorkspaceContext } from "../control-plane/workspace-context"
+import { ProjectID } from "../project/schema"
 
 import type { Provider } from "@/provider/provider"
 import { PermissionNext } from "@/permission/next"
@@ -120,7 +121,7 @@ export namespace Session {
     .object({
       id: Identifier.schema("session"),
       slug: z.string(),
-      projectID: z.string(),
+      projectID: ProjectID.zod,
       workspaceID: z.string().optional(),
       directory: z.string(),
       parentID: Identifier.schema("session").optional(),
@@ -162,7 +163,7 @@ export namespace Session {
 
   export const ProjectInfo = z
     .object({
-      id: z.string(),
+      id: ProjectID.zod,
       name: z.string().optional(),
       worktree: z.string(),
     })
