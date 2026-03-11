@@ -3,7 +3,7 @@ import { showToast } from "@opencode-ai/ui/toast"
 import type { FitAddon, Ghostty, Terminal as Term } from "ghostty-web"
 import { type ComponentProps, createEffect, createMemo, onCleanup, onMount, splitProps } from "solid-js"
 import { SerializeAddon } from "@/addons/serialize"
-import { matchKeybind, parseKeybind } from "@/context/command"
+import { matchKeybind, parseKeybind, useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
@@ -156,6 +156,7 @@ export const Terminal = (props: TerminalProps) => {
   const settings = useSettings()
   const theme = useTheme()
   const language = useLanguage()
+  const command = useCommand()
   const server = useServer()
   let container!: HTMLDivElement
   const [local, others] = splitProps(props, ["pty", "class", "classList", "autoFocus", "onConnect", "onConnectError"])
@@ -363,13 +364,13 @@ export const Terminal = (props: TerminalProps) => {
           return true
         }
 
-        // Let terminal-toggle keybind bubble to parent command handlers.
-        // Returning false prevents xterm from consuming the key event.
         const config = settings.keybinds.get(TOGGLE_TERMINAL_ID) ?? DEFAULT_TOGGLE_TERMINAL_KEYBIND
         const keybinds = parseKeybind(config)
-        if (matchKeybind(keybinds, event)) return false
+        if (!matchKeybind(keybinds, event)) return true
 
-        return true
+        // Handle terminal toggle directly so it works even when terminal input has focus.
+        command.trigger(TOGGLE_TERMINAL_ID, "keybind")
+        return false
       })
 
       const fit = new mod.FitAddon()
