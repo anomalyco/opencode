@@ -1,35 +1,11 @@
-import { test, expect, mock } from "bun:test"
+import { test, expect } from "bun:test"
 import path from "path"
 
-// === Mocks ===
-// These mocks prevent real package installations during tests
-
-mock.module("../../src/bun/index", () => ({
-  BunProc: {
-    install: async (pkg: string, _version?: string) => {
-      // Return package name without version for mocking
-      const lastAtIndex = pkg.lastIndexOf("@")
-      return lastAtIndex > 0 ? pkg.substring(0, lastAtIndex) : pkg
-    },
-    run: async () => {
-      throw new Error("BunProc.run should not be called in tests")
-    },
-    which: () => process.execPath,
-    InstallFailedError: class extends Error {},
-  },
-}))
-
-const mockPlugin = () => ({})
-mock.module("opencode-copilot-auth", () => ({ default: mockPlugin }))
-mock.module("opencode-anthropic-auth", () => ({ default: mockPlugin }))
-mock.module("@gitlab/opencode-gitlab-auth", () => ({ default: mockPlugin }))
-
-// Import after mocks are set up
-const { tmpdir } = await import("../fixture/fixture")
-const { Instance } = await import("../../src/project/instance")
-const { Provider } = await import("../../src/provider/provider")
-const { Env } = await import("../../src/env")
-const { Global } = await import("../../src/global")
+import { tmpdir } from "../fixture/fixture"
+import { Instance } from "../../src/project/instance"
+import { Provider } from "../../src/provider/provider"
+import { Env } from "../../src/env"
+import { Global } from "../../src/global"
 
 test("GitLab Duo: loads provider with API key from environment", async () => {
   await using tmp = await tmpdir({
@@ -218,6 +194,30 @@ test("GitLab Duo: config apiKey takes precedence over environment variable", asy
     fn: async () => {
       const providers = await Provider.list()
       expect(providers["gitlab"]).toBeDefined()
+    },
+  })
+})
+
+test("GitLab Duo: includes context-1m beta header in aiGatewayHeaders", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("GITLAB_TOKEN", "test-token")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["gitlab"]).toBeDefined()
+      expect(providers["gitlab"].options?.aiGatewayHeaders?.["anthropic-beta"]).toContain("context-1m-2025-08-07")
     },
   })
 })

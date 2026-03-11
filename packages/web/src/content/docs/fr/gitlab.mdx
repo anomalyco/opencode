@@ -1,0 +1,195 @@
+---
+title: GitLab
+description: Utilisez OpenCode dans les issues GitLab et les merge requests.
+---
+
+OpenCode s'intègre à votre flux de travail GitLab via votre pipeline CI/CD GitLab ou avec GitLab Duo.
+
+Dans les deux cas, OpenCode fonctionnera sur vos runners GitLab.
+
+---
+
+## GitLab CI
+
+OpenCode fonctionne dans un pipeline GitLab régulier. Vous pouvez l'intégrer dans un pipeline en tant que [composant CI](https://docs.gitlab.com/ee/ci/components/)
+
+Ici, nous utilisons un composant CI/CD créé par la communauté pour OpenCode — [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode).
+
+---
+
+### Fonctionnalités
+
+- **Utiliser une configuration personnalisée par tâche** : configurez OpenCode avec un répertoire de configuration personnalisé, par exemple `./config/#custom-directory` pour activer ou désactiver la fonctionnalité pour chaque appel d'OpenCode.
+- **Configuration minimale** : le composant CI configure OpenCode en arrière-plan, il vous suffit de créer la configuration OpenCode et le prompt initial.
+- **Flexible** : le composant CI prend en charge plusieurs entrées pour personnaliser son comportement
+
+---
+
+### Installation
+
+1. Stockez votre authentification OpenCode JSON en tant que variables d'environnement CI de type fichier sous **Paramètres** > **CI/CD** > **Variables**. Assurez-vous de les marquer comme « Masquées et protégées ».
+2. Ajoutez ce qui suit à votre fichier `.gitlab-ci.yml`.
+
+   ```yaml title=".gitlab-ci.yml"
+   include:
+     - component: $CI_SERVER_FQDN/nagyv/gitlab-opencode/opencode@2
+       inputs:
+         config_dir: ${CI_PROJECT_DIR}/opencode-config
+         auth_json: $OPENCODE_AUTH_JSON # The variable name for your OpenCode authentication JSON
+         command: optional-custom-command
+         message: "Your prompt here"
+   ```
+
+Pour plus d'entrées et de cas d'utilisation [consultez la doc](https://gitlab.com/explore/catalog/nagyv/gitlab-opencode) pour ce composant.
+
+---
+
+## GitLab Duo
+
+OpenCode s'intègre à votre flux de travail GitLab.
+Mentionnez `@opencode` dans un commentaire et OpenCode exécutera les tâches au sein de votre pipeline CI GitLab.
+
+---
+
+### Fonctionnalités
+
+- **Triage d'issues** : demandez à OpenCode d'examiner une issue et de vous l'expliquer.
+- **Correction et implémentation** : demandez à OpenCode de résoudre une issue ou d'implémenter une fonctionnalité.
+  Cela créera une nouvelle branche et déclenchera une merge request avec les modifications.
+- **Sécurisé** : OpenCode fonctionne sur vos runners GitLab.
+
+---
+
+### Installation
+
+OpenCode s'exécute dans votre pipeline CI/CD GitLab. Voici ce dont vous aurez besoin pour le configurer :
+
+:::tip
+Consultez la [**documentation GitLab**](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/) pour obtenir des instructions à jour.
+:::
+
+1.  Configurez votre environnement GitLab
+2.  Configurer CI/CD
+3.  Obtenez la clé API d'un fournisseur de modèles d'IA
+4.  Créer un compte de service
+5.  Configurer les variables CI/CD
+6.  Créez un fichier de configuration de flux, voici un exemple :
+
+        <details>
+
+    <summary>Configuration du flux</summary>
+
+    ```yaml
+    image: node:22-slim
+    commands:
+      - echo "Installing opencode"
+      - npm install --global opencode-ai
+      - echo "Installing glab"
+      - export GITLAB_TOKEN=$GITLAB_TOKEN_OPENCODE
+      - apt-get update --quiet && apt-get install --yes curl wget gpg git && rm --recursive --force /var/lib/apt/lists/*
+      - curl --silent --show-error --location "https://raw.githubusercontent.com/upciti/wakemeops/main/assets/install_repository" | bash
+      - apt-get install --yes glab
+      - echo "Configuring glab"
+      - echo $GITLAB_HOST
+      - echo "Creating OpenCode auth configuration"
+      - mkdir --parents ~/.local/share/opencode
+      - |
+        cat > ~/.local/share/opencode/auth.json << EOF
+        {
+          "anthropic": {
+            "type": "api",
+            "key": "$ANTHROPIC_API_KEY"
+          }
+        }
+        EOF
+      - echo "Configuring git"
+      - git config --global user.email "opencode@gitlab.com"
+      - git config --global user.name "OpenCode"
+      - echo "Testing glab"
+      - glab issue list
+      - echo "Running OpenCode"
+      - |
+        opencode run "
+        You are an AI assistant helping with GitLab operations.
+
+        Context: $AI_FLOW_CONTEXT
+        Task: $AI_FLOW_INPUT
+        Event: $AI_FLOW_EVENT
+
+        Please execute the requested task using the available GitLab tools.
+        Be thorough in your analysis and provide clear explanations.
+
+        <important>
+        Please use the glab CLI to access data from GitLab. The glab CLI has already been authenticated. You can run the corresponding commands.
+
+        If you are asked to summarize an MR or issue or asked to provide more information then please post back a note to the MR/Issue so that the user can see it.
+        You don't need to commit or push up changes, those will be done automatically based on the file changes you make.
+        </important>
+        "
+      - git checkout --branch $CI_WORKLOAD_REF origin/$CI_WORKLOAD_REF
+      - echo "Checking for git changes and pushing if any exist"
+      - |
+        if ! git diff --quiet || ! git diff --cached --quiet || [ --not --zero "$(git ls-files --others --exclude-standard)" ]; then
+          echo "Git changes detected, adding and pushing..."
+          git add .
+          if git diff --cached --quiet; then
+            echo "No staged changes to commit"
+          else
+            echo "Committing changes to branch: $CI_WORKLOAD_REF"
+            git commit --message "Codex changes"
+            echo "Pushing changes up to $CI_WORKLOAD_REF"
+            git push https://gitlab-ci-token:$GITLAB_TOKEN@$GITLAB_HOST/gl-demo-ultimate-dev-ai-epic-17570/test-java-project.git $CI_WORKLOAD_REF
+            echo "Changes successfully pushed"
+          fi
+        else
+          echo "No git changes detected, skipping push"
+        fi
+    variables:
+      - ANTHROPIC_API_KEY
+      - GITLAB_TOKEN_OPENCODE
+      - GITLAB_HOST
+    ```
+
+        </details>
+
+Vous pouvez vous référer aux [GitLab CLI agents docs](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/) pour des instructions détaillées.
+
+---
+
+### Exemples
+
+Voici quelques exemples de la façon dont vous pouvez utiliser OpenCode dans GitLab.
+
+:::tip
+Vous pouvez configurer pour utiliser une phrase de déclenchement différente de `@opencode`.
+:::
+
+- **Expliquer une issue**
+
+Ajoutez ce commentaire dans une issue GitLab.
+
+```
+  @opencode explain this issue
+```
+
+OpenCode lira l'issue et répondra avec une explication claire.
+
+- **Résoudre une issue**
+
+Dans une issue GitLab, dites :
+
+```
+  @opencode fix this
+```
+
+OpenCode créera une nouvelle branche, mettra en œuvre les modifications et ouvrira une merge request avec les modifications.
+
+- **Revue de merge request**
+
+Laissez le commentaire suivant sur une merge request GitLab.
+
+```
+  @opencode review this merge request
+```
+
+OpenCode examinera la merge request et fournira des commentaires.

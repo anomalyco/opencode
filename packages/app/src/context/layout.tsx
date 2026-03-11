@@ -1,15 +1,21 @@
 import { createStore, produce } from "solid-js/store"
-import { batch, createEffect, createMemo, on, onCleanup, onMount, type Accessor } from "solid-js"
+import { batch, createEffect, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useGlobalSync } from "./global-sync"
 import { useGlobalSDK } from "./global-sdk"
 import { useServer } from "./server"
+import { usePlatform } from "./platform"
 import { Project } from "@opencode-ai/sdk/v2"
 import { Persist, persisted, removePersisted } from "@/utils/persist"
+import { decode64 } from "@/utils/base64"
 import { same } from "@/utils/same"
 import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
+import { createPathHelpers } from "./file/path"
 
 const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const
+const DEFAULT_PANEL_WIDTH = 344
+const DEFAULT_SESSION_WIDTH = 600
+const DEFAULT_TERMINAL_HEIGHT = 280
 export type AvatarColorKey = (typeof AVATAR_COLOR_KEYS)[number]
 
 export function getAvatarColors(key?: string) {
@@ -33,11 +39,96 @@ type SessionTabs = {
 type SessionView = {
   scroll: Record<string, SessionScroll>
   reviewOpen?: string[]
+  pendingMessage?: string
+  pendingMessageAt?: number
+}
+
+type TabHandoff = {
+  dir: string
+  id: string
+  at: number
 }
 
 export type LocalProject = Partial<Project> & { worktree: string; expanded: boolean }
 
 export type ReviewDiffStyle = "unified" | "split"
+
+export function ensureSessionKey(key: string, touch: (key: string) => void, seed: (key: string) => void) {
+  touch(key)
+  seed(key)
+  return key
+}
+
+export function createSessionKeyReader(sessionKey: string | Accessor<string>, ensure: (key: string) => void) {
+  const key = typeof sessionKey === "function" ? sessionKey : () => sessionKey
+  return () => {
+    const value = key()
+    ensure(value)
+    return value
+  }
+}
+
+export function pruneSessionKeys(input: {
+  keep?: string
+  max: number
+  used: Map<string, number>
+  view: string[]
+  tabs: string[]
+}) {
+  if (!input.keep) return []
+
+  const keys = new Set<string>([...input.view, ...input.tabs])
+  if (keys.size <= input.max) return []
+
+  const score = (key: string) => {
+    if (key === input.keep) return Number.MAX_SAFE_INTEGER
+    return input.used.get(key) ?? 0
+  }
+
+  return Array.from(keys)
+    .sort((a, b) => score(b) - score(a))
+    .slice(input.max)
+}
+
+function nextSessionTabsForOpen(current: SessionTabs | undefined, tab: string): SessionTabs {
+  const all = current?.all ?? []
+  if (tab === "review") return { all: all.filter((x) => x !== "review"), active: tab }
+  if (tab === "context") return { all: [tab, ...all.filter((x) => x !== tab)], active: tab }
+  if (!all.includes(tab)) return { all: [...all, tab], active: tab }
+  return { all, active: tab }
+}
+
+const sessionPath = (key: string) => {
+  const dir = key.split("/")[0]
+  if (!dir) return
+  const root = decode64(dir)
+  if (!root) return
+  return createPathHelpers(() => root)
+}
+
+const normalizeSessionTab = (path: ReturnType<typeof createPathHelpers> | undefined, tab: string) => {
+  if (!tab.startsWith("file://")) return tab
+  if (!path) return tab
+  return path.tab(tab)
+}
+
+const normalizeSessionTabList = (path: ReturnType<typeof createPathHelpers> | undefined, all: string[]) => {
+  const seen = new Set<string>()
+  return all.flatMap((tab) => {
+    const value = normalizeSessionTab(path, tab)
+    if (seen.has(value)) return []
+    seen.add(value)
+    return [value]
+  })
+}
+
+const normalizeStoredSessionTabs = (key: string, tabs: SessionTabs) => {
+  const path = sessionPath(key)
+  return {
+    all: normalizeSessionTabList(path, tabs.all),
+    active: tabs.active ? normalizeSessionTab(path, tabs.active) : tabs.active,
+  }
+}
 
 export const { use: useLayout, provider: LayoutProvider } = createSimpleContext({
   name: "Layout",
@@ -45,22 +136,91 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     const globalSdk = useGlobalSDK()
     const globalSync = useGlobalSync()
     const server = useServer()
+    const platform = usePlatform()
 
     const isRecord = (value: unknown): value is Record<string, unknown> =>
       typeof value === "object" && value !== null && !Array.isArray(value)
 
     const migrate = (value: unknown) => {
       if (!isRecord(value)) return value
+
       const sidebar = value.sidebar
-      if (!isRecord(sidebar)) return value
-      if (typeof sidebar.workspaces !== "boolean") return value
-      return {
-        ...value,
-        sidebar: {
+      const migratedSidebar = (() => {
+        if (!isRecord(sidebar)) return sidebar
+        if (typeof sidebar.workspaces !== "boolean") return sidebar
+        return {
           ...sidebar,
           workspaces: {},
           workspacesDefault: sidebar.workspaces,
-        },
+        }
+      })()
+
+      const review = value.review
+      const fileTree = value.fileTree
+      const migratedFileTree = (() => {
+        if (!isRecord(fileTree)) return fileTree
+        if (fileTree.tab === "changes" || fileTree.tab === "all") return fileTree
+
+        const width = typeof fileTree.width === "number" ? fileTree.width : DEFAULT_PANEL_WIDTH
+        return {
+          ...fileTree,
+          opened: true,
+          width: width === 260 ? DEFAULT_PANEL_WIDTH : width,
+          tab: "changes",
+        }
+      })()
+
+      const migratedReview = (() => {
+        if (!isRecord(review)) return review
+        if (typeof review.panelOpened === "boolean") return review
+
+        const opened = isRecord(fileTree) && typeof fileTree.opened === "boolean" ? fileTree.opened : true
+        return {
+          ...review,
+          panelOpened: opened,
+        }
+      })()
+
+      const sessionTabs = value.sessionTabs
+      const migratedSessionTabs = (() => {
+        if (!isRecord(sessionTabs)) return sessionTabs
+
+        let changed = false
+        const next = Object.fromEntries(
+          Object.entries(sessionTabs).map(([key, tabs]) => {
+            if (!isRecord(tabs) || !Array.isArray(tabs.all)) return [key, tabs]
+
+            const current = {
+              all: tabs.all.filter((tab): tab is string => typeof tab === "string"),
+              active: typeof tabs.active === "string" ? tabs.active : undefined,
+            }
+            const normalized = normalizeStoredSessionTabs(key, current)
+            if (current.all.length !== tabs.all.length) changed = true
+            if (!same(current.all, normalized.all) || current.active !== normalized.active) changed = true
+            if (tabs.active !== undefined && typeof tabs.active !== "string") changed = true
+            return [key, normalized]
+          }),
+        )
+
+        if (!changed) return sessionTabs
+        return next
+      })()
+
+      if (
+        migratedSidebar === sidebar &&
+        migratedReview === review &&
+        migratedFileTree === fileTree &&
+        migratedSessionTabs === sessionTabs
+      ) {
+        return value
+      }
+
+      return {
+        ...value,
+        sidebar: migratedSidebar,
+        review: migratedReview,
+        fileTree: migratedFileTree,
+        sessionTabs: migratedSessionTabs,
       }
     }
 
@@ -70,32 +230,44 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       createStore({
         sidebar: {
           opened: false,
-          width: 344,
+          width: DEFAULT_PANEL_WIDTH,
           workspaces: {} as Record<string, boolean>,
           workspacesDefault: false,
         },
         terminal: {
-          height: 280,
+          height: DEFAULT_TERMINAL_HEIGHT,
           opened: false,
         },
         review: {
           diffStyle: "split" as ReviewDiffStyle,
           panelOpened: true,
         },
+        fileTree: {
+          opened: true,
+          width: DEFAULT_PANEL_WIDTH,
+          tab: "changes" as "changes" | "all",
+        },
         session: {
-          width: 600,
+          width: DEFAULT_SESSION_WIDTH,
         },
         mobileSidebar: {
           opened: false,
         },
         sessionTabs: {} as Record<string, SessionTabs>,
         sessionView: {} as Record<string, SessionView>,
+        handoff: {
+          tabs: undefined as TabHandoff | undefined,
+        },
       }),
     )
 
     const MAX_SESSION_KEYS = 50
-    const meta = { active: undefined as string | undefined, pruned: false }
-    const used = new Map<string, number>()
+    const PENDING_MESSAGE_TTL_MS = 2 * 60 * 1000
+    const usage = {
+      active: undefined as string | undefined,
+      pruned: false,
+      used: new Map<string, number>(),
+    }
 
     const SESSION_STATE_KEYS = [
       { key: "prompt", legacy: "prompt", version: "v2" },
@@ -112,29 +284,22 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
         for (const entry of SESSION_STATE_KEYS) {
           const target = session ? Persist.session(dir, session, entry.key) : Persist.workspace(dir, entry.key)
-          void removePersisted(target)
+          void removePersisted(target, platform)
 
           const legacyKey = `${dir}/${entry.legacy}${session ? "/" + session : ""}.${entry.version}`
-          void removePersisted({ key: legacyKey })
+          void removePersisted({ key: legacyKey }, platform)
         }
       }
     }
 
     function prune(keep?: string) {
-      if (!keep) return
-
-      const keys = new Set<string>()
-      for (const key of Object.keys(store.sessionView)) keys.add(key)
-      for (const key of Object.keys(store.sessionTabs)) keys.add(key)
-      if (keys.size <= MAX_SESSION_KEYS) return
-
-      const score = (key: string) => {
-        if (key === keep) return Number.MAX_SAFE_INTEGER
-        return used.get(key) ?? 0
-      }
-
-      const ordered = Array.from(keys).sort((a, b) => score(b) - score(a))
-      const drop = ordered.slice(MAX_SESSION_KEYS)
+      const drop = pruneSessionKeys({
+        keep,
+        max: MAX_SESSION_KEYS,
+        used: usage.used,
+        view: Object.keys(store.sessionView),
+        tabs: Object.keys(store.sessionTabs),
+      })
       if (drop.length === 0) return
 
       setStore(
@@ -150,18 +315,18 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       dropSessionState(drop)
 
       for (const key of drop) {
-        used.delete(key)
+        usage.used.delete(key)
       }
     }
 
     function touch(sessionKey: string) {
-      meta.active = sessionKey
-      used.set(sessionKey, Date.now())
+      usage.active = sessionKey
+      usage.used.set(sessionKey, Date.now())
 
       if (!ready()) return
-      if (meta.pruned) return
+      if (usage.pruned) return
 
-      meta.pruned = true
+      usage.pruned = true
       prune(sessionKey)
     }
 
@@ -170,7 +335,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       getSnapshot: (sessionKey) => store.sessionView[sessionKey]?.scroll,
       onFlush: (sessionKey, next) => {
         const current = store.sessionView[sessionKey]
-        const keep = meta.active ?? sessionKey
+        const keep = usage.active ?? sessionKey
         if (!current) {
           setStore("sessionView", sessionKey, { scroll: next })
           prune(keep)
@@ -182,12 +347,14 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       },
     })
 
+    const ensureKey = (key: string) => ensureSessionKey(key, touch, (sessionKey) => scroll.seed(sessionKey))
+
     createEffect(() => {
       if (!ready()) return
-      if (meta.pruned) return
-      const active = meta.active
+      if (usage.pruned) return
+      const active = usage.active
       if (!active) return
-      meta.pruned = true
+      usage.pruned = true
       prune(active)
     })
 
@@ -209,6 +376,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     })
 
     const [colors, setColors] = createStore<Record<string, AvatarColorKey>>({})
+    const colorRequested = new Map<string, AvatarColorKey>()
 
     function pickAvailableColor(used: Set<string>): AvatarColorKey {
       const available = AVATAR_COLOR_KEYS.filter((c) => !used.has(c))
@@ -217,7 +385,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     }
 
     function enrich(project: { worktree: string; expanded: boolean }) {
-      const [childStore] = globalSync.child(project.worktree)
+      const [childStore] = globalSync.child(project.worktree, { bootstrap: false })
       const projectID = childStore.project
       const metadata = projectID
         ? globalSync.data.project.find((x) => x.id === projectID)
@@ -267,17 +435,36 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       return map
     })
 
-    createEffect(() => {
+    const rootFor = (directory: string) => {
       const map = roots()
-      if (map.size === 0) return
+      if (map.size === 0) return directory
 
+      const visited = new Set<string>()
+      const chain = [directory]
+
+      while (chain.length) {
+        const current = chain[chain.length - 1]
+        if (!current) return directory
+
+        const next = map.get(current)
+        if (!next) return current
+
+        if (visited.has(next)) return directory
+        visited.add(next)
+        chain.push(next)
+      }
+
+      return directory
+    }
+
+    createEffect(() => {
       const projects = server.projects.list()
       const seen = new Set(projects.map((project) => project.worktree))
 
       batch(() => {
         for (const project of projects) {
-          const root = map.get(project.worktree)
-          if (!root) continue
+          const root = rootFor(project.worktree)
+          if (root === project.worktree) continue
 
           server.projects.close(project.worktree)
 
@@ -305,13 +492,21 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     createEffect(() => {
       const projects = enriched()
       if (projects.length === 0) return
+      if (!globalSync.ready) return
 
-      if (globalSync.ready) {
-        for (const project of projects) {
-          if (!project.id) continue
-          if (project.id === "global") continue
-          globalSync.project.icon(project.worktree, project.icon?.override)
-        }
+      for (const project of projects) {
+        if (!project.id) continue
+        if (project.id === "global") continue
+        globalSync.project.icon(project.worktree, project.icon?.override)
+      }
+    })
+
+    createEffect(() => {
+      const projects = enriched()
+      if (projects.length === 0) return
+
+      for (const project of projects) {
+        if (project.icon?.color) colorRequested.delete(project.worktree)
       }
 
       const used = new Set<string>()
@@ -322,18 +517,29 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
       for (const project of projects) {
         if (project.icon?.color) continue
-        const existing = colors[project.worktree]
+        const worktree = project.worktree
+        const existing = colors[worktree]
         const color = existing ?? pickAvailableColor(used)
         if (!existing) {
           used.add(color)
-          setColors(project.worktree, color)
+          setColors(worktree, color)
         }
         if (!project.id) continue
+
+        const requested = colorRequested.get(worktree)
+        if (requested === color) continue
+        colorRequested.set(worktree, color)
+
         if (project.id === "global") {
-          globalSync.project.meta(project.worktree, { icon: { color } })
+          globalSync.project.meta(worktree, { icon: { color } })
           continue
         }
-        void globalSdk.client.project.update({ projectID: project.id, directory: project.worktree, icon: { color } })
+
+        void globalSdk.client.project
+          .update({ projectID: project.id, directory: worktree, icon: { color } })
+          .catch(() => {
+            if (colorRequested.get(worktree) === color) colorRequested.delete(worktree)
+          })
       }
     })
 
@@ -347,10 +553,20 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     return {
       ready,
+      handoff: {
+        tabs: createMemo(() => store.handoff?.tabs),
+        setTabs(dir: string, id: string) {
+          setStore("handoff", "tabs", { dir, id, at: Date.now() })
+        },
+        clearTabs() {
+          if (!store.handoff?.tabs) return
+          setStore("handoff", "tabs", undefined)
+        },
+      },
       projects: {
         list,
         open(directory: string) {
-          const root = roots().get(directory) ?? directory
+          const root = rootFor(directory)
           if (server.projects.list().find((x) => x.worktree === root)) return
           globalSync.project.loadSessions(root)
           server.projects.open(root)
@@ -384,7 +600,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setStore("sidebar", "width", width)
         },
         workspaces(directory: string) {
-          return createMemo(() => store.sidebar.workspaces[directory] ?? store.sidebar.workspacesDefault ?? false)
+          return () => store.sidebar.workspaces[directory] ?? store.sidebar.workspacesDefault ?? false
         },
         setWorkspaces(directory: string, value: boolean) {
           setStore("sidebar", "workspaces", directory, value)
@@ -404,14 +620,54 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         diffStyle: createMemo(() => store.review?.diffStyle ?? "split"),
         setDiffStyle(diffStyle: ReviewDiffStyle) {
           if (!store.review) {
-            setStore("review", { diffStyle })
+            setStore("review", { diffStyle, panelOpened: true })
             return
           }
           setStore("review", "diffStyle", diffStyle)
         },
       },
+      fileTree: {
+        opened: createMemo(() => store.fileTree?.opened ?? true),
+        width: createMemo(() => store.fileTree?.width ?? DEFAULT_PANEL_WIDTH),
+        tab: createMemo(() => store.fileTree?.tab ?? "changes"),
+        setTab(tab: "changes" | "all") {
+          if (!store.fileTree) {
+            setStore("fileTree", { opened: true, width: DEFAULT_PANEL_WIDTH, tab })
+            return
+          }
+          setStore("fileTree", "tab", tab)
+        },
+        open() {
+          if (!store.fileTree) {
+            setStore("fileTree", { opened: true, width: DEFAULT_PANEL_WIDTH, tab: "changes" })
+            return
+          }
+          setStore("fileTree", "opened", true)
+        },
+        close() {
+          if (!store.fileTree) {
+            setStore("fileTree", { opened: false, width: DEFAULT_PANEL_WIDTH, tab: "changes" })
+            return
+          }
+          setStore("fileTree", "opened", false)
+        },
+        toggle() {
+          if (!store.fileTree) {
+            setStore("fileTree", { opened: true, width: DEFAULT_PANEL_WIDTH, tab: "changes" })
+            return
+          }
+          setStore("fileTree", "opened", (x) => !x)
+        },
+        resize(width: number) {
+          if (!store.fileTree) {
+            setStore("fileTree", { opened: true, width, tab: "changes" })
+            return
+          }
+          setStore("fileTree", "width", width)
+        },
+      },
       session: {
-        width: createMemo(() => store.session?.width ?? 600),
+        width: createMemo(() => store.session?.width ?? DEFAULT_SESSION_WIDTH),
         resize(width: number) {
           if (!store.session) {
             setStore("session", { width })
@@ -432,23 +688,51 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setStore("mobileSidebar", "opened", (x) => !x)
         },
       },
+      pendingMessage: {
+        set(sessionKey: string, messageID: string) {
+          const at = Date.now()
+          touch(sessionKey)
+          const current = store.sessionView[sessionKey]
+          if (!current) {
+            setStore("sessionView", sessionKey, {
+              scroll: {},
+              pendingMessage: messageID,
+              pendingMessageAt: at,
+            })
+            prune(usage.active ?? sessionKey)
+            return
+          }
+
+          setStore(
+            "sessionView",
+            sessionKey,
+            produce((draft) => {
+              draft.pendingMessage = messageID
+              draft.pendingMessageAt = at
+            }),
+          )
+        },
+        consume(sessionKey: string) {
+          const current = store.sessionView[sessionKey]
+          const message = current?.pendingMessage
+          const at = current?.pendingMessageAt
+          if (!message || !at) return
+
+          setStore(
+            "sessionView",
+            sessionKey,
+            produce((draft) => {
+              delete draft.pendingMessage
+              delete draft.pendingMessageAt
+            }),
+          )
+
+          if (Date.now() - at > PENDING_MESSAGE_TTL_MS) return
+          return message
+        },
+      },
       view(sessionKey: string | Accessor<string>) {
-        const key = typeof sessionKey === "function" ? sessionKey : () => sessionKey
-
-        touch(key())
-        scroll.seed(key())
-
-        createEffect(
-          on(
-            key,
-            (value) => {
-              touch(value)
-              scroll.seed(value)
-            },
-            { defer: true },
-          ),
-        )
-
+        const key = createSessionKeyReader(sessionKey, ensureKey)
         const s = createMemo(() => store.sessionView[key()] ?? { scroll: {} })
         const terminalOpened = createMemo(() => store.terminal?.opened ?? false)
         const reviewPanelOpened = createMemo(() => store.review?.panelOpened ?? true)
@@ -456,7 +740,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         function setTerminalOpened(next: boolean) {
           const current = store.terminal
           if (!current) {
-            setStore("terminal", { height: 280, opened: next })
+            setStore("terminal", { height: DEFAULT_TERMINAL_HEIGHT, opened: next })
             return
           }
 
@@ -528,93 +812,59 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         }
       },
       tabs(sessionKey: string | Accessor<string>) {
-        const key = typeof sessionKey === "function" ? sessionKey : () => sessionKey
-
-        touch(key())
-
-        createEffect(
-          on(
-            key,
-            (value) => {
-              touch(value)
-            },
-            { defer: true },
-          ),
-        )
-
+        const key = createSessionKeyReader(sessionKey, ensureKey)
+        const path = createMemo(() => sessionPath(key()))
         const tabs = createMemo(() => store.sessionTabs[key()] ?? { all: [] })
+        const normalize = (tab: string) => normalizeSessionTab(path(), tab)
+        const normalizeAll = (all: string[]) => normalizeSessionTabList(path(), all)
         return {
           tabs,
           active: createMemo(() => tabs().active),
-          all: createMemo(() => tabs().all),
+          all: createMemo(() => tabs().all.filter((tab) => tab !== "review")),
           setActive(tab: string | undefined) {
             const session = key()
+            const next = tab ? normalize(tab) : tab
             if (!store.sessionTabs[session]) {
-              setStore("sessionTabs", session, { all: [], active: tab })
+              setStore("sessionTabs", session, { all: [], active: next })
             } else {
-              setStore("sessionTabs", session, "active", tab)
+              setStore("sessionTabs", session, "active", next)
             }
           },
           setAll(all: string[]) {
             const session = key()
+            const next = normalizeAll(all).filter((tab) => tab !== "review")
             if (!store.sessionTabs[session]) {
-              setStore("sessionTabs", session, { all, active: undefined })
+              setStore("sessionTabs", session, { all: next, active: undefined })
             } else {
-              setStore("sessionTabs", session, "all", all)
+              setStore("sessionTabs", session, "all", next)
             }
           },
           async open(tab: string) {
             const session = key()
-            const current = store.sessionTabs[session] ?? { all: [] }
-
-            if (tab === "review") {
-              if (!store.sessionTabs[session]) {
-                setStore("sessionTabs", session, { all: [], active: tab })
-                return
-              }
-              setStore("sessionTabs", session, "active", tab)
-              return
-            }
-
-            if (tab === "context") {
-              const all = [tab, ...current.all.filter((x) => x !== tab)]
-              if (!store.sessionTabs[session]) {
-                setStore("sessionTabs", session, { all, active: tab })
-                return
-              }
-              setStore("sessionTabs", session, "all", all)
-              setStore("sessionTabs", session, "active", tab)
-              return
-            }
-
-            if (!current.all.includes(tab)) {
-              if (!store.sessionTabs[session]) {
-                setStore("sessionTabs", session, { all: [tab], active: tab })
-                return
-              }
-              setStore("sessionTabs", session, "all", [...current.all, tab])
-              setStore("sessionTabs", session, "active", tab)
-              return
-            }
-
-            if (!store.sessionTabs[session]) {
-              setStore("sessionTabs", session, { all: current.all, active: tab })
-              return
-            }
-            setStore("sessionTabs", session, "active", tab)
+            const next = nextSessionTabsForOpen(store.sessionTabs[session], normalize(tab))
+            setStore("sessionTabs", session, next)
           },
           close(tab: string) {
             const session = key()
             const current = store.sessionTabs[session]
             if (!current) return
 
+            if (tab === "review") {
+              if (current.active !== tab) return
+              setStore("sessionTabs", session, "active", current.all[0])
+              return
+            }
+
             const all = current.all.filter((x) => x !== tab)
+            if (current.active !== tab) {
+              setStore("sessionTabs", session, "all", all)
+              return
+            }
+
+            const index = current.all.findIndex((f) => f === tab)
+            const next = current.all[index - 1] ?? current.all[index + 1] ?? all[0]
             batch(() => {
               setStore("sessionTabs", session, "all", all)
-              if (current.active !== tab) return
-
-              const index = current.all.findIndex((f) => f === tab)
-              const next = all[index - 1] ?? all[0]
               setStore("sessionTabs", session, "active", next)
             })
           },

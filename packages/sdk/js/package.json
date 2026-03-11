@@ -1,12 +1,12 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode-ai/sdk",
-  "version": "1.1.34",
+  "version": "1.2.24",
   "type": "module",
   "license": "MIT",
   "scripts": {
     "typecheck": "tsgo --noEmit",
-    "build": "./script/build.ts"
+    "build": "bun ./script/build.ts"
   },
   "exports": {
     ".": "./src/index.ts",
@@ -14,20 +14,18 @@
     "./server": "./src/server.ts",
     "./v2": "./src/v2/index.ts",
     "./v2/client": "./src/v2/client.ts",
+    "./v2/gen/client": "./src/v2/gen/client/index.ts",
     "./v2/server": "./src/v2/server.ts"
   },
   "files": [
     "dist"
   ],
   "devDependencies": {
-    "@hey-api/openapi-ts": "0.90.4",
+    "@hey-api/openapi-ts": "0.90.10",
     "@tsconfig/node22": "catalog:",
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "@typescript/native-preview": "catalog:"
   },
-  "dependencies": {},
-  "publishConfig": {
-    "directory": "dist"
-  }
+  "dependencies": {}
 }

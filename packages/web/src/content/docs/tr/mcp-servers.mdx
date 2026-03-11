@@ -1,0 +1,511 @@
+---
+title: MCP sunucuları
+description: Yerel ve uzak MCP araçlarını ekleyin.
+---
+
+_Model Bağlam Protokolü_ veya MCP kullanarak opencode'a harici araçlar ekleyebilirsiniz. opencode hem yerel hem de uzak sunucuları destekler.
+
+MCP araçları eklendikten sonra yerleşik araçların yanı sıra LLM tarafından otomatik olarak kullanılabilir.
+
+---
+
+#### Uyarılar
+
+Bir MCP sunucusu kullandığınızda bağlama eklenir. Çok fazla aletiniz varsa, bu hızla artabilir. Bu nedenle hangi MCP sunucularını kullandığınıza dikkat etmenizi öneririz.
+
+:::tip
+MCP sunucuları içeriğinize katkıda bulunur, bu nedenle hangilerini etkinleştirdiğinize dikkat etmek istersiniz.
+:::
+
+GitHub MCP sunucusu gibi belirli MCP sunucuları çok sayıda belirteç ekleme eğilimindedir ve bağlam sınırını kolayca aşabilir.
+
+---
+
+## Etkinleştirme
+
+MCP sunucularını [opencode Config](https://opencode.ai/docs/config/)'nizde `mcp` altında tanımlayabilirsiniz. Her MCP'ü benzersiz bir adla ekleyin. LLM isteminde bulunurken bu MCP adına başvurabilirsiniz.
+
+```jsonc title="opencode.jsonc" {6}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "name-of-mcp-server": {
+      // ...
+      "enabled": true,
+    },
+    "name-of-other-mcp-server": {
+      // ...
+    },
+  },
+}
+```
+
+Ayrıca `enabled` öğesini `false` olarak ayarlayarak bir sunucuyu devre dışı bırakabilirsiniz. Bir sunucuyu yapılandırmanızdan kaldırmadan geçici olarak devre dışı bırakmak istiyorsanız bu kullanışlıdır.
+
+---
+
+### Uzak varsayılanları geçersiz kılma
+
+Kuruluşlar, `.well-known/opencode` uç noktaları aracılığıyla varsayılan MCP sunucularını sağlayabilir. Bu sunucular varsayılan olarak devre dışı bırakılarak kullanıcıların ihtiyaç duydukları sunucuları seçmelerine olanak tanınabilir.
+
+Kuruluşunuzun uzak yapılandırmasından belirli bir sunucuyu etkinleştirmek için onu `enabled: true` ile yerel yapılandırmanıza ekleyin:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "jira": {
+      "type": "remote",
+      "url": "https://jira.example.com/mcp",
+      "enabled": true
+    }
+  }
+}
+```
+
+Yerel yapılandırma değerleriniz uzak varsayılanları geçersiz kılar. Daha fazla ayrıntı için [config precedence](/docs/config#precedence-order)'a bakın.
+
+---
+
+## Yerel
+
+`type` kullanarak yerel MCP sunucularını MCP nesnesi içindeki `"local"`'ye ekleyin.
+
+```jsonc title="opencode.jsonc" {15}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-local-mcp-server": {
+      "type": "local",
+      // Or ["bun", "x", "my-mcp-command"]
+      "command": ["npx", "-y", "my-mcp-command"],
+      "enabled": true,
+      "environment": {
+        "MY_ENV_VAR": "my_env_var_value",
+      },
+    },
+  },
+}
+```
+
+Komut, yerel MCP sunucusunun nasıl başlatıldığıdır. Ayrıca ortam değişkenlerinin bir listesini de iletebilirsiniz.
+
+Örneğin, [`@modelcontextprotocol/server-everything`](https://www.npmjs.com/package/@modelcontextprotocol/server-everything) MCP test sunucusunu şu şekilde görebilirsiniz.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "mcp_everything": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-everything"],
+    },
+  },
+}
+```
+
+Ve bunu kullanmak için istemlerime `use the mcp_everything tool` kullanıyorum.
+
+```txt "mcp_everything"
+use the mcp_everything tool to add the number 3 and 4
+```
+
+---
+
+#### Seçenekler
+
+Yerel bir MCP sunucusunu yapılandırmak için tüm seçenekler burada verilmiştir.
+
+| Seçenek       | Tür     | Gerekli | Açıklama                                                                                       |
+| ------------- | ------- | ------- | ---------------------------------------------------------------------------------------------- |
+| `type`        | Dize    | Y       | MCP sunucu bağlantısı türü, `"local"` olmalıdır.                                               |
+| `command`     | Dizi    | Y       | MCP sunucusunu çalıştırmak için komut ve argümanlar.                                           |
+| `environment` | Nesne   |         | Sunucuyu çalıştırırken ayarlanacak ortam değişkenleri.                                         |
+| `enabled`     | Boolean |         | Başlangıçta MCP sunucusunu etkinleştirin veya devre dışı bırakın.                              |
+| `timeout`     | Sayı    |         | MCP sunucusundan araçları getirirken ms cinsinden zaman aşımı. Varsayılan 5000'dir (5 saniye). |
+
+---
+
+## Uzak
+
+`type`'yi `"remote"` olarak ayarlayarak uzak MCP sunucularını ekleyin.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-remote-mcp": {
+      "type": "remote",
+      "url": "https://my-mcp-server.com",
+      "enabled": true,
+      "headers": {
+        "Authorization": "Bearer MY_API_KEY"
+      }
+    }
+  }
+}
+```
+
+`url` uzak MCP sunucusunun URL'sidir ve `headers` seçeneğiyle bir başlık listesi iletebilirsiniz.
+
+---
+
+#### Seçenekler
+
+| Seçenek   | Tür     | Gerekli | Açıklama                                                                                       |
+| --------- | ------- | ------- | ---------------------------------------------------------------------------------------------- |
+| `type`    | Dize    | Y       | MCP sunucu bağlantısı türü, `"remote"` olmalıdır.                                              |
+| `url`     | Dize    | Y       | Uzak MCP sunucusunun URL.                                                                      |
+| `enabled` | Boolean |         | Başlangıçta MCP sunucusunu etkinleştirin veya devre dışı bırakın.                              |
+| `headers` | Nesne   |         | İstekle birlikte gönderilecek başlıklar.                                                       |
+| `oauth`   | Object  |         | OAuth authentication configuration. See [OAuth](#oauth) section below.                         |
+| `timeout` | Sayı    |         | MCP sunucusundan araçları getirirken ms cinsinden zaman aşımı. Varsayılan 5000'dir (5 saniye). |
+
+---
+
+## OAuth
+
+opencode, uzak MCP sunucuları için OAuth kimlik doğrulamasını otomatik olarak yönetir. Bir sunucu kimlik doğrulaması gerektirdiğinde opencode şunları yapar:
+
+1. 401 yanıtını tespit edin ve OAuth akışını başlatın
+2. Sunucu tarafından destekleniyorsa **Dinamik İstemci Kaydı (RFC 7591)** kullanın
+3. Gelecekteki istekler için belirteçleri güvenli bir şekilde saklayın
+
+---
+
+### Otomatik
+
+OAuth'un etkin olduğu çoğu MCP sunucusu için özel bir yapılandırmaya gerek yoktur. Uzak sunucuyu yapılandırmanız yeterli:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-oauth-server": {
+      "type": "remote",
+      "url": "https://mcp.example.com/mcp"
+    }
+  }
+}
+```
+
+Sunucu kimlik doğrulama gerektiriyorsa opencode, onu ilk kez kullanmaya çalıştığınızda kimlik doğrulamanızı isteyecektir. Değilse, `opencode mcp auth <server-name>` ile [manually trigger the flow](#authenticating) yapabilirsiniz.
+
+---
+
+### Ön kayıtlı
+
+MCP sunucu sağlayıcısından istemci kimlik bilgileriniz varsa, bunları yapılandırabilirsiniz:
+
+```json title="opencode.json" {7-11}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-oauth-server": {
+      "type": "remote",
+      "url": "https://mcp.example.com/mcp",
+      "oauth": {
+        "clientId": "{env:MY_MCP_CLIENT_ID}",
+        "clientSecret": "{env:MY_MCP_CLIENT_SECRET}",
+        "scope": "tools:read tools:execute"
+      }
+    }
+  }
+}
+```
+
+---
+
+### Kimlik doğrulama
+
+Kimlik doğrulamayı manuel olarak tetikleyebilir veya kimlik bilgilerini yönetebilirsiniz.
+
+Belirli bir MCP sunucusuyla kimlik doğrulaması yapın:
+
+```bash
+opencode mcp auth my-oauth-server
+```
+
+Tüm MCP sunucularını ve kimlik doğrulama durumlarını listeleyin:
+
+```bash
+opencode mcp list
+```
+
+Remove stored credentials:
+
+```bash
+opencode mcp logout my-oauth-server
+```
+
+`mcp auth` komutu tarayıcınızı yetkilendirme için açacaktır. Yetkilendirmenizin ardından opencode, belirteçleri `~/.local/share/opencode/mcp-auth.json`'de güvenli bir şekilde saklar.
+
+---
+
+#### OAuth'u devre dışı bırakma
+
+Bir sunucu için otomatik OAuth'u devre dışı bırakmak istiyorsanız (örneğin, bunun yerine API anahtarlarını kullanan sunucular için), `oauth`'yi `false` olarak ayarlayın:
+
+```json title="opencode.json" {7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-api-key-server": {
+      "type": "remote",
+      "url": "https://mcp.example.com/mcp",
+      "oauth": false,
+      "headers": {
+        "Authorization": "Bearer {env:MY_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+---
+
+#### OAuth Seçenekleri
+
+| Seçenek        | Tür             | Açıklama                                                                         |
+| -------------- | --------------- | -------------------------------------------------------------------------------- |
+| `oauth`        | Object \| false | OAuth config object, or `false` to disable OAuth auto-detection.                 |
+| `clientId`     | Dize            | OAuth istemci kimliği. Sağlanmadığı takdirde dinamik müşteri kaydı denenecektir. |
+| `clientSecret` | Dize            | Yetkilendirme sunucusu gerektiriyorsa OAuth istemci sırrı.                       |
+| `scope`        | String          | OAuth scopes to request during authorization.                                    |
+
+#### Hata Ayıklama
+
+Uzak bir MCP sunucusunun kimlik doğrulaması başarısız olursa aşağıdakileri kullanarak sorunları teşhis edebilirsiniz:
+
+```bash
+# View auth status for all OAuth-capable servers
+opencode mcp auth list
+
+# Debug connection and OAuth flow for a specific server
+opencode mcp debug my-oauth-server
+```
+
+`mcp debug` komutu mevcut kimlik doğrulama durumunu gösterir, HTTP bağlantısını test eder ve OAuth bulma akışını dener.
+
+---
+
+## Yönetim
+
+MCP'leriniz yerleşik araçların yanı sıra opencode'da araç olarak mevcuttur. Böylece bunları diğer araçlar gibi opencode yapılandırması aracılığıyla yönetebilirsiniz.
+
+---
+
+### Global
+
+Bu, bunları global olarak etkinleştirebileceğiniz veya devre dışı bırakabileceğiniz anlamına gelir.
+
+```json title="opencode.json" {14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-mcp-foo": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command-foo"]
+    },
+    "my-mcp-bar": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command-bar"]
+    }
+  },
+  "tools": {
+    "my-mcp-foo": false
+  }
+}
+```
+
+Eşleşen tüm MCP'leri devre dışı bırakmak için bir glob modeli de kullanabiliriz.
+
+```json title="opencode.json" {14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-mcp-foo": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command-foo"]
+    },
+    "my-mcp-bar": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command-bar"]
+    }
+  },
+  "tools": {
+    "my-mcp*": false
+  }
+}
+```
+
+Burada tüm MCP'leri devre dışı bırakmak için `my-mcp*` glob modelini kullanıyoruz.
+
+---
+
+### Agent başına
+
+Çok sayıda MCP sunucunuz varsa, bunları yalnızca aracı başına etkinleştirmek ve genel olarak devre dışı bırakmak isteyebilirsiniz. Bunu yapmak için:
+
+1. Global olarak bir araç olarak devre dışı bırakın.
+2. [agent config](/docs/agents#tools)'nizde, MCP sunucusunu bir araç olarak etkinleştirin.
+
+```json title="opencode.json" {11, 14-18}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-mcp": {
+      "type": "local",
+      "command": ["bun", "x", "my-mcp-command"],
+      "enabled": true
+    }
+  },
+  "tools": {
+    "my-mcp*": false
+  },
+  "agent": {
+    "my-agent": {
+      "tools": {
+        "my-mcp*": true
+      }
+    }
+  }
+}
+```
+
+---
+
+#### Glob desenleri
+
+Glob modeli, basit normal ifade globbing modellerini kullanır:
+
+- `*` herhangi bir karakterin sıfır veya daha fazlasıyla eşleşir (örneğin, `"my-mcp*"` `my-mcp_search`, `my-mcp_list` vb. ile eşleşir)
+- `?` matches exactly one character
+- All other characters match literally
+
+:::note
+MCP sunucu araçları önek olarak sunucu adıyla kayıtlıdır, dolayısıyla bir sunucuya ilişkin tüm araçları devre dışı bırakmak için aşağıdakileri kullanmanız yeterlidir:
+
+```
+"mymcpservername_*": false
+```
+
+:::
+
+---
+
+## Örnekler
+
+Aşağıda bazı yaygın MCP sunucularının örnekleri verilmiştir. Diğer sunucuları belgelemek istiyorsanız PR gönderebilirsiniz.
+
+---
+
+### Sentry
+
+Sentry projelerinizle ve sorunlarınızla etkileşimde bulunmak için [Sentry MCP server](https://mcp.sentry.dev) ekleyin.
+
+```json title="opencode.json" {4-8}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "sentry": {
+      "type": "remote",
+      "url": "https://mcp.sentry.dev/mcp",
+      "oauth": {}
+    }
+  }
+}
+```
+
+Yapılandırmayı ekledikten sonra Sentry ile kimlik doğrulaması yapın:
+
+```bash
+opencode mcp auth sentry
+```
+
+Bu, OAuth akışını tamamlamak ve opencode'u Sentry hesabınıza bağlamak için bir tarayıcı penceresi açacaktır.
+
+Kimlik doğrulaması yapıldıktan sonra sorunları, projeleri ve hata verilerini sorgulamak için istemlerinizde Sentry araçlarını kullanabilirsiniz.
+
+```txt "use sentry"
+Show me the latest unresolved issues in my project. use sentry
+```
+
+---
+
+### Context7
+
+Dokumanlar arasında arama yapmak için [Context7 MCP server](https://github.com/upstash/context7) ekleyin.
+
+```json title="opencode.json" {4-7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp"
+    }
+  }
+}
+```
+
+Ücretsiz bir hesaba kaydolduysanız API anahtarınızı kullanarak daha yüksek ücret limitleri elde edebilirsiniz.
+
+```json title="opencode.json" {7-9}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp",
+      "headers": {
+        "CONTEXT7_API_KEY": "{env:CONTEXT7_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+Burada `CONTEXT7_API_KEY` ortam değişkeninin ayarlandığını varsayıyoruz.
+
+Context7 MCP sunucunu kullanmak için isteklerinize `use context7` ekleyin.
+
+```txt "use context7"
+Configure a Cloudflare Worker script to cache JSON API responses for five minutes. use context7
+```
+
+Alternatif olarak [AGENTS.md](/docs/rules/)'a buna benzer bir şey ekleyebilirsiniz.
+
+```md title="AGENTS.md"
+When you need to search docs, use `context7` tools.
+```
+
+---
+
+### Grep by Vercel
+
+GitHub'daki kod parçacıkları arasında arama yapmak için [Grep by Vercel](https://grep.app) MCP sunucusunu ekleyin.
+
+```json title="opencode.json" {4-7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "gh_grep": {
+      "type": "remote",
+      "url": "https://mcp.grep.app"
+    }
+  }
+}
+```
+
+MCP sunucumuzu `gh_grep` olarak adlandırdığımız için, aracının onu kullanmasını sağlamak için istemlerinize `use the gh_grep tool` ekleyebilirsiniz.
+
+```txt "use the gh_grep tool"
+What's the right way to set a custom domain in an SST Astro component? use the gh_grep tool
+```
+
+Alternatif olarak [AGENTS.md](/docs/rules/)'a buna benzer bir şey ekleyebilirsiniz.
+
+```md title="AGENTS.md"
+If you are unsure how to do something, use `gh_grep` to search code examples from GitHub.
+```

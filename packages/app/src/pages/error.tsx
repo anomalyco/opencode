@@ -13,6 +13,17 @@ export type InitError = {
 }
 
 type Translator = ReturnType<typeof useLanguage>["t"]
+const CHAIN_SEPARATOR = "\n" + "─".repeat(40) + "\n"
+
+function isIssue(value: unknown): value is { message: string; path: string[] } {
+  if (!value || typeof value !== "object") return false
+  if (!("message" in value) || !("path" in value)) return false
+  const message = (value as { message: unknown }).message
+  const path = (value as { path: unknown }).path
+  if (typeof message !== "string") return false
+  if (!Array.isArray(path)) return false
+  return path.every((part) => typeof part === "string")
+}
 
 function isInitError(error: unknown): error is InitError {
   return (
@@ -112,9 +123,7 @@ function formatInitError(error: InitError, t: Translator): string {
     }
     case "ConfigInvalidError": {
       const issues = Array.isArray(data.issues)
-        ? data.issues.map(
-            (issue: { message: string; path: string[] }) => "↳ " + issue.message + " " + issue.path.join("."),
-          )
+        ? data.issues.filter(isIssue).map((issue) => "↳ " + issue.message + " " + issue.path.join("."))
         : []
       const message = typeof data.message === "string" ? data.message : ""
       const path = typeof data.path === "string" ? data.path : safeJson(data.path)
@@ -139,14 +148,14 @@ function formatErrorChain(error: unknown, t: Translator, depth = 0, parentMessag
   if (isInitError(error)) {
     const message = formatInitError(error, t)
     if (depth > 0 && parentMessage === message) return ""
-    const indent = depth > 0 ? `\n${"─".repeat(40)}\n${t("error.chain.causedBy")}\n` : ""
+    const indent = depth > 0 ? `\n${CHAIN_SEPARATOR}${t("error.chain.causedBy")}\n` : ""
     return indent + `${error.name}\n${message}`
   }
 
   if (error instanceof Error) {
     const isDuplicate = depth > 0 && parentMessage === error.message
     const parts: string[] = []
-    const indent = depth > 0 ? `\n${"─".repeat(40)}\n${t("error.chain.causedBy")}\n` : ""
+    const indent = depth > 0 ? `\n${CHAIN_SEPARATOR}${t("error.chain.causedBy")}\n` : ""
 
     const header = `${error.name}${error.message ? `: ${error.message}` : ""}`
     const stack = error.stack?.trim()
@@ -190,11 +199,11 @@ function formatErrorChain(error: unknown, t: Translator, depth = 0, parentMessag
 
   if (typeof error === "string") {
     if (depth > 0 && parentMessage === error) return ""
-    const indent = depth > 0 ? `\n${"─".repeat(40)}\n${t("error.chain.causedBy")}\n` : ""
+    const indent = depth > 0 ? `\n${CHAIN_SEPARATOR}${t("error.chain.causedBy")}\n` : ""
     return indent + error
   }
 
-  const indent = depth > 0 ? `\n${"─".repeat(40)}\n${t("error.chain.causedBy")}\n` : ""
+  const indent = depth > 0 ? `\n${CHAIN_SEPARATOR}${t("error.chain.causedBy")}\n` : ""
   return indent + safeJson(error)
 }
 
@@ -212,20 +221,35 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
   const [store, setStore] = createStore({
     checking: false,
     version: undefined as string | undefined,
+    actionError: undefined as string | undefined,
   })
 
   async function checkForUpdates() {
     if (!platform.checkUpdate) return
     setStore("checking", true)
-    const result = await platform.checkUpdate()
-    setStore("checking", false)
-    if (result.updateAvailable && result.version) setStore("version", result.version)
+    await platform
+      .checkUpdate()
+      .then((result) => {
+        setStore("actionError", undefined)
+        if (result.updateAvailable && result.version) setStore("version", result.version)
+      })
+      .catch((err) => {
+        setStore("actionError", formatError(err, language.t))
+      })
+      .finally(() => {
+        setStore("checking", false)
+      })
   }
 
   async function installUpdate() {
     if (!platform.update || !platform.restart) return
-    await platform.update()
-    await platform.restart()
+    await platform
+      .update()
+      .then(() => platform.restart!())
+      .then(() => setStore("actionError", undefined))
+      .catch((err) => {
+        setStore("actionError", formatError(err, language.t))
+      })
   }
 
   return (
@@ -266,6 +290,9 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
             </Show>
           </Show>
         </div>
+        <Show when={store.actionError}>
+          {(message) => <p class="text-xs text-text-danger-base text-center max-w-2xl">{message()}</p>}
+        </Show>
         <div class="flex flex-col items-center gap-2">
           <div class="flex items-center justify-center gap-1">
             {language.t("error.page.report.prefix")}

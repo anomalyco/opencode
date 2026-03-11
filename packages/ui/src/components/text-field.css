@@ -51,7 +51,7 @@
       border: 1px solid var(--border-weak-base);
       background: var(--input-base);
 
-      &:focus-within {
+      &:focus-within:not(:has([data-readonly])) {
         border-color: transparent;
         /* border/shadow-xs/select */
         box-shadow:

@@ -1,8 +1,9 @@
-import { For, Show, onMount, Suspense, onCleanup, createMemo, createSignal, SuspenseList, createEffect } from "solid-js"
+import { For, Show, onMount, Suspense, onCleanup, createMemo, createSignal, SuspenseList } from "solid-js"
 import { DateTime } from "luxon"
-import { createStore, reconcile, unwrap } from "solid-js/store"
+import { createStore, reconcile } from "solid-js/store"
 import { IconArrowDown } from "./icons"
 import { IconOpencode } from "./icons/custom"
+import { ShareI18nProvider, formatCurrency, formatNumber, normalizeLocale } from "./share/common"
 import styles from "./share.module.css"
 import type { MessageV2 } from "opencode/session/message-v2"
 import type { Message } from "opencode/session/message"
@@ -20,24 +21,29 @@ function scrollToAnchor(id: string) {
   el.scrollIntoView({ behavior: "smooth" })
 }
 
-function getStatusText(status: [Status, string?]): string {
+function getStatusText(status: [Status, string?], messages: Record<string, string>): string {
   switch (status[0]) {
     case "connected":
-      return "Connected, waiting for messages..."
+      return messages.status_connected_waiting
     case "connecting":
-      return "Connecting..."
+      return messages.status_connecting
     case "disconnected":
-      return "Disconnected"
+      return messages.status_disconnected
     case "reconnecting":
-      return "Reconnecting..."
+      return messages.status_reconnecting
     case "error":
-      return status[1] || "Error"
+      return status[1] || messages.status_error
     default:
-      return "Unknown"
+      return messages.status_unknown
   }
 }
 
-export default function Share(props: { id: string; api: string; info: Session.Info }) {
+export default function Share(props: {
+  id: string
+  api: string
+  info: Session.Info
+  messages: { locale: string } & Record<string, string>
+}) {
   let lastScrollY = 0
   let hasScrolledToAnchor = false
   let scrollTimeout: number | undefined
@@ -57,6 +63,9 @@ export default function Share(props: { id: string; api: string; info: Session.In
   }>({
     info: {
       id: props.id,
+      slug: props.info.slug,
+      projectID: props.info.projectID,
+      directory: props.info.directory,
       title: props.info.title,
       version: props.info.version,
       time: {
@@ -67,22 +76,19 @@ export default function Share(props: { id: string; api: string; info: Session.In
     messages: {},
   })
   const messages = createMemo(() => Object.values(store.messages).toSorted((a, b) => a.id?.localeCompare(b.id)))
-  const [connectionStatus, setConnectionStatus] = createSignal<[Status, string?]>(["disconnected", "Disconnected"])
-  createEffect(() => {
-    console.log(unwrap(store))
-  })
+  const [connectionStatus, setConnectionStatus] = createSignal<[Status, string?]>(["disconnected"])
 
   onMount(() => {
     const apiUrl = props.api
 
     if (!props.id) {
-      setConnectionStatus(["error", "id not found"])
+      setConnectionStatus(["error", props.messages.error_id_not_found])
       return
     }
 
     if (!apiUrl) {
       console.error("API URL not found in environment variables")
-      setConnectionStatus(["error", "API URL not found"])
+      setConnectionStatus(["error", props.messages.error_api_url_not_found])
       return
     }
 
@@ -101,20 +107,16 @@ export default function Share(props: { id: string; api: string; info: Session.In
       // Always use secure WebSocket protocol (wss)
       const wsBaseUrl = apiUrl.replace(/^https?:\/\//, "wss://")
       const wsUrl = `${wsBaseUrl}/share_poll?id=${props.id}`
-      console.log("Connecting to WebSocket URL:", wsUrl)
-
       // Create WebSocket connection
       socket = new WebSocket(wsUrl)
 
       // Handle connection opening
       socket.onopen = () => {
         setConnectionStatus(["connected"])
-        console.log("WebSocket connection established")
       }
 
       // Handle incoming messages
       socket.onmessage = (event) => {
-        console.log("WebSocket message received")
         try {
           const d = JSON.parse(event.data)
           const [root, type, ...splits] = d.key.split("/")
@@ -147,12 +149,11 @@ export default function Share(props: { id: string; api: string; info: Session.In
       // Handle errors
       socket.onerror = (error) => {
         console.error("WebSocket error:", error)
-        setConnectionStatus(["error", "Connection failed"])
+        setConnectionStatus(["error", props.messages.error_connection_failed])
       }
 
       // Handle connection close and reconnection
-      socket.onclose = (event) => {
-        console.log(`WebSocket closed: ${event.code} ${event.reason}`)
+      socket.onclose = () => {
         setConnectionStatus(["reconnecting"])
 
         // Try to reconnect after 2 seconds
@@ -166,7 +167,6 @@ export default function Share(props: { id: string; api: string; info: Session.In
 
     // Clean up on component unmount
     onCleanup(() => {
-      console.log("Cleaning up WebSocket connection")
       if (socket) {
         socket.close()
       }
@@ -297,201 +297,212 @@ export default function Share(props: { id: string; api: string; info: Session.In
 
   return (
     <Show when={store.info}>
-      <main classList={{ [styles.root]: true, "not-content": true }}>
-        <div data-component="header">
-          <h1 data-component="header-title">{store.info?.title}</h1>
-          <div data-component="header-details">
-            <ul data-component="header-stats">
-              <li title="opencode version" data-slot="item">
-                <div data-slot="icon" title="opencode">
-                  <IconOpencode width={16} height={16} />
-                </div>
-                <Show when={store.info?.version} fallback="v0.0.1">
-                  <span>v{store.info?.version}</span>
-                </Show>
-              </li>
-              {Object.values(data().models).length > 0 ? (
-                <For each={Object.values(data().models)}>
-                  {([provider, model]) => (
-                    <li data-slot="item">
-                      <div data-slot="icon" title={provider}>
-                        <ProviderIcon model={model} />
-                      </div>
-                      <span data-slot="model">{model}</span>
-                    </li>
-                  )}
-                </For>
-              ) : (
-                <li>
-                  <span data-element-label>Models</span>
-                  <span data-placeholder>&mdash;</span>
+      <ShareI18nProvider messages={props.messages}>
+        <main classList={{ [styles.root]: true, "not-content": true }}>
+          <div data-component="header">
+            <h1 data-component="header-title">{store.info?.title}</h1>
+            <div data-component="header-details">
+              <ul data-component="header-stats">
+                <li title={props.messages.opencode_version} data-slot="item">
+                  <div data-slot="icon" title={props.messages.opencode_name}>
+                    <IconOpencode width={16} height={16} />
+                  </div>
+                  <Show when={store.info?.version} fallback="v0.0.1">
+                    <span>v{store.info?.version}</span>
+                  </Show>
                 </li>
-              )}
-            </ul>
-            <div
-              data-component="header-time"
-              title={DateTime.fromMillis(data().created || 0).toLocaleString(DateTime.DATETIME_FULL_WITH_SECONDS)}
-            >
-              {DateTime.fromMillis(data().created || 0).toLocaleString(DateTime.DATETIME_MED)}
-            </div>
-          </div>
-        </div>
-
-        <div>
-          <Show when={data().messages.length > 0} fallback={<p>Waiting for messages...</p>}>
-            <div class={styles.parts}>
-              <SuspenseList revealOrder="forwards">
-                <For each={data().messages}>
-                  {(msg, msgIndex) => {
-                    const filteredParts = createMemo(() =>
-                      msg.parts.filter((x, index) => {
-                        if (x.type === "step-start" && index > 0) return false
-                        if (x.type === "snapshot") return false
-                        if (x.type === "patch") return false
-                        if (x.type === "step-finish") return false
-                        if (x.type === "text" && x.synthetic === true) return false
-                        if (x.type === "tool" && x.tool === "todoread") return false
-                        if (x.type === "text" && !x.text) return false
-                        if (x.type === "tool" && (x.state.status === "pending" || x.state.status === "running"))
-                          return false
-                        return true
-                      }),
-                    )
-
-                    return (
-                      <Suspense>
-                        <For each={filteredParts()}>
-                          {(part, partIndex) => {
-                            const last = createMemo(
-                              () =>
-                                data().messages.length === msgIndex() + 1 && filteredParts().length === partIndex() + 1,
-                            )
-
-                            onMount(() => {
-                              const hash = window.location.hash.slice(1)
-                              // Wait till all parts are loaded
-                              if (
-                                hash !== "" &&
-                                !hasScrolledToAnchor &&
-                                filteredParts().length === partIndex() + 1 &&
-                                data().messages.length === msgIndex() + 1
-                              ) {
-                                hasScrolledToAnchor = true
-                                scrollToAnchor(hash)
-                              }
-                            })
-
-                            return <Part last={last()} part={part} index={partIndex()} message={msg} />
-                          }}
-                        </For>
-                      </Suspense>
-                    )
-                  }}
-                </For>
-              </SuspenseList>
-              <div data-section="part" data-part-type="summary">
-                <div data-section="decoration">
-                  <span data-status={connectionStatus()[0]}></span>
-                </div>
-                <div data-section="content">
-                  <p data-section="copy">{getStatusText(connectionStatus())}</p>
-                  <ul data-section="stats">
-                    <li>
-                      <span data-element-label>Cost</span>
-                      {data().cost !== undefined ? (
-                        <span>${data().cost.toFixed(2)}</span>
-                      ) : (
-                        <span data-placeholder>&mdash;</span>
-                      )}
-                    </li>
-                    <li>
-                      <span data-element-label>Input Tokens</span>
-                      {data().tokens.input ? <span>{data().tokens.input}</span> : <span data-placeholder>&mdash;</span>}
-                    </li>
-                    <li>
-                      <span data-element-label>Output Tokens</span>
-                      {data().tokens.output ? (
-                        <span>{data().tokens.output}</span>
-                      ) : (
-                        <span data-placeholder>&mdash;</span>
-                      )}
-                    </li>
-                    <li>
-                      <span data-element-label>Reasoning Tokens</span>
-                      {data().tokens.reasoning ? (
-                        <span>{data().tokens.reasoning}</span>
-                      ) : (
-                        <span data-placeholder>&mdash;</span>
-                      )}
-                    </li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-          </Show>
-        </div>
-
-        <Show when={debug}>
-          <div style={{ margin: "2rem 0" }}>
-            <div
-              style={{
-                border: "1px solid #ccc",
-                padding: "1rem",
-                "overflow-y": "auto",
-              }}
-            >
-              <Show when={data().messages.length > 0} fallback={<p>Waiting for messages...</p>}>
-                <ul style={{ "list-style-type": "none", padding: 0 }}>
-                  <For each={data().messages}>
-                    {(msg) => (
-                      <li
-                        style={{
-                          padding: "0.75rem",
-                          margin: "0.75rem 0",
-                          "box-shadow": "0 1px 3px rgba(0,0,0,0.1)",
-                        }}
-                      >
-                        <div>
-                          <strong>Key:</strong> {msg.id}
+                {Object.values(data().models).length > 0 ? (
+                  <For each={Object.values(data().models)}>
+                    {([provider, model]) => (
+                      <li data-slot="item">
+                        <div data-slot="icon" title={provider}>
+                          <ProviderIcon model={model} />
                         </div>
-                        <pre>{JSON.stringify(msg, null, 2)}</pre>
+                        <span data-slot="model">{model}</span>
                       </li>
                     )}
                   </For>
-                </ul>
-              </Show>
+                ) : (
+                  <li>
+                    <span data-element-label>{props.messages.models}</span>
+                    <span data-placeholder>&mdash;</span>
+                  </li>
+                )}
+              </ul>
+              <div
+                data-component="header-time"
+                title={DateTime.fromMillis(data().created || 0)
+                  .setLocale(normalizeLocale(props.messages.locale))
+                  .toLocaleString(DateTime.DATETIME_FULL_WITH_SECONDS)}
+              >
+                {DateTime.fromMillis(data().created || 0)
+                  .setLocale(normalizeLocale(props.messages.locale))
+                  .toLocaleString(DateTime.DATETIME_MED)}
+              </div>
             </div>
           </div>
-        </Show>
 
-        <Show when={showScrollButton()}>
-          <button
-            type="button"
-            class={styles["scroll-button"]}
-            onClick={() => document.body.scrollIntoView({ behavior: "smooth", block: "end" })}
-            onMouseEnter={() => {
-              setIsButtonHovered(true)
-              if (scrollTimeout) {
-                clearTimeout(scrollTimeout)
-              }
-            }}
-            onMouseLeave={() => {
-              setIsButtonHovered(false)
-              if (showScrollButton()) {
-                scrollTimeout = window.setTimeout(() => {
-                  if (!isButtonHovered()) {
-                    setShowScrollButton(false)
-                  }
-                }, 3000)
-              }
-            }}
-            title="Scroll to bottom"
-            aria-label="Scroll to bottom"
-          >
-            <IconArrowDown width={20} height={20} />
-          </button>
-        </Show>
-      </main>
+          <div>
+            <Show when={data().messages.length > 0} fallback={<p>{props.messages.waiting_for_messages}</p>}>
+              <div class={styles.parts}>
+                <SuspenseList revealOrder="forwards">
+                  <For each={data().messages}>
+                    {(msg, msgIndex) => {
+                      const filteredParts = createMemo(() =>
+                        msg.parts.filter((x, index) => {
+                          if (x.type === "step-start" && index > 0) return false
+                          if (x.type === "snapshot") return false
+                          if (x.type === "patch") return false
+                          if (x.type === "step-finish") return false
+                          if (x.type === "text" && x.synthetic === true) return false
+                          if (x.type === "tool" && x.tool === "todoread") return false
+                          if (x.type === "text" && !x.text) return false
+                          if (x.type === "tool" && (x.state.status === "pending" || x.state.status === "running"))
+                            return false
+                          return true
+                        }),
+                      )
+
+                      return (
+                        <Suspense>
+                          <For each={filteredParts()}>
+                            {(part, partIndex) => {
+                              const last = createMemo(
+                                () =>
+                                  data().messages.length === msgIndex() + 1 &&
+                                  filteredParts().length === partIndex() + 1,
+                              )
+
+                              onMount(() => {
+                                const hash = window.location.hash.slice(1)
+                                // Wait till all parts are loaded
+                                if (
+                                  hash !== "" &&
+                                  !hasScrolledToAnchor &&
+                                  filteredParts().length === partIndex() + 1 &&
+                                  data().messages.length === msgIndex() + 1
+                                ) {
+                                  hasScrolledToAnchor = true
+                                  scrollToAnchor(hash)
+                                }
+                              })
+
+                              return <Part last={last()} part={part} index={partIndex()} message={msg} />
+                            }}
+                          </For>
+                        </Suspense>
+                      )
+                    }}
+                  </For>
+                </SuspenseList>
+                <div data-section="part" data-part-type="summary">
+                  <div data-section="decoration">
+                    <span data-status={connectionStatus()[0]}></span>
+                  </div>
+                  <div data-section="content">
+                    <p data-section="copy">{getStatusText(connectionStatus(), props.messages)}</p>
+                    <ul data-section="stats">
+                      <li>
+                        <span data-element-label>{props.messages.cost}</span>
+                        {data().cost !== undefined ? (
+                          <span>{formatCurrency(data().cost, props.messages.locale)}</span>
+                        ) : (
+                          <span data-placeholder>&mdash;</span>
+                        )}
+                      </li>
+                      <li>
+                        <span data-element-label>{props.messages.input_tokens}</span>
+                        {data().tokens.input ? (
+                          <span>{formatNumber(data().tokens.input, props.messages.locale)}</span>
+                        ) : (
+                          <span data-placeholder>&mdash;</span>
+                        )}
+                      </li>
+                      <li>
+                        <span data-element-label>{props.messages.output_tokens}</span>
+                        {data().tokens.output ? (
+                          <span>{formatNumber(data().tokens.output, props.messages.locale)}</span>
+                        ) : (
+                          <span data-placeholder>&mdash;</span>
+                        )}
+                      </li>
+                      <li>
+                        <span data-element-label>{props.messages.reasoning_tokens}</span>
+                        {data().tokens.reasoning ? (
+                          <span>{formatNumber(data().tokens.reasoning, props.messages.locale)}</span>
+                        ) : (
+                          <span data-placeholder>&mdash;</span>
+                        )}
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </Show>
+          </div>
+
+          <Show when={debug}>
+            <div style={{ margin: "2rem 0" }}>
+              <div
+                style={{
+                  border: "1px solid #ccc",
+                  padding: "1rem",
+                  "overflow-y": "auto",
+                }}
+              >
+                <Show when={data().messages.length > 0} fallback={<p>{props.messages.waiting_for_messages}</p>}>
+                  <ul style={{ "list-style-type": "none", padding: 0 }}>
+                    <For each={data().messages}>
+                      {(msg) => (
+                        <li
+                          style={{
+                            padding: "0.75rem",
+                            margin: "0.75rem 0",
+                            "box-shadow": "0 1px 3px rgba(0,0,0,0.1)",
+                          }}
+                        >
+                          <div>
+                            <strong>{props.messages.debug_key}:</strong> {msg.id}
+                          </div>
+                          <pre>{JSON.stringify(msg, null, 2)}</pre>
+                        </li>
+                      )}
+                    </For>
+                  </ul>
+                </Show>
+              </div>
+            </div>
+          </Show>
+
+          <Show when={showScrollButton()}>
+            <button
+              type="button"
+              class={styles["scroll-button"]}
+              onClick={() => document.body.scrollIntoView({ behavior: "smooth", block: "end" })}
+              onMouseEnter={() => {
+                setIsButtonHovered(true)
+                if (scrollTimeout) {
+                  clearTimeout(scrollTimeout)
+                }
+              }}
+              onMouseLeave={() => {
+                setIsButtonHovered(false)
+                if (showScrollButton()) {
+                  scrollTimeout = window.setTimeout(() => {
+                    if (!isButtonHovered()) {
+                      setShowScrollButton(false)
+                    }
+                  }, 3000)
+                }
+              }}
+              title={props.messages.scroll_to_bottom}
+              aria-label={props.messages.scroll_to_bottom}
+            >
+              <IconArrowDown width={20} height={20} />
+            </button>
+          </Show>
+        </main>
+      </ShareI18nProvider>
     </Show>
   )
 }
@@ -502,6 +513,8 @@ export function fromV1(v1: Message.Info): MessageWithParts {
       id: v1.id,
       sessionID: v1.metadata.sessionID,
       role: "assistant",
+      parentID: "",
+      agent: "build",
       time: {
         created: v1.metadata.time.created,
         completed: v1.metadata.time.completed,
@@ -521,7 +534,6 @@ export function fromV1(v1: Message.Info): MessageWithParts {
       modelID: v1.metadata.assistant!.modelID,
       providerID: v1.metadata.assistant!.providerID,
       mode: "build",
-      system: v1.metadata.assistant!.system,
       error: v1.metadata.error,
       parts: v1.parts.flatMap((part, index): MessageV2.Part[] => {
         const base = {
@@ -557,6 +569,8 @@ export function fromV1(v1: Message.Info): MessageWithParts {
                 if (part.toolInvocation.state === "partial-call") {
                   return {
                     status: "pending",
+                    input: {},
+                    raw: "",
                   }
                 }
 
@@ -596,6 +610,11 @@ export function fromV1(v1: Message.Info): MessageWithParts {
       id: v1.id,
       sessionID: v1.metadata.sessionID,
       role: "user",
+      agent: "user",
+      model: {
+        providerID: "",
+        modelID: "",
+      },
       time: {
         created: v1.metadata.time.created,
       },

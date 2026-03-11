@@ -7,8 +7,8 @@ import { Log } from "../util/log"
 import { Instance } from "../project/instance"
 import { lazy } from "@/util/lazy"
 import { Language } from "web-tree-sitter"
+import fs from "fs/promises"
 
-import { $ } from "bun"
 import { Filesystem } from "@/util/filesystem"
 import { fileURLToPath } from "url"
 import { Flag } from "@/flag/flag.ts"
@@ -16,6 +16,7 @@ import { Shell } from "@/shell/shell"
 
 import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncation"
+import { Plugin } from "@/plugin"
 
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
@@ -91,6 +92,10 @@ export const BashTool = Tool.define("bash", async () => {
 
       for (const node of tree.rootNode.descendantsOfType("command")) {
         if (!node) continue
+
+        // Get full command text including redirects if present
+        let commandText = node.parent?.type === "redirected_statement" ? node.parent.text : node.text
+
         const command = []
         for (let i = 0; i < node.childCount; i++) {
           const child = node.child(i)
@@ -111,36 +116,36 @@ export const BashTool = Tool.define("bash", async () => {
         if (["cd", "rm", "cp", "mv", "mkdir", "touch", "chmod", "chown", "cat"].includes(command[0])) {
           for (const arg of command.slice(1)) {
             if (arg.startsWith("-") || (command[0] === "chmod" && arg.startsWith("+"))) continue
-            const resolved = await $`realpath ${arg}`
-              .cwd(cwd)
-              .quiet()
-              .nothrow()
-              .text()
-              .then((x) => x.trim())
+            const resolved = await fs.realpath(path.resolve(cwd, arg)).catch(() => "")
             log.info("resolved path", { arg, resolved })
             if (resolved) {
-              // Git Bash on Windows returns Unix-style paths like /c/Users/...
               const normalized =
-                process.platform === "win32" && resolved.match(/^\/[a-z]\//)
-                  ? resolved.replace(/^\/([a-z])\//, (_, drive) => `${drive.toUpperCase()}:\\`).replace(/\//g, "\\")
-                  : resolved
-              if (!Instance.containsPath(normalized)) directories.add(normalized)
+                process.platform === "win32" ? Filesystem.windowsPath(resolved).replace(/\//g, "\\") : resolved
+              if (!Instance.containsPath(normalized)) {
+                const dir = (await Filesystem.isDir(normalized)) ? normalized : path.dirname(normalized)
+                directories.add(dir)
+              }
             }
           }
         }
 
         // cd covered by above check
         if (command.length && command[0] !== "cd") {
-          patterns.add(command.join(" "))
-          always.add(BashArity.prefix(command).join(" ") + "*")
+          patterns.add(commandText)
+          always.add(BashArity.prefix(command).join(" ") + " *")
         }
       }
 
       if (directories.size > 0) {
+        const globs = Array.from(directories).map((dir) => {
+          // Preserve POSIX-looking paths with /s, even on Windows
+          if (dir.startsWith("/")) return `${dir.replace(/[\\/]+$/, "")}/*`
+          return path.join(dir, "*")
+        })
         await ctx.ask({
           permission: "external_directory",
-          patterns: Array.from(directories),
-          always: Array.from(directories).map((x) => path.dirname(x) + "*"),
+          patterns: globs,
+          always: globs,
           metadata: {},
         })
       }
@@ -154,14 +159,21 @@ export const BashTool = Tool.define("bash", async () => {
         })
       }
 
+      const shellEnv = await Plugin.trigger(
+        "shell.env",
+        { cwd, sessionID: ctx.sessionID, callID: ctx.callID },
+        { env: {} },
+      )
       const proc = spawn(params.command, {
         shell,
         cwd,
         env: {
           ...process.env,
+          ...shellEnv.env,
         },
         stdio: ["ignore", "pipe", "pipe"],
         detached: process.platform !== "win32",
+        windowsHide: process.platform === "win32",
       })
 
       let output = ""

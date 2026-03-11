@@ -1,0 +1,222 @@
+---
+title: "مهارات الوكيل"
+description: "عرّف سلوكاً قابلاً لإعادة الاستخدام عبر تعريفات SKILL.md"
+---
+
+تتيح مهارات الوكيل لـ OpenCode اكتشاف تعليمات قابلة لإعادة الاستخدام من مستودعك أو من دليل المنزل.
+تُحمَّل المهارات عند الطلب عبر أداة `skill` المدمجة — يرى الوكلاء المهارات المتاحة ويمكنهم تحميل المحتوى الكامل عند الحاجة.
+
+---
+
+## وضع الملفات
+
+أنشئ مجلداً واحداً لكل اسم مهارة وضع بداخله ملف `SKILL.md`.
+يبحث OpenCode في هذه المواقع:
+
+- إعدادات المشروع: `.opencode/skills/<name>/SKILL.md`
+- إعدادات عامة: `~/.config/opencode/skills/<name>/SKILL.md`
+- مشروع متوافق مع Claude: `.claude/skills/<name>/SKILL.md`
+- عام متوافق مع Claude: `~/.claude/skills/<name>/SKILL.md`
+- مشروع متوافق مع الوكلاء: `.agents/skills/<name>/SKILL.md`
+- عام متوافق مع الوكلاء: `~/.agents/skills/<name>/SKILL.md`
+
+---
+
+## فهم الاكتشاف
+
+بالنسبة لمسارات المشروع المحلية، يتدرج OpenCode صعوداً من دليل العمل الحالي حتى يصل إلى `git worktree`.
+ويحمّل أي ملفات مطابقة لـ `skills/*/SKILL.md` داخل `.opencode/` وأي ملفات مطابقة لـ `.claude/skills/*/SKILL.md` أو `.agents/skills/*/SKILL.md` على طول الطريق.
+
+كما تُحمَّل التعريفات العامة أيضاً من `~/.config/opencode/skills/*/SKILL.md` و `~/.claude/skills/*/SKILL.md` و `~/.agents/skills/*/SKILL.md`.
+
+---
+
+## كتابة بيانات `frontmatter`
+
+يجب أن يبدأ كل ملف `SKILL.md` بـ `frontmatter` بتنسيق YAML.
+لا يتم التعرف إلا على الحقول التالية:
+
+- `name` (مطلوب)
+- `description` (مطلوب)
+- `license` (اختياري)
+- `compatibility` (اختياري)
+- `metadata` (اختياري، خريطة من سلسلة إلى سلسلة)
+
+يتم تجاهل أي حقول `frontmatter` غير معروفة.
+
+---
+
+## التحقق من الأسماء
+
+يجب أن يكون `name`:
+
+- بطول 1–64 حرفاً
+- أحرفاً وأرقاماً بحروف صغيرة مع فواصل شرطة مفردة
+- لا يبدأ ولا ينتهي بـ `-`
+- لا يحتوي على `--` متتالية
+- يطابق اسم الدليل الذي يحتوي على `SKILL.md`
+
+التعبير النمطي المكافئ:
+
+```text
+^[a-z0-9]+(-[a-z0-9]+)*$
+```
+
+---
+
+## اتباع قواعد الطول
+
+يجب أن يكون `description` بطول 1-1024 حرفاً.
+اجعله محدداً بما يكفي كي يختار الوكيل بشكل صحيح.
+
+---
+
+## استخدم مثالاً
+
+أنشئ `.opencode/skills/git-release/SKILL.md` بهذا الشكل:
+
+```markdown
+---
+name: git-release
+description: Create consistent releases and changelogs
+license: MIT
+compatibility: opencode
+metadata:
+  audience: maintainers
+  workflow: github
+---
+
+## What I do
+
+- Draft release notes from merged PRs
+- Propose a version bump
+- Provide a copy-pasteable `gh release create` command
+
+## When to use me
+
+Use this when you are preparing a tagged release.
+Ask clarifying questions if the target versioning scheme is unclear.
+```
+
+---
+
+## التعرّف على وصف الأداة
+
+يعرض OpenCode المهارات المتاحة في وصف أداة `skill`.
+يتضمن كل إدخال اسم المهارة ووصفها:
+
+```xml
+<available_skills>
+  <skill>
+    <name>git-release</name>
+    <description>Create consistent releases and changelogs</description>
+  </skill>
+</available_skills>
+```
+
+يقوم الوكيل بتحميل مهارة عبر استدعاء الأداة:
+
+```
+skill({ name: "git-release" })
+```
+
+---
+
+## تهيئة الصلاحيات
+
+تحكم في المهارات التي يمكن للوكلاء الوصول إليها باستخدام صلاحيات مبنية على أنماط داخل `opencode.json`:
+
+```json
+{
+  "permission": {
+    "skill": {
+      "*": "allow",
+      "pr-review": "allow",
+      "internal-*": "deny",
+      "experimental-*": "ask"
+    }
+  }
+}
+```
+
+| الصلاحية | السلوك                                 |
+| -------- | -------------------------------------- |
+| `allow`  | تُحمَّل المهارة فوراً                  |
+| `deny`   | تُخفى المهارة عن الوكيل ويُرفض الوصول  |
+| `ask`    | يُطلب من المستخدم الموافقة قبل التحميل |
+
+تدعم الأنماط أحرف البدل: يطابق `internal-*` كلاً من `internal-docs` و `internal-tools` وغير ذلك.
+
+---
+
+## تجاوز الإعدادات لكل وكيل
+
+امنح وكلاء محددين صلاحيات مختلفة عن الإعدادات الافتراضية العامة.
+
+**للوكلاء المخصصين** (في `frontmatter` الخاص بالوكيل):
+
+```yaml
+---
+permission:
+  skill:
+    "documents-*": "allow"
+---
+```
+
+**للوكلاء المدمجين** (في `opencode.json`):
+
+```json
+{
+  "agent": {
+    "plan": {
+      "permission": {
+        "skill": {
+          "internal-*": "allow"
+        }
+      }
+    }
+  }
+}
+```
+
+---
+
+## تعطيل أداة skill
+
+عطّل المهارات بالكامل للوكلاء الذين لا ينبغي أن يستخدموها:
+
+**للوكلاء المخصصين**:
+
+```yaml
+---
+tools:
+  skill: false
+---
+```
+
+**للوكلاء المدمجين**:
+
+```json
+{
+  "agent": {
+    "plan": {
+      "tools": {
+        "skill": false
+      }
+    }
+  }
+}
+```
+
+عند تعطيلها، يتم حذف قسم `<available_skills>` بالكامل.
+
+---
+
+## استكشاف أخطاء التحميل
+
+إذا لم تظهر مهارة:
+
+1. تحقّق من أن `SKILL.md` مكتوب بأحرف كبيرة بالكامل
+2. تحقّق من أن `frontmatter` تتضمن `name` و `description`
+3. تأكد من أن أسماء المهارات فريدة عبر جميع المواقع
+4. تحقّق من الصلاحيات — المهارات ذات `deny` تكون مخفية عن الوكلاء

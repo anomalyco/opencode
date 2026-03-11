@@ -2,6 +2,7 @@ import { Component } from "solid-js"
 import { useLanguage } from "@/context/language"
 
 export const SettingsAgents: Component = () => {
+  // TODO: Replace this placeholder with full agents settings controls.
   const language = useLanguage()
 
   return (

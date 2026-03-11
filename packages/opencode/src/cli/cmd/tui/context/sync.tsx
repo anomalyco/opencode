@@ -28,6 +28,7 @@ import { useArgs } from "./args"
 import { batch, onMount } from "solid-js"
 import { Log } from "@/util/log"
 import type { Path } from "@opencode-ai/sdk"
+import type { Workspace } from "@opencode-ai/sdk/v2"
 
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
@@ -73,6 +74,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       formatter: FormatterStatus[]
       vcs: VcsInfo | undefined
       path: Path
+      workspaceList: Workspace[]
     }>({
       provider_next: {
         all: [],
@@ -100,9 +102,16 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       formatter: [],
       vcs: undefined,
       path: { state: "", config: "", worktree: "", directory: "" },
+      workspaceList: [],
     })
 
     const sdk = useSDK()
+
+    async function syncWorkspaces() {
+      const result = await sdk.client.experimental.workspace.list().catch(() => undefined)
+      if (!result?.data) return
+      setStore("workspaceList", reconcile(result.data))
+    }
 
     sdk.event.listen((e) => {
       const event = e.details
@@ -299,6 +308,24 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           break
         }
 
+        case "message.part.delta": {
+          const parts = store.part[event.properties.messageID]
+          if (!parts) break
+          const result = Binary.search(parts, event.properties.partID, (p) => p.id)
+          if (!result.found) break
+          setStore(
+            "part",
+            event.properties.messageID,
+            produce((draft) => {
+              const part = draft[result.index]
+              const field = event.properties.field as keyof typeof part
+              const existing = part[field] as string | undefined
+              ;(part[field] as string) = (existing ?? "") + event.properties.delta
+            }),
+          )
+          break
+        }
+
         case "message.part.removed": {
           const parts = store.part[event.properties.messageID]
           const result = Binary.search(parts, event.properties.partID, (p) => p.id)
@@ -333,32 +360,57 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       const start = Date.now() - 30 * 24 * 60 * 60 * 1000
       const sessionListPromise = sdk.client.session
         .list({ start: start })
-        .then((x) => setStore("session", reconcile((x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))))
+        .then((x) => (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))
 
       // blocking - include session.list when continuing a session
+      const providersPromise = sdk.client.config.providers({}, { throwOnError: true })
+      const providerListPromise = sdk.client.provider.list({}, { throwOnError: true })
+      const agentsPromise = sdk.client.app.agents({}, { throwOnError: true })
+      const configPromise = sdk.client.config.get({}, { throwOnError: true })
       const blockingRequests: Promise<unknown>[] = [
-        sdk.client.config.providers({}, { throwOnError: true }).then((x) => {
-          batch(() => {
-            setStore("provider", reconcile(x.data!.providers))
-            setStore("provider_default", reconcile(x.data!.default))
-          })
-        }),
-        sdk.client.provider.list({}, { throwOnError: true }).then((x) => {
-          batch(() => {
-            setStore("provider_next", reconcile(x.data!))
-          })
-        }),
-        sdk.client.app.agents({}, { throwOnError: true }).then((x) => setStore("agent", reconcile(x.data ?? []))),
-        sdk.client.config.get({}, { throwOnError: true }).then((x) => setStore("config", reconcile(x.data!))),
+        providersPromise,
+        providerListPromise,
+        agentsPromise,
+        configPromise,
         ...(args.continue ? [sessionListPromise] : []),
       ]
 
       await Promise.all(blockingRequests)
         .then(() => {
+          const providersResponse = providersPromise.then((x) => x.data!)
+          const providerListResponse = providerListPromise.then((x) => x.data!)
+          const agentsResponse = agentsPromise.then((x) => x.data ?? [])
+          const configResponse = configPromise.then((x) => x.data!)
+          const sessionListResponse = args.continue ? sessionListPromise : undefined
+
+          return Promise.all([
+            providersResponse,
+            providerListResponse,
+            agentsResponse,
+            configResponse,
+            ...(sessionListResponse ? [sessionListResponse] : []),
+          ]).then((responses) => {
+            const providers = responses[0]
+            const providerList = responses[1]
+            const agents = responses[2]
+            const config = responses[3]
+            const sessions = responses[4]
+
+            batch(() => {
+              setStore("provider", reconcile(providers.providers))
+              setStore("provider_default", reconcile(providers.default))
+              setStore("provider_next", reconcile(providerList))
+              setStore("agent", reconcile(agents))
+              setStore("config", reconcile(config))
+              if (sessions !== undefined) setStore("session", reconcile(sessions))
+            })
+          })
+        })
+        .then(() => {
           if (store.status !== "complete") setStore("status", "partial")
           // non-blocking
           Promise.all([
-            ...(args.continue ? [] : [sessionListPromise]),
+            ...(args.continue ? [] : [sessionListPromise.then((sessions) => setStore("session", reconcile(sessions)))]),
             sdk.client.command.list().then((x) => setStore("command", reconcile(x.data ?? []))),
             sdk.client.lsp.status().then((x) => setStore("lsp", reconcile(x.data!))),
             sdk.client.mcp.status().then((x) => setStore("mcp", reconcile(x.data!))),
@@ -370,6 +422,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             sdk.client.provider.auth().then((x) => setStore("provider_auth", reconcile(x.data ?? {}))),
             sdk.client.vcs.get().then((x) => setStore("vcs", reconcile(x.data))),
             sdk.client.path.get().then((x) => setStore("path", reconcile(x.data!))),
+            syncWorkspaces(),
           ]).then(() => {
             setStore("status", "complete")
           })
@@ -437,6 +490,12 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           )
           fullSyncedSessions.add(sessionID)
         },
+      },
+      workspace: {
+        get(workspaceID: string) {
+          return store.workspaceList.find((workspace) => workspace.id === workspaceID)
+        },
+        sync: syncWorkspaces,
       },
       bootstrap,
     }
