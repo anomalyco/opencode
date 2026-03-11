@@ -46,8 +46,13 @@ import { applyPatch } from "diff"
 
 type ModeOption = { id: string; name: string; description?: string }
 type ModelOption = { modelId: string; name: string }
+type SessionUpdatePayload = Parameters<AgentSideConnection["sessionUpdate"]>[0]["update"]
 
 const DEFAULT_VARIANT_VALUE = "default"
+// Hard cap for any single text field in ACP tool_call_update payloads.
+// We enforce this per field (not per message) to avoid transport/client issues
+// when tools emit very large stdout/stderr blocks.
+const TOOL_UPDATE_TEXT_FIELD_LIMIT_BYTES = 10 * 1024
 
 export namespace ACP {
   const log = Log.create({ service: "acp-agent" })
@@ -284,22 +289,19 @@ export namespace ACP {
                   const hash = String(Bun.hash(output))
                   if (part.tool === "bash") {
                     if (this.bashSnapshots.get(part.callID) === hash) {
-                      await this.connection
-                        .sessionUpdate({
-                          sessionId,
-                          update: {
-                            sessionUpdate: "tool_call_update",
-                            toolCallId: part.callID,
-                            status: "in_progress",
-                            kind: toToolKind(part.tool),
-                            title: part.tool,
-                            locations: toLocations(part.tool, part.state.input),
-                            rawInput: part.state.input,
-                          },
-                        })
-                        .catch((error) => {
-                          log.error("failed to send tool in_progress to ACP", { error })
-                        })
+                      await this.sendSessionUpdate(
+                        sessionId,
+                        {
+                          sessionUpdate: "tool_call_update",
+                          toolCallId: part.callID,
+                          status: "in_progress",
+                          kind: toToolKind(part.tool),
+                          title: part.tool,
+                          locations: toLocations(part.tool, part.state.input),
+                          rawInput: part.state.input,
+                        },
+                        "tool in_progress",
+                      )
                       return
                     }
                     this.bashSnapshots.set(part.callID, hash)
@@ -312,23 +314,20 @@ export namespace ACP {
                     },
                   })
                 }
-                await this.connection
-                  .sessionUpdate({
-                    sessionId,
-                    update: {
-                      sessionUpdate: "tool_call_update",
-                      toolCallId: part.callID,
-                      status: "in_progress",
-                      kind: toToolKind(part.tool),
-                      title: part.tool,
-                      locations: toLocations(part.tool, part.state.input),
-                      rawInput: part.state.input,
-                      ...(content.length > 0 && { content }),
-                    },
-                  })
-                  .catch((error) => {
-                    log.error("failed to send tool in_progress to ACP", { error })
-                  })
+                await this.sendSessionUpdate(
+                  sessionId,
+                  {
+                    sessionUpdate: "tool_call_update",
+                    toolCallId: part.callID,
+                    status: "in_progress",
+                    kind: toToolKind(part.tool),
+                    title: part.tool,
+                    locations: toLocations(part.tool, part.state.input),
+                    rawInput: part.state.input,
+                    ...(content.length > 0 && { content }),
+                  },
+                  "tool in_progress",
+                )
                 return
 
               case "completed": {
@@ -390,59 +389,53 @@ export namespace ACP {
                   }
                 }
 
-                await this.connection
-                  .sessionUpdate({
-                    sessionId,
-                    update: {
-                      sessionUpdate: "tool_call_update",
-                      toolCallId: part.callID,
-                      status: "completed",
-                      kind,
-                      content,
-                      title: part.state.title,
-                      rawInput: part.state.input,
-                      rawOutput: {
-                        output: part.state.output,
-                        metadata: part.state.metadata,
-                      },
+                await this.sendSessionUpdate(
+                  sessionId,
+                  {
+                    sessionUpdate: "tool_call_update",
+                    toolCallId: part.callID,
+                    status: "completed",
+                    kind,
+                    content,
+                    title: part.state.title,
+                    rawInput: part.state.input,
+                    rawOutput: {
+                      output: part.state.output,
+                      metadata: part.state.metadata,
                     },
-                  })
-                  .catch((error) => {
-                    log.error("failed to send tool completed to ACP", { error })
-                  })
+                  },
+                  "tool completed",
+                )
                 return
               }
               case "error":
                 this.toolStarts.delete(part.callID)
                 this.bashSnapshots.delete(part.callID)
-                await this.connection
-                  .sessionUpdate({
-                    sessionId,
-                    update: {
-                      sessionUpdate: "tool_call_update",
-                      toolCallId: part.callID,
-                      status: "failed",
-                      kind: toToolKind(part.tool),
-                      title: part.tool,
-                      rawInput: part.state.input,
-                      content: [
-                        {
-                          type: "content",
-                          content: {
-                            type: "text",
-                            text: part.state.error,
-                          },
+                await this.sendSessionUpdate(
+                  sessionId,
+                  {
+                    sessionUpdate: "tool_call_update",
+                    toolCallId: part.callID,
+                    status: "failed",
+                    kind: toToolKind(part.tool),
+                    title: part.tool,
+                    rawInput: part.state.input,
+                    content: [
+                      {
+                        type: "content",
+                        content: {
+                          type: "text",
+                          text: part.state.error,
                         },
-                      ],
-                      rawOutput: {
-                        error: part.state.error,
-                        metadata: part.state.metadata,
                       },
+                    ],
+                    rawOutput: {
+                      error: part.state.error,
+                      metadata: part.state.metadata,
                     },
-                  })
-                  .catch((error) => {
-                    log.error("failed to send tool error to ACP", { error })
-                  })
+                  },
+                  "tool error",
+                )
                 return
             }
           }
@@ -828,23 +821,20 @@ export namespace ACP {
                   },
                 })
               }
-              await this.connection
-                .sessionUpdate({
-                  sessionId,
-                  update: {
-                    sessionUpdate: "tool_call_update",
-                    toolCallId: part.callID,
-                    status: "in_progress",
-                    kind: toToolKind(part.tool),
-                    title: part.tool,
-                    locations: toLocations(part.tool, part.state.input),
-                    rawInput: part.state.input,
-                    ...(runningContent.length > 0 && { content: runningContent }),
-                  },
-                })
-                .catch((err) => {
-                  log.error("failed to send tool in_progress to ACP", { error: err })
-                })
+              await this.sendSessionUpdate(
+                sessionId,
+                {
+                  sessionUpdate: "tool_call_update",
+                  toolCallId: part.callID,
+                  status: "in_progress",
+                  kind: toToolKind(part.tool),
+                  title: part.tool,
+                  locations: toLocations(part.tool, part.state.input),
+                  rawInput: part.state.input,
+                  ...(runningContent.length > 0 && { content: runningContent }),
+                },
+                "tool in_progress",
+              )
               break
             case "completed":
               this.toolStarts.delete(part.callID)
@@ -905,58 +895,52 @@ export namespace ACP {
                 }
               }
 
-              await this.connection
-                .sessionUpdate({
-                  sessionId,
-                  update: {
-                    sessionUpdate: "tool_call_update",
-                    toolCallId: part.callID,
-                    status: "completed",
-                    kind,
-                    content,
-                    title: part.state.title,
-                    rawInput: part.state.input,
-                    rawOutput: {
-                      output: part.state.output,
-                      metadata: part.state.metadata,
-                    },
+              await this.sendSessionUpdate(
+                sessionId,
+                {
+                  sessionUpdate: "tool_call_update",
+                  toolCallId: part.callID,
+                  status: "completed",
+                  kind,
+                  content,
+                  title: part.state.title,
+                  rawInput: part.state.input,
+                  rawOutput: {
+                    output: part.state.output,
+                    metadata: part.state.metadata,
                   },
-                })
-                .catch((err) => {
-                  log.error("failed to send tool completed to ACP", { error: err })
-                })
+                },
+                "tool completed",
+              )
               break
             case "error":
               this.toolStarts.delete(part.callID)
               this.bashSnapshots.delete(part.callID)
-              await this.connection
-                .sessionUpdate({
-                  sessionId,
-                  update: {
-                    sessionUpdate: "tool_call_update",
-                    toolCallId: part.callID,
-                    status: "failed",
-                    kind: toToolKind(part.tool),
-                    title: part.tool,
-                    rawInput: part.state.input,
-                    content: [
-                      {
-                        type: "content",
-                        content: {
-                          type: "text",
-                          text: part.state.error,
-                        },
+              await this.sendSessionUpdate(
+                sessionId,
+                {
+                  sessionUpdate: "tool_call_update",
+                  toolCallId: part.callID,
+                  status: "failed",
+                  kind: toToolKind(part.tool),
+                  title: part.tool,
+                  rawInput: part.state.input,
+                  content: [
+                    {
+                      type: "content",
+                      content: {
+                        type: "text",
+                        text: part.state.error,
                       },
-                    ],
-                    rawOutput: {
-                      error: part.state.error,
-                      metadata: part.state.metadata,
                     },
+                  ],
+                  rawOutput: {
+                    error: part.state.error,
+                    metadata: part.state.metadata,
                   },
-                })
-                .catch((err) => {
-                  log.error("failed to send tool error to ACP", { error: err })
-                })
+                },
+                "tool error",
+              )
               break
           }
         } else if (part.type === "text") {
@@ -1083,6 +1067,98 @@ export namespace ACP {
       const output = part.state.metadata["output"]
       if (typeof output !== "string") return
       return output
+    }
+
+    private async sendSessionUpdate(sessionId: string, update: SessionUpdatePayload, context: string) {
+      // Centralize ACP update sending so every tool_call_update goes through the
+      // same payload sanitizer before crossing the protocol boundary.
+      const sanitized = this.sanitizeToolCallUpdate(update)
+      await this.connection
+        .sessionUpdate({
+          sessionId,
+          update: sanitized,
+        })
+        .catch((error) => {
+          log.error(`failed to send ${context} to ACP`, { error })
+        })
+    }
+
+    private sanitizeToolCallUpdate(update: SessionUpdatePayload): SessionUpdatePayload {
+      // Only tool_call_update carries potentially large tool output text.
+      // Other ACP update variants should pass through unchanged.
+      if (update.sessionUpdate !== "tool_call_update") return update
+
+      // Candidate #1 for oversize payloads:
+      //   update.content[].content.text
+      // We only touch plain-text content blocks and preserve all other block types.
+      const content = update.content?.map((item) => {
+        if (item.type !== "content" || item.content.type !== "text") return item
+        return {
+          ...item,
+          content: {
+            ...item.content,
+            text: this.limitToolUpdateText(item.content.text, "update.content"),
+          },
+        }
+      })
+
+      // Candidate #2 for oversize payloads:
+      //   update.rawOutput.output
+      // This mirrors the same tool output in the raw payload envelope.
+      const rawOutput = (() => {
+        if (!update.rawOutput) return update.rawOutput
+        if (typeof update.rawOutput !== "object") return update.rawOutput
+        if (!("output" in update.rawOutput) || typeof update.rawOutput.output !== "string") {
+          return update.rawOutput
+        }
+        return {
+          ...update.rawOutput,
+          output: this.limitToolUpdateText(update.rawOutput.output, "rawOutput.output"),
+        }
+      })()
+
+      return {
+        ...update,
+        ...(content ? { content } : {}),
+        ...(rawOutput ? { rawOutput } : {}),
+      }
+    }
+
+    private limitToolUpdateText(value: string, field: "update.content" | "rawOutput.output") {
+      // Use byte size (UTF-8) instead of character count so the cap is stable
+      // across ASCII and multi-byte characters.
+      const size = Buffer.byteLength(value, "utf-8")
+      if (size <= TOOL_UPDATE_TEXT_FIELD_LIMIT_BYTES) return value
+
+      // Keep a human-readable truncation marker inside the same capped field so
+      // ACP clients can understand why text was shortened.
+      const suffix = `\n\n...[truncated for ACP ${field}: ${size - TOOL_UPDATE_TEXT_FIELD_LIMIT_BYTES} bytes omitted]`
+      const suffixBytes = Buffer.byteLength(suffix, "utf-8")
+      // Reserve space for the suffix first, then keep as much head text as fits.
+      const contentBudget = Math.max(0, TOOL_UPDATE_TEXT_FIELD_LIMIT_BYTES - suffixBytes)
+      const head = this.truncateUtf8ByBytes(value, contentBudget)
+
+      log.warn("truncated oversize ACP tool_call_update field", {
+        field,
+        originalBytes: size,
+        truncatedToBytes: TOOL_UPDATE_TEXT_FIELD_LIMIT_BYTES,
+      })
+      return `${head}${suffix}`
+    }
+
+    private truncateUtf8ByBytes(value: string, maxBytes: number) {
+      // Iterate by Unicode code point (`for...of`) and stop before exceeding the
+      // byte budget, preventing invalid UTF-8 splits.
+      if (maxBytes <= 0) return ""
+      let out = ""
+      let used = 0
+      for (const char of value) {
+        const charBytes = Buffer.byteLength(char, "utf-8")
+        if (used + charBytes > maxBytes) break
+        out += char
+        used += charBytes
+      }
+      return out
     }
 
     private async toolStart(sessionId: string, part: ToolPart) {
