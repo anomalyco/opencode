@@ -126,3 +126,7 @@ const table = sqliteTable("session", {
 ## Type Checking
 
 - Always run `bun typecheck` from package directories (e.g., `packages/opencode`), never `tsc` directly.
+
+## Pull Requests
+
+Before creating any pull request with `gh pr create`, read `.github/pull_request_template.md` and use its exact section structure in the PR body. The CI bot will auto-close PRs that don't match the template. Fill in all sections; mark N/A where not applicable.
