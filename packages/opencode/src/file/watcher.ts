@@ -24,12 +24,8 @@ export namespace FileWatcher {
   const log = Log.create({ service: "file.watcher" })
   const hold = new Map<string, number>()
 
-  function key(input: string) {
-    return path.resolve(input)
-  }
-
   export function paused(file: string) {
-    const input = key(file)
+    const input = path.resolve(file)
     for (const [dir, count] of hold) {
       if (count < 1) continue
       if (input === dir) return true
@@ -39,7 +35,7 @@ export namespace FileWatcher {
   }
 
   export function pause(dir: string) {
-    const id = key(dir)
+    const id = path.resolve(dir)
     hold.set(id, (hold.get(id) ?? 0) + 1)
     let live = true
     return () => {
