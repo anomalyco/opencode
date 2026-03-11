@@ -29,6 +29,7 @@ import {
   PollSuccess,
   UserCode,
 } from "./schema"
+import * as Array from "effect/Array"
 
 export * from "./schema"
 
@@ -139,29 +140,19 @@ export class AccountService extends ServiceMap.Service<AccountService, AccountSe
       const repo = yield* AccountRepo
       const http = yield* HttpClient.HttpClient
       const httpRead = withTransientReadRetry(http)
+      const httpOk = HttpClient.filterStatusOk(http)
+      const httpReadOk = HttpClient.filterStatusOk(httpRead)
 
       const executeRead = (request: HttpClientRequest.HttpClientRequest) =>
         httpRead.execute(request).pipe(mapAccountServiceError("HTTP request failed"))
 
-      const executeEffect = <E>(request: Effect.Effect<HttpClientRequest.HttpClientRequest, E>) =>
-        request.pipe(
-          Effect.flatMap((req) => http.execute(req)),
-          mapAccountServiceError("HTTP request failed"),
-        )
+      const executeReadOk = (request: HttpClientRequest.HttpClientRequest) =>
+        httpReadOk.execute(request).pipe(mapAccountServiceError("HTTP request failed"))
 
-      // Treats selected non-2xx statuses as an absent resource instead of a
-      // service failure.
-      const okOrNone = (response: HttpClientResponse.HttpClientResponse, empty: ReadonlyArray<number> = []) =>
-        HttpClientResponse.filterStatusOk(response).pipe(
-          Effect.map(Option.some),
-          Effect.catch((error) =>
-            error.reason._tag === "StatusCodeError" &&
-            error.response !== undefined &&
-            empty.includes(error.response.status)
-              ? Effect.succeed(Option.none<HttpClientResponse.HttpClientResponse>())
-              : Effect.fail(error),
-          ),
-          mapAccountServiceError(),
+      const executeEffectOk = <E>(request: Effect.Effect<HttpClientRequest.HttpClientRequest, E>) =>
+        request.pipe(
+          Effect.flatMap((req) => httpOk.execute(req)),
+          mapAccountServiceError("HTTP request failed"),
         )
 
       // Returns a usable access token for a stored account row, refreshing and
@@ -170,7 +161,7 @@ export class AccountService extends ServiceMap.Service<AccountService, AccountSe
         const now = yield* Clock.currentTimeMillis
         if (row.token_expiry && row.token_expiry > now) return row.access_token
 
-        const response = yield* executeEffect(
+        const response = yield* executeEffectOk(
           HttpClientRequest.post(`${row.url}/auth/device/token`).pipe(
             HttpClientRequest.acceptJson,
             HttpClientRequest.schemaBodyJson(TokenRefreshRequest)({
@@ -181,9 +172,7 @@ export class AccountService extends ServiceMap.Service<AccountService, AccountSe
           ),
         )
 
-        const ok = yield* HttpClientResponse.filterStatusOk(response).pipe(mapAccountServiceError())
-
-        const parsed = yield* HttpClientResponse.schemaBodyJson(TokenRefresh)(ok).pipe(
+        const parsed = yield* HttpClientResponse.schemaBodyJson(TokenRefresh)(response).pipe(
           mapAccountServiceError("Failed to decode response"),
         )
 
@@ -209,16 +198,27 @@ export class AccountService extends ServiceMap.Service<AccountService, AccountSe
       })
 
       const fetchOrgs = Effect.fnUntraced(function* (url: string, accessToken: AccessToken) {
-        const response = yield* executeRead(
+        const response = yield* executeReadOk(
           HttpClientRequest.get(`${url}/api/orgs`).pipe(
             HttpClientRequest.acceptJson,
             HttpClientRequest.bearerToken(accessToken),
           ),
         )
 
-        const ok = yield* HttpClientResponse.filterStatusOk(response).pipe(mapAccountServiceError())
+        return yield* HttpClientResponse.schemaBodyJson(Schema.Array(Org))(response).pipe(
+          mapAccountServiceError("Failed to decode response"),
+        )
+      })
 
-        return yield* HttpClientResponse.schemaBodyJson(Schema.Array(Org))(ok).pipe(
+      const fetchUser = Effect.fnUntraced(function* (url: string, accessToken: AccessToken) {
+        const response = yield* executeReadOk(
+          HttpClientRequest.get(`${url}/api/user`).pipe(
+            HttpClientRequest.acceptJson,
+            HttpClientRequest.bearerToken(accessToken),
+          ),
+        )
+
+        return yield* HttpClientResponse.schemaBodyJson(User)(response).pipe(
           mapAccountServiceError("Failed to decode response"),
         )
       })
@@ -265,32 +265,25 @@ export class AccountService extends ServiceMap.Service<AccountService, AccountSe
           ),
         )
 
-        const ok = yield* okOrNone(response, [404])
-        if (Option.isNone(ok)) return Option.none()
+        if (response.status === 404) return Option.none()
 
-        const parsed = yield* HttpClientResponse.schemaBodyJson(RemoteConfig)(ok.value).pipe(
+        const ok = yield* HttpClientResponse.filterStatusOk(response).pipe(mapAccountServiceError())
+
+        const parsed = yield* HttpClientResponse.schemaBodyJson(RemoteConfig)(ok).pipe(
           mapAccountServiceError("Failed to decode response"),
         )
         return Option.some(parsed.config)
       })
 
       const login = Effect.fn("AccountService.login")(function* (server: string) {
-        const response = yield* executeEffect(
+        const response = yield* executeEffectOk(
           HttpClientRequest.post(`${server}/auth/device/code`).pipe(
             HttpClientRequest.acceptJson,
             HttpClientRequest.schemaBodyJson(ClientId)({ client_id: clientId }),
           ),
         )
 
-        const ok = yield* okOrNone(response)
-        if (Option.isNone(ok)) {
-          const body = yield* response.text.pipe(Effect.orElseSucceed(() => ""))
-          return yield* new AccountServiceError({
-            message: `Failed to initiate device flow: ${body || response.status}`,
-          })
-        }
-
-        const parsed = yield* HttpClientResponse.schemaBodyJson(DeviceAuth)(ok.value).pipe(
+        const parsed = yield* HttpClientResponse.schemaBodyJson(DeviceAuth)(response).pipe(
           mapAccountServiceError("Failed to decode response"),
         )
         return new Login({
@@ -304,7 +297,7 @@ export class AccountService extends ServiceMap.Service<AccountService, AccountSe
       })
 
       const poll = Effect.fn("AccountService.poll")(function* (input: Login) {
-        const response = yield* executeEffect(
+        const response = yield* executeEffectOk(
           HttpClientRequest.post(`${input.server}/auth/device/token`).pipe(
             HttpClientRequest.acceptJson,
             HttpClientRequest.schemaBodyJson(DeviceTokenRequest)({
@@ -320,41 +313,31 @@ export class AccountService extends ServiceMap.Service<AccountService, AccountSe
         )
 
         if (parsed instanceof DeviceTokenError) return parsed.toPollResult()
+        const accessToken = parsed.access_token
 
-        const access = parsed.access_token
+        const user = fetchUser(input.server, accessToken)
+        const orgs = fetchOrgs(input.server, accessToken)
 
-        const fetchUser = executeRead(
-          HttpClientRequest.get(`${input.server}/api/user`).pipe(
-            HttpClientRequest.acceptJson,
-            HttpClientRequest.bearerToken(access),
-          ),
-        ).pipe(
-          Effect.flatMap((r) =>
-            HttpClientResponse.schemaBodyJson(User)(r).pipe(mapAccountServiceError("Failed to decode response")),
-          ),
-        )
+        const [account, remoteOrgs] = yield* Effect.all([user, orgs], { concurrency: 2 })
 
-        const orgs = fetchOrgs(input.server, access)
-
-        const [user, remoteOrgs] = yield* Effect.all([fetchUser, orgs], { concurrency: 2 })
-
-        const firstOrgID = remoteOrgs.length > 0 ? Option.some(remoteOrgs[0].id) : Option.none<OrgID>()
+        // TODO: When there are multiple orgs, let the user choose
+        const firstOrgID = remoteOrgs.length > 0 ? Option.some(remoteOrgs[0].id) : Option.none()
 
         const now = yield* Clock.currentTimeMillis
         const expiry = now + Duration.toMillis(parsed.expires_in)
-        const refresh = parsed.refresh_token
+        const refreshToken = parsed.refresh_token
 
         yield* repo.persistAccount({
-          id: user.id,
-          email: user.email,
+          id: account.id,
+          email: account.email,
           url: input.server,
-          accessToken: parsed.access_token,
-          refreshToken: refresh,
+          accessToken,
+          refreshToken,
           expiry,
           orgID: firstOrgID,
         })
 
-        return new PollSuccess({ email: user.email })
+        return new PollSuccess({ email: account.email })
       })
 
       return AccountService.of({
