@@ -116,10 +116,11 @@ export namespace MCP {
     })
   }
 
-  type CallToolResult = z.infer<typeof CallToolResultSchema>
-
-  function callToolErrorText(result: CallToolResult): string {
-    const content = Array.isArray(result.content) ? result.content : []
+  function callToolErrorText(result: unknown): string {
+    const content =
+      result && typeof result === "object" && "content" in result && Array.isArray((result as any).content)
+        ? ((result as any).content as unknown[])
+        : []
     const lines = content
       .map((item) => {
         if (item && typeof item === "object") {
