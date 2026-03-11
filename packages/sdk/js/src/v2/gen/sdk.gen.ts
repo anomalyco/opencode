@@ -1294,6 +1294,7 @@ export class Session2 extends HeyApiClient {
       parentID?: string
       title?: string
       permission?: PermissionRuleset
+      workspaceID?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1307,6 +1308,7 @@ export class Session2 extends HeyApiClient {
             { in: "body", key: "parentID" },
             { in: "body", key: "title" },
             { in: "body", key: "permission" },
+            { in: "body", key: "workspaceID" },
           ],
         },
       ],

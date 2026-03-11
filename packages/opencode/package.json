@@ -27,6 +27,7 @@
   },
   "devDependencies": {
     "@babel/core": "7.28.4",
+    "@effect/language-service": "0.79.0",
     "@octokit/webhooks-types": "7.6.1",
     "@opencode-ai/script": "workspace:*",
     "@parcel/watcher-darwin-arm64": "2.5.1",
@@ -41,6 +42,7 @@
     "@types/babel__core": "7.20.5",
     "@types/bun": "catalog:",
     "@types/mime-types": "3.0.1",
+    "@types/semver": "^7.5.8",
     "@types/turndown": "5.0.5",
     "@types/yargs": "17.0.33",
     "@types/which": "3.0.4",

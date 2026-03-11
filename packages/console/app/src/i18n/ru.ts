@@ -492,7 +492,6 @@ export const dict = {
   "workspace.cost.deletedSuffix": "(удалено)",
   "workspace.cost.empty": "Нет данных об использовании за выбранный период.",
   "workspace.cost.subscriptionShort": "подписка",
-  "workspace.cost.liteShort": "lite",
 
   "workspace.keys.title": "API Ключи",
   "workspace.keys.subtitle": "Управляйте вашими API ключами для доступа к сервисам opencode.",

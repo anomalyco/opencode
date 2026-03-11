@@ -24,6 +24,7 @@ export const dict = {
   "footer.github": "GitHub",
   "footer.docs": "文档",
   "footer.changelog": "更新日志",
+  "footer.feishu": "飞书",
   "footer.discord": "Discord",
   "footer.x": "X",
 
@@ -463,7 +464,6 @@ export const dict = {
   "workspace.cost.deletedSuffix": "(已删除)",
   "workspace.cost.empty": "所选期间无可用使用数据。",
   "workspace.cost.subscriptionShort": "订阅",
-  "workspace.cost.liteShort": "lite",
 
   "workspace.keys.title": "API 密钥",
   "workspace.keys.subtitle": "管理访问 OpenCode 服务的 API 密钥。",

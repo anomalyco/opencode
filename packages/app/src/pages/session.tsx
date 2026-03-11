@@ -32,12 +32,12 @@ import { useLayout } from "@/context/layout"
 import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
+import { useTerminal } from "@/context/terminal"
 import { createSessionComposerState, SessionComposerRegion } from "@/pages/session/composer"
-import { createOpenReviewFile, createSizing } from "@/pages/session/helpers"
+import { createOpenReviewFile, createSizing, focusTerminalById } from "@/pages/session/helpers"
 import { MessageTimeline } from "@/pages/session/message-timeline"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
 import { resetSessionModel, syncSessionModel } from "@/pages/session/session-model-helpers"
-import { createScrollSpy } from "@/pages/session/scroll-spy"
 import { SessionMobileTabs } from "@/pages/session/session-mobile-tabs"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
@@ -122,9 +122,13 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
       return
     }
     const beforeTop = el.scrollTop
+    const beforeHeight = el.scrollHeight
     fn()
-    void el.scrollHeight
-    el.scrollTop = beforeTop
+    requestAnimationFrame(() => {
+      const delta = el.scrollHeight - beforeHeight
+      if (!delta) return
+      el.scrollTop = beforeTop + delta
+    })
   }
 
   const backfillTurns = () => {
@@ -207,7 +211,7 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
     if (!input.userScrolled()) return
     const el = input.scroller()
     if (!el) return
-    if (el.scrollHeight - el.clientHeight + el.scrollTop >= turnScrollThreshold) return
+    if (el.scrollTop >= turnScrollThreshold) return
 
     const start = turnStart()
     if (start > 0) {
@@ -264,6 +268,7 @@ export default function Page() {
   const sdk = useSDK()
   const prompt = usePrompt()
   const comments = useComments()
+  const terminal = useTerminal()
   const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
 
   createEffect(() => {
@@ -281,6 +286,7 @@ export default function Page() {
   const [ui, setUi] = createStore({
     git: false,
     pendingMessage: undefined as string | undefined,
+    reviewSnap: false,
     scrollGesture: 0,
     scroll: {
       overflow: false,
@@ -426,10 +432,12 @@ export default function Page() {
 
   createEffect(
     on(
-      () => params.id,
-      (id, prev) => {
-        if (id || !prev) return
-        resetSessionModel(local)
+      () => ({ dir: params.dir, id: params.id }),
+      (next, prev) => {
+        if (!prev) return
+        if (next.dir === prev.dir && next.id === prev.id) return
+        if (prev.id) sync.session.evict(prev.id, prev.dir)
+        if (!next.id) resetSessionModel(local)
       },
       { defer: true },
     ),
@@ -454,6 +462,21 @@ export default function Page() {
     return key
   }, sessionKey())
 
+  let reviewFrame: number | undefined
+
+  createComputed((prev) => {
+    const open = desktopReviewOpen()
+    if (prev === undefined || prev === open) return open
+
+    if (reviewFrame !== undefined) cancelAnimationFrame(reviewFrame)
+    setUi("reviewSnap", true)
+    reviewFrame = requestAnimationFrame(() => {
+      reviewFrame = undefined
+      setUi("reviewSnap", false)
+    })
+    return open
+  }, desktopReviewOpen())
+
   const turnDiffs = createMemo(() => lastUserMessage()?.summary?.diffs ?? [])
   const reviewDiffs = createMemo(() => (store.changes === "session" ? diffs() : turnDiffs()))
 
@@ -464,20 +487,49 @@ export default function Page() {
     return "main"
   })
 
-  const activeMessage = createMemo(() => {
-    if (!store.messageId) return lastUserMessage()
-    const found = visibleUserMessages()?.find((m) => m.id === store.messageId)
-    return found ?? lastUserMessage()
-  })
   const setActiveMessage = (message: UserMessage | undefined) => {
+    messageMark = scrollMark
     setStore("messageId", message?.id)
+  }
+
+  const anchor = (id: string) => `message-${id}`
+
+  const cursor = () => {
+    const root = scroller
+    if (!root) return store.messageId
+
+    const box = root.getBoundingClientRect()
+    const line = box.top + 100
+    const list = [...root.querySelectorAll<HTMLElement>("[data-message-id]")]
+      .map((el) => {
+        const id = el.dataset.messageId
+        if (!id) return
+
+        const rect = el.getBoundingClientRect()
+        return { id, top: rect.top, bottom: rect.bottom }
+      })
+      .filter((item): item is { id: string; top: number; bottom: number } => !!item)
+
+    const shown = list.filter((item) => item.bottom > box.top && item.top < box.bottom)
+    const hit = shown.find((item) => item.top <= line && item.bottom >= line)
+    if (hit) return hit.id
+
+    const near = [...shown].sort((a, b) => {
+      const da = Math.abs(a.top - line)
+      const db = Math.abs(b.top - line)
+      if (da !== db) return da - db
+      return a.top - b.top
+    })[0]
+    if (near) return near.id
+
+    return list.filter((item) => item.top <= line).at(-1)?.id ?? list[0]?.id ?? store.messageId
   }
 
   function navigateMessageByOffset(offset: number) {
     const msgs = visibleUserMessages()
     if (msgs.length === 0) return
 
-    const current = store.messageId
+    const current = store.messageId && messageMark === scrollMark ? store.messageId : cursor()
     const base = current ? msgs.findIndex((m) => m.id === current) : msgs.length
     const currentIndex = base === -1 ? msgs.length : base
     const targetIndex = currentIndex + offset
@@ -550,6 +602,8 @@ export default function Page() {
   let dockHeight = 0
   let scroller: HTMLDivElement | undefined
   let content: HTMLDivElement | undefined
+  let scrollMark = 0
+  let messageMark = 0
 
   const scrollGestureWindowMs = 250
 
@@ -594,6 +648,7 @@ export default function Page() {
       () => {
         setStore("messageId", undefined)
         setStore("changes", "session")
+        setUi("pendingMessage", undefined)
       },
       { defer: true },
     ),
@@ -706,8 +761,11 @@ export default function Page() {
       return
     }
 
-    // Don't autofocus chat if desktop terminal panel is open
-    if (isDesktop() && view().terminal.opened()) return
+    // Prefer the open terminal over the composer when it can take focus
+    if (view().terminal.opened()) {
+      const id = terminal.active()
+      if (id && focusTerminalById(id)) return
+    }
 
     // Only treat explicit scroll keys as potential "user scroll" gestures.
     if (event.key === "PageUp" || event.key === "PageDown" || event.key === "Home" || event.key === "End") {
@@ -799,10 +857,40 @@ export default function Page() {
   }
 
   const emptyTurn = () => (
-    <div class="h-full pb-64 flex flex-col items-center justify-center text-center gap-6">
+    <div class="h-full pb-64 -mt-4 flex flex-col items-center justify-center text-center gap-6">
       <div class="text-14-regular text-text-weak max-w-56">{language.t("session.review.noChanges")}</div>
     </div>
   )
+
+  const reviewEmpty = (input: { loadingClass: string; emptyClass: string }) => {
+    if (store.changes === "turn") return emptyTurn()
+
+    if (hasReview() && !diffsReady()) {
+      return <div class={input.loadingClass}>{language.t("session.review.loadingChanges")}</div>
+    }
+
+    if (reviewEmptyKey() === "session.review.noVcs") {
+      return (
+        <div class={input.emptyClass}>
+          <div class="flex flex-col gap-3">
+            <div class="text-14-medium text-text-strong">Create a Git repository</div>
+            <div class="text-14-regular text-text-base max-w-md" style={{ "line-height": "var(--line-height-normal)" }}>
+              Track, review, and undo changes in this project
+            </div>
+          </div>
+          <Button size="large" disabled={ui.git} onClick={initGit}>
+            {ui.git ? "Creating Git repository..." : "Create Git repository"}
+          </Button>
+        </div>
+      )
+    }
+
+    return (
+      <div class={input.emptyClass}>
+        <div class="text-14-regular text-text-weak max-w-56">{language.t(reviewEmptyKey())}</div>
+      </div>
+    )
+  }
 
   const reviewContent = (input: {
     diffStyle: DiffStyle
@@ -812,98 +900,25 @@ export default function Page() {
     emptyClass: string
   }) => (
     <Show when={!store.deferRender}>
-      <Switch>
-        <Match when={store.changes === "turn" && !!params.id}>
-          <SessionReviewTab
-            title={changesTitle()}
-            empty={emptyTurn()}
-            diffs={reviewDiffs}
-            view={view}
-            diffStyle={input.diffStyle}
-            onDiffStyleChange={input.onDiffStyleChange}
-            onScrollRef={(el) => setTree("reviewScroll", el)}
-            focusedFile={tree.activeDiff}
-            onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
-            onLineCommentUpdate={updateCommentInContext}
-            onLineCommentDelete={removeCommentFromContext}
-            lineCommentActions={reviewCommentActions()}
-            comments={comments.all()}
-            focusedComment={comments.focus()}
-            onFocusedCommentChange={comments.setFocus}
-            onViewFile={openReviewFile}
-            classes={input.classes}
-          />
-        </Match>
-        <Match when={hasReview()}>
-          <Show
-            when={diffsReady()}
-            fallback={<div class={input.loadingClass}>{language.t("session.review.loadingChanges")}</div>}
-          >
-            <SessionReviewTab
-              title={changesTitle()}
-              diffs={reviewDiffs}
-              view={view}
-              diffStyle={input.diffStyle}
-              onDiffStyleChange={input.onDiffStyleChange}
-              onScrollRef={(el) => setTree("reviewScroll", el)}
-              focusedFile={tree.activeDiff}
-              onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
-              onLineCommentUpdate={updateCommentInContext}
-              onLineCommentDelete={removeCommentFromContext}
-              lineCommentActions={reviewCommentActions()}
-              comments={comments.all()}
-              focusedComment={comments.focus()}
-              onFocusedCommentChange={comments.setFocus}
-              onViewFile={openReviewFile}
-              classes={input.classes}
-            />
-          </Show>
-        </Match>
-        <Match when={true}>
-          <SessionReviewTab
-            title={changesTitle()}
-            empty={
-              store.changes === "turn" ? (
-                emptyTurn()
-              ) : reviewEmptyKey() === "session.review.noVcs" ? (
-                <div class={input.emptyClass}>
-                  <div class="flex flex-col gap-3">
-                    <div class="text-14-medium text-text-strong">Create a Git repository</div>
-                    <div
-                      class="text-14-regular text-text-base max-w-md"
-                      style={{ "line-height": "var(--line-height-normal)" }}
-                    >
-                      Track, review, and undo changes in this project
-                    </div>
-                  </div>
-                  <Button size="large" disabled={ui.git} onClick={initGit}>
-                    {ui.git ? "Creating Git repository..." : "Create Git repository"}
-                  </Button>
-                </div>
-              ) : (
-                <div class={input.emptyClass}>
-                  <div class="text-14-regular text-text-weak max-w-56">{language.t(reviewEmptyKey())}</div>
-                </div>
-              )
-            }
-            diffs={reviewDiffs}
-            view={view}
-            diffStyle={input.diffStyle}
-            onDiffStyleChange={input.onDiffStyleChange}
-            onScrollRef={(el) => setTree("reviewScroll", el)}
-            focusedFile={tree.activeDiff}
-            onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
-            onLineCommentUpdate={updateCommentInContext}
-            onLineCommentDelete={removeCommentFromContext}
-            lineCommentActions={reviewCommentActions()}
-            comments={comments.all()}
-            focusedComment={comments.focus()}
-            onFocusedCommentChange={comments.setFocus}
-            onViewFile={openReviewFile}
-            classes={input.classes}
-          />
-        </Match>
-      </Switch>
+      <SessionReviewTab
+        title={changesTitle()}
+        empty={reviewEmpty(input)}
+        diffs={reviewDiffs}
+        view={view}
+        diffStyle={input.diffStyle}
+        onDiffStyleChange={input.onDiffStyleChange}
+        onScrollRef={(el) => setTree("reviewScroll", el)}
+        focusedFile={tree.activeDiff}
+        onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
+        onLineCommentUpdate={updateCommentInContext}
+        onLineCommentDelete={removeCommentFromContext}
+        lineCommentActions={reviewCommentActions()}
+        comments={comments.all()}
+        focusedComment={comments.focus()}
+        onFocusedCommentChange={comments.setFocus}
+        onViewFile={openReviewFile}
+        classes={input.classes}
+      />
     </Show>
   )
 
@@ -914,7 +929,7 @@ export default function Page() {
           diffStyle: layout.review.diffStyle(),
           onDiffStyleChange: layout.review.setDiffStyle,
           loadingClass: "px-6 py-4 text-text-weak",
-          emptyClass: "h-full pb-64 flex flex-col items-center justify-center text-center gap-6",
+          emptyClass: "h-full pb-64 -mt-4 flex flex-col items-center justify-center text-center gap-6",
         })}
       </div>
     </div>
@@ -1088,17 +1103,11 @@ export default function Page() {
 
   let scrollStateFrame: number | undefined
   let scrollStateTarget: HTMLDivElement | undefined
-  const scrollSpy = createScrollSpy({
-    onActive: (id) => {
-      if (id === store.messageId) return
-      setStore("messageId", id)
-    },
-  })
 
   const updateScrollState = (el: HTMLDivElement) => {
     const max = el.scrollHeight - el.clientHeight
     const overflow = max > 1
-    const bottom = !overflow || Math.abs(el.scrollTop) <= 2 || !autoScroll.userScrolled()
+    const bottom = !overflow || el.scrollTop >= max - 2
 
     if (ui.scroll.overflow === overflow && ui.scroll.bottom === bottom) return
     setUi("scroll", { overflow, bottom })
@@ -1121,7 +1130,7 @@ export default function Page() {
 
   const resumeScroll = () => {
     setStore("messageId", undefined)
-    autoScroll.smoothScrollToBottom()
+    autoScroll.forceScrollToBottom()
     clearMessageHash()
 
     const el = scroller
@@ -1141,23 +1150,14 @@ export default function Page() {
     ),
   )
 
-  createEffect(
-    on(
-      sessionKey,
-      () => {
-        scrollSpy.clear()
-      },
-      { defer: true },
-    ),
-  )
-
-  const anchor = (id: string) => `message-${id}`
-
   const setScrollRef = (el: HTMLDivElement | undefined) => {
     scroller = el
     autoScroll.scrollRef(el)
-    scrollSpy.setContainer(el)
     if (el) scheduleScrollState(el)
+  }
+
+  const markUserScroll = () => {
+    scrollMark += 1
   }
 
   createResizeObserver(
@@ -1165,7 +1165,6 @@ export default function Page() {
     () => {
       const el = scroller
       if (el) scheduleScrollState(el)
-      scrollSpy.markDirty()
     },
   )
 
@@ -1189,14 +1188,15 @@ export default function Page() {
 
       const el = scroller
       const delta = next - dockHeight
-      const stick = el ? Math.abs(el.scrollTop) < 10 + Math.max(0, delta) : false
+      const stick = el
+        ? !autoScroll.userScrolled() || el.scrollHeight - el.clientHeight - el.scrollTop < 10 + Math.max(0, delta)
+        : false
 
       dockHeight = next
 
-      if (stick) autoScroll.smoothScrollToBottom()
+      if (stick) autoScroll.forceScrollToBottom()
 
       if (el) scheduleScrollState(el)
-      scrollSpy.markDirty()
     },
   )
 
@@ -1224,7 +1224,7 @@ export default function Page() {
 
   onCleanup(() => {
     document.removeEventListener("keydown", handleKeyDown)
-    scrollSpy.destroy()
+    if (reviewFrame !== undefined) cancelAnimationFrame(reviewFrame)
     if (scrollStateFrame !== undefined) cancelAnimationFrame(scrollStateFrame)
   })
 
@@ -1246,7 +1246,7 @@ export default function Page() {
           classList={{
             "@container relative shrink-0 flex flex-col min-h-0 h-full bg-background-stronger flex-1 md:flex-none": true,
             "transition-[width] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
-              !size.active(),
+              !size.active() && !ui.reviewSnap,
           }}
           style={{
             width: sessionPanelWidth(),
@@ -1255,7 +1255,7 @@ export default function Page() {
           <div class="flex-1 min-h-0 overflow-hidden">
             <Switch>
               <Match when={params.id}>
-                <Show when={activeMessage()}>
+                <Show when={lastUserMessage()}>
                   <MessageTimeline
                     mobileChanges={mobileChanges()}
                     mobileFallback={reviewContent({
@@ -1266,7 +1266,7 @@ export default function Page() {
                         container: "px-4",
                       },
                       loadingClass: "px-4 py-4 text-text-weak",
-                      emptyClass: "h-full pb-64 flex flex-col items-center justify-center text-center gap-6",
+                      emptyClass: "h-full pb-64 -mt-4 flex flex-col items-center justify-center text-center gap-6",
                     })}
                     scroll={ui.scroll}
                     onResumeScroll={resumeScroll}
@@ -1275,11 +1275,9 @@ export default function Page() {
                     onAutoScrollHandleScroll={autoScroll.handleScroll}
                     onMarkScrollGesture={markScrollGesture}
                     hasScrollGesture={hasScrollGesture}
-                    isDesktop={isDesktop()}
-                    onScrollSpyScroll={scrollSpy.onScroll}
+                    onUserScroll={markUserScroll}
                     onTurnBackfillScroll={historyWindow.onScrollerScroll}
                     onAutoScrollInteraction={autoScroll.handleInteraction}
-                    onPreserveScrollAnchor={autoScroll.preserve}
                     centered={centered()}
                     setContentRef={(el) => {
                       content = el
@@ -1296,8 +1294,6 @@ export default function Page() {
                     }}
                     renderedUserMessages={historyWindow.renderedUserMessages()}
                     anchor={anchor}
-                    onRegisterMessage={scrollSpy.register}
-                    onUnregisterMessage={scrollSpy.unregister}
                   />
                 </Show>
               </Match>
@@ -1362,6 +1358,7 @@ export default function Page() {
           reviewPanel={reviewPanel}
           activeDiff={tree.activeDiff}
           focusReviewDiff={focusReviewDiff}
+          reviewSnap={ui.reviewSnap}
           size={size}
         />
       </div>

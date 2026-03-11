@@ -32,7 +32,8 @@ import { Flag } from "../flag/flag"
 import { ulid } from "ulid"
 import { spawn } from "child_process"
 import { Command } from "../command"
-import { $, fileURLToPath, pathToFileURL } from "bun"
+import { $ } from "bun"
+import { pathToFileURL, fileURLToPath } from "url"
 import { ConfigMarkdown } from "../config/markdown"
 import { SessionSummary } from "./summary"
 import { NamedError } from "@opencode-ai/util/error"
@@ -50,6 +51,8 @@ import { Truncate } from "@/tool/truncation"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
+
+const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
 
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
@@ -618,12 +621,24 @@ export namespace SessionPrompt {
 
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: sessionMessages })
 
+      // Build system prompt, adding structured output instruction if needed
+      const skills = await SystemPrompt.skills(agent)
+      const system = [
+        ...(await SystemPrompt.environment(model)),
+        ...(skills ? [skills] : []),
+        ...(await InstructionPrompt.system()),
+      ]
+      const format = lastUser.format ?? { type: "text" }
+      if (format.type === "json_schema") {
+        system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
+      }
+
       const result = await processor.process({
         user: lastUser,
         agent,
         abort,
         sessionID,
-        system: [...(await SystemPrompt.environment(model)), ...(await InstructionPrompt.system())],
+        system,
         messages: [
           ...MessageV2.toModelMessages(sessionMessages, model),
           ...(isLastStep
@@ -1547,6 +1562,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     const proc = spawn(shell, args, {
       cwd,
       detached: process.platform !== "win32",
+      windowsHide: process.platform === "win32",
       stdio: ["ignore", "pipe", "pipe"],
       env: {
         ...process.env,

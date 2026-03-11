@@ -16,6 +16,13 @@
       "@shell-mode/*": ["./plugin/shell-mode/*"],
       "@tui-integration": ["./plugin/tui-integration/index.ts"],
       "@tui-integration/*": ["./plugin/tui-integration/*"]
-    }
+    },
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "transform": "@effect/language-service/transform",
+        "namespaceImportPackages": ["effect", "@effect/*"]
+      }
+    ]
   }
 }

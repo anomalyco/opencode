@@ -10,10 +10,20 @@ import { Database } from "../../src/storage/db"
 import { resetDatabase } from "../fixture/db"
 import * as adaptors from "../../src/control-plane/adaptors"
 import type { Adaptor } from "../../src/control-plane/types"
+import { Flag } from "../../src/flag/flag"
 
 afterEach(async () => {
   mock.restore()
   await resetDatabase()
+})
+
+const original = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
+// @ts-expect-error don't do this normally, but it works
+Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
+
+afterEach(() => {
+  // @ts-expect-error don't do this normally, but it works
+  Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = original
 })
 
 type State = {
