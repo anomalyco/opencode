@@ -754,7 +754,7 @@ zenobi-us/opencode-skillful
 { type: "raw" \| "patch", content: string }
 {file:path/to/file}
 **/*.js
-%USERPROFILE%/intelephense/license.txt
+%USERPROFILE%/intelephense/licence.txt
 %USERPROFILE%\.cache\opencode
 %USERPROFILE%\.config\opencode\opencode.jsonc
 %USERPROFILE%\.config\opencode\plugins
@@ -801,7 +801,7 @@ zenobi-us/opencode-skillful
 ~/projects/*
 ~/projects/personal/
 ${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts
-$HOME/intelephense/license.txt
+$HOME/intelephense/licence.txt
 $HOME/projects/*
 $XDG_CONFIG_HOME/opencode/themes/*.json
 agent/
