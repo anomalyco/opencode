@@ -166,11 +166,13 @@ try {
     // Local PR
     if (prData.headRepository.nameWithOwner === prData.baseRepository.nameWithOwner) {
       await checkoutLocalBranch(prData)
+      const head = (await $`git rev-parse HEAD`).stdout.toString().trim()
       const dataPrompt = buildPromptDataForPR(prData)
       const response = await chat(`${userPrompt}\n\n${dataPrompt}`, promptFiles)
-      if (await branchIsDirty()) {
+      const { dirty, uncommittedChanges } = await branchIsDirty(head)
+      if (dirty) {
         const summary = await summarize(response)
-        await pushToLocalBranch(summary)
+        await pushToLocalBranch(summary, uncommittedChanges)
       }
       const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${useShareUrl()}/s/${shareId}`))
       await updateComment(`${response}${footer({ image: !hasShared })}`)
@@ -178,11 +180,13 @@ try {
     // Fork PR
     else {
       await checkoutForkBranch(prData)
+      const head = (await $`git rev-parse HEAD`).stdout.toString().trim()
       const dataPrompt = buildPromptDataForPR(prData)
       const response = await chat(`${userPrompt}\n\n${dataPrompt}`, promptFiles)
-      if (await branchIsDirty()) {
+      const { dirty, uncommittedChanges } = await branchIsDirty(head)
+      if (dirty) {
         const summary = await summarize(response)
-        await pushToForkBranch(summary, prData)
+        await pushToForkBranch(summary, prData, uncommittedChanges)
       }
       const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${useShareUrl()}/s/${shareId}`))
       await updateComment(`${response}${footer({ image: !hasShared })}`)
@@ -191,12 +195,14 @@ try {
   // Issue
   else {
     const branch = await checkoutNewBranch()
+    const head = (await $`git rev-parse HEAD`).stdout.toString().trim()
     const issueData = await fetchIssue()
     const dataPrompt = buildPromptDataForIssue(issueData)
     const response = await chat(`${userPrompt}\n\n${dataPrompt}`, promptFiles)
-    if (await branchIsDirty()) {
+    const { dirty, uncommittedChanges } = await branchIsDirty(head)
+    if (dirty) {
       const summary = await summarize(response)
-      await pushToNewBranch(summary, branch)
+      await pushToNewBranch(summary, branch, uncommittedChanges)
       const pr = await createPR(
         repoData.data.default_branch,
         branch,
@@ -714,45 +720,62 @@ function generateBranchName(type: "issue" | "pr") {
   return `opencode/${type}${useIssueId()}-${timestamp}`
 }
 
-async function pushToNewBranch(summary: string, branch: string) {
+async function pushToNewBranch(summary: string, branch: string, commit: boolean) {
   console.log("Pushing to new branch...")
   const actor = useContext().actor
 
-  await $`git add .`
-  await $`git commit -m "${summary}
+  if (commit) {
+    await $`git add .`
+    await $`git commit -m "${summary}
 
 Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
+  }
   await $`git push -u origin ${branch}`
 }
 
-async function pushToLocalBranch(summary: string) {
+async function pushToLocalBranch(summary: string, commit: boolean) {
   console.log("Pushing to local branch...")
   const actor = useContext().actor
 
-  await $`git add .`
-  await $`git commit -m "${summary}
+  if (commit) {
+    await $`git add .`
+    await $`git commit -m "${summary}
 
 Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
+  }
   await $`git push`
 }
 
-async function pushToForkBranch(summary: string, pr: GitHubPullRequest) {
+async function pushToForkBranch(summary: string, pr: GitHubPullRequest, commit: boolean) {
   console.log("Pushing to fork branch...")
   const actor = useContext().actor
 
   const remoteBranch = pr.headRefName
 
-  await $`git add .`
-  await $`git commit -m "${summary}
+  if (commit) {
+    await $`git add .`
+    await $`git commit -m "${summary}
 
 Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
+  }
   await $`git push fork HEAD:${remoteBranch}`
 }
 
-async function branchIsDirty() {
+async function branchIsDirty(originalHead: string) {
   console.log("Checking if branch is dirty...")
   const ret = await $`git status --porcelain`
-  return ret.stdout.toString().trim().length > 0
+  const status = ret.stdout.toString().trim()
+  if (status.length > 0) {
+    return {
+      dirty: true,
+      uncommittedChanges: true,
+    }
+  }
+  const head = await $`git rev-parse HEAD`
+  return {
+    dirty: head.stdout.toString().trim() !== originalHead,
+    uncommittedChanges: false,
+  }
 }
 
 async function assertPermissions() {
