@@ -131,7 +131,7 @@
   --surface-warning-base: #fcf3cb;
   --surface-warning-weak: #fdfaec;
   --surface-warning-strong: #fbdd46;
-  --surface-critical-base: #feefeb;
+  --surface-critical-base: #fff2f0;
   --surface-critical-weak: #fff8f6;
   --surface-critical-strong: #fc533a;
   --surface-info-base: #fdecfe;
@@ -391,7 +391,7 @@
     --surface-warning-base: #fdf3cf;
     --surface-warning-weak: #fdfaed;
     --surface-warning-strong: #fcd53a;
-    --surface-critical-base: #42120b;
+    --surface-critical-base: #1f0603;
     --surface-critical-weak: #28110c;
     --surface-critical-strong: #fc533a;
     --surface-info-base: #feecfe;
