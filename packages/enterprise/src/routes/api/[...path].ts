@@ -108,6 +108,7 @@ app
     validator("param", z.object({ shareID: z.string() })),
     async (c) => {
       const { shareID } = c.req.valid("param")
+      c.header("Cache-Control", "public, max-age=30, s-maxage=300, stale-while-revalidate=86400")
       return c.json(await Share.data(shareID))
     },
   )

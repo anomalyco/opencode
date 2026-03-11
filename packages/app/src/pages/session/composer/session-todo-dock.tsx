@@ -138,7 +138,6 @@ export function SessionTodoDock(props: {
               "--tool-motion-mask-height": `${props.countMaskHeight ?? 0}px`,
               "--tool-motion-spring-ms": `${props.countWidthDuration ?? 560}ms`,
               opacity: `${Math.max(0, Math.min(1, 1 - shut()))}`,
-              filter: `blur(${Math.max(0, Math.min(1, shut())) * 2}px)`,
             }}
           >
             <AnimatedNumber value={done()} />
@@ -196,7 +195,6 @@ export function SessionTodoDock(props: {
           style={{
             visibility: off() ? "hidden" : "visible",
             opacity: `${Math.max(0, Math.min(1, 1 - hide()))}`,
-            filter: `blur(${Math.max(0, Math.min(1, hide())) * 2}px)`,
           }}
         >
           <TodoList todos={props.todos} open={!store.collapsed} />
@@ -281,10 +279,8 @@ function TodoList(props: { todos: Todo[]; open: boolean }) {
               style={{
                 "--checkbox-align": "flex-start",
                 "--checkbox-offset": "1px",
-                transition:
-                  "opacity 220ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1)), filter 220ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1))",
+                transition: "opacity 220ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1))",
                 opacity: todo().status === "pending" ? "0.94" : "1",
-                filter: todo().status === "pending" ? "blur(0.3px)" : "blur(0px)",
               }}
             >
               <TextStrikethrough
@@ -294,13 +290,12 @@ function TodoList(props: { todos: Todo[]; open: boolean }) {
                 style={{
                   "line-height": "var(--line-height-normal)",
                   transition:
-                    "color 220ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1)), opacity 220ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1)), filter 220ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1))",
+                    "color 220ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1)), opacity 220ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1))",
                   color:
                     todo().status === "completed" || todo().status === "cancelled"
                       ? "var(--text-weak)"
                       : "var(--text-strong)",
                   opacity: todo().status === "pending" ? "0.92" : "1",
-                  filter: todo().status === "pending" ? "blur(0.3px)" : "blur(0px)",
                 }}
               />
             </Checkbox>

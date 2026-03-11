@@ -78,11 +78,13 @@ export function createAutoScroll(options: AutoScrollOptions) {
 
   const scrollToBottom = (force: boolean) => {
     if (!force && !active()) return
+
+    if (force && store.userScrolled) setStore("userScrolled", false)
+
     const el = scroll
     if (!el) return
 
     if (!force && store.userScrolled) return
-    if (force && store.userScrolled) setStore("userScrolled", false)
 
     const distance = distanceFromBottom(el)
     if (distance < 2) {

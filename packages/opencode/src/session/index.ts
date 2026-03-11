@@ -23,6 +23,7 @@ import { fn } from "@/util/fn"
 import { Command } from "../command"
 import { Snapshot } from "@/snapshot"
 import { WorkspaceContext } from "../control-plane/workspace-context"
+import { ProjectID } from "../project/schema"
 
 import type { Provider } from "@/provider/provider"
 import { PermissionNext } from "@/permission/next"
@@ -120,7 +121,7 @@ export namespace Session {
     .object({
       id: Identifier.schema("session"),
       slug: z.string(),
-      projectID: z.string(),
+      projectID: ProjectID.zod,
       workspaceID: z.string().optional(),
       directory: z.string(),
       parentID: Identifier.schema("session").optional(),
@@ -162,7 +163,7 @@ export namespace Session {
 
   export const ProjectInfo = z
     .object({
-      id: z.string(),
+      id: ProjectID.zod,
       name: z.string().optional(),
       worktree: z.string(),
     })
@@ -219,6 +220,7 @@ export namespace Session {
         parentID: Identifier.schema("session").optional(),
         title: z.string().optional(),
         permission: Info.shape.permission,
+        workspaceID: Identifier.schema("workspace").optional(),
       })
       .optional(),
     async (input) => {
@@ -227,6 +229,7 @@ export namespace Session {
         directory: Instance.directory,
         title: input?.title,
         permission: input?.permission,
+        workspaceID: input?.workspaceID,
       })
     },
   )
@@ -242,6 +245,7 @@ export namespace Session {
       const title = getForkedTitle(original.title)
       const session = await createNext({
         directory: Instance.directory,
+        workspaceID: original.workspaceID,
         title,
       })
       const msgs = await messages({ sessionID: input.sessionID })
@@ -292,6 +296,7 @@ export namespace Session {
     id?: string
     title?: string
     parentID?: string
+    workspaceID?: string
     directory: string
     permission?: PermissionNext.Ruleset
   }) {
@@ -301,7 +306,7 @@ export namespace Session {
       version: Installation.VERSION,
       projectID: Instance.project.id,
       directory: input.directory,
-      workspaceID: WorkspaceContext.workspaceID,
+      workspaceID: input.workspaceID,
       parentID: input.parentID,
       title: input.title ?? createDefaultTitle(!!input.parentID),
       permission: input.permission,

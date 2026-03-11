@@ -10,7 +10,7 @@ import { ShareNext } from "../../share/share-next"
 import { EOL } from "os"
 import { Filesystem } from "../../util/filesystem"
 
-/** Discriminated union returned by the ShareNext API (GET /api/share/:id/data) */
+/** Discriminated union returned by the ShareNext API (GET /api/shares/:id/data) */
 export type ShareData =
   | { type: "session"; data: SDKSession }
   | { type: "message"; data: Message }
@@ -22,6 +22,14 @@ export type ShareData =
 export function parseShareUrl(url: string): string | null {
   const match = url.match(/^https?:\/\/[^/]+\/share\/([a-zA-Z0-9_-]+)$/)
   return match ? match[1] : null
+}
+
+export function shouldAttachShareAuthHeaders(shareUrl: string, accountBaseUrl: string): boolean {
+  try {
+    return new URL(shareUrl).origin === new URL(accountBaseUrl).origin
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -78,7 +86,7 @@ export const ImportCommand = cmd({
     await bootstrap(process.cwd(), async () => {
       let exportData:
         | {
-            info: Session.Info
+            info: SDKSession
             messages: Array<{
               info: Message
               parts: Part[]
@@ -97,8 +105,21 @@ export const ImportCommand = cmd({
           return
         }
 
-        const baseUrl = await ShareNext.url()
-        const response = await fetch(`${baseUrl}/api/share/${slug}/data`)
+        const parsed = new URL(args.file)
+        const baseUrl = parsed.origin
+        const req = await ShareNext.request()
+        const headers = shouldAttachShareAuthHeaders(args.file, req.baseUrl) ? req.headers : {}
+
+        const dataPath = req.api.data(slug)
+        let response = await fetch(`${baseUrl}${dataPath}`, {
+          headers,
+        })
+
+        if (!response.ok && dataPath !== `/api/share/${slug}/data`) {
+          response = await fetch(`${baseUrl}/api/share/${slug}/data`, {
+            headers,
+          })
+        }
 
         if (!response.ok) {
           process.stdout.write(`Failed to fetch share data: ${response.statusText}`)
@@ -131,7 +152,7 @@ export const ImportCommand = cmd({
         return
       }
 
-      const row = { ...Session.toRow(exportData.info), project_id: Instance.project.id }
+      const row = Session.toRow({ ...exportData.info, projectID: Instance.project.id })
       Database.use((db) =>
         db
           .insert(SessionTable)

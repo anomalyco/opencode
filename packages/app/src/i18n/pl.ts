@@ -460,6 +460,7 @@ export const dict = {
   "session.todo.title": "Zadania",
   "session.todo.collapse": "Zwiń",
   "session.todo.expand": "Rozwiń",
+  "session.new.title": "Zbuduj cokolwiek",
   "session.new.worktree.main": "Główna gałąź",
   "session.new.worktree.mainWithBranch": "Główna gałąź ({{branch}})",
   "session.new.worktree.create": "Utwórz nowe drzewo robocze",
