@@ -213,9 +213,7 @@ export namespace Billing {
           enabled: true,
         },
         payment_method_options: {
-          alipay: {
-            setup_future_usage: "off_session",
-          },
+          alipay: {},
           card: {
             setup_future_usage: "on_session",
           },
