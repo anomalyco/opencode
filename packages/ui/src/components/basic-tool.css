@@ -64,7 +64,7 @@
 
   [data-slot="basic-tool-tool-info-main"] {
     display: flex;
-    align-items: center;
+    align-items: baseline;
     gap: 8px;
     min-width: 0;
     overflow: hidden;
@@ -97,6 +97,7 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     font-family: var(--font-family-sans);
+    font-variant-numeric: tabular-nums;
     font-size: 14px;
     font-style: normal;
     font-weight: var(--font-weight-regular);
@@ -142,6 +143,7 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     font-family: var(--font-family-sans);
+    font-variant-numeric: tabular-nums;
     font-size: 14px;
     font-style: normal;
     font-weight: var(--font-weight-regular);

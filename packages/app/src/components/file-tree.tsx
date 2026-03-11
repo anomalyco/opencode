@@ -325,12 +325,6 @@ export default function FileTree(props: {
     ),
   )
 
-  createEffect(() => {
-    const dir = file.tree.state(props.path)
-    if (!shouldListExpanded({ level, dir })) return
-    void file.tree.list(props.path)
-  })
-
   const nodes = createMemo(() => {
     const nodes = file.tree.children(props.path)
     const current = filter()

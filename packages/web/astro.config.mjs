@@ -224,7 +224,7 @@ export default defineConfig({
             "zh-CN": "使用",
             "zh-TW": "使用",
           },
-          items: ["tui", "cli", "web", "ide", "zen", "share", "github", "gitlab"],
+          items: ["go", "tui", "cli", "web", "ide", "zen", "share", "github", "gitlab"],
         },
 
         {
