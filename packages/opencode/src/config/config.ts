@@ -923,6 +923,16 @@ export namespace Config {
       session_child_first: z.string().optional().default("<leader>down").describe("Go to first child session"),
       session_child_cycle: z.string().optional().default("right").describe("Go to next child session"),
       session_child_cycle_reverse: z.string().optional().default("left").describe("Go to previous child session"),
+      session_global_cycle: z
+        .string()
+        .optional()
+        .default("<leader>right")
+        .describe("Go to next session (sorted by recent)"),
+      session_global_cycle_reverse: z
+        .string()
+        .optional()
+        .default("<leader>left")
+        .describe("Go to previous session (sorted by recent)"),
       session_parent: z.string().optional().default("up").describe("Go to parent session"),
       terminal_suspend: z.string().optional().default("ctrl+z").describe("Suspend terminal"),
       terminal_title_toggle: z.string().optional().default("none").describe("Toggle terminal title"),
