@@ -170,9 +170,6 @@ export function LiteSection() {
     <>
       <Show when={isBlack()}>
         <section class={styles.root}>
-          <div data-slot="section-title">
-            <h2>{i18n.t("workspace.lite.title")}</h2>
-          </div>
           <p data-slot="other-message">{i18n.t("workspace.lite.black.message")}</p>
         </section>
       </Show>
@@ -180,7 +177,6 @@ export function LiteSection() {
         {(sub) => (
           <section class={styles.root}>
             <div data-slot="section-title">
-              <h2>{i18n.t("workspace.lite.title")}</h2>
               <div data-slot="title-row">
                 <p>{i18n.t("workspace.lite.subscription.message")}</p>
                 <button
@@ -260,17 +256,11 @@ export function LiteSection() {
       </Show>
       <Show when={!isBlack() && lite() && !lite()!.mine}>
         <section class={styles.root}>
-          <div data-slot="section-title">
-            <h2>{i18n.t("workspace.lite.title")}</h2>
-          </div>
           <p data-slot="other-message">{i18n.t("workspace.lite.other.message")}</p>
         </section>
       </Show>
       <Show when={!isBlack() && lite() === null}>
         <section class={styles.root}>
-          <div data-slot="section-title">
-            <h2>{i18n.t("workspace.lite.title")}</h2>
-          </div>
           <p data-slot="promo-description">
             <For
               each={i18n

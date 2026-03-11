@@ -263,7 +263,8 @@ export const dict = {
   "go.cta.text": "Go abonnieren",
   "go.cta.price": "$10/Monat",
   "go.cta.promo": "$5 im ersten Monat",
-  "go.pricing.body": "Mit jedem Agenten nutzbar. $5 im ersten Monat, danach $10/Monat. Guthaben bei Bedarf aufladen. Jederzeit kündbar.",
+  "go.pricing.body":
+    "Mit jedem Agenten nutzbar. $5 im ersten Monat, danach $10/Monat. Guthaben bei Bedarf aufladen. Jederzeit kündbar.",
   "go.graph.free": "Kostenlos",
   "go.graph.freePill": "Big Pickle und kostenlose Modelle",
   "go.graph.go": "Go",
@@ -302,7 +303,8 @@ export const dict = {
   "go.problem.item3": "Für so viele Programmierer wie möglich gebaut",
   "go.problem.item4": "Beinhaltet GLM-5, Kimi K2.5 und MiniMax M2.5",
   "go.how.title": "Wie Go funktioniert",
-  "go.how.body": "Go beginnt bei $5 für den ersten Monat, danach $10/Monat. Du kannst es mit OpenCode oder jedem Agenten nutzen.",
+  "go.how.body":
+    "Go beginnt bei $5 für den ersten Monat, danach $10/Monat. Du kannst es mit OpenCode oder jedem Agenten nutzen.",
   "go.how.step1.title": "Konto erstellen",
   "go.how.step1.beforeLink": "folge den",
   "go.how.step1.link": "Einrichtungsanweisungen",
@@ -426,6 +428,7 @@ export const dict = {
   "workspace.nav.settings": "Einstellungen",
 
   "workspace.home.banner.beforeLink": "Zuverlässige, optimierte Modelle für Coding-Agents.",
+  "workspace.lite.banner.beforeLink": "Kostengünstige Coding-Modelle für alle.",
   "workspace.home.billing.loading": "Laden...",
   "workspace.home.billing.enable": "Abrechnung aktivieren",
   "workspace.home.billing.currentBalance": "Aktuelles Guthaben",
@@ -628,7 +631,6 @@ export const dict = {
   "workspace.lite.time.minute": "Minute",
   "workspace.lite.time.minutes": "Minuten",
   "workspace.lite.time.fewSeconds": "einige Sekunden",
-  "workspace.lite.title": "OpenCode Go",
   "workspace.lite.subscription.message": "Du hast OpenCode Go abonniert.",
   "workspace.lite.subscription.manage": "Abo verwalten",
   "workspace.lite.subscription.rollingUsage": "Fortlaufende Nutzung",

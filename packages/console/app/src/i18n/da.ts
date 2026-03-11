@@ -261,7 +261,8 @@ export const dict = {
   "go.cta.text": "Abonner på Go",
   "go.cta.price": "$10/måned",
   "go.cta.promo": "$5 første måned",
-  "go.pricing.body": "Brug med enhver agent. $5 første måned, derefter $10/måned. Tank op med kredit efter behov. Afmeld når som helst.",
+  "go.pricing.body":
+    "Brug med enhver agent. $5 første måned, derefter $10/måned. Tank op med kredit efter behov. Afmeld når som helst.",
   "go.graph.free": "Gratis",
   "go.graph.freePill": "Big Pickle og gratis modeller",
   "go.graph.go": "Go",
@@ -300,7 +301,8 @@ export const dict = {
   "go.problem.item3": "Bygget til så mange programmører som muligt",
   "go.problem.item4": "Inkluderer GLM-5, Kimi K2.5 og MiniMax M2.5",
   "go.how.title": "Hvordan Go virker",
-  "go.how.body": "Go starter ved $5 for den første måned, derefter $10/måned. Du kan bruge det med OpenCode eller enhver agent.",
+  "go.how.body":
+    "Go starter ved $5 for den første måned, derefter $10/måned. Du kan bruge det med OpenCode eller enhver agent.",
   "go.how.step1.title": "Opret en konto",
   "go.how.step1.beforeLink": "følg",
   "go.how.step1.link": "opsætningsinstruktionerne",
@@ -423,6 +425,7 @@ export const dict = {
   "workspace.nav.settings": "Indstillinger",
 
   "workspace.home.banner.beforeLink": "Pålidelige optimerede modeller til kodningsagenter.",
+  "workspace.lite.banner.beforeLink": "Lavpris kodemodeller for alle.",
   "workspace.home.billing.loading": "Indlæser...",
   "workspace.home.billing.enable": "Aktiver fakturering",
   "workspace.home.billing.currentBalance": "Nuværende saldo",
@@ -625,7 +628,6 @@ export const dict = {
   "workspace.lite.time.minute": "minut",
   "workspace.lite.time.minutes": "minutter",
   "workspace.lite.time.fewSeconds": "et par sekunder",
-  "workspace.lite.title": "OpenCode Go",
   "workspace.lite.subscription.message": "Du abonnerer på OpenCode Go.",
   "workspace.lite.subscription.manage": "Administrer abonnement",
   "workspace.lite.subscription.rollingUsage": "Løbende forbrug",

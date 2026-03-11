@@ -429,6 +429,7 @@ export const dict = {
   "workspace.nav.settings": "Ayarlar",
 
   "workspace.home.banner.beforeLink": "Kodlama ajanları için güvenilir optimize edilmiş modeller.",
+  "workspace.lite.banner.beforeLink": "Herkes için düşük maliyetli kodlama modelleri.",
   "workspace.home.billing.loading": "Yükleniyor...",
   "workspace.home.billing.enable": "Faturalandırmayı etkinleştir",
   "workspace.home.billing.currentBalance": "Mevcut bakiye",
@@ -631,7 +632,6 @@ export const dict = {
   "workspace.lite.time.minute": "dakika",
   "workspace.lite.time.minutes": "dakika",
   "workspace.lite.time.fewSeconds": "birkaç saniye",
-  "workspace.lite.title": "OpenCode Go",
   "workspace.lite.subscription.message": "OpenCode Go abonesisiniz.",
   "workspace.lite.subscription.manage": "Aboneliği Yönet",
   "workspace.lite.subscription.rollingUsage": "Devam Eden Kullanım",

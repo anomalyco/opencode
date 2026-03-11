@@ -405,6 +405,7 @@ export const dict = {
   "workspace.nav.settings": "设置",
 
   "workspace.home.banner.beforeLink": "可靠、优化的编程代理模型。",
+  "workspace.lite.banner.beforeLink": "低成本编码模型，人人可用。",
   "workspace.home.billing.loading": "加载中...",
   "workspace.home.billing.enable": "启用计费",
   "workspace.home.billing.currentBalance": "当前余额",
@@ -604,7 +605,6 @@ export const dict = {
   "workspace.lite.time.minute": "分钟",
   "workspace.lite.time.minutes": "分钟",
   "workspace.lite.time.fewSeconds": "几秒钟",
-  "workspace.lite.title": "OpenCode Go",
   "workspace.lite.subscription.message": "您已订阅 OpenCode Go。",
   "workspace.lite.subscription.manage": "管理订阅",
   "workspace.lite.subscription.rollingUsage": "滚动用量",

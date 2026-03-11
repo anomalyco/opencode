@@ -264,7 +264,8 @@ export const dict = {
   "go.cta.text": "Suscribirse a Go",
   "go.cta.price": "10 $/mes",
   "go.cta.promo": "$5 el primer mes",
-  "go.pricing.body": "Úsalo con cualquier agente. $5 el primer mes, luego 10 $/mes. Recarga crédito si es necesario. Cancela en cualquier momento.",
+  "go.pricing.body":
+    "Úsalo con cualquier agente. $5 el primer mes, luego 10 $/mes. Recarga crédito si es necesario. Cancela en cualquier momento.",
   "go.graph.free": "Gratis",
   "go.graph.freePill": "Big Pickle y modelos gratuitos",
   "go.graph.go": "Go",
@@ -428,6 +429,7 @@ export const dict = {
   "workspace.nav.settings": "Configuración",
 
   "workspace.home.banner.beforeLink": "Modelos optimizados y confiables para agentes de codificación.",
+  "workspace.lite.banner.beforeLink": "Modelos de codificación de bajo costo para todos.",
   "workspace.home.billing.loading": "Cargando...",
   "workspace.home.billing.enable": "Habilitar facturación",
   "workspace.home.billing.currentBalance": "Saldo actual",
@@ -630,7 +632,6 @@ export const dict = {
   "workspace.lite.time.minute": "minuto",
   "workspace.lite.time.minutes": "minutos",
   "workspace.lite.time.fewSeconds": "unos pocos segundos",
-  "workspace.lite.title": "OpenCode Go",
   "workspace.lite.subscription.message": "Estás suscrito a OpenCode Go.",
   "workspace.lite.subscription.manage": "Gestionar Suscripción",
   "workspace.lite.subscription.rollingUsage": "Uso Continuo",

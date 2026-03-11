@@ -259,7 +259,8 @@ export const dict = {
   "go.cta.text": "اشترك في Go",
   "go.cta.price": "$10/شهر",
   "go.cta.promo": "$5 للشهر الأول",
-  "go.pricing.body": "استخدمه مع أي وكيل. $5 للشهر الأول، ثم $10/شهر. قم بزيادة الرصيد إذا لزم الأمر. الإلغاء في أي وقت.",
+  "go.pricing.body":
+    "استخدمه مع أي وكيل. $5 للشهر الأول، ثم $10/شهر. قم بزيادة الرصيد إذا لزم الأمر. الإلغاء في أي وقت.",
   "go.graph.free": "مجاني",
   "go.graph.freePill": "Big Pickle ونماذج مجانية",
   "go.graph.go": "Go",
@@ -420,6 +421,7 @@ export const dict = {
   "workspace.nav.settings": "الإعدادات",
 
   "workspace.home.banner.beforeLink": "نماذج محسنة وموثوقة لوكلاء البرمجة.",
+  "workspace.lite.banner.beforeLink": "نماذج برمجة منخفضة التكلفة للجميع.",
   "workspace.home.billing.loading": "جارٍ التحميل...",
   "workspace.home.billing.enable": "تمكين الفوترة",
   "workspace.home.billing.currentBalance": "الرصيد الحالي",
@@ -620,7 +622,6 @@ export const dict = {
   "workspace.lite.time.minute": "دقيقة",
   "workspace.lite.time.minutes": "دقائق",
   "workspace.lite.time.fewSeconds": "بضع ثوان",
-  "workspace.lite.title": "OpenCode Go",
   "workspace.lite.subscription.message": "أنت مشترك في OpenCode Go.",
   "workspace.lite.subscription.manage": "إدارة الاشتراك",
   "workspace.lite.subscription.rollingUsage": "الاستخدام المتجدد",

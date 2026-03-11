@@ -262,7 +262,8 @@ export const dict = {
   "go.cta.text": "Zasubskrybuj Go",
   "go.cta.price": "$10/miesiąc",
   "go.cta.promo": "$5 pierwszy miesiąc",
-  "go.pricing.body": "Używaj z dowolnym agentem. $5 za pierwszy miesiąc, potem $10/miesiąc. Doładuj konto w razie potrzeby. Anuluj w dowolnym momencie.",
+  "go.pricing.body":
+    "Używaj z dowolnym agentem. $5 za pierwszy miesiąc, potem $10/miesiąc. Doładuj konto w razie potrzeby. Anuluj w dowolnym momencie.",
   "go.graph.free": "Darmowe",
   "go.graph.freePill": "Big Pickle i darmowe modele",
   "go.graph.go": "Go",
@@ -301,7 +302,8 @@ export const dict = {
   "go.problem.item3": "Stworzony dla jak największej liczby programistów",
   "go.problem.item4": "Zawiera GLM-5, Kimi K2.5 i MiniMax M2.5",
   "go.how.title": "Jak działa Go",
-  "go.how.body": "Go zaczyna się od $5 za pierwszy miesiąc, potem $10/miesiąc. Możesz go używać z OpenCode lub dowolnym agentem.",
+  "go.how.body":
+    "Go zaczyna się od $5 za pierwszy miesiąc, potem $10/miesiąc. Możesz go używać z OpenCode lub dowolnym agentem.",
   "go.how.step1.title": "Załóż konto",
   "go.how.step1.beforeLink": "postępuj zgodnie z",
   "go.how.step1.link": "instrukcją konfiguracji",
@@ -425,6 +427,7 @@ export const dict = {
   "workspace.nav.settings": "Ustawienia",
 
   "workspace.home.banner.beforeLink": "Niezawodne, zoptymalizowane modele dla agentów kodujących.",
+  "workspace.lite.banner.beforeLink": "Niskokosztowe modele kodowania dla każdego.",
   "workspace.home.billing.loading": "Ładowanie...",
   "workspace.home.billing.enable": "Włącz rozliczenia",
   "workspace.home.billing.currentBalance": "Aktualne saldo",
@@ -627,7 +630,6 @@ export const dict = {
   "workspace.lite.time.minute": "minuta",
   "workspace.lite.time.minutes": "minut(y)",
   "workspace.lite.time.fewSeconds": "kilka sekund",
-  "workspace.lite.title": "OpenCode Go",
   "workspace.lite.subscription.message": "Subskrybujesz OpenCode Go.",
   "workspace.lite.subscription.manage": "Zarządzaj subskrypcją",
   "workspace.lite.subscription.rollingUsage": "Użycie kroczące",

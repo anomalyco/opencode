@@ -260,7 +260,8 @@ export const dict = {
   "go.cta.text": "Goを購読する",
   "go.cta.price": "$10/月",
   "go.cta.promo": "初月 $5",
-  "go.pricing.body": "どのエージェントでも使えます。最初の月$5、その後$10/月。必要に応じてクレジットを追加。いつでもキャンセルできます。",
+  "go.pricing.body":
+    "どのエージェントでも使えます。最初の月$5、その後$10/月。必要に応じてクレジットを追加。いつでもキャンセルできます。",
   "go.graph.free": "無料",
   "go.graph.freePill": "Big Pickleと無料モデル",
   "go.graph.go": "Go",
@@ -425,6 +426,7 @@ export const dict = {
   "workspace.nav.settings": "設定",
 
   "workspace.home.banner.beforeLink": "コーディングエージェント向けに信頼性の高い最適化されたモデル。",
+  "workspace.lite.banner.beforeLink": "誰でも使える低コストコーディングモデル。",
   "workspace.home.billing.loading": "読み込み中...",
   "workspace.home.billing.enable": "課金を有効にする",
   "workspace.home.billing.currentBalance": "現在の残高",
@@ -628,7 +630,6 @@ export const dict = {
   "workspace.lite.time.minute": "分",
   "workspace.lite.time.minutes": "分",
   "workspace.lite.time.fewSeconds": "数秒",
-  "workspace.lite.title": "OpenCode Go",
   "workspace.lite.subscription.message": "あなたは OpenCode Go を購読しています。",
   "workspace.lite.subscription.manage": "サブスクリプションの管理",
   "workspace.lite.subscription.rollingUsage": "ローリング利用量",

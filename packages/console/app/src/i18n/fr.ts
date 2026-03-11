@@ -265,7 +265,8 @@ export const dict = {
   "go.cta.text": "S'abonner à Go",
   "go.cta.price": "10 $/mois",
   "go.cta.promo": "$5 le premier mois",
-  "go.pricing.body": "Utilisez-le avec n'importe quel agent. $5 le premier mois, puis 10 $/mois. Rechargez du crédit si nécessaire. Annulez à tout moment.",
+  "go.pricing.body":
+    "Utilisez-le avec n'importe quel agent. $5 le premier mois, puis 10 $/mois. Rechargez du crédit si nécessaire. Annulez à tout moment.",
   "go.graph.free": "Gratuit",
   "go.graph.freePill": "Big Pickle et modèles gratuits",
   "go.graph.go": "Go",
@@ -304,7 +305,8 @@ export const dict = {
   "go.problem.item3": "Conçu pour autant de programmeurs que possible",
   "go.problem.item4": "Inclut GLM-5, Kimi K2.5 et MiniMax M2.5",
   "go.how.title": "Comment fonctionne Go",
-  "go.how.body": "Go commence à $5 pour le premier mois, puis 10 $/mois. Vous pouvez l'utiliser avec OpenCode ou n'importe quel agent.",
+  "go.how.body":
+    "Go commence à $5 pour le premier mois, puis 10 $/mois. Vous pouvez l'utiliser avec OpenCode ou n'importe quel agent.",
   "go.how.step1.title": "Créez un compte",
   "go.how.step1.beforeLink": "suivez les",
   "go.how.step1.link": "instructions de configuration",
@@ -428,6 +430,7 @@ export const dict = {
   "workspace.nav.settings": "Paramètres",
 
   "workspace.home.banner.beforeLink": "Modèles optimisés fiables pour les agents de code.",
+  "workspace.lite.banner.beforeLink": "Modèles de code à faible coût pour tous.",
   "workspace.home.billing.loading": "Chargement...",
   "workspace.home.billing.enable": "Activer la facturation",
   "workspace.home.billing.currentBalance": "Solde actuel",
@@ -634,7 +637,6 @@ export const dict = {
   "workspace.lite.time.minute": "minute",
   "workspace.lite.time.minutes": "minutes",
   "workspace.lite.time.fewSeconds": "quelques secondes",
-  "workspace.lite.title": "OpenCode Go",
   "workspace.lite.subscription.message": "Vous êtes abonné à OpenCode Go.",
   "workspace.lite.subscription.manage": "Gérer l'abonnement",
   "workspace.lite.subscription.rollingUsage": "Utilisation glissante",

@@ -1,10 +1,10 @@
-import { Match, Show, Switch, createMemo } from "solid-js"
+import { Show, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createAsync, useParams, useAction, useSubmission } from "@solidjs/router"
 import { NewUserSection } from "./new-user-section"
 import { ModelSection } from "./model-section"
 import { ProviderSection } from "./provider-section"
-import { IconLogo } from "~/component/icon"
+import { IconZen } from "~/component/icon"
 import { querySessionInfo, queryBillingInfo, createCheckoutUrl, formatBalance } from "../common"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
@@ -34,7 +34,7 @@ export default function () {
   return (
     <div data-page="workspace-[id]">
       <section data-component="header-section">
-        <IconLogo />
+        <IconZen />
         <p>
           <span>
             {i18n.t("workspace.home.banner.beforeLink")}{" "}

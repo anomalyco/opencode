@@ -263,7 +263,8 @@ export const dict = {
   "go.cta.text": "Assinar o Go",
   "go.cta.price": "$10/mês",
   "go.cta.promo": "$5 no primeiro mês",
-  "go.pricing.body": "Use com qualquer agente. $5 no primeiro mês, depois $10/mês. Recarregue o crédito se necessário. Cancele a qualquer momento.",
+  "go.pricing.body":
+    "Use com qualquer agente. $5 no primeiro mês, depois $10/mês. Recarregue o crédito se necessário. Cancele a qualquer momento.",
   "go.graph.free": "Grátis",
   "go.graph.freePill": "Big Pickle e modelos gratuitos",
   "go.graph.go": "Go",
@@ -303,7 +304,8 @@ export const dict = {
   "go.problem.item3": "Feito para o maior número possível de programadores",
   "go.problem.item4": "Inclui GLM-5, Kimi K2.5 e MiniMax M2.5",
   "go.how.title": "Como o Go funciona",
-  "go.how.body": "O Go começa em $5 no primeiro mês, depois $10/mês. Você pode usá-lo com o OpenCode ou qualquer agente.",
+  "go.how.body":
+    "O Go começa em $5 no primeiro mês, depois $10/mês. Você pode usá-lo com o OpenCode ou qualquer agente.",
   "go.how.step1.title": "Crie uma conta",
   "go.how.step1.beforeLink": "siga as",
   "go.how.step1.link": "instruções de configuração",
@@ -427,6 +429,7 @@ export const dict = {
   "workspace.nav.settings": "Configurações",
 
   "workspace.home.banner.beforeLink": "Modelos otimizados e confiáveis para agentes de codificação.",
+  "workspace.lite.banner.beforeLink": "Modelos de codificação de baixo custo para todos.",
   "workspace.home.billing.loading": "Carregando...",
   "workspace.home.billing.enable": "Ativar faturamento",
   "workspace.home.billing.currentBalance": "Saldo atual",
@@ -629,7 +632,6 @@ export const dict = {
   "workspace.lite.time.minute": "minuto",
   "workspace.lite.time.minutes": "minutos",
   "workspace.lite.time.fewSeconds": "alguns segundos",
-  "workspace.lite.title": "OpenCode Go",
   "workspace.lite.subscription.message": "Você assina o OpenCode Go.",
   "workspace.lite.subscription.manage": "Gerenciar Assinatura",
   "workspace.lite.subscription.rollingUsage": "Uso Contínuo",

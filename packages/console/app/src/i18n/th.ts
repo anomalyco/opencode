@@ -422,6 +422,7 @@ export const dict = {
   "workspace.nav.settings": "การตั้งค่า",
 
   "workspace.home.banner.beforeLink": "โมเดลที่เชื่อถือได้และปรับแต่งแล้วสำหรับเอเจนต์เขียนโค้ด",
+  "workspace.lite.banner.beforeLink": "โมเดลเขียนโค้ดต้นทุนต่ำสำหรับทุกคน",
   "workspace.home.billing.loading": "กำลังโหลด...",
   "workspace.home.billing.enable": "เปิดใช้งานการเรียกเก็บเงิน",
   "workspace.home.billing.currentBalance": "ยอดคงเหลือปัจจุบัน",
@@ -624,7 +625,6 @@ export const dict = {
   "workspace.lite.time.minute": "นาที",
   "workspace.lite.time.minutes": "นาที",
   "workspace.lite.time.fewSeconds": "ไม่กี่วินาที",
-  "workspace.lite.title": "OpenCode Go",
   "workspace.lite.subscription.message": "คุณได้สมัครสมาชิก OpenCode Go แล้ว",
   "workspace.lite.subscription.manage": "จัดการการสมัครสมาชิก",
   "workspace.lite.subscription.rollingUsage": "การใช้งานแบบหมุนเวียน",

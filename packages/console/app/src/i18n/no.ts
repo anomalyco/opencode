@@ -261,7 +261,8 @@ export const dict = {
   "go.cta.text": "Abonner på Go",
   "go.cta.price": "$10/måned",
   "go.cta.promo": "$5 første måned",
-  "go.pricing.body": "Bruk med hvilken som helst agent. $5 første måned, deretter $10/måned. Fyll på kreditt ved behov. Avslutt når som helst.",
+  "go.pricing.body":
+    "Bruk med hvilken som helst agent. $5 første måned, deretter $10/måned. Fyll på kreditt ved behov. Avslutt når som helst.",
   "go.graph.free": "Gratis",
   "go.graph.freePill": "Big Pickle og gratis modeller",
   "go.graph.go": "Go",
@@ -300,7 +301,8 @@ export const dict = {
   "go.problem.item3": "Bygget for så mange programmerere som mulig",
   "go.problem.item4": "Inkluderer GLM-5, Kimi K2.5 og MiniMax M2.5",
   "go.how.title": "Hvordan Go fungerer",
-  "go.how.body": "Go starter på $5 for den første måneden, deretter $10/måned. Du kan bruke det med OpenCode eller hvilken som helst agent.",
+  "go.how.body":
+    "Go starter på $5 for den første måneden, deretter $10/måned. Du kan bruke det med OpenCode eller hvilken som helst agent.",
   "go.how.step1.title": "Opprett en konto",
   "go.how.step1.beforeLink": "følg",
   "go.how.step1.link": "oppsettsinstruksjonene",
@@ -424,6 +426,7 @@ export const dict = {
   "workspace.nav.settings": "Innstillinger",
 
   "workspace.home.banner.beforeLink": "Pålitelige optimaliserte modeller for kodeagenter.",
+  "workspace.lite.banner.beforeLink": "Lavkost kodemodeller for alle.",
   "workspace.home.billing.loading": "Laster...",
   "workspace.home.billing.enable": "Aktiver fakturering",
   "workspace.home.billing.currentBalance": "Gjeldende saldo",
@@ -626,7 +629,6 @@ export const dict = {
   "workspace.lite.time.minute": "minutt",
   "workspace.lite.time.minutes": "minutter",
   "workspace.lite.time.fewSeconds": "noen få sekunder",
-  "workspace.lite.title": "OpenCode Go",
   "workspace.lite.subscription.message": "Du abonnerer på OpenCode Go.",
   "workspace.lite.subscription.manage": "Administrer abonnement",
   "workspace.lite.subscription.rollingUsage": "Løpende bruk",

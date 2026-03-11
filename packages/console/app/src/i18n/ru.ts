@@ -265,7 +265,8 @@ export const dict = {
   "go.cta.text": "Подписаться на Go",
   "go.cta.price": "$10/месяц",
   "go.cta.promo": "$5 первый месяц",
-  "go.pricing.body": "Используйте с любым агентом. $5 за первый месяц, затем $10/месяц. Пополняйте баланс при необходимости. Отменить можно в любое время.",
+  "go.pricing.body":
+    "Используйте с любым агентом. $5 за первый месяц, затем $10/месяц. Пополняйте баланс при необходимости. Отменить можно в любое время.",
   "go.graph.free": "Бесплатно",
   "go.graph.freePill": "Big Pickle и бесплатные модели",
   "go.graph.go": "Go",
@@ -305,7 +306,8 @@ export const dict = {
   "go.problem.item3": "Создан для максимального числа программистов",
   "go.problem.item4": "Включает GLM-5, Kimi K2.5 и MiniMax M2.5",
   "go.how.title": "Как работает Go",
-  "go.how.body": "Go начинается с $5 за первый месяц, затем $10/месяц. Вы можете использовать его с OpenCode или любым агентом.",
+  "go.how.body":
+    "Go начинается с $5 за первый месяц, затем $10/месяц. Вы можете использовать его с OpenCode или любым агентом.",
   "go.how.step1.title": "Создайте аккаунт",
   "go.how.step1.beforeLink": "следуйте",
   "go.how.step1.link": "инструкциям по настройке",
@@ -430,6 +432,7 @@ export const dict = {
   "workspace.nav.settings": "Настройки",
 
   "workspace.home.banner.beforeLink": "Надежные оптимизированные модели для кодинг-агентов.",
+  "workspace.lite.banner.beforeLink": "Недорогие модели для кодинга, доступные каждому.",
   "workspace.home.billing.loading": "Загрузка...",
   "workspace.home.billing.enable": "Включить оплату",
   "workspace.home.billing.currentBalance": "Текущий баланс",
@@ -633,7 +636,6 @@ export const dict = {
   "workspace.lite.time.minute": "минута",
   "workspace.lite.time.minutes": "минут",
   "workspace.lite.time.fewSeconds": "несколько секунд",
-  "workspace.lite.title": "OpenCode Go",
   "workspace.lite.subscription.message": "Вы подписаны на OpenCode Go.",
   "workspace.lite.subscription.manage": "Управление подпиской",
   "workspace.lite.subscription.rollingUsage": "Скользящее использование",

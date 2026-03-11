@@ -420,6 +420,7 @@ export const dict = {
   "workspace.nav.settings": "Settings",
 
   "workspace.home.banner.beforeLink": "Reliable optimized models for coding agents.",
+  "workspace.lite.banner.beforeLink": "Low cost coding models for everyone.",
   "workspace.home.billing.loading": "Loading...",
   "workspace.home.billing.enable": "Enable billing",
   "workspace.home.billing.currentBalance": "Current balance",
@@ -622,7 +623,6 @@ export const dict = {
   "workspace.lite.time.minute": "minute",
   "workspace.lite.time.minutes": "minutes",
   "workspace.lite.time.fewSeconds": "a few seconds",
-  "workspace.lite.title": "OpenCode Go",
   "workspace.lite.subscription.message": "You are subscribed to OpenCode Go.",
   "workspace.lite.subscription.manage": "Manage Subscription",
   "workspace.lite.subscription.rollingUsage": "Rolling Usage",

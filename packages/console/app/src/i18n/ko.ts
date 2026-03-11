@@ -257,7 +257,8 @@ export const dict = {
   "go.cta.text": "Go 구독하기",
   "go.cta.price": "$10/월",
   "go.cta.promo": "첫 달 $5",
-  "go.pricing.body": "어떤 에이전트와도 사용할 수 있습니다. 첫 달 $5, 이후 $10/월. 필요하면 크레딧을 충전하세요. 언제든지 취소할 수 있습니다.",
+  "go.pricing.body":
+    "어떤 에이전트와도 사용할 수 있습니다. 첫 달 $5, 이후 $10/월. 필요하면 크레딧을 충전하세요. 언제든지 취소할 수 있습니다.",
   "go.graph.free": "무료",
   "go.graph.freePill": "Big Pickle 및 무료 모델",
   "go.graph.go": "Go",
@@ -419,6 +420,7 @@ export const dict = {
   "workspace.nav.settings": "설정",
 
   "workspace.home.banner.beforeLink": "코딩 에이전트를 위한 신뢰할 수 있고 최적화된 모델.",
+  "workspace.lite.banner.beforeLink": "모두를 위한 저비용 코딩 모델.",
   "workspace.home.billing.loading": "로드 중...",
   "workspace.home.billing.enable": "결제 활성화",
   "workspace.home.billing.currentBalance": "현재 잔액",
@@ -620,7 +622,6 @@ export const dict = {
   "workspace.lite.time.minute": "분",
   "workspace.lite.time.minutes": "분",
   "workspace.lite.time.fewSeconds": "몇 초",
-  "workspace.lite.title": "OpenCode Go",
   "workspace.lite.subscription.message": "현재 OpenCode Go를 구독 중입니다.",
   "workspace.lite.subscription.manage": "구독 관리",
   "workspace.lite.subscription.rollingUsage": "롤링 사용량",

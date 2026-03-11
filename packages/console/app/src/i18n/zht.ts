@@ -240,8 +240,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "以下例外情況",
 
   "go.title": "OpenCode Go | 低成本全民編碼模型",
-  "go.meta.description":
-    "Go 首月 $5，之後 $10/月，提供對 GLM-5、Kimi K2.5 和 MiniMax M2.5 的 5 小時充裕請求額度。",
+  "go.meta.description": "Go 首月 $5，之後 $10/月，提供對 GLM-5、Kimi K2.5 和 MiniMax M2.5 的 5 小時充裕請求額度。",
   "go.hero.title": "低成本全民編碼模型",
   "go.hero.body":
     "Go 將代理編碼帶給全世界的程式設計師。提供寬裕的限額以及對最強大開源模型的穩定存取，讓你可以使用強大的代理進行構建，而無需擔心成本或可用性。",
@@ -406,6 +405,7 @@ export const dict = {
   "workspace.nav.settings": "設定",
 
   "workspace.home.banner.beforeLink": "編碼代理的可靠最佳化模型。",
+  "workspace.lite.banner.beforeLink": "低成本編碼模型，人人可用。",
   "workspace.home.billing.loading": "載入中...",
   "workspace.home.billing.enable": "啟用帳務",
   "workspace.home.billing.currentBalance": "目前餘額",
@@ -605,7 +605,6 @@ export const dict = {
   "workspace.lite.time.minute": "分鐘",
   "workspace.lite.time.minutes": "分鐘",
   "workspace.lite.time.fewSeconds": "幾秒",
-  "workspace.lite.title": "OpenCode Go",
   "workspace.lite.subscription.message": "您已訂閱 OpenCode Go。",
   "workspace.lite.subscription.manage": "管理訂閱",
   "workspace.lite.subscription.rollingUsage": "滾動使用量",
