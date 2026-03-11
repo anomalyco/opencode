@@ -17,6 +17,7 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { Binary } from "@opencode-ai/util/binary"
 import { getFilename } from "@opencode-ai/util/path"
 import { Popover as KobaltePopover } from "@kobalte/core/popover"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/message-gesture"
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -306,6 +307,7 @@ export function MessageTimeline(props: {
   const titleValue = createMemo(() => info()?.title)
   const shareUrl = createMemo(() => info()?.share?.url)
   const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
+  const shared = createMemo(() => shareEnabled() && !!shareUrl())
   const parentID = createMemo(() => info()?.parentID)
   const showHeader = createMemo(() => !!(titleValue() || parentID()))
   const stageCfg = { init: 1, batch: 3 }
@@ -329,6 +331,11 @@ export function MessageTimeline(props: {
   const [share, setShare] = createStore({
     open: false,
     dismiss: null as "escape" | "outside" | null,
+  })
+
+  const [clip, setClip] = createStore({
+    ok: false,
+    timer: undefined as number | undefined,
   })
 
   let more: HTMLButtonElement | undefined
@@ -369,6 +376,42 @@ export function MessageTimeline(props: {
     const url = shareUrl()
     if (!url) return
     platform.openLink(url)
+  }
+
+  createEffect(() => {
+    const url = shareUrl()
+    if (url) return
+    if (clip.timer) window.clearTimeout(clip.timer)
+    setClip({ ok: false, timer: undefined })
+  })
+
+  onCleanup(() => {
+    if (!clip.timer) return
+    window.clearTimeout(clip.timer)
+  })
+
+  const copy = () => {
+    const url = shareUrl()
+    if (!url) return
+    navigator.clipboard
+      .writeText(url)
+      .then(() => {
+        if (clip.timer) window.clearTimeout(clip.timer)
+        setClip("ok", true)
+        setClip(
+          "timer",
+          window.setTimeout(() => {
+            setClip({ ok: false, timer: undefined })
+          }, 3000),
+        )
+      })
+      .catch((err: unknown) =>
+        showToast({
+          variant: "error",
+          title: language.t("common.requestFailed"),
+          description: err instanceof Error ? err.message : String(err),
+        }),
+      )
   }
 
   const errorMessage = (err: unknown) => {
@@ -734,8 +777,45 @@ export function MessageTimeline(props: {
                   </div>
                   <Show when={sessionID()}>
                     {(id) => (
-                      <div class="shrink-0 flex items-center gap-3">
-                        <SessionContextUsage placement="bottom" />
+                      <div class="shrink-0 flex items-center gap-0">
+                        <div class="mr-3">
+                          <SessionContextUsage placement="bottom" />
+                        </div>
+                        <div
+                          class="shrink-0 flex items-center justify-center overflow-hidden transition-[width,margin] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]"
+                          style={{
+                            width: shared() ? "24px" : "0px",
+                            "margin-right": shared() ? "12px" : "0px",
+                          }}
+                          aria-hidden={!shared()}
+                        >
+                          <div
+                            class="transition-opacity duration-100 ease-out"
+                            classList={{
+                              "opacity-0 pointer-events-none": !shared(),
+                            }}
+                          >
+                            <Tooltip
+                              placement="bottom"
+                              gutter={8}
+                              value={
+                                clip.ok
+                                  ? language.t("session.share.copy.copied")
+                                  : language.t("session.share.copy.copyLink")
+                              }
+                            >
+                              <IconButton
+                                icon={clip.ok ? "check" : "link"}
+                                variant="ghost"
+                                class="size-6 rounded-md"
+                                tabIndex={shared() ? 0 : -1}
+                                disabled={!shared()}
+                                aria-label={language.t("session.share.copy.copyLink")}
+                                onClick={copy}
+                              />
+                            </Tooltip>
+                          </div>
+                        </div>
                         <DropdownMenu
                           gutter={4}
                           placement="bottom-end"
