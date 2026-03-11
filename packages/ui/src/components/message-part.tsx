@@ -129,10 +129,18 @@ function DiagnosticsDisplay(props: { diagnostics: Diagnostic[] }): JSX.Element {
 export interface MessageProps {
   message: MessageType
   parts: PartType[]
+  actions?: UserActions
   showAssistantCopyPartID?: string | null
   interrupted?: boolean
   queued?: boolean
   showReasoningSummaries?: boolean
+}
+
+export type SessionAction = (input: { sessionID: string; messageID: string }) => Promise<void> | void
+
+export type UserActions = {
+  fork?: SessionAction
+  revert?: SessionAction
 }
 
 export interface MessagePartProps {
@@ -437,8 +445,8 @@ function groupParts(parts: { messageID: string; part: PartType }[]) {
   return result
 }
 
-function partByID(parts: readonly PartType[], partID: string) {
-  return parts.find((part) => part.id === partID)
+function index<T extends { id: string }>(items: readonly T[]) {
+  return new Map(items.map((item) => [item.id, item] as const))
 }
 
 function renderable(part: PartType, showReasoningSummaries = true) {
@@ -474,6 +482,13 @@ export function AssistantParts(props: {
   const data = useData()
   const emptyParts: PartType[] = []
   const emptyTools: ToolPart[] = []
+  const msgs = createMemo(() => index(props.messages))
+  const part = createMemo(
+    () =>
+      new Map(
+        props.messages.map((message) => [message.id, index(list(data.store.part?.[message.id], emptyParts))] as const),
+      ),
+  )
 
   const grouped = createMemo(
     () =>
@@ -507,7 +522,7 @@ export function AssistantParts(props: {
                     const entry = entryAccessor()
                     if (entry.type !== "context") return emptyTools
                     return entry.refs
-                      .map((ref) => partByID(list(data.store.part?.[ref.messageID], emptyParts), ref.partID))
+                      .map((ref) => part().get(ref.messageID)?.get(ref.partID))
                       .filter((part): part is ToolPart => !!part && isContextGroupTool(part))
                   },
                   emptyTools,
@@ -527,23 +542,23 @@ export function AssistantParts(props: {
                 const message = createMemo(() => {
                   const entry = entryAccessor()
                   if (entry.type !== "part") return
-                  return props.messages.find((item) => item.id === entry.ref.messageID)
+                  return msgs().get(entry.ref.messageID)
                 })
-                const part = createMemo(() => {
+                const item = createMemo(() => {
                   const entry = entryAccessor()
                   if (entry.type !== "part") return
-                  return partByID(list(data.store.part?.[entry.ref.messageID], emptyParts), entry.ref.partID)
+                  return part().get(entry.ref.messageID)?.get(entry.ref.partID)
                 })
 
                 return (
                   <Show when={message()}>
-                    <Show when={part()}>
+                    <Show when={item()}>
                       <Part
-                        part={part()!}
+                        part={item()!}
                         message={message()!}
                         showAssistantCopyPartID={props.showAssistantCopyPartID}
                         turnDurationMs={props.turnDurationMs}
-                        defaultOpen={partDefaultOpen(part()!, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
+                        defaultOpen={partDefaultOpen(item()!, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
                       />
                     </Show>
                   </Show>
@@ -669,6 +684,7 @@ export function Message(props: MessageProps) {
           <UserMessageDisplay
             message={userMessage() as UserMessage}
             parts={props.parts}
+            actions={props.actions}
             interrupted={props.interrupted}
             queued={props.queued}
           />
@@ -695,6 +711,7 @@ export function AssistantMessageDisplay(props: {
   showReasoningSummaries?: boolean
 }) {
   const emptyTools: ToolPart[] = []
+  const part = createMemo(() => index(props.parts))
   const grouped = createMemo(
     () =>
       groupParts(
@@ -723,7 +740,7 @@ export function AssistantMessageDisplay(props: {
                     const entry = entryAccessor()
                     if (entry.type !== "context") return emptyTools
                     return entry.refs
-                      .map((ref) => partByID(props.parts, ref.partID))
+                      .map((ref) => part().get(ref.partID))
                       .filter((part): part is ToolPart => !!part && isContextGroupTool(part))
                   },
                   emptyTools,
@@ -739,16 +756,16 @@ export function AssistantMessageDisplay(props: {
             </Match>
             <Match when={entryType() === "part"}>
               {(() => {
-                const part = createMemo(() => {
+                const item = createMemo(() => {
                   const entry = entryAccessor()
                   if (entry.type !== "part") return
-                  return partByID(props.parts, entry.ref.partID)
+                  return part().get(entry.ref.partID)
                 })
 
                 return (
-                  <Show when={part()}>
+                  <Show when={item()}>
                     <Part
-                      part={part()!}
+                      part={item()!}
                       message={props.message}
                       showAssistantCopyPartID={props.showAssistantCopyPartID}
                     />
@@ -864,6 +881,7 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
 export function UserMessageDisplay(props: {
   message: UserMessage
   parts: PartType[]
+  actions?: UserActions
   interrupted?: boolean
   queued?: boolean
 }) {
@@ -871,6 +889,7 @@ export function UserMessageDisplay(props: {
   const dialog = useDialog()
   const i18n = useI18n()
   const [copied, setCopied] = createSignal(false)
+  const [busy, setBusy] = createSignal<"fork" | "revert" | undefined>()
 
   const textPart = createMemo(
     () => props.parts?.find((p) => p.type === "text" && !(p as TextPart).synthetic) as TextPart | undefined,
@@ -935,6 +954,22 @@ export function UserMessageDisplay(props: {
     await navigator.clipboard.writeText(content)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  const run = (kind: "fork" | "revert") => {
+    const act = kind === "fork" ? props.actions?.fork : props.actions?.revert
+    if (!act || busy()) return
+    setBusy(kind)
+    void Promise.resolve()
+      .then(() =>
+        act({
+          sessionID: props.message.sessionID,
+          messageID: props.message.id,
+        }),
+      )
+      .finally(() => {
+        if (busy() === kind) setBusy(undefined)
+      })
   }
 
   return (
@@ -1003,6 +1038,38 @@ export function UserMessageDisplay(props: {
                   </span>
                 </Show>
               </span>
+            </Show>
+            <Show when={props.actions?.fork}>
+              <Tooltip value={i18n.t("ui.message.forkMessage")} placement="top" gutter={4}>
+                <IconButton
+                  icon="fork"
+                  size="normal"
+                  variant="ghost"
+                  disabled={!!busy()}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    run("fork")
+                  }}
+                  aria-label={i18n.t("ui.message.forkMessage")}
+                />
+              </Tooltip>
+            </Show>
+            <Show when={props.actions?.revert}>
+              <Tooltip value={i18n.t("ui.message.revertMessage")} placement="top" gutter={4}>
+                <IconButton
+                  icon="reset"
+                  size="normal"
+                  variant="ghost"
+                  disabled={!!busy()}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    run("revert")
+                  }}
+                  aria-label={i18n.t("ui.message.revertMessage")}
+                />
+              </Tooltip>
             </Show>
             <Tooltip
               value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
@@ -1190,7 +1257,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
                   </div>
                 )
               }
-              return <ToolErrorCard tool={part().tool} error={error()} />
+              return <ToolErrorCard tool={part().tool} error={error()} defaultOpen={props.defaultOpen} />
             }}
           </Match>
           <Match when={true}>

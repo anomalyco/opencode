@@ -36,6 +36,11 @@ type MessageComment = {
 const emptyMessages: MessageType[] = []
 const idle = { type: "idle" as const }
 
+type UserActions = {
+  fork?: (input: { sessionID: string; messageID: string }) => Promise<void> | void
+  revert?: (input: { sessionID: string; messageID: string }) => Promise<void> | void
+}
+
 const messageComments = (parts: Part[]): MessageComment[] =>
   parts.flatMap((part) => {
     if (part.type !== "text" || !(part as TextPart).synthetic) return []
@@ -186,6 +191,7 @@ function createTimelineStaging(input: TimelineStageInput) {
 export function MessageTimeline(props: {
   mobileChanges: boolean
   mobileFallback: JSX.Element
+  actions?: UserActions
   scroll: { overflow: boolean; bottom: boolean }
   onResumeScroll: () => void
   setScrollRef: (el: HTMLDivElement | undefined) => void
@@ -764,6 +770,7 @@ export function MessageTimeline(props: {
                         "min-w-0 w-full max-w-full": true,
                         "md:max-w-200 2xl:max-w-[1000px]": props.centered,
                       }}
+                      style={{ "content-visibility": "auto", "contain-intrinsic-size": "auto 500px" }}
                     >
                       <Show when={commentCount() > 0}>
                         <div class="w-full px-4 md:px-5 pb-2">
@@ -804,6 +811,7 @@ export function MessageTimeline(props: {
                       <SessionTurn
                         sessionID={sessionID() ?? ""}
                         messageID={messageID}
+                        actions={props.actions}
                         active={active()}
                         queued={queued()}
                         status={active() ? sessionStatus() : undefined}

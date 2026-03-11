@@ -6,6 +6,7 @@ import { Project } from "@/project/project"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { Log } from "@/util/log"
+import { ProjectID } from "@/project/schema"
 import { WorkspaceTable } from "./workspace.sql"
 import { getAdaptor } from "./adaptors"
 import { WorkspaceInfo } from "./types"
@@ -48,7 +49,7 @@ export namespace Workspace {
     id: Identifier.schema("workspace").optional(),
     type: Info.shape.type,
     branch: Info.shape.branch,
-    projectID: Info.shape.projectID,
+    projectID: ProjectID.zod,
     extra: Info.shape.extra,
   })
 

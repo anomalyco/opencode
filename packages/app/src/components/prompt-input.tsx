@@ -490,6 +490,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     setComposing(false)
   }
 
+  const handleCompositionStart = () => {
+    setComposing(true)
+  }
+
+  const handleCompositionEnd = () => {
+    setComposing(false)
+    requestAnimationFrame(() => {
+      if (composing()) return
+      reconcile(prompt.current().filter((part) => part.type !== "image"))
+    })
+  }
+
   const agentList = createMemo(() =>
     sync.data.agent
       .filter((agent) => !agent.hidden && agent.mode !== "primary")
@@ -680,24 +692,27 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
   }
 
+  const reconcile = (input: Prompt) => {
+    if (mirror.input) {
+      mirror.input = false
+      if (isNormalizedEditor()) return
+
+      renderEditorWithCursor(input)
+      return
+    }
+
+    const dom = parseFromDOM()
+    if (isNormalizedEditor() && isPromptEqual(input, dom)) return
+
+    renderEditorWithCursor(input)
+  }
+
   createEffect(
     on(
       () => prompt.current(),
-      (currentParts) => {
-        const inputParts = currentParts.filter((part) => part.type !== "image")
-
-        if (mirror.input) {
-          mirror.input = false
-          if (isNormalizedEditor()) return
-
-          renderEditorWithCursor(inputParts)
-          return
-        }
-
-        const domParts = parseFromDOM()
-        if (isNormalizedEditor() && isPromptEqual(inputParts, domParts)) return
-
-        renderEditorWithCursor(inputParts)
+      (parts) => {
+        if (composing()) return
+        reconcile(parts.filter((part) => part.type !== "image"))
       },
     ),
   )
@@ -1208,8 +1223,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               spellcheck={store.mode === "normal"}
               onInput={handleInput}
               onPaste={handlePaste}
-              onCompositionStart={() => setComposing(true)}
-              onCompositionEnd={() => setComposing(false)}
+              onCompositionStart={handleCompositionStart}
+              onCompositionEnd={handleCompositionEnd}
               onBlur={handleBlur}
               onKeyDown={handleKeyDown}
               classList={{

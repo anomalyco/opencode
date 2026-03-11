@@ -8,6 +8,7 @@ import path from "path"
 import fs from "fs/promises"
 import { pathToFileURL } from "url"
 import { Global } from "../../src/global"
+import { ProjectID } from "../../src/project/schema"
 import { Filesystem } from "../../src/util/filesystem"
 
 // Get managed config directory from environment (set in preload.ts)
@@ -44,7 +45,7 @@ async function check(map: (dir: string) => string) {
         const cfg = await Config.get()
         expect(cfg.snapshot).toBe(true)
         expect(Instance.directory).toBe(Filesystem.resolve(tmp.path))
-        expect(Instance.project.id).not.toBe("global")
+        expect(Instance.project.id).not.toBe(ProjectID.global)
       },
     })
   } finally {
