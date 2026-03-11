@@ -67,7 +67,11 @@ export namespace Provider {
     const project =
       options["project"] ?? Env.get("GOOGLE_CLOUD_PROJECT") ?? Env.get("GCP_PROJECT") ?? Env.get("GCLOUD_PROJECT")
     const location =
-      options["location"] ?? Env.get("GOOGLE_CLOUD_LOCATION") ?? Env.get("VERTEX_LOCATION") ?? "us-central1"
+      options["location"] ??
+      Env.get("GOOGLE_VERTEX_LOCATION") ??
+      Env.get("GOOGLE_CLOUD_LOCATION") ??
+      Env.get("VERTEX_LOCATION") ??
+      "us-central1"
     const endpoint = location === "global" ? "aiplatform.googleapis.com" : `${location}-aiplatform.googleapis.com`
 
     return {
@@ -437,7 +441,11 @@ export namespace Provider {
         Env.get("GCLOUD_PROJECT")
 
       const location =
-        provider.options?.location ?? Env.get("GOOGLE_CLOUD_LOCATION") ?? Env.get("VERTEX_LOCATION") ?? "us-central1"
+        provider.options?.location ??
+        Env.get("GOOGLE_VERTEX_LOCATION") ??
+        Env.get("GOOGLE_CLOUD_LOCATION") ??
+        Env.get("VERTEX_LOCATION") ??
+        "us-central1"
 
       const autoload = Boolean(project)
       if (!autoload) return { autoload: false }
