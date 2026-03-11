@@ -961,6 +961,21 @@ export namespace Provider {
             (v) => omit(v, ["disabled"]),
           )
         }
+
+        // Auto-detect 1M context window for Claude models when the user
+        // configures the context-1m beta flag. Without this, models.dev reports
+        // 200k and compaction triggers too early.
+        // Bedrock uses providerOptions: anthropicBeta (array of strings).
+        // Anthropic direct uses HTTP headers: anthropic-beta (comma-separated string).
+        if (model.limit.context <= 200_000) {
+          const has1mBeta =
+            (Array.isArray(model.options?.anthropicBeta) &&
+              model.options.anthropicBeta.some((b: string) => /^context-1m-/.test(b))) ||
+            /context-1m-/.test(model.headers?.["anthropic-beta"] ?? "")
+          if (has1mBeta) {
+            model.limit = { ...model.limit, context: 1_000_000 }
+          }
+        }
       }
 
       if (Object.keys(provider.models).length === 0) {

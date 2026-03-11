@@ -183,7 +183,7 @@ When constructing the summary, try to stick to this template:
       tools: {},
       system: [],
       messages: [
-        ...MessageV2.toModelMessages(input.messages, model),
+        ...MessageV2.toModelMessages(input.messages, model, { stripMetadata: true }),
         {
           role: "user",
           content: [

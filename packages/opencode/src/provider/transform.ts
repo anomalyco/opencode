@@ -20,6 +20,14 @@ function mimeToModality(mime: string): Modality | undefined {
 export namespace ProviderTransform {
   export const OUTPUT_TOKEN_MAX = Flag.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
 
+  // Returns true if the model is a Claude model on any provider (Anthropic, Bedrock, Vertex).
+  // Claude uniformly rejects empty content blocks regardless of host provider.
+  function isClaude(model: Provider.Model): boolean {
+    return (
+      model.api.npm === "@ai-sdk/anthropic" || model.api.id.includes("claude") || model.api.id.includes("anthropic")
+    )
+  }
+
   // Maps npm package to the key the AI SDK expects for providerOptions
   function sdkKey(npm: string): string | undefined {
     switch (npm) {
@@ -49,9 +57,10 @@ export namespace ProviderTransform {
     model: Provider.Model,
     options: Record<string, unknown>,
   ): ModelMessage[] {
-    // Anthropic rejects messages with empty content - filter out empty string messages
-    // and remove empty text/reasoning parts from array content
-    if (model.api.npm === "@ai-sdk/anthropic") {
+    // Claude rejects messages with empty content - filter out empty string messages
+    // and remove empty text/reasoning parts from array content.
+    // This applies to all providers hosting Claude models (Anthropic, Bedrock, Vertex).
+    if (isClaude(model)) {
       msgs = msgs
         .map((msg) => {
           if (typeof msg.content === "string") {

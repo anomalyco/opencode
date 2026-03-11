@@ -2127,3 +2127,111 @@ test("custom model with variants enabled and disabled", async () => {
     },
   })
 })
+
+test("bedrock model with anthropicBeta context-1m option gets 1M context limit", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "amazon-bedrock": {
+              models: {
+                "us.anthropic.claude-opus-4-6-v1": {
+                  options: {
+                    anthropicBeta: ["context-1m-2025-08-07"],
+                  },
+                },
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("AWS_ACCESS_KEY_ID", "test")
+      Env.set("AWS_SECRET_ACCESS_KEY", "test")
+      Env.set("AWS_REGION", "us-east-1")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      const model = providers["amazon-bedrock"]?.models["us.anthropic.claude-opus-4-6-v1"]
+      if (!model) return // skip if models.dev doesn't include this model in test env
+      expect(model.limit.context).toBe(1_000_000)
+    },
+  })
+})
+
+test("bedrock model without anthropicBeta keeps default context limit", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "amazon-bedrock": {
+              models: {
+                "us.anthropic.claude-opus-4-6-v1": {},
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("AWS_ACCESS_KEY_ID", "test")
+      Env.set("AWS_SECRET_ACCESS_KEY", "test")
+      Env.set("AWS_REGION", "us-east-1")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      const model = providers["amazon-bedrock"]?.models["us.anthropic.claude-opus-4-6-v1"]
+      if (!model) return
+      expect(model.limit.context).toBeLessThanOrEqual(200_000)
+    },
+  })
+})
+
+test("anthropic model with context-1m header gets 1M context limit", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            anthropic: {
+              models: {
+                "claude-opus-4-6": {
+                  headers: {
+                    "anthropic-beta": "context-1m-2025-08-07",
+                  },
+                },
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("ANTHROPIC_API_KEY", "test-key")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      const model = providers["anthropic"]?.models["claude-opus-4-6"]
+      if (!model) return
+      expect(model.limit.context).toBe(1_000_000)
+    },
+  })
+})

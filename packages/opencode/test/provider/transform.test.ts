@@ -649,7 +649,7 @@ describe("ProviderTransform.message - empty image handling", () => {
   })
 })
 
-describe("ProviderTransform.message - anthropic empty content filtering", () => {
+describe("ProviderTransform.message - claude empty content filtering", () => {
   const anthropicModel = {
     id: "anthropic/claude-3-5-sonnet",
     providerID: "anthropic",
@@ -797,7 +797,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     expect(result[0].content[1]).toEqual({ type: "text", text: "Result" })
   })
 
-  test("does not filter for non-anthropic providers", () => {
+  test("does not filter for non-claude providers", () => {
     const openaiModel = {
       ...anthropicModel,
       providerID: "openai",
@@ -821,6 +821,66 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     expect(result).toHaveLength(2)
     expect(result[0].content).toBe("")
     expect(result[1].content).toHaveLength(1)
+  })
+
+  test("filters empty content for bedrock claude models", () => {
+    const bedrockModel = {
+      ...anthropicModel,
+      providerID: "amazon-bedrock",
+      api: {
+        id: "us.anthropic.claude-opus-4-6-v1",
+        url: "https://bedrock-runtime.us-east-1.amazonaws.com",
+        npm: "@ai-sdk/amazon-bedrock",
+      },
+    }
+
+    const msgs = [
+      { role: "assistant", content: "" },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "" },
+          { type: "text", text: "Hello" },
+        ],
+      },
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "" },
+          { type: "text", text: "Answer" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, bedrockModel, {})
+
+    expect(result).toHaveLength(2)
+    expect(result[0].content).toHaveLength(1)
+    expect(result[0].content[0]).toEqual({ type: "text", text: "Hello" })
+    expect(result[1].content).toHaveLength(1)
+    expect(result[1].content[0]).toEqual({ type: "text", text: "Answer" })
+  })
+
+  test("filters empty content for vertex claude models", () => {
+    const vertexModel = {
+      ...anthropicModel,
+      providerID: "google-vertex",
+      api: {
+        id: "claude-opus-4-6@20260205",
+        url: "https://us-east5-aiplatform.googleapis.com",
+        npm: "@ai-sdk/google-vertex",
+      },
+    }
+
+    const msgs = [
+      { role: "assistant", content: "" },
+      { role: "user", content: "World" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, vertexModel, {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toBe("World")
   })
 })
 

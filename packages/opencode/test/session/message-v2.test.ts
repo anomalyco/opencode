@@ -784,6 +784,141 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ])
   })
+
+  test("strips provider metadata when stripMetadata option is set", () => {
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "hello",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "text",
+            text: "response",
+            metadata: { bedrock: { thinking: "sig" } },
+          },
+          {
+            ...basePart(assistantID, "a2"),
+            type: "reasoning",
+            text: "thinking about it",
+            time: { start: 0 },
+            metadata: { bedrock: { thinking_signature: "abc" } },
+          },
+          {
+            ...basePart(assistantID, "a3"),
+            type: "tool",
+            callID: "call-1",
+            tool: "bash",
+            state: {
+              status: "completed",
+              input: { cmd: "ls" },
+              output: "ok",
+              title: "Bash",
+              metadata: {},
+              time: { start: 0, end: 1 },
+            },
+            metadata: { bedrock: { tool_meta: "xyz" } },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    // Same model, but stripMetadata=true should still omit metadata
+    const result = MessageV2.toModelMessages(input, model, { stripMetadata: true })
+
+    expect(result).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "hello" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "response" },
+          { type: "reasoning", text: "thinking about it", providerOptions: undefined },
+          {
+            type: "tool-call",
+            toolCallId: "call-1",
+            toolName: "bash",
+            input: { cmd: "ls" },
+            providerExecuted: undefined,
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-1",
+            toolName: "bash",
+            output: { type: "text", value: "ok" },
+          },
+        ],
+      },
+    ])
+  })
+
+  test("preserves provider metadata without stripMetadata option", () => {
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "hello",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "reasoning",
+            text: "thinking",
+            time: { start: 0 },
+            metadata: { bedrock: { sig: "keep" } },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const result = MessageV2.toModelMessages(input, model)
+
+    expect(result).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "hello" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "reasoning",
+            text: "thinking",
+            providerOptions: { bedrock: { sig: "keep" } },
+          },
+        ],
+      },
+    ])
+  })
 })
 
 describe("session.message-v2.fromError", () => {
