@@ -24,7 +24,7 @@ import { Command } from "../command"
 import { Snapshot } from "@/snapshot"
 import { WorkspaceContext } from "../control-plane/workspace-context"
 import { ProjectID } from "../project/schema"
-import { SessionID } from "./schema"
+import { SessionID, MessageID } from "./schema"
 
 import type { Provider } from "@/provider/provider"
 import { PermissionNext } from "@/permission/next"
@@ -150,7 +150,7 @@ export namespace Session {
       permission: PermissionNext.Ruleset.optional(),
       revert: z
         .object({
-          messageID: z.string(),
+          messageID: MessageID.zod,
           partID: z.string().optional(),
           snapshot: z.string().optional(),
           diff: z.string().optional(),
@@ -238,7 +238,7 @@ export namespace Session {
   export const fork = fn(
     z.object({
       sessionID: SessionID.zod,
-      messageID: Identifier.schema("message").optional(),
+      messageID: MessageID.zod.optional(),
     }),
     async (input) => {
       const original = await get(input.sessionID)
@@ -250,11 +250,11 @@ export namespace Session {
         title,
       })
       const msgs = await messages({ sessionID: input.sessionID })
-      const idMap = new Map<string, string>()
+      const idMap = new Map<string, MessageID>()
 
       for (const msg of msgs) {
         if (input.messageID && msg.info.id >= input.messageID) break
-        const newID = Identifier.ascending("message")
+        const newID = MessageID.ascending()
         idMap.set(msg.info.id, newID)
 
         const parentID = msg.info.role === "assistant" && msg.info.parentID ? idMap.get(msg.info.parentID) : undefined
@@ -707,7 +707,7 @@ export namespace Session {
   export const removeMessage = fn(
     z.object({
       sessionID: SessionID.zod,
-      messageID: Identifier.schema("message"),
+      messageID: MessageID.zod,
     }),
     async (input) => {
       // CASCADE delete handles parts automatically
@@ -729,7 +729,7 @@ export namespace Session {
   export const removePart = fn(
     z.object({
       sessionID: SessionID.zod,
-      messageID: Identifier.schema("message"),
+      messageID: MessageID.zod,
       partID: Identifier.schema("part"),
     }),
     async (input) => {
@@ -777,7 +777,7 @@ export namespace Session {
   export const updatePartDelta = fn(
     z.object({
       sessionID: SessionID.zod,
-      messageID: z.string(),
+      messageID: MessageID.zod,
       partID: z.string(),
       field: z.string(),
       delta: z.string(),
@@ -877,7 +877,7 @@ export namespace Session {
       sessionID: SessionID.zod,
       modelID: z.string(),
       providerID: z.string(),
-      messageID: Identifier.schema("message"),
+      messageID: MessageID.zod,
     }),
     async (input) => {
       await SessionPrompt.command({

@@ -4,7 +4,7 @@ import type { MessageV2 } from "./message-v2"
 import type { Snapshot } from "../snapshot"
 import type { PermissionNext } from "../permission/next"
 import type { ProjectID } from "../project/schema"
-import type { SessionID } from "./schema"
+import type { SessionID, MessageID } from "./schema"
 import { Timestamps } from "../storage/schema.sql"
 
 type PartData = Omit<MessageV2.Part, "id" | "sessionID" | "messageID">
@@ -29,7 +29,7 @@ export const SessionTable = sqliteTable(
     summary_deletions: integer(),
     summary_files: integer(),
     summary_diffs: text({ mode: "json" }).$type<Snapshot.FileDiff[]>(),
-    revert: text({ mode: "json" }).$type<{ messageID: string; partID?: string; snapshot?: string; diff?: string }>(),
+    revert: text({ mode: "json" }).$type<{ messageID: MessageID; partID?: string; snapshot?: string; diff?: string }>(),
     permission: text({ mode: "json" }).$type<PermissionNext.Ruleset>(),
     ...Timestamps,
     time_compacting: integer(),
@@ -45,7 +45,7 @@ export const SessionTable = sqliteTable(
 export const MessageTable = sqliteTable(
   "message",
   {
-    id: text().primaryKey(),
+    id: text().$type<MessageID>().primaryKey(),
     session_id: text()
       .$type<SessionID>()
       .notNull()
@@ -61,6 +61,7 @@ export const PartTable = sqliteTable(
   {
     id: text().primaryKey(),
     message_id: text()
+      .$type<MessageID>()
       .notNull()
       .references(() => MessageTable.id, { onDelete: "cascade" }),
     session_id: text().$type<SessionID>().notNull(),

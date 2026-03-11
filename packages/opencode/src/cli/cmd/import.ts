@@ -1,7 +1,7 @@
 import type { Argv } from "yargs"
 import type { Session as SDKSession, Message, Part } from "@opencode-ai/sdk/v2"
 import { Session } from "../../session"
-import { SessionID } from "../../session/schema"
+import { SessionID, MessageID } from "../../session/schema"
 import { cmd } from "./cmd"
 import { bootstrap } from "../bootstrap"
 import { Database } from "../../storage/db"
@@ -158,6 +158,9 @@ export const ImportCommand = cmd({
         id: SessionID.make(exportData.info.id),
         parentID: exportData.info.parentID ? SessionID.make(exportData.info.parentID) : undefined,
         projectID: Instance.project.id,
+        revert: exportData.info.revert
+          ? { ...exportData.info.revert, messageID: MessageID.make(exportData.info.revert.messageID) }
+          : undefined,
       })
       Database.use((db) =>
         db
@@ -172,10 +175,10 @@ export const ImportCommand = cmd({
           db
             .insert(MessageTable)
             .values({
-              id: msg.info.id,
+              id: MessageID.make(msg.info.id),
               session_id: row.id,
               time_created: msg.info.time?.created ?? Date.now(),
-              data: msg.info,
+              data: msg.info as any,
             })
             .onConflictDoNothing()
             .run(),
@@ -187,9 +190,9 @@ export const ImportCommand = cmd({
               .insert(PartTable)
               .values({
                 id: part.id,
-                message_id: msg.info.id,
+                message_id: MessageID.make(msg.info.id),
                 session_id: row.id,
-                data: part,
+                data: part as any,
               })
               .onConflictDoNothing()
               .run(),

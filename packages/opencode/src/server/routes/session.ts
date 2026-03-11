@@ -1,7 +1,7 @@
 import { Hono } from "hono"
 import { stream } from "hono/streaming"
 import { describeRoute, validator, resolver } from "hono-openapi"
-import { SessionID } from "@/session/schema"
+import { SessionID, MessageID } from "@/session/schema"
 import z from "zod"
 import { Session } from "../../session"
 import { MessageV2 } from "../../session/message-v2"
@@ -607,7 +607,7 @@ export const SessionRoutes = lazy(() =>
         "param",
         z.object({
           sessionID: SessionID.zod,
-          messageID: z.string().meta({ description: "Message ID" }),
+          messageID: MessageID.zod,
         }),
       ),
       async (c) => {
@@ -642,7 +642,7 @@ export const SessionRoutes = lazy(() =>
         "param",
         z.object({
           sessionID: SessionID.zod,
-          messageID: z.string().meta({ description: "Message ID" }),
+          messageID: MessageID.zod,
         }),
       ),
       async (c) => {
@@ -676,8 +676,8 @@ export const SessionRoutes = lazy(() =>
         "param",
         z.object({
           sessionID: SessionID.zod,
-          messageID: z.string().meta({ description: "Message ID" }),
-          partID: z.string().meta({ description: "Part ID" }),
+          messageID: MessageID.zod,
+          partID: z.string(),
         }),
       ),
       async (c) => {
@@ -711,8 +711,8 @@ export const SessionRoutes = lazy(() =>
         "param",
         z.object({
           sessionID: SessionID.zod,
-          messageID: z.string().meta({ description: "Message ID" }),
-          partID: z.string().meta({ description: "Part ID" }),
+          messageID: MessageID.zod,
+          partID: z.string(),
         }),
       ),
       validator("json", MessageV2.Part),
