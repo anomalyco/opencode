@@ -7,6 +7,8 @@ import { Instance } from "../../project/instance"
 import { Project } from "../../project/project"
 import { MCP } from "../../mcp"
 import { Session } from "../../session"
+import { Agent } from "../../agent/agent"
+import { PermissionNext } from "../../permission/next"
 import { zodToJsonSchema } from "zod-to-json-schema"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
@@ -33,8 +35,31 @@ export const ExperimentalRoutes = lazy(() =>
           ...errors(400),
         },
       }),
+      validator(
+        "query",
+        z.object({
+          provider: z.string().optional(),
+          model: z.string().optional(),
+          agent: z.string().optional(),
+          sessionID: z.string().optional(),
+        }),
+      ),
       async (c) => {
-        return c.json(await ToolRegistry.ids())
+        const { provider, model, agent: agentName, sessionID } = c.req.valid("query")
+        if (!provider || !model) {
+          return c.json(await ToolRegistry.ids())
+        }
+
+        const agent = await Agent.get(agentName ?? (await Agent.defaultAgent()))
+        const sessionPermission = sessionID ? ((await Session.get(sessionID)).permission ?? []) : []
+
+        const tools = await ToolRegistry.tools({ providerID: provider, modelID: model }, agent)
+        const disabled = PermissionNext.disabled(
+          tools.map((tool) => tool.id),
+          PermissionNext.merge(agent.permission, sessionPermission),
+        )
+
+        return c.json(tools.filter((tool) => !disabled.has(tool.id)).map((tool) => tool.id))
       },
     )
     .get(
@@ -73,18 +98,30 @@ export const ExperimentalRoutes = lazy(() =>
         z.object({
           provider: z.string(),
           model: z.string(),
+          agent: z.string().optional(),
+          sessionID: z.string().optional(),
         }),
       ),
       async (c) => {
-        const { provider, model } = c.req.valid("query")
-        const tools = await ToolRegistry.tools({ providerID: provider, modelID: model })
+        const { provider, model, agent: agentName, sessionID } = c.req.valid("query")
+        const agent = await Agent.get(agentName ?? (await Agent.defaultAgent()))
+        const sessionPermission = sessionID ? ((await Session.get(sessionID)).permission ?? []) : []
+
+        const tools = await ToolRegistry.tools({ providerID: provider, modelID: model }, agent)
+        const disabled = PermissionNext.disabled(
+          tools.map((tool) => tool.id),
+          PermissionNext.merge(agent.permission, sessionPermission),
+        )
+
         return c.json(
-          tools.map((t) => ({
-            id: t.id,
-            description: t.description,
-            // Handle both Zod schemas and plain JSON schemas
-            parameters: (t.parameters as any)?._def ? zodToJsonSchema(t.parameters as any) : t.parameters,
-          })),
+          tools
+            .filter((tool) => !disabled.has(tool.id))
+            .map((t) => ({
+              id: t.id,
+              description: t.description,
+              // Handle both Zod schemas and plain JSON schemas
+              parameters: (t.parameters as any)?._def ? zodToJsonSchema(t.parameters as any) : t.parameters,
+            })),
         )
       },
     )
