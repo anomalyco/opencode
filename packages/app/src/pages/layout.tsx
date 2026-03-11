@@ -83,7 +83,7 @@ import {
 import { workspaceOpenState } from "./layout/sidebar-workspace-helpers"
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
-import { askProjectClose, closeProject as runProjectClose } from "./layout/project-close"
+import { closeProject as runProjectClose } from "./layout/project-close"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore, , ready] = persisted(
@@ -1341,16 +1341,6 @@ export default function Layout(props: ParentProps) {
       open: navigateToProject,
     })
 
-  const askClose = (project: LocalProject) =>
-    askProjectClose({
-      project,
-      t: language.t,
-      show: dialog.show,
-      dismiss: dialog.close,
-      onClose: close,
-      list: globalSDK.client.session.list,
-    })
-
   function toggleProjectWorkspaces(project: LocalProject) {
     const enabled = layout.sidebar.workspaces(project.worktree)()
     if (enabled) {
@@ -2025,7 +2015,7 @@ export default function Layout(props: ParentProps) {
                         <DropdownMenu.Item
                           data-action="project-close-menu"
                           data-project={base64Encode(p().worktree)}
-                          onSelect={() => void askClose(p())}
+                          onSelect={() => close(p().worktree)}
                         >
                           <DropdownMenu.ItemLabel>{language.t("common.close")}</DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>

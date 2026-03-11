@@ -1,26 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { closeProject, projectCloseBody } from "./project-close"
-
-const t = (key: string, vars?: Record<string, string | number>) => {
-  if (key === "dialog.project.close.note") return "Reopen later."
-  if (key === "dialog.project.close.sessions.one") return "1 active session."
-  if (key === "dialog.project.close.sessions.many") return `${vars?.count} active sessions.`
-  return key
-}
-
-describe("project close copy", () => {
-  test("shows note when there are no active sessions", () => {
-    expect(projectCloseBody(0, t)).toBe("Reopen later.")
-  })
-
-  test("shows singular session warning with note", () => {
-    expect(projectCloseBody(1, t)).toBe("1 active session. Reopen later.")
-  })
-
-  test("shows plural session warning with note", () => {
-    expect(projectCloseBody(3, t)).toBe("3 active sessions. Reopen later.")
-  })
-})
+import { closeProject } from "./project-close"
 
 describe("closeProject", () => {
   test("closes inactive project without navigation", () => {
