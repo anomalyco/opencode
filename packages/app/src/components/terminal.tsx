@@ -366,11 +366,11 @@ export const Terminal = (props: TerminalProps) => {
 
         const config = settings.keybinds.get(TOGGLE_TERMINAL_ID) ?? DEFAULT_TOGGLE_TERMINAL_KEYBIND
         const keybinds = parseKeybind(config)
-        if (!matchKeybind(keybinds, event)) return true
+        if (!matchKeybind(keybinds, event)) return false
 
         // Handle terminal toggle directly so it works even when terminal input has focus.
         command.trigger(TOGGLE_TERMINAL_ID, "keybind")
-        return false
+        return true
       })
 
       const fit = new mod.FitAddon()
