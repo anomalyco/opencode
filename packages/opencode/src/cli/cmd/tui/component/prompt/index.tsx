@@ -943,9 +943,8 @@ export function Prompt(props: PromptProps) {
                   return
                 }
 
-                // trim ' from the beginning and end of the pasted content. just
-                // ' and nothing else
-                const filepath = pastedContent.replace(/^'+|'+$/g, "").replace(/\\ /g, " ")
+                // strip shell quoting/escaping that terminals add when drag-dropping file paths
+                const filepath = pastedContent.replace(/^'+|'+$/g, "").replace(/\\([^a-zA-Z0-9])/g, "$1")
                 const isUrl = /^(https?):\/\//.test(filepath)
                 if (!isUrl) {
                   try {
