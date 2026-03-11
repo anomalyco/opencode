@@ -20,6 +20,12 @@ export const AccessToken = Schema.String.pipe(
 )
 export type AccessToken = Schema.Schema.Type<typeof AccessToken>
 
+export const RefreshToken = Schema.String.pipe(
+  Schema.brand("RefreshToken"),
+  withStatics((s) => ({ make: (token: string) => s.makeUnsafe(token) })),
+)
+export type RefreshToken = Schema.Schema.Type<typeof RefreshToken>
+
 export const DeviceCode = Schema.String.pipe(
   Schema.brand("DeviceCode"),
   withStatics((s) => ({ make: (code: string) => s.makeUnsafe(code) })),

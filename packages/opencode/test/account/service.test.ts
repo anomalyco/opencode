@@ -4,7 +4,7 @@ import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 
 import { AccountRepo } from "../../src/account/repo"
 import { AccountService } from "../../src/account/service"
-import { AccountID, DeviceCode, Login, Org, OrgID, UserCode } from "../../src/account/schema"
+import { AccessToken, AccountID, DeviceCode, Login, Org, OrgID, RefreshToken, UserCode } from "../../src/account/schema"
 import { Database } from "../../src/storage/db"
 import { testEffect } from "../fixture/effect"
 
@@ -42,8 +42,8 @@ it.effect(
         id: AccountID.make("user-1"),
         email: "one@example.com",
         url: "https://one.example.com",
-        accessToken: "at_1",
-        refreshToken: "rt_1",
+        accessToken: AccessToken.make("at_1"),
+        refreshToken: RefreshToken.make("rt_1"),
         expiry: Date.now() + 60_000,
         orgID: Option.none(),
       }),
@@ -54,8 +54,8 @@ it.effect(
         id: AccountID.make("user-2"),
         email: "two@example.com",
         url: "https://two.example.com",
-        accessToken: "at_2",
-        refreshToken: "rt_2",
+        accessToken: AccessToken.make("at_2"),
+        refreshToken: RefreshToken.make("rt_2"),
         expiry: Date.now() + 60_000,
         orgID: Option.none(),
       }),
@@ -101,8 +101,8 @@ it.effect(
         id,
         email: "user@example.com",
         url: "https://one.example.com",
-        accessToken: "at_old",
-        refreshToken: "rt_old",
+        accessToken: AccessToken.make("at_old"),
+        refreshToken: RefreshToken.make("rt_old"),
         expiry: Date.now() - 1_000,
         orgID: Option.none(),
       }),
@@ -127,8 +127,8 @@ it.effect(
 
     const row = yield* AccountRepo.use((r) => r.getRow(id))
     const value = Option.getOrThrow(row)
-    expect(value.access_token).toBe("at_new")
-    expect(value.refresh_token).toBe("rt_new")
+    expect(value.access_token).toBe(AccessToken.make("at_new"))
+    expect(value.refresh_token).toBe(RefreshToken.make("rt_new"))
     expect(value.token_expiry).toBeGreaterThan(Date.now())
   }),
 )
@@ -143,8 +143,8 @@ it.effect(
         id,
         email: "user@example.com",
         url: "https://one.example.com",
-        accessToken: "at_1",
-        refreshToken: "rt_1",
+        accessToken: AccessToken.make("at_1"),
+        refreshToken: RefreshToken.make("rt_1"),
         expiry: Date.now() + 60_000,
         orgID: Option.none(),
       }),

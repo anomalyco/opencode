@@ -1,14 +1,14 @@
 import { sqliteTable, text, integer, primaryKey } from "drizzle-orm/sqlite-core"
 
-import { type AccountID, type OrgID } from "./schema"
+import { type AccessToken, type AccountID, type OrgID, type RefreshToken } from "./schema"
 import { Timestamps } from "../storage/schema.sql"
 
 export const AccountTable = sqliteTable("account", {
   id: text().$type<AccountID>().primaryKey(),
   email: text().notNull(),
   url: text().notNull(),
-  access_token: text().notNull(),
-  refresh_token: text().notNull(),
+  access_token: text().$type<AccessToken>().notNull(),
+  refresh_token: text().$type<RefreshToken>().notNull(),
   token_expiry: integer(),
   ...Timestamps,
 })
@@ -27,8 +27,8 @@ export const ControlAccountTable = sqliteTable(
   {
     email: text().notNull(),
     url: text().notNull(),
-    access_token: text().notNull(),
-    refresh_token: text().notNull(),
+    access_token: text().$type<AccessToken>().notNull(),
+    refresh_token: text().$type<RefreshToken>().notNull(),
     token_expiry: integer(),
     active: integer({ mode: "boolean" })
       .notNull()
