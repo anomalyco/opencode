@@ -1,5 +1,16 @@
 export const promptSelector = '[data-component="prompt-input"]'
-export const terminalSelector = '[data-component="terminal"]'
+export const terminalPanelSelector = '#terminal-panel[aria-hidden="false"]'
+export const terminalSelector = `${terminalPanelSelector} [data-component="terminal"]`
+export const sessionComposerDockSelector = '[data-component="session-prompt-dock"]'
+export const questionDockSelector = '[data-component="dock-prompt"][data-kind="question"]'
+export const permissionDockSelector = '[data-component="dock-prompt"][data-kind="permission"]'
+export const permissionRejectSelector = `${permissionDockSelector} [data-slot="permission-footer-actions"] [data-component="button"]:nth-child(1)`
+export const permissionAllowAlwaysSelector = `${permissionDockSelector} [data-slot="permission-footer-actions"] [data-component="button"]:nth-child(2)`
+export const permissionAllowOnceSelector = `${permissionDockSelector} [data-slot="permission-footer-actions"] [data-component="button"]:nth-child(3)`
+export const sessionTodoDockSelector = '[data-component="session-todo-dock"]'
+export const sessionTodoToggleSelector = '[data-action="session-todo-toggle"]'
+export const sessionTodoToggleButtonSelector = '[data-action="session-todo-toggle-button"]'
+export const sessionTodoListSelector = '[data-slot="session-todo-list"]'
 
 export const modelVariantCycleSelector = '[data-action="model-variant-cycle"]'
 export const settingsLanguageSelectSelector = '[data-action="settings-language"]'
@@ -10,11 +21,8 @@ export const settingsNotificationsAgentSelector = '[data-action="settings-notifi
 export const settingsNotificationsPermissionsSelector = '[data-action="settings-notifications-permissions"]'
 export const settingsNotificationsErrorsSelector = '[data-action="settings-notifications-errors"]'
 export const settingsSoundsAgentSelector = '[data-action="settings-sounds-agent"]'
-export const settingsSoundsAgentEnabledSelector = '[data-action="settings-sounds-agent-enabled"]'
 export const settingsSoundsPermissionsSelector = '[data-action="settings-sounds-permissions"]'
-export const settingsSoundsPermissionsEnabledSelector = '[data-action="settings-sounds-permissions-enabled"]'
 export const settingsSoundsErrorsSelector = '[data-action="settings-sounds-errors"]'
-export const settingsSoundsErrorsEnabledSelector = '[data-action="settings-sounds-errors-enabled"]'
 export const settingsUpdatesStartupSelector = '[data-action="settings-updates-startup"]'
 export const settingsReleaseNotesSelector = '[data-action="settings-release-notes"]'
 
@@ -22,8 +30,6 @@ export const sidebarNavSelector = '[data-component="sidebar-nav-desktop"]'
 
 export const projectSwitchSelector = (slug: string) =>
   `${sidebarNavSelector} [data-action="project-switch"][data-project="${slug}"]`
-
-export const projectCloseHoverSelector = (slug: string) => `[data-action="project-close-hover"][data-project="${slug}"]`
 
 export const projectMenuTriggerSelector = (slug: string) =>
   `${sidebarNavSelector} [data-action="project-menu"][data-project="${slug}"]`

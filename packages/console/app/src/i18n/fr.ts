@@ -3,6 +3,7 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
+  "app.meta.description": "OpenCode - L'agent de code open source.",
   "nav.github": "GitHub",
   "nav.docs": "Documentation",
   "nav.changelog": "Changelog",
@@ -15,6 +16,7 @@ export const dict = {
   "nav.home": "Accueil",
   "nav.openMenu": "Ouvrir le menu",
   "nav.getStartedFree": "Commencer gratuitement",
+  "nav.logoAlt": "OpenCode",
 
   "nav.context.copyLogo": "Copier le logo en SVG",
   "nav.context.copyWordmark": "Copier le logotype en SVG",
@@ -42,6 +44,8 @@ export const dict = {
   "notFound.docs": "Documentation",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
+  "notFound.logoLightAlt": "opencode logo light",
+  "notFound.logoDarkAlt": "opencode logo dark",
 
   "user.logout": "Se déconnecter",
 
@@ -75,6 +79,7 @@ export const dict = {
   "error.modelRequired": "Le modèle est requis",
   "error.reloadAmountMin": "Le montant de recharge doit être d'au moins {{amount}} $",
   "error.reloadTriggerMin": "Le seuil de déclenchement doit être d'au moins {{amount}} $",
+  "auth.callback.error.codeMissing": "Aucun code d'autorisation trouvé.",
 
   "home.title": "OpenCode | L'agent de code IA open source",
 
@@ -91,6 +96,8 @@ export const dict = {
   "temp.feature.models.afterLink": ", y compris les modèles locaux",
   "temp.screenshot.caption": "OpenCode TUI avec le thème tokyonight",
   "temp.screenshot.alt": "OpenCode TUI avec le thème tokyonight",
+  "temp.logoLightAlt": "opencode logo light",
+  "temp.logoDarkAlt": "opencode logo dark",
 
   "home.banner.badge": "Nouveau",
   "home.banner.text": "Application desktop disponible en bêta",
@@ -246,11 +253,129 @@ export const dict = {
     "Tous les modèles Zen sont hébergés aux États-Unis. Les fournisseurs suivent une politique de rétention zéro et n'utilisent pas vos données pour l'entraînement des modèles, avec les",
   "zen.privacy.exceptionsLink": "exceptions suivantes",
 
+  "go.title": "OpenCode Go | Modèles de code à faible coût pour tous",
+  "go.meta.description":
+    "Go est un abonnement à 10 $/mois avec des limites généreuses de 5 heures de requêtes pour GLM-5, Kimi K2.5 et MiniMax M2.5.",
+  "go.hero.title": "Modèles de code à faible coût pour tous",
+  "go.hero.body":
+    "Go apporte le codage agentique aux programmeurs du monde entier. Offrant des limites généreuses et un accès fiable aux modèles open source les plus capables, pour que vous puissiez construire avec des agents puissants sans vous soucier du coût ou de la disponibilité.",
+
+  "go.cta.start": "S'abonner à Go",
+  "go.cta.template": "{{text}} {{price}}",
+  "go.cta.text": "S'abonner à Go",
+  "go.cta.price": "10 $/mois",
+  "go.pricing.body": "Utilisez avec n'importe quel agent. Rechargez du crédit si nécessaire. Annulez à tout moment.",
+  "go.graph.free": "Gratuit",
+  "go.graph.freePill": "Big Pickle et modèles gratuits",
+  "go.graph.go": "Go",
+  "go.graph.label": "Requêtes par tranche de 5 heures",
+  "go.graph.usageLimits": "Limites d'utilisation",
+  "go.graph.tick": "{{n}}x",
+  "go.graph.aria": "Requêtes par 5h : {{free}} vs {{go}}",
+
+  "go.testimonials.brand.zen": "Zen",
+  "go.testimonials.brand.go": "Go",
+  "go.testimonials.handle": "@OpenCode",
+  "go.testimonials.dax.name": "Dax Raad",
+  "go.testimonials.dax.title": "ex-PDG, Terminal Products",
+  "go.testimonials.dax.quoteAfter": "a changé ma vie, c'est vraiment une évidence.",
+  "go.testimonials.jay.name": "Jay V",
+  "go.testimonials.jay.title": "ex-Fondateur, SEED, PM, Melt, Pop, Dapt, Cadmus, et ViewPoint",
+  "go.testimonials.jay.quoteBefore": "4 personnes sur 5 dans notre équipe adorent utiliser",
+  "go.testimonials.jay.quoteAfter": ".",
+  "go.testimonials.adam.name": "Adam Elmore",
+  "go.testimonials.adam.title": "ex-Hero, AWS",
+  "go.testimonials.adam.quoteBefore": "Je ne peux pas recommander",
+  "go.testimonials.adam.quoteAfter": "assez. Sérieusement, c'est vraiment bien.",
+  "go.testimonials.david.name": "David Hill",
+  "go.testimonials.david.title": "ex-Directeur du Design, Laravel",
+  "go.testimonials.david.quoteBefore": "Avec",
+  "go.testimonials.david.quoteAfter": "je sais que tous les modèles sont testés et parfaits pour les agents de code.",
+  "go.testimonials.frank.name": "Frank Wang",
+  "go.testimonials.frank.title": "ex-Stagiaire, Nvidia (4 fois)",
+  "go.testimonials.frank.quote": "J'aimerais être encore chez Nvidia.",
+  "go.problem.title": "Quel problème Go résout-il ?",
+  "go.problem.body":
+    "Nous nous concentrons sur le fait d'apporter l'expérience OpenCode à autant de personnes que possible. OpenCode Go est un abonnement à faible coût (10 $/mois) conçu pour apporter le codage agentique aux programmeurs du monde entier. Il offre des limites généreuses et un accès fiable aux modèles open source les plus capables.",
+  "go.problem.subtitle": " ",
+  "go.problem.item1": "Prix d'abonnement bas",
+  "go.problem.item2": "Limites généreuses et accès fiable",
+  "go.problem.item3": "Conçu pour autant de programmeurs que possible",
+  "go.problem.item4": "Inclut GLM-5, Kimi K2.5 et MiniMax M2.5",
+  "go.how.title": "Comment fonctionne Go",
+  "go.how.body": "Go est un abonnement à 10 $/mois que vous pouvez utiliser avec OpenCode ou n'importe quel agent.",
+  "go.how.step1.title": "Créez un compte",
+  "go.how.step1.beforeLink": "suivez les",
+  "go.how.step1.link": "instructions de configuration",
+  "go.how.step2.title": "Abonnez-vous à Go",
+  "go.how.step2.link": "10 $/mois",
+  "go.how.step2.afterLink": "avec des limites généreuses",
+  "go.how.step3.title": "Commencez à coder",
+  "go.how.step3.body": "avec un accès fiable aux modèles open source",
+  "go.privacy.title": "Votre vie privée est importante pour nous",
+  "go.privacy.body":
+    "Le plan est conçu principalement pour les utilisateurs internationaux, avec des modèles hébergés aux États-Unis, dans l'UE et à Singapour pour un accès mondial stable.",
+  "go.privacy.contactAfter": "si vous avez des questions.",
+  "go.privacy.beforeExceptions":
+    "Les modèles Go sont hébergés aux États-Unis. Les fournisseurs suivent une politique de rétention zéro et n'utilisent pas vos données pour l'entraînement des modèles, avec les",
+  "go.privacy.exceptionsLink": "exceptions suivantes",
+  "go.faq.q1": "Qu'est-ce que OpenCode Go ?",
+  "go.faq.a1":
+    "Go est un abonnement à faible coût qui vous donne un accès fiable à des modèles open source performants pour le codage agentique.",
+  "go.faq.q2": "Quels modèles Go inclut-il ?",
+  "go.faq.a2": "Go inclut GLM-5, Kimi K2.5 et MiniMax M2.5, avec des limites généreuses et un accès fiable.",
+  "go.faq.q3": "Est-ce que Go est la même chose que Zen ?",
+  "go.faq.a3":
+    "Non. Zen est payé à l'usage (pay-as-you-go), tandis que Go est un abonnement à 10 $/mois avec des limites généreuses et un accès fiable aux modèles open source GLM-5, Kimi K2.5 et MiniMax M2.5.",
+  "go.faq.q4": "Combien coûte Go ?",
+  "go.faq.a4.p1.beforePricing": "Go coûte",
+  "go.faq.a4.p1.pricingLink": "10 $/mois",
+  "go.faq.a4.p1.afterPricing": "avec des limites généreuses.",
+  "go.faq.a4.p2.beforeAccount": "Vous pouvez gérer votre abonnement dans votre",
+  "go.faq.a4.p2.accountLink": "compte",
+  "go.faq.a4.p3": "Annulez à tout moment.",
+  "go.faq.q5": "Et pour les données et la confidentialité ?",
+  "go.faq.a5.body":
+    "Le plan est conçu principalement pour les utilisateurs internationaux, avec des modèles hébergés aux États-Unis, dans l'UE et à Singapour pour un accès mondial stable.",
+  "go.faq.a5.contactAfter": "si vous avez des questions.",
+  "go.faq.a5.beforeExceptions":
+    "Les modèles Go sont hébergés aux États-Unis. Les fournisseurs suivent une politique de rétention zéro et n'utilisent pas vos données pour l'entraînement des modèles, avec les",
+  "go.faq.a5.exceptionsLink": "exceptions suivantes",
+  "go.faq.q6": "Puis-je recharger mon crédit ?",
+  "go.faq.a6": "Si vous avez besoin de plus d'utilisation, vous pouvez recharger du crédit dans votre compte.",
+  "go.faq.q7": "Puis-je annuler ?",
+  "go.faq.a7": "Oui, vous pouvez annuler à tout moment.",
+  "go.faq.q8": "Puis-je utiliser Go avec d'autres agents de code ?",
+  "go.faq.a8":
+    "Oui, vous pouvez utiliser Go avec n'importe quel agent. Suivez les instructions de configuration dans votre agent de code préféré.",
+  "go.faq.q9": "Quelle est la différence entre les modèles gratuits et Go ?",
+  "go.faq.a9":
+    "Les modèles gratuits incluent Big Pickle ainsi que des modèles promotionnels disponibles à ce moment-là, avec un quota de 200 requêtes/jour. Go inclut GLM-5, Kimi K2.5 et MiniMax M2.5 avec des quotas de requêtes plus élevés appliqués sur des fenêtres glissantes (5 heures, hebdomadaire et mensuelle), à peu près équivalent à 12 $ par 5 heures, 30 $ par semaine et 60 $ par mois (le nombre réel de requêtes varie selon le modèle et l'utilisation).",
+
+  "zen.api.error.rateLimitExceeded": "Limite de débit dépassée. Veuillez réessayer plus tard.",
+  "zen.api.error.modelNotSupported": "Modèle {{model}} non pris en charge",
+  "zen.api.error.modelFormatNotSupported": "Modèle {{model}} non pris en charge pour le format {{format}}",
+  "zen.api.error.noProviderAvailable": "Aucun fournisseur disponible",
+  "zen.api.error.providerNotSupported": "Fournisseur {{provider}} non pris en charge",
+  "zen.api.error.missingApiKey": "Clé API manquante.",
+  "zen.api.error.invalidApiKey": "Clé API invalide.",
+  "zen.api.error.subscriptionQuotaExceeded": "Quota d'abonnement dépassé. Réessayez dans {{retryIn}}.",
+  "zen.api.error.subscriptionQuotaExceededUseFreeModels":
+    "Quota d'abonnement dépassé. Vous pouvez continuer à utiliser les modèles gratuits.",
+  "zen.api.error.noPaymentMethod": "Aucune méthode de paiement. Ajoutez une méthode de paiement ici : {{billingUrl}}",
+  "zen.api.error.insufficientBalance": "Solde insuffisant. Gérez votre facturation ici : {{billingUrl}}",
+  "zen.api.error.workspaceMonthlyLimitReached":
+    "Votre espace de travail a atteint sa limite de dépense mensuelle de {{amount}} $. Gérez vos limites ici : {{billingUrl}}",
+  "zen.api.error.userMonthlyLimitReached":
+    "Vous avez atteint votre limite de dépense mensuelle de {{amount}} $. Gérez vos limites ici : {{membersUrl}}",
+  "zen.api.error.modelDisabled": "Le modèle est désactivé",
+
   "black.meta.title": "OpenCode Black | Accédez aux meilleurs modèles de code au monde",
   "black.meta.description": "Accédez à Claude, GPT, Gemini et plus avec les forfaits d'abonnement OpenCode Black.",
   "black.hero.title": "Accédez aux meilleurs modèles de code au monde",
   "black.hero.subtitle": "Y compris Claude, GPT, Gemini et plus",
   "black.title": "OpenCode Black | Tarification",
+  "black.paused": "L'inscription au plan Black est temporairement suspendue.",
   "black.plan.icon20": "Forfait Black 20",
   "black.plan.icon100": "Forfait Black 100",
   "black.plan.icon200": "Forfait Black 200",
@@ -348,12 +473,15 @@ export const dict = {
   "workspace.usage.table.input": "Entrée",
   "workspace.usage.table.output": "Sortie",
   "workspace.usage.table.cost": "Coût",
+  "workspace.usage.table.session": "Session",
   "workspace.usage.breakdown.input": "Entrée",
   "workspace.usage.breakdown.cacheRead": "Lecture cache",
   "workspace.usage.breakdown.cacheWrite": "Écriture cache",
   "workspace.usage.breakdown.output": "Sortie",
   "workspace.usage.breakdown.reasoning": "Raisonnement",
-  "workspace.usage.subscription": "abonnement ({{amount}} $)",
+  "workspace.usage.subscription": "Black ({{amount}} $)",
+  "workspace.usage.lite": "Go ({{amount}} $)",
+  "workspace.usage.byok": "BYOK ({{amount}} $)",
 
   "workspace.cost.title": "Coût",
   "workspace.cost.subtitle": "Coûts d'utilisation répartis par modèle.",
@@ -452,6 +580,7 @@ export const dict = {
   "workspace.reload.updatePaymentMethod": "Veuillez mettre à jour votre méthode de paiement et réessayer.",
   "workspace.reload.retrying": "Nouvelle tentative...",
   "workspace.reload.retry": "Réessayer",
+  "workspace.reload.error.paymentFailed": "Échec du paiement.",
 
   "workspace.payments.title": "Historique des paiements",
   "workspace.payments.subtitle": "Transactions de paiement récentes.",
@@ -492,6 +621,37 @@ export const dict = {
   "workspace.black.waitlist.enrolled": "Inscrit",
   "workspace.black.waitlist.enrollNote":
     "Lorsque vous cliquez sur S'inscrire, votre abonnement démarre immédiatement et votre carte sera débitée.",
+
+  "workspace.lite.loading": "Chargement...",
+  "workspace.lite.time.day": "jour",
+  "workspace.lite.time.days": "jours",
+  "workspace.lite.time.hour": "heure",
+  "workspace.lite.time.hours": "heures",
+  "workspace.lite.time.minute": "minute",
+  "workspace.lite.time.minutes": "minutes",
+  "workspace.lite.time.fewSeconds": "quelques secondes",
+  "workspace.lite.subscription.title": "Abonnement Go",
+  "workspace.lite.subscription.message": "Vous êtes abonné à OpenCode Go.",
+  "workspace.lite.subscription.manage": "Gérer l'abonnement",
+  "workspace.lite.subscription.rollingUsage": "Utilisation glissante",
+  "workspace.lite.subscription.weeklyUsage": "Utilisation hebdomadaire",
+  "workspace.lite.subscription.monthlyUsage": "Utilisation mensuelle",
+  "workspace.lite.subscription.resetsIn": "Réinitialisation dans",
+  "workspace.lite.subscription.useBalance":
+    "Utilisez votre solde disponible après avoir atteint les limites d'utilisation",
+  "workspace.lite.subscription.selectProvider":
+    'Sélectionnez "OpenCode Go" comme fournisseur dans votre configuration opencode pour utiliser les modèles Go.',
+  "workspace.lite.other.title": "Abonnement Go",
+  "workspace.lite.other.message":
+    "Un autre membre de cet espace de travail est déjà abonné à OpenCode Go. Un seul membre par espace de travail peut s'abonner.",
+  "workspace.lite.promo.title": "OpenCode Go",
+  "workspace.lite.promo.description":
+    "OpenCode Go est un abonnement à 10 $ par mois qui offre un accès fiable aux modèles de codage ouverts populaires avec des limites d'utilisation généreuses.",
+  "workspace.lite.promo.modelsTitle": "Ce qui est inclus",
+  "workspace.lite.promo.footer":
+    "Le plan est conçu principalement pour les utilisateurs internationaux, avec des modèles hébergés aux États-Unis, dans l'UE et à Singapour pour un accès mondial stable. Les tarifs et les limites d'utilisation peuvent changer à mesure que nous apprenons des premières utilisations et des commentaires.",
+  "workspace.lite.promo.subscribe": "S'abonner à Go",
+  "workspace.lite.promo.subscribing": "Redirection...",
 
   "download.title": "OpenCode | Téléchargement",
   "download.meta.description": "Téléchargez OpenCode pour macOS, Windows et Linux",
@@ -545,6 +705,10 @@ export const dict = {
   "enterprise.form.send": "Envoyer",
   "enterprise.form.sending": "Envoi...",
   "enterprise.form.success": "Message envoyé, nous vous contacterons bientôt.",
+  "enterprise.form.success.submitted": "Formulaire soumis avec succès.",
+  "enterprise.form.error.allFieldsRequired": "Tous les champs sont requis.",
+  "enterprise.form.error.invalidEmailFormat": "Format d'e-mail invalide.",
+  "enterprise.form.error.internalServer": "Erreur interne du serveur.",
   "enterprise.faq.title": "FAQ",
   "enterprise.faq.q1": "Qu'est-ce que OpenCode Enterprise ?",
   "enterprise.faq.a1":
@@ -604,4 +768,5 @@ export const dict = {
   "bench.detail.table.duration": "Durée",
   "bench.detail.run.title": "Exécution {{n}}",
   "bench.detail.rawJson": "JSON brut",
+  "bench.submission.error.allFieldsRequired": "Tous les champs sont requis.",
 } satisfies Dict

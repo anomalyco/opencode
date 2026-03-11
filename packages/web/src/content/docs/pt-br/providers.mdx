@@ -54,7 +54,39 @@ OpenCode Zen é uma lista de modelos fornecidos pela equipe do opencode que fora
 Se você é novo, recomendamos começar com o OpenCode Zen.
 :::
 
-1. Execute o comando `/connect` no TUI, selecione opencode e acesse [opencode.ai/auth](https://opencode.ai/auth).
+1. Execute o comando `/connect` no TUI, selecione `OpenCode Zen` e acesse [opencode.ai/zen](https://opencode.ai/zen).
+
+   ```txt
+   /connect
+   ```
+
+2. Faça login, adicione seus dados de cobrança e copie sua chave da API.
+
+3. Cole sua chave da API.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Execute `/models` no TUI para ver a lista de modelos que recomendamos.
+
+   ```txt
+   /models
+   ```
+
+Funciona como qualquer outro provedor no opencode e é completamente opcional.
+
+---
+
+## OpenCode Go
+
+OpenCode Go é um plano de assinatura de baixo custo que fornece acesso confiável a modelos de codificação abertos populares fornecidos pela equipe do opencode que foram
+testados e verificados para funcionar bem com o opencode.
+
+1. Execute o comando `/connect` no TUI, selecione `OpenCode Go` e acesse [opencode.ai/zen](https://opencode.ai/zen).
 
    ```txt
    /connect
@@ -130,6 +162,8 @@ Para usar o Amazon Bedrock com o opencode:
 
 2. **Configure a autenticação** usando um dos seguintes métodos:
 
+   ***
+
    #### Variáveis de Ambiente (Início Rápido)
 
    Defina uma dessas variáveis de ambiente ao executar o opencode:
@@ -151,6 +185,8 @@ Para usar o Amazon Bedrock com o opencode:
    export AWS_PROFILE=my-dev-profile
    export AWS_REGION=us-east-1
    ```
+
+   ***
 
    #### Arquivo de Configuração (Recomendado)
 
@@ -179,6 +215,8 @@ Para usar o Amazon Bedrock com o opencode:
    As opções do arquivo de configuração têm precedência sobre as variáveis de ambiente.
    :::
 
+   ***
+
    #### Avançado: Endpoints VPC
 
    Se você estiver usando endpoints VPC para Bedrock:
@@ -202,11 +240,15 @@ Para usar o Amazon Bedrock com o opencode:
    A opção `endpoint` é um alias para a opção genérica `baseURL`, usando terminologia específica da AWS. Se tanto `endpoint` quanto `baseURL` forem especificados, `endpoint` tem precedência.
    :::
 
+   ***
+
    #### Métodos de Autenticação
    - **`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`**: Crie um usuário IAM e gere chaves de acesso no Console da AWS
    - **`AWS_PROFILE`**: Use perfis nomeados de `~/.aws/credentials`. Primeiro configure com `aws configure --profile my-profile` ou `aws sso login`
    - **`AWS_BEARER_TOKEN_BEDROCK`**: Gere chaves de API de longo prazo no console do Amazon Bedrock
    - **`AWS_WEB_IDENTITY_TOKEN_FILE` / `AWS_ROLE_ARN`**: Para EKS IRSA (IAM Roles for Service Accounts) ou outros ambientes Kubernetes com federação OIDC. Essas variáveis de ambiente são injetadas automaticamente pelo Kubernetes ao usar anotações de conta de serviço.
+
+   ***
 
    #### Precedência de Autenticação
 
@@ -225,7 +267,8 @@ Para usar o Amazon Bedrock com o opencode:
    ```
 
 :::note
-Para perfis de inferência personalizados, use o nome do modelo e do provedor na chave e defina a propriedade `id` para o arn. Isso garante o cache correto:
+Para perfis de inferência personalizados, use o nome do modelo e do provedor na chave e defina a propriedade `id` para o arn. Isso garante o cache correto.
+:::
 
 ```json title="opencode.json"
 {
@@ -242,8 +285,6 @@ Para perfis de inferência personalizados, use o nome do modelo e do provedor na
   }
 }
 ```
-
-:::
 
 ---
 
@@ -784,8 +825,6 @@ Para usar sua assinatura do GitHub Copilot com o opencode:
 
 :::note
 Alguns modelos podem precisar de uma [assinatura Pro+](https://github.com/features/copilot/plans) para usar.
-
-Alguns modelos precisam ser habilitados manualmente nas suas [configurações do GitHub Copilot](https://docs.github.com/en/copilot/how-tos/use-ai-models/configure-access-to-ai-models#setup-for-individual-use).
 :::
 
 1. Execute o comando `/connect` e procure por GitHub Copilot.
@@ -803,7 +842,8 @@ Alguns modelos precisam ser habilitados manualmente nas suas [configurações do
    │
    │ Digite o código: 8F43-6FCF
    │
-   └ Aguardando autorização...
+   │ Aguardando autorização...
+   └
    ```
 
 3. Agora execute o comando `/models` para selecionar o modelo que você deseja.
@@ -1309,6 +1349,7 @@ Recomendamos se inscrever para [ChatGPT Plus ou Pro](https://chatgpt.com/pricing
    │
    │ ChatGPT Plus/Pro
    │ Inserir manualmente a chave de API
+   │
    └
    ```
 
@@ -1465,6 +1506,39 @@ SAP AI Core fornece acesso a mais de 40 modelos do OpenAI, Anthropic, Google, Am
    :::
 
 5. Execute o comando `/models` para selecionar entre mais de 40 modelos disponíveis.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### STACKIT
+
+O STACKIT AI Model Serving fornece um ambiente de hospedagem soberano totalmente gerenciado para modelos de IA, com foco em LLMs como Llama, Mistral e Qwen, com máxima soberania de dados na infraestrutura europeia.
+
+1. Vá para o [Portal STACKIT](https://portal.stackit.cloud), navegue até **AI Model Serving** e crie um token de autenticação para o seu projeto.
+
+   :::tip
+   Você precisa de uma conta de cliente STACKIT, conta de usuário e projeto antes de criar tokens de autenticação.
+   :::
+
+2. Execute o comando `/connect` e procure por **STACKIT**.
+
+   ```txt
+   /connect
+   ```
+
+3. Insira seu token de autenticação do STACKIT AI Model Serving.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Execute o comando `/models` para selecionar entre os modelos disponíveis, como _Qwen3-VL 235B_ ou _Llama 3.3 70B_.
 
    ```txt
    /models
@@ -1751,10 +1825,9 @@ Você pode usar qualquer provedor compatível com OpenAI com o opencode. A maior
 
    ┌  Adicionar credencial
    │
-   ▲  Isso armazena apenas uma credencial para myprovider - você precisará configurá-lo no opencode.json, verifique a documentação para exemplos.
-   │
-   ◇  Digite sua chave de API
-   │  sk-...
+   ◆  Select provider
+   │  ...
+   │  ● Other
    └
    ```
 
@@ -1765,10 +1838,8 @@ Você pode usar qualquer provedor compatível com OpenAI com o opencode. A maior
 
    ┌  Adicionar credencial
    │
-   ▲  Isso armazena apenas uma credencial para myprovider - você precisará configurá-lo no opencode.json, verifique a documentação para exemplos.
-   │
-   ◇  Digite sua chave de API
-   │  sk-...
+   ◇  Enter provider id
+   │  myprovider
    └
    ```
 
@@ -1808,8 +1879,6 @@ Você pode usar qualquer provedor compatível com OpenAI com o opencode. A maior
            }
          }
        }
-         }
-       }
      }
    }
    ```
@@ -1845,18 +1914,6 @@ Aqui está um exemplo definindo as opções `apiKey`, `headers` e `limit` do mod
         "headers": {
           "Authorization": "Bearer custom-token"
         }
-      },
-      "models": {
-        "my-model-name": {
-          "name": "Nome de Exibição do Meu Modelo",
-          "limit": {
-            "context": 200000,
-            "output": 65536
-          }
-        }
-      }
-    }
-  }
       },
       "models": {
         "my-model-name": {

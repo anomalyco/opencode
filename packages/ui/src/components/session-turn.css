@@ -37,21 +37,36 @@
     max-width: 100%;
   }
 
+  [data-slot="session-turn-compaction"] {
+    width: 100%;
+    min-width: 0;
+    align-self: stretch;
+  }
+
   [data-slot="session-turn-thinking"] {
     display: flex;
     align-items: center;
     gap: 8px;
+    width: 100%;
+    min-width: 0;
     color: var(--text-weak);
     font-family: var(--font-family-sans);
     font-size: var(--font-size-base);
     font-weight: var(--font-weight-medium);
-    line-height: var(--line-height-large);
+    line-height: 20px;
     min-height: 20px;
 
     [data-component="spinner"] {
       width: 16px;
       height: 16px;
     }
+  }
+
+  [data-component="text-reveal"].session-turn-thinking-heading {
+    flex: 1 1 auto;
+    min-width: 0;
+    color: var(--text-weaker);
+    font-weight: var(--font-weight-regular);
   }
 
   .error-card {
@@ -118,6 +133,7 @@
   [data-slot="session-turn-diffs-count"] {
     color: var(--text-base);
     font-family: var(--font-family-sans);
+    font-variant-numeric: tabular-nums;
     font-size: var(--font-size-base);
     font-weight: var(--font-weight-regular);
     line-height: var(--line-height-x-large);
@@ -128,6 +144,11 @@
     align-items: center;
     gap: 8px;
     flex-shrink: 0;
+
+    [data-slot="collapsible-arrow"] {
+      margin-left: -6px;
+      transform: translateY(2px);
+    }
 
     [data-component="diff-changes"][data-variant="bars"] {
       transform: translateY(1px);
@@ -151,9 +172,8 @@
 
   [data-slot="session-turn-diff-path"] {
     display: flex;
+    flex-grow: 1;
     min-width: 0;
-    align-items: baseline;
-    overflow: hidden;
 
     font-family: var(--font-family-sans);
     font-size: var(--font-size-small);
@@ -161,17 +181,16 @@
   }
 
   [data-slot="session-turn-diff-directory"] {
-    color: var(--text-weak);
-    min-width: 0;
+    color: var(--text-base);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     direction: rtl;
-    unicode-bidi: plaintext;
     text-align: left;
   }
 
   [data-slot="session-turn-diff-filename"] {
+    flex-shrink: 0;
     color: var(--text-strong);
     font-weight: var(--font-weight-medium);
   }

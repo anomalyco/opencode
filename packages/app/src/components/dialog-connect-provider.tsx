@@ -4,7 +4,6 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
-import type { IconName } from "@opencode-ai/ui/icons/provider"
 import { List, type ListRef } from "@opencode-ai/ui/list"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Spinner } from "@opencode-ai/ui/spinner"
@@ -447,7 +446,7 @@ export function DialogConnectProvider(props: { provider: string }) {
     >
       <div class="flex flex-col gap-6 px-2.5 pb-3">
         <div class="px-2.5 flex gap-4 items-center">
-          <ProviderIcon id={props.provider as IconName} class="size-5 shrink-0 icon-strong-base" />
+          <ProviderIcon id={props.provider} class="size-5 shrink-0 icon-strong-base" />
           <div class="text-16-medium text-text-strong">
             <Switch>
               <Match when={props.provider === "anthropic" && method()?.label?.toLowerCase().includes("max")}>

@@ -1,6 +1,5 @@
-import { For, Show, createEffect, createMemo, on } from "solid-js"
+import { For, Show, createEffect, createMemo, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
-import { createMediaQuery } from "@solid-primitives/media"
 import { useParams } from "@solidjs/router"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
@@ -17,7 +16,7 @@ import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useTerminal, type LocalPTY } from "@/context/terminal"
 import { terminalTabLabel } from "@/pages/session/terminal-label"
-import { focusTerminalById } from "@/pages/session/helpers"
+import { createSizing, focusTerminalById } from "@/pages/session/helpers"
 import { getTerminalHandoff, setTerminalHandoff } from "@/pages/session/handoff"
 
 export function TerminalPanel() {
@@ -27,44 +26,38 @@ export function TerminalPanel() {
   const language = useLanguage()
   const command = useCommand()
 
-  const isDesktop = createMediaQuery("(min-width: 768px)")
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const view = createMemo(() => layout.view(sessionKey))
 
   const opened = createMemo(() => view().terminal.opened())
-  const open = createMemo(() => isDesktop() && opened())
+  const size = createSizing()
   const height = createMemo(() => layout.terminal.height())
   const close = () => view().terminal.close()
+  let root: HTMLDivElement | undefined
 
   const [store, setStore] = createStore({
     autoCreated: false,
-    everOpened: false,
     activeDraggable: undefined as string | undefined,
+    view: typeof window === "undefined" ? 1000 : (window.visualViewport?.height ?? window.innerHeight),
   })
 
-  const rendered = createMemo(() => isDesktop() && (opened() || store.everOpened))
+  const max = () => store.view * 0.6
+  const pane = () => Math.min(height(), max())
 
-  createEffect(
-    on(open, (isOpen, prev) => {
-      if (isOpen) {
-        if (!store.everOpened) setStore("everOpened", true)
-        const activeId = terminal.active()
-        if (!activeId) return
-        if (document.activeElement instanceof HTMLElement) {
-          document.activeElement.blur()
-        }
-        setTimeout(() => focusTerminalById(activeId), 0)
-        return
-      }
+  createEffect(() => {
+    if (typeof window === "undefined") return
 
-      if (!prev) return
-      const panel = document.getElementById("terminal-panel")
-      const activeElement = document.activeElement
-      if (!panel || !(activeElement instanceof HTMLElement)) return
-      if (!panel.contains(activeElement)) return
-      activeElement.blur()
-    }),
-  )
+    const sync = () => setStore("view", window.visualViewport?.height ?? window.innerHeight)
+    const port = window.visualViewport
+
+    sync()
+    window.addEventListener("resize", sync)
+    port?.addEventListener("resize", sync)
+    onCleanup(() => {
+      window.removeEventListener("resize", sync)
+      port?.removeEventListener("resize", sync)
+    })
+  })
 
   createEffect(() => {
     if (!opened()) {
@@ -81,25 +74,54 @@ export function TerminalPanel() {
     on(
       () => terminal.all().length,
       (count, prevCount) => {
-        if (prevCount !== undefined && prevCount > 0 && count === 0) {
-          if (opened()) view().terminal.toggle()
-        }
+        if (prevCount === undefined || prevCount <= 0 || count !== 0) return
+        if (!opened()) return
+        close()
       },
     ),
   )
 
+  const focus = (id: string) => {
+    focusTerminalById(id)
+
+    const frame = requestAnimationFrame(() => {
+      if (!opened()) return
+      if (terminal.active() !== id) return
+      focusTerminalById(id)
+    })
+
+    const timers = [120, 240].map((ms) =>
+      window.setTimeout(() => {
+        if (!opened()) return
+        if (terminal.active() !== id) return
+        focusTerminalById(id)
+      }, ms),
+    )
+
+    return () => {
+      cancelAnimationFrame(frame)
+      for (const timer of timers) clearTimeout(timer)
+    }
+  }
+
   createEffect(
     on(
-      () => terminal.active(),
-      (activeId) => {
-        if (!activeId || !open()) return
-        if (document.activeElement instanceof HTMLElement) {
-          document.activeElement.blur()
-        }
-        focusTerminalById(activeId)
+      () => [opened(), terminal.active()] as const,
+      ([next, id]) => {
+        if (!next || !id) return
+        const stop = focus(id)
+        onCleanup(stop)
       },
     ),
   )
+
+  createEffect(() => {
+    if (opened()) return
+    const active = document.activeElement
+    if (!(active instanceof HTMLElement)) return
+    if (!root?.contains(active)) return
+    active.blur()
+  })
 
   createEffect(() => {
     const dir = params.dir
@@ -127,7 +149,7 @@ export function TerminalPanel() {
 
   const all = createMemo(() => terminal.all())
   const ids = createMemo(() => all().map((pty) => pty.id))
-  const byId = createMemo(() => new Map(all().map((pty) => [pty.id, pty])))
+  const byId = createMemo(() => new Map(all().map((pty) => [pty.id, { ...pty }])))
 
   const handleTerminalDragStart = (event: unknown) => {
     const id = getDraggableId(event)
@@ -152,43 +174,57 @@ export function TerminalPanel() {
 
     const activeId = terminal.active()
     if (!activeId) return
-    setTimeout(() => {
+    requestAnimationFrame(() => {
+      if (terminal.active() !== activeId) return
       focusTerminalById(activeId)
-    }, 0)
+    })
   }
 
   return (
-    <Show when={rendered()}>
+    <div
+      ref={root}
+      id="terminal-panel"
+      role="region"
+      aria-label={language.t("terminal.title")}
+      aria-hidden={!opened()}
+      inert={!opened()}
+      class="relative w-full shrink-0 overflow-hidden bg-background-stronger"
+      classList={{
+        "border-t border-border-weak-base": opened(),
+        "transition-[height] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[height] motion-reduce:transition-none":
+          !size.active(),
+      }}
+      style={{ height: opened() ? `${pane()}px` : "0px" }}
+    >
       <div
-        id="terminal-panel"
-        role="region"
-        aria-label={language.t("terminal.title")}
+        class="absolute inset-x-0 top-0 flex flex-col"
         classList={{
-          "relative w-full flex flex-col shrink-0 overflow-hidden": true,
-          "border-t border-border-weak-base": open(),
-          "pointer-events-none": !open(),
+          "translate-y-0": opened(),
+          "translate-y-full pointer-events-none": !opened(),
+          "transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform motion-reduce:transition-none":
+            !size.active(),
         }}
-        style={{
-          height: `${height()}px`,
-          display: open() ? "flex" : "none",
-        }}
+        style={{ height: `${pane()}px` }}
       >
-        <Show when={open()}>
+        <div class="hidden md:block" onPointerDown={() => size.start()}>
           <ResizeHandle
             direction="vertical"
-            size={height()}
+            size={pane()}
             min={100}
-            max={typeof window === "undefined" ? 1000 : window.innerHeight * 0.6}
+            max={max()}
             collapseThreshold={50}
-            onResize={layout.terminal.resize}
+            onResize={(next) => {
+              size.touch()
+              layout.terminal.resize(next)
+            }}
             onCollapse={close}
           />
-        </Show>
+        </div>
         <Show
           when={terminal.ready()}
           fallback={
             <div class="flex flex-col h-full pointer-events-none">
-              <div class="h-10 flex items-center gap-2 px-2 border-b border-border-weak-base bg-background-stronger overflow-hidden">
+              <div class="h-10 flex items-center gap-2 px-2 border-b border-border-weaker-base bg-background-stronger overflow-hidden">
                 <For each={handoff()}>
                   {(title) => (
                     <div class="px-2 py-1 rounded-md bg-surface-base text-14-regular text-text-weak truncate max-w-40">
@@ -221,9 +257,15 @@ export function TerminalPanel() {
                 onChange={(id) => terminal.open(id)}
                 class="!h-auto !flex-none"
               >
-                <Tabs.List class="h-10">
+                <Tabs.List class="h-10 border-b border-border-weaker-base">
                   <SortableProvider ids={ids()}>
-                    <For each={all()}>{(pty) => <SortableTerminalTab terminal={pty} onClose={close} />}</For>
+                    <For each={ids()}>
+                      {(id) => (
+                        <Show when={byId().get(id)}>
+                          {(pty) => <SortableTerminalTab terminal={pty()} onClose={close} />}
+                        </Show>
+                      )}
+                    </For>
                   </SortableProvider>
                   <div class="h-full flex items-center justify-center">
                     <TooltipKeybind
@@ -243,21 +285,23 @@ export function TerminalPanel() {
                 </Tabs.List>
               </Tabs>
               <div class="flex-1 min-h-0 relative">
-                <For each={all()}>
-                  {(pty) => (
-                    <div
-                      id={`terminal-wrapper-${pty.id}`}
-                      class="absolute inset-0"
-                      style={{
-                        display: terminal.active() === pty.id ? "block" : "none",
-                      }}
-                    >
-                      <Show when={pty.id} keyed>
-                        <Terminal pty={pty} onCleanup={terminal.update} onConnectError={() => terminal.clone(pty.id)} />
-                      </Show>
-                    </div>
+                <Show when={terminal.active()} keyed>
+                  {(id) => (
+                    <Show when={byId().get(id)}>
+                      {(pty) => (
+                        <div id={`terminal-wrapper-${id}`} class="absolute inset-0">
+                          <Terminal
+                            pty={pty()}
+                            autoFocus={opened()}
+                            onConnect={() => terminal.trim(id)}
+                            onCleanup={terminal.update}
+                            onConnectError={() => terminal.clone(id)}
+                          />
+                        </div>
+                      )}
+                    </Show>
                   )}
-                </For>
+                </Show>
               </div>
             </div>
             <DragOverlay>
@@ -280,6 +324,6 @@ export function TerminalPanel() {
           </DragDropProvider>
         </Show>
       </div>
-    </Show>
+    </div>
   )
 }

@@ -18,23 +18,9 @@ export namespace Pty {
 
   type Socket = {
     readyState: number
+    data?: unknown
     send: (data: string | Uint8Array | ArrayBuffer) => void
     close: (code?: number, reason?: string) => void
-  }
-
-  type Subscriber = {
-    id: number
-  }
-
-  const sockets = new WeakMap<object, number>()
-  const owners = new WeakMap<object, string>()
-  let socketCounter = 0
-
-  const tagSocket = (ws: Socket) => {
-    if (!ws || typeof ws !== "object") return
-    const next = (socketCounter = (socketCounter + 1) % Number.MAX_SAFE_INTEGER)
-    sockets.set(ws, next)
-    return next
   }
 
   // WebSocket control frame: 0x00 + UTF-8 JSON.
@@ -101,7 +87,7 @@ export namespace Pty {
     buffer: string
     bufferCursor: number
     cursor: number
-    subscribers: Map<Socket, Subscriber>
+    subscribers: Map<unknown, Socket>
   }
 
   const state = Instance.state(
@@ -111,9 +97,9 @@ export namespace Pty {
         try {
           session.process.kill()
         } catch {}
-        for (const ws of session.subscribers.keys()) {
+        for (const [key, ws] of session.subscribers.entries()) {
           try {
-            ws.close()
+            if (ws.data === key) ws.close()
           } catch {
             // ignore
           }
@@ -184,20 +170,21 @@ export namespace Pty {
     ptyProcess.onData((chunk) => {
       session.cursor += chunk.length
 
-      for (const [ws, sub] of session.subscribers) {
+      for (const [key, ws] of session.subscribers.entries()) {
         if (ws.readyState !== 1) {
-          session.subscribers.delete(ws)
+          session.subscribers.delete(key)
           continue
         }
 
-        if (typeof ws === "object" && sockets.get(ws) !== sub.id) {
-          session.subscribers.delete(ws)
+        if (ws.data !== key) {
+          session.subscribers.delete(key)
           continue
         }
+
         try {
           ws.send(chunk)
         } catch {
-          session.subscribers.delete(ws)
+          session.subscribers.delete(key)
         }
       }
 
@@ -208,18 +195,11 @@ export namespace Pty {
       session.bufferCursor += excess
     })
     ptyProcess.onExit(({ exitCode }) => {
+      if (session.info.status === "exited") return
       log.info("session exited", { id, exitCode })
       session.info.status = "exited"
-      for (const ws of session.subscribers.keys()) {
-        try {
-          ws.close()
-        } catch {
-          // ignore
-        }
-      }
-      session.subscribers.clear()
       Bus.publish(Event.Exited, { id, exitCode })
-      state().delete(id)
+      remove(id)
     })
     Bus.publish(Event.Created, { info })
     return info
@@ -241,19 +221,19 @@ export namespace Pty {
   export async function remove(id: string) {
     const session = state().get(id)
     if (!session) return
+    state().delete(id)
     log.info("removing session", { id })
     try {
       session.process.kill()
     } catch {}
-    for (const ws of session.subscribers.keys()) {
+    for (const [key, ws] of session.subscribers.entries()) {
       try {
-        ws.close()
+        if (ws.data === key) ws.close()
       } catch {
         // ignore
       }
     }
     session.subscribers.clear()
-    state().delete(id)
     Bus.publish(Event.Deleted, { id })
   }
 
@@ -279,23 +259,16 @@ export namespace Pty {
     }
     log.info("client connected to session", { id })
 
-    const socketId = tagSocket(ws)
-    if (socketId === undefined) {
-      ws.close()
-      return
-    }
+    // Use ws.data as the unique key for this connection lifecycle.
+    // If ws.data is undefined, fallback to ws object.
+    const connectionKey = ws.data && typeof ws.data === "object" ? ws.data : ws
 
-    const previous = owners.get(ws)
-    if (previous && previous !== id) {
-      state().get(previous)?.subscribers.delete(ws)
-    }
-
-    owners.set(ws, id)
-    session.subscribers.set(ws, { id: socketId })
+    // Optionally cleanup if the key somehow exists
+    session.subscribers.delete(connectionKey)
+    session.subscribers.set(connectionKey, ws)
 
     const cleanup = () => {
-      session.subscribers.delete(ws)
-      if (owners.get(ws) === id) owners.delete(ws)
+      session.subscribers.delete(connectionKey)
     }
 
     const start = session.bufferCursor

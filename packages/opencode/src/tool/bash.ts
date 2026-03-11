@@ -7,8 +7,8 @@ import { Log } from "../util/log"
 import { Instance } from "../project/instance"
 import { lazy } from "@/util/lazy"
 import { Language } from "web-tree-sitter"
+import fs from "fs/promises"
 
-import { $ } from "bun"
 import { Filesystem } from "@/util/filesystem"
 import { fileURLToPath } from "url"
 import { Flag } from "@/flag/flag.ts"
@@ -116,19 +116,11 @@ export const BashTool = Tool.define("bash", async () => {
         if (["cd", "rm", "cp", "mv", "mkdir", "touch", "chmod", "chown", "cat"].includes(command[0])) {
           for (const arg of command.slice(1)) {
             if (arg.startsWith("-") || (command[0] === "chmod" && arg.startsWith("+"))) continue
-            const resolved = await $`realpath ${arg}`
-              .cwd(cwd)
-              .quiet()
-              .nothrow()
-              .text()
-              .then((x) => x.trim())
+            const resolved = await fs.realpath(path.resolve(cwd, arg)).catch(() => "")
             log.info("resolved path", { arg, resolved })
             if (resolved) {
-              // Git Bash on Windows returns Unix-style paths like /c/Users/...
               const normalized =
-                process.platform === "win32" && resolved.match(/^\/[a-z]\//)
-                  ? resolved.replace(/^\/([a-z])\//, (_, drive) => `${drive.toUpperCase()}:\\`).replace(/\//g, "\\")
-                  : resolved
+                process.platform === "win32" ? Filesystem.windowsPath(resolved).replace(/\//g, "\\") : resolved
               if (!Instance.containsPath(normalized)) {
                 const dir = (await Filesystem.isDir(normalized)) ? normalized : path.dirname(normalized)
                 directories.add(dir)
@@ -145,7 +137,11 @@ export const BashTool = Tool.define("bash", async () => {
       }
 
       if (directories.size > 0) {
-        const globs = Array.from(directories).map((dir) => path.join(dir, "*"))
+        const globs = Array.from(directories).map((dir) => {
+          // Preserve POSIX-looking paths with /s, even on Windows
+          if (dir.startsWith("/")) return `${dir.replace(/[\\/]+$/, "")}/*`
+          return path.join(dir, "*")
+        })
         await ctx.ask({
           permission: "external_directory",
           patterns: globs,
@@ -177,6 +173,7 @@ export const BashTool = Tool.define("bash", async () => {
         },
         stdio: ["ignore", "pipe", "pipe"],
         detached: process.platform !== "win32",
+        windowsHide: process.platform === "win32",
       })
 
       let output = ""

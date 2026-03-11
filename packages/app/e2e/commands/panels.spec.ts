@@ -10,6 +10,8 @@ const expanded = async (el: { getAttribute: (name: string) => Promise<string | n
 test("review panel can be toggled via keybind", async ({ page, gotoSession }) => {
   await gotoSession()
 
+  const reviewPanel = page.locator("#review-panel")
+
   const treeToggle = page.getByRole("button", { name: "Toggle file tree" }).first()
   await expect(treeToggle).toBeVisible()
   if (await expanded(treeToggle)) await treeToggle.click()
@@ -19,13 +21,13 @@ test("review panel can be toggled via keybind", async ({ page, gotoSession }) =>
   await expect(reviewToggle).toBeVisible()
   if (await expanded(reviewToggle)) await reviewToggle.click()
   await expect(reviewToggle).toHaveAttribute("aria-expanded", "false")
-  await expect(page.locator("#review-panel")).toHaveCount(0)
+  await expect(reviewPanel).toHaveAttribute("aria-hidden", "true")
 
   await page.keyboard.press(`${modKey}+Shift+R`)
   await expect(reviewToggle).toHaveAttribute("aria-expanded", "true")
-  await expect(page.locator("#review-panel")).toBeVisible()
+  await expect(reviewPanel).toHaveAttribute("aria-hidden", "false")
 
   await page.keyboard.press(`${modKey}+Shift+R`)
   await expect(reviewToggle).toHaveAttribute("aria-expanded", "false")
-  await expect(page.locator("#review-panel")).toHaveCount(0)
+  await expect(reviewPanel).toHaveAttribute("aria-hidden", "true")
 })
