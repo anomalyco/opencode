@@ -8,6 +8,7 @@ import { usePrompt } from "@/context/prompt"
 import { getSessionHandoff, setSessionHandoff } from "@/pages/session/handoff"
 import { SessionPermissionDock } from "@/pages/session/composer/session-permission-dock"
 import { SessionQuestionDock } from "@/pages/session/composer/session-question-dock"
+import { SessionRevertDock } from "@/pages/session/composer/session-revert-dock"
 import type { SessionComposerState } from "@/pages/session/composer/session-composer-state"
 import { SessionTodoDock } from "@/pages/session/composer/session-todo-dock"
 
@@ -20,6 +21,11 @@ export function SessionComposerRegion(props: {
   onNewSessionWorktreeReset: () => void
   onSubmit: () => void
   onResponseSubmit: () => void
+  revert?: {
+    items: { id: string; text: string }[]
+    restoring?: string
+    onRestore: (id: string) => void
+  }
   setPromptDockRef: (el: HTMLDivElement) => void
   visualDuration?: number
   bounce?: number
@@ -167,6 +173,13 @@ export function SessionComposerRegion(props: {
         </Show>
 
         <Show when={!props.state.blocked()}>
+          <Show when={props.revert?.items.length ? props.revert : undefined} keyed>
+            {(revert) => (
+              <div class="pb-2">
+                <SessionRevertDock items={revert.items} restoring={revert.restoring} onRestore={revert.onRestore} />
+              </div>
+            )}
+          </Show>
           <Show
             when={prompt.ready()}
             fallback={
