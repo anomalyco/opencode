@@ -85,7 +85,10 @@ async function expand(page: Parameters<typeof test>[0]["page"]) {
 async function waitMark(page: Parameters<typeof test>[0]["page"], file: string, mark: string) {
   await page.waitForFunction(
     ({ file, mark }) => {
-      const head = Array.from(document.querySelectorAll("h3")).find(
+      const view = document.querySelector('[data-slot="session-review-scroll"] .scroll-view__viewport')
+      if (!(view instanceof HTMLElement)) return false
+
+      const head = Array.from(view.querySelectorAll("h3")).find(
         (node) => node instanceof HTMLElement && node.textContent?.includes(file),
       )
       if (!(head instanceof HTMLElement)) return false
@@ -106,7 +109,7 @@ async function spot(page: Parameters<typeof test>[0]["page"], file: string) {
     const view = document.querySelector('[data-slot="session-review-scroll"] .scroll-view__viewport')
     if (!(view instanceof HTMLElement)) return null
 
-    const row = Array.from(document.querySelectorAll("h3")).find(
+    const row = Array.from(view.querySelectorAll("h3")).find(
       (node) => node instanceof HTMLElement && node.textContent?.includes(file),
     )
     if (!(row instanceof HTMLElement)) return null
