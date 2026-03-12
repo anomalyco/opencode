@@ -4,3 +4,10 @@ gen
 app.log
 src/provider/models-snapshot.ts
 .ace-tool/
+
+# Temporary TODO files
+TODO-*.md
+
+# Temporary test files
+packages/opencode/test/mcp/prompts.test.ts
+packages/opencode/test/provider/openai-compatible-responses-input.test.ts
