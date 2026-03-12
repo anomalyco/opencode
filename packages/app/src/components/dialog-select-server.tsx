@@ -16,6 +16,8 @@ import { usePlatform } from "@/context/platform"
 import { normalizeServerUrl, ServerConnection, useServer } from "@/context/server"
 import { checkServerHealth, type ServerHealth } from "@/utils/server-health"
 
+const DEFAULT_USERNAME = "opencode"
+
 interface ServerFormProps {
   value: string
   name: string
@@ -178,7 +180,7 @@ export function DialogSelectServer() {
     addServer: {
       url: "",
       name: "",
-      username: "",
+      username: DEFAULT_USERNAME,
       password: "",
       adding: false,
       error: "",
@@ -201,7 +203,7 @@ export function DialogSelectServer() {
     setStore("addServer", {
       url: "",
       name: "",
-      username: "",
+      username: DEFAULT_USERNAME,
       password: "",
       adding: false,
       error: "",
@@ -362,8 +364,8 @@ export function DialogSelectServer() {
       http: { url: normalized },
     }
     if (store.addServer.name.trim()) conn.displayName = store.addServer.name.trim()
-    if (store.addServer.username) conn.http.username = store.addServer.username
     if (store.addServer.password) conn.http.password = store.addServer.password
+    if (store.addServer.password && store.addServer.username) conn.http.username = store.addServer.username
     const result = await checkServerHealth(conn.http, fetcher)
     setStore("addServer", { adding: false })
     if (!result.healthy) {
@@ -441,7 +443,7 @@ export function DialogSelectServer() {
       showForm: true,
       url: "",
       name: "",
-      username: "",
+      username: DEFAULT_USERNAME,
       password: "",
       error: "",
       status: undefined,
