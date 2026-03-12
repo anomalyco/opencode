@@ -1371,16 +1371,16 @@ export namespace Provider {
     if (cfg.model) return parseModel(cfg.model)
 
     const providers = await list()
-    const recent = (await Filesystem.readJson<{ recent?: { providerID: string; modelID: string }[] }>(
+    const recent = (await Filesystem.readJson<{ recent?: { providerID: ProviderID; modelID: ModelID }[] }>(
       path.join(Global.Path.state, "model.json"),
     )
       .then((x) => (Array.isArray(x.recent) ? x.recent : []))
-      .catch(() => [])) as { providerID: string; modelID: string }[]
+      .catch(() => [])) as { providerID: ProviderID; modelID: ModelID }[]
     for (const entry of recent) {
       const provider = providers[entry.providerID]
       if (!provider) continue
       if (!provider.models[entry.modelID]) continue
-      return { providerID: ProviderID.make(entry.providerID), modelID: ModelID.make(entry.modelID) }
+      return { providerID: entry.providerID, modelID: entry.modelID }
     }
 
     const provider = Object.values(providers).find((p) => !cfg.provider || Object.keys(cfg.provider).includes(p.id))
