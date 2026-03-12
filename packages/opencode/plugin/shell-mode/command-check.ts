@@ -1,10 +1,192 @@
 /**
  * Auto-routing logic for determining if input should go to shell or agent.
- * Uses `command -v` (POSIX standard) to check if the first token is a valid command.
+ * Uses fast synchronous checks (builtins + which) to avoid spawning a shell
+ * on every keystroke. Aliases are loaded once in the background at startup.
  */
 
 import { Shell } from "@/shell/shell"
+import { which } from "@/util/which"
+import { spawn as nodeSpawn } from "node:child_process"
 import path from "path"
+
+/**
+ * Shell builtins that are always valid commands regardless of PATH.
+ * Covers bash and zsh builtins.
+ */
+const SHELL_BUILTINS = new Set([
+  // POSIX / bash builtins
+  "alias",
+  "bg",
+  "bind",
+  "break",
+  "builtin",
+  "caller",
+  "cd",
+  "command",
+  "compgen",
+  "complete",
+  "compopt",
+  "continue",
+  "declare",
+  "dirs",
+  "disown",
+  "echo",
+  "enable",
+  "eval",
+  "exec",
+  "exit",
+  "export",
+  "false",
+  "fc",
+  "fg",
+  "getopts",
+  "hash",
+  "help",
+  "history",
+  "jobs",
+  "kill",
+  "let",
+  "local",
+  "logout",
+  "mapfile",
+  "popd",
+  "printf",
+  "pushd",
+  "pwd",
+  "read",
+  "readarray",
+  "readonly",
+  "return",
+  "set",
+  "shift",
+  "shopt",
+  "source",
+  "suspend",
+  "test",
+  "times",
+  "trap",
+  "true",
+  "type",
+  "typeset",
+  "ulimit",
+  "umask",
+  "unalias",
+  "unset",
+  "wait",
+  // zsh-specific builtins
+  "autoload",
+  "bindkey",
+  "cap",
+  "clone",
+  "compctl",
+  "disable",
+  "echotc",
+  "echoti",
+  "emulate",
+  "functions",
+  "getcap",
+  "getln",
+  "integer",
+  "limit",
+  "log",
+  "noglob",
+  "print",
+  "pushln",
+  "r",
+  "sched",
+  "setcap",
+  "setopt",
+  "stat",
+  "ttyctl",
+  "unfunction",
+  "unhash",
+  "unlimit",
+  "unsetopt",
+  "vared",
+  "whence",
+  "where",
+  "zcompile",
+  "zformat",
+  "zle",
+  "zmodload",
+  "zparseopts",
+  "zprof",
+  "zpty",
+  "zregexparse",
+  "zsocket",
+  "zstyle",
+  "ztcp",
+])
+
+/**
+ * User aliases loaded from the interactive shell, cached as a resolved Set.
+ * Starts loading eagerly at module load so it's ready before first use.
+ * Non-blocking: commandExists() checks this synchronously if already settled.
+ */
+let _aliases: Set<string> | null = null
+
+;(async () => {
+  try {
+    const shellPath = Shell.preferred()
+    const shellName = (
+      process.platform === "win32" ? path.win32.basename(shellPath, ".exe") : path.basename(shellPath)
+    ).toLowerCase()
+
+    if (shellName === "cmd" || shellName === "powershell" || shellName === "pwsh") {
+      _aliases = new Set()
+      return
+    }
+
+    // Use -i so .zshrc/.bashrc is sourced (many rc files guard with [[ -o interactive ]]).
+    // Run detached (setsid) so the child has no controlling terminal — this prevents
+    // interactive zsh from calling tcsetattr and corrupting the TUI's raw terminal mode.
+    //
+    // Emit aliases then a sentinel then function names so both can be parsed
+    // from a single shell invocation.
+    let dumpCmd: string
+    if (shellName === "zsh") {
+      dumpCmd = "alias 2>/dev/null; echo __FNAMES__; print -l ${(k)functions} 2>/dev/null || true"
+    } else if (shellName === "bash") {
+      dumpCmd = "shopt -s expand_aliases 2>/dev/null || true; alias 2>/dev/null; echo __FNAMES__; compgen -A function"
+    } else {
+      dumpCmd = "alias 2>/dev/null; echo __FNAMES__"
+    }
+
+    const chunks: Buffer[] = []
+    await new Promise<void>((resolve, reject) => {
+      const proc = nodeSpawn(shellPath, ["-l", "-i", "-c", dumpCmd], {
+        detached: true,
+        stdio: ["ignore", "pipe", "ignore"],
+        env: { ...process.env, TERM: "dumb" },
+      })
+      proc.stdout?.on("data", (chunk: Buffer) => chunks.push(chunk))
+      proc.on("close", () => resolve())
+      proc.on("error", reject)
+    })
+    const output = Buffer.concat(chunks).toString()
+
+    const known = new Set<string>()
+    let inFunctions = false
+    for (const line of output.split("\n")) {
+      if (line === "__FNAMES__") {
+        inFunctions = true
+        continue
+      }
+      if (inFunctions) {
+        const name = line.trim()
+        if (name) known.add(name)
+      } else {
+        // bash: `alias ..='cd ..'`   zsh: `..='cd ..'`
+        const match = line.match(/^(?:alias\s+)?([^=\s]+)=/)
+        if (match) known.add(match[1])
+      }
+    }
+    _aliases = known
+  } catch (error) {
+    console.error("Failed to load shell aliases:", error)
+    _aliases = new Set()
+  }
+})()
 
 /**
  * Shell reserved words that are valid shell syntax but never standalone commands.
@@ -224,7 +406,7 @@ export async function shouldRouteToShell(input: string): Promise<boolean> {
   // Common English words always route to agent
   if (AGENT_WORDS.has(lower)) return false
 
-  return commandExists(firstToken)
+  return Promise.resolve(commandExists(firstToken))
 }
 
 /**
@@ -251,36 +433,18 @@ function extractFirstToken(input: string): string | null {
 }
 
 /**
- * Check if a command exists using the user's preferred shell.
- * This checks builtins, functions, aliases, and executables.
+ * Check if a command exists without spawning a shell.
+ * Checks (in order): alias cache, builtins, PATH executables.
  */
-async function commandExists(cmd: string): Promise<boolean> {
-  try {
-    const shellPath = Shell.preferred()
-    const shellName = (
-      process.platform === "win32" ? path.win32.basename(shellPath, ".exe") : path.basename(shellPath)
-    ).toLowerCase()
+function commandExists(cmd: string): boolean {
+  // Alias cache: populated eagerly at startup, available after first load
+  if (_aliases !== null && _aliases.has(cmd)) return true
 
-    // Escape single quotes for safe shell interpolation in POSIX shells
-    const escaped = `'${cmd.replace(/'/g, "'\\''")}'`
+  // Shell builtins (cd, echo, export, etc.)
+  if (SHELL_BUILTINS.has(cmd)) return true
 
-    let args: string[]
-    if (shellName === "cmd") {
-      args = ["/c", `where ${cmd} >nul 2>nul || help ${cmd} >nul 2>nul`]
-    } else if (shellName === "powershell" || shellName === "pwsh") {
-      args = ["-NoProfile", "-Command", `if (Get-Command "${cmd}" -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }`]
-    } else {
-      // Use login shell for POSIX shells to catch aliases from .zshrc/.bash_profile
-      args = ["-l", "-c", `command -v ${escaped}`]
-    }
+  // PATH executables (synchronous, no shell spawn)
+  if (which(cmd) !== null) return true
 
-    const { exited } = Bun.spawn([shellPath, ...args], {
-      stdout: "ignore",
-      stderr: "ignore",
-    })
-    const exitCode = await exited
-    return exitCode === 0
-  } catch {
-    return false
-  }
+  return false
 }
