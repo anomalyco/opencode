@@ -19,6 +19,7 @@ import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange
 import { createStore } from "solid-js/store"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Select } from "@opencode-ai/ui/select"
+import { Tabs } from "@opencode-ai/ui/tabs"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
 import { Button } from "@opencode-ai/ui/button"
@@ -27,6 +28,7 @@ import { base64Encode, checksum } from "@opencode-ai/util/encode"
 import { useNavigate, useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
 import { useComments } from "@/context/comments"
+import { getSessionPrefetch, SESSION_PREFETCH_TTL } from "@/context/global-sync/session-prefetch"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
@@ -35,12 +37,11 @@ import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
 import { createSessionComposerState, SessionComposerRegion } from "@/pages/session/composer"
-import { createOpenReviewFile, createSizing, focusTerminalById } from "@/pages/session/helpers"
+import { createOpenReviewFile, createSessionTabs, createSizing, focusTerminalById } from "@/pages/session/helpers"
 import { MessageTimeline } from "@/pages/session/message-timeline"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { resetSessionModel, syncSessionModel } from "@/pages/session/session-model-helpers"
-import { SessionMobileTabs } from "@/pages/session/session-mobile-tabs"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
@@ -372,18 +373,22 @@ export default function Page() {
     if (!view().reviewPanel.opened()) view().reviewPanel.open()
   }
 
-  createEffect(() => {
-    const active = tabs().active()
-    if (!active) return
-
-    const path = file.pathFromTab(active)
-    if (path) file.load(path)
-  })
-
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
   const reviewCount = createMemo(() => Math.max(info()?.summary?.files ?? 0, diffs().length))
   const hasReview = createMemo(() => reviewCount() > 0)
+  const reviewTab = createMemo(() => isDesktop())
+  const tabState = createSessionTabs({
+    tabs,
+    pathFromTab: file.pathFromTab,
+    normalizeTab,
+    review: reviewTab,
+    hasReview,
+  })
+  const contextOpen = tabState.contextOpen
+  const openedTabs = tabState.openedTabs
+  const activeTab = tabState.activeTab
+  const activeFileTab = tabState.activeFileTab
   const revertMessageID = createMemo(() => info()?.revert?.messageID)
   const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
   const messagesReady = createMemo(() => {
@@ -420,6 +425,14 @@ export default function Page() {
   )
   const lastUserMessage = createMemo(() => visibleUserMessages().at(-1))
 
+  createEffect(() => {
+    const tab = activeFileTab()
+    if (!tab) return
+
+    const path = file.pathFromTab(tab)
+    if (path) file.load(path)
+  })
+
   createEffect(
     on(
       () => lastUserMessage()?.id,
@@ -437,7 +450,6 @@ export default function Page() {
       (next, prev) => {
         if (!prev) return
         if (next.dir === prev.dir && next.id === prev.id) return
-        if (prev.id) sync.session.evict(prev.id, prev.dir)
         if (!next.id) resetSessionModel(local)
       },
       { defer: true },
@@ -464,6 +476,10 @@ export default function Page() {
   }, sessionKey())
 
   let reviewFrame: number | undefined
+  let refreshFrame: number | undefined
+  let refreshTimer: number | undefined
+  let diffFrame: number | undefined
+  let diffTimer: number | undefined
 
   createComputed((prev) => {
     const open = desktopReviewOpen()
@@ -623,10 +639,36 @@ export default function Page() {
 
   createEffect(
     on([() => sdk.directory, () => params.id] as const, ([, id]) => {
+      if (refreshFrame !== undefined) cancelAnimationFrame(refreshFrame)
+      if (refreshTimer !== undefined) window.clearTimeout(refreshTimer)
+      refreshFrame = undefined
+      refreshTimer = undefined
       if (!id) return
+
+      const cached = untrack(() => sync.data.message[id] !== undefined)
+      const stale = !cached
+        ? false
+        : (() => {
+            const info = getSessionPrefetch(sdk.directory, id)
+            if (!info) return true
+            return Date.now() - info.at > SESSION_PREFETCH_TTL
+          })()
+      const todos = untrack(() => sync.data.todo[id] !== undefined || globalSync.data.session_todo[id] !== undefined)
+
       untrack(() => {
         void sync.session.sync(id)
-        void sync.session.todo(id)
+      })
+
+      refreshFrame = requestAnimationFrame(() => {
+        refreshFrame = undefined
+        refreshTimer = window.setTimeout(() => {
+          refreshTimer = undefined
+          if (params.id !== id) return
+          untrack(() => {
+            if (stale) void sync.session.sync(id, { force: true })
+            void sync.session.todo(id, todos ? { force: true } : undefined)
+          })
+        }, 0)
       })
     }),
   )
@@ -776,15 +818,7 @@ export default function Page() {
     }
   }
 
-  const contextOpen = createMemo(() => tabs().active() === "context" || tabs().all().includes("context"))
-  const openedTabs = createMemo(() =>
-    tabs()
-      .all()
-      .filter((tab) => tab !== "context" && tab !== "review"),
-  )
-
   const mobileChanges = createMemo(() => !isDesktop() && store.mobileTab === "changes")
-  const reviewTab = createMemo(() => isDesktop())
 
   const fileTreeTab = () => layout.fileTree.tab()
   const setFileTreeTab = (value: "changes" | "all") => layout.fileTree.setTab(value)
@@ -820,6 +854,7 @@ export default function Page() {
     navigateMessageByOffset,
     setActiveMessage,
     focusInput,
+    review: reviewTab,
   })
 
   const openReviewFile = createOpenReviewFile({
@@ -934,11 +969,10 @@ export default function Page() {
 
   createEffect(
     on(
-      () => tabs().active(),
+      activeFileTab,
       (active) => {
         if (!active) return
         if (fileTreeTab() !== "changes") return
-        if (!file.pathFromTab(active)) return
         showAllFiles()
       },
       { defer: true },
@@ -981,8 +1015,7 @@ export default function Page() {
 
   const focusReviewDiff = (path: string) => {
     openReviewPanel()
-    const current = view().review.open() ?? []
-    if (!current.includes(path)) view().review.setOpen([...current, path])
+    view().review.openPath(path)
     setTree({ activeDiff: path, pendingDiff: path })
   }
 
@@ -1027,29 +1060,6 @@ export default function Page() {
     requestAnimationFrame(() => attempt(0))
   })
 
-  const activeTab = createMemo(() => {
-    const active = tabs().active()
-    if (active === "context") return "context"
-    if (active === "review" && reviewTab()) return "review"
-    if (active && file.pathFromTab(active)) return normalizeTab(active)
-
-    const first = openedTabs()[0]
-    if (first) return first
-    if (contextOpen()) return "context"
-    if (reviewTab() && hasReview()) return "review"
-    return "empty"
-  })
-
-  createEffect(() => {
-    if (!layout.ready()) return
-    if (tabs().active()) return
-    if (openedTabs().length === 0 && !contextOpen() && !(reviewTab() && hasReview())) return
-
-    const next = activeTab()
-    if (next === "empty") return
-    tabs().setActive(next)
-  })
-
   createEffect(() => {
     const id = params.id
     if (!id) return
@@ -1063,6 +1073,39 @@ export default function Page() {
 
     void sync.session.diff(id)
   })
+
+  createEffect(
+    on(
+      () =>
+        [
+          sessionKey(),
+          isDesktop()
+            ? desktopFileTreeOpen() || (desktopReviewOpen() && activeTab() === "review")
+            : store.mobileTab === "changes",
+        ] as const,
+      ([key, wants]) => {
+        if (diffFrame !== undefined) cancelAnimationFrame(diffFrame)
+        if (diffTimer !== undefined) window.clearTimeout(diffTimer)
+        diffFrame = undefined
+        diffTimer = undefined
+        if (!wants) return
+
+        const id = params.id
+        if (!id) return
+        if (!untrack(() => sync.data.session_diff[id] !== undefined)) return
+
+        diffFrame = requestAnimationFrame(() => {
+          diffFrame = undefined
+          diffTimer = window.setTimeout(() => {
+            diffTimer = undefined
+            if (sessionKey() !== key) return
+            void sync.session.diff(id, { force: true })
+          }, 0)
+        })
+      },
+      { defer: true },
+    ),
+  )
 
   let treeDir: string | undefined
   createEffect(() => {
@@ -1083,9 +1126,9 @@ export default function Page() {
       () => {
         void file.tree.list("")
 
-        const active = tabs().active()
-        if (!active) return
-        const path = file.pathFromTab(active)
+        const tab = activeFileTab()
+        if (!tab) return
+        const path = file.pathFromTab(tab)
         if (!path) return
         void file.load(path, { force: true })
       },
@@ -1326,6 +1369,10 @@ export default function Page() {
   onCleanup(() => {
     document.removeEventListener("keydown", handleKeyDown)
     if (reviewFrame !== undefined) cancelAnimationFrame(reviewFrame)
+    if (refreshFrame !== undefined) cancelAnimationFrame(refreshFrame)
+    if (refreshTimer !== undefined) window.clearTimeout(refreshTimer)
+    if (diffFrame !== undefined) cancelAnimationFrame(diffFrame)
+    if (diffTimer !== undefined) window.clearTimeout(diffTimer)
     if (scrollStateFrame !== undefined) cancelAnimationFrame(scrollStateFrame)
   })
 
@@ -1333,14 +1380,30 @@ export default function Page() {
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
       <SessionHeader />
       <div class="flex-1 min-h-0 flex flex-col md:flex-row">
-        <SessionMobileTabs
-          open={!isDesktop() && !!params.id}
-          mobileTab={store.mobileTab}
-          hasReview={hasReview()}
-          reviewCount={reviewCount()}
-          onSession={() => setStore("mobileTab", "session")}
-          onChanges={() => setStore("mobileTab", "changes")}
-        />
+        <Show when={!isDesktop() && !!params.id}>
+          <Tabs value={store.mobileTab} class="h-auto">
+            <Tabs.List>
+              <Tabs.Trigger
+                value="session"
+                class="!w-1/2 !max-w-none"
+                classes={{ button: "w-full" }}
+                onClick={() => setStore("mobileTab", "session")}
+              >
+                {language.t("session.tab.session")}
+              </Tabs.Trigger>
+              <Tabs.Trigger
+                value="changes"
+                class="!w-1/2 !max-w-none !border-r-0"
+                classes={{ button: "w-full" }}
+                onClick={() => setStore("mobileTab", "changes")}
+              >
+                {hasReview()
+                  ? language.t("session.review.filesChanged", { count: reviewCount() })
+                  : language.t("session.review.change.other")}
+              </Tabs.Trigger>
+            </Tabs.List>
+          </Tabs>
+        </Show>
 
         {/* Session panel */}
         <div
@@ -1400,23 +1463,7 @@ export default function Page() {
                 </Show>
               </Match>
               <Match when={true}>
-                <NewSessionView
-                  worktree={newSessionWorktree()}
-                  onWorktreeChange={(value) => {
-                    if (value === "create") {
-                      setStore("newSessionWorktree", value)
-                      return
-                    }
-
-                    setStore("newSessionWorktree", "main")
-
-                    const target = value === "main" ? sync.project?.worktree : value
-                    if (!target) return
-                    if (target === sdk.directory) return
-                    layout.projects.open(target)
-                    navigate(`/${base64Encode(target)}/session`)
-                  }}
-                />
+                <NewSessionView worktree={newSessionWorktree()} />
               </Match>
             </Switch>
           </div>

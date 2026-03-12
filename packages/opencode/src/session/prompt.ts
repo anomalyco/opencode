@@ -237,7 +237,7 @@ export namespace SessionPrompt {
     return parts
   }
 
-  function start(sessionID: string) {
+  function start(sessionID: SessionID) {
     const s = state()
     if (s[sessionID]) return
     const controller = new AbortController()
@@ -248,7 +248,7 @@ export namespace SessionPrompt {
     return controller.signal
   }
 
-  function resume(sessionID: string) {
+  function resume(sessionID: SessionID) {
     const s = state()
     if (!s[sessionID]) return
 
@@ -788,7 +788,7 @@ export namespace SessionPrompt {
     })
 
     for (const item of await ToolRegistry.tools(
-      { modelID: input.model.api.id, providerID: input.model.providerID },
+      { modelID: ModelID.make(input.model.api.id), providerID: input.model.providerID },
       input.agent,
     )) {
       const schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters))
@@ -1898,8 +1898,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
   async function ensureTitle(input: {
     session: Session.Info
     history: MessageV2.WithParts[]
-    providerID: string
-    modelID: string
+    providerID: ProviderID
+    modelID: ModelID
   }) {
     if (input.session.parentID) return
     if (!Session.isDefaultTitle(input.session.title)) return

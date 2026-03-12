@@ -7,7 +7,7 @@ import { Instance } from "../../src/project/instance"
 import { Provider } from "../../src/provider/provider"
 import { ProviderTransform } from "../../src/provider/transform"
 import { ModelsDev } from "../../src/provider/models"
-import { ProviderID } from "../../src/provider/schema"
+import { ProviderID, ModelID } from "../../src/provider/schema"
 import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
 import type { Agent } from "../../src/agent/agent"
@@ -266,7 +266,7 @@ describe("session.llm.stream", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const resolved = await Provider.getModel(providerID, model.id)
+        const resolved = await Provider.getModel(ProviderID.make(providerID), ModelID.make(model.id))
         const sessionID = SessionID.make("session-test-1")
         const agent = {
           name: "test",
@@ -396,7 +396,7 @@ describe("session.llm.stream", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const resolved = await Provider.getModel("openai", model.id)
+        const resolved = await Provider.getModel(ProviderID.openai, ModelID.make(model.id))
         const sessionID = SessionID.make("session-test-2")
         const agent = {
           name: "test",
@@ -518,7 +518,7 @@ describe("session.llm.stream", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const resolved = await Provider.getModel(providerID, model.id)
+        const resolved = await Provider.getModel(ProviderID.make(providerID), ModelID.make(model.id))
         const sessionID = SessionID.make("session-test-3")
         const agent = {
           name: "test",
@@ -619,7 +619,7 @@ describe("session.llm.stream", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const resolved = await Provider.getModel(providerID, model.id)
+        const resolved = await Provider.getModel(ProviderID.make(providerID), ModelID.make(model.id))
         const sessionID = SessionID.make("session-test-4")
         const agent = {
           name: "test",
