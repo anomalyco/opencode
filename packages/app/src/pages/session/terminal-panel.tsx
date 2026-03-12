@@ -199,10 +199,7 @@ export function TerminalPanel() {
       <div
         class="absolute inset-x-0 top-0 flex flex-col"
         classList={{
-          "translate-y-0": opened(),
-          "translate-y-full pointer-events-none": !opened(),
-          "transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform motion-reduce:transition-none":
-            !size.active(),
+          "pointer-events-none": !opened(),
         }}
         style={{ height: `${pane()}px` }}
       >
