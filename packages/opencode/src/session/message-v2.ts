@@ -15,6 +15,7 @@ import { ProviderError } from "@/provider/error"
 import { iife } from "@/util/iife"
 import { type SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
+import { ModelID, ProviderID } from "@/provider/schema"
 
 export namespace MessageV2 {
   export function isMedia(mime: string) {
@@ -213,8 +214,8 @@ export namespace MessageV2 {
     agent: z.string(),
     model: z
       .object({
-        providerID: z.string(),
-        modelID: z.string(),
+        providerID: ProviderID.zod,
+        modelID: ModelID.zod,
       })
       .optional(),
     command: z.string().optional(),
@@ -362,8 +363,8 @@ export namespace MessageV2 {
       .optional(),
     agent: z.string(),
     model: z.object({
-      providerID: z.string(),
-      modelID: z.string(),
+      providerID: ProviderID.zod,
+      modelID: ModelID.zod,
     }),
     system: z.string().optional(),
     tools: z.record(z.string(), z.boolean()).optional(),
@@ -411,8 +412,8 @@ export namespace MessageV2 {
       ])
       .optional(),
     parentID: MessageID.zod,
-    modelID: z.string(),
-    providerID: z.string(),
+    modelID: ModelID.zod,
+    providerID: ProviderID.zod,
     /**
      * @deprecated
      */
@@ -824,7 +825,7 @@ export namespace MessageV2 {
     return result
   }
 
-  export function fromError(e: unknown, ctx: { providerID: string }) {
+  export function fromError(e: unknown, ctx: { providerID: ProviderID }): NonNullable<Assistant["error"]> {
     switch (true) {
       case e instanceof DOMException && e.name === "AbortError":
         return new MessageV2.AbortedError(

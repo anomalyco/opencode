@@ -45,6 +45,7 @@ import { fromNodeProviderChain } from "@aws-sdk/credential-providers"
 import { GoogleAuth } from "google-auth-library"
 import { ProviderTransform } from "./transform"
 import { Installation } from "../installation"
+import { ModelID, ProviderID } from "./schema"
 
 const DEFAULT_CHUNK_TIMEOUT = 120_000
 
@@ -673,8 +674,8 @@ export namespace Provider {
 
   export const Model = z
     .object({
-      id: z.string(),
-      providerID: z.string(),
+      id: ModelID.zod,
+      providerID: ProviderID.zod,
       api: z.object({
         id: z.string(),
         url: z.string(),
@@ -744,7 +745,7 @@ export namespace Provider {
 
   export const Info = z
     .object({
-      id: z.string(),
+      id: ProviderID.zod,
       name: z.string(),
       source: z.enum(["env", "config", "custom", "api"]),
       env: z.string().array(),
@@ -759,8 +760,8 @@ export namespace Provider {
 
   function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model): Model {
     const m: Model = {
-      id: model.id,
-      providerID: provider.id,
+      id: ModelID.make(model.id),
+      providerID: ProviderID.make(provider.id),
       name: model.name,
       family: model.family,
       api: {
@@ -826,7 +827,7 @@ export namespace Provider {
 
   export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
     return {
-      id: provider.id,
+      id: ProviderID.make(provider.id),
       source: "custom",
       name: provider.name,
       env: provider.env ?? [],
@@ -866,11 +867,11 @@ export namespace Provider {
       const githubCopilot = database["github-copilot"]
       database["github-copilot-enterprise"] = {
         ...githubCopilot,
-        id: "github-copilot-enterprise",
+        id: ProviderID.make("github-copilot-enterprise"),
         name: "GitHub Copilot Enterprise",
         models: mapValues(githubCopilot.models, (model) => ({
           ...model,
-          providerID: "github-copilot-enterprise",
+          providerID: ProviderID.make("github-copilot-enterprise"),
         })),
       }
     }
@@ -892,7 +893,7 @@ export namespace Provider {
     for (const [providerID, provider] of configProviders) {
       const existing = database[providerID]
       const parsed: Info = {
-        id: providerID,
+        id: ProviderID.make(providerID),
         name: provider.name ?? existing?.name ?? providerID,
         env: provider.env ?? existing?.env ?? [],
         options: mergeDeep(existing?.options ?? {}, provider.options ?? {}),
@@ -908,7 +909,7 @@ export namespace Provider {
           return existingModel?.name ?? modelID
         })
         const parsedModel: Model = {
-          id: modelID,
+          id: ModelID.make(modelID),
           api: {
             id: model.id ?? existingModel?.api.id ?? modelID,
             npm:
@@ -921,7 +922,7 @@ export namespace Provider {
           },
           status: model.status ?? existingModel?.status ?? "active",
           name,
-          providerID,
+          providerID: ProviderID.make(providerID),
           capabilities: {
             temperature: model.temperature ?? existingModel?.capabilities.temperature ?? false,
             reasoning: model.reasoning ?? existingModel?.capabilities.reasoning ?? false,
@@ -1356,7 +1357,7 @@ export namespace Provider {
   }
 
   const priority = ["gpt-5", "claude-sonnet-4", "big-pickle", "gemini-3-pro"]
-  export function sort(models: Model[]) {
+  export function sort<T extends { id: string }>(models: T[]) {
     return sortBy(
       models,
       [(model) => priority.findIndex((filter) => model.id.includes(filter)), "desc"],
@@ -1370,11 +1371,11 @@ export namespace Provider {
     if (cfg.model) return parseModel(cfg.model)
 
     const providers = await list()
-    const recent = (await Filesystem.readJson<{ recent?: { providerID: string; modelID: string }[] }>(
+    const recent = (await Filesystem.readJson<{ recent?: { providerID: ProviderID; modelID: ModelID }[] }>(
       path.join(Global.Path.state, "model.json"),
     )
       .then((x) => (Array.isArray(x.recent) ? x.recent : []))
-      .catch(() => [])) as { providerID: string; modelID: string }[]
+      .catch(() => [])) as { providerID: ProviderID; modelID: ModelID }[]
     for (const entry of recent) {
       const provider = providers[entry.providerID]
       if (!provider) continue
@@ -1395,16 +1396,16 @@ export namespace Provider {
   export function parseModel(model: string) {
     const [providerID, ...rest] = model.split("/")
     return {
-      providerID: providerID,
-      modelID: rest.join("/"),
+      providerID: ProviderID.make(providerID),
+      modelID: ModelID.make(rest.join("/")),
     }
   }
 
   export const ModelNotFoundError = NamedError.create(
     "ProviderModelNotFoundError",
     z.object({
-      providerID: z.string(),
-      modelID: z.string(),
+      providerID: ProviderID.zod,
+      modelID: ModelID.zod,
       suggestions: z.array(z.string()).optional(),
     }),
   )
@@ -1412,7 +1413,7 @@ export namespace Provider {
   export const InitError = NamedError.create(
     "ProviderInitError",
     z.object({
-      providerID: z.string(),
+      providerID: ProviderID.zod,
     }),
   )
 }

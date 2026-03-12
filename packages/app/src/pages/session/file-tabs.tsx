@@ -1,7 +1,6 @@
 import { createEffect, createMemo, Match, on, onCleanup, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
-import { useParams } from "@solidjs/router"
 import type { FileSearchHandle } from "@opencode-ai/ui/file"
 import { useFileComponent } from "@opencode-ai/ui/context/file"
 import { cloneSelectedLineRange, previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
@@ -12,12 +11,12 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { showToast } from "@opencode-ai/ui/toast"
-import { useLayout } from "@/context/layout"
 import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/context/file"
 import { useComments } from "@/context/comments"
 import { useLanguage } from "@/context/language"
 import { usePrompt } from "@/context/prompt"
 import { getSessionHandoff } from "@/pages/session/handoff"
+import { useSessionLayout } from "@/pages/session/session-layout"
 
 function FileCommentMenu(props: {
   moreLabel: string
@@ -53,17 +52,12 @@ function FileCommentMenu(props: {
 }
 
 export function FileTabContent(props: { tab: string }) {
-  const params = useParams()
-  const layout = useLayout()
   const file = useFile()
   const comments = useComments()
   const language = useLanguage()
   const prompt = usePrompt()
   const fileComponent = useFileComponent()
-
-  const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
-  const tabs = createMemo(() => layout.tabs(sessionKey))
-  const view = createMemo(() => layout.view(sessionKey))
+  const { sessionKey, tabs, view } = useSessionLayout()
 
   let scroll: HTMLDivElement | undefined
   let scrollFrame: number | undefined
