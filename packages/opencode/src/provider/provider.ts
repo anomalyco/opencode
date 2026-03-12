@@ -809,6 +809,7 @@ export namespace Provider {
         context: z.number(),
         input: z.number().optional(),
         output: z.number(),
+        tools: z.number().optional(),
       }),
       status: z.enum(["alpha", "beta", "deprecated", "active"]),
       options: z.record(z.string(), z.any()),
@@ -835,6 +836,10 @@ export namespace Provider {
       ref: "Provider",
     })
   export type Info = z.infer<typeof Info>
+
+  const TOOL_LIMITS: Record<string, number> = {
+    xai: 200,
+  }
 
   function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model): Model {
     const m: Model = {
@@ -872,6 +877,7 @@ export namespace Provider {
         context: model.limit.context,
         input: model.limit.input,
         output: model.limit.output,
+        tools: model.limit.tools,
       },
       capabilities: {
         temperature: model.temperature,
@@ -896,6 +902,11 @@ export namespace Provider {
       },
       release_date: model.release_date,
       variants: {},
+    }
+
+    if (!m.limit.tools) {
+      const cap = TOOL_LIMITS[provider.id]
+      if (cap) m.limit.tools = cap
     }
 
     m.variants = mapValues(ProviderTransform.variants(m), (v) => v)
@@ -1026,6 +1037,7 @@ export namespace Provider {
           limit: {
             context: model.limit?.context ?? existingModel?.limit?.context ?? 0,
             output: model.limit?.output ?? existingModel?.limit?.output ?? 0,
+            tools: model.limit?.tools ?? existingModel?.limit?.tools,
           },
           headers: mergeDeep(existingModel?.headers ?? {}, model.headers ?? {}),
           family: model.family ?? existingModel?.family ?? "",

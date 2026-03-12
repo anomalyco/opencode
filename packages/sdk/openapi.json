@@ -4531,6 +4531,9 @@
                                     },
                                     "output": {
                                       "type": "number"
+                                    },
+                                    "tools": {
+                                      "type": "number"
                                     }
                                   },
                                   "required": ["context", "output"]
@@ -10091,6 +10094,9 @@
                     },
                     "output": {
                       "type": "number"
+                    },
+                    "tools": {
+                      "type": "number"
                     }
                   },
                   "required": ["context", "output"]
@@ -11021,6 +11027,9 @@
                 "type": "number"
               },
               "output": {
+                "type": "number"
+              },
+              "tools": {
                 "type": "number"
               }
             },
