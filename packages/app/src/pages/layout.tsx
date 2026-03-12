@@ -35,6 +35,15 @@ import { showToast, Toast, toaster } from "@opencode-ai/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { clearWorkspaceTerminals } from "@/context/terminal"
 import { dropSessionCaches, pickSessionCacheEvictions } from "@/context/global-sync/session-cache"
+import {
+  clearSessionPrefetchInflight,
+  clearSessionPrefetch,
+  getSessionPrefetch,
+  isSessionPrefetchCurrent,
+  runSessionPrefetch,
+  SESSION_PREFETCH_TTL,
+  setSessionPrefetch,
+} from "@/context/global-sync/session-prefetch"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
 import { Binary } from "@opencode-ai/util/binary"
@@ -662,8 +671,9 @@ export default function Layout(props: ParentProps) {
   }
 
   const prefetchChunk = 200
-  const prefetchConcurrency = 1
-  const prefetchPendingLimit = 6
+  const prefetchConcurrency = 2
+  const prefetchPendingLimit = 10
+  const span = 4
   const prefetchToken = { value: 0 }
   const prefetchQueues = new Map<string, PrefetchQueue>()
 
@@ -689,13 +699,29 @@ export default function Layout(props: ParentProps) {
   }
 
   createEffect(() => {
+    const active = new Set(visibleSessionDirs())
+    for (const directory of [...prefetchedByDir.keys()]) {
+      if (active.has(directory)) continue
+      prefetchedByDir.delete(directory)
+    }
+  })
+
+  createEffect(() => {
     params.dir
     globalSDK.url
 
     prefetchToken.value += 1
-    for (const q of prefetchQueues.values()) {
+    clearSessionPrefetchInflight()
+    prefetchQueues.clear()
+  })
+
+  createEffect(() => {
+    const visible = new Set(visibleSessionDirs())
+    for (const [directory, q] of prefetchQueues) {
+      if (visible.has(directory)) continue
       q.pending.length = 0
       q.pendingSet.clear()
+      if (q.running === 0) prefetchQueues.delete(directory)
     }
   })
 
@@ -731,36 +757,67 @@ export default function Layout(props: ParentProps) {
   async function prefetchMessages(directory: string, sessionID: string, token: number) {
     const [store, setStore] = globalSync.child(directory, { bootstrap: false })
 
-    return retry(() => globalSDK.client.session.messages({ directory, sessionID, limit: prefetchChunk }))
-      .then((messages) => {
-        if (prefetchToken.value !== token) return
-        if (!lruFor(directory).has(sessionID)) return
+    return runSessionPrefetch({
+      directory,
+      sessionID,
+      task: (rev) =>
+        retry(() => globalSDK.client.session.messages({ directory, sessionID, limit: prefetchChunk }))
+          .then((messages) => {
+            if (prefetchToken.value !== token) return
+            if (!isSessionPrefetchCurrent(directory, sessionID, rev)) return
 
-        const items = (messages.data ?? []).filter((x) => !!x?.info?.id)
-        const next = items.map((x) => x.info).filter((m): m is Message => !!m?.id)
-        const sorted = mergeByID([], next)
+            const items = (messages.data ?? []).filter((x) => !!x?.info?.id)
+            const next = items.map((x) => x.info).filter((m): m is Message => !!m?.id)
+            const sorted = mergeByID([], next)
+            const stale = markPrefetched(directory, sessionID)
+            const meta = {
+              limit: prefetchChunk,
+              complete: sorted.length < prefetchChunk,
+              at: Date.now(),
+            }
 
-        const current = store.message[sessionID] ?? []
-        const merged = mergeByID(
-          current.filter((item): item is Message => !!item?.id),
-          sorted,
-        )
+            if (stale.length > 0) {
+              clearSessionPrefetch(directory, stale)
+              for (const id of stale) {
+                globalSync.todo.set(id, undefined)
+              }
+            }
 
-        batch(() => {
-          setStore("message", sessionID, reconcile(merged, { key: "id" }))
-
-          for (const message of items) {
-            const currentParts = store.part[message.info.id] ?? []
-            const mergedParts = mergeByID(
-              currentParts.filter((item): item is (typeof currentParts)[number] & { id: string } => !!item?.id),
-              message.parts.filter((item): item is (typeof message.parts)[number] & { id: string } => !!item?.id),
+            const current = store.message[sessionID] ?? []
+            const merged = mergeByID(
+              current.filter((item): item is Message => !!item?.id),
+              sorted,
             )
 
-            setStore("part", message.info.id, reconcile(mergedParts, { key: "id" }))
-          }
-        })
-      })
-      .catch(() => undefined)
+            if (!isSessionPrefetchCurrent(directory, sessionID, rev)) return
+
+            batch(() => {
+              if (stale.length > 0) {
+                setStore(
+                  produce((draft) => {
+                    dropSessionCaches(draft, stale)
+                  }),
+                )
+              }
+
+              setStore("message", sessionID, reconcile(merged, { key: "id" }))
+              setSessionPrefetch({ directory, sessionID, ...meta })
+
+              for (const message of items) {
+                const currentParts = store.part[message.info.id] ?? []
+                const mergedParts = mergeByID(
+                  currentParts.filter((item): item is (typeof currentParts)[number] & { id: string } => !!item?.id),
+                  message.parts.filter((item): item is (typeof message.parts)[number] & { id: string } => !!item?.id),
+                )
+
+                setStore("part", message.info.id, reconcile(mergedParts, { key: "id" }))
+              }
+            })
+
+            return meta
+          })
+          .catch(() => undefined),
+    })
   }
 
   const pumpPrefetch = (directory: string) => {
@@ -788,28 +845,29 @@ export default function Layout(props: ParentProps) {
     if (!directory) return
 
     const [store] = globalSync.child(directory, { bootstrap: false })
-    const cached = untrack(() => store.message[session.id] !== undefined)
+    const cached = untrack(() => {
+      if (store.message[session.id] === undefined) return false
+      const info = getSessionPrefetch(directory, session.id)
+      if (!info) return false
+      return Date.now() - info.at < SESSION_PREFETCH_TTL
+    })
     if (cached) return
 
     const q = queueFor(directory)
     if (q.inflight.has(session.id)) return
-    if (q.pendingSet.has(session.id)) return
+    if (q.pendingSet.has(session.id)) {
+      if (priority !== "high") return
+      const index = q.pending.indexOf(session.id)
+      if (index > 0) {
+        q.pending.splice(index, 1)
+        q.pending.unshift(session.id)
+      }
+      return
+    }
 
     const lru = lruFor(directory)
     const known = lru.has(session.id)
     if (!known && lru.size >= PREFETCH_MAX_SESSIONS_PER_DIR && priority !== "high") return
-    const stale = markPrefetched(directory, session.id)
-    if (stale.length > 0) {
-      const [, setStore] = globalSync.child(directory, { bootstrap: false })
-      for (const id of stale) {
-        globalSync.todo.set(id, undefined)
-      }
-      setStore(
-        produce((draft) => {
-          dropSessionCaches(draft, stale)
-        }),
-      )
-    }
 
     if (priority === "high") q.pending.unshift(session.id)
     if (priority !== "high") q.pending.push(session.id)
@@ -824,27 +882,29 @@ export default function Layout(props: ParentProps) {
     pumpPrefetch(directory)
   }
 
+  const warm = (sessions: Session[], index: number) => {
+    for (let offset = 1; offset <= span; offset++) {
+      const next = sessions[index + offset]
+      if (next) prefetchSession(next, offset === 1 ? "high" : "low")
+
+      const prev = sessions[index - offset]
+      if (prev) prefetchSession(prev, offset === 1 ? "high" : "low")
+    }
+  }
+
   createEffect(() => {
     const sessions = currentSessions()
-    const id = params.id
+    if (sessions.length === 0) return
 
-    if (!id) {
-      const first = sessions[0]
-      if (first) prefetchSession(first)
-
-      const second = sessions[1]
-      if (second) prefetchSession(second)
-      return
-    }
-
-    const index = sessions.findIndex((s) => s.id === id)
+    const index = params.id ? sessions.findIndex((s) => s.id === params.id) : 0
     if (index === -1) return
 
-    const next = sessions[index + 1]
-    if (next) prefetchSession(next)
+    if (!params.id) {
+      const first = sessions[index]
+      if (first) prefetchSession(first, "high")
+    }
 
-    const prev = sessions[index - 1]
-    if (prev) prefetchSession(prev)
+    warm(sessions, index)
   })
 
   function navigateSessionByOffset(offset: number) {
@@ -863,18 +923,8 @@ export default function Layout(props: ParentProps) {
     const session = sessions[targetIndex]
     if (!session) return
 
-    const next = sessions[(targetIndex + 1) % sessions.length]
-    const prev = sessions[(targetIndex - 1 + sessions.length) % sessions.length]
-
-    if (offset > 0) {
-      if (next) prefetchSession(next, "high")
-      if (prev) prefetchSession(prev)
-    }
-
-    if (offset < 0) {
-      if (prev) prefetchSession(prev, "high")
-      if (next) prefetchSession(next)
-    }
+    prefetchSession(session, "high")
+    warm(sessions, targetIndex)
 
     navigateToSession(session)
   }
@@ -896,19 +946,7 @@ export default function Layout(props: ParentProps) {
       if (notification.session.unseenCount(session.id) === 0) continue
 
       prefetchSession(session, "high")
-
-      const next = sessions[(index + 1) % sessions.length]
-      const prev = sessions[(index - 1 + sessions.length) % sessions.length]
-
-      if (offset > 0) {
-        if (next) prefetchSession(next, "high")
-        if (prev) prefetchSession(prev)
-      }
-
-      if (offset < 0) {
-        if (prev) prefetchSession(prev, "high")
-        if (next) prefetchSession(next)
-      }
+      warm(sessions, index)
 
       navigateToSession(session)
       return
@@ -1842,6 +1880,7 @@ export default function Layout(props: ParentProps) {
 
   const workspaceSidebarCtx: WorkspaceSidebarContext = {
     currentDir,
+    navList: currentSessions,
     sidebarExpanded,
     sidebarHovering,
     nav: () => state.nav,
@@ -1887,6 +1926,7 @@ export default function Layout(props: ParentProps) {
     workspaceIds,
     workspaceLabel,
     sessionProps: {
+      navList: currentSessions,
       sidebarExpanded,
       sidebarHovering,
       nav: () => state.nav,
