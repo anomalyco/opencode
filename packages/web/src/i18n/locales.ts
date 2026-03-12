@@ -42,7 +42,6 @@ export const localeAlias = {
   pl: "pl",
   pt: "pt-br",
   "pt-br": "pt-br",
-  root: "en",
   ru: "ru",
   th: "th",
   tr: "tr",

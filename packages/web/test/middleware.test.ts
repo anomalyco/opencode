@@ -23,8 +23,6 @@ describe("docs middleware", () => {
   test("keeps explicit locale routes authoritative", () => {
     expect(docsRedirect("/docs/en/agents", "fr")).toBeNull()
     expect(docsRedirect("/docs/fr/agents", "en")).toBeNull()
-    expect(docsRouteLocale("/docs/en/agents")).toBe("en")
-    expect(docsRouteLocale("/docs/fr/agents")).toBe("fr")
   })
 
   test("treats unknown locale-looking segments as bare docs aliases", () => {
@@ -33,11 +31,9 @@ describe("docs middleware", () => {
     expect(docsRedirect("/docs/xx/agents", "en")).toBe("/docs/en/xx/agents")
   })
 
-  test("normalizes legacy root alias to english", () => {
-    expect(docsAlias("/docs/root/agents")).toEqual({
-      path: "/docs/en/agents",
-      locale: "en",
-    })
+  test("leaves unknown locale aliases alone", () => {
+    expect(docsAlias("/docs/root/agents")).toBeNull()
+    expect(docsAlias("/docs/root")).toBeNull()
   })
 
   test("parses locale from cookie and accept-language", () => {

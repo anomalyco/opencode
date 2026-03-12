@@ -9,7 +9,7 @@ export function docsAlias(pathname: string) {
   const locale = exactLocale(value)
   if (!locale) return null
 
-  const next = `/docs/${locale}${tail}`
+  const next = tail ? `/docs/${locale}${tail}` : `/docs/${locale}/`
   if (next === pathname) return null
   return {
     path: next,
