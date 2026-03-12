@@ -29,6 +29,8 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
 
   let root: HTMLDivElement | undefined
   let replied = false
+  let cachedScroller: HTMLElement | undefined
+  let cachedDock: HTMLElement | undefined
 
   const question = createMemo(() => questions()[store.tab])
   const options = createMemo(() => question()?.options ?? [])
@@ -65,37 +67,72 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   }
 
   const measure = () => {
-    if (!root) return
+    try {
+      if (!root) return
 
-    const scroller = document.querySelector(".scroll-view__viewport")
-    const head = scroller instanceof HTMLElement ? scroller.firstElementChild : undefined
-    const top =
-      head instanceof HTMLElement && head.classList.contains("sticky") ? head.getBoundingClientRect().bottom : 0
-    if (!top) {
-      root.style.removeProperty("--question-prompt-max-height")
-      root.style.removeProperty("--question-text-max-height")
-      return
+      const scroller = cachedScroller ?? document.querySelector(".scroll-view__viewport")
+      if (scroller instanceof HTMLElement && !cachedScroller) cachedScroller = scroller
+
+      const head = scroller instanceof HTMLElement ? scroller.firstElementChild : undefined
+      const top =
+        head instanceof HTMLElement && head.classList.contains("sticky") ? head.getBoundingClientRect().bottom : 0
+      if (!top) {
+        root.style.removeProperty("--question-prompt-max-height")
+        root.style.removeProperty("--question-text-max-height")
+        return
+      }
+
+      const dock = cachedDock ?? root.closest('[data-component="session-prompt-dock"]')
+      if (dock instanceof HTMLElement) {
+        if (!cachedDock) cachedDock = dock
+      } else {
+        return
+      }
+
+      const dockBottom = dock.getBoundingClientRect().bottom
+      const below = Math.max(0, dockBottom - root.getBoundingClientRect().bottom)
+      const gap = 8
+      const max = Math.max(240, Math.floor(dockBottom - top - gap - below))
+      root.style.setProperty("--question-prompt-max-height", `${max}px`)
+
+      const questionText = root.querySelector('[data-slot="question-text"]')
+      if (questionText instanceof HTMLElement) {
+        const headerTitle = root.querySelector('[data-slot="question-header-title"]')
+        const progress = root.querySelector('[data-slot="question-progress"]')
+        const hint = root.querySelector('[data-slot="question-hint"]')
+        const options = root.querySelector('[data-slot="question-options"]')
+
+        let usedHeight = 0
+
+        if (headerTitle instanceof HTMLElement) {
+          usedHeight += headerTitle.getBoundingClientRect().height
+        }
+        if (progress instanceof HTMLElement) {
+          usedHeight += progress.getBoundingClientRect().height
+        }
+        if (hint instanceof HTMLElement) {
+          usedHeight += hint.getBoundingClientRect().height
+        }
+
+        const optionsMinHeight = 200
+        const padding = 16
+
+        const questionTextMaxHeight = max - usedHeight - optionsMinHeight - padding
+        root.style.setProperty("--question-text-max-height", `${Math.max(60, questionTextMaxHeight)}px`)
+      }
+    } catch (err) {
+      console.warn("Failed to measure question dock layout:", err)
     }
+  }
 
-    const dock = root.closest('[data-component="session-prompt-dock"]')
-    if (!(dock instanceof HTMLElement)) return
-
-    const dockBottom = dock.getBoundingClientRect().bottom
-    const below = Math.max(0, dockBottom - root.getBoundingClientRect().bottom)
-    const gap = 8
-    const max = Math.max(240, Math.floor(dockBottom - top - gap - below))
-    root.style.setProperty("--question-prompt-max-height", `${max}px`)
-
-    // Calculate max height for question text to ensure options remain visible
-    // Reserve space for: header (~44px), hint (~40px), options (~200px min), padding (~16px)
-    const questionText = root.querySelector('[data-slot="question-text"]')
-    if (questionText instanceof HTMLElement) {
-      const headerHeight = 44
-      const hintHeight = 40
-      const optionsMinHeight = 200
-      const padding = 16
-      const questionTextMaxHeight = max - headerHeight - hintHeight - optionsMinHeight - padding
-      root.style.setProperty("--question-text-max-height", `${Math.max(60, questionTextMaxHeight)}px`)
+  const debounce = (fn: () => void, ms: number) => {
+    let timeout: ReturnType<typeof setTimeout> | undefined
+    return () => {
+      if (timeout !== undefined) clearTimeout(timeout)
+      timeout = setTimeout(() => {
+        timeout = undefined
+        fn()
+      }, ms)
     }
   }
 
@@ -109,8 +146,10 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
       })
     }
 
+    const debouncedUpdate = debounce(update, 100)
+
     update()
-    window.addEventListener("resize", update)
+    window.addEventListener("resize", debouncedUpdate)
 
     const dock = root?.closest('[data-component="session-prompt-dock"]')
     const scroller = document.querySelector(".scroll-view__viewport")
@@ -119,9 +158,11 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     if (scroller instanceof HTMLElement) observer.observe(scroller)
 
     onCleanup(() => {
-      window.removeEventListener("resize", update)
+      window.removeEventListener("resize", debouncedUpdate)
       observer.disconnect()
       if (raf !== undefined) cancelAnimationFrame(raf)
+      cachedScroller = undefined
+      cachedDock = undefined
     })
   })
 
