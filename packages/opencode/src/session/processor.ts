@@ -364,8 +364,13 @@ export namespace SessionProcessor {
                 error,
               })
             } else {
+              // Check if retry should be delegated to plugins
+              const config = await Config.get()
+              const delegateRetryToPlugin = config.session?.retry?.delegate_to_plugin === true
+              const nativeRetryEnabled = config.session?.retry?.enabled !== false
+
               const retry = SessionRetry.retryable(error)
-              if (retry !== undefined) {
+              if (retry !== undefined && nativeRetryEnabled && !delegateRetryToPlugin) {
                 attempt++
                 const delay = SessionRetry.delay(attempt, error.name === "APIError" ? error : undefined)
                 SessionStatus.set(input.sessionID, {
