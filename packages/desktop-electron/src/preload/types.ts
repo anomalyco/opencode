@@ -36,6 +36,8 @@ export type ElectronAPI = {
   storeKeys: (name: string) => Promise<string[]>
   storeLength: (name: string) => Promise<number>
 
+  getWindowCount: () => Promise<number>
+  onWindowCount: (cb: (count: number) => void) => () => void
   onSqliteMigrationProgress: (cb: (progress: SqliteMigrationProgress) => void) => () => void
   onMenuCommand: (cb: (id: string) => void) => () => void
   onDeepLink: (cb: (urls: string[]) => void) => () => void

@@ -142,6 +142,8 @@ export function registerIpcHandlers(deps: Deps) {
     new Notification({ title, body }).show()
   })
 
+  ipcMain.handle("get-window-count", () => BrowserWindow.getAllWindows().length)
+
   ipcMain.handle("get-window-focused", (event: IpcMainInvokeEvent) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     return win?.isFocused() ?? false
@@ -169,6 +171,10 @@ export function registerIpcHandlers(deps: Deps) {
     if (!win) return
     setTitlebar(win, theme)
   })
+}
+
+export function sendWindowCount(win: BrowserWindow, count: number) {
+  win.webContents.send("window-count", count)
 }
 
 export function sendSqliteMigrationProgress(win: BrowserWindow, progress: SqliteMigrationProgress) {

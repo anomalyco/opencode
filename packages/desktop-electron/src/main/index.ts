@@ -5,7 +5,7 @@ import { createServer } from "node:net"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import type { Event } from "electron"
-import { app, type BrowserWindow, dialog } from "electron"
+import { app, BrowserWindow, dialog } from "electron"
 import pkg from "electron-updater"
 
 const APP_NAMES: Record<string, string> = {
@@ -27,7 +27,13 @@ import { checkAppExists, resolveAppPath, wslPath } from "./apps"
 import type { CommandChild } from "./cli"
 import { installCli, syncCli } from "./cli"
 import { CHANNEL, UPDATER_ENABLED } from "./constants"
-import { registerIpcHandlers, sendDeepLinks, sendMenuCommand, sendSqliteMigrationProgress } from "./ipc"
+import {
+  registerIpcHandlers,
+  sendDeepLinks,
+  sendMenuCommand,
+  sendSqliteMigrationProgress,
+  sendWindowCount,
+} from "./ipc"
 import { initLogging } from "./logging"
 import { parseMarkdown } from "./markdown"
 import { createMenu } from "./menu"
@@ -79,6 +85,15 @@ function setupApp() {
 
   app.on("before-quit", () => {
     killSidecar()
+  })
+
+  app.on("browser-window-created", (_, win) => {
+    const broadcast = () => {
+      const count = BrowserWindow.getAllWindows().length
+      for (const w of BrowserWindow.getAllWindows()) sendWindowCount(w, count)
+    }
+    win.on("show", broadcast)
+    win.on("closed", broadcast)
   })
 
   void app.whenReady().then(async () => {
@@ -159,8 +174,6 @@ async function initialize() {
     deepLinks: pendingDeepLinks,
   }
 
-  wireMenu()
-
   if (needsMigration) {
     const show = await Promise.race([loadingTask.then(() => false), delay(1_000).then(() => true)])
     if (show) {
@@ -177,6 +190,7 @@ async function initialize() {
   }
 
   mainWindow = createMainWindow(globals)
+  wireMenu()
 
   overlay?.close()
 }
