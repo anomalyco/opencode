@@ -343,6 +343,8 @@ export default function Page() {
 
   const [ui, setUi] = createStore({
     pendingMessage: undefined as string | undefined,
+    restoring: undefined as string | undefined,
+    reverting: false,
     reviewSnap: false,
     scrollGesture: 0,
     scroll: {
@@ -475,7 +477,8 @@ export default function Page() {
     () => {
       const revert = revertMessageID()
       if (!revert) return userMessages()
-      return userMessages().filter((m) => m.id < revert)
+      const idx = userMessages().findIndex((m) => m.id === revert)
+      return idx >= 0 ? userMessages().slice(0, idx) : userMessages()
     },
     emptyUserMessages,
     {
@@ -756,7 +759,7 @@ export default function Page() {
       )
       return
     }
-    const at = list.findIndex((item) => item.id > next.id)
+    const at = list.findIndex((item) => item.id.localeCompare(next.id) > 0)
     if (at >= 0) {
       globalSync.set("project", [...list.slice(0, at), next, ...list.slice(at)])
       return
@@ -1768,16 +1771,58 @@ export default function Page() {
   }
 
   const restore = (id: string) => {
-    if (!params.id || reverting()) return
-    return restoreMutation.mutateAsync(id)
+    const sessionID = params.id
+    if (!sessionID || ui.restoring || ui.reverting) return
+
+    const idx = userMessages().findIndex((m) => m.id === id)
+    const next = idx >= 0 ? userMessages()[idx + 1] : undefined
+    const prev = prompt.current().slice()
+    const last = info()?.revert
+
+    batch(() => {
+      setUi("restoring", id)
+      setUi("reverting", true)
+      roll(sessionID, next ? { messageID: next.id } : undefined)
+      if (next) {
+        prompt.set(draft(next.id))
+        return
+      }
+      prompt.reset()
+    })
+
+    const task = !next
+      ? halt(sessionID).then(() => sdk.client.session.unrevert({ sessionID }))
+      : halt(sessionID).then(() =>
+          sdk.client.session.revert({
+            sessionID,
+            messageID: next.id,
+          }),
+        )
+
+    return task
+      .then((result) => {
+        if (result.data) merge(result.data)
+      })
+      .catch((err) => {
+        batch(() => {
+          roll(sessionID, last)
+          prompt.set(prev)
+        })
+        fail(err)
+      })
+      .finally(() => {
+        batch(() => {
+          setUi("restoring", (value) => (value === id ? undefined : value))
+          setUi("reverting", false)
+        })
+      })
   }
 
   const rolled = createMemo(() => {
     const id = revertMessageID()
     if (!id) return []
-    return userMessages()
-      .filter((item) => item.id >= id)
-      .map((item) => ({ id: item.id, text: line(item.id) }))
+    const idx = userMessages().findIndex((m) => m.id === id)
+    return (idx >= 0 ? userMessages().slice(idx) : []).map((item) => ({ id: item.id, text: line(item.id) }))
   })
 
   const actions = { fork, revert }

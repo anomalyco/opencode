@@ -9,6 +9,8 @@ import { MessageV2 } from "../../src/session/message-v2"
 import { SessionPrompt } from "../../src/session/prompt"
 import { Log } from "../../src/util/log"
 import { tmpdir } from "../fixture/fixture"
+import { MessageID } from "../../src/session/schema"
+import { behindPair, makeUser, makeAssistant } from "./fixtures/skewed-messages"
 
 Log.init({ print: false })
 
@@ -267,10 +269,10 @@ describe("session.agent-resolution", () => {
       directory: tmp.path,
       fn: async () => {
         const session = await Session.create({})
-        const err = await SessionPrompt.command({
+        const err = await SessionPrompt.prompt({
           sessionID: session.id,
-          command: "nonexistent-command-xyz",
-          arguments: "",
+          noReply: true,
+          parts: [{ type: "text", text: "/nonexistent-command-xyz" }],
         }).then(
           () => undefined,
           (e) => e,
@@ -285,4 +287,59 @@ describe("session.agent-resolution", () => {
       },
     })
   }, 30000)
+})
+
+describe("shouldExitLoop", () => {
+  const user = { id: MessageID.make("msg-user-1") } as any
+  const assistant = (parentID: string | undefined, finish: string | undefined) =>
+    ({
+      role: "assistant",
+      finish,
+      parentID: parentID ? MessageID.make(parentID) : undefined,
+    }) as any
+
+  test("normal exit: parentID matches, finish=end_turn \u2192 true", () => {
+    expect(SessionPrompt.shouldExitLoop(user, assistant("msg-user-1", "end_turn"))).toBe(true)
+  })
+
+  test("clock-skew exit: parentID matches, finish=stop \u2192 true", () => {
+    expect(SessionPrompt.shouldExitLoop(user, assistant("msg-user-1", "stop"))).toBe(true)
+  })
+
+  test("tool-calls: finish=tool-calls \u2192 false", () => {
+    expect(SessionPrompt.shouldExitLoop(user, assistant("msg-user-1", "tool-calls"))).toBe(false)
+  })
+
+  test("unknown: finish=unknown \u2192 false", () => {
+    expect(SessionPrompt.shouldExitLoop(user, assistant("msg-user-1", "unknown"))).toBe(false)
+  })
+
+  test("no assistant: lastAssistant=undefined \u2192 false", () => {
+    expect(SessionPrompt.shouldExitLoop(user, undefined)).toBe(false)
+  })
+
+  test("no finish: finish=undefined \u2192 false", () => {
+    expect(SessionPrompt.shouldExitLoop(user, assistant("msg-user-1", undefined))).toBe(false)
+  })
+
+  test("parentID mismatch: assistant.parentID !== user.id \u2192 false", () => {
+    expect(SessionPrompt.shouldExitLoop(user, assistant("msg-other-user", "end_turn"))).toBe(false)
+  })
+
+  test("no user: lastUser=undefined \u2192 false", () => {
+    expect(SessionPrompt.shouldExitLoop(undefined, assistant("msg-user-1", "end_turn"))).toBe(false)
+  })
+
+  test("should return true when assistant has missing parentID (fail-safe)", () => {
+    expect(SessionPrompt.shouldExitLoop(user, assistant(undefined, "end_turn"))).toBe(true)
+  })
+})
+
+describe("system-reminder wrapping", () => {
+  test("wraps queued user messages based on position, not ID ordering", () => {
+    const { user, assistant } = behindPair()
+    expect(user.id < assistant.id).toBe(true)
+    expect(SessionPrompt.shouldWrapSystemReminder(user, 2, assistant, 1)).toBe(true)
+    expect(SessionPrompt.shouldWrapSystemReminder(user, 1, assistant, 1)).toBe(false)
+  })
 })

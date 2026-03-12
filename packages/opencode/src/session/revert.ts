@@ -58,7 +58,8 @@ export namespace SessionRevert {
       revert.snapshot = session.revert?.snapshot ?? (await Snapshot.track())
       await Snapshot.revert(patches)
       if (revert.snapshot) revert.diff = await Snapshot.diff(revert.snapshot)
-      const rangeMessages = all.filter((msg) => msg.info.id >= revert!.messageID)
+      const idx = all.findIndex((msg) => msg.info.id === revert!.messageID)
+      const rangeMessages = idx >= 0 ? all.slice(idx) : all
       const diffs = await SessionSummary.computeDiff({ messages: rangeMessages })
       await Storage.write(["session_diff", input.sessionID], diffs)
       Bus.publish(Session.Event.Diff, {
@@ -95,21 +96,27 @@ export namespace SessionRevert {
     const preserve = [] as MessageV2.WithParts[]
     const remove = [] as MessageV2.WithParts[]
     let target: MessageV2.WithParts | undefined
-    for (const msg of msgs) {
-      if (msg.info.id < messageID) {
-        preserve.push(msg)
-        continue
-      }
-      if (msg.info.id > messageID) {
+    const idx = msgs.findIndex((msg) => msg.info.id === messageID)
+    if (idx < 0) {
+      preserve.push(...msgs)
+    } else {
+      for (let i = 0; i < msgs.length; i++) {
+        const msg = msgs[i]!
+        if (i < idx) {
+          preserve.push(msg)
+          continue
+        }
+        if (i > idx) {
+          remove.push(msg)
+          continue
+        }
+        if (session.revert.partID) {
+          preserve.push(msg)
+          target = msg
+          continue
+        }
         remove.push(msg)
-        continue
       }
-      if (session.revert.partID) {
-        preserve.push(msg)
-        target = msg
-        continue
-      }
-      remove.push(msg)
     }
     for (const msg of remove) {
       SyncEvent.run(MessageV2.Event.Removed, {

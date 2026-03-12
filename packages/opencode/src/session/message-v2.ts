@@ -694,6 +694,14 @@ export namespace MessageV2 {
         ) {
           continue
         }
+        // Skip incomplete assistant messages (no finish, no error, and no meaningful parts)
+        if (
+          !msg.info.finish &&
+          !msg.info.error &&
+          !msg.parts.some((part) => part.type !== "step-start")
+        ) {
+          continue
+        }
         const assistantMessage: UIMessage = {
           id: msg.info.id,
           role: "assistant",

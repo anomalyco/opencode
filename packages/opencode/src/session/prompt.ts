@@ -302,15 +302,16 @@ export namespace SessionPrompt {
       let msgs = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
 
       let lastUser: MessageV2.User | undefined
-      let lastAssistant: MessageV2.Assistant | undefined
       let lastFinished: MessageV2.Assistant | undefined
+      let finishedIdx = -1
       let tasks: (MessageV2.CompactionPart | MessageV2.SubtaskPart)[] = []
       for (let i = msgs.length - 1; i >= 0; i--) {
         const msg = msgs[i]
         if (!lastUser && msg.info.role === "user") lastUser = msg.info as MessageV2.User
-        if (!lastAssistant && msg.info.role === "assistant") lastAssistant = msg.info as MessageV2.Assistant
-        if (!lastFinished && msg.info.role === "assistant" && msg.info.finish)
+        if (!lastFinished && msg.info.role === "assistant" && msg.info.finish) {
           lastFinished = msg.info as MessageV2.Assistant
+          finishedIdx = i
+        }
         if (lastUser && lastFinished) break
         const task = msg.parts.filter((part) => part.type === "compaction" || part.type === "subtask")
         if (task && !lastFinished) {
@@ -319,11 +320,7 @@ export namespace SessionPrompt {
       }
 
       if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
-      if (
-        lastAssistant?.finish &&
-        !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
-        lastUser.id < lastAssistant.id
-      ) {
+      if (shouldExitLoop(lastUser, lastFinished)) {
         log.info("exiting loop", { sessionID })
         break
       }
@@ -653,8 +650,9 @@ export namespace SessionPrompt {
 
       // Ephemerally wrap queued user messages with a reminder to stay on track
       if (step > 1 && lastFinished) {
-        for (const msg of msgs) {
-          if (msg.info.role !== "user" || msg.info.id <= lastFinished.id) continue
+        for (let i = 0; i < msgs.length; i++) {
+          const msg = msgs[i]
+          if (!shouldWrapSystemReminder(msg.info, i, lastFinished, finishedIdx)) continue
           for (const part of msg.parts) {
             if (part.type !== "text" || part.ignored || part.synthetic) continue
             if (!part.text.trim()) continue
@@ -2045,5 +2043,27 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         throw err
       })
     }
+  }
+
+  export function shouldExitLoop(
+    lastUser: MessageV2.User | undefined,
+    lastAssistant: MessageV2.Assistant | undefined,
+  ): boolean {
+    if (!lastUser) return false
+    if (!lastAssistant?.finish) return false
+    if (["tool-calls", "unknown"].includes(lastAssistant.finish)) return false
+    if (!lastAssistant.parentID) return true
+    return lastAssistant.parentID === lastUser.id
+  }
+
+  export function shouldWrapSystemReminder(
+    msg: MessageV2.User | MessageV2.Assistant,
+    idx: number,
+    lastFinished: MessageV2.Assistant | undefined,
+    finishedIdx: number,
+  ): boolean {
+    if (msg.role !== "user") return false
+    if (!lastFinished) return false
+    return idx > finishedIdx
   }
 }

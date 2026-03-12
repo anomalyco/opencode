@@ -3,6 +3,7 @@ import type { JSX } from "solid-js"
 import { useSync } from "@/context/sync"
 import { checksum } from "@opencode-ai/util/encode"
 import { findLast } from "@opencode-ai/util/array"
+import { sortMessages } from "@opencode-ai/util/message"
 import { same } from "@/utils/same"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Accordion } from "@opencode-ai/ui/accordion"
@@ -100,7 +101,7 @@ export function SessionContextTab() {
     () => {
       const id = params.id
       if (!id) return emptyMessages
-      return (sync.data.message[id] ?? []) as Message[]
+      return sortMessages((sync.data.message[id] ?? []) as Message[])
     },
     emptyMessages,
     { equals: same },

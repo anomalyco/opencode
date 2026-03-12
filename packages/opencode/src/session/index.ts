@@ -270,9 +270,11 @@ export namespace Session {
       })
       const msgs = await messages({ sessionID: input.sessionID })
       const idMap = new Map<string, MessageID>()
+      const cutoff = input.messageID ? msgs.findIndex((msg) => msg.info.id === input.messageID) : -1
 
-      for (const msg of msgs) {
-        if (input.messageID && msg.info.id >= input.messageID) break
+      for (let i = 0; i < msgs.length; i++) {
+        if (cutoff >= 0 && i >= cutoff) break
+        const msg = msgs[i]
         const newID = MessageID.ascending()
         idMap.set(msg.info.id, newID)
 

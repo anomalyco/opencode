@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeEach, afterEach } from "bun:test"
+import { describe, expect, test, beforeEach, afterEach, spyOn } from "bun:test"
 import path from "path"
 import { Session } from "../../src/session"
 import { ModelID, ProviderID } from "../../src/provider/schema"
@@ -8,12 +8,289 @@ import { MessageV2 } from "../../src/session/message-v2"
 import { Log } from "../../src/util/log"
 import { Instance } from "../../src/project/instance"
 import { MessageID, PartID } from "../../src/session/schema"
+import { Identifier } from "../../src/id/id"
+import { SessionSummary } from "../../src/session/summary"
 import { tmpdir } from "../fixture/fixture"
 
 const projectRoot = path.join(__dirname, "../..")
 Log.init({ print: false })
 
 describe("revert + compact workflow", () => {
+  test("cleanup preserves messages before target even when their IDs sort after target", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const sessionID = session.id
+        const now = Date.now()
+
+        const userA = await Session.updateMessage({
+          id: MessageID.make(Identifier.create("message", false, now + 60_000)),
+          role: "user",
+          sessionID,
+          agent: "default",
+          model: {
+            providerID: ProviderID.make("openai"),
+            modelID: ModelID.make("gpt-4"),
+          },
+          time: {
+            created: now + 1,
+          },
+        })
+        await Session.updatePart({
+          id: PartID.ascending(),
+          messageID: userA.id,
+          sessionID,
+          type: "text",
+          text: "A",
+        })
+
+        const assistantB: MessageV2.Assistant = {
+          id: MessageID.ascending(),
+          role: "assistant",
+          sessionID,
+          mode: "default",
+          agent: "default",
+          path: {
+            cwd: tmp.path,
+            root: tmp.path,
+          },
+          cost: 0,
+          tokens: {
+            output: 0,
+            input: 0,
+            reasoning: 0,
+            cache: { read: 0, write: 0 },
+          },
+          modelID: ModelID.make("gpt-4"),
+          providerID: ProviderID.make("openai"),
+          parentID: userA.id,
+          time: {
+            created: now + 2,
+          },
+          finish: "end_turn",
+        }
+        await Session.updateMessage(assistantB)
+        await Session.updatePart({
+          id: PartID.ascending(),
+          messageID: assistantB.id,
+          sessionID,
+          type: "text",
+          text: "B",
+        })
+
+        const userC = await Session.updateMessage({
+          id: MessageID.ascending(),
+          role: "user",
+          sessionID,
+          agent: "default",
+          model: {
+            providerID: ProviderID.make("openai"),
+            modelID: ModelID.make("gpt-4"),
+          },
+          time: {
+            created: now + 3,
+          },
+        })
+        await Session.updatePart({
+          id: PartID.ascending(),
+          messageID: userC.id,
+          sessionID,
+          type: "text",
+          text: "C",
+        })
+
+        const assistantD: MessageV2.Assistant = {
+          id: MessageID.ascending(),
+          role: "assistant",
+          sessionID,
+          mode: "default",
+          agent: "default",
+          path: {
+            cwd: tmp.path,
+            root: tmp.path,
+          },
+          cost: 0,
+          tokens: {
+            output: 0,
+            input: 0,
+            reasoning: 0,
+            cache: { read: 0, write: 0 },
+          },
+          modelID: ModelID.make("gpt-4"),
+          providerID: ProviderID.make("openai"),
+          parentID: userC.id,
+          time: {
+            created: now + 4,
+          },
+          finish: "end_turn",
+        }
+        await Session.updateMessage(assistantD)
+        await Session.updatePart({
+          id: PartID.ascending(),
+          messageID: assistantD.id,
+          sessionID,
+          type: "text",
+          text: "D",
+        })
+
+        await SessionRevert.revert({
+          sessionID,
+          messageID: userC.id,
+        })
+
+        const info = await Session.get(sessionID)
+        await SessionRevert.cleanup(info)
+
+        const ids = (await Session.messages({ sessionID })).map((item) => item.info.id)
+        expect(ids).toEqual([userA.id, assistantB.id])
+
+        await Session.remove(sessionID)
+      },
+    })
+  })
+
+  test("revert range includes target and trailing messages regardless of ID ordering", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const sessionID = session.id
+        const now = Date.now()
+
+        const userA = await Session.updateMessage({
+          id: MessageID.make(Identifier.create("message", false, now + 60_000)),
+          role: "user",
+          sessionID,
+          agent: "default",
+          model: {
+            providerID: ProviderID.make("openai"),
+            modelID: ModelID.make("gpt-4"),
+          },
+          time: {
+            created: now + 1,
+          },
+        })
+        await Session.updatePart({
+          id: PartID.ascending(),
+          messageID: userA.id,
+          sessionID,
+          type: "text",
+          text: "A",
+        })
+
+        const assistantB: MessageV2.Assistant = {
+          id: MessageID.ascending(),
+          role: "assistant",
+          sessionID,
+          mode: "default",
+          agent: "default",
+          path: {
+            cwd: tmp.path,
+            root: tmp.path,
+          },
+          cost: 0,
+          tokens: {
+            output: 0,
+            input: 0,
+            reasoning: 0,
+            cache: { read: 0, write: 0 },
+          },
+          modelID: ModelID.make("gpt-4"),
+          providerID: ProviderID.make("openai"),
+          parentID: userA.id,
+          time: {
+            created: now + 2,
+          },
+          finish: "end_turn",
+        }
+        await Session.updateMessage(assistantB)
+        await Session.updatePart({
+          id: PartID.ascending(),
+          messageID: assistantB.id,
+          sessionID,
+          type: "text",
+          text: "B",
+        })
+
+        const userC = await Session.updateMessage({
+          id: MessageID.ascending(),
+          role: "user",
+          sessionID,
+          agent: "default",
+          model: {
+            providerID: ProviderID.make("openai"),
+            modelID: ModelID.make("gpt-4"),
+          },
+          time: {
+            created: now + 3,
+          },
+        })
+        await Session.updatePart({
+          id: PartID.ascending(),
+          messageID: userC.id,
+          sessionID,
+          type: "text",
+          text: "C",
+        })
+
+        const assistantD: MessageV2.Assistant = {
+          id: MessageID.ascending(),
+          role: "assistant",
+          sessionID,
+          mode: "default",
+          agent: "default",
+          path: {
+            cwd: tmp.path,
+            root: tmp.path,
+          },
+          cost: 0,
+          tokens: {
+            output: 0,
+            input: 0,
+            reasoning: 0,
+            cache: { read: 0, write: 0 },
+          },
+          modelID: ModelID.make("gpt-4"),
+          providerID: ProviderID.make("openai"),
+          parentID: userC.id,
+          time: {
+            created: now + 4,
+          },
+          finish: "end_turn",
+        }
+        await Session.updateMessage(assistantD)
+        await Session.updatePart({
+          id: PartID.ascending(),
+          messageID: assistantD.id,
+          sessionID,
+          type: "text",
+          text: "D",
+        })
+
+        const spy = spyOn(SessionSummary, "computeDiff").mockResolvedValue([])
+
+        try {
+          await SessionRevert.revert({
+            sessionID,
+            messageID: userC.id,
+          })
+
+          expect(spy).toHaveBeenCalledTimes(1)
+          const input = spy.mock.calls[0]?.[0]
+          const ids = input?.messages.map((item) => item.info.id)
+          expect(ids).toEqual([userC.id, assistantD.id])
+        } finally {
+          spy.mockRestore()
+        }
+
+        await Session.remove(sessionID)
+      },
+    })
+  })
+
   test("should properly handle compact command after revert", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
@@ -22,6 +299,7 @@ describe("revert + compact workflow", () => {
         // Create a session
         const session = await Session.create({})
         const sessionID = session.id
+        const now = Date.now()
 
         // Create a user message
         const userMsg1 = await Session.updateMessage({
@@ -34,7 +312,7 @@ describe("revert + compact workflow", () => {
             modelID: ModelID.make("gpt-4"),
           },
           time: {
-            created: Date.now(),
+            created: now + 1,
           },
         })
 
@@ -69,7 +347,7 @@ describe("revert + compact workflow", () => {
           providerID: ProviderID.make("openai"),
           parentID: userMsg1.id,
           time: {
-            created: Date.now(),
+            created: now + 2,
           },
           finish: "end_turn",
         }
@@ -95,7 +373,7 @@ describe("revert + compact workflow", () => {
             modelID: ModelID.make("gpt-4"),
           },
           time: {
-            created: Date.now(),
+            created: now + 3,
           },
         })
 
@@ -129,7 +407,7 @@ describe("revert + compact workflow", () => {
           providerID: ProviderID.make("openai"),
           parentID: userMsg2.id,
           time: {
-            created: Date.now(),
+            created: now + 4,
           },
           finish: "end_turn",
         }
@@ -198,6 +476,7 @@ describe("revert + compact workflow", () => {
         // Create a session
         const session = await Session.create({})
         const sessionID = session.id
+        const now = Date.now()
 
         // Create initial messages
         const userMsg = await Session.updateMessage({
@@ -210,7 +489,7 @@ describe("revert + compact workflow", () => {
             modelID: ModelID.make("gpt-4"),
           },
           time: {
-            created: Date.now(),
+            created: now,
           },
         })
 
@@ -243,7 +522,7 @@ describe("revert + compact workflow", () => {
           providerID: ProviderID.make("openai"),
           parentID: userMsg.id,
           time: {
-            created: Date.now(),
+            created: now + 1,
           },
           finish: "end_turn",
         }

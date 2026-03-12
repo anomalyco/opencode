@@ -15,7 +15,7 @@ import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { TextField } from "@opencode-ai/ui/text-field"
 import type { AssistantMessage, Message as MessageType, Part, TextPart, UserMessage } from "@opencode-ai/sdk/v2"
 import { showToast } from "@opencode-ai/ui/toast"
-import { Binary } from "@opencode-ai/util/binary"
+import { sortMessages } from "@opencode-ai/util/message"
 import { getFilename } from "@opencode-ai/util/path"
 import { Popover as KobaltePopover } from "@kobalte/core/popover"
 import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/message-gesture"
@@ -236,7 +236,7 @@ export function MessageTimeline(props: {
   const sessionMessages = createMemo(() => {
     const id = sessionID()
     if (!id) return emptyMessages
-    return sync.data.message[id] ?? emptyMessages
+    return sortMessages(sync.data.message[id] ?? emptyMessages)
   })
   const pending = createMemo(() =>
     sessionMessages().findLast(
@@ -270,8 +270,7 @@ export function MessageTimeline(props: {
     const parentID = pending()?.parentID
     if (parentID) {
       const messages = sessionMessages()
-      const result = Binary.search(messages, parentID, (message) => message.id)
-      const message = result.found ? messages[result.index] : messages.find((item) => item.id === parentID)
+      const message = messages.find((item) => item.id === parentID)
       if (message && message.role === "user") return message.id
     }
 
@@ -923,6 +922,15 @@ export function MessageTimeline(props: {
               <For each={rendered()}>
                 {(messageID) => {
                   const active = createMemo(() => activeMessageID() === messageID)
+                  const queued = createMemo(() => {
+                    if (active()) return false
+                    const activeID = activeMessageID()
+                    if (!activeID) return false
+                    const ids = rendered()
+                    const activeIdx = ids.indexOf(activeID)
+                    if (activeIdx === -1) return false
+                    return ids.indexOf(messageID) > activeIdx
+                  })
                   const comments = createMemo(() => messageComments(sync.data.part[messageID] ?? []), [], {
                     equals: (a, b) =>
                       a.length === b.length &&

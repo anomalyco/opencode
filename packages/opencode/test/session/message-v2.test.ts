@@ -644,6 +644,54 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
+  test("toModelMessages skips assistant messages with no finish and no error", () => {
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "hello",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "step-start",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: userInfo("m-user-2"),
+        parts: [
+          {
+            ...basePart("m-user-2", "u2"),
+            type: "text",
+            text: "follow up",
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "hello" }],
+      },
+      {
+        role: "user",
+        content: [{ type: "text", text: "follow up" }],
+      },
+    ])
+  })
+
   test("splits assistant messages on step-start boundaries", () => {
     const assistantID = "m-assistant"
 

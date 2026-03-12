@@ -3,7 +3,7 @@ import type { SessionStatus } from "@opencode-ai/sdk/v2"
 import { useData } from "../context"
 import { useFileComponent } from "../context/file"
 
-import { Binary } from "@opencode-ai/util/binary"
+import { sortMessages, selectAssistants } from "@opencode-ai/util/message"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { createEffect, createMemo, createSignal, For, on, ParentProps, Show } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -149,6 +149,7 @@ export function SessionTurn(
     editToolDefaultOpen?: boolean
     active?: boolean
     status?: SessionStatus
+    queued?: boolean
     onUserInteracted?: () => void
     classes?: {
       root?: string
@@ -167,13 +168,11 @@ export function SessionTurn(
   const emptyDiffs: FileDiff[] = []
   const idle = { type: "idle" as const }
 
-  const allMessages = createMemo(() => props.messages ?? list(data.store.message?.[props.sessionID], emptyMessages))
+  const allMessages = createMemo(() => props.messages ?? sortMessages(list(data.store.message?.[props.sessionID], emptyMessages)))
 
   const messageIndex = createMemo(() => {
-    const messages = allMessages() ?? emptyMessages
-    const result = Binary.search(messages, props.messageID, (m) => m.id)
-
-    const index = result.found ? result.index : messages.findIndex((m) => m.id === props.messageID)
+    const messages = allMessages()
+    const index = messages.findIndex((m) => m.id === props.messageID)
     if (index < 0) return -1
 
     const msg = messages[index]
@@ -204,9 +203,8 @@ export function SessionTurn(
   const pendingUser = createMemo(() => {
     const item = pending()
     if (!item?.parentID) return
-    const messages = allMessages() ?? emptyMessages
-    const result = Binary.search(messages, item.parentID, (m) => m.id)
-    const msg = result.found ? messages[result.index] : messages.find((m) => m.id === item.parentID)
+    const messages = allMessages()
+    const msg = messages.find((m) => m.id === item.parentID)
     if (!msg || msg.role !== "user") return
     return msg
   })
@@ -219,6 +217,17 @@ export function SessionTurn(
     return parent.id === msg.id
   })
 
+  const queued = createMemo(() => {
+    if (typeof props.queued === "boolean") return props.queued
+    const index = messageIndex()
+    if (index < 0) return false
+    if (!pendingUser()) return false
+    const item = pending()
+    if (!item) return false
+    const messages = allMessages()
+    const active = messages.findIndex((m) => m.id === item.parentID)
+    return active >= 0 && index > active
+  })
   const parts = createMemo(() => {
     const msg = message()
     if (!msg) return emptyParts
@@ -263,19 +272,7 @@ export function SessionTurn(
     () => {
       const msg = message()
       if (!msg) return emptyAssistant
-
-      const messages = allMessages() ?? emptyMessages
-      const index = messageIndex()
-      if (index < 0) return emptyAssistant
-
-      const result: AssistantMessage[] = []
-      for (let i = index + 1; i < messages.length; i++) {
-        const item = messages[i]
-        if (!item) continue
-        if (item.role === "user") break
-        if (item.role === "assistant" && item.parentID === msg.id) result.push(item as AssistantMessage)
-      }
-      return result
+      return selectAssistants(allMessages(), msg.id) as AssistantMessage[]
     },
     emptyAssistant,
     { equals: same },
