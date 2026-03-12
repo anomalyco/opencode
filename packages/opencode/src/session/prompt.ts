@@ -664,6 +664,7 @@ export namespace SessionPrompt {
       const result = await processor.process({
         user: lastUser,
         agent,
+        sessionPermission: session.permission,
         abort,
         sessionID,
         system,

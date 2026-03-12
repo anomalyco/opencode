@@ -2415,6 +2415,10 @@ export type ToolIdsData = {
   query?: {
     directory?: string
     workspace?: string
+    provider?: string
+    model?: string
+    agent?: string
+    sessionID?: string
   }
   url: "/experimental/tool/ids"
 }
@@ -2445,6 +2449,8 @@ export type ToolListData = {
     workspace?: string
     provider: string
     model: string
+    agent?: string
+    sessionID?: string
   }
   url: "/experimental/tool"
 }

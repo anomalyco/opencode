@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test"
 import path from "path"
-import type { ModelMessage } from "ai"
+import { jsonSchema, type ModelMessage, tool } from "ai"
 import { LLM } from "../../src/session/llm"
 import { Global } from "../../src/global"
 import { Instance } from "../../src/project/instance"
@@ -222,6 +222,125 @@ function createEventResponse(chunks: unknown[], includeDone = false) {
 }
 
 describe("session.llm.stream", () => {
+  test("applies session permissions before exposing tools to the model", async () => {
+    const server = state.server
+    if (!server) {
+      throw new Error("Server not initialized")
+    }
+
+    const providerID = "alibaba"
+    const modelID = "qwen-plus"
+    const fixture = await loadFixture(providerID, modelID)
+
+    const allowedRequest = waitRequest(
+      "/chat/completions",
+      new Response(createChatStream("allowed"), {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      }),
+    )
+
+    const deniedRequest = waitRequest(
+      "/chat/completions",
+      new Response(createChatStream("denied"), {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      }),
+    )
+
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            enabled_providers: [providerID],
+            provider: {
+              [providerID]: {
+                options: {
+                  apiKey: "test-key",
+                  baseURL: `${server.url.origin}/v1`,
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const resolved = await Provider.getModel(providerID, fixture.model.id)
+        const sessionID = "session-test-session-permissions"
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+
+        const user = {
+          id: "user-permission-1",
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID, modelID: resolved.id },
+        } satisfies MessageV2.User
+
+        const bashTool = tool({
+          description: "Run shell commands",
+          inputSchema: jsonSchema({
+            type: "object",
+            properties: {
+              command: { type: "string" },
+            },
+            required: ["command"],
+            additionalProperties: false,
+          }),
+          execute: async () => ({ output: "", title: "", metadata: {} }),
+        })
+
+        const allowedStream = await LLM.stream({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          abort: new AbortController().signal,
+          messages: [{ role: "user", content: "Hello" }],
+          tools: { bash: bashTool },
+        })
+        for await (const _ of allowedStream.fullStream) {
+        }
+
+        const allowedCapture = await allowedRequest
+        const allowedTools = allowedCapture.body.tools as Array<{ function?: { name?: string } }> | undefined
+        expect(Array.isArray(allowedTools)).toBe(true)
+        expect(allowedTools?.some((item) => item.function?.name === "bash")).toBe(true)
+
+        const deniedStream = await LLM.stream({
+          user: { ...user, id: "user-permission-2" },
+          sessionID,
+          model: resolved,
+          agent,
+          sessionPermission: [{ permission: "bash", pattern: "*", action: "deny" }],
+          system: ["You are a helpful assistant."],
+          abort: new AbortController().signal,
+          messages: [{ role: "user", content: "Hello again" }],
+          tools: { bash: bashTool },
+        })
+        for await (const _ of deniedStream.fullStream) {
+        }
+
+        const deniedCapture = await deniedRequest
+        const deniedTools = deniedCapture.body.tools as Array<{ function?: { name?: string } }> | undefined
+        expect(deniedTools?.some((item) => item.function?.name === "bash") ?? false).toBe(false)
+      },
+    })
+  })
+
   test("sends temperature, tokens, and reasoning options for openai-compatible models", async () => {
     const server = state.server
     if (!server) {
