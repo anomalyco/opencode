@@ -173,10 +173,6 @@ export function registerIpcHandlers(deps: Deps) {
   })
 }
 
-export function sendWindowCount(win: BrowserWindow, count: number) {
-  win.webContents.send("window-count", count)
-}
-
 export function sendSqliteMigrationProgress(win: BrowserWindow, progress: SqliteMigrationProgress) {
   win.webContents.send("sqlite-migration-progress", progress)
 }

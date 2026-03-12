@@ -29,11 +29,6 @@ const api: ElectronAPI = {
   storeLength: (name) => ipcRenderer.invoke("store-length", name),
 
   getWindowCount: () => ipcRenderer.invoke("get-window-count"),
-  onWindowCount: (cb) => {
-    const handler = (_: unknown, count: number) => cb(count)
-    ipcRenderer.on("window-count", handler)
-    return () => ipcRenderer.removeListener("window-count", handler)
-  },
   onSqliteMigrationProgress: (cb) => {
     const handler = (_: unknown, progress: SqliteMigrationProgress) => cb(progress)
     ipcRenderer.on("sqlite-migration-progress", handler)

@@ -27,13 +27,7 @@ import { checkAppExists, resolveAppPath, wslPath } from "./apps"
 import type { CommandChild } from "./cli"
 import { installCli, syncCli } from "./cli"
 import { CHANNEL, UPDATER_ENABLED } from "./constants"
-import {
-  registerIpcHandlers,
-  sendDeepLinks,
-  sendMenuCommand,
-  sendSqliteMigrationProgress,
-  sendWindowCount,
-} from "./ipc"
+import { registerIpcHandlers, sendDeepLinks, sendMenuCommand, sendSqliteMigrationProgress } from "./ipc"
 import { initLogging } from "./logging"
 import { parseMarkdown } from "./markdown"
 import { createMenu } from "./menu"
@@ -85,15 +79,6 @@ function setupApp() {
 
   app.on("before-quit", () => {
     killSidecar()
-  })
-
-  app.on("browser-window-created", (_, win) => {
-    const broadcast = () => {
-      const count = BrowserWindow.getAllWindows().length
-      for (const w of BrowserWindow.getAllWindows()) sendWindowCount(w, count)
-    }
-    win.on("show", broadcast)
-    win.on("closed", broadcast)
   })
 
   void app.whenReady().then(async () => {
