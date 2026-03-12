@@ -9,10 +9,10 @@ import {
 import { type Session } from "@opencode-ai/sdk/v2/client"
 import {
   displayName,
+  effectiveWorkspaceOrder,
   errorMessage,
   hasProjectPermissions,
   latestRootSession,
-  syncWorkspaceOrder,
   workspaceKey,
 } from "./helpers"
 
@@ -116,7 +116,7 @@ describe("layout workspace helpers", () => {
   })
 
   test("keeps local first while preserving known order", () => {
-    const result = syncWorkspaceOrder("/root", ["/root", "/b", "/c"], ["/root", "/c", "/a", "/b"])
+    const result = effectiveWorkspaceOrder("/root", ["/root", "/b", "/c"], ["/root", "/c", "/a", "/b"])
     expect(result).toEqual(["/root", "/c", "/b"])
   })
 

@@ -17,7 +17,6 @@ import {
 } from "@/context/prompt"
 import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
-import { useParams } from "@solidjs/router"
 import { useSync } from "@/context/sync"
 import { useComments } from "@/context/comments"
 import { Button } from "@opencode-ai/ui/button"
@@ -37,6 +36,7 @@ import { Persist, persisted } from "@/utils/persist"
 import { usePermission } from "@/context/permission"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
+import { useSessionLayout } from "@/pages/session/session-layout"
 import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge } from "./prompt-input/editor-dom"
 import { createPromptAttachments, ACCEPTED_FILE_TYPES } from "./prompt-input/attachments"
 import {
@@ -102,13 +102,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const prompt = usePrompt()
   const layout = useLayout()
   const comments = useComments()
-  const params = useParams()
   const dialog = useDialog()
   const providers = useProviders()
   const command = useCommand()
   const permission = usePermission()
   const language = useLanguage()
   const platform = usePlatform()
+  const { params, tabs, view } = useSessionLayout()
   let editorRef!: HTMLDivElement
   let fileInputRef: HTMLInputElement | undefined
   let scrollRef!: HTMLDivElement
@@ -153,10 +153,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const queueScroll = () => {
     requestAnimationFrame(scrollCursorIntoView)
   }
-
-  const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
-  const tabs = createMemo(() => layout.tabs(sessionKey))
-  const view = createMemo(() => layout.view(sessionKey))
 
   const commentInReview = (path: string) => {
     const sessionID = params.id
@@ -255,6 +251,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   })
 
   const buttonsSpring = useSpring(() => (store.mode === "normal" ? 1 : 0), { visualDuration: 0.2, bounce: 0 })
+  const motion = (value: number) => ({
+    opacity: value,
+    transform: `scale(${0.95 + value * 0.05})`,
+    filter: `blur(${(1 - value) * 2}px)`,
+    "pointer-events": value > 0.5 ? ("auto" as const) : ("none" as const),
+  })
+  const buttons = createMemo(() => motion(buttonsSpring()))
+  const shell = createMemo(() => motion(1 - buttonsSpring()))
+  const control = createMemo(() => ({ height: "28px", ...buttons() }))
 
   const commentCount = createMemo(() => {
     if (store.mode === "shell") return 0
@@ -1275,11 +1280,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   type="button"
                   variant="ghost"
                   class="size-8 p-0"
-                  style={{
-                    opacity: buttonsSpring(),
-                    transform: `scale(${0.95 + buttonsSpring() * 0.05})`,
-                    filter: `blur(${(1 - buttonsSpring()) * 2}px)`,
-                  }}
+                  style={buttons()}
                   onClick={pick}
                   disabled={store.mode !== "normal"}
                   tabIndex={store.mode === "normal" ? undefined : -1}
@@ -1317,11 +1318,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   icon={working() ? "stop" : "arrow-up"}
                   variant="primary"
                   class="size-8"
-                  style={{
-                    opacity: buttonsSpring(),
-                    transform: `scale(${0.95 + buttonsSpring() * 0.05})`,
-                    filter: `blur(${(1 - buttonsSpring()) * 2}px)`,
-                  }}
+                  style={buttons()}
                   aria-label={working() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
                 />
               </Tooltip>
@@ -1379,10 +1376,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 class="h-7 flex items-center gap-1.5 max-w-[160px] min-w-0 absolute inset-y-0 left-0"
                 style={{
                   padding: "0 4px 0 8px",
-                  opacity: 1 - buttonsSpring(),
-                  transform: `scale(${0.95 + (1 - buttonsSpring()) * 0.05})`,
-                  filter: `blur(${buttonsSpring() * 2}px)`,
-                  "pointer-events": buttonsSpring() < 0.5 ? "auto" : "none",
+                  ...shell(),
                 }}
               >
                 <span class="truncate text-13-medium text-text-strong">{language.t("prompt.mode.shell")}</span>
@@ -1402,13 +1396,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     onSelect={local.agent.set}
                     class="capitalize max-w-[160px]"
                     valueClass="truncate text-13-regular"
-                    triggerStyle={{
-                      height: "28px",
-                      opacity: buttonsSpring(),
-                      transform: `scale(${0.95 + buttonsSpring() * 0.05})`,
-                      filter: `blur(${(1 - buttonsSpring()) * 2}px)`,
-                      "pointer-events": buttonsSpring() > 0.5 ? "auto" : "none",
-                    }}
+                    triggerStyle={control()}
                     variant="ghost"
                   />
                 </TooltipKeybind>
@@ -1426,13 +1414,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         variant="ghost"
                         size="normal"
                         class="min-w-0 max-w-[320px] text-13-regular group"
-                        style={{
-                          height: "28px",
-                          opacity: buttonsSpring(),
-                          transform: `scale(${0.95 + buttonsSpring() * 0.05})`,
-                          filter: `blur(${(1 - buttonsSpring()) * 2}px)`,
-                          "pointer-events": buttonsSpring() > 0.5 ? "auto" : "none",
-                        }}
+                        style={control()}
                         onClick={() => dialog.show(() => <DialogSelectModelUnpaid />)}
                       >
                         <Show when={local.model.current()?.provider?.id}>
@@ -1461,13 +1443,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       triggerProps={{
                         variant: "ghost",
                         size: "normal",
-                        style: {
-                          height: "28px",
-                          opacity: buttonsSpring(),
-                          transform: `scale(${0.95 + buttonsSpring() * 0.05})`,
-                          filter: `blur(${(1 - buttonsSpring()) * 2}px)`,
-                          "pointer-events": buttonsSpring() > 0.5 ? "auto" : "none",
-                        },
+                        style: control(),
                         class: "min-w-0 max-w-[320px] text-13-regular group",
                       }}
                     >
@@ -1499,13 +1475,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     onSelect={(x) => local.model.variant.set(x === "default" ? undefined : x)}
                     class="capitalize max-w-[160px]"
                     valueClass="truncate text-13-regular"
-                    triggerStyle={{
-                      height: "28px",
-                      opacity: buttonsSpring(),
-                      transform: `scale(${0.95 + buttonsSpring() * 0.05})`,
-                      filter: `blur(${(1 - buttonsSpring()) * 2}px)`,
-                      "pointer-events": buttonsSpring() > 0.5 ? "auto" : "none",
-                    }}
+                    triggerStyle={control()}
                     variant="ghost"
                   />
                 </TooltipKeybind>
