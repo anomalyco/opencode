@@ -13,6 +13,7 @@ const seed = async () => {
   const { Session } = await import("../src/session")
   const { MessageID, PartID } = await import("../src/session/schema")
   const { Project } = await import("../src/project/project")
+  const { ModelID, ProviderID } = await import("../src/provider/schema")
 
   await Instance.provide({
     directory: dir,
@@ -28,8 +29,8 @@ const seed = async () => {
         time: { created: now },
         agent: "build",
         model: {
-          providerID,
-          modelID,
+          providerID: ProviderID.make(providerID),
+          modelID: ModelID.make(modelID),
         },
       }
       const part = {

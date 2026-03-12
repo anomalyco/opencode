@@ -8,6 +8,7 @@ import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Icon } from "@opencode-ai/ui/icon"
 import { useTerminal, type LocalPTY } from "@/context/terminal"
 import { useLanguage } from "@/context/language"
+import { focusTerminalById } from "@/pages/session/helpers"
 
 export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () => void }): JSX.Element {
   const terminal = useTerminal()
@@ -53,21 +54,8 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () =>
 
   const focus = () => {
     if (store.editing) return
-
-    if (document.activeElement instanceof HTMLElement) {
-      document.activeElement.blur()
-    }
-    const wrapper = document.getElementById(`terminal-wrapper-${props.terminal.id}`)
-    const element = wrapper?.querySelector('[data-component="terminal"]') as HTMLElement
-    if (!element) return
-
-    const textarea = element.querySelector("textarea") as HTMLTextAreaElement
-    if (textarea) {
-      textarea.focus()
-      return
-    }
-    element.focus()
-    element.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true }))
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
+    focusTerminalById(props.terminal.id)
   }
 
   const edit = (e?: Event) => {
