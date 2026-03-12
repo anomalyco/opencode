@@ -898,9 +898,9 @@ describe("session.message-v2.fromError", () => {
 describe("session.message-v2.AgentPart", () => {
   test("parses AgentPart with model field", () => {
     const part = {
-      id: "p1",
-      sessionID: "s1",
-      messageID: "m1",
+      id: "prt_000000000001",
+      sessionID: "ses_000000000001",
+      messageID: "msg_000000000001",
       type: "agent",
       name: "explore",
       model: {
@@ -917,9 +917,9 @@ describe("session.message-v2.AgentPart", () => {
 
   test("parses AgentPart without model field", () => {
     const part = {
-      id: "p1",
-      sessionID: "s1",
-      messageID: "m1",
+      id: "prt_000000000001",
+      sessionID: "ses_000000000001",
+      messageID: "msg_000000000001",
       type: "agent",
       name: "explore",
     }
@@ -929,9 +929,9 @@ describe("session.message-v2.AgentPart", () => {
 
   test("parses AgentPart with source field", () => {
     const part = {
-      id: "p1",
-      sessionID: "s1",
-      messageID: "m1",
+      id: "prt_000000000001",
+      sessionID: "ses_000000000001",
+      messageID: "msg_000000000001",
       type: "agent",
       name: "explore",
       model: {
@@ -959,9 +959,9 @@ describe("session.message-v2.AgentPart", () => {
 
   test("rejects AgentPart with invalid model field", () => {
     const part = {
-      id: "p1",
-      sessionID: "s1",
-      messageID: "m1",
+      id: "prt_000000000001",
+      sessionID: "ses_000000000001",
+      messageID: "msg_000000000001",
       type: "agent",
       name: "explore",
       model: {
@@ -976,9 +976,9 @@ describe("session.message-v2.AgentPart", () => {
 describe("session.message-v2.SubtaskPart", () => {
   test("parses SubtaskPart with model field", () => {
     const part = {
-      id: "p1",
-      sessionID: "s1",
-      messageID: "m1",
+      id: "prt_000000000001",
+      sessionID: "ses_000000000001",
+      messageID: "msg_000000000001",
       type: "subtask",
       prompt: "do something",
       description: "task desc",
@@ -997,9 +997,9 @@ describe("session.message-v2.SubtaskPart", () => {
 
   test("parses SubtaskPart without model field", () => {
     const part = {
-      id: "p1",
-      sessionID: "s1",
-      messageID: "m1",
+      id: "prt_000000000001",
+      sessionID: "ses_000000000001",
+      messageID: "msg_000000000001",
       type: "subtask",
       prompt: "do something",
       description: "task desc",
