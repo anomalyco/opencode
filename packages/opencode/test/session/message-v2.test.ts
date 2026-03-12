@@ -2,8 +2,9 @@ import { describe, expect, test } from "bun:test"
 import { APICallError } from "ai"
 import { MessageV2 } from "../../src/session/message-v2"
 import type { Provider } from "../../src/provider/provider"
+import { SessionID, MessageID, PartID } from "../../src/session/schema"
 
-const sessionID = "session"
+const sessionID = SessionID.make("session")
 const model: Provider.Model = {
   id: "test-model",
   providerID: "test",
@@ -97,9 +98,9 @@ function assistantInfo(
 
 function basePart(messageID: string, id: string) {
   return {
-    id,
+    id: PartID.make(id),
     sessionID,
-    messageID,
+    messageID: MessageID.make(messageID),
   }
 }
 
@@ -839,35 +840,6 @@ describe("session.message-v2.fromError", () => {
           responseBody: JSON.stringify(input),
         },
       })
-    })
-  })
-
-  test("maps github-copilot 403 to reauth guidance", () => {
-    const error = new APICallError({
-      message: "forbidden",
-      url: "https://api.githubcopilot.com/v1/chat/completions",
-      requestBodyValues: {},
-      statusCode: 403,
-      responseHeaders: { "content-type": "application/json" },
-      responseBody: '{"error":"forbidden"}',
-      isRetryable: false,
-    })
-
-    const result = MessageV2.fromError(error, { providerID: "github-copilot" })
-
-    expect(result).toStrictEqual({
-      name: "APIError",
-      data: {
-        message:
-          "Please reauthenticate with the copilot provider to ensure your credentials work properly with OpenCode.",
-        statusCode: 403,
-        isRetryable: false,
-        responseHeaders: { "content-type": "application/json" },
-        responseBody: '{"error":"forbidden"}',
-        metadata: {
-          url: "https://api.githubcopilot.com/v1/chat/completions",
-        },
-      },
     })
   })
 

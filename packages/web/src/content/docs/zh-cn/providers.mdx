@@ -1845,7 +1845,7 @@ Vercel AI Gateway 允许你通过统一端点访问来自 OpenAI、Anthropic、G
    ```
 
    以下是配置选项说明：
-   - **npm**：要使用的 AI SDK 包，对于 OpenAI 兼容的提供商使用 `@ai-sdk/openai-compatible`
+   - **npm**：要使用的 AI SDK 包，对于 OpenAI 兼容的提供商使用 `@ai-sdk/openai-compatible`（适用于 `/v1/chat/completions`）。如果你的提供商/模型走 `/v1/responses`，请使用 `@ai-sdk/openai`。
    - **name**：在 UI 中显示的名称。
    - **models**：可用模型。
    - **options.baseURL**：API 端点 URL。
@@ -1911,5 +1911,5 @@ Vercel AI Gateway 允许你通过统一端点访问来自 OpenAI、Anthropic、G
 
 2. 对于自定义提供商，请检查 OpenCode 配置并确认：
    - `/connect` 命令中使用的提供商 ID 与 OpenCode 配置中的 ID 一致。
-   - 使用了正确的 npm 包。例如，Cerebras 应使用 `@ai-sdk/cerebras`。对于其他所有 OpenAI 兼容的提供商，使用 `@ai-sdk/openai-compatible`。
+   - 使用了正确的 npm 包。例如，Cerebras 应使用 `@ai-sdk/cerebras`。对于其他所有 OpenAI 兼容的提供商，使用 `@ai-sdk/openai-compatible`（`/v1/chat/completions`）；如果模型走 `/v1/responses`，请使用 `@ai-sdk/openai`。同一 provider 混用时，可在模型下设置 `provider.npm` 覆盖默认值。
    - `options.baseURL` 字段中的 API 端点地址正确。

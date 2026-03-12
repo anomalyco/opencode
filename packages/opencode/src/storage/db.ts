@@ -39,7 +39,7 @@ export namespace Database {
   type Schema = typeof schema
   export type Transaction = SQLiteTransaction<"sync", void, Schema>
 
-  type Client = SQLiteBunDatabase<Schema>
+  type Client = SQLiteBunDatabase
 
   type Journal = { sql: string; timestamp: number; name: string }[]
 
@@ -93,7 +93,7 @@ export namespace Database {
     sqlite.run("PRAGMA foreign_keys = ON")
     sqlite.run("PRAGMA wal_checkpoint(PASSIVE)")
 
-    const db = drizzle({ client: sqlite, schema })
+    const db = drizzle({ client: sqlite })
 
     // Apply schema migrations
     const entries =
@@ -124,7 +124,7 @@ export namespace Database {
     Client.reset()
   }
 
-  export type TxOrDb = Transaction | Client
+  export type TxOrDb = SQLiteTransaction<"sync", void, any, any> | Client
 
   const ctx = Context.create<{
     tx: TxOrDb

@@ -1,4 +1,4 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "child_process"
+import { spawn as launch, type ChildProcessWithoutNullStreams } from "child_process"
 import path from "path"
 import os from "os"
 import { Global } from "../global"
@@ -13,6 +13,11 @@ import { Archive } from "../util/archive"
 import { Process } from "../util/process"
 import { which } from "../util/which"
 import { Module } from "@opencode-ai/util/module"
+
+const spawn = ((cmd, args, opts) => {
+  if (Array.isArray(args)) return launch(cmd, [...args], { ...(opts ?? {}), windowsHide: true })
+  return launch(cmd, { ...(args ?? {}), windowsHide: true })
+}) as typeof launch
 
 export namespace LSPServer {
   const log = Log.create({ service: "lsp.server" })
