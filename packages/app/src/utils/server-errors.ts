@@ -7,28 +7,31 @@ export type ConfigInvalidError = {
   }
 }
 
-type Label = {
-  unknown: string
-  invalidConfiguration: string
-}
-
-const fallback: Label = {
-  unknown: "Unknown error",
-  invalidConfiguration: "Invalid configuration",
-}
-
-function resolveLabel(labels: Partial<Label> | undefined): Label {
-  return {
-    unknown: labels?.unknown ?? fallback.unknown,
-    invalidConfiguration: labels?.invalidConfiguration ?? fallback.invalidConfiguration,
+export type ProviderModelNotFoundError = {
+  name: "ProviderModelNotFoundError"
+  data: {
+    providerID: string
+    modelID: string
+    suggestions?: string[]
   }
 }
 
-export function formatServerError(error: unknown, labels?: Partial<Label>) {
-  if (isConfigInvalidErrorLike(error)) return parseReabaleConfigInvalidError(error, labels)
+type Translator = (key: string, vars?: Record<string, string | number>) => string
+
+function tr(translator: Translator | undefined, key: string, text: string, vars?: Record<string, string | number>) {
+  if (!translator) return text
+  const out = translator(key, vars)
+  if (!out || out === key) return text
+  return out
+}
+
+export function formatServerError(error: unknown, translate?: Translator, fallback?: string) {
+  if (isConfigInvalidErrorLike(error)) return parseReadableConfigInvalidError(error, translate)
+  if (isProviderModelNotFoundErrorLike(error)) return parseReadableProviderModelNotFoundError(error, translate)
   if (error instanceof Error && error.message) return error.message
   if (typeof error === "string" && error) return error
-  return resolveLabel(labels).unknown
+  if (fallback) return fallback
+  return tr(translate, "error.chain.unknown", "Unknown error")
 }
 
 function isConfigInvalidErrorLike(error: unknown): error is ConfigInvalidError {
@@ -37,13 +40,41 @@ function isConfigInvalidErrorLike(error: unknown): error is ConfigInvalidError {
   return o.name === "ConfigInvalidError" && typeof o.data === "object" && o.data !== null
 }
 
-export function parseReabaleConfigInvalidError(errorInput: ConfigInvalidError, labels?: Partial<Label>) {
-  const head = resolveLabel(labels).invalidConfiguration
-  const file = errorInput.data.path && errorInput.data.path !== "config" ? errorInput.data.path : ""
+function isProviderModelNotFoundErrorLike(error: unknown): error is ProviderModelNotFoundError {
+  if (typeof error !== "object" || error === null) return false
+  const o = error as Record<string, unknown>
+  return o.name === "ProviderModelNotFoundError" && typeof o.data === "object" && o.data !== null
+}
+
+export function parseReadableConfigInvalidError(errorInput: ConfigInvalidError, translator?: Translator) {
+  const file = errorInput.data.path && errorInput.data.path !== "config" ? errorInput.data.path : "config"
   const detail = errorInput.data.message?.trim() ?? ""
-  const issues = (errorInput.data.issues ?? []).map((issue) => {
-    return `${issue.path.join(".")}: ${issue.message}`
+  const issues = (errorInput.data.issues ?? [])
+    .map((issue) => {
+      const msg = issue.message.trim()
+      if (!issue.path.length) return msg
+      return `${issue.path.join(".")}: ${msg}`
+    })
+    .filter(Boolean)
+  const msg = issues.length ? issues.join("\n") : detail
+  if (!msg) return tr(translator, "error.chain.configInvalid", `Config file at ${file} is invalid`, { path: file })
+  return tr(translator, "error.chain.configInvalidWithMessage", `Config file at ${file} is invalid: ${msg}`, {
+    path: file,
+    message: msg,
   })
-  if (issues.length) return [head, file, "", ...issues].filter(Boolean).join("\n")
-  return [head, file, detail].filter(Boolean).join("\n")
+}
+
+function parseReadableProviderModelNotFoundError(errorInput: ProviderModelNotFoundError, translator?: Translator) {
+  const p = errorInput.data.providerID.trim()
+  const m = errorInput.data.modelID.trim()
+  const list = (errorInput.data.suggestions ?? []).map((v) => v.trim()).filter(Boolean)
+  const body = tr(translator, "error.chain.modelNotFound", `Model not found: ${p}/${m}`, { provider: p, model: m })
+  const tail = tr(translator, "error.chain.checkConfig", "Check your config (opencode.json) provider/model names")
+  if (list.length) {
+    const suggestions = list.slice(0, 5).join(", ")
+    return [body, tr(translator, "error.chain.didYouMean", `Did you mean: ${suggestions}`, { suggestions }), tail].join(
+      "\n",
+    )
+  }
+  return [body, tail].join("\n")
 }

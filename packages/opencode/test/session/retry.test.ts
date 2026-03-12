@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { NamedError } from "@opencode-ai/util/error"
 import { APICallError } from "ai"
+import { setTimeout as sleep } from "node:timers/promises"
 import { SessionRetry } from "../../src/session/retry"
 import { MessageV2 } from "../../src/session/message-v2"
 
@@ -135,7 +136,7 @@ describe("session.message-v2.fromError", () => {
             new ReadableStream({
               async pull(controller) {
                 controller.enqueue("Hello,")
-                await Bun.sleep(10000)
+                await sleep(10000)
                 controller.enqueue(" World!")
                 controller.close()
               },
