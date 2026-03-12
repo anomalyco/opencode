@@ -16,7 +16,7 @@ import { DialogSelectModel } from "@/components/dialog-select-model"
 import { DialogSelectMcp } from "@/components/dialog-select-mcp"
 import { DialogFork } from "@/components/dialog-fork"
 import { showToast } from "@opencode-ai/ui/toast"
-import { findLast } from "@opencode-ai/util/array"
+import { sortMessages, splitMessages } from "@opencode-ai/util/message"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { UserMessage } from "@opencode-ai/sdk/v2"
 import { canAddSelectionContext } from "@/pages/session/session-command-helpers"
@@ -56,12 +56,11 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
 
   const idle = { type: "idle" as const }
   const status = createMemo(() => sync.data.session_status[params.id ?? ""] ?? idle)
-  const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
+  const messages = createMemo(() => (params.id ? sortMessages(sync.data.message[params.id] ?? []) : []))
   const userMessages = createMemo(() => messages().filter((m) => m.role === "user") as UserMessage[])
   const visibleUserMessages = createMemo(() => {
     const revert = info()?.revert?.messageID
-    if (!revert) return userMessages()
-    return userMessages().filter((m) => m.id < revert)
+    return splitMessages(userMessages(), revert).before as UserMessage[]
   })
 
   const showAllFiles = () => {
@@ -311,7 +310,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
           await sdk.client.session.abort({ sessionID }).catch(() => {})
         }
         const revert = info()?.revert?.messageID
-        const message = findLast(userMessages(), (x) => !revert || x.id < revert)
+        const visible = splitMessages(userMessages(), revert).before as UserMessage[]
+        const message = visible.at(-1)
         if (!message) return
         await sdk.client.session.revert({ sessionID, messageID: message.id })
         const parts = sync.data.part[message.id]
@@ -319,7 +319,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
           const restored = extractPromptFromParts(parts, { directory: sdk.directory })
           prompt.set(restored)
         }
-        const priorMessage = findLast(userMessages(), (x) => x.id < message.id)
+        const priorMessage = visible.at(-2)
         setActiveMessage(priorMessage)
       },
     }),
@@ -334,16 +334,16 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         if (!sessionID) return
         const revertMessageID = info()?.revert?.messageID
         if (!revertMessageID) return
-        const nextMessage = userMessages().find((x) => x.id > revertMessageID)
+        const nextMessage = splitMessages(userMessages(), revertMessageID).after[0] as UserMessage | undefined
         if (!nextMessage) {
           await sdk.client.session.unrevert({ sessionID })
           prompt.reset()
-          const lastMsg = findLast(userMessages(), (x) => x.id >= revertMessageID)
+          const lastMsg = userMessages().at(-1)
           setActiveMessage(lastMsg)
           return
         }
         await sdk.client.session.revert({ sessionID, messageID: nextMessage.id })
-        const priorMsg = findLast(userMessages(), (x) => x.id < nextMessage.id)
+        const priorMsg = splitMessages(userMessages(), nextMessage.id).before.at(-1) as UserMessage | undefined
         setActiveMessage(priorMsg)
       },
     }),

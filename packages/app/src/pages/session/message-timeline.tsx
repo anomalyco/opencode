@@ -13,8 +13,8 @@ import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import type { AssistantMessage, Message as MessageType, Part, TextPart, UserMessage } from "@opencode-ai/sdk/v2"
 import { showToast } from "@opencode-ai/ui/toast"
-import { Binary } from "@opencode-ai/util/binary"
 import { getFilename } from "@opencode-ai/util/path"
+import { sortMessages } from "@opencode-ai/util/message"
 import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/message-gesture"
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -227,7 +227,7 @@ export function MessageTimeline(props: {
   const sessionMessages = createMemo(() => {
     const id = sessionID()
     if (!id) return emptyMessages
-    return sync.data.message[id] ?? emptyMessages
+    return sortMessages(sync.data.message[id] ?? emptyMessages)
   })
   const pending = createMemo(() =>
     sessionMessages().findLast(
@@ -277,8 +277,7 @@ export function MessageTimeline(props: {
     const parentID = pending()?.parentID
     if (parentID) {
       const messages = sessionMessages()
-      const result = Binary.search(messages, parentID, (message) => message.id)
-      const message = result.found ? messages[result.index] : messages.find((item) => item.id === parentID)
+      const message = messages.find((item) => item.id === parentID)
       if (message && message.role === "user") return message.id
     }
 
