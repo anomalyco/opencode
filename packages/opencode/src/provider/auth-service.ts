@@ -1,11 +1,11 @@
-import { Effect, Layer, ServiceMap } from "effect"
+import { Effect, Layer, Record, ServiceMap, Struct } from "effect"
 import { Instance } from "@/project/instance"
 import { Plugin } from "../plugin"
-import { filter, fromEntries, map, mapValues, pipe } from "remeda"
+import { filter, fromEntries, map, pipe } from "remeda"
 import type { AuthOuathResult } from "@opencode-ai/plugin"
 import { NamedError } from "@opencode-ai/util/error"
 import * as Auth from "@/auth/service"
-import * as ScopedState from "@/util/scoped-state"
+import * as InstanceState from "@/util/instance-state"
 import { ProviderID } from "./schema"
 import z from "zod"
 
@@ -44,13 +44,20 @@ export type ProviderAuthError =
 
 export namespace ProviderAuthService {
   export interface Service {
+    /** Get available auth methods for each provider (e.g. OAuth, API key). */
     readonly methods: () => Effect.Effect<Record<string, Method[]>>
+
+    /** Start an OAuth authorization flow for a provider. Returns the URL to redirect to. */
     readonly authorize: (input: { providerID: ProviderID; method: number }) => Effect.Effect<Authorization | undefined>
+
+    /** Complete an OAuth flow after the user has authorized. Exchanges the code/callback for credentials. */
     readonly callback: (input: {
       providerID: ProviderID
       method: number
       code?: string
     }) => Effect.Effect<void, ProviderAuthError>
+
+    /** Set an API key directly for a provider (no OAuth flow). */
     readonly api: (input: { providerID: ProviderID; key: string }) => Effect.Effect<void, Auth.AuthServiceError>
   }
 }
@@ -62,8 +69,7 @@ export class ProviderAuthService extends ServiceMap.Service<ProviderAuthService,
     ProviderAuthService,
     Effect.gen(function* () {
       const auth = yield* Auth.AuthService
-      const state = yield* ScopedState.make({
-        root: () => Instance.directory,
+      const state = yield* InstanceState.make({
         lookup: () =>
           Effect.promise(async () => {
             const methods = pipe(
@@ -76,30 +82,22 @@ export class ProviderAuthService extends ServiceMap.Service<ProviderAuthService,
           }),
       })
 
-      const methods = Effect.fn("ProviderAuthService.methods")(() =>
-        ScopedState.get(state).pipe(
-          Effect.map((x) =>
-            mapValues(x.methods, (y) =>
-              y.methods.map(
-                (z): Method => ({
-                  type: z.type,
-                  label: z.label,
-                }),
-              ),
-            ),
-          ),
-        ),
-      )
+      const methods = Effect.fn("ProviderAuthService.methods")(function* () {
+        const x = yield* InstanceState.get(state)
+        return Record.map(x.methods, (y) => y.methods.map((z): Method => Struct.pick(z, ["type", "label"])))
+      })
 
       const authorize = Effect.fn("ProviderAuthService.authorize")(function* (input: {
         providerID: ProviderID
         method: number
       }) {
-        const item = (yield* ScopedState.get(state)).methods[input.providerID]
-        const method = item.methods[input.method]
+        const authHook = (yield* InstanceState.get(state)).methods[input.providerID]
+        const method = authHook.methods[input.method]
         if (method.type !== "oauth") return
         const result = yield* Effect.promise(() => method.authorize())
-        ;(yield* ScopedState.get(state)).pending[input.providerID] = result
+
+        const s = yield* InstanceState.get(state)
+        s.pending[input.providerID] = result
         return {
           url: result.url,
           method: result.method,
@@ -112,17 +110,15 @@ export class ProviderAuthService extends ServiceMap.Service<ProviderAuthService,
         method: number
         code?: string
       }) {
-        const match = (yield* ScopedState.get(state)).pending[input.providerID]
+        const match = (yield* InstanceState.get(state)).pending[input.providerID]
         if (!match) return yield* Effect.fail(new OauthMissing({ providerID: input.providerID }))
 
-        const result =
-          match.method === "code"
-            ? yield* Effect.gen(function* () {
-                const code = input.code
-                if (!code) return yield* Effect.fail(new OauthCodeMissing({ providerID: input.providerID }))
-                return yield* Effect.promise(() => match.callback(code))
-              })
-            : yield* Effect.promise(() => match.callback())
+        if (match.method === "code" && !input.code)
+          return yield* Effect.fail(new OauthCodeMissing({ providerID: input.providerID }))
+
+        const result = yield* Effect.promise(() =>
+          match.method === "code" ? match.callback(input.code!) : match.callback(),
+        )
 
         if (!result || result.type !== "success") return yield* Effect.fail(new OauthCallbackFailed({}))
 
