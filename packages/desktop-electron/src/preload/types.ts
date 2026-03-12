@@ -2,6 +2,7 @@ export type InitStep = { phase: "server_waiting" } | { phase: "sqlite_waiting" }
 
 export type ServerReadyData = {
   url: string
+  username: string | null
   password: string | null
 }
 
@@ -10,6 +11,9 @@ export type SqliteMigrationProgress = { type: "InProgress"; value: number } | { 
 export type WslConfig = { enabled: boolean }
 
 export type LinuxDisplayBackend = "wayland" | "auto"
+export type TitlebarTheme = {
+  mode: "light" | "dark"
+}
 
 export type ElectronAPI = {
   killSidecar: () => Promise<void>
@@ -57,6 +61,7 @@ export type ElectronAPI = {
   relaunch: () => void
   getZoomFactor: () => Promise<number>
   setZoomFactor: (factor: number) => Promise<void>
+  setTitlebar: (theme: TitlebarTheme) => Promise<void>
   loadingWindowComplete: () => void
   runUpdater: (alertOnFail: boolean) => Promise<void>
   checkUpdate: () => Promise<{ updateAvailable: boolean; version?: string }>
