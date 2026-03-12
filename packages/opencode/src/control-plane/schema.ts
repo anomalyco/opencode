@@ -12,6 +12,6 @@ export const WorkspaceID = workspaceIdSchema.pipe(
   withStatics((schema: typeof workspaceIdSchema) => ({
     make: (id: string) => schema.makeUnsafe(id),
     ascending: (id?: string) => schema.makeUnsafe(Identifier.ascending("workspace", id)),
-    zod: z.string().startsWith("wrk").pipe(z.custom<WorkspaceID>()),
+    zod: Identifier.schema("workspace").pipe(z.custom<WorkspaceID>()),
   })),
 )

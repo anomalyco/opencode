@@ -12,6 +12,6 @@ export const ToolID = toolIdSchema.pipe(
   withStatics((schema: typeof toolIdSchema) => ({
     make: (id: string) => schema.makeUnsafe(id),
     ascending: (id?: string) => schema.makeUnsafe(Identifier.ascending("tool", id)),
-    zod: z.string().startsWith("tool").pipe(z.custom<ToolID>()),
+    zod: Identifier.schema("tool").pipe(z.custom<ToolID>()),
   })),
 )

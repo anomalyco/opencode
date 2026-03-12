@@ -12,7 +12,7 @@ export const SessionID = sessionIdSchema.pipe(
   withStatics((schema: typeof sessionIdSchema) => ({
     make: (id: string) => schema.makeUnsafe(id),
     descending: (id?: string) => schema.makeUnsafe(Identifier.descending("session", id)),
-    zod: z.string().startsWith("ses").pipe(z.custom<SessionID>()),
+    zod: Identifier.schema("session").pipe(z.custom<SessionID>()),
   })),
 )
 
@@ -24,7 +24,7 @@ export const MessageID = messageIdSchema.pipe(
   withStatics((schema: typeof messageIdSchema) => ({
     make: (id: string) => schema.makeUnsafe(id),
     ascending: (id?: string) => schema.makeUnsafe(Identifier.ascending("message", id)),
-    zod: z.string().startsWith("msg").pipe(z.custom<MessageID>()),
+    zod: Identifier.schema("message").pipe(z.custom<MessageID>()),
   })),
 )
 
@@ -36,6 +36,6 @@ export const PartID = partIdSchema.pipe(
   withStatics((schema: typeof partIdSchema) => ({
     make: (id: string) => schema.makeUnsafe(id),
     ascending: (id?: string) => schema.makeUnsafe(Identifier.ascending("part", id)),
-    zod: z.string().startsWith("prt").pipe(z.custom<PartID>()),
+    zod: Identifier.schema("part").pipe(z.custom<PartID>()),
   })),
 )

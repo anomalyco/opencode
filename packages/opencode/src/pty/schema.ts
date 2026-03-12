@@ -12,6 +12,6 @@ export const PtyID = ptyIdSchema.pipe(
   withStatics((schema: typeof ptyIdSchema) => ({
     make: (id: string) => schema.makeUnsafe(id),
     ascending: (id?: string) => schema.makeUnsafe(Identifier.ascending("pty", id)),
-    zod: z.string().startsWith("pty").pipe(z.custom<PtyID>()),
+    zod: Identifier.schema("pty").pipe(z.custom<PtyID>()),
   })),
 )

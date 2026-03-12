@@ -12,6 +12,6 @@ export const PermissionID = permissionIdSchema.pipe(
   withStatics((schema: typeof permissionIdSchema) => ({
     make: (id: string) => schema.makeUnsafe(id),
     ascending: (id?: string) => schema.makeUnsafe(Identifier.ascending("permission", id)),
-    zod: z.string().startsWith("per").pipe(z.custom<PermissionID>()),
+    zod: Identifier.schema("permission").pipe(z.custom<PermissionID>()),
   })),
 )
