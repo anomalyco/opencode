@@ -116,6 +116,42 @@ test("changing theme persists in localStorage", async ({ page, gotoSession }) =>
   expect(dataTheme).toBe(storedThemeId)
 })
 
+test("legacy oc-1 theme migrates to oc-2", async ({ page, gotoSession }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("opencode-theme-id", "oc-1")
+    localStorage.setItem("opencode-theme-css-light", "--background-base:#fff;")
+    localStorage.setItem("opencode-theme-css-dark", "--background-base:#000;")
+  })
+
+  await gotoSession()
+
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "oc-2")
+
+  await expect
+    .poll(async () => {
+      return await page.evaluate(() => {
+        return localStorage.getItem("opencode-theme-id")
+      })
+    })
+    .toBe("oc-2")
+
+  await expect
+    .poll(async () => {
+      return await page.evaluate(() => {
+        return localStorage.getItem("opencode-theme-css-light")
+      })
+    })
+    .toBeNull()
+
+  await expect
+    .poll(async () => {
+      return await page.evaluate(() => {
+        return localStorage.getItem("opencode-theme-css-dark")
+      })
+    })
+    .toBeNull()
+})
+
 test("changing font persists in localStorage and updates CSS variable", async ({ page, gotoSession }) => {
   await gotoSession()
 
