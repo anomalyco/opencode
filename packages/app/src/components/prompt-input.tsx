@@ -48,7 +48,7 @@ import {
   type PromptHistoryStoredEntry,
   promptLength,
 } from "./prompt-input/history"
-import { createPromptSubmit } from "./prompt-input/submit"
+import { createPromptSubmit, type FollowupDraft } from "./prompt-input/submit"
 import { PromptPopover, type AtOption, type SlashCommand } from "./prompt-input/slash-popover"
 import { PromptContextItems } from "./prompt-input/context-items"
 import { PromptImageAttachments } from "./prompt-input/image-attachments"
@@ -61,6 +61,11 @@ interface PromptInputProps {
   ref?: (el: HTMLDivElement) => void
   newSessionWorktree?: string
   onNewSessionWorktreeReset?: () => void
+  edit?: { id: string; prompt: Prompt; context: FollowupDraft["context"] }
+  onEditLoaded?: () => void
+  shouldQueue?: () => boolean
+  onQueue?: (draft: FollowupDraft) => void
+  onAbort?: () => void
   onSubmit?: () => void
 }
 
@@ -947,6 +952,45 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     setCurrentHistory("entries", next)
   }
 
+  createEffect(
+    on(
+      () => props.edit?.id,
+      (id) => {
+        const edit = props.edit
+        if (!id || !edit) return
+
+        for (const item of prompt.context.items()) {
+          prompt.context.remove(item.key)
+        }
+
+        for (const item of edit.context) {
+          prompt.context.add({
+            type: item.type,
+            path: item.path,
+            selection: item.selection,
+            comment: item.comment,
+            commentID: item.commentID,
+            commentOrigin: item.commentOrigin,
+            preview: item.preview,
+          })
+        }
+
+        setStore("mode", "normal")
+        setStore("popover", null)
+        setStore("historyIndex", -1)
+        setStore("savedPrompt", null)
+        prompt.set(edit.prompt, promptLength(edit.prompt))
+        requestAnimationFrame(() => {
+          editorRef.focus()
+          setCursorPosition(editorRef, promptLength(edit.prompt))
+          queueScroll()
+        })
+        props.onEditLoaded?.()
+      },
+      { defer: true },
+    ),
+  )
+
   const navigateHistory = (direction: "up" | "down") => {
     const result = navigatePromptHistory({
       direction,
@@ -1001,6 +1045,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     setPopover: (popover) => setStore("popover", popover),
     newSessionWorktree: () => props.newSessionWorktree,
     onNewSessionWorktreeReset: props.onNewSessionWorktreeReset,
+    shouldQueue: props.shouldQueue,
+    onQueue: props.onQueue,
+    onAbort: props.onAbort,
     onSubmit: props.onSubmit,
   })
 

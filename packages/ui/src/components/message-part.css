@@ -54,10 +54,6 @@
       border-color: var(--border-strong-base);
     }
 
-    &[data-queued] {
-      opacity: 0.6;
-    }
-
     &[data-type="image"] {
       width: 48px;
       height: 48px;
@@ -111,11 +107,6 @@
     border: 1px solid var(--border-weak-base);
     padding: 8px 12px;
     border-radius: 6px;
-    transition: opacity 0.3s ease;
-
-    &[data-queued] {
-      opacity: 0.6;
-    }
 
     [data-highlight="file"] {
       color: var(--syntax-property);
@@ -126,14 +117,6 @@
     }
 
     max-width: 100%;
-  }
-
-  [data-slot="user-message-queued-indicator"] {
-    margin-top: 6px;
-    margin-right: 2px;
-    font-size: var(--font-size-small);
-    color: var(--text-weak);
-    user-select: none;
   }
 
   [data-slot="user-message-copy-wrapper"] {
