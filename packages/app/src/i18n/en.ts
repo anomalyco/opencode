@@ -511,11 +511,13 @@ export const dict = {
   "session.review.change.other": "Changes",
   "session.review.loadingChanges": "Loading changes...",
   "session.review.empty": "No changes in this session yet",
-  "session.review.noVcs": "No git VCS detected, so session changes will not be detected",
+  "session.review.noVcs": "No Git Version Control System detected, changes not displayed",
+  "session.review.noSnapshot": "Snapshot tracking is disabled in config, so session changes are unavailable",
   "session.review.noChanges": "No changes",
 
   "session.files.selectToOpen": "Select a file to open",
   "session.files.all": "All files",
+  "session.files.empty": "No files",
   "session.files.binaryContent": "Binary file (content cannot be displayed)",
 
   "session.messages.renderEarlier": "Render earlier messages",
@@ -528,7 +530,13 @@ export const dict = {
   "session.todo.title": "Todos",
   "session.todo.collapse": "Collapse",
   "session.todo.expand": "Expand",
+  "session.revertDock.summary.one": "{{count}} rolled back message",
+  "session.revertDock.summary.other": "{{count}} rolled back messages",
+  "session.revertDock.collapse": "Collapse rolled back messages",
+  "session.revertDock.expand": "Expand rolled back messages",
+  "session.revertDock.restore": "Restore message",
 
+  "session.new.title": "Build anything",
   "session.new.worktree.main": "Main branch",
   "session.new.worktree.mainWithBranch": "Main branch ({{branch}})",
   "session.new.worktree.create": "Create new worktree",

@@ -1225,7 +1225,11 @@ export type ProviderConfig = {
      * Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.
      */
     timeout?: number | false
-    [key: string]: unknown | string | boolean | number | false | undefined
+    /**
+     * Timeout in milliseconds between streamed SSE chunks for this provider. If no chunk arrives within this window, the request is aborted.
+     */
+    chunkTimeout?: number
+    [key: string]: unknown | string | boolean | number | false | number | undefined
   }
 }
 
@@ -2087,6 +2091,25 @@ export type ProjectCurrentResponses = {
 
 export type ProjectCurrentResponse = ProjectCurrentResponses[keyof ProjectCurrentResponses]
 
+export type ProjectInitGitData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/project/git/init"
+}
+
+export type ProjectInitGitResponses = {
+  /**
+   * Project information after git initialization
+   */
+  200: Project
+}
+
+export type ProjectInitGitResponse = ProjectInitGitResponses[keyof ProjectInitGitResponses]
+
 export type ProjectUpdateData = {
   body?: {
     name?: string
@@ -2745,6 +2768,7 @@ export type SessionCreateData = {
     parentID?: string
     title?: string
     permission?: PermissionRuleset
+    workspaceID?: string
   }
   path?: never
   query?: {
@@ -2946,9 +2970,6 @@ export type SessionChildrenResponse = SessionChildrenResponses[keyof SessionChil
 export type SessionTodoData = {
   body?: never
   path: {
-    /**
-     * Session ID
-     */
     sessionID: string
   }
   query?: {
@@ -2987,9 +3008,6 @@ export type SessionInitData = {
     messageID: string
   }
   path: {
-    /**
-     * Session ID
-     */
     sessionID: string
   }
   query?: {
@@ -3175,9 +3193,6 @@ export type SessionSummarizeData = {
     auto?: boolean
   }
   path: {
-    /**
-     * Session ID
-     */
     sessionID: string
   }
   query?: {
@@ -3212,9 +3227,6 @@ export type SessionSummarizeResponse = SessionSummarizeResponses[keyof SessionSu
 export type SessionMessagesData = {
   body?: never
   path: {
-    /**
-     * Session ID
-     */
     sessionID: string
   }
   query?: {
@@ -3271,9 +3283,6 @@ export type SessionPromptData = {
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {
-    /**
-     * Session ID
-     */
     sessionID: string
   }
   query?: {
@@ -3311,13 +3320,7 @@ export type SessionPromptResponse = SessionPromptResponses[keyof SessionPromptRe
 export type SessionDeleteMessageData = {
   body?: never
   path: {
-    /**
-     * Session ID
-     */
     sessionID: string
-    /**
-     * Message ID
-     */
     messageID: string
   }
   query?: {
@@ -3352,13 +3355,7 @@ export type SessionDeleteMessageResponse = SessionDeleteMessageResponses[keyof S
 export type SessionMessageData = {
   body?: never
   path: {
-    /**
-     * Session ID
-     */
     sessionID: string
-    /**
-     * Message ID
-     */
     messageID: string
   }
   query?: {
@@ -3396,17 +3393,8 @@ export type SessionMessageResponse = SessionMessageResponses[keyof SessionMessag
 export type PartDeleteData = {
   body?: never
   path: {
-    /**
-     * Session ID
-     */
     sessionID: string
-    /**
-     * Message ID
-     */
     messageID: string
-    /**
-     * Part ID
-     */
     partID: string
   }
   query?: {
@@ -3441,17 +3429,8 @@ export type PartDeleteResponse = PartDeleteResponses[keyof PartDeleteResponses]
 export type PartUpdateData = {
   body?: Part
   path: {
-    /**
-     * Session ID
-     */
     sessionID: string
-    /**
-     * Message ID
-     */
     messageID: string
-    /**
-     * Part ID
-     */
     partID: string
   }
   query?: {
@@ -3504,9 +3483,6 @@ export type SessionPromptAsyncData = {
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {
-    /**
-     * Session ID
-     */
     sessionID: string
   }
   query?: {
@@ -3556,9 +3532,6 @@ export type SessionCommandData = {
     }>
   }
   path: {
-    /**
-     * Session ID
-     */
     sessionID: string
   }
   query?: {
@@ -3603,9 +3576,6 @@ export type SessionShellData = {
     command: string
   }
   path: {
-    /**
-     * Session ID
-     */
     sessionID: string
   }
   query?: {
