@@ -10,9 +10,9 @@ import {
   useCommand,
 } from "@opencode-ai/app"
 import type { AsyncStorage } from "@solid-primitives/storage"
+import { MemoryRouter } from "@solidjs/router"
 import { createResource, onCleanup, onMount, Show } from "solid-js"
 import { render } from "solid-js/web"
-import { MemoryRouter } from "@solidjs/router"
 import pkg from "../../package.json"
 import { initI18n, t } from "./i18n"
 import { UPDATER_ENABLED } from "./updater"
@@ -226,7 +226,9 @@ const createPlatform = (): Platform => {
       const image = await window.api.readClipboardImage().catch(() => null)
       if (!image) return null
       const blob = new Blob([image.buffer], { type: "image/png" })
-      return new File([blob], `pasted-image-${Date.now()}.png`, { type: "image/png" })
+      return new File([blob], `pasted-image-${Date.now()}.png`, {
+        type: "image/png",
+      })
     },
   }
 }
@@ -286,6 +288,21 @@ render(() => {
     })
   })
 
+  // function ThemeSync() {
+  //   const theme = useTheme()
+
+  //   createEffect(() => {
+  //     theme.themeId()
+  //     theme.mode()
+  //     const bg = getComputedStyle(document.documentElement).getPropertyValue("--background-base").trim()
+  //     if (bg) {
+  //       void window.api.setBackgroundColor(bg)
+  //     }
+  //   })
+
+  //   return null
+  // }
+
   return (
     <PlatformProvider value={platform}>
       <AppBaseProviders>
@@ -298,6 +315,7 @@ render(() => {
                 router={MemoryRouter}
               >
                 <Inner />
+                <ThemeSync />
               </AppInterface>
             )
           }}

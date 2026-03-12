@@ -62,6 +62,7 @@ const api: ElectronAPI = {
   runUpdater: (alertOnFail) => ipcRenderer.invoke("run-updater", alertOnFail),
   checkUpdate: () => ipcRenderer.invoke("check-update"),
   installUpdate: () => ipcRenderer.invoke("install-update"),
+  setBackgroundColor: (color: string) => ipcRenderer.invoke("set-background-color", color),
 }
 
 contextBridge.exposeInMainWorld("api", api)

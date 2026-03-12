@@ -32,7 +32,7 @@ import { initLogging } from "./logging"
 import { parseMarkdown } from "./markdown"
 import { createMenu } from "./menu"
 import { getDefaultServerUrl, getWslConfig, setDefaultServerUrl, setWslConfig, spawnLocalServer } from "./server"
-import { createLoadingWindow, createMainWindow, setDockIcon } from "./windows"
+import { createLoadingWindow, createMainWindow, setBackgroundColor, setDockIcon } from "./windows"
 
 const initEmitter = new EventEmitter()
 let initStep: InitStep = { phase: "server_waiting" }
@@ -156,7 +156,6 @@ async function initialize() {
 
   const globals = {
     updaterEnabled: UPDATER_ENABLED,
-    wsl: getWslConfig().enabled,
     deepLinks: pendingDeepLinks,
   }
 
@@ -231,6 +230,7 @@ registerIpcHandlers({
   runUpdater: async (alertOnFail) => checkForUpdates(alertOnFail),
   checkUpdate: async () => checkUpdate(),
   installUpdate: async () => installUpdate(),
+  setBackgroundColor: (color) => setBackgroundColor(color),
 })
 
 function killSidecar() {
