@@ -642,45 +642,100 @@ function hydrate(rows: (typeof MessageTable.$inferSelect)[]) {
   }))
 }
 
-function providerMeta(metadata: Record<string, any> | undefined) {
-  if (!metadata) return undefined
-  const { providerExecuted: _, ...rest } = metadata
-  return Object.keys(rest).length > 0 ? rest : undefined
-}
+  export function toModelMessages(
+    input: WithParts[],
+    model: Provider.Model,
+    options?: { stripMedia?: boolean },
+  ): ModelMessage[] {
+    const result: UIMessage[] = []
+    const toolNames = new Set<string>()
+    // Track media from tool results that need to be injected as user messages
+    // for providers that don't support media in tool results.
+    //
+    // OpenAI-compatible APIs only support string content in tool results, so we need
+    // to extract media and inject as user messages. Other SDKs (anthropic, google,
+    // bedrock) handle type: "content" with media parts natively.
+    //
+    // Only apply this workaround if the model actually supports image input -
+    // otherwise there's no point extracting images.
+    const supportsMediaInToolResults = (() => {
+      if (!model.capabilities.input.image) return false
+      if (model.api.npm === "@ai-sdk/anthropic") return true
+      // Removed @ai-sdk/openai from this list because it doesn't properly handle
+      // nested data URLs in tool result attachments. When supportsMediaInToolResults=false,
+      // the media() function cleans up nested data URLs before injection.
+      // if (model.api.npm === "@ai-sdk/openai") return true
+      if (model.api.npm === "@ai-sdk/amazon-bedrock") return true
+      if (model.api.npm === "@ai-sdk/google-vertex/anthropic") return true
+      if (model.api.npm === "@ai-sdk/google") {
+        const id = model.api.id.toLowerCase()
+        return id.includes("gemini-3") && !id.includes("gemini-2")
+      }
+      return false
+    })()
 
-export const toModelMessagesEffect = Effect.fnUntraced(function* (
-  input: WithParts[],
-  model: Provider.Model,
-  options?: { stripMedia?: boolean; toolOutputMaxChars?: number },
-) {
-  const result: UIMessage[] = []
-  const toolNames = new Set<string>()
-  // Track media from tool results that need to be injected as user messages
-  // for providers that don't support that media type in tool results.
-  //
-  // OpenAI-compatible APIs only support string content in tool results, so we need
-  // to extract media and inject as user messages. Some SDKs only support a subset
-  // of media in tool results; e.g. Bedrock supports images but not PDFs there.
-  //
-  // Only apply this workaround if the model actually supports that media input -
-  // otherwise unsupportedParts() will turn it into a user-visible error.
-  const supportsMediaInToolResult = (attachment: { mime: string }) => {
-    if (model.api.npm === "@ai-sdk/anthropic") return true
-    if (model.api.npm === "@ai-sdk/openai") return true
-    if (model.api.npm === "@ai-sdk/amazon-bedrock") return attachment.mime.startsWith("image/")
-    if (model.api.npm === "@ai-sdk/xai") return attachment.mime.startsWith("image/")
-    if (model.api.npm === "@ai-sdk/google-vertex/anthropic") return true
-    if (model.api.npm === "@ai-sdk/google") {
-      const id = model.api.id.toLowerCase()
-      return id.includes("gemini-3") && !id.includes("gemini-2")
+    const media = (url: string): string => {
+      console.log('[message-v2.ts] media() input:', url.substring(0, 100))
+      // If not a data URL, return as-is
+      if (!url.startsWith("data:")) return url
+
+      const comma = url.indexOf(",")
+      if (comma === -1) return url
+
+      const prefix = url.slice(0, comma + 1) // e.g., "data:image/png;base64,"
+      const body = url.slice(comma + 1)
+
+      // If body is nested data URL, recursively extract and rebuild
+      if (body.startsWith("data:")) {
+        const extracted = media(body)
+        // If extracted is a data URL, strip its prefix and use our prefix
+        if (extracted.startsWith("data:")) {
+          const extractedComma = extracted.indexOf(",")
+          if (extractedComma !== -1) {
+            const result = prefix + extracted.slice(extractedComma + 1)
+            console.log('[message-v2.ts] media() output:', result.substring(0, 100))
+            return result
+          }
+        }
+        const result = prefix + extracted
+        console.log('[message-v2.ts] media() output:', result.substring(0, 100))
+        return result
+      }
+
+      // Body is pure base64, return complete data URL
+      const result = prefix + body
+      console.log('[message-v2.ts] media() output:', result.substring(0, 100))
+      return result
     }
-    return false
-  }
 
-  const toModelOutput = (options: { toolCallId: string; input: unknown; output: unknown }) => {
-    const output = options.output
-    if (typeof output === "string") {
-      return { type: "text", value: output }
+    const toModelOutput = (output: unknown) => {
+      if (typeof output === "string") {
+        return { type: "text", value: output }
+      }
+
+      if (typeof output === "object") {
+        const outputObject = output as {
+          text: string
+          attachments?: Array<{ mime: string; url: string }>
+        }
+        const attachments = (outputObject.attachments ?? []).filter((attachment) => {
+          return attachment.url.startsWith("data:") && attachment.url.includes(",")
+        })
+
+        return {
+          type: "content",
+          value: [
+            { type: "text", text: outputObject.text },
+            ...attachments.map((attachment) => ({
+              type: "media",
+              mediaType: attachment.mime,
+              data: media(attachment.url),
+            })),
+          ],
+        }
+      }
+
+      return { type: "json", value: output as never }
     }
 
     if (typeof output === "object") {
