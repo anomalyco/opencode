@@ -6,9 +6,15 @@ import {
   parseDeepLink,
   parseNewSessionDeepLink,
 } from "./deep-links"
-import { displayName, errorMessage, getDraggableId, syncWorkspaceOrder, workspaceKey } from "./helpers"
 import { type Session } from "@opencode-ai/sdk/v2/client"
-import { hasProjectPermissions, latestRootSession } from "./helpers"
+import {
+  displayName,
+  errorMessage,
+  hasProjectPermissions,
+  latestRootSession,
+  syncWorkspaceOrder,
+  workspaceKey,
+} from "./helpers"
 
 const session = (input: Partial<Session> & Pick<Session, "id" | "directory">) =>
   ({
@@ -190,12 +196,6 @@ describe("layout workspace helpers", () => {
     )
 
     expect(result?.id).toBe("root")
-  })
-
-  test("extracts draggable id safely", () => {
-    expect(getDraggableId({ draggable: { id: "x" } })).toBe("x")
-    expect(getDraggableId({ draggable: { id: 42 } })).toBeUndefined()
-    expect(getDraggableId(null)).toBeUndefined()
   })
 
   test("formats fallback project display name", () => {
