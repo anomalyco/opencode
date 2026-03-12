@@ -1,8 +1,8 @@
 import { BusEvent } from "@/bus/bus-event"
+import { SessionID, MessageID, PartID } from "./schema"
 import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
 import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
-import { Identifier } from "../id/id"
 import { LSP } from "../lsp"
 import { Snapshot } from "@/snapshot"
 import { fn } from "@/util/fn"
@@ -78,9 +78,9 @@ export namespace MessageV2 {
   export type OutputFormat = z.infer<typeof Format>
 
   const PartBase = z.object({
-    id: z.string(),
-    sessionID: z.string(),
-    messageID: z.string(),
+    id: PartID.zod,
+    sessionID: SessionID.zod,
+    messageID: MessageID.zod,
   })
 
   export const SnapshotPart = PartBase.extend({
@@ -343,8 +343,8 @@ export namespace MessageV2 {
   export type ToolPart = z.infer<typeof ToolPart>
 
   const Base = z.object({
-    id: z.string(),
-    sessionID: z.string(),
+    id: MessageID.zod,
+    sessionID: SessionID.zod,
   })
 
   export const User = Base.extend({
@@ -410,7 +410,7 @@ export namespace MessageV2 {
         APIError.Schema,
       ])
       .optional(),
-    parentID: z.string(),
+    parentID: MessageID.zod,
     modelID: z.string(),
     providerID: z.string(),
     /**
@@ -457,8 +457,8 @@ export namespace MessageV2 {
     Removed: BusEvent.define(
       "message.removed",
       z.object({
-        sessionID: z.string(),
-        messageID: z.string(),
+        sessionID: SessionID.zod,
+        messageID: MessageID.zod,
       }),
     ),
     PartUpdated: BusEvent.define(
@@ -470,9 +470,9 @@ export namespace MessageV2 {
     PartDelta: BusEvent.define(
       "message.part.delta",
       z.object({
-        sessionID: z.string(),
-        messageID: z.string(),
-        partID: z.string(),
+        sessionID: SessionID.zod,
+        messageID: MessageID.zod,
+        partID: PartID.zod,
         field: z.string(),
         delta: z.string(),
       }),
@@ -480,9 +480,9 @@ export namespace MessageV2 {
     PartRemoved: BusEvent.define(
       "message.part.removed",
       z.object({
-        sessionID: z.string(),
-        messageID: z.string(),
-        partID: z.string(),
+        sessionID: SessionID.zod,
+        messageID: MessageID.zod,
+        partID: PartID.zod,
       }),
     ),
   }
@@ -698,7 +698,7 @@ export namespace MessageV2 {
           // media (images, PDFs) in tool results
           if (media.length > 0) {
             result.push({
-              id: Identifier.ascending("message"),
+              id: MessageID.ascending(),
               role: "user",
               parts: [
                 {
@@ -728,7 +728,7 @@ export namespace MessageV2 {
     )
   }
 
-  export const stream = fn(Identifier.schema("session"), async function* (sessionID) {
+  export const stream = fn(SessionID.zod, async function* (sessionID) {
     const size = 50
     let offset = 0
     while (true) {
@@ -781,7 +781,7 @@ export namespace MessageV2 {
     }
   })
 
-  export const parts = fn(Identifier.schema("message"), async (message_id) => {
+  export const parts = fn(MessageID.zod, async (message_id) => {
     const rows = Database.use((db) =>
       db.select().from(PartTable).where(eq(PartTable.message_id, message_id)).orderBy(PartTable.id).all(),
     )
@@ -792,8 +792,8 @@ export namespace MessageV2 {
 
   export const get = fn(
     z.object({
-      sessionID: Identifier.schema("session"),
-      messageID: Identifier.schema("message"),
+      sessionID: SessionID.zod,
+      messageID: MessageID.zod,
     }),
     async (input): Promise<WithParts> => {
       const row = Database.use((db) => db.select().from(MessageTable).where(eq(MessageTable.id, input.messageID)).get())

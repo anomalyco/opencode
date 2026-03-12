@@ -10,6 +10,7 @@ import { useSDK } from "@/context/sdk"
 import { useServer } from "@/context/server"
 import { monoFontFamily, useSettings } from "@/context/settings"
 import type { LocalPTY } from "@/context/terminal"
+import { terminalAttr, terminalProbe } from "@/testing/terminal"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/utils/runtime-adapters"
 import { terminalWriter } from "@/utils/terminal-writer"
 
@@ -17,6 +18,7 @@ const TOGGLE_TERMINAL_ID = "terminal.toggle"
 const DEFAULT_TOGGLE_TERMINAL_KEYBIND = "ctrl+`"
 export interface TerminalProps extends ComponentProps<"div"> {
   pty: LocalPTY
+  autoFocus?: boolean
   onSubmit?: () => void
   onCleanup?: (pty: Partial<LocalPTY> & { id: string }) => void
   onConnect?: () => void
@@ -157,8 +159,9 @@ export const Terminal = (props: TerminalProps) => {
   const language = useLanguage()
   const server = useServer()
   let container!: HTMLDivElement
-  const [local, others] = splitProps(props, ["pty", "class", "classList", "onConnect", "onConnectError"])
+  const [local, others] = splitProps(props, ["pty", "class", "classList", "autoFocus", "onConnect", "onConnectError"])
   const id = local.pty.id
+  const probe = terminalProbe(id)
   const restore = typeof local.pty.buffer === "string" ? local.pty.buffer : ""
   const restoreSize =
     restore &&
@@ -325,6 +328,9 @@ export const Terminal = (props: TerminalProps) => {
   }
 
   onMount(() => {
+    probe.init()
+    cleanups.push(() => probe.drop())
+
     const run = async () => {
       const loaded = await loadGhostty()
       if (disposed) return
@@ -352,7 +358,13 @@ export const Terminal = (props: TerminalProps) => {
       }
       ghostty = g
       term = t
-      output = terminalWriter((data, done) => t.write(data, done))
+      output = terminalWriter((data, done) =>
+        t.write(data, () => {
+          probe.render(data)
+          probe.settle()
+          done?.()
+        }),
+      )
 
       t.attachCustomKeyEventHandler((event) => {
         const key = event.key.toLowerCase()
@@ -386,7 +398,7 @@ export const Terminal = (props: TerminalProps) => {
         handleLinkClick,
       })
 
-      focusTerminal()
+      if (local.autoFocus !== false) focusTerminal()
 
       if (typeof document !== "undefined" && document.fonts) {
         document.fonts.ready.then(scheduleFit)
@@ -440,10 +452,6 @@ export const Terminal = (props: TerminalProps) => {
         startResize()
       }
 
-      // t.onScroll((ydisp) => {
-      // console.log("Scroll position:", ydisp)
-      // })
-
       const once = { value: false }
       let closing = false
 
@@ -451,7 +459,7 @@ export const Terminal = (props: TerminalProps) => {
       url.searchParams.set("directory", sdk.directory)
       url.searchParams.set("cursor", String(start !== undefined ? start : restore ? -1 : 0))
       url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
-      url.username = server.current?.http.username ?? ""
+      url.username = server.current?.http.username ?? "opencode"
       url.password = server.current?.http.password ?? ""
 
       const socket = new WebSocket(url)
@@ -459,6 +467,7 @@ export const Terminal = (props: TerminalProps) => {
       ws = socket
 
       const handleOpen = () => {
+        probe.connect()
         local.onConnect?.()
         scheduleSize(t.cols, t.rows)
       }
@@ -559,6 +568,7 @@ export const Terminal = (props: TerminalProps) => {
     <div
       ref={container}
       data-component="terminal"
+      {...{ [terminalAttr]: id }}
       data-prevent-autofocus
       tabIndex={-1}
       style={{ "background-color": terminalColors().background }}
