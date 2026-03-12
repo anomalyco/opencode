@@ -25,6 +25,7 @@
       "syntax-critical": "#ff8c00",
       "syntax-diff-delete": "#ff8c00",
       "syntax-diff-unknown": "#a753ae"
+      "surface-critical-base": "#FFF2F0"
     }
   },
   "dark": {
@@ -50,6 +51,7 @@
       "syntax-critical": "#fab283",
       "syntax-diff-delete": "#fab283",
       "syntax-diff-unknown": "#edb2f1"
+      "surface-critical-base": "#1F0603"
     }
   }
 }

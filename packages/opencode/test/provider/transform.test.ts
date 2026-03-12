@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { ProviderTransform } from "../../src/provider/transform"
+import { ModelID, ProviderID } from "../../src/provider/schema"
 
 const OUTPUT_TOKEN_MAX = 32000
 
@@ -740,8 +741,8 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
     const result = ProviderTransform.message(
       msgs,
       {
-        id: "deepseek/deepseek-chat",
-        providerID: "deepseek",
+        id: ModelID.make("deepseek/deepseek-chat"),
+        providerID: ProviderID.make("deepseek"),
         api: {
           id: "deepseek-chat",
           url: "https://api.deepseek.com",
@@ -802,8 +803,8 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
     const result = ProviderTransform.message(
       msgs,
       {
-        id: "openai/gpt-4",
-        providerID: "openai",
+        id: ModelID.make("openai/gpt-4"),
+        providerID: ProviderID.make("openai"),
         api: {
           id: "gpt-4",
           url: "https://api.openai.com",
@@ -2473,6 +2474,146 @@ describe("ProviderTransform.variants", () => {
           id: "sonar-plus",
           url: "https://api.perplexity.ai",
           npm: "@ai-sdk/perplexity",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(result).toEqual({})
+    })
+  })
+
+  describe("@jerome-benoit/sap-ai-provider-v2", () => {
+    test("anthropic models return thinking variants", () => {
+      const model = createMockModel({
+        id: "sap-ai-core/anthropic--claude-sonnet-4",
+        providerID: "sap-ai-core",
+        api: {
+          id: "anthropic--claude-sonnet-4",
+          url: "https://api.ai.sap",
+          npm: "@jerome-benoit/sap-ai-provider-v2",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["high", "max"])
+      expect(result.high).toEqual({
+        thinking: {
+          type: "enabled",
+          budgetTokens: 16000,
+        },
+      })
+      expect(result.max).toEqual({
+        thinking: {
+          type: "enabled",
+          budgetTokens: 31999,
+        },
+      })
+    })
+
+    test("anthropic 4.6 models return adaptive thinking variants", () => {
+      const model = createMockModel({
+        id: "sap-ai-core/anthropic--claude-sonnet-4-6",
+        providerID: "sap-ai-core",
+        api: {
+          id: "anthropic--claude-sonnet-4-6",
+          url: "https://api.ai.sap",
+          npm: "@jerome-benoit/sap-ai-provider-v2",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "max"])
+      expect(result.low).toEqual({
+        thinking: {
+          type: "adaptive",
+        },
+        effort: "low",
+      })
+      expect(result.max).toEqual({
+        thinking: {
+          type: "adaptive",
+        },
+        effort: "max",
+      })
+    })
+
+    test("gemini 2.5 models return thinkingConfig variants", () => {
+      const model = createMockModel({
+        id: "sap-ai-core/gcp--gemini-2.5-pro",
+        providerID: "sap-ai-core",
+        api: {
+          id: "gcp--gemini-2.5-pro",
+          url: "https://api.ai.sap",
+          npm: "@jerome-benoit/sap-ai-provider-v2",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["high", "max"])
+      expect(result.high).toEqual({
+        thinkingConfig: {
+          includeThoughts: true,
+          thinkingBudget: 16000,
+        },
+      })
+      expect(result.max).toEqual({
+        thinkingConfig: {
+          includeThoughts: true,
+          thinkingBudget: 24576,
+        },
+      })
+    })
+
+    test("gpt models return reasoningEffort variants", () => {
+      const model = createMockModel({
+        id: "sap-ai-core/azure-openai--gpt-4o",
+        providerID: "sap-ai-core",
+        api: {
+          id: "azure-openai--gpt-4o",
+          url: "https://api.ai.sap",
+          npm: "@jerome-benoit/sap-ai-provider-v2",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high"])
+      expect(result.low).toEqual({ reasoningEffort: "low" })
+      expect(result.high).toEqual({ reasoningEffort: "high" })
+    })
+
+    test("o-series models return reasoningEffort variants", () => {
+      const model = createMockModel({
+        id: "sap-ai-core/azure-openai--o3-mini",
+        providerID: "sap-ai-core",
+        api: {
+          id: "azure-openai--o3-mini",
+          url: "https://api.ai.sap",
+          npm: "@jerome-benoit/sap-ai-provider-v2",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high"])
+      expect(result.low).toEqual({ reasoningEffort: "low" })
+      expect(result.high).toEqual({ reasoningEffort: "high" })
+    })
+
+    test("sonar models return empty object", () => {
+      const model = createMockModel({
+        id: "sap-ai-core/perplexity--sonar-pro",
+        providerID: "sap-ai-core",
+        api: {
+          id: "perplexity--sonar-pro",
+          url: "https://api.ai.sap",
+          npm: "@jerome-benoit/sap-ai-provider-v2",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(result).toEqual({})
+    })
+
+    test("mistral models return empty object", () => {
+      const model = createMockModel({
+        id: "sap-ai-core/mistral--mistral-large",
+        providerID: "sap-ai-core",
+        api: {
+          id: "mistral--mistral-large",
+          url: "https://api.ai.sap",
+          npm: "@jerome-benoit/sap-ai-provider-v2",
         },
       })
       const result = ProviderTransform.variants(model)

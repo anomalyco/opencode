@@ -382,28 +382,28 @@ export function DebugBar() {
           dim={state.fps === undefined}
         />
         <Cell
-          label="FRM"
+          label="FRAME"
           tip="Worst frame time over the last 5 seconds."
           value={time(state.gap)}
           bad={bad(state.gap, 50)}
           dim={state.gap === undefined}
         />
         <Cell
-          label="JNK"
+          label="JANK"
           tip="Frames over 32ms in the last 5 seconds."
           value={state.jank === undefined ? "n/a" : `${state.jank}`}
           bad={bad(state.jank, 8)}
           dim={state.jank === undefined}
         />
         <Cell
-          label="LNG"
+          label="LONG"
           tip={`Blocked time and long-task count in the last 5 seconds. Max task: ${ms(state.long.max)}.`}
           value={longv()}
           bad={bad(state.long.block, 200)}
           dim={state.long.count === undefined}
         />
         <Cell
-          label="DLY"
+          label="DELAY"
           tip="Worst observed input delay in the last 5 seconds."
           value={time(state.delay)}
           bad={bad(state.delay, 100)}
