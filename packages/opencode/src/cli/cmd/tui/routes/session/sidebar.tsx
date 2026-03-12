@@ -23,6 +23,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const [expanded, setExpanded] = createStore({
     mcp: true,
     diff: true,
+    skill: true,
     todo: true,
     lsp: true,
   })
@@ -58,6 +59,22 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
       tokens: total.toLocaleString(),
       percentage: model?.limit.context ? Math.round((total / model.limit.context) * 100) : null,
     }
+  })
+
+  const skills = createMemo(() => {
+    const seen = new Set<string>()
+    return messages()
+      .toReversed()
+      .flatMap((msg) => sync.data.part[msg.id] ?? [])
+      .flatMap((part) => {
+        if (part.type !== "tool" || part.tool !== "skill") return []
+        const name = part.state.input.name
+        if (typeof name !== "string") return []
+        if (!name.trim() || seen.has(name)) return []
+        seen.add(name)
+        return [name]
+      })
+      .slice(0, 10)
   })
 
   const directory = useDirectory()
@@ -160,6 +177,39 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                               </Match>
                             </Switch>
                           </span>
+                        </text>
+                      </box>
+                    )}
+                  </For>
+                </Show>
+              </box>
+            </Show>
+            <Show when={skills().length > 0}>
+              <box>
+                <box
+                  flexDirection="row"
+                  gap={1}
+                  onMouseDown={() => skills().length > 2 && setExpanded("skill", !expanded.skill)}
+                >
+                  <Show when={skills().length > 2}>
+                    <text fg={theme.text}>{expanded.skill ? "▼" : "▶"}</text>
+                  </Show>
+                  <text fg={theme.text}>
+                    <b>Skills</b>
+                    <Show when={!expanded.skill}>
+                      <span style={{ fg: theme.textMuted }}> ({skills().length} used)</span>
+                    </Show>
+                  </text>
+                </box>
+                <Show when={skills().length <= 2 || expanded.skill}>
+                  <For each={skills()}>
+                    {(item) => (
+                      <box flexDirection="row" gap={1}>
+                        <text flexShrink={0} fg={theme.success}>
+                          •
+                        </text>
+                        <text fg={theme.textMuted} wrapMode="word">
+                          {item}
                         </text>
                       </box>
                     )}
