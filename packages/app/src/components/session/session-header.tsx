@@ -358,7 +358,7 @@ export function SessionHeader() {
                             aria-label={language.t("session.header.open.menu")}
                           />
                           <DropdownMenu.Portal>
-                            <DropdownMenu.Content>
+                            <DropdownMenu.Content class="[&_[data-slot=dropdown-menu-item]]:pl-1 [&_[data-slot=dropdown-menu-radio-item]]:pl-1">
                               <DropdownMenu.Group>
                                 <DropdownMenu.GroupLabel>{language.t("session.header.openIn")}</DropdownMenu.GroupLabel>
                                 <DropdownMenu.RadioGroup
