@@ -3,7 +3,7 @@ import z from "zod"
 
 import { withStatics } from "@/util/schema"
 
-const providerIdSchema = Schema.String.pipe(Schema.brand("ProviderId"))
+const providerIdSchema = Schema.String.pipe(Schema.brand("ProviderID"))
 
 export type ProviderID = typeof providerIdSchema.Type
 
@@ -14,7 +14,7 @@ export const ProviderID = providerIdSchema.pipe(
   })),
 )
 
-const modelIdSchema = Schema.String.pipe(Schema.brand("ModelId"))
+const modelIdSchema = Schema.String.pipe(Schema.brand("ModelID"))
 
 export type ModelID = typeof modelIdSchema.Type
 
