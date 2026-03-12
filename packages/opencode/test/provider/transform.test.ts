@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { ProviderTransform } from "../../src/provider/transform"
+import { ModelID, ProviderID } from "../../src/provider/schema"
 
 const OUTPUT_TOKEN_MAX = 32000
 
@@ -740,8 +741,8 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
     const result = ProviderTransform.message(
       msgs,
       {
-        id: "deepseek/deepseek-chat",
-        providerID: "deepseek",
+        id: ModelID.make("deepseek/deepseek-chat"),
+        providerID: ProviderID.make("deepseek"),
         api: {
           id: "deepseek-chat",
           url: "https://api.deepseek.com",
@@ -802,8 +803,8 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
     const result = ProviderTransform.message(
       msgs,
       {
-        id: "openai/gpt-4",
-        providerID: "openai",
+        id: ModelID.make("openai/gpt-4"),
+        providerID: ProviderID.make("openai"),
         api: {
           id: "gpt-4",
           url: "https://api.openai.com",

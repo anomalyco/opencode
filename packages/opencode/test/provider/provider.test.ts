@@ -302,8 +302,8 @@ test("getModel returns model for valid provider/model", async () => {
     fn: async () => {
       const model = await Provider.getModel("anthropic", "claude-sonnet-4-20250514")
       expect(model).toBeDefined()
-      expect(model.providerID).toBe("anthropic")
-      expect(model.id).toBe("claude-sonnet-4-20250514")
+      expect(String(model.providerID)).toBe("anthropic")
+      expect(String(model.id)).toBe("claude-sonnet-4-20250514")
       const language = await Provider.getLanguage(model)
       expect(language).toBeDefined()
     },
@@ -353,14 +353,14 @@ test("getModel throws ModelNotFoundError for invalid provider", async () => {
 
 test("parseModel correctly parses provider/model string", () => {
   const result = Provider.parseModel("anthropic/claude-sonnet-4")
-  expect(result.providerID).toBe("anthropic")
-  expect(result.modelID).toBe("claude-sonnet-4")
+  expect(String(result.providerID)).toBe("anthropic")
+  expect(String(result.modelID)).toBe("claude-sonnet-4")
 })
 
 test("parseModel handles model IDs with slashes", () => {
   const result = Provider.parseModel("openrouter/anthropic/claude-3-opus")
-  expect(result.providerID).toBe("openrouter")
-  expect(result.modelID).toBe("anthropic/claude-3-opus")
+  expect(String(result.providerID)).toBe("openrouter")
+  expect(String(result.modelID)).toBe("anthropic/claude-3-opus")
 })
 
 test("defaultModel returns first available model when no config set", async () => {
@@ -406,8 +406,8 @@ test("defaultModel respects config model setting", async () => {
     },
     fn: async () => {
       const model = await Provider.defaultModel()
-      expect(model.providerID).toBe("anthropic")
-      expect(model.modelID).toBe("claude-sonnet-4-20250514")
+      expect(String(model.providerID)).toBe("anthropic")
+      expect(String(model.modelID)).toBe("claude-sonnet-4-20250514")
     },
   })
 })
@@ -632,7 +632,7 @@ test("getModel uses realIdByKey for aliased models", async () => {
 
       const model = await Provider.getModel("anthropic", "my-sonnet")
       expect(model).toBeDefined()
-      expect(model.id).toBe("my-sonnet")
+      expect(String(model.id)).toBe("my-sonnet")
       expect(model.name).toBe("My Sonnet Alias")
     },
   })
@@ -960,8 +960,8 @@ test("getSmallModel respects config small_model override", async () => {
     fn: async () => {
       const model = await Provider.getSmallModel("anthropic")
       expect(model).toBeDefined()
-      expect(model?.providerID).toBe("anthropic")
-      expect(model?.id).toBe("claude-sonnet-4-20250514")
+      expect(String(model?.providerID)).toBe("anthropic")
+      expect(String(model?.id)).toBe("claude-sonnet-4-20250514")
     },
   })
 })
@@ -1605,7 +1605,7 @@ test("getProvider returns provider info", async () => {
     fn: async () => {
       const provider = await Provider.getProvider("anthropic")
       expect(provider).toBeDefined()
-      expect(provider?.id).toBe("anthropic")
+      expect(String(provider?.id)).toBe("anthropic")
     },
   })
 })
