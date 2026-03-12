@@ -36,6 +36,7 @@ export namespace ZenData {
         weight: z.number().optional(),
         disabled: z.boolean().optional(),
         storeModel: z.string().optional(),
+        payloadModifier: z.record(z.string(), z.any()).optional(),
       }),
     ),
   })
