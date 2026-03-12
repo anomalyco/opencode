@@ -54,26 +54,48 @@ let _aliases: Set<string> | null = null
     // Use -i so .zshrc/.bashrc is sourced (many rc files guard with [[ -o interactive ]]).
     // Run detached (setsid) so the child has no controlling terminal — this prevents
     // interactive zsh from calling tcsetattr and corrupting the TUI's raw terminal mode.
+    //
+    // Emit aliases then a sentinel then function names so both can be parsed
+    // from a single shell invocation.
+    let dumpCmd: string
+    if (shellName === "zsh") {
+      dumpCmd = "alias 2>/dev/null; echo __FNAMES__; print -l ${(k)functions} 2>/dev/null || true"
+    } else if (shellName === "bash") {
+      dumpCmd = "shopt -s expand_aliases 2>/dev/null || true; alias 2>/dev/null; echo __FNAMES__; declare -F 2>/dev/null | awk '{print $3}'"
+    } else {
+      dumpCmd = "alias 2>/dev/null; echo __FNAMES__"
+    }
+
     const chunks: Buffer[] = []
-    await new Promise<void>((resolve) => {
-      const proc = nodeSpawn(shellPath, ["-l", "-i", "-c", "alias"], {
+    await new Promise<void>((resolve, reject) => {
+      const proc = nodeSpawn(shellPath, ["-l", "-i", "-c", dumpCmd], {
         detached: true,
         stdio: ["ignore", "pipe", "ignore"],
         env: { ...process.env, TERM: "dumb" },
       })
       proc.stdout?.on("data", (chunk: Buffer) => chunks.push(chunk))
       proc.on("close", () => resolve())
-      proc.on("error", () => resolve())
+      proc.on("error", reject)
     })
     const output = Buffer.concat(chunks).toString()
 
-    const aliases = new Set<string>()
+    const known = new Set<string>()
+    let inFunctions = false
     for (const line of output.split("\n")) {
-      // bash: `alias ..='cd ..'`   zsh: `..='cd ..'`
-      const match = line.match(/^(?:alias\s+)?([^=\s]+)=/)
-      if (match) aliases.add(match[1])
+      if (line === "__FNAMES__") {
+        inFunctions = true
+        continue
+      }
+      if (inFunctions) {
+        const name = line.trim()
+        if (name) known.add(name)
+      } else {
+        // bash: `alias ..='cd ..'`   zsh: `..='cd ..'`
+        const match = line.match(/^(?:alias\s+)?([^=\s]+)=/)
+        if (match) known.add(match[1])
+      }
     }
-    _aliases = aliases
+    _aliases = known
   } catch {
     _aliases = new Set()
   }
