@@ -499,6 +499,33 @@ export namespace MessageV2 {
     model: Provider.Model,
     options?: { stripMedia?: boolean },
   ): ModelMessage[] {
+    // Solution A: the agent prompts (see session/prompt/*) now explicitly
+    // tell the model to start each `<tool_call>` on a fresh line.  This helps
+    // avoid the problem in the first place.
+    // Solution B: some tool callers still forget and stick the tag immediately
+    // after text. the underlying parser in the AI SDK only recognizes a tool
+    // call if it begins on a new line, so we sanitize the text by inserting a
+    // newline whenever a tool call tag appears immediately after non-newline
+    // content.
+    function sanitizeToolCalls(messages: UIMessage[]) {
+      for (const msg of messages) {
+        for (const part of msg.parts) {
+          if (part.type === "text" && typeof part.text === "string") {
+            // add a newline before any <tool_call> that isn't already on its own line
+            part.text = part.text.replace(/([^\n])(<tool_call>)/g, "$1\n$2")
+          }
+        }
+      }
+    }
+
+    // copy input so we can sanitize without mutating the original array.
+    // we shallow-copy the message and its parts array; the parts themselves
+    // are left by reference, which lets the sanitizer still alter text but
+    // avoids surprising callers who hold the original `input` array.  after
+    // sanitization we operate on `msgs` when building the output.
+    const msgs = input.map((m) => ({ ...m, parts: [...m.parts] }))
+    sanitizeToolCalls(msgs)
+
     const result: UIMessage[] = []
     const toolNames = new Set<string>()
     // Track media from tool results that need to be injected as user messages
@@ -555,7 +582,7 @@ export namespace MessageV2 {
       return { type: "json", value: output as never }
     }
 
-    for (const msg of input) {
+    for (const msg of msgs) {
       if (msg.parts.length === 0) continue
 
       if (msg.info.role === "user") {

@@ -153,6 +153,77 @@ describe("session.message-v2.toModelMessage", () => {
     expect(MessageV2.toModelMessages(input, model)).toStrictEqual([])
   })
 
+  // regression test for https://github.com/anomalyco/opencode/issues/17253
+  // solution B: the sanitizer should inject a newline when the tag is glued
+  // directly to preceding text.
+  test("auto-inserts newline before tool calls in user text", () => {
+    const messageID = "m-user"
+    const toolMarkup = `<tool_call>\n<function=grep>\n<parameter>-A</parameter>\n10\n</function>\n</tool_call>`
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(messageID),
+        parts: [
+          {
+            ...basePart(messageID, "p1"),
+            type: "text",
+            // no newline before the tag intentionally
+            text: `Let me search for the fetch method properly:${toolMarkup}`,
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const result = MessageV2.toModelMessages(input, model)
+    expect(result).toHaveLength(1)
+    expect(result[0].role).toBe("user")
+    const content = result[0].content
+    expect(content.length).toBeGreaterThan(1)
+    expect(content[0]).toEqual({ type: "text", text: "Let me search for the fetch method properly:" })
+    // second part should be a parsed tool-call
+    expect(content[1]).toMatchObject({ type: "tool-call", toolCallId: expect.any(String), toolName: expect.any(String) })
+  })
+
+  test("does not alter text when newline already present", () => {
+    const messageID = "m-user"
+    const toolMarkup = `<tool_call>\n<function=grep>\n<parameter>-A</parameter>\n10\n</function>\n</tool_call>`
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(messageID),
+        parts: [
+          {
+            ...basePart(messageID, "p2"),
+            type: "text",
+            text: `Check this out:\n${toolMarkup}`,
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+    const result = MessageV2.toModelMessages(input, model)
+    expect(result[0].content[0]).toEqual({ type: "text", text: "Check this out:" })
+    expect(result[0].content[1]).toMatchObject({ type: "tool-call" })
+  })
+
+  test("sanitizes assistant text as well as user text", () => {
+    const assistantID = "m-assist"
+    const toolMarkup = `<tool_call>\n<function=grep>\n<parameter>-A</parameter>\n10\n</function>\n</tool_call>`
+    const input: MessageV2.WithParts[] = [
+      {
+        info: assistantInfo(assistantID, "m-parent"),
+        parts: [
+          {
+            ...basePart(assistantID, "a3"),
+            type: "text",
+            text: `Here is a tool:${toolMarkup}`,
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+    const result = MessageV2.toModelMessages(input, model)
+    expect(result[0].role).toBe("assistant")
+    expect(result[0].content[0]).toEqual({ type: "text", text: "Here is a tool:" })
+    expect(result[0].content[1]).toMatchObject({ type: "tool-call" })
+  })
+
   test("includes synthetic text parts", () => {
     const messageID = "m-user"
 
