@@ -632,7 +632,9 @@ export function Session() {
             title="Btw Prompt"
             placeholder="Ask a quick question"
             onConfirm={(value) => {
-              console.log(value);
+              // read value
+              // pipe value to ask question to session history and give an answer
+              // display answer in a dialog
               dialog.clear()
             }}
           />
