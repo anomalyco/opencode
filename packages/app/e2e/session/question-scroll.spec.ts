@@ -62,17 +62,24 @@ test("question with long text shows scrollable content and visible options", asy
       const questionText = dock.locator('[data-slot="question-text"]')
       await expect(questionText).toBeVisible()
 
+      await page.waitForTimeout(250)
+
       const scrollHeight = await questionText.evaluate((el) => el.scrollHeight)
       const clientHeight = await questionText.evaluate((el) => el.clientHeight)
+
       expect(scrollHeight).toBeGreaterThan(clientHeight)
 
       await questionText.evaluate((el) => {
         el.scrollTop = el.scrollHeight / 2
       })
 
+      await page.waitForTimeout(100)
+
       await questionText.evaluate((el) => {
         el.scrollTop = 0
       })
+
+      await page.waitForTimeout(100)
 
       const options = dock.locator('[data-slot="question-option"]')
       await expect.poll(() => options.count(), { timeout: 5000 }).toBe(3)
@@ -131,10 +138,13 @@ test("question with multiple tabs and long text handles scrolling correctly", as
       const questionText = dock.locator('[data-slot="question-text"]')
       await expect(questionText).toBeVisible()
 
+      await page.waitForTimeout(250)
+
       await dock.locator('[data-slot="question-option"]').first().click()
       await dock.getByRole("button", { name: /next/i }).click()
 
       await expect(questionText).toBeVisible()
+      await page.waitForTimeout(250)
 
       await dock.locator('[data-slot="question-option"]').first().click()
       await dock.getByRole("button", { name: /submit/i }).click()
@@ -175,6 +185,8 @@ test("question with moderate text displays without unnecessary scrolling", async
 
       const questionText = dock.locator('[data-slot="question-text"]')
       await expect(questionText).toBeVisible()
+
+      await page.waitForTimeout(250)
 
       const scrollHeight = await questionText.evaluate((el) => el.scrollHeight)
       const clientHeight = await questionText.evaluate((el) => el.clientHeight)
@@ -228,6 +240,8 @@ test("question with 50 items demonstrates scrolling behavior", async ({ page, sd
       const questionText = dock.locator('[data-slot="question-text"]')
       await expect(questionText).toBeVisible()
 
+      await page.waitForTimeout(250)
+
       const scrollHeight = await questionText.evaluate((el) => el.scrollHeight)
       const clientHeight = await questionText.evaluate((el) => el.clientHeight)
       expect(scrollHeight).toBeGreaterThan(clientHeight)
@@ -236,13 +250,19 @@ test("question with 50 items demonstrates scrolling behavior", async ({ page, sd
         el.scrollTop = el.scrollHeight / 2
       })
 
+      await page.waitForTimeout(100)
+
       await questionText.evaluate((el) => {
         el.scrollTop = el.scrollHeight
       })
 
+      await page.waitForTimeout(100)
+
       await questionText.evaluate((el) => {
         el.scrollTop = 0
       })
+
+      await page.waitForTimeout(100)
 
       const options = dock.locator('[data-slot="question-option"]')
       await expect.poll(() => options.count()).toBe(2)
