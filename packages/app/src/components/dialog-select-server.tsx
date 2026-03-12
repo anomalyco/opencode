@@ -14,7 +14,7 @@ import { ServerHealthIndicator, ServerRow } from "@/components/server/server-row
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { normalizeServerUrl, ServerConnection, useServer } from "@/context/server"
-import { useCheckServerHealth, type ServerHealth } from "@/utils/server-health"
+import { type ServerHealth, useCheckServerHealth } from "@/utils/server-health"
 
 const DEFAULT_USERNAME = "opencode"
 
@@ -557,7 +557,7 @@ export function DialogSelectServer() {
                     status={store.status[key]}
                     class="flex items-center gap-3 min-w-0 flex-1"
                     badge={
-                      <Show when={defaultKey() === i.http.url}>
+                      <Show when={defaultKey() === ServerConnection.key(i)}>
                         <span class="text-text-base bg-surface-base text-14-regular px-1.5 rounded-xs">
                           {language.t("dialog.server.status.default")}
                         </span>
