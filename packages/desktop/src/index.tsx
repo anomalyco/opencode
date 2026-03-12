@@ -152,6 +152,15 @@ const createPlatform = (): Platform => {
       let timer: ReturnType<typeof setTimeout> | undefined
       let flushing: Promise<void> | undefined
 
+      const settle = async () => {
+        if (timer) {
+          clearTimeout(timer)
+          timer = undefined
+        }
+
+        await flushing?.catch(() => undefined)
+      }
+
       const flush = async () => {
         if (flushing) return flushing
 
@@ -203,6 +212,7 @@ const createPlatform = (): Platform => {
           schedule()
         },
         clear: async () => {
+          await settle()
           pending.clear()
           const store = await getStore(name)
           await store.clear().catch(() => undefined)
