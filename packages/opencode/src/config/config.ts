@@ -12,6 +12,7 @@ import { lazy } from "../util/lazy"
 import { NamedError } from "@opencode-ai/util/error"
 import { Flag } from "../flag/flag"
 import { Auth } from "../auth"
+import { Env } from "../env"
 import {
   type ParseError as JsoncParseError,
   applyEdits,
@@ -32,7 +33,7 @@ import { Glob } from "../util/glob"
 import { PackageRegistry } from "@/bun/registry"
 import { proxied } from "@/util/proxied"
 import { iife } from "@/util/iife"
-import { Control } from "@/control"
+import { Account } from "@/account"
 import { ConfigPaths } from "./paths"
 import { Filesystem } from "@/util/filesystem"
 
@@ -108,10 +109,6 @@ export namespace Config {
       }
     }
 
-    const token = await Control.token()
-    if (token) {
-    }
-
     // Global user config overrides remote config.
     result = mergeConfigConcatArrays(result, await global())
 
@@ -176,6 +173,32 @@ export namespace Config {
         }),
       )
       log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
+    }
+
+    const active = Account.active()
+    if (active?.active_org_id) {
+      try {
+        const [config, token] = await Promise.all([
+          Account.config(active.id, active.active_org_id),
+          Account.token(active.id),
+        ])
+        if (token) {
+          process.env["OPENCODE_CONSOLE_TOKEN"] = token
+          Env.set("OPENCODE_CONSOLE_TOKEN", token)
+        }
+
+        if (config) {
+          result = mergeConfigConcatArrays(
+            result,
+            await load(JSON.stringify(config), {
+              dir: path.dirname(`${active.url}/api/config`),
+              source: `${active.url}/api/config`,
+            }),
+          )
+        }
+      } catch (err: any) {
+        log.debug("failed to fetch remote account config", { error: err?.message ?? err })
+      }
     }
 
     // Load managed config files last (highest priority) - enterprise admin-controlled
@@ -971,6 +994,14 @@ export namespace Config {
             .optional()
             .describe(
               "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
+            ),
+          chunkTimeout: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe(
+              "Timeout in milliseconds between streamed SSE chunks for this provider. If no chunk arrives within this window, the request is aborted.",
             ),
         })
         .catchall(z.any())

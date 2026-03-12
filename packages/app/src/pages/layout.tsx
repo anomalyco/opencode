@@ -54,6 +54,7 @@ import { useCommand, type CommandOption } from "@/context/command"
 import { ConstrainDragXAxis } from "@/utils/solid-dnd"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { DialogEditProject } from "@/components/dialog-edit-project"
+import { DebugBar } from "@/components/debug-bar"
 import { Titlebar } from "@/components/titlebar"
 import { useServer } from "@/context/server"
 import { useLanguage, type Locale } from "@/context/language"
@@ -421,6 +422,17 @@ export default function Layout(props: ParentProps) {
         if (e.details?.type === "worktree.failed") {
           setBusy(e.name, false)
           WorktreeState.failed(e.name, e.details.properties?.message ?? language.t("common.requestFailed"))
+          return
+        }
+
+        if (
+          e.details?.type === "question.replied" ||
+          e.details?.type === "question.rejected" ||
+          e.details?.type === "permission.replied"
+        ) {
+          const props = e.details.properties as { sessionID: string }
+          const sessionKey = `${e.name}:${props.sessionID}`
+          dismissSessionAlert(sessionKey)
           return
         }
 
@@ -1917,7 +1929,7 @@ export default function Layout(props: ParentProps) {
     return (
       <div
         classList={{
-          "flex flex-col min-h-0 min-w-0 rounded-tl-[12px] px-2": true,
+          "flex flex-col min-h-0 min-w-0 box-border rounded-tl-[12px] px-2": true,
           "border border-b-0 border-border-weak-base": !merged(),
           "border-l border-t border-border-weaker-base": merged(),
           "bg-background-base": merged() || hover(),
@@ -2124,193 +2136,204 @@ export default function Layout(props: ParentProps) {
   }
 
   return (
-    <div class="relative bg-background-base flex-1 min-h-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
+    <div class="relative bg-background-base flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
       <Titlebar />
-      <div class="flex-1 min-h-0 relative overflow-x-hidden">
-        <nav
-          aria-label={language.t("sidebar.nav.projectsAndSessions")}
-          data-component="sidebar-nav-desktop"
-          classList={{
-            "hidden xl:block": true,
-            "absolute inset-y-0 left-0": true,
-            "z-10": true,
-          }}
-          style={{ width: `${Math.max(layout.sidebar.width(), 244)}px` }}
-          ref={(el) => {
-            setState("nav", el)
-          }}
-          onMouseEnter={() => {
-            disarm()
-          }}
-          onMouseLeave={() => {
-            aim.reset()
-            if (!sidebarHovering()) return
+      <div class="flex-1 min-h-0 min-w-0 flex">
+        <div class="flex-1 min-h-0 relative">
+          <div class="size-full relative overflow-x-hidden">
+            <nav
+              aria-label={language.t("sidebar.nav.projectsAndSessions")}
+              data-component="sidebar-nav-desktop"
+              classList={{
+                "hidden xl:block": true,
+                "absolute inset-y-0 left-0": true,
+                "z-10": true,
+              }}
+              style={{ width: `${Math.max(layout.sidebar.width(), 244)}px` }}
+              ref={(el) => {
+                setState("nav", el)
+              }}
+              onMouseEnter={() => {
+                disarm()
+              }}
+              onMouseLeave={() => {
+                aim.reset()
+                if (!sidebarHovering()) return
 
-            arm()
-          }}
-        >
-          <div class="@container w-full h-full contain-strict">
-            <SidebarContent
-              opened={() => layout.sidebar.opened()}
-              aimMove={aim.move}
-              projects={() => layout.projects.list()}
-              renderProject={(project) => (
-                <SortableProject ctx={projectSidebarCtx} project={project} sortNow={sortNow} />
-              )}
-              handleDragStart={handleDragStart}
-              handleDragEnd={handleDragEnd}
-              handleDragOver={handleDragOver}
-              openProjectLabel={language.t("command.project.open")}
-              openProjectKeybind={() => command.keybind("project.open")}
-              onOpenProject={chooseProject}
-              renderProjectOverlay={() => (
-                <ProjectDragOverlay projects={() => layout.projects.list()} activeProject={() => store.activeProject} />
-              )}
-              settingsLabel={() => language.t("sidebar.settings")}
-              settingsKeybind={() => command.keybind("settings.open")}
-              onOpenSettings={openSettings}
-              helpLabel={() => language.t("sidebar.help")}
-              onOpenHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
-              renderPanel={() => (
-                <Show when={currentProject()} keyed>
-                  {(project) => <SidebarPanel project={project} merged />}
-                </Show>
-              )}
+                arm()
+              }}
+            >
+              <div class="@container w-full h-full contain-strict">
+                <SidebarContent
+                  opened={() => layout.sidebar.opened()}
+                  aimMove={aim.move}
+                  projects={() => layout.projects.list()}
+                  renderProject={(project) => (
+                    <SortableProject ctx={projectSidebarCtx} project={project} sortNow={sortNow} />
+                  )}
+                  handleDragStart={handleDragStart}
+                  handleDragEnd={handleDragEnd}
+                  handleDragOver={handleDragOver}
+                  openProjectLabel={language.t("command.project.open")}
+                  openProjectKeybind={() => command.keybind("project.open")}
+                  onOpenProject={chooseProject}
+                  renderProjectOverlay={() => (
+                    <ProjectDragOverlay
+                      projects={() => layout.projects.list()}
+                      activeProject={() => store.activeProject}
+                    />
+                  )}
+                  settingsLabel={() => language.t("sidebar.settings")}
+                  settingsKeybind={() => command.keybind("settings.open")}
+                  onOpenSettings={openSettings}
+                  helpLabel={() => language.t("sidebar.help")}
+                  onOpenHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
+                  renderPanel={() => (
+                    <Show when={currentProject()} keyed>
+                      {(project) => <SidebarPanel project={project} merged />}
+                    </Show>
+                  )}
+                />
+              </div>
+              <Show when={layout.sidebar.opened()}>
+                <div onPointerDown={() => setSizing(true)}>
+                  <ResizeHandle
+                    direction="horizontal"
+                    size={layout.sidebar.width()}
+                    min={244}
+                    max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.3 + 64}
+                    collapseThreshold={244}
+                    onResize={(w) => {
+                      setSizing(true)
+                      if (sizet !== undefined) clearTimeout(sizet)
+                      sizet = window.setTimeout(() => setSizing(false), 120)
+                      layout.sidebar.resize(w)
+                    }}
+                    onCollapse={layout.sidebar.close}
+                  />
+                </div>
+              </Show>
+            </nav>
+
+            <div
+              class="hidden xl:block pointer-events-none absolute top-0 right-0 z-0 border-t border-border-weaker-base"
+              style={{ left: "calc(4rem + 12px)" }}
             />
-          </div>
-          <Show when={layout.sidebar.opened()}>
-            <div onPointerDown={() => setSizing(true)}>
-              <ResizeHandle
-                direction="horizontal"
-                size={layout.sidebar.width()}
-                min={244}
-                max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.3 + 64}
-                collapseThreshold={244}
-                onResize={(w) => {
-                  setSizing(true)
-                  if (sizet !== undefined) clearTimeout(sizet)
-                  sizet = window.setTimeout(() => setSizing(false), 120)
-                  layout.sidebar.resize(w)
+
+            <div class="xl:hidden">
+              <div
+                classList={{
+                  "fixed inset-x-0 top-10 bottom-0 z-40 transition-opacity duration-200": true,
+                  "opacity-100 pointer-events-auto": layout.mobileSidebar.opened(),
+                  "opacity-0 pointer-events-none": !layout.mobileSidebar.opened(),
                 }}
-                onCollapse={layout.sidebar.close}
+                onClick={(e) => {
+                  if (e.target === e.currentTarget) layout.mobileSidebar.hide()
+                }}
               />
+              <nav
+                aria-label={language.t("sidebar.nav.projectsAndSessions")}
+                data-component="sidebar-nav-mobile"
+                classList={{
+                  "@container fixed top-10 bottom-0 left-0 z-50 w-full max-w-[400px] overflow-hidden border-r border-border-weaker-base bg-background-base transition-transform duration-200 ease-out": true,
+                  "translate-x-0": layout.mobileSidebar.opened(),
+                  "-translate-x-full": !layout.mobileSidebar.opened(),
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <SidebarContent
+                  mobile
+                  opened={() => layout.sidebar.opened()}
+                  aimMove={aim.move}
+                  projects={() => layout.projects.list()}
+                  renderProject={(project) => (
+                    <SortableProject ctx={projectSidebarCtx} project={project} sortNow={sortNow} mobile />
+                  )}
+                  handleDragStart={handleDragStart}
+                  handleDragEnd={handleDragEnd}
+                  handleDragOver={handleDragOver}
+                  openProjectLabel={language.t("command.project.open")}
+                  openProjectKeybind={() => command.keybind("project.open")}
+                  onOpenProject={chooseProject}
+                  renderProjectOverlay={() => (
+                    <ProjectDragOverlay
+                      projects={() => layout.projects.list()}
+                      activeProject={() => store.activeProject}
+                    />
+                  )}
+                  settingsLabel={() => language.t("sidebar.settings")}
+                  settingsKeybind={() => command.keybind("settings.open")}
+                  onOpenSettings={openSettings}
+                  helpLabel={() => language.t("sidebar.help")}
+                  onOpenHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
+                  renderPanel={() => <SidebarPanel project={currentProject()} mobile />}
+                />
+              </nav>
             </div>
-          </Show>
-        </nav>
 
-        <div
-          class="hidden xl:block pointer-events-none absolute top-0 right-0 z-0 border-t border-border-weaker-base"
-          style={{ left: "calc(4rem + 12px)" }}
-        />
+            <div
+              classList={{
+                "absolute inset-0": true,
+                "xl:inset-y-0 xl:right-0 xl:left-[var(--main-left)]": true,
+                "z-20": true,
+                "transition-[left] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[left] motion-reduce:transition-none":
+                  !sizing(),
+              }}
+              style={{
+                "--main-left": layout.sidebar.opened() ? `${Math.max(layout.sidebar.width(), 244)}px` : "4rem",
+              }}
+            >
+              <main
+                classList={{
+                  "size-full overflow-x-hidden flex flex-col items-start contain-strict border-t border-border-weak-base bg-background-base xl:border-l xl:rounded-tl-[12px]": true,
+                }}
+              >
+                <Show when={!autoselecting()} fallback={<div class="size-full" />}>
+                  {props.children}
+                </Show>
+              </main>
+            </div>
 
-        <div class="xl:hidden">
-          <div
-            classList={{
-              "fixed inset-x-0 top-10 bottom-0 z-40 transition-opacity duration-200": true,
-              "opacity-100 pointer-events-auto": layout.mobileSidebar.opened(),
-              "opacity-0 pointer-events-none": !layout.mobileSidebar.opened(),
-            }}
-            onClick={(e) => {
-              if (e.target === e.currentTarget) layout.mobileSidebar.hide()
-            }}
-          />
-          <nav
-            aria-label={language.t("sidebar.nav.projectsAndSessions")}
-            data-component="sidebar-nav-mobile"
-            classList={{
-              "@container fixed top-10 bottom-0 left-0 z-50 w-full max-w-[400px] overflow-hidden border-r border-border-weaker-base bg-background-base transition-transform duration-200 ease-out": true,
-              "translate-x-0": layout.mobileSidebar.opened(),
-              "-translate-x-full": !layout.mobileSidebar.opened(),
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <SidebarContent
-              mobile
-              opened={() => layout.sidebar.opened()}
-              aimMove={aim.move}
-              projects={() => layout.projects.list()}
-              renderProject={(project) => (
-                <SortableProject ctx={projectSidebarCtx} project={project} sortNow={sortNow} mobile />
-              )}
-              handleDragStart={handleDragStart}
-              handleDragEnd={handleDragEnd}
-              handleDragOver={handleDragOver}
-              openProjectLabel={language.t("command.project.open")}
-              openProjectKeybind={() => command.keybind("project.open")}
-              onOpenProject={chooseProject}
-              renderProjectOverlay={() => (
-                <ProjectDragOverlay projects={() => layout.projects.list()} activeProject={() => store.activeProject} />
-              )}
-              settingsLabel={() => language.t("sidebar.settings")}
-              settingsKeybind={() => command.keybind("settings.open")}
-              onOpenSettings={openSettings}
-              helpLabel={() => language.t("sidebar.help")}
-              onOpenHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
-              renderPanel={() => <SidebarPanel project={currentProject()} mobile />}
-            />
-          </nav>
+            <div
+              classList={{
+                "hidden xl:flex absolute inset-y-0 left-16 z-30": true,
+                "opacity-100 translate-x-0 pointer-events-auto": peeked() && !layout.sidebar.opened(),
+                "opacity-0 -translate-x-2 pointer-events-none": !peeked() || layout.sidebar.opened(),
+                "transition-[opacity,transform] motion-reduce:transition-none": true,
+                "duration-180 ease-out": peeked() && !layout.sidebar.opened(),
+                "duration-120 ease-in": !peeked() || layout.sidebar.opened(),
+              }}
+              onMouseMove={disarm}
+              onMouseEnter={() => {
+                disarm()
+                aim.reset()
+              }}
+              onPointerDown={disarm}
+              onMouseLeave={() => {
+                arm()
+              }}
+            >
+              <Show when={peek()} keyed>
+                {(project) => <SidebarPanel project={project} merged={false} />}
+              </Show>
+            </div>
+
+            <div
+              classList={{
+                "hidden xl:block pointer-events-none absolute inset-y-0 right-0 z-25 overflow-hidden": true,
+                "opacity-100 translate-x-0": peeked() && !layout.sidebar.opened(),
+                "opacity-0 -translate-x-2": !peeked() || layout.sidebar.opened(),
+                "transition-[opacity,transform] motion-reduce:transition-none": true,
+                "duration-180 ease-out": peeked() && !layout.sidebar.opened(),
+                "duration-120 ease-in": !peeked() || layout.sidebar.opened(),
+              }}
+              style={{ left: `calc(4rem + ${Math.max(Math.max(layout.sidebar.width(), 244) - 64, 0)}px)` }}
+            >
+              <div class="h-full w-px" style={{ "box-shadow": "var(--shadow-sidebar-overlay)" }} />
+            </div>
+          </div>
         </div>
-
-        <div
-          classList={{
-            "absolute inset-0": true,
-            "xl:inset-y-0 xl:right-0 xl:left-[var(--main-left)]": true,
-            "z-20": true,
-            "transition-[left] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[left] motion-reduce:transition-none":
-              !sizing(),
-          }}
-          style={{
-            "--main-left": layout.sidebar.opened() ? `${Math.max(layout.sidebar.width(), 244)}px` : "4rem",
-          }}
-        >
-          <main
-            classList={{
-              "size-full overflow-x-hidden flex flex-col items-start contain-strict border-t border-border-weak-base bg-background-base xl:border-l xl:rounded-tl-[12px]": true,
-            }}
-          >
-            <Show when={!autoselecting()} fallback={<div class="size-full" />}>
-              {props.children}
-            </Show>
-          </main>
-        </div>
-
-        <div
-          classList={{
-            "hidden xl:flex absolute inset-y-0 left-16 z-30": true,
-            "opacity-100 translate-x-0 pointer-events-auto": peeked() && !layout.sidebar.opened(),
-            "opacity-0 -translate-x-2 pointer-events-none": !peeked() || layout.sidebar.opened(),
-            "transition-[opacity,transform] motion-reduce:transition-none": true,
-            "duration-180 ease-out": peeked() && !layout.sidebar.opened(),
-            "duration-120 ease-in": !peeked() || layout.sidebar.opened(),
-          }}
-          onMouseMove={disarm}
-          onMouseEnter={() => {
-            disarm()
-            aim.reset()
-          }}
-          onPointerDown={disarm}
-          onMouseLeave={() => {
-            arm()
-          }}
-        >
-          <Show when={peek()} keyed>
-            {(project) => <SidebarPanel project={project} merged={false} />}
-          </Show>
-        </div>
-
-        <div
-          classList={{
-            "hidden xl:block pointer-events-none absolute inset-y-0 right-0 z-25 overflow-hidden": true,
-            "opacity-100 translate-x-0": peeked() && !layout.sidebar.opened(),
-            "opacity-0 -translate-x-2": !peeked() || layout.sidebar.opened(),
-            "transition-[opacity,transform] motion-reduce:transition-none": true,
-            "duration-180 ease-out": peeked() && !layout.sidebar.opened(),
-            "duration-120 ease-in": !peeked() || layout.sidebar.opened(),
-          }}
-          style={{ left: `calc(4rem + ${Math.max(Math.max(layout.sidebar.width(), 244) - 64, 0)}px)` }}
-        >
-          <div class="h-full w-px" style={{ "box-shadow": "var(--shadow-sidebar-overlay)" }} />
-        </div>
+        {import.meta.env.DEV && <DebugBar />}
       </div>
       <Toast.Region />
     </div>

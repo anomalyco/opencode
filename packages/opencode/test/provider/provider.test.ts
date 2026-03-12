@@ -260,6 +260,7 @@ test("env variable takes precedence, config merges options", async () => {
             anthropic: {
               options: {
                 timeout: 60000,
+                chunkTimeout: 15000,
               },
             },
           },
@@ -277,6 +278,7 @@ test("env variable takes precedence, config merges options", async () => {
       expect(providers["anthropic"]).toBeDefined()
       // Config options should be merged
       expect(providers["anthropic"].options.timeout).toBe(60000)
+      expect(providers["anthropic"].options.chunkTimeout).toBe(15000)
     },
   })
 })
