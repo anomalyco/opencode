@@ -4,7 +4,7 @@ import type { MessageV2 } from "./message-v2"
 import type { Snapshot } from "../snapshot"
 import type { PermissionNext } from "../permission/next"
 import type { ProjectID } from "../project/schema"
-import type { SessionID, MessageID } from "./schema"
+import type { SessionID, MessageID, PartID } from "./schema"
 import type { WorkspaceID } from "../control-plane/schema"
 import { Timestamps } from "../storage/schema.sql"
 
@@ -30,7 +30,7 @@ export const SessionTable = sqliteTable(
     summary_deletions: integer(),
     summary_files: integer(),
     summary_diffs: text({ mode: "json" }).$type<Snapshot.FileDiff[]>(),
-    revert: text({ mode: "json" }).$type<{ messageID: MessageID; partID?: string; snapshot?: string; diff?: string }>(),
+    revert: text({ mode: "json" }).$type<{ messageID: MessageID; partID?: PartID; snapshot?: string; diff?: string }>(),
     permission: text({ mode: "json" }).$type<PermissionNext.Ruleset>(),
     ...Timestamps,
     time_compacting: integer(),
@@ -60,7 +60,7 @@ export const MessageTable = sqliteTable(
 export const PartTable = sqliteTable(
   "part",
   {
-    id: text().primaryKey(),
+    id: text().$type<PartID>().primaryKey(),
     message_id: text()
       .$type<MessageID>()
       .notNull()

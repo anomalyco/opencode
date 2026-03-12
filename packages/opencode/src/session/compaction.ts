@@ -1,8 +1,7 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Session } from "."
-import { Identifier } from "../id/id"
-import { SessionID, MessageID } from "./schema"
+import { SessionID, MessageID, PartID } from "./schema"
 import { Instance } from "../project/instance"
 import { Provider } from "../provider/provider"
 import { MessageV2 } from "./message-v2"
@@ -256,7 +255,7 @@ When constructing the summary, try to stick to this template:
               : part
           await Session.updatePart({
             ...replayPart,
-            id: Identifier.ascending("part"),
+            id: PartID.ascending(),
             messageID: replayMsg.id,
             sessionID: input.sessionID,
           })
@@ -276,7 +275,7 @@ When constructing the summary, try to stick to this template:
             : "") +
           "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed."
         await Session.updatePart({
-          id: Identifier.ascending("part"),
+          id: PartID.ascending(),
           messageID: continueMsg.id,
           sessionID: input.sessionID,
           type: "text",
@@ -317,7 +316,7 @@ When constructing the summary, try to stick to this template:
         },
       })
       await Session.updatePart({
-        id: Identifier.ascending("part"),
+        id: PartID.ascending(),
         messageID: msg.id,
         sessionID: msg.sessionID,
         type: "compaction",

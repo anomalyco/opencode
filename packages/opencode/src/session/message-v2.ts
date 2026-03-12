@@ -1,5 +1,5 @@
 import { BusEvent } from "@/bus/bus-event"
-import { SessionID, MessageID } from "./schema"
+import { SessionID, MessageID, PartID } from "./schema"
 import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
 import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
@@ -78,7 +78,7 @@ export namespace MessageV2 {
   export type OutputFormat = z.infer<typeof Format>
 
   const PartBase = z.object({
-    id: z.string(),
+    id: PartID.zod,
     sessionID: SessionID.zod,
     messageID: MessageID.zod,
   })
@@ -472,7 +472,7 @@ export namespace MessageV2 {
       z.object({
         sessionID: SessionID.zod,
         messageID: MessageID.zod,
-        partID: z.string(),
+        partID: PartID.zod,
         field: z.string(),
         delta: z.string(),
       }),
@@ -482,7 +482,7 @@ export namespace MessageV2 {
       z.object({
         sessionID: SessionID.zod,
         messageID: MessageID.zod,
-        partID: z.string(),
+        partID: PartID.zod,
       }),
     ),
   }

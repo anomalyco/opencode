@@ -1,6 +1,5 @@
 import z from "zod"
-import { Identifier } from "../id/id"
-import { SessionID, MessageID } from "./schema"
+import { SessionID, MessageID, PartID } from "./schema"
 import { Snapshot } from "../snapshot"
 import { MessageV2 } from "./message-v2"
 import { Session } from "."
@@ -18,7 +17,7 @@ export namespace SessionRevert {
   export const RevertInput = z.object({
     sessionID: SessionID.zod,
     messageID: MessageID.zod,
-    partID: Identifier.schema("part").optional(),
+    partID: PartID.zod.optional(),
   })
   export type RevertInput = z.infer<typeof RevertInput>
 

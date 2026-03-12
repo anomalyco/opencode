@@ -4,10 +4,9 @@ import { Tool } from "./tool"
 import { Question } from "../question"
 import { Session } from "../session"
 import { MessageV2 } from "../session/message-v2"
-import { Identifier } from "../id/id"
 import { Provider } from "../provider/provider"
 import { Instance } from "../project/instance"
-import { type SessionID, MessageID } from "../session/schema"
+import { type SessionID, MessageID, PartID } from "../session/schema"
 import EXIT_DESCRIPTION from "./plan-exit.txt"
 
 async function getLastModel(sessionID: SessionID) {
@@ -56,7 +55,7 @@ export const PlanExitTool = Tool.define("plan_exit", {
     }
     await Session.updateMessage(userMsg)
     await Session.updatePart({
-      id: Identifier.ascending("part"),
+      id: PartID.ascending(),
       messageID: userMsg.id,
       sessionID: ctx.sessionID,
       type: "text",
@@ -114,7 +113,7 @@ export const PlanEnterTool = Tool.define("plan_enter", {
     }
     await Session.updateMessage(userMsg)
     await Session.updatePart({
-      id: Identifier.ascending("part"),
+      id: PartID.ascending(),
       messageID: userMsg.id,
       sessionID: ctx.sessionID,
       type: "text",
