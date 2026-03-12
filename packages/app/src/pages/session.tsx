@@ -60,6 +60,7 @@ const emptyFollowups: (FollowupDraft & { id: string })[] = []
 type SessionHistoryWindowInput = {
   sessionID: () => string | undefined
   messagesReady: () => boolean
+  loaded: () => number
   visibleUserMessages: () => UserMessage[]
   historyMore: () => boolean
   historyLoading: () => boolean
@@ -157,23 +158,39 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
 
     const start = turnStart()
     const beforeVisible = input.visibleUserMessages().length
+    let loaded = input.loaded()
 
     if (start > 0) setTurnStart(0)
 
     if (!input.historyMore() || input.historyLoading()) return
 
-    await input.loadMore(id)
-    if (input.sessionID() !== id) return
+    let afterVisible = beforeVisible
+    let added = 0
 
-    const afterVisible = input.visibleUserMessages().length
-    const growth = afterVisible - beforeVisible
+    while (true) {
+      await input.loadMore(id)
+      if (input.sessionID() !== id) return
+
+      afterVisible = input.visibleUserMessages().length
+      const nextLoaded = input.loaded()
+      const raw = nextLoaded - loaded
+      added += raw
+      loaded = nextLoaded
+
+      if (afterVisible > beforeVisible) break
+      if (raw <= 0) break
+      if (!input.historyMore()) break
+    }
+
+    if (added <= 0) return
     if (state.prefetchNoGrowth) setState("prefetchNoGrowth", 0)
+
+    const growth = afterVisible - beforeVisible
     if (growth <= 0) return
     if (turnStart() !== 0) return
 
-    const target = Math.min(afterVisible, Math.max(beforeVisible, renderedUserMessages().length) + turnBatch)
-    const nextStart = Math.max(0, afterVisible - target)
-    preserveScroll(() => setTurnStart(nextStart))
+    const target = Math.min(afterVisible, beforeVisible + turnBatch)
+    setTurnStart(Math.max(0, afterVisible - target))
   }
 
   /** Scroll/prefetch path: fetch older history from server. */
@@ -192,19 +209,35 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
     const start = turnStart()
     const beforeVisible = input.visibleUserMessages().length
     const beforeRendered = start <= 0 ? beforeVisible : renderedUserMessages().length
+    let loaded = input.loaded()
+    let added = 0
+    let growth = 0
 
-    await input.loadMore(id)
-    if (input.sessionID() !== id) return
+    while (true) {
+      await input.loadMore(id)
+      if (input.sessionID() !== id) return
+
+      const nextLoaded = input.loaded()
+      const raw = nextLoaded - loaded
+      added += raw
+      loaded = nextLoaded
+      growth = input.visibleUserMessages().length - beforeVisible
+
+      if (growth > 0) break
+      if (raw <= 0) break
+      if (opts?.prefetch) break
+      if (!input.historyMore()) break
+    }
 
     const afterVisible = input.visibleUserMessages().length
-    const growth = afterVisible - beforeVisible
 
     if (opts?.prefetch) {
-      setState("prefetchNoGrowth", growth > 0 ? 0 : state.prefetchNoGrowth + 1)
-    } else if (growth > 0 && state.prefetchNoGrowth) {
+      setState("prefetchNoGrowth", added > 0 ? 0 : state.prefetchNoGrowth + 1)
+    } else if (added > 0 && state.prefetchNoGrowth) {
       setState("prefetchNoGrowth", 0)
     }
 
+    if (added <= 0) return
     if (growth <= 0) return
     if (turnStart() !== start) return
 
@@ -1161,6 +1194,7 @@ export default function Page() {
 
   let scrollStateFrame: number | undefined
   let scrollStateTarget: HTMLDivElement | undefined
+  let fillFrame: number | undefined
 
   const updateScrollState = (el: HTMLDivElement) => {
     const max = el.scrollHeight - el.clientHeight
@@ -1208,10 +1242,14 @@ export default function Page() {
     ),
   )
 
+  let fill = () => {}
+
   const setScrollRef = (el: HTMLDivElement | undefined) => {
     scroller = el
     autoScroll.scrollRef(el)
-    if (el) scheduleScrollState(el)
+    if (!el) return
+    scheduleScrollState(el)
+    fill()
   }
 
   const markUserScroll = () => {
@@ -1223,12 +1261,14 @@ export default function Page() {
     () => {
       const el = scroller
       if (el) scheduleScrollState(el)
+      fill()
     },
   )
 
   const historyWindow = createSessionHistoryWindow({
     sessionID: () => params.id,
     messagesReady,
+    loaded: () => messages().length,
     visibleUserMessages,
     historyMore,
     historyLoading,
@@ -1236,6 +1276,45 @@ export default function Page() {
     userScrolled: autoScroll.userScrolled,
     scroller: () => scroller,
   })
+
+  fill = () => {
+    if (fillFrame !== undefined) return
+
+    fillFrame = requestAnimationFrame(() => {
+      fillFrame = undefined
+
+      if (!params.id || !messagesReady()) return
+      if (autoScroll.userScrolled() || historyLoading()) return
+
+      const el = scroller
+      if (!el) return
+      if (el.scrollHeight > el.clientHeight + 1) return
+      if (historyWindow.turnStart() <= 0 && !historyMore()) return
+
+      void historyWindow.loadAndReveal()
+    })
+  }
+
+  createEffect(
+    on(
+      () =>
+        [
+          params.id,
+          messagesReady(),
+          historyWindow.turnStart(),
+          historyMore(),
+          historyLoading(),
+          autoScroll.userScrolled(),
+          visibleUserMessages().length,
+        ] as const,
+      ([id, ready, start, more, loading, scrolled]) => {
+        if (!id || !ready || loading || scrolled) return
+        if (start <= 0 && !more) return
+        fill()
+      },
+      { defer: true },
+    ),
+  )
 
   const draft = (id: string) =>
     extractPromptFromParts(sync.data.part[id] ?? [], {
@@ -1532,6 +1611,7 @@ export default function Page() {
       if (stick) autoScroll.forceScrollToBottom()
 
       if (el) scheduleScrollState(el)
+      fill()
     },
   )
 
@@ -1565,6 +1645,7 @@ export default function Page() {
     if (diffFrame !== undefined) cancelAnimationFrame(diffFrame)
     if (diffTimer !== undefined) window.clearTimeout(diffTimer)
     if (scrollStateFrame !== undefined) cancelAnimationFrame(scrollStateFrame)
+    if (fillFrame !== undefined) cancelAnimationFrame(fillFrame)
   })
 
   return (
