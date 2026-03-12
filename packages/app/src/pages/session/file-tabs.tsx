@@ -17,6 +17,7 @@ import { useLanguage } from "@/context/language"
 import { usePrompt } from "@/context/prompt"
 import { getSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
+import { createSessionTabs } from "@/pages/session/helpers"
 
 function FileCommentMenu(props: {
   moreLabel: string
@@ -58,6 +59,11 @@ export function FileTabContent(props: { tab: string }) {
   const prompt = usePrompt()
   const fileComponent = useFileComponent()
   const { sessionKey, tabs, view } = useSessionLayout()
+  const activeFileTab = createSessionTabs({
+    tabs,
+    pathFromTab: file.pathFromTab,
+    normalizeTab: (tab) => (tab.startsWith("file://") ? file.tab(tab) : tab),
+  }).activeFileTab
 
   let scroll: HTMLDivElement | undefined
   let scrollFrame: number | undefined
@@ -228,7 +234,7 @@ export function FileTabContent(props: { tab: string }) {
     if (typeof window === "undefined") return
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (tabs().active() !== props.tab) return
+      if (activeFileTab() !== props.tab) return
       if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return
       if (event.key.toLowerCase() !== "f") return
 
@@ -256,7 +262,7 @@ export function FileTabContent(props: { tab: string }) {
     const p = path()
     if (!focus || !p) return
     if (focus.file !== p) return
-    if (tabs().active() !== props.tab) return
+    if (activeFileTab() !== props.tab) return
 
     const target = fileComments().find((comment) => comment.id === focus.id)
     if (!target) return
@@ -376,7 +382,7 @@ export function FileTabContent(props: { tab: string }) {
   createEffect(() => {
     const loaded = !!state()?.loaded
     const ready = file.ready()
-    const active = tabs().active() === props.tab
+    const active = activeFileTab() === props.tab
     const restore = (loaded && !prev.loaded) || (ready && !prev.ready) || (active && loaded && !prev.active)
     prev = { loaded, ready, active }
     if (!restore) return

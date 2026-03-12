@@ -58,6 +58,12 @@ export function Titlebar() {
   })
 
   const path = () => `${location.pathname}${location.search}${location.hash}`
+  const creating = createMemo(() => {
+    if (!params.dir) return false
+    if (params.id) return false
+    const parts = location.pathname.replace(/\/+$/, "").split("/")
+    return parts.at(-1) === "session"
+  })
 
   createEffect(() => {
     const current = path()
@@ -206,19 +212,7 @@ export function Titlebar() {
               aria-label={language.t("command.sidebar.toggle")}
               aria-expanded={layout.sidebar.opened()}
             >
-              <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
-                <Icon
-                  size="small"
-                  name={layout.sidebar.opened() ? "layout-left-partial" : "layout-left"}
-                  class="group-hover/sidebar-toggle:hidden"
-                />
-                <Icon size="small" name="layout-left-partial" class="hidden group-hover/sidebar-toggle:inline-block" />
-                <Icon
-                  size="small"
-                  name={layout.sidebar.opened() ? "layout-left" : "layout-left-partial"}
-                  class="hidden group-active/sidebar-toggle:inline-block"
-                />
-              </div>
+              <Icon size="small" name={layout.sidebar.opened() ? "sidebar-active" : "sidebar"} />
             </Button>
           </TooltipKeybind>
           <div class="hidden xl:flex items-center shrink-0">
@@ -231,13 +225,14 @@ export function Titlebar() {
               >
                 <Button
                   variant="ghost"
-                  icon="new-session"
+                  icon={creating() ? "new-session-active" : "new-session"}
                   class="titlebar-icon w-8 h-6 p-0 box-border"
                   onClick={() => {
                     if (!params.dir) return
                     navigate(`/${params.dir}/session`)
                   }}
                   aria-label={language.t("command.session.new")}
+                  aria-current={creating() ? "page" : undefined}
                 />
               </TooltipKeybind>
             </Show>

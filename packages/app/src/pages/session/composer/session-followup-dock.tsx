@@ -1,38 +1,39 @@
-import { For, Show, createEffect, createMemo } from "solid-js"
+import { For, Show, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
 import { DockTray } from "@opencode-ai/ui/dock-surface"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { useLanguage } from "@/context/language"
 
-export function SessionRevertDock(props: {
+export function SessionFollowupDock(props: {
   items: { id: string; text: string }[]
-  restoring?: string
-  disabled?: boolean
-  onRestore: (id: string) => void
+  sending?: string
+  onSend: (id: string) => void
+  onEdit: (id: string) => void
 }) {
   const language = useLanguage()
   const [store, setStore] = createStore({
-    collapsed: true,
-  })
-
-  createEffect(() => {
-    props.items.length
-    props.items[0]?.id
-    setStore("collapsed", true)
+    collapsed: false,
   })
 
   const toggle = () => setStore("collapsed", (value) => !value)
   const total = createMemo(() => props.items.length)
   const label = createMemo(() =>
-    language.t(total() === 1 ? "session.revertDock.summary.one" : "session.revertDock.summary.other", {
+    language.t(total() === 1 ? "session.followupDock.summary.one" : "session.followupDock.summary.other", {
       count: total(),
     }),
   )
   const preview = createMemo(() => props.items[0]?.text ?? "")
 
   return (
-    <DockTray data-component="session-revert-dock">
+    <DockTray
+      data-component="session-followup-dock"
+      style={{
+        "margin-bottom": "-0.875rem",
+        "border-bottom-left-radius": 0,
+        "border-bottom-right-radius": 0,
+      }}
+    >
       <div
         class="pl-3 pr-2 py-2 flex items-center gap-2"
         role="button"
@@ -44,9 +45,9 @@ export function SessionRevertDock(props: {
           toggle()
         }}
       >
-        <span class="shrink-0 text-14-regular text-text-strong cursor-default">{label()}</span>
+        <span class="shrink-0 text-13-medium text-text-strong cursor-default">{label()}</span>
         <Show when={store.collapsed && preview()}>
-          <span class="min-w-0 flex-1 truncate text-14-regular text-text-base cursor-default">{preview()}</span>
+          <span class="min-w-0 flex-1 truncate text-13-regular text-text-base cursor-default">{preview()}</span>
         </Show>
         <div class="ml-auto shrink-0">
           <IconButton
@@ -64,7 +65,7 @@ export function SessionRevertDock(props: {
               toggle()
             }}
             aria-label={
-              store.collapsed ? language.t("session.revertDock.expand") : language.t("session.revertDock.collapse")
+              store.collapsed ? language.t("session.followupDock.expand") : language.t("session.followupDock.collapse")
             }
           />
         </div>
@@ -84,10 +85,19 @@ export function SessionRevertDock(props: {
                   size="small"
                   variant="secondary"
                   class="shrink-0"
-                  disabled={props.disabled || !!props.restoring}
-                  onClick={() => props.onRestore(item.id)}
+                  disabled={!!props.sending}
+                  onClick={() => props.onSend(item.id)}
                 >
-                  {language.t("session.revertDock.restore")}
+                  {language.t("session.followupDock.sendNow")}
+                </Button>
+                <Button
+                  size="small"
+                  variant="ghost"
+                  class="shrink-0"
+                  disabled={!!props.sending}
+                  onClick={() => props.onEdit(item.id)}
+                >
+                  {language.t("session.followupDock.edit")}
                 </Button>
               </div>
             )}

@@ -146,7 +146,6 @@ export function SessionTurn(
     shellToolDefaultOpen?: boolean
     editToolDefaultOpen?: boolean
     active?: boolean
-    queued?: boolean
     status?: SessionStatus
     onUserInteracted?: () => void
     classes?: {
@@ -193,7 +192,7 @@ export function SessionTurn(
   })
 
   const pending = createMemo(() => {
-    if (typeof props.active === "boolean" && typeof props.queued === "boolean") return
+    if (typeof props.active === "boolean") return
     const messages = allMessages() ?? emptyMessages
     return messages.findLast(
       (item): item is AssistantMessage => item.role === "assistant" && typeof item.time.completed !== "number",
@@ -216,16 +215,6 @@ export function SessionTurn(
     const parent = pendingUser()
     if (!msg || !parent) return false
     return parent.id === msg.id
-  })
-
-  const queued = createMemo(() => {
-    if (typeof props.queued === "boolean") return props.queued
-    const id = message()?.id
-    if (!id) return false
-    if (!pendingUser()) return false
-    const item = pending()
-    if (!item) return false
-    return id > item.id
   })
 
   const parts = createMemo(() => {
@@ -367,7 +356,6 @@ export function SessionTurn(
   )
   const showThinking = createMemo(() => {
     if (!working() || !!error()) return false
-    if (queued()) return false
     if (status().type === "retry") return false
     if (showReasoningSummaries()) return assistantVisible() === 0
     return true
@@ -396,13 +384,7 @@ export function SessionTurn(
               class={props.classes?.container}
             >
               <div data-slot="session-turn-message-content" aria-live="off">
-                <Message
-                  message={message()!}
-                  parts={parts()}
-                  actions={props.actions}
-                  interrupted={interrupted()}
-                  queued={queued()}
-                />
+                <Message message={message()!} parts={parts()} actions={props.actions} interrupted={interrupted()} />
               </div>
               <Show when={compaction()}>
                 <div data-slot="session-turn-compaction">
