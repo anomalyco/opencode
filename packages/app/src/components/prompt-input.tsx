@@ -1118,7 +1118,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
 
     if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-      if (event.altKey || event.ctrlKey || event.metaKey) return
+      if (event.altKey || event.ctrlKey || event.metaKey) {
+        event.stopImmediatePropagation()
+        return
+      }
+
       const { collapsed } = getCaretState()
       if (!collapsed) return
 
