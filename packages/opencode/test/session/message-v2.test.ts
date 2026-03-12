@@ -2,8 +2,9 @@ import { describe, expect, test } from "bun:test"
 import { APICallError } from "ai"
 import { MessageV2 } from "../../src/session/message-v2"
 import type { Provider } from "../../src/provider/provider"
+import { SessionID, MessageID, PartID } from "../../src/session/schema"
 
-const sessionID = "session"
+const sessionID = SessionID.make("session")
 const model: Provider.Model = {
   id: "test-model",
   providerID: "test",
@@ -97,9 +98,9 @@ function assistantInfo(
 
 function basePart(messageID: string, id: string) {
   return {
-    id,
+    id: PartID.make(id),
     sessionID,
-    messageID,
+    messageID: MessageID.make(messageID),
   }
 }
 
