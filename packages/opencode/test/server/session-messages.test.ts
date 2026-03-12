@@ -1,19 +1,19 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
-import { Identifier } from "../../src/id/id"
 import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
 import { Session } from "../../src/session"
 import { MessageV2 } from "../../src/session/message-v2"
+import { MessageID, PartID, type SessionID } from "../../src/session/schema"
 import { Log } from "../../src/util/log"
 
 const root = path.join(__dirname, "../..")
 Log.init({ print: false })
 
-async function fill(sessionID: string, count: number, time = (i: number) => Date.now() + i) {
-  const ids: string[] = []
+async function fill(sessionID: SessionID, count: number, time = (i: number) => Date.now() + i) {
+  const ids = [] as MessageID[]
   for (let i = 0; i < count; i++) {
-    const id = Identifier.ascending("message")
+    const id = MessageID.ascending()
     ids.push(id)
     await Session.updateMessage({
       id,
@@ -26,7 +26,7 @@ async function fill(sessionID: string, count: number, time = (i: number) => Date
       mode: "",
     } as unknown as MessageV2.Info)
     await Session.updatePart({
-      id: Identifier.ascending("part"),
+      id: PartID.ascending(),
       sessionID,
       messageID: id,
       type: "text",
