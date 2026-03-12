@@ -1,4 +1,5 @@
-import { Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
+import { Show, createEffect, createMemo, onCleanup } from "solid-js"
+import { createStore } from "solid-js/store"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
 import { PromptInput } from "@/components/prompt-input"
 import { useLanguage } from "@/context/language"
@@ -50,7 +51,11 @@ export function SessionComposerRegion(props: {
     setSessionHandoff(sessionKey(), { prompt: previewPrompt() })
   })
 
-  const [ready, setReady] = createSignal(false)
+  const [store, setStore] = createStore({
+    ready: false,
+    height: 320,
+    body: undefined as HTMLDivElement | undefined,
+  })
   let timer: number | undefined
   let frame: number | undefined
 
@@ -67,17 +72,17 @@ export function SessionComposerRegion(props: {
 
   createEffect(() => {
     sessionKey()
-    const active = props.ready
+    const ready = props.ready
     const delay = 140
 
     clear()
-    setReady(false)
-    if (!active) return
+    setStore("ready", false)
+    if (!ready) return
 
     frame = requestAnimationFrame(() => {
       frame = undefined
       timer = window.setTimeout(() => {
-        setReady(true)
+        setStore("ready", true)
         timer = undefined
       }, delay)
     })
@@ -85,21 +90,19 @@ export function SessionComposerRegion(props: {
 
   onCleanup(clear)
 
-  const open = createMemo(() => ready() && props.state.dock() && !props.state.closing())
+  const open = createMemo(() => store.ready && props.state.dock() && !props.state.closing())
   const progress = useSpring(() => (open() ? 1 : 0), { visualDuration: 0.3, bounce: 0 })
   const value = createMemo(() => Math.max(0, Math.min(1, progress())))
-  const [height, setHeight] = createSignal(320)
-  const dock = createMemo(() => (ready() && props.state.dock()) || value() > 0.001)
+  const dock = createMemo(() => (store.ready && props.state.dock()) || value() > 0.001)
   const rolled = createMemo(() => (props.revert?.items.length ? props.revert : undefined))
   const lift = createMemo(() => (rolled() ? 18 : 36 * value()))
-  const full = createMemo(() => Math.max(78, height()))
-  const [contentRef, setContentRef] = createSignal<HTMLDivElement>()
+  const full = createMemo(() => Math.max(78, store.height))
 
   createEffect(() => {
-    const el = contentRef()
+    const el = store.body
     if (!el) return
     const update = () => {
-      setHeight(el.getBoundingClientRect().height)
+      setStore("height", el.getBoundingClientRect().height)
     }
     update()
     const observer = new ResizeObserver(update)
@@ -174,7 +177,7 @@ export function SessionComposerRegion(props: {
                   "max-height": `${full() * value()}px`,
                 }}
               >
-                <div ref={setContentRef}>
+                <div ref={(el) => setStore("body", el)}>
                   <SessionTodoDock
                     todos={props.state.todos()}
                     title={language.t("session.todo.title")}
