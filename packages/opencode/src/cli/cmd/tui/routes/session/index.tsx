@@ -1612,7 +1612,7 @@ function GenericTool(props: ToolProps<any>) {
   const { theme } = useTheme()
   const ctx = use()
   const output = createMemo(() => props.output?.trim() ?? "")
-  const [expanded, setExpanded] = createSignal(false)
+  const [expanded, setExpanded] = createSignal(ctx.tui?.show_tool_output?.includes(props.tool) ?? false)
   const lines = createMemo(() => output().split("\n"))
   const maxLines = 3
   const overflow = createMemo(() => lines().length > maxLines)
@@ -1623,7 +1623,7 @@ function GenericTool(props: ToolProps<any>) {
 
   return (
     <Show
-      when={props.output && ctx.showGenericToolOutput()}
+      when={props.output && (ctx.showGenericToolOutput() || ctx.tui?.show_tool_output?.includes(props.tool))}
       fallback={
         <InlineTool icon="⚙" pending="Writing command..." complete={true} part={props.part}>
           {props.tool} {input(props.input)}
