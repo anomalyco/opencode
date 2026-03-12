@@ -108,12 +108,6 @@ const LINUX_APPS = [
   },
 ] as const
 
-type OpenOption = (typeof MAC_APPS)[number] | (typeof WINDOWS_APPS)[number] | (typeof LINUX_APPS)[number]
-type OpenIcon = OpenApp | "file-explorer"
-const OPEN_ICON_BASE = new Set<OpenIcon>(["finder", "vscode", "cursor", "zed"])
-
-const openIconSize = (id: OpenIcon) => (OPEN_ICON_BASE.has(id) ? "size-4" : "size-[19px]")
-
 const detectOS = (platform: ReturnType<typeof usePlatform>): OS => {
   if (platform.platform === "desktop" && platform.os) return platform.os
   if (typeof navigator !== "object") return "unknown"
@@ -332,11 +326,8 @@ export function SessionHeader() {
                           disabled={opening()}
                           aria-label={language.t("session.header.open.ariaLabel", { app: current().label })}
                         >
-                          <div class="flex size-5 shrink-0 items-center justify-center">
-                            <Show
-                              when={opening()}
-                              fallback={<AppIcon id={current().icon} class={openIconSize(current().icon)} />}
-                            >
+                          <div class="flex size-5 shrink-0 items-center justify-center [&_[data-component=app-icon]]:size-5">
+                            <Show when={opening()} fallback={<AppIcon id={current().icon} />}>
                               <Spinner class="size-3.5 text-icon-base" />
                             </Show>
                           </div>
@@ -383,8 +374,8 @@ export function SessionHeader() {
                                           openDir(o.id)
                                         }}
                                       >
-                                        <div class="flex size-5 shrink-0 items-center justify-center">
-                                          <AppIcon id={o.icon} class={openIconSize(o.icon)} />
+                                        <div class="flex size-5 shrink-0 items-center justify-center [&_[data-component=app-icon]]:size-5">
+                                          <AppIcon id={o.icon} />
                                         </div>
                                         <DropdownMenu.ItemLabel>{o.label}</DropdownMenu.ItemLabel>
                                         <DropdownMenu.ItemIndicator>
