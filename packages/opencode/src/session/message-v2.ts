@@ -15,7 +15,7 @@ import { ProviderError } from "@/provider/error"
 import { iife } from "@/util/iife"
 import { type SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
-import { type ProviderID as ProviderIDT, ModelID, ProviderID } from "@/provider/schema"
+import { ModelID, ProviderID } from "@/provider/schema"
 
 export namespace MessageV2 {
   export function isMedia(mime: string) {
@@ -825,7 +825,7 @@ export namespace MessageV2 {
     return result
   }
 
-  export function fromError(e: unknown, ctx: { providerID: ProviderIDT }): NonNullable<Assistant["error"]> {
+  export function fromError(e: unknown, ctx: { providerID: ProviderID }): NonNullable<Assistant["error"]> {
     switch (true) {
       case e instanceof DOMException && e.name === "AbortError":
         return new MessageV2.AbortedError(
@@ -837,10 +837,9 @@ export namespace MessageV2 {
       case MessageV2.OutputLengthError.isInstance(e):
         return e
       case LoadAPIKeyError.isInstance(e):
-        const providerID = ProviderID.make(ctx.providerID)
         return new MessageV2.AuthError(
           {
-            providerID,
+            providerID: ctx.providerID,
             message: e.message,
           },
           { cause: e },
