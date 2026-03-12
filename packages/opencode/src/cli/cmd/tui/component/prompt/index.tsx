@@ -41,6 +41,7 @@ export type PromptProps = {
   visible?: boolean
   disabled?: boolean
   onSubmit?: () => void
+  onBeforeSubmit?: (text: string) => boolean
   ref?: (ref: PromptRef) => void
   hint?: JSX.Element
   showPlaceholder?: boolean
@@ -586,6 +587,17 @@ export function Prompt(props: PromptProps) {
     // Capture mode before it gets reset
     const currentMode = store.mode
     const variant = local.model.variant.current()
+
+    // Allow external interception (e.g., /btw mode)
+    if (props.onBeforeSubmit?.(inputText)) {
+      history.append({ ...store.prompt, mode: currentMode })
+      input.extmarks.clear()
+      setStore("prompt", { input: "", parts: [] })
+      setStore("extmarkToPartIndex", new Map())
+      input.clear()
+      props.onSubmit?.()
+      return
+    }
 
     if (store.mode === "shell") {
       sdk.client.session.shell({
