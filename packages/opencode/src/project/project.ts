@@ -170,9 +170,7 @@ export namespace Project {
           id = roots[0]
           if (id) {
             // Write to common dir so the cache is shared across worktrees.
-            // Falls back to dotgit for non-worktree repos (worktree === sandbox).
-            const cache = worktree !== sandbox ? path.join(worktree, ".git", "opencode") : path.join(dotgit, "opencode")
-            await Filesystem.write(cache, id).catch(() => undefined)
+            await Filesystem.write(path.join(worktree, ".git", "opencode"), id).catch(() => undefined)
           }
         }
 
