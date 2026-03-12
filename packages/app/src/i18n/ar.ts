@@ -394,6 +394,7 @@ export const dict = {
   "error.page.description": "حدث خطأ أثناء تحميل التطبيق.",
   "error.page.details.label": "تفاصيل الخطأ",
   "error.page.action.restart": "إعادة تشغيل",
+  "error.page.action.clearCache": "مسح ذاكرة التخزين المؤقت",
   "error.page.action.checking": "جارٍ التحقق...",
   "error.page.action.checkUpdates": "التحقق من وجود تحديثات",
   "error.page.action.updateTo": "تحديث إلى {{version}}",

@@ -395,6 +395,7 @@ export const dict = {
   "error.page.description": "Ocorreu um erro ao carregar a aplicação.",
   "error.page.details.label": "Detalhes do Erro",
   "error.page.action.restart": "Reiniciar",
+  "error.page.action.clearCache": "Limpar cache",
   "error.page.action.checking": "Verificando...",
   "error.page.action.checkUpdates": "Verificar atualizações",
   "error.page.action.updateTo": "Atualizar para {{version}}",

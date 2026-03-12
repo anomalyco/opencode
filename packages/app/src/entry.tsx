@@ -93,6 +93,22 @@ const restart: Platform["restart"] = async () => {
   window.location.reload()
 }
 
+const clearCache: Platform["clearCache"] = async () => {
+  if (typeof localStorage !== "undefined") {
+    try {
+      localStorage.clear()
+    } catch {}
+  }
+
+  if ("caches" in window) {
+    const keys = await caches.keys().catch(() => [])
+    await Promise.all(keys.map((key) => caches.delete(key).catch(() => false)))
+  }
+
+  document.cookie = "oc_locale=; Path=/; Max-Age=0; SameSite=Lax"
+  window.location.reload()
+}
+
 const root = document.getElementById("root")
 if (!(root instanceof HTMLElement) && import.meta.env.DEV) {
   throw new Error(getRootNotFoundError())
@@ -118,6 +134,7 @@ const platform: Platform = {
   back,
   forward,
   restart,
+  clearCache,
   notify,
   getDefaultServer: async () => {
     const stored = readDefaultServerUrl()

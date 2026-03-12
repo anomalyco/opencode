@@ -28,6 +28,9 @@ export type Platform = {
   /** Restart the app  */
   restart(): Promise<void>
 
+  /** Clear persisted client cache/state */
+  clearCache?(): Promise<void>
+
   /** Navigate back in history */
   back(): void
 

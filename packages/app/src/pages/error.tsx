@@ -220,6 +220,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
   const language = useLanguage()
   const [store, setStore] = createStore({
     checking: false,
+    clearing: false,
     version: undefined as string | undefined,
     actionError: undefined as string | undefined,
   })
@@ -252,6 +253,20 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
       })
   }
 
+  async function clearCache() {
+    if (!platform.clearCache) return
+    setStore("clearing", true)
+    await platform
+      .clearCache()
+      .then(() => setStore("actionError", undefined))
+      .catch((err) => {
+        setStore("actionError", formatError(err, language.t))
+      })
+      .finally(() => {
+        setStore("clearing", false)
+      })
+  }
+
   return (
     <div class="relative flex-1 h-screen w-screen min-h-0 flex flex-col items-center justify-center bg-background-base font-sans">
       <div class="w-2/3 max-w-3xl flex flex-col items-center justify-center gap-8">
@@ -273,11 +288,21 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
           <Button size="large" onClick={platform.restart}>
             {language.t("error.page.action.restart")}
           </Button>
+          <Show when={platform.clearCache}>
+            <Button size="large" variant="ghost" onClick={clearCache} disabled={store.clearing}>
+              {language.t("error.page.action.clearCache")}
+            </Button>
+          </Show>
           <Show when={platform.checkUpdate}>
             <Show
               when={store.version}
               fallback={
-                <Button size="large" variant="ghost" onClick={checkForUpdates} disabled={store.checking}>
+                <Button
+                  size="large"
+                  variant="ghost"
+                  onClick={checkForUpdates}
+                  disabled={store.checking || store.clearing}
+                >
                   {store.checking
                     ? language.t("error.page.action.checking")
                     : language.t("error.page.action.checkUpdates")}
