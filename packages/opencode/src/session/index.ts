@@ -660,24 +660,41 @@ export namespace Session {
   })
 
   export const remove = fn(Identifier.schema("session"), async (sessionID) => {
-    const project = Instance.project
     try {
       const session = await get(sessionID)
+      log.info("removing session", { sessionID, title: session.title })
       for (const child of await children(sessionID)) {
         await remove(child.id)
       }
       await unshare(sessionID).catch(() => {})
+
+      // 在删除 session 前，先清理 team 相关表中的外键引用
+      const { TeamTaskTable } = await import("@/team/team-task.sql")
+      const { TeamMessageTable } = await import("@/team/team-message.sql")
+
+      Database.use((db) => {
+        // 将 assigned_to 设置为 null
+        db.update(TeamTaskTable).set({ assigned_to: null }).where(eq(TeamTaskTable.assigned_to, sessionID)).run()
+        // 将 to_session_id 设置为 null
+        db.update(TeamMessageTable)
+          .set({ to_session_id: null })
+          .where(eq(TeamMessageTable.to_session_id, sessionID))
+          .run()
+      })
+
       // CASCADE delete handles messages and parts automatically
       Database.use((db) => {
         db.delete(SessionTable).where(eq(SessionTable.id, sessionID)).run()
-        Database.effect(() =>
-          Bus.publish(Event.Deleted, {
-            info: session,
-          }),
-        )
       })
+      // Publish event after successful deletion
+      await Bus.publish(Event.Deleted, {
+        info: session,
+      })
+      log.info("session removed", { sessionID })
     } catch (e) {
-      log.error(e)
+      log.error("failed to remove session", { sessionID, error: String(e) })
+      // Re-throw to allow caller to handle the error
+      throw e
     }
   })
 

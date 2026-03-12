@@ -97,6 +97,14 @@ export namespace Team {
     }
   }
 
+  async function publishSessionUpdated(sessionID: string) {
+    const { Session: SessionModule } = await import("@/session")
+    const sessionRow = Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get())
+    if (sessionRow) {
+      await Bus.publish(SessionModule.Event.Updated, { info: SessionModule.fromRow(sessionRow) })
+    }
+  }
+
   export async function create(input: { name: string; sessionID: string }) {
     const existing = Database.use((db) =>
       db.select().from(SessionTable).where(eq(SessionTable.id, input.sessionID)).get(),
@@ -117,8 +125,9 @@ export namespace Team {
         })
         .run()
       db.update(SessionTable).set({ team_id: id, team_role: "lead" }).where(eq(SessionTable.id, input.sessionID)).run()
-      return db.select().from(TeamTable).where(eq(TeamTable.id, id)).get()!
+      return db.select().from(TeamTable).where(eq(TeamTable.id, id)).get()
     })
+    if (!row) throw new Error("Failed to create team")
     const info = fromRow(row)
     log.info("created", { id, name: input.name })
     await Bus.publish(Event.Created, { info })
@@ -127,6 +136,10 @@ export namespace Team {
       sessionID: input.sessionID,
       role: "lead",
     })
+
+    // Publish session.updated event so TUI can update teamID
+    await publishSessionUpdated(input.sessionID)
+
     return info
   }
 
@@ -197,15 +210,28 @@ export namespace Team {
     if (running.length > 0)
       throw new Error(`Cannot cleanup: ${running.length} teammate(s) still running. Shut them down first.`)
 
+    log.info("cleanup team", { teamID, memberCount: active.length })
+
     const { Session: SessionModule } = await import("@/session")
     const memberSessions = active.filter((m) => m.team_role === "member")
     for (const m of memberSessions) {
-      await SessionModule.remove(m.id).catch((e) => log.error("remove member failed", { id: m.id, error: e }))
+      try {
+        await SessionModule.remove(m.id)
+        log.info("removed member session", { sessionID: m.id, title: m.title })
+      } catch (e) {
+        log.error("failed to remove member session", { sessionID: m.id, title: m.title, error: String(e) })
+        // Continue with cleanup even if one member fails
+      }
     }
 
     Database.use((db) => {
       db.update(SessionTable).set({ team_id: null, team_role: null }).where(eq(SessionTable.team_id, teamID)).run()
     })
+
+    // Publish session.updated event for lead session so TUI can update teamID
+    await publishSessionUpdated(leadSessionID)
+
+    log.info("team cleaned up", { teamID })
     return archive(teamID)
   }
 
@@ -218,6 +244,9 @@ export namespace Team {
       sessionID,
       role: "member",
     })
+
+    // Publish session.updated event so TUI can update teamID
+    await publishSessionUpdated(sessionID)
   }
 
   export async function leave(sessionID: string) {
@@ -228,12 +257,16 @@ export namespace Team {
       db.update(SessionTable).set({ team_id: null, team_role: null }).where(eq(SessionTable.id, sessionID)).run()
     })
     await Bus.publish(Event.MemberLeft, { teamID, sessionID })
+
+    // Publish session.updated event so TUI can update teamID
+    await publishSessionUpdated(sessionID)
   }
 
   export function getBySession(sessionID: string) {
     const row = Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get())
-    if (!row?.team_id) return undefined
-    const team = Database.use((db) => db.select().from(TeamTable).where(eq(TeamTable.id, row.team_id!)).get())
+    const teamID = row?.team_id
+    if (!teamID) return undefined
+    const team = Database.use((db) => db.select().from(TeamTable).where(eq(TeamTable.id, teamID)).get())
     if (!team) return undefined
     return fromRow(team)
   }

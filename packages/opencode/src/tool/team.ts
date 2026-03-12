@@ -10,7 +10,10 @@ import { SessionPrompt } from "../session/prompt"
 import { Identifier } from "../id/id"
 import { Bus } from "../bus"
 import { Provider } from "../provider/provider"
+import { Log } from "@/util/log"
 import type { MessageV2 } from "../session/message-v2"
+
+const log = Log.create({ service: "team" })
 
 const TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
 const pending = new Map<string, Promise<string>>()
@@ -88,6 +91,14 @@ export const TeamTool = Tool.define("team", async () => {
           })
           await Team.join(team.id, teammate.id)
 
+          // Auto-create and claim task for the teammate
+          const taskID = await TeamTask.create({
+            teamID: team.id,
+            title,
+            description: params.prompt,
+          })
+          await TeamTask.claim(taskID, teammate.id)
+
           const model = agent.model ?? (await Provider.defaultModel())
 
           const promise = withTimeout(
@@ -97,6 +108,7 @@ export const TeamTool = Tool.define("team", async () => {
               model,
               agentName: agent.name,
               prompt: params.prompt,
+              taskID,
             }),
             TIMEOUT_MS,
           )
@@ -266,6 +278,7 @@ async function runTeammate(input: {
   model: { modelID: string; providerID: string }
   agentName: string
   prompt: string
+  taskID?: string
 }): Promise<string> {
   SessionPromptState.mark(input.sessionID)
   const resp = await SessionPrompt.prompt({
@@ -277,6 +290,12 @@ async function runTeammate(input: {
     parts: [{ type: "text", text: input.prompt }],
   }).finally(() => {
     SessionPromptState.unmark(input.sessionID)
+    // Auto-complete spawned task (must be before reassign)
+    if (input.taskID) {
+      TeamTask.complete(input.taskID, input.sessionID).catch((err) => {
+        log.warn("failed to complete task", { taskID: input.taskID, error: String(err) })
+      })
+    }
     TeamTask.reassign(input.sessionID)
   })
   const text = resp.parts.findLast((x) => x.type === "text")?.text ?? ""
