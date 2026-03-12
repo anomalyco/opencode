@@ -15,6 +15,7 @@ import { useLayout } from "@/context/layout"
 import { useFile } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useSessionLayout } from "@/pages/session/session-layout"
+import { createSessionTabs } from "@/pages/session/helpers"
 import { decode64 } from "@/utils/base64"
 import { getRelativeTime } from "@/utils/time"
 
@@ -133,9 +134,14 @@ function createFileEntries(props: {
   tabs: () => ReturnType<ReturnType<typeof useLayout>["tabs"]>
   language: ReturnType<typeof useLanguage>
 }) {
+  const tabState = createSessionTabs({
+    tabs: props.tabs,
+    pathFromTab: props.file.pathFromTab,
+    normalizeTab: (tab) => (tab.startsWith("file://") ? props.file.tab(tab) : tab),
+  })
   const recent = createMemo(() => {
-    const all = props.tabs().all()
-    const active = props.tabs().active()
+    const all = tabState.openedTabs()
+    const active = tabState.activeFileTab()
     const order = active ? [active, ...all.filter((item) => item !== active)] : all
     const seen = new Set<string>()
     const category = props.language.t("palette.group.files")
