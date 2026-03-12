@@ -17,7 +17,6 @@ import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link"
 import { open, save } from "@tauri-apps/plugin-dialog"
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http"
 import { isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification"
-import { type as ostype } from "@tauri-apps/plugin-os"
 import { relaunch } from "@tauri-apps/plugin-process"
 import { open as shellOpen } from "@tauri-apps/plugin-shell"
 import { Store } from "@tauri-apps/plugin-store"
@@ -44,6 +43,11 @@ let update: Update | null = null
 
 const deepLinkEvent = "opencode:deep-link"
 
+const ok = () =>
+  typeof window !== "undefined" &&
+  ((globalThis as unknown as { __TAURI_INTERNALS__?: { invoke?: unknown } }).__TAURI_INTERNALS__?.invoke ??
+    (globalThis as unknown as { __TAURI__?: { invoke?: unknown } }).__TAURI__?.invoke) !== undefined
+
 const emitDeepLinks = (urls: string[]) => {
   if (urls.length === 0) return
   window.__OPENCODE__ ??= {}
@@ -53,25 +57,29 @@ const emitDeepLinks = (urls: string[]) => {
 }
 
 const listenForDeepLinks = async () => {
+  if (!ok()) return
   const startUrls = await getCurrent().catch(() => null)
   if (startUrls?.length) emitDeepLinks(startUrls)
   await onOpenUrl((urls) => emitDeepLinks(urls)).catch(() => undefined)
 }
 
 const createPlatform = (): Platform => {
+  const tauri = ok()
   const os = (() => {
-    const type = ostype()
-    if (type === "macos" || type === "windows" || type === "linux") return type
+    const s = `${navigator.platform} ${navigator.userAgent}`
+    if (/Mac/i.test(s)) return "macos"
+    if (/Win/i.test(s)) return "windows"
+    if (/Linux/i.test(s)) return "linux"
     return undefined
   })()
 
   const wslHome = async () => {
-    if (os !== "windows" || !window.__OPENCODE__?.wsl) return undefined
+    if (!tauri || os !== "windows" || !window.__OPENCODE__?.wsl) return undefined
     return commands.wslPath("~", "windows").catch(() => undefined)
   }
 
   const handleWslPicker = async <T extends string | string[]>(result: T | null): Promise<T | null> => {
-    if (!result || !window.__OPENCODE__?.wsl) return result
+    if (!tauri || !result || !window.__OPENCODE__?.wsl) return result
     if (Array.isArray(result)) {
       return Promise.all(result.map((path) => commands.wslPath(path, "linux").catch(() => path))) as any
     }
@@ -84,6 +92,7 @@ const createPlatform = (): Platform => {
     version: pkg.version,
 
     async openDirectoryPickerDialog(opts) {
+      if (!tauri) return null
       const defaultPath = await wslHome()
       const result = await open({
         directory: true,
@@ -95,6 +104,7 @@ const createPlatform = (): Platform => {
     },
 
     async openFilePickerDialog(opts) {
+      if (!tauri) return null
       const result = await open({
         directory: false,
         multiple: opts?.multiple ?? false,
@@ -104,6 +114,7 @@ const createPlatform = (): Platform => {
     },
 
     async saveFilePickerDialog(opts) {
+      if (!tauri) return null
       const result = await save({
         title: opts?.title ?? t("desktop.dialog.saveFile"),
         defaultPath: opts?.defaultPath,
@@ -112,9 +123,14 @@ const createPlatform = (): Platform => {
     },
 
     openLink(url: string) {
+      if (!tauri) {
+        window.open(url, "_blank", "noopener,noreferrer")
+        return
+      }
       void shellOpen(url).catch(() => undefined)
     },
     async openPath(path: string, app?: string) {
+      if (!tauri) return
       await commands.openPath(path, app ?? null)
     },
 
@@ -294,11 +310,12 @@ const createPlatform = (): Platform => {
 
     update: async () => {
       if (!UPDATER_ENABLED || !update) return
-      if (ostype() === "windows") await commands.killSidecar().catch(() => undefined)
+      if (os === "windows") await commands.killSidecar().catch(() => undefined)
       await update.install().catch(() => undefined)
     },
 
     restart: async () => {
+      if (!tauri) return
       await commands.killSidecar().catch(() => undefined)
       await relaunch()
     },
@@ -308,8 +325,9 @@ const createPlatform = (): Platform => {
       const permission = granted ? "granted" : await requestPermission().catch(() => "denied")
       if (permission !== "granted") return
 
-      const win = getCurrentWindow()
-      const focused = await win.isFocused().catch(() => document.hasFocus())
+      const focused = await (tauri ? getCurrentWindow().isFocused() : Promise.resolve(document.hasFocus())).catch(() =>
+        document.hasFocus(),
+      )
       if (focused) return
 
       await Promise.resolve()
@@ -319,10 +337,14 @@ const createPlatform = (): Platform => {
             icon: "https://opencode.ai/favicon-96x96-v3.png",
           })
           notification.onclick = () => {
-            const win = getCurrentWindow()
-            void win.show().catch(() => undefined)
-            void win.unminimize().catch(() => undefined)
-            void win.setFocus().catch(() => undefined)
+            if (tauri) {
+              const win = getCurrentWindow()
+              void win.show().catch(() => undefined)
+              void win.unminimize().catch(() => undefined)
+              void win.setFocus().catch(() => undefined)
+            } else {
+              window.focus()
+            }
             handleNotificationClick(href)
             notification.close()
           }
@@ -331,6 +353,7 @@ const createPlatform = (): Platform => {
     },
 
     fetch: (input, init) => {
+      if (!tauri) return fetch(input as any, init as any)
       if (input instanceof Request) {
         return tauriFetch(input)
       } else {
@@ -339,21 +362,25 @@ const createPlatform = (): Platform => {
     },
 
     getWslEnabled: async () => {
+      if (!tauri) return false
       const next = await commands.getWslConfig().catch(() => null)
       if (next) return next.enabled
-      return window.__OPENCODE__!.wsl ?? false
+      return window.__OPENCODE__?.wsl ?? false
     },
 
     setWslEnabled: async (enabled) => {
+      if (!tauri) return
       await commands.setWslConfig({ enabled })
     },
 
     getDefaultServerUrl: async () => {
+      if (!tauri) return null
       const result = await commands.getDefaultServerUrl().catch(() => null)
       return result
     },
 
     setDefaultServerUrl: async (url: string | null) => {
+      if (!tauri) return
       await commands.setDefaultServerUrl(url)
     },
 
@@ -404,10 +431,10 @@ const createPlatform = (): Platform => {
 }
 
 let menuTrigger = null as null | ((id: string) => void)
-createMenu((id) => {
+void createMenu((id) => {
   menuTrigger?.(id)
-})
-void listenForDeepLinks()
+}).catch(() => undefined)
+void listenForDeepLinks().catch(() => undefined)
 
 render(() => {
   const platform = createPlatform()
@@ -476,6 +503,15 @@ render(() => {
 
 // Gate component that waits for the server to be ready
 function ServerGate(props: { children: (data: ServerReadyData) => JSX.Element }) {
+  if (!ok()) {
+    return (
+      <div class="h-screen w-screen flex flex-col items-center justify-center bg-background-base">
+        <Splash class="w-16 h-20 opacity-50 animate-pulse" />
+        <div class="text-foreground-muted text-sm mt-4">请在 Tauri 窗口中打开此页面（tauri dev）</div>
+      </div>
+    )
+  }
+
   const [serverData] = createResource(() => commands.awaitInitialization(new Channel<InitStep>() as any))
   if (serverData.state === "errored") throw serverData.error
 

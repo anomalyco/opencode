@@ -1,0 +1,4 @@
+{
+  "$comment": "当 baseline=true 时，会构建带 -baseline 后缀的命令行工具（CLI）—— 该版本无需 AVX2 指令集支持，兼容性更好。你也可以通过环境变量临时覆盖此配置：设置 OPENCODE_NO_BASELINE=1 禁用 baseline 模式，或设置 OPENCODE_BASELINE=1 强制启用 baseline 模式。",
+  "baseline": false
+}

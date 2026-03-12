@@ -8,8 +8,15 @@ import { installCli } from "./cli"
 import { initI18n, t } from "./i18n"
 import { commands } from "./bindings"
 
+const ok = () =>
+  typeof window !== "undefined" &&
+  ((globalThis as unknown as { __TAURI_INTERNALS__?: { invoke?: unknown } }).__TAURI_INTERNALS__?.invoke ??
+    (globalThis as unknown as { __TAURI__?: { invoke?: unknown } }).__TAURI__?.invoke) !== undefined
+
 export async function createMenu(trigger: (id: string) => void) {
-  if (ostype() !== "macos") return
+  if (!ok()) return
+  const os = ostype()
+  if (os !== "macos") return
 
   await initI18n()
 

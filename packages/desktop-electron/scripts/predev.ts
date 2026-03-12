@@ -16,6 +16,20 @@ async function main() {
     return await cmd.nothrow()
   }
 
+  const cfg = Bun.file("../../opencode.dev.json")
+  const val = (await cfg.exists()) ? ((await cfg.json()) as { baseline?: boolean }).baseline : undefined
+  const off = ["1", "true", "yes"].includes((Bun.env.OPENCODE_NO_BASELINE || "").toLowerCase())
+  const on = ["1", "true", "yes"].includes((Bun.env.OPENCODE_BASELINE || "").toLowerCase())
+  const base = off ? false : on ? true : val ?? true
+
+  if (!base && name.includes("-baseline")) {
+    const alt = name.replace("-baseline", "")
+    const res = await run(false)
+    if (res.exitCode !== 0) throw new Error(res.stderr.toString() || res.stdout.toString())
+    await copyBinaryToSidecarFolder(windowsify(`../opencode/dist/${alt}/bin/opencode`), target)
+    return
+  }
+
   if (!name.includes("-baseline")) {
     const res = await run(false)
     if (res.exitCode !== 0) throw new Error(res.stderr.toString() || res.stdout.toString())
