@@ -60,6 +60,7 @@ function init() {
   useKeyboard((evt) => {
     if (suspended()) return
     if (dialog.stack.length > 0) return
+    if (evt.defaultPrevented) return
     for (const option of entries()) {
       if (!isEnabled(option)) continue
       if (option.keybind && keybind.match(option.keybind, evt)) {
@@ -93,7 +94,7 @@ function init() {
       })
     },
     keybinds(enabled: boolean) {
-      setSuspendCount((count) => count + (enabled ? -1 : 1))
+      setSuspendCount((count) => Math.max(0, count + (enabled ? -1 : 1)))
     },
     suspended,
     show() {

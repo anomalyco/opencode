@@ -1,5 +1,5 @@
 import { createStore } from "solid-js/store"
-import { createMemo, createSignal, For, Show } from "solid-js"
+import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
 import { useKeybind } from "../../context/keybind"
@@ -9,12 +9,17 @@ import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../component/border"
 import { useTextareaKeybindings } from "../../component/textarea-keybindings"
 import { useDialog } from "../../ui/dialog"
+import { useCommandDialog } from "../../component/dialog-command"
 
 export function QuestionPrompt(props: { request: QuestionRequest }) {
   const sdk = useSDK()
   const { theme } = useTheme()
   const keybind = useKeybind()
   const bindings = useTextareaKeybindings()
+  const command = useCommandDialog()
+
+  onMount(() => command.keybinds(false))
+  onCleanup(() => command.keybinds(true))
 
   const questions = createMemo(() => props.request.questions)
   const single = createMemo(() => questions().length === 1 && questions()[0]?.multiple !== true)

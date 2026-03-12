@@ -1,5 +1,5 @@
 import { createStore } from "solid-js/store"
-import { createMemo, For, Match, Show, Switch } from "solid-js"
+import { createMemo, For, Match, onCleanup, onMount, Show, Switch } from "solid-js"
 import { Portal, useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
 import { useKeybind } from "../../context/keybind"
@@ -16,6 +16,7 @@ import { Locale } from "@/util/locale"
 import { Global } from "@/global"
 import { useDialog } from "../../ui/dialog"
 import { useTuiConfig } from "../../context/tui-config"
+import { useCommandDialog } from "../../component/dialog-command"
 
 type PermissionStage = "permission" | "always" | "reject"
 
@@ -129,9 +130,13 @@ function TextBody(props: { title: string; description?: string; icon?: string })
 export function PermissionPrompt(props: { request: PermissionRequest }) {
   const sdk = useSDK()
   const sync = useSync()
+  const command = useCommandDialog()
   const [store, setStore] = createStore({
     stage: "permission" as PermissionStage,
   })
+
+  onMount(() => command.keybinds(false))
+  onCleanup(() => command.keybinds(true))
 
   const session = createMemo(() => sync.data.session.find((s) => s.id === props.request.sessionID))
 
