@@ -34,8 +34,8 @@ export namespace Plugin {
       project: Instance.project,
       worktree: Instance.worktree,
       directory: Instance.directory,
-      get serverUrl(): URL | undefined {
-        return undefined
+      get serverUrl(): URL {
+        return Server.url ?? new URL("http://localhost:4096")
       },
       $: Bun.$,
     }
