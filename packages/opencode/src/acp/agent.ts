@@ -97,6 +97,7 @@ export namespace ACP {
     if (!lastAssistant) return
 
     const msg = lastAssistant.info
+    if (!msg.providerID || !msg.modelID) return
     const size = await getContextLimit(sdk, ProviderID.make(msg.providerID), ModelID.make(msg.modelID), directory)
 
     if (!size) {
