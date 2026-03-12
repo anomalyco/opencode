@@ -215,27 +215,6 @@ jobs:
           opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
           opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
 
-      - name: Setup Windows ARM64 clang
-        if: runner.os == 'Windows' && matrix.settings.target == 'aarch64-pc-windows-msvc'
-        shell: pwsh
-        run: |
-          $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
-          if (!(Test-Path $vswhere)) { throw "vswhere.exe not found at $vswhere" }
-          $root = & $vswhere -latest -products * -property installationPath
-          if (!$root) { throw "Visual Studio installation not found" }
-          $llvm = Join-Path $root "VC\Tools\Llvm"
-          $bin = @(
-            (Join-Path $llvm "x64\bin"),
-            (Join-Path $llvm "bin")
-          ) | Where-Object { Test-Path (Join-Path $_ "clang.exe") } | Select-Object -First 1
-          if (!$bin -and (Test-Path $llvm)) {
-            $bin = Get-ChildItem -Path $llvm -Filter clang.exe -Recurse -File | Select-Object -First 1 | ForEach-Object { $_.DirectoryName }
-          }
-          if (!$bin) { throw "clang.exe not found under $llvm" }
-          $env:PATH = "$bin;$env:PATH"
-          Add-Content -Path $env:GITHUB_PATH -Value $bin
-          clang --version
-
       - name: Build and upload artifacts
         uses: tauri-apps/tauri-action@390cbe447412ced1303d35abe75287949e43437a
         timeout-minutes: 60
