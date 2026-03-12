@@ -35,18 +35,19 @@ describe("pty", () => {
           Bus.subscribe(Pty.Event.Deleted, (evt) => log.push({ type: "deleted", id: evt.properties.id })),
         ]
 
-        const info = await Pty.create({ command: "/bin/ls", title: "ls" })
-        const id = info.id
-
+        let id: PtyID | undefined
         try {
-          await wait(() => pick(log, id).includes("exited"))
+          const info = await Pty.create({ command: "/bin/ls", title: "ls" })
+          id = info.id
+
+          await wait(() => pick(log, id!).includes("exited"))
 
           await Pty.remove(id)
-          await wait(() => pick(log, id).length >= 3)
-          expect(pick(log, id)).toEqual(["created", "exited", "deleted"])
+          await wait(() => pick(log, id!).length >= 3)
+          expect(pick(log, id!)).toEqual(["created", "exited", "deleted"])
         } finally {
           off.forEach((x) => x())
-          await Pty.remove(id)
+          if (id) await Pty.remove(id)
         }
       },
     })
@@ -67,18 +68,19 @@ describe("pty", () => {
           Bus.subscribe(Pty.Event.Deleted, (evt) => log.push({ type: "deleted", id: evt.properties.id })),
         ]
 
-        const info = await Pty.create({ command: "/bin/sh", title: "sh" })
-        const id = info.id
-
+        let id: PtyID | undefined
         try {
+          const info = await Pty.create({ command: "/bin/sh", title: "sh" })
+          id = info.id
+
           await sleep(100)
 
           await Pty.remove(id)
-          await wait(() => pick(log, id).length >= 3)
-          expect(pick(log, id)).toEqual(["created", "exited", "deleted"])
+          await wait(() => pick(log, id!).length >= 3)
+          expect(pick(log, id!)).toEqual(["created", "exited", "deleted"])
         } finally {
           off.forEach((x) => x())
-          await Pty.remove(id)
+          if (id) await Pty.remove(id)
         }
       },
     })
