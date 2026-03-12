@@ -369,6 +369,7 @@ export namespace MessageV2 {
     system: z.string().optional(),
     tools: z.record(z.string(), z.boolean()).optional(),
     variant: z.string().optional(),
+    btw: z.boolean().optional(),
   }).meta({
     ref: "UserMessage",
   })
@@ -438,6 +439,7 @@ export namespace MessageV2 {
     structured: z.any().optional(),
     variant: z.string().optional(),
     finish: z.string().optional(),
+    btw: z.boolean().optional(),
   }).meta({
     ref: "AssistantMessage",
   })
@@ -555,8 +557,20 @@ export namespace MessageV2 {
       return { type: "json", value: output as never }
     }
 
+    // Pre-compute which btw user messages already have a response, so we can
+    // skip completed btw exchanges while still including any pending btw question
+    const answeredBtwUserIDs = new Set<string>()
+    for (const msg of input) {
+      if (msg.info.role === "assistant" && msg.info.btw) {
+        answeredBtwUserIDs.add((msg.info as Assistant).parentID)
+      }
+    }
+
     for (const msg of input) {
       if (msg.parts.length === 0) continue
+      // Skip completed btw pairs; pending btw question passes through so the model can answer it
+      if (msg.info.btw && msg.info.role === "assistant") continue
+      if (msg.info.btw && msg.info.role === "user" && answeredBtwUserIDs.has(msg.info.id)) continue
 
       if (msg.info.role === "user") {
         const userMessage: UIMessage = {
