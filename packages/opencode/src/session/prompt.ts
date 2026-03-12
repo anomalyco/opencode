@@ -49,6 +49,7 @@ import { Shell } from "@/shell/shell"
 import { Truncate } from "@/tool/truncate"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
+import { Todo } from "./todo"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -1773,6 +1774,210 @@ NOTE: At any point in time through this workflow you should feel free to ask the
   const argsRegex = /(?:\[Image\s+\d+\]|"[^"]*"|'[^']*'|[^\s"']+)/gi
   const placeholderRegex = /\$(\d+)/g
   const quoteTrimRegex = /^["']|["']$/g
+
+  function text(parts: MessageV2.Part[]) {
+    return parts.findLast((part) => part.type === "text")?.text.trim() ?? ""
+  }
+
+  function label(prefix: string, value: string) {
+    const next = value.trim() || prefix
+    return next.length > 80 ? next.slice(0, 77) + "..." : next
+  }
+
+  async function idle(sessionID: SessionID) {
+    while (SessionStatus.get(sessionID).type !== "idle") {
+      await Bun.sleep(50)
+    }
+  }
+
+  async function post(input: {
+    sessionID: SessionID
+    agent: string
+    model: { providerID: ProviderID; modelID: ModelID }
+    title: string
+    text: string
+    wait?: boolean
+  }) {
+    if (input.wait) await idle(input.sessionID)
+    const user: MessageV2.User = {
+      id: MessageID.ascending(),
+      sessionID: input.sessionID,
+      role: "user",
+      time: {
+        created: Date.now(),
+      },
+      agent: input.agent,
+      model: input.model,
+    }
+    await Session.updateMessage(user)
+    await Session.updatePart({
+      id: PartID.ascending(),
+      messageID: user.id,
+      sessionID: input.sessionID,
+      type: "text",
+      text: input.title,
+      synthetic: true,
+    } satisfies MessageV2.TextPart)
+
+    const assistant: MessageV2.Assistant = {
+      id: MessageID.ascending(),
+      sessionID: input.sessionID,
+      parentID: user.id,
+      mode: input.agent,
+      agent: input.agent,
+      cost: 0,
+      path: {
+        cwd: Instance.directory,
+        root: Instance.worktree,
+      },
+      time: {
+        created: Date.now(),
+        completed: Date.now(),
+      },
+      role: "assistant",
+      tokens: {
+        input: 0,
+        output: 0,
+        reasoning: 0,
+        cache: { read: 0, write: 0 },
+      },
+      modelID: input.model.modelID,
+      providerID: input.model.providerID,
+    }
+    await Session.updateMessage(assistant)
+    const part = {
+      id: PartID.ascending(),
+      messageID: assistant.id,
+      sessionID: input.sessionID,
+      type: "text",
+      text: input.text,
+      synthetic: true,
+    } satisfies MessageV2.TextPart
+    await Session.updatePart(part)
+    return {
+      info: assistant,
+      parts: [part],
+    }
+  }
+
+  async function update(input: { part: MessageV2.TextPart; text: string; wait?: boolean }) {
+    if (input.wait) await idle(input.part.sessionID)
+    input.part.text = [input.part.text, input.text].filter(Boolean).join("\n\n")
+    await Session.updatePart(input.part)
+  }
+
+  async function status(sessionID: SessionID) {
+    const kids = await Session.children(sessionID)
+    if (kids.length === 0) return "No background tasks yet."
+
+    const lines = await Promise.all(
+      kids.map(async (child) => {
+        const state = SessionStatus.get(child.id)
+        if (state.type === "busy") return `- ${child.title} (\`${child.id}\`) - running`
+        if (state.type === "retry") return `- ${child.title} (\`${child.id}\`) - retry ${state.attempt}`
+
+        const msgs = await Session.messages({ sessionID: child.id, limit: 3 })
+        const assistant = msgs.find((msg) => msg.info.role === "assistant")
+        const value = assistant ? text(assistant.parts) || "completed" : "idle"
+        return `- ${child.title} (\`${child.id}\`) - ${value}`
+      }),
+    )
+
+    return lines.join("\n")
+  }
+
+  export async function commandBtw(input: {
+    sessionID: SessionID
+    agent: string
+    model: { providerID: ProviderID; modelID: ModelID }
+    arguments: string
+    variant?: string
+    parts?: CommandInput["parts"]
+    run?: (input: PromptInput) => Promise<MessageV2.WithParts>
+  }) {
+    const run = input.run ?? prompt
+    const args = input.arguments.trim()
+    if (args === "status") {
+      return post({
+        sessionID: input.sessionID,
+        agent: input.agent,
+        model: input.model,
+        title: "Background status",
+        text: await status(input.sessionID),
+      })
+    }
+
+    const todo = args.startsWith("todo ") ? args.slice(5).trim() : ""
+    if (todo) {
+      Todo.append({
+        sessionID: input.sessionID,
+        todo: { content: todo, status: "pending", priority: "medium" },
+      })
+      return post({
+        sessionID: input.sessionID,
+        agent: input.agent,
+        model: input.model,
+        title: `Background note: ${label("todo", todo)}`,
+        text: `Added todo: ${todo}`,
+      })
+    }
+
+    const query = args.startsWith("ask ") ? args.slice(4).trim() : args
+    if (!query) {
+      return post({
+        sessionID: input.sessionID,
+        agent: input.agent,
+        model: input.model,
+        title: "Background helper",
+        text: "Usage: `/btw ask <question>`, `/btw todo <text>`, or `/btw status`.",
+      })
+    }
+
+    const parent = await Session.get(input.sessionID)
+    const child = await Session.create({
+      parentID: input.sessionID,
+      workspaceID: parent.workspaceID,
+      title: `BTW: ${label("background task", query)}`,
+    })
+
+    const note = await post({
+      sessionID: input.sessionID,
+      agent: input.agent,
+      model: input.model,
+      title: `Background task: ${label("ask", query)}`,
+      text: `Started background task in child session \`${child.id}\`. I'll post the result here when it finishes.`,
+    })
+
+    void run({
+      sessionID: child.id,
+      model: input.model,
+      agent: input.agent,
+      variant: input.variant,
+      parts: [
+        {
+          type: "text",
+          text: query,
+        },
+        ...(input.parts ?? []),
+      ],
+    })
+      .then((result) =>
+        update({
+          part: note.parts[0] as MessageV2.TextPart,
+          text: `Child session \`${child.id}\` completed.\n\n${text(result.parts) || "(no text output)"}`,
+          wait: true,
+        }),
+      )
+      .catch((err) =>
+        update({
+          part: note.parts[0] as MessageV2.TextPart,
+          text: `Child session \`${child.id}\` failed: ${err instanceof Error ? err.message : String(err)}`,
+          wait: true,
+        }),
+      )
+
+    return note
+  }
   /**
    * Regular expression to match @ file references in text
    * Matches @ followed by file paths, excluding commas, periods at end of sentences, and backticks
@@ -1867,6 +2072,17 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         error: error.toObject(),
       })
       throw error
+    }
+
+    if (input.command === "btw") {
+      return commandBtw({
+        sessionID: input.sessionID,
+        agent: agent.name,
+        model: taskModel,
+        arguments: input.arguments,
+        variant: input.variant,
+        parts: input.parts,
+      })
     }
 
     const templateParts = await resolvePromptParts(template)
