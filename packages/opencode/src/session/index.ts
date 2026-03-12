@@ -849,12 +849,20 @@ export namespace Session {
         input.model.cost?.experimentalOver200K && tokens.input + tokens.cache.read > 200_000
           ? input.model.cost.experimentalOver200K
           : input.model.cost
+
+      // When a provider reports cached tokens but doesn't actually support input caching
+      // (cache.read price is 0), charge those tokens at the full input rate.
+      // This fixes cost underestimation for providers like Together.AI that report
+      // cached_tokens from vLLM but don't offer discounted cache pricing.
+      const cacheReadPrice = costInfo?.cache?.read ?? 0
+      const effectiveCacheReadPrice = cacheReadPrice === 0 ? (costInfo?.input ?? 0) : cacheReadPrice
+
       return {
         cost: safe(
           new Decimal(0)
             .add(new Decimal(tokens.input).mul(costInfo?.input ?? 0).div(1_000_000))
             .add(new Decimal(tokens.output).mul(costInfo?.output ?? 0).div(1_000_000))
-            .add(new Decimal(tokens.cache.read).mul(costInfo?.cache?.read ?? 0).div(1_000_000))
+            .add(new Decimal(tokens.cache.read).mul(effectiveCacheReadPrice).div(1_000_000))
             .add(new Decimal(tokens.cache.write).mul(costInfo?.cache?.write ?? 0).div(1_000_000))
             // TODO: update models.dev to have better pricing model, for now:
             // charge reasoning tokens at the same rate as output tokens
