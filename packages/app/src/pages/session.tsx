@@ -1,6 +1,7 @@
 import type { Project, UserMessage } from "@opencode-ai/sdk/v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import {
+  batch,
   onCleanup,
   Show,
   Match,
@@ -291,6 +292,7 @@ export default function Page() {
     git: false,
     pendingMessage: undefined as string | undefined,
     restoring: undefined as string | undefined,
+    reverting: false,
     reviewSnap: false,
     scrollGesture: 0,
     scroll: {
@@ -1243,6 +1245,24 @@ export default function Page() {
     })
   }
 
+  const merge = (next: NonNullable<ReturnType<typeof info>>) =>
+    sync.set("session", (list) => {
+      const idx = list.findIndex((item) => item.id === next.id)
+      if (idx < 0) return list
+      const out = list.slice()
+      out[idx] = next
+      return out
+    })
+
+  const roll = (sessionID: string, next: NonNullable<ReturnType<typeof info>>["revert"]) =>
+    sync.set("session", (list) => {
+      const idx = list.findIndex((item) => item.id === sessionID)
+      if (idx < 0) return list
+      const out = list.slice()
+      out[idx] = { ...out[idx], revert: next }
+      return out
+    })
+
   const busy = (sessionID: string) => {
     if (sync.data.session_status[sessionID]?.type !== "idle") return true
     return (sync.data.message[sessionID] ?? []).some(
@@ -1275,42 +1295,77 @@ export default function Page() {
   }
 
   const revert = (input: { sessionID: string; messageID: string }) => {
+    if (ui.reverting || ui.restoring) return
+    const prev = prompt.current().slice()
+    const last = info()?.revert
     const value = draft(input.messageID)
+    batch(() => {
+      setUi("reverting", true)
+      roll(input.sessionID, { messageID: input.messageID })
+      prompt.set(value)
+    })
     return halt(input.sessionID)
       .then(() => sdk.client.session.revert(input))
-      .then(() => {
-        prompt.set(value)
+      .then((result) => {
+        if (result.data) merge(result.data)
       })
-      .catch(fail)
+      .catch((err) => {
+        batch(() => {
+          roll(input.sessionID, last)
+          prompt.set(prev)
+        })
+        fail(err)
+      })
+      .finally(() => {
+        setUi("reverting", false)
+      })
   }
 
   const restore = (id: string) => {
     const sessionID = params.id
-    if (!sessionID || ui.restoring) return
+    if (!sessionID || ui.restoring || ui.reverting) return
 
     const next = userMessages().find((item) => item.id > id)
-    setUi("restoring", id)
+    const prev = prompt.current().slice()
+    const last = info()?.revert
+
+    batch(() => {
+      setUi("restoring", id)
+      setUi("reverting", true)
+      roll(sessionID, next ? { messageID: next.id } : undefined)
+      if (next) {
+        prompt.set(draft(next.id))
+        return
+      }
+      prompt.reset()
+    })
 
     const task = !next
-      ? halt(sessionID)
-          .then(() => sdk.client.session.unrevert({ sessionID }))
-          .then(() => {
-            prompt.reset()
-          })
-      : halt(sessionID)
-          .then(() =>
-            sdk.client.session.revert({
-              sessionID,
-              messageID: next.id,
-            }),
-          )
-          .then(() => {
-            prompt.set(draft(next.id))
-          })
+      ? halt(sessionID).then(() => sdk.client.session.unrevert({ sessionID }))
+      : halt(sessionID).then(() =>
+          sdk.client.session.revert({
+            sessionID,
+            messageID: next.id,
+          }),
+        )
 
-    return task.catch(fail).finally(() => {
-      setUi("restoring", (value) => (value === id ? undefined : value))
-    })
+    return task
+      .then((result) => {
+        if (result.data) merge(result.data)
+      })
+      .catch((err) => {
+        batch(() => {
+          roll(sessionID, last)
+          prompt.set(prev)
+        })
+        fail(err)
+      })
+      .finally(() => {
+        batch(() => {
+          setUi("restoring", (value) => (value === id ? undefined : value))
+          setUi("reverting", false)
+        })
+      })
   }
 
   const rolled = createMemo(() => {
@@ -1487,6 +1542,7 @@ export default function Page() {
                 ? {
                     items: rolled(),
                     restoring: ui.restoring,
+                    disabled: ui.reverting,
                     onRestore: restore,
                   }
                 : undefined

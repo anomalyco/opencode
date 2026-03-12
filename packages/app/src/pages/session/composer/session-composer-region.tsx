@@ -24,6 +24,7 @@ export function SessionComposerRegion(props: {
   revert?: {
     items: { id: string; text: string }[]
     restoring?: string
+    disabled?: boolean
     onRestore: (id: string) => void
   }
   setPromptDockRef: (el: HTMLDivElement) => void
@@ -156,6 +157,7 @@ export function SessionComposerRegion(props: {
                       <SessionRevertDock
                         items={revert.items}
                         restoring={revert.restoring}
+                        disabled={revert.disabled}
                         onRestore={revert.onRestore}
                       />
                     </div>
@@ -195,7 +197,12 @@ export function SessionComposerRegion(props: {
                     "margin-top": `${-36 * value()}px`,
                   }}
                 >
-                  <SessionRevertDock items={revert.items} restoring={revert.restoring} onRestore={revert.onRestore} />
+                  <SessionRevertDock
+                    items={revert.items}
+                    restoring={revert.restoring}
+                    disabled={revert.disabled}
+                    onRestore={revert.onRestore}
+                  />
                 </div>
               )}
             </Show>
