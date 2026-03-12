@@ -43,17 +43,6 @@ import { TerminalProvider } from "@/context/terminal"
 import DirectoryLayout from "@/pages/directory-layout"
 import Layout from "@/pages/layout"
 import { ErrorPage } from "./pages/error"
-
-// Test error trigger - renders error page when ?error=test is in URL
-function TestErrorTrigger() {
-  if (typeof location !== "undefined") {
-    const params = new URLSearchParams(location.search)
-    if (params.get("error") === "test") {
-      throw new Error("Test error triggered via URL parameter")
-    }
-  }
-  return null
-}
 import { useCheckServerHealth } from "./utils/server-health"
 
 const Home = lazy(() => import("@/pages/home"))
@@ -152,7 +141,6 @@ export function AppBaseProviders(props: ParentProps) {
         <LanguageProvider>
           <UiI18nBridge>
             <ErrorBoundary fallback={(error) => <ErrorPage error={error} />}>
-              <TestErrorTrigger />
               <DialogProvider>
                 <MarkedProviderWithNativeParser>
                   <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
