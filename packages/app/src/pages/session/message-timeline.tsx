@@ -1,6 +1,6 @@
 import { For, createEffect, createMemo, on, onCleanup, Show, Index, type JSX } from "solid-js"
 import { createStore, produce } from "solid-js/store"
-import { useNavigate, useParams } from "@solidjs/router"
+import { useNavigate } from "@solidjs/router"
 import { Button } from "@opencode-ai/ui/button"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -19,6 +19,7 @@ import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
+import { useSessionKey } from "@/pages/session/session-layout"
 import { useSettings } from "@/context/settings"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
@@ -213,16 +214,15 @@ export function MessageTimeline(props: {
 }) {
   let touchGesture: number | undefined
 
-  const params = useParams()
   const navigate = useNavigate()
   const sdk = useSDK()
   const sync = useSync()
   const settings = useSettings()
   const dialog = useDialog()
   const language = useLanguage()
+  const { params, sessionKey } = useSessionKey()
 
   const rendered = createMemo(() => props.renderedUserMessages.map((message) => message.id))
-  const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const sessionID = createMemo(() => params.id)
   const sessionMessages = createMemo(() => {
     const id = sessionID()
