@@ -100,6 +100,9 @@ export namespace Bus {
       const index = match.indexOf(callback)
       if (index === -1) return
       match.splice(index, 1)
+      if (match.length === 0) {
+        subscriptions.delete(type)
+      }
     }
   }
 }
