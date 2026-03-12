@@ -47,8 +47,9 @@ Config sources are loaded in this order (later sources override earlier ones):
 2. **Global config** (`~/.config/opencode/opencode.json`) - user preferences
 3. **Custom config** (`OPENCODE_CONFIG` env var) - custom overrides
 4. **Project config** (`opencode.json` in project) - project-specific settings
-5. **`.opencode` directories** - agents, commands, plugins
-6. **Inline config** (`OPENCODE_CONFIG_CONTENT` env var) - runtime overrides
+5. **Project local config** (`opencode.local.json` in project) - local overrides (gitignored)
+6. **`.opencode` directories** - agents, commands, plugins
+7. **Inline config** (`OPENCODE_CONFIG_CONTENT` env var) - runtime overrides
 
 This means project configs can override global defaults, and global configs can override remote organizational defaults.
 
@@ -106,7 +107,7 @@ Global config overrides remote organizational defaults.
 
 ### Per project
 
-Add `opencode.json` in your project root. Project config has the highest precedence among standard config files - it overrides both global and remote configs.
+Add `opencode.json` in your project root. This is safe to check into Git and is shared with your team.
 
 For project-specific TUI settings, add `tui.json` alongside it.
 
@@ -116,7 +117,38 @@ Place project specific config in the root of your project.
 
 When OpenCode starts up, it looks for a config file in the current directory or traverse up to the nearest Git directory.
 
-This is also safe to be checked into Git and uses the same schema as the global one.
+---
+
+### Local overrides
+
+Add `opencode.local.json` (or `opencode.local.jsonc`) alongside your project config for machine-specific overrides that shouldn't be committed to Git.
+
+```json title="opencode.local.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "anthropic/claude-sonnet-4-5",
+  "provider": {
+    "anthropic": {
+      "options": {
+        "apiKey": "sk-ant-..."
+      }
+    }
+  }
+}
+```
+
+Local config is merged on top of the project config, so you only need to specify the keys you want to override. Add `opencode.local.json` to your `.gitignore`:
+
+```txt title=".gitignore"
+opencode.local.json
+opencode.local.jsonc
+```
+
+This is useful for:
+
+- API keys or secrets you don't want in version control.
+- Machine-specific model or provider preferences.
+- Overriding team defaults without modifying the shared config.
 
 ---
 

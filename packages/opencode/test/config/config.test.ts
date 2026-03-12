@@ -1781,6 +1781,203 @@ describe("deduplicatePlugins", () => {
   })
 })
 
+describe("opencode.local.json", () => {
+  test("loads local JSON config file", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await writeConfig(
+          dir,
+          {
+            $schema: "https://opencode.ai/config.json",
+            model: "local/model",
+            username: "local-user",
+          },
+          "opencode.local.json",
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.model).toBe("local/model")
+        expect(config.username).toBe("local-user")
+      },
+    })
+  })
+
+  test("loads local JSONC config file", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Filesystem.write(
+          path.join(dir, "opencode.local.jsonc"),
+          `{
+          // local override with comments
+          "$schema": "https://opencode.ai/config.json",
+          "model": "local/model"
+        }`,
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.model).toBe("local/model")
+      },
+    })
+  })
+
+  test("local config overrides project config", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await writeConfig(dir, {
+          $schema: "https://opencode.ai/config.json",
+          model: "project/model",
+          username: "project-user",
+        })
+        await writeConfig(
+          dir,
+          {
+            $schema: "https://opencode.ai/config.json",
+            model: "local/model",
+          },
+          "opencode.local.json",
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.model).toBe("local/model")
+        expect(config.username).toBe("project-user")
+      },
+    })
+  })
+
+  test(".opencode directory overrides local config", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await writeConfig(dir, {
+          $schema: "https://opencode.ai/config.json",
+          model: "project/model",
+        })
+        await writeConfig(
+          dir,
+          {
+            $schema: "https://opencode.ai/config.json",
+            model: "local/model",
+          },
+          "opencode.local.json",
+        )
+        const opencodeDir = path.join(dir, ".opencode")
+        await fs.mkdir(opencodeDir, { recursive: true })
+        await writeConfig(opencodeDir, {
+          $schema: "https://opencode.ai/config.json",
+          model: "dotdir/model",
+        })
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.model).toBe("dotdir/model")
+      },
+    })
+  })
+
+  test("skipped when OPENCODE_DISABLE_PROJECT_CONFIG is set", async () => {
+    const prev = process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
+    process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = "true"
+    try {
+      await using tmp = await tmpdir({
+        init: async (dir) => {
+          await writeConfig(
+            dir,
+            {
+              $schema: "https://opencode.ai/config.json",
+              model: "local/model",
+            },
+            "opencode.local.json",
+          )
+        },
+      })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const config = await Config.get()
+          expect(config.model).not.toBe("local/model")
+        },
+      })
+    } finally {
+      if (prev === undefined) delete process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
+      else process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = prev
+    }
+  })
+
+  test("merges plugin and instructions arrays with project config", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await writeConfig(dir, {
+          $schema: "https://opencode.ai/config.json",
+          plugin: ["project-plugin"],
+          instructions: ["project-instruction"],
+        })
+        await writeConfig(
+          dir,
+          {
+            $schema: "https://opencode.ai/config.json",
+            plugin: ["local-plugin"],
+            instructions: ["local-instruction"],
+          },
+          "opencode.local.json",
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.plugin).toContain("local-plugin")
+        expect(config.plugin).toContain("project-plugin")
+        expect(config.instructions).toContain("local-instruction")
+        expect(config.instructions).toContain("project-instruction")
+      },
+    })
+  })
+  test("loads even when ignored in .gitignore", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      init: async (dir) => {
+        await writeConfig(dir, {
+          $schema: "https://opencode.ai/config.json",
+          model: "project/model",
+        })
+        await writeConfig(
+          dir,
+          {
+            $schema: "https://opencode.ai/config.json",
+            model: "local/model",
+            username: "local-user",
+          },
+          "opencode.local.json",
+        )
+        await Filesystem.write(path.join(dir, ".gitignore"), "opencode.local.json\nopencode.local.jsonc\n")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.model).toBe("local/model")
+        expect(config.username).toBe("local-user")
+      },
+    })
+  })
+})
+
 describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
   test("skips project config files when flag is set", async () => {
     const originalEnv = process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]

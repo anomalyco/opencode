@@ -81,8 +81,9 @@ export namespace Config {
     // 2) Global config (~/.config/opencode/opencode.json{,c})
     // 3) Custom config (OPENCODE_CONFIG)
     // 4) Project config (opencode.json{,c})
-    // 5) .opencode directories (.opencode/agents/, .opencode/commands/, .opencode/plugins/, .opencode/opencode.json{,c})
-    // 6) Inline config (OPENCODE_CONFIG_CONTENT)
+    // 5) Project local config (opencode.local.json{,c}) — intended for .gitignore
+    // 6) .opencode directories (.opencode/agents/, .opencode/commands/, .opencode/plugins/, .opencode/opencode.json{,c})
+    // 7) Inline config (OPENCODE_CONFIG_CONTENT)
     // Managed config directory is enterprise-only and always overrides everything above.
     let result: Info = {}
     for (const [key, value] of Object.entries(auth)) {
@@ -121,6 +122,10 @@ export namespace Config {
     // Project config overrides global and remote config.
     if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
       for (const file of await ConfigPaths.projectFiles("opencode", Instance.directory, Instance.worktree)) {
+        result = mergeConfigConcatArrays(result, await loadFile(file))
+      }
+      // Project local config overrides project config (intended for .gitignore).
+      for (const file of await ConfigPaths.projectFiles("opencode.local", Instance.directory, Instance.worktree)) {
         result = mergeConfigConcatArrays(result, await loadFile(file))
       }
     }
