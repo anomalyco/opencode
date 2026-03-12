@@ -62,9 +62,7 @@ export async function waitTerminalReady(page: Page, input?: { term?: Locator; ti
   const timeout = input?.timeout ?? 10_000
   await expect(term).toBeVisible()
   await expect(term.locator("textarea")).toHaveCount(1)
-  await expect
-    .poll(() => terminalReady(page, term), { timeout })
-    .toBe(true)
+  await expect.poll(() => terminalReady(page, term), { timeout }).toBe(true)
 }
 
 export async function runTerminal(page: Page, input: { cmd: string; token: string; term?: Locator; timeout?: number }) {
@@ -76,9 +74,7 @@ export async function runTerminal(page: Page, input: { cmd: string; token: strin
   await expect(textarea).toBeFocused()
   await page.keyboard.type(input.cmd)
   await page.keyboard.press("Enter")
-  await expect
-    .poll(() => terminalHas(page, { term, token: input.token }), { timeout })
-    .toBe(true)
+  await expect.poll(() => terminalHas(page, { term, token: input.token }), { timeout }).toBe(true)
 }
 
 export async function openPalette(page: Page) {
