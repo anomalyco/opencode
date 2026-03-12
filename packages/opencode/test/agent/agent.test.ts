@@ -1,5 +1,6 @@
 import { test, expect } from "bun:test"
 import path from "path"
+import fs from "fs/promises"
 import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Agent } from "../../src/agent/agent"
@@ -562,6 +563,45 @@ description: Permission skill.
   } finally {
     process.env.OPENCODE_TEST_HOME = home
   }
+})
+
+test("symlinked skill aliases add one external_directory allow rule", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      const claude = path.join(dir, ".claude", "skills", "shared-skill")
+      const agents = path.join(dir, ".agents", "skills")
+      await Bun.write(
+        path.join(claude, "SKILL.md"),
+        `---
+name: shared-skill
+description: Shared skill.
+---
+
+# Shared Skill
+`,
+      )
+      await fs.mkdir(agents, { recursive: true })
+      await fs.symlink(claude, path.join(agents, "shared-skill"), "dir")
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const build = await Agent.get("build")
+      const rules = build!.permission.filter(
+        (rule) =>
+          rule.permission === "external_directory" &&
+          rule.action === "allow" &&
+          rule.pattern.includes("shared-skill") &&
+          rule.pattern.endsWith("*"),
+      )
+
+      expect(rules).toHaveLength(1)
+      expect(rules[0].pattern).toBe(path.join(tmp.path, ".agents", "skills", "shared-skill", "*"))
+    },
+  })
 })
 
 test("defaultAgent returns build when no default_agent config", async () => {

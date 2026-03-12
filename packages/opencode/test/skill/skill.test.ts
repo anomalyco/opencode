@@ -386,3 +386,36 @@ description: A skill in the .opencode/skills directory.
     },
   })
 })
+
+test("dedupes symlinked skill aliases and keeps the later path", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      const claude = path.join(dir, ".claude", "skills", "shared-skill")
+      const agents = path.join(dir, ".agents", "skills")
+      await Bun.write(
+        path.join(claude, "SKILL.md"),
+        `---
+name: shared-skill
+description: Shared skill.
+---
+
+# Shared Skill
+`,
+      )
+      await fs.mkdir(agents, { recursive: true })
+      await fs.symlink(claude, path.join(agents, "shared-skill"), "dir")
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const skills = await Skill.all()
+      const dirs = await Skill.dirs()
+      expect(skills).toHaveLength(1)
+      expect(skills[0].location).toContain(path.join(".agents", "skills", "shared-skill", "SKILL.md"))
+      expect(dirs).toEqual([path.join(tmp.path, ".agents", "skills", "shared-skill")])
+    },
+  })
+})

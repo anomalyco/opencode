@@ -54,9 +54,11 @@ export namespace Skill {
 
   export const state = Instance.state(async () => {
     const skills: Record<string, Info> = {}
-    const dirs = new Set<string>()
+    const dirs = new Map<string, string>()
+    const seen = new Map<string, string>()
 
     const addSkill = async (match: string) => {
+      const real = Filesystem.resolve(match)
       const md = await ConfigMarkdown.parse(match).catch((err) => {
         const message = ConfigMarkdown.FrontmatterError.isInstance(err)
           ? err.data.message
@@ -71,16 +73,23 @@ export namespace Skill {
       const parsed = Info.pick({ name: true, description: true }).safeParse(md.data)
       if (!parsed.success) return
 
-      // Warn on duplicate skill names
-      if (skills[parsed.data.name]) {
+      const prev = skills[parsed.data.name]
+      if (prev && Filesystem.resolve(prev.location) !== real) {
         log.warn("duplicate skill name", {
           name: parsed.data.name,
-          existing: skills[parsed.data.name].location,
+          existing: prev.location,
           duplicate: match,
         })
       }
 
-      dirs.add(path.dirname(match))
+      const old = seen.get(real)
+      if (old && old !== parsed.data.name) {
+        const skill = skills[old]
+        if (skill && Filesystem.resolve(skill.location) === real) delete skills[old]
+      }
+
+      dirs.set(path.dirname(real), path.dirname(match))
+      seen.set(real, parsed.data.name)
 
       skills[parsed.data.name] = {
         name: parsed.data.name,
@@ -159,7 +168,6 @@ export namespace Skill {
     for (const url of config.skills?.urls ?? []) {
       const list = await Discovery.pull(url)
       for (const dir of list) {
-        dirs.add(dir)
         const matches = await Glob.scan(SKILL_PATTERN, {
           cwd: dir,
           absolute: true,
@@ -174,7 +182,7 @@ export namespace Skill {
 
     return {
       skills,
-      dirs: Array.from(dirs),
+      dirs: Array.from(dirs.values()),
     }
   })
 
