@@ -4,7 +4,7 @@ import z from "zod"
 import { Identifier } from "@/id/id"
 import { withStatics } from "@/util/schema"
 
-const toolIdSchema = Schema.String.pipe(Schema.brand("ToolId"))
+const toolIdSchema = Schema.String.pipe(Schema.brand("ToolID"))
 
 export type ToolID = typeof toolIdSchema.Type
 

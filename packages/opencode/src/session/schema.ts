@@ -4,7 +4,7 @@ import z from "zod"
 import { withStatics } from "@/util/schema"
 import { Identifier } from "@/id/id"
 
-const sessionIdSchema = Schema.String.pipe(Schema.brand("SessionId"))
+const sessionIdSchema = Schema.String.pipe(Schema.brand("SessionID"))
 
 export type SessionID = typeof sessionIdSchema.Type
 
@@ -16,7 +16,7 @@ export const SessionID = sessionIdSchema.pipe(
   })),
 )
 
-const messageIdSchema = Schema.String.pipe(Schema.brand("MessageId"))
+const messageIdSchema = Schema.String.pipe(Schema.brand("MessageID"))
 
 export type MessageID = typeof messageIdSchema.Type
 
@@ -28,7 +28,7 @@ export const MessageID = messageIdSchema.pipe(
   })),
 )
 
-const partIdSchema = Schema.String.pipe(Schema.brand("PartId"))
+const partIdSchema = Schema.String.pipe(Schema.brand("PartID"))
 
 export type PartID = typeof partIdSchema.Type
 
