@@ -54,14 +54,6 @@ export const childMapByParent = (sessions: Session[]) => {
   return map
 }
 
-export function getDraggableId(event: unknown): string | undefined {
-  if (typeof event !== "object" || event === null) return undefined
-  if (!("draggable" in event)) return undefined
-  const draggable = (event as { draggable?: { id?: unknown } }).draggable
-  if (!draggable) return undefined
-  return typeof draggable.id === "string" ? draggable.id : undefined
-}
-
 export const displayName = (project: { name?: string; worktree: string }) =>
   project.name || getFilename(project.worktree)
 

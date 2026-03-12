@@ -1,5 +1,5 @@
 import z from "zod"
-import { Identifier } from "../id/id"
+import { SessionID, MessageID, PartID } from "./schema"
 import { Snapshot } from "../snapshot"
 import { MessageV2 } from "./message-v2"
 import { Session } from "."
@@ -15,9 +15,9 @@ export namespace SessionRevert {
   const log = Log.create({ service: "session.revert" })
 
   export const RevertInput = z.object({
-    sessionID: Identifier.schema("session"),
-    messageID: Identifier.schema("message"),
-    partID: Identifier.schema("part").optional(),
+    sessionID: SessionID.zod,
+    messageID: MessageID.zod,
+    partID: PartID.zod.optional(),
   })
   export type RevertInput = z.infer<typeof RevertInput>
 
@@ -79,7 +79,7 @@ export namespace SessionRevert {
     return session
   }
 
-  export async function unrevert(input: { sessionID: string }) {
+  export async function unrevert(input: { sessionID: SessionID }) {
     log.info("unreverting", input)
     SessionPrompt.assertNotBusy(input.sessionID)
     const session = await Session.get(input.sessionID)
