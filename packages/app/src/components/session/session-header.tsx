@@ -303,7 +303,12 @@ export function SessionHeader() {
   })
 
   const canOpen = createMemo(() => platform.platform === "desktop" && !!platform.openPath && server.isLocal())
-  const current = createMemo(() => options().find((o) => o.id === prefs.app) ?? options()[0])
+  const current = createMemo(
+    () =>
+      options().find((o) => o.id === prefs.app) ??
+      options()[0] ??
+      ({ id: "finder", label: fileManager().label, icon: fileManager().icon } as const),
+  )
   const opening = createMemo(() => openRequest.app !== undefined)
 
   const selectApp = (app: OpenApp) => {

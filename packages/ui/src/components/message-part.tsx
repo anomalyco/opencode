@@ -31,9 +31,8 @@ import {
 import { useData } from "../context"
 import { useFileComponent } from "../context/file"
 import { useDialog } from "../context/dialog"
-import { useI18n } from "../context/i18n"
-import { BasicTool } from "./basic-tool"
-import { GenericTool } from "./basic-tool"
+import { type UiI18n, useI18n } from "../context/i18n"
+import { BasicTool, GenericTool } from "./basic-tool"
 import { Accordion } from "./accordion"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { Card } from "./card"
@@ -52,6 +51,7 @@ import { TextShimmer } from "./text-shimmer"
 import { AnimatedCountList } from "./tool-count-summary"
 import { ToolStatusTitle } from "./tool-status-title"
 import { animate } from "motion"
+import { useLocation } from "@solidjs/router"
 
 function ShellSubmessage(props: { text: string; animate?: boolean }) {
   let widthRef: HTMLSpanElement | undefined
@@ -209,6 +209,11 @@ export type ToolInfo = {
   subtitle?: string
 }
 
+function agentTitle(i18n: UiI18n, type?: string) {
+  if (!type) return i18n.t("ui.tool.agent.default")
+  return i18n.t("ui.tool.agent", { type })
+}
+
 export function getToolInfo(tool: string, input: any = {}): ToolInfo {
   const i18n = useI18n()
   switch (tool) {
@@ -242,12 +247,29 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
         title: i18n.t("ui.tool.webfetch"),
         subtitle: input.url,
       }
-    case "task":
+    case "websearch":
+      return {
+        icon: "window-cursor",
+        title: i18n.t("ui.tool.websearch"),
+        subtitle: input.query,
+      }
+    case "codesearch":
+      return {
+        icon: "code",
+        title: i18n.t("ui.tool.codesearch"),
+        subtitle: input.query,
+      }
+    case "task": {
+      const type =
+        typeof input.subagent_type === "string" && input.subagent_type
+          ? input.subagent_type[0]!.toUpperCase() + input.subagent_type.slice(1)
+          : undefined
       return {
         icon: "task",
-        title: i18n.t("ui.tool.agent", { type: input.subagent_type || "task" }),
+        title: agentTitle(i18n, type),
         subtitle: input.description,
       }
+    }
     case "bash":
       return {
         icon: "console",
@@ -300,6 +322,18 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
         title: tool,
       }
   }
+}
+
+function urls(text: string | undefined) {
+  if (!text) return []
+  const seen = new Set<string>()
+  return [...text.matchAll(/https?:\/\/[^\s<>"'`)\]]+/g)]
+    .map((item) => item[0].replace(/[),.;:!?]+$/g, ""))
+    .filter((item) => {
+      if (seen.has(item)) return false
+      seen.add(item)
+      return true
+    })
 }
 
 const CONTEXT_GROUP_TOOLS = new Set(["read", "glob", "grep", "list"])
@@ -469,7 +503,8 @@ export function AssistantParts(props: {
               {(() => {
                 const parts = createMemo(
                   () => {
-                    const entry = entryAccessor() as { type: "context"; refs: PartRef[] }
+                    const entry = entryAccessor()
+                    if (entry.type !== "context") return emptyTools
                     return entry.refs
                       .map((ref) => partByID(list(data.store.part?.[ref.messageID], emptyParts), ref.partID))
                       .filter((part): part is ToolPart => !!part && isContextGroupTool(part))
@@ -489,29 +524,27 @@ export function AssistantParts(props: {
             <Match when={entryType() === "part"}>
               {(() => {
                 const message = createMemo(() => {
-                  const entry = entryAccessor() as { type: "part"; ref: PartRef }
+                  const entry = entryAccessor()
+                  if (entry.type !== "part") return
                   return props.messages.find((item) => item.id === entry.ref.messageID)
                 })
                 const part = createMemo(() => {
-                  const entry = entryAccessor() as { type: "part"; ref: PartRef }
+                  const entry = entryAccessor()
+                  if (entry.type !== "part") return
                   return partByID(list(data.store.part?.[entry.ref.messageID], emptyParts), entry.ref.partID)
                 })
 
                 return (
                   <Show when={message()}>
-                    {(msg) => (
-                      <Show when={part()}>
-                        {(p) => (
-                          <Part
-                            part={p()}
-                            message={msg()}
-                            showAssistantCopyPartID={props.showAssistantCopyPartID}
-                            turnDurationMs={props.turnDurationMs}
-                            defaultOpen={partDefaultOpen(p(), props.shellToolDefaultOpen, props.editToolDefaultOpen)}
-                          />
-                        )}
-                      </Show>
-                    )}
+                    <Show when={part()}>
+                      <Part
+                        part={part()!}
+                        message={message()!}
+                        showAssistantCopyPartID={props.showAssistantCopyPartID}
+                        turnDurationMs={props.turnDurationMs}
+                        defaultOpen={partDefaultOpen(part()!, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
+                      />
+                    </Show>
                   </Show>
                 )
               })()}
@@ -597,6 +630,32 @@ function contextToolSummary(parts: ToolPart[]) {
   return { read, search, list }
 }
 
+function ExaOutput(props: { output?: string }) {
+  const links = createMemo(() => urls(props.output))
+
+  return (
+    <Show when={links().length > 0}>
+      <div data-component="exa-tool-output">
+        <div data-slot="exa-tool-links">
+          <For each={links()}>
+            {(url) => (
+              <a
+                data-slot="exa-tool-link"
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(event) => event.stopPropagation()}
+              >
+                {url}
+              </a>
+            )}
+          </For>
+        </div>
+      </div>
+    </Show>
+  )
+}
+
 export function registerPartComponent(type: string, component: PartComponent) {
   PART_MAPPING[type] = component
 }
@@ -660,7 +719,8 @@ export function AssistantMessageDisplay(props: {
               {(() => {
                 const parts = createMemo(
                   () => {
-                    const entry = entryAccessor() as { type: "context"; refs: PartRef[] }
+                    const entry = entryAccessor()
+                    if (entry.type !== "context") return emptyTools
                     return entry.refs
                       .map((ref) => partByID(props.parts, ref.partID))
                       .filter((part): part is ToolPart => !!part && isContextGroupTool(part))
@@ -679,19 +739,18 @@ export function AssistantMessageDisplay(props: {
             <Match when={entryType() === "part"}>
               {(() => {
                 const part = createMemo(() => {
-                  const entry = entryAccessor() as { type: "part"; ref: PartRef }
+                  const entry = entryAccessor()
+                  if (entry.type !== "part") return
                   return partByID(props.parts, entry.ref.partID)
                 })
 
                 return (
                   <Show when={part()}>
-                    {(p) => (
-                      <Part
-                        part={p()}
-                        message={props.message}
-                        showAssistantCopyPartID={props.showAssistantCopyPartID}
-                      />
-                    )}
+                    <Part
+                      part={part()!}
+                      message={props.message}
+                      showAssistantCopyPartID={props.showAssistantCopyPartID}
+                    />
                   </Show>
                 )
               })()}
@@ -1354,11 +1413,9 @@ ToolRegistry.register({
         trigger={{ title: i18n.t("ui.tool.list"), subtitle: getDirectory(props.input.path || "/") }}
       >
         <Show when={props.output}>
-          {(output) => (
-            <div data-component="tool-output" data-scrollable>
-              <Markdown text={output()} />
-            </div>
-          )}
+          <div data-component="tool-output" data-scrollable>
+            <Markdown text={props.output!} />
+          </div>
         </Show>
       </BasicTool>
     )
@@ -1380,11 +1437,9 @@ ToolRegistry.register({
         }}
       >
         <Show when={props.output}>
-          {(output) => (
-            <div data-component="tool-output" data-scrollable>
-              <Markdown text={output()} />
-            </div>
-          )}
+          <div data-component="tool-output" data-scrollable>
+            <Markdown text={props.output!} />
+          </div>
         </Show>
       </BasicTool>
     )
@@ -1409,11 +1464,9 @@ ToolRegistry.register({
         }}
       >
         <Show when={props.output}>
-          {(output) => (
-            <div data-component="tool-output" data-scrollable>
-              <Markdown text={output()} />
-            </div>
-          )}
+          <div data-component="tool-output" data-scrollable>
+            <Markdown text={props.output!} />
+          </div>
         </Show>
       </BasicTool>
     )
@@ -1467,12 +1520,70 @@ ToolRegistry.register({
 })
 
 ToolRegistry.register({
+  name: "websearch",
+  render(props) {
+    const i18n = useI18n()
+    const query = createMemo(() => {
+      const value = props.input.query
+      if (typeof value !== "string") return ""
+      return value
+    })
+
+    return (
+      <BasicTool
+        {...props}
+        icon="window-cursor"
+        trigger={{
+          title: i18n.t("ui.tool.websearch"),
+          subtitle: query(),
+          subtitleClass: "exa-tool-query",
+        }}
+      >
+        <ExaOutput output={props.output} />
+      </BasicTool>
+    )
+  },
+})
+
+ToolRegistry.register({
+  name: "codesearch",
+  render(props) {
+    const i18n = useI18n()
+    const query = createMemo(() => {
+      const value = props.input.query
+      if (typeof value !== "string") return ""
+      return value
+    })
+
+    return (
+      <BasicTool
+        {...props}
+        icon="code"
+        trigger={{
+          title: i18n.t("ui.tool.codesearch"),
+          subtitle: query(),
+          subtitleClass: "exa-tool-query",
+        }}
+      >
+        <ExaOutput output={props.output} />
+      </BasicTool>
+    )
+  },
+})
+
+ToolRegistry.register({
   name: "task",
   render(props) {
     const data = useData()
     const i18n = useI18n()
+    const location = useLocation()
     const childSessionId = () => props.metadata.sessionId as string | undefined
-    const title = createMemo(() => i18n.t("ui.tool.agent", { type: props.input.subagent_type || props.tool }))
+    const type = createMemo(() => {
+      const raw = props.input.subagent_type
+      if (typeof raw !== "string" || !raw) return undefined
+      return raw[0]!.toUpperCase() + raw.slice(1)
+    })
+    const title = createMemo(() => agentTitle(i18n, type()))
     const description = createMemo(() => {
       const value = props.input.description
       if (typeof value === "string") return value
@@ -1487,8 +1598,7 @@ ToolRegistry.register({
       const direct = data.sessionHref?.(sessionId)
       if (direct) return direct
 
-      if (typeof window === "undefined") return
-      const path = window.location.pathname
+      const path = location.pathname
       const idx = path.indexOf("/session")
       if (idx === -1) return
       return `${path.slice(0, idx)}/session/${sessionId}`
@@ -1505,16 +1615,14 @@ ToolRegistry.register({
           <Show when={description()}>
             <Switch>
               <Match when={href()}>
-                {(url) => (
-                  <a
-                    data-slot="basic-tool-tool-subtitle"
-                    class="clickable subagent-link"
-                    href={url()}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {description()}
-                  </a>
-                )}
+                <a
+                  data-slot="basic-tool-tool-subtitle"
+                  class="clickable subagent-link"
+                  href={href()!}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {description()}
+                </a>
               </Match>
               <Match when={true}>
                 <span data-slot="basic-tool-tool-subtitle">{description()}</span>
@@ -1639,7 +1747,9 @@ ToolRegistry.register({
             <ToolFileAccordion
               path={path()}
               actions={
-                <Show when={!pending() && props.metadata.filediff}>{(diff) => <DiffChanges changes={diff()} />}</Show>
+                <Show when={!pending() && props.metadata.filediff}>
+                  <DiffChanges changes={props.metadata.filediff!} />
+                </Show>
               }
             >
               <div data-component="edit-content">
@@ -1866,74 +1976,72 @@ ToolRegistry.register({
           </div>
         }
       >
-        {(file) => (
-          <div data-component="apply-patch-tool">
-            <BasicTool
-              {...props}
-              icon="code-lines"
-              defer
-              trigger={
-                <div data-component="edit-trigger">
-                  <div data-slot="message-part-title-area">
-                    <div data-slot="message-part-title">
-                      <span data-slot="message-part-title-text">
-                        <TextShimmer text={i18n.t("ui.tool.patch")} active={pending()} />
-                      </span>
-                      <Show when={!pending()}>
-                        <span data-slot="message-part-title-filename">{getFilename(file().relativePath)}</span>
-                      </Show>
-                    </div>
-                    <Show when={!pending() && file().relativePath.includes("/")}>
-                      <div data-slot="message-part-path">
-                        <span data-slot="message-part-directory">{getDirectory(file().relativePath)}</span>
-                      </div>
-                    </Show>
-                  </div>
-                  <div data-slot="message-part-actions">
+        <div data-component="apply-patch-tool">
+          <BasicTool
+            {...props}
+            icon="code-lines"
+            defer
+            trigger={
+              <div data-component="edit-trigger">
+                <div data-slot="message-part-title-area">
+                  <div data-slot="message-part-title">
+                    <span data-slot="message-part-title-text">
+                      <TextShimmer text={i18n.t("ui.tool.patch")} active={pending()} />
+                    </span>
                     <Show when={!pending()}>
-                      <DiffChanges changes={{ additions: file().additions, deletions: file().deletions }} />
+                      <span data-slot="message-part-title-filename">{getFilename(single()!.relativePath)}</span>
                     </Show>
                   </div>
+                  <Show when={!pending() && single()!.relativePath.includes("/")}>
+                    <div data-slot="message-part-path">
+                      <span data-slot="message-part-directory">{getDirectory(single()!.relativePath)}</span>
+                    </div>
+                  </Show>
                 </div>
+                <div data-slot="message-part-actions">
+                  <Show when={!pending()}>
+                    <DiffChanges changes={{ additions: single()!.additions, deletions: single()!.deletions }} />
+                  </Show>
+                </div>
+              </div>
+            }
+          >
+            <ToolFileAccordion
+              path={single()!.relativePath}
+              actions={
+                <Switch>
+                  <Match when={single()!.type === "add"}>
+                    <span data-slot="apply-patch-change" data-type="added">
+                      {i18n.t("ui.patch.action.created")}
+                    </span>
+                  </Match>
+                  <Match when={single()!.type === "delete"}>
+                    <span data-slot="apply-patch-change" data-type="removed">
+                      {i18n.t("ui.patch.action.deleted")}
+                    </span>
+                  </Match>
+                  <Match when={single()!.type === "move"}>
+                    <span data-slot="apply-patch-change" data-type="modified">
+                      {i18n.t("ui.patch.action.moved")}
+                    </span>
+                  </Match>
+                  <Match when={true}>
+                    <DiffChanges changes={{ additions: single()!.additions, deletions: single()!.deletions }} />
+                  </Match>
+                </Switch>
               }
             >
-              <ToolFileAccordion
-                path={file().relativePath}
-                actions={
-                  <Switch>
-                    <Match when={file().type === "add"}>
-                      <span data-slot="apply-patch-change" data-type="added">
-                        {i18n.t("ui.patch.action.created")}
-                      </span>
-                    </Match>
-                    <Match when={file().type === "delete"}>
-                      <span data-slot="apply-patch-change" data-type="removed">
-                        {i18n.t("ui.patch.action.deleted")}
-                      </span>
-                    </Match>
-                    <Match when={file().type === "move"}>
-                      <span data-slot="apply-patch-change" data-type="modified">
-                        {i18n.t("ui.patch.action.moved")}
-                      </span>
-                    </Match>
-                    <Match when={true}>
-                      <DiffChanges changes={{ additions: file().additions, deletions: file().deletions }} />
-                    </Match>
-                  </Switch>
-                }
-              >
-                <div data-component="apply-patch-file-diff">
-                  <Dynamic
-                    component={fileComponent}
-                    mode="diff"
-                    before={{ name: file().filePath, contents: file().before }}
-                    after={{ name: file().movePath ?? file().filePath, contents: file().after }}
-                  />
-                </div>
-              </ToolFileAccordion>
-            </BasicTool>
-          </div>
-        )}
+              <div data-component="apply-patch-file-diff">
+                <Dynamic
+                  component={fileComponent}
+                  mode="diff"
+                  before={{ name: single()!.filePath, contents: single()!.before }}
+                  after={{ name: single()!.movePath ?? single()!.filePath, contents: single()!.after }}
+                />
+              </div>
+            </ToolFileAccordion>
+          </BasicTool>
+        </div>
       </Show>
     )
   },

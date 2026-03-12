@@ -577,6 +577,46 @@
   justify-content: center;
 }
 
+[data-component="exa-tool-output"] {
+  width: 100%;
+  padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+}
+
+[data-slot="basic-tool-tool-subtitle"].exa-tool-query {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-slot="exa-tool-links"] {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+[data-slot="exa-tool-link"] {
+  display: block;
+  max-width: 100%;
+  color: var(--text-interactive-base);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  &:hover {
+    color: var(--text-interactive-base);
+  }
+
+  &:visited {
+    color: var(--text-interactive-base);
+  }
+}
+
 [data-component="todos"] {
   padding: 10px 0 24px 0;
   display: flex;
