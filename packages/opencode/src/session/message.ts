@@ -1,4 +1,5 @@
 import z from "zod"
+import { SessionID } from "./schema"
 import { NamedError } from "@opencode-ai/util/error"
 
 export namespace Message {
@@ -142,7 +143,7 @@ export namespace Message {
           error: z
             .discriminatedUnion("name", [AuthError.Schema, NamedError.Unknown.Schema, OutputLengthError.Schema])
             .optional(),
-          sessionID: z.string(),
+          sessionID: SessionID.zod,
           tool: z.record(
             z.string(),
             z

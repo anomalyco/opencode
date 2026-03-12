@@ -1,7 +1,8 @@
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { Config } from "@/config/config"
-import { Identifier } from "@/id/id"
+import { SessionID, MessageID } from "@/session/schema"
+import { PermissionID } from "./schema"
 import { Instance } from "@/project/instance"
 import { Database, eq } from "@/storage/db"
 import { PermissionTable } from "@/session/session.sql"
@@ -68,15 +69,15 @@ export namespace PermissionNext {
 
   export const Request = z
     .object({
-      id: Identifier.schema("permission"),
-      sessionID: Identifier.schema("session"),
+      id: PermissionID.zod,
+      sessionID: SessionID.zod,
       permission: z.string(),
       patterns: z.string().array(),
       metadata: z.record(z.string(), z.any()),
       always: z.string().array(),
       tool: z
         .object({
-          messageID: z.string(),
+          messageID: MessageID.zod,
           callID: z.string(),
         })
         .optional(),
@@ -100,8 +101,8 @@ export namespace PermissionNext {
     Replied: BusEvent.define(
       "permission.replied",
       z.object({
-        sessionID: z.string(),
-        requestID: z.string(),
+        sessionID: SessionID.zod,
+        requestID: PermissionID.zod,
         reply: Reply,
       }),
     ),
@@ -142,7 +143,7 @@ export namespace PermissionNext {
         if (rule.action === "deny")
           throw new DeniedError(ruleset.filter((r) => Wildcard.match(request.permission, r.permission)))
         if (rule.action === "ask") {
-          const id = input.id ?? Identifier.ascending("permission")
+          const id = input.id ?? PermissionID.ascending()
           return new Promise<void>((resolve, reject) => {
             const info: Request = {
               id,
@@ -163,7 +164,7 @@ export namespace PermissionNext {
 
   export const reply = fn(
     z.object({
-      requestID: Identifier.schema("permission"),
+      requestID: PermissionID.zod,
       reply: Reply,
       message: z.string().optional(),
     }),
