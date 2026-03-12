@@ -901,6 +901,33 @@
     line-height: var(--line-height-large);
     color: var(--text-strong);
     padding: 0 10px;
+    max-height: var(--question-text-max-height, 300px);
+    overflow-y: auto;
+    min-height: 0;
+    scrollbar-width: thin;
+    -ms-overflow-style: -ms-autohiding-scrollbar;
+
+    &::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    &::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background: var(--scrollbar-thumb);
+      border-radius: 4px;
+      border: 2px solid transparent;
+      background-clip: content-box;
+    }
+
+    &:hover::-webkit-scrollbar-thumb {
+      background: var(--scrollbar-thumb-hover);
+      border: 2px solid transparent;
+      background-clip: content-box;
+    }
   }
 
   [data-slot="question-hint"] {

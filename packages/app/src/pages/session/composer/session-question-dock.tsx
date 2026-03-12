@@ -35,6 +35,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   const input = createMemo(() => store.custom[store.tab] ?? "")
   const on = createMemo(() => store.customOn[store.tab] === true)
   const multi = createMemo(() => question()?.multiple === true)
+  const custom = createMemo(() => question()?.custom !== false)
 
   const summary = createMemo(() => {
     const n = Math.min(store.tab + 1, total())
@@ -72,6 +73,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
       head instanceof HTMLElement && head.classList.contains("sticky") ? head.getBoundingClientRect().bottom : 0
     if (!top) {
       root.style.removeProperty("--question-prompt-max-height")
+      root.style.removeProperty("--question-text-max-height")
       return
     }
 
@@ -83,6 +85,18 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     const gap = 8
     const max = Math.max(240, Math.floor(dockBottom - top - gap - below))
     root.style.setProperty("--question-prompt-max-height", `${max}px`)
+
+    // Calculate max height for question text to ensure options remain visible
+    // Reserve space for: header (~44px), hint (~40px), options (~200px min), padding (~16px)
+    const questionText = root.querySelector('[data-slot="question-text"]')
+    if (questionText instanceof HTMLElement) {
+      const headerHeight = 44
+      const hintHeight = 40
+      const optionsMinHeight = 200
+      const padding = 16
+      const questionTextMaxHeight = max - headerHeight - hintHeight - optionsMinHeight - padding
+      root.style.setProperty("--question-text-max-height", `${Math.max(60, questionTextMaxHeight)}px`)
+    }
   }
 
   onMount(() => {
@@ -336,17 +350,60 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
           }}
         </For>
 
-        <Show
-          when={store.editing}
-          fallback={
-            <button
+        <Show when={custom()}>
+          <Show
+            when={store.editing}
+            fallback={
+              <button
+                data-slot="question-option"
+                data-custom="true"
+                data-picked={on()}
+                role={multi() ? "checkbox" : "radio"}
+                aria-checked={on()}
+                disabled={store.sending}
+                onClick={customOpen}
+              >
+                <span
+                  data-slot="question-option-check"
+                  aria-hidden="true"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    customToggle()
+                  }}
+                >
+                  <span data-slot="question-option-box" data-type={multi() ? "checkbox" : "radio"} data-picked={on()}>
+                    <Show when={multi()} fallback={<span data-slot="question-option-radio-dot" />}>
+                      <Icon name="check-small" size="small" />
+                    </Show>
+                  </span>
+                </span>
+                <span data-slot="question-option-main">
+                  <span data-slot="option-label">{language.t("ui.messagePart.option.typeOwnAnswer")}</span>
+                  <span data-slot="option-description">{input() || language.t("ui.question.custom.placeholder")}</span>
+                </span>
+              </button>
+            }
+          >
+            <form
               data-slot="question-option"
               data-custom="true"
               data-picked={on()}
               role={multi() ? "checkbox" : "radio"}
               aria-checked={on()}
-              disabled={store.sending}
-              onClick={customOpen}
+              onMouseDown={(e) => {
+                if (store.sending) {
+                  e.preventDefault()
+                  return
+                }
+                if (e.target instanceof HTMLTextAreaElement) return
+                const input = e.currentTarget.querySelector('[data-slot="question-custom-input"]')
+                if (input instanceof HTMLTextAreaElement) input.focus()
+              }}
+              onSubmit={(e) => {
+                e.preventDefault()
+                commitCustom()
+              }}
             >
               <span
                 data-slot="question-option-check"
@@ -365,79 +422,38 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
               </span>
               <span data-slot="question-option-main">
                 <span data-slot="option-label">{language.t("ui.messagePart.option.typeOwnAnswer")}</span>
-                <span data-slot="option-description">{input() || language.t("ui.question.custom.placeholder")}</span>
-              </span>
-            </button>
-          }
-        >
-          <form
-            data-slot="question-option"
-            data-custom="true"
-            data-picked={on()}
-            role={multi() ? "checkbox" : "radio"}
-            aria-checked={on()}
-            onMouseDown={(e) => {
-              if (store.sending) {
-                e.preventDefault()
-                return
-              }
-              if (e.target instanceof HTMLTextAreaElement) return
-              const input = e.currentTarget.querySelector('[data-slot="question-custom-input"]')
-              if (input instanceof HTMLTextAreaElement) input.focus()
-            }}
-            onSubmit={(e) => {
-              e.preventDefault()
-              commitCustom()
-            }}
-          >
-            <span
-              data-slot="question-option-check"
-              aria-hidden="true"
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                customToggle()
-              }}
-            >
-              <span data-slot="question-option-box" data-type={multi() ? "checkbox" : "radio"} data-picked={on()}>
-                <Show when={multi()} fallback={<span data-slot="question-option-radio-dot" />}>
-                  <Icon name="check-small" size="small" />
-                </Show>
-              </span>
-            </span>
-            <span data-slot="question-option-main">
-              <span data-slot="option-label">{language.t("ui.messagePart.option.typeOwnAnswer")}</span>
-              <textarea
-                ref={(el) =>
-                  setTimeout(() => {
-                    el.focus()
-                    el.style.height = "0px"
-                    el.style.height = `${el.scrollHeight}px`
-                  }, 0)
-                }
-                data-slot="question-custom-input"
-                placeholder={language.t("ui.question.custom.placeholder")}
-                value={input()}
-                rows={1}
-                disabled={store.sending}
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") {
-                    e.preventDefault()
-                    setStore("editing", false)
-                    return
+                <textarea
+                  ref={(el) =>
+                    setTimeout(() => {
+                      el.focus()
+                      el.style.height = "0px"
+                      el.style.height = `${el.scrollHeight}px`
+                    }, 0)
                   }
-                  if (e.key !== "Enter" || e.shiftKey) return
-                  e.preventDefault()
-                  commitCustom()
-                }}
-                onInput={(e) => {
-                  customUpdate(e.currentTarget.value)
-                  e.currentTarget.style.height = "0px"
-                  e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`
-                }}
-              />
-            </span>
-          </form>
+                  data-slot="question-custom-input"
+                  placeholder={language.t("ui.question.custom.placeholder")}
+                  value={input()}
+                  rows={1}
+                  disabled={store.sending}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      e.preventDefault()
+                      setStore("editing", false)
+                      return
+                    }
+                    if (e.key !== "Enter" || e.shiftKey) return
+                    e.preventDefault()
+                    commitCustom()
+                  }}
+                  onInput={(e) => {
+                    customUpdate(e.currentTarget.value)
+                    e.currentTarget.style.height = "0px"
+                    e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`
+                  }}
+                />
+              </span>
+            </form>
+          </Show>
         </Show>
       </div>
     </DockPrompt>
