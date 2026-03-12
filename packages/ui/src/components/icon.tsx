@@ -22,12 +22,12 @@ const icons = {
   "close-small": `<path d="M6 6L14 14M14 6L6 14" stroke="currentColor" stroke-linecap="square"/>`,
   checklist: `<path d="M9.58342 13.7498H17.0834M9.58342 6.24984H17.0834M2.91675 6.6665L4.58341 7.9165L7.08341 4.1665M2.91675 14.1665L4.58341 15.4165L7.08341 11.6665" stroke="currentColor" stroke-linecap="square"/>`,
   console: `<path d="M3.75 5.4165L8.33333 9.99984L3.75 14.5832M10.4167 14.5832H16.25" stroke="currentColor" stroke-linecap="square"/>`,
-  terminal: `<path d="M2 5.2V18H18V5.2M2 5.2V2H18V5.2M2 5.2H18M6.5 9L8.64286 11L6.5 13M10.9286 13H13.5" stroke="currentColor" stroke-linecap="square"/>`,
-  "terminal-active": `<path d="M2 18H18V5.2H2V18Z" fill="currentColor" fill-opacity="0.1"/>
-<path d="M2 5.2V18H18V5.2M2 5.2V2H18V5.2M2 5.2H18M6.5 9L8.64286 11L6.5 13M10.9286 13H13.5" stroke="currentColor" stroke-linecap="square"/>`,
-  review: `<path d="M5.2 18H18V2L5.2 2M5.2 18H2L2 2L5.2 2M5.2 18L5.2 2M8.5 14.5H14.5M8.5 7.99512H11.5049M11.5049 7.99512H14.5M11.5049 7.99512V5M11.5049 7.99512V11" stroke="currentColor"/>`,
-  "review-active": `<path d="M18 18V2L5.2 2L5.2 18H18Z" fill="currentColor" fill-opacity="0.1"/>
-<path d="M5.2 18H18V2L5.2 2M5.2 18H2L2 2L5.2 2M5.2 18L5.2 2M8.5 14.5H14.5M8.5 7.99512H11.5049M11.5049 7.99512H14.5M11.5049 7.99512V5M11.5049 7.99512V11" stroke="currentColor"/>`,
+  terminal: `<path d="M6.5 8L8.64286 10L6.5 12M10.9286 12H13.5M2 18H18V2H2V18Z" stroke="currentColor" stroke-linecap="square"/>`,
+  "terminal-active": `<path d="M2 18H18V2H2V18Z" fill="currentColor" fill-opacity="0.1"/>
+<path d="M6.5 8L8.64286 10L6.5 12M10.9286 12H13.5M2 18H18V2H2V18Z" stroke="currentColor" stroke-linecap="square"/>`,
+  review: `<path d="M7 14.5H13M7 7.99512H10.0049M10.0049 7.99512H13M10.0049 7.99512V5M10.0049 7.99512V11M18 18V2L2 2L2 18H18Z" stroke="currentColor"/>`,
+  "review-active": `<path d="M18 18V2L2 2L2 18H18Z" fill="currentColor" fill-opacity="0.1"/>
+<path d="M7 14.5H13M7 7.99512H10.0049M10.0049 7.99512H13M10.0049 7.99512V5M10.0049 7.99512V11M18 18V2L2 2L2 18H18Z" stroke="currentColor"/>`,
   expand: `<path d="M4.58301 10.4163V15.4163H9.58301M10.4163 4.58301H15.4163V9.58301" stroke="currentColor" stroke-linecap="square"/>`,
   collapse: `<path d="M16.666 8.33398H11.666V3.33398" stroke="currentColor" stroke-linecap="square"/><path d="M8.33398 16.666V11.666H3.33398" stroke="currentColor" stroke-linecap="square"/>`,
   code: `<path d="M8.7513 7.5013L6.2513 10.0013L8.7513 12.5013M11.2513 7.5013L13.7513 10.0013L11.2513 12.5013M2.91797 2.91797H17.0846V17.0846H2.91797V2.91797Z" stroke="currentColor"/>`,
