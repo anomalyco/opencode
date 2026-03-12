@@ -85,6 +85,7 @@ export namespace ModelsDev {
     "o4",
     "gemini",
     "mistral",
+    "codestral",
     "deepseek",
     "grok",
     "llama",
