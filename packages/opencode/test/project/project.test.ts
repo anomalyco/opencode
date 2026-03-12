@@ -7,6 +7,11 @@ import { tmpdir } from "../fixture/fixture"
 import { Filesystem } from "../../src/util/filesystem"
 import { GlobalBus } from "../../src/bus/global"
 import { ProjectID } from "../../src/project/schema"
+import { Session } from "../../src/session"
+import { Instance } from "../../src/project/instance"
+import { Database } from "../../src/storage/db"
+import { SessionTable } from "../../src/session/session.sql"
+import { eq } from "../../src/storage/db"
 
 Log.init({ print: false })
 
@@ -345,5 +350,57 @@ describe("Project.update", () => {
     expect(updated.icon?.url).toBe("https://example.com/favicon.ico")
     expect(updated.icon?.color).toBe("#00ff00")
     expect(updated.commands?.start).toBe("make start")
+  })
+})
+
+describe("Project session migration", () => {
+  test("migrates sessions from global to git project after git init", async () => {
+    await using tmp = await tmpdir()
+
+    const globalProject = await Project.fromDirectory(tmp.path)
+    expect(globalProject.project.id).toBe(ProjectID.global)
+
+    const sessions = await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session1 = await Session.create({ title: "Session before git init" })
+        const session2 = await Session.create({ title: "Another pre-git session" })
+
+        const globalSessions = [...Session.list({ roots: true })]
+        expect(globalSessions.length).toBe(2)
+        expect(globalSessions.map((s) => s.id)).toContain(session1.id)
+        expect(globalSessions.map((s) => s.id)).toContain(session2.id)
+
+        return { session1, session2 }
+      },
+    })
+
+    await $`git init`.cwd(tmp.path).quiet()
+    await $`git config user.email "test@test.com"`.cwd(tmp.path).quiet()
+    await $`git config user.name "Test User"`.cwd(tmp.path).quiet()
+    await $`git commit --allow-empty -m "initial commit"`.cwd(tmp.path).quiet()
+
+    const gitProject = await Project.fromDirectory(tmp.path)
+    expect(gitProject.project.id).not.toBe(ProjectID.global)
+    expect(gitProject.project.vcs).toBe("git")
+
+    const migratedRows = Database.use((db) =>
+      db.select().from(SessionTable).where(eq(SessionTable.project_id, gitProject.project.id)).all(),
+    )
+    expect(migratedRows.length).toBe(2)
+
+    await Instance.reload({
+      directory: tmp.path,
+      project: gitProject.project,
+      worktree: gitProject.project.worktree,
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const gitSessions = [...Session.list({ roots: true })]
+        expect(gitSessions.length).toBe(2)
+      },
+    })
   })
 })

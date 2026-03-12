@@ -230,9 +230,6 @@ export namespace Project {
           updated: Date.now(),
         },
       }
-      if (data.id !== ProjectID.global) {
-        await migrateFromGlobal(data.id, data.worktree)
-      }
       return fresh
     })
 
@@ -277,6 +274,11 @@ export namespace Project {
     Database.use((db) =>
       db.insert(ProjectTable).values(insert).onConflictDoUpdate({ target: ProjectTable.id, set: updateSet }).run(),
     )
+
+    if (data.id !== ProjectID.global) {
+      await migrateFromGlobal(data.id, data.worktree)
+    }
+
     GlobalBus.emit("event", {
       payload: {
         type: Event.Updated.type,
