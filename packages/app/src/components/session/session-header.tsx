@@ -427,23 +427,7 @@ export function SessionHeader() {
                     aria-expanded={view().terminal.opened()}
                     aria-controls="terminal-panel"
                   >
-                    <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
-                      <Icon
-                        size="small"
-                        name={view().terminal.opened() ? "layout-bottom-partial" : "layout-bottom"}
-                        class="group-hover/terminal-toggle:hidden"
-                      />
-                      <Icon
-                        size="small"
-                        name="layout-bottom-partial"
-                        class="hidden group-hover/terminal-toggle:inline-block"
-                      />
-                      <Icon
-                        size="small"
-                        name={view().terminal.opened() ? "layout-bottom" : "layout-bottom-partial"}
-                        class="hidden group-active/terminal-toggle:inline-block"
-                      />
-                    </div>
+                    <Icon size="small" name={view().terminal.opened() ? "terminal-active" : "terminal"} />
                   </Button>
                 </TooltipKeybind>
 
@@ -460,23 +444,7 @@ export function SessionHeader() {
                       aria-expanded={view().reviewPanel.opened()}
                       aria-controls="review-panel"
                     >
-                      <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
-                        <Icon
-                          size="small"
-                          name={view().reviewPanel.opened() ? "layout-right-partial" : "layout-right"}
-                          class="group-hover/review-toggle:hidden"
-                        />
-                        <Icon
-                          size="small"
-                          name="layout-right-partial"
-                          class="hidden group-hover/review-toggle:inline-block"
-                        />
-                        <Icon
-                          size="small"
-                          name={view().reviewPanel.opened() ? "layout-right" : "layout-right-partial"}
-                          class="hidden group-active/review-toggle:inline-block"
-                        />
-                      </div>
+                      <Icon size="small" name={view().reviewPanel.opened() ? "review-active" : "review"} />
                     </Button>
                   </TooltipKeybind>
 
