@@ -131,12 +131,17 @@ export namespace Installation {
   export async function upgrade(method: Method, target: string) {
     let cmd
     switch (method) {
-      case "curl":
-        cmd = $`curl -fsSL https://raw.githubusercontent.com/mammouth-ai/code/dev/install.sh | bash`.env({
+      case "curl": {
+        cmd =
+          process.platform === "win32"
+            ? $`irm https://code.mammouth.ai/install.ps1 | iex`
+            : $`curl -fsSL https://raw.githubusercontent.com/mammouth-ai/code/dev/install.sh | bash`
+        cmd = cmd.env({
           ...process.env,
           VERSION: target,
         })
         break
+      }
       case "npm":
         cmd = $`npm install -g mammouth-ai@${target}`
         break
