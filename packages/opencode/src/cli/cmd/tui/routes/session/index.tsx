@@ -421,7 +421,7 @@ export function Session() {
               })
               if (child) scroll.scrollBy(child.y - scroll.y - 1)
             }}
-            sessionID={route.sessionID}
+            sessionID={session()?.parentID ?? route.sessionID}
             setPrompt={(promptInfo) => prompt.set(promptInfo)}
           />
         ))
@@ -444,7 +444,7 @@ export function Session() {
               })
               if (child) scroll.scrollBy(child.y - scroll.y - 1)
             }}
-            sessionID={route.sessionID}
+            sessionID={session()?.parentID ?? route.sessionID}
           />
         ))
       },
@@ -1144,7 +1144,7 @@ export function Session() {
                           dialog.replace(() => (
                             <DialogMessage
                               messageID={message.id}
-                              sessionID={route.sessionID}
+                              sessionID={session()?.parentID ?? route.sessionID}
                               setPrompt={(promptInfo) => prompt.set(promptInfo)}
                             />
                           ))
@@ -1186,7 +1186,7 @@ export function Session() {
                 onSubmit={() => {
                   toBottom()
                 }}
-                sessionID={route.sessionID}
+                sessionID={session()?.parentID ?? route.sessionID}
               />
             </box>
           </Show>
@@ -1195,7 +1195,7 @@ export function Session() {
         <Show when={sidebarVisible()}>
           <Switch>
             <Match when={wide()}>
-              <Sidebar sessionID={route.sessionID} />
+              <Sidebar sessionID={session()?.parentID ?? route.sessionID} />
             </Match>
             <Match when={!wide()}>
               <box
@@ -1207,7 +1207,7 @@ export function Session() {
                 alignItems="flex-end"
                 backgroundColor={RGBA.fromInts(0, 0, 0, 70)}
               >
-                <Sidebar sessionID={route.sessionID} />
+                <Sidebar sessionID={session()?.parentID ?? route.sessionID} />
               </box>
             </Match>
           </Switch>
