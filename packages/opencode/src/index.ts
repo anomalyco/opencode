@@ -1,3 +1,4 @@
+process.env.BROWSERSLIST_IGNORE_OLD_DATA = "true"
 import yargs from "yargs"
 import { hideBin } from "yargs/helpers"
 import { RunCommand } from "./cli/cmd/run"
