@@ -23,7 +23,11 @@ export namespace ShareNext {
     if (!cachedUrl) {
       cachedUrl = await Config.get().then((x) => x.enterprise?.url ?? "https://opencode.j9xym.com")
     }
-    return cachedUrl
+    return cachedUrl!
+  }
+
+  export async function url() {
+    return getUrl()
   }
 
   function rpcHeaders(): Record<string, string> | undefined {
