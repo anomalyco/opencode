@@ -160,7 +160,6 @@ async function initialize() {
     deepLinks: pendingDeepLinks,
   }
 
-  mainWindow = createMainWindow(globals)
   wireMenu()
 
   if (needsMigration) {
@@ -177,6 +176,8 @@ async function initialize() {
   if (overlay) {
     await loadingComplete.promise
   }
+
+  mainWindow = createMainWindow(globals)
 
   overlay?.close()
 }
