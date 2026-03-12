@@ -56,6 +56,7 @@ setupApp()
 function setupApp() {
   ensureLoopbackNoProxy()
   app.commandLine.appendSwitch("proxy-bypass-list", "<-loopback>")
+  let isQuitting = false
 
   if (!app.requestSingleInstanceLock()) {
     app.quit()
@@ -78,8 +79,29 @@ function setupApp() {
   })
 
   app.on("before-quit", () => {
+    isQuitting = true
     killSidecar()
   })
+
+  app.on("window-all-closed", () => {
+    if (process.platform !== "darwin") {
+      app.quit()
+    }
+  })
+
+  if (process.platform !== "win32") {
+    process.on("SIGINT", () => {
+      if (isQuitting) return
+      isQuitting = true
+      app.quit()
+    })
+
+    process.on("SIGTERM", () => {
+      if (isQuitting) return
+      isQuitting = true
+      app.quit()
+    })
+  }
 
   void app.whenReady().then(async () => {
     // migrate()

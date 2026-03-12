@@ -188,7 +188,7 @@ export function spawnCommand(args: string, extraEnv: Record<string, string>) {
 
   const kill = () => {
     if (!child.pid) return
-    treeKill(child.pid)
+    child.kill("SIGTERM")
   }
 
   return { events, child: { kill }, exit }
