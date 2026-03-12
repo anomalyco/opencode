@@ -2,6 +2,7 @@ export type InitStep = { phase: "server_waiting" } | { phase: "sqlite_waiting" }
 
 export type ServerReadyData = {
   url: string
+  username: string | null
   password: string | null
 }
 
