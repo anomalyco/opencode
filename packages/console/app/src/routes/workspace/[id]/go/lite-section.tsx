@@ -1,6 +1,6 @@
 import { action, useParams, useAction, useSubmission, json, query, createAsync } from "@solidjs/router"
 import { createStore } from "solid-js/store"
-import { Show } from "solid-js"
+import { createMemo, For, Show } from "solid-js"
 import { Billing } from "@opencode-ai/console-core/billing.js"
 import { Database, eq, and, isNull } from "@opencode-ai/console-core/drizzle/index.js"
 import { BillingTable, LiteTable } from "@opencode-ai/console-core/schema/billing.sql.js"
@@ -138,6 +138,8 @@ export function LiteSection() {
   const params = useParams()
   const i18n = useI18n()
   const language = useLanguage()
+  const billingInfo = createAsync(() => queryBillingInfo(params.id!))
+  const isBlack = createMemo(() => billingInfo()?.subscriptionID || billingInfo()?.timeSubscriptionBooked)
   const lite = createAsync(() => queryLiteSubscription(params.id!))
   const sessionAction = useAction(createSessionUrl)
   const sessionSubmission = useSubmission(createSessionUrl)
@@ -166,11 +168,15 @@ export function LiteSection() {
 
   return (
     <>
-      <Show when={lite() && lite()!.mine && lite()!}>
+      <Show when={isBlack()}>
+        <section class={styles.root}>
+          <p data-slot="other-message">{i18n.t("workspace.lite.black.message")}</p>
+        </section>
+      </Show>
+      <Show when={!isBlack() && lite() && lite()!.mine && lite()!}>
         {(sub) => (
           <section class={styles.root}>
             <div data-slot="section-title">
-              <h2>{i18n.t("workspace.lite.subscription.title")}</h2>
               <div data-slot="title-row">
                 <p>{i18n.t("workspace.lite.subscription.message")}</p>
                 <button
@@ -248,20 +254,26 @@ export function LiteSection() {
           </section>
         )}
       </Show>
-      <Show when={lite() && !lite()!.mine}>
+      <Show when={!isBlack() && lite() && !lite()!.mine}>
         <section class={styles.root}>
-          <div data-slot="section-title">
-            <h2>{i18n.t("workspace.lite.other.title")}</h2>
-          </div>
           <p data-slot="other-message">{i18n.t("workspace.lite.other.message")}</p>
         </section>
       </Show>
-      <Show when={lite() === null}>
+      <Show when={!isBlack() && lite() === null}>
         <section class={styles.root}>
-          <div data-slot="section-title">
-            <h2>{i18n.t("workspace.lite.promo.title")}</h2>
-          </div>
-          <p data-slot="promo-description">{i18n.t("workspace.lite.promo.description")}</p>
+          <p data-slot="promo-description">
+            <For
+              each={i18n
+                .t("workspace.lite.promo.description")
+                .split(/(\{\{price\}\})/g)
+                .filter(Boolean)}
+            >
+              {(part) => {
+                if (part === "{{price}}") return <strong>{i18n.t("workspace.lite.promo.price")}</strong>
+                return part
+              }}
+            </For>
+          </p>
           <h3 data-slot="promo-models-title">{i18n.t("workspace.lite.promo.modelsTitle")}</h3>
           <ul data-slot="promo-models">
             <li>Kimi K2.5</li>

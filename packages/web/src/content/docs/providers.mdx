@@ -1890,7 +1890,7 @@ You can use any OpenAI-compatible provider with opencode. Most modern AI provide
    ```
 
    Here are the configuration options:
-   - **npm**: AI SDK package to use, `@ai-sdk/openai-compatible` for OpenAI-compatible providers
+   - **npm**: AI SDK package to use, `@ai-sdk/openai-compatible` for OpenAI-compatible providers (for `/v1/chat/completions`). If your provider/model uses `/v1/responses`, use `@ai-sdk/openai`.
    - **name**: Display name in UI.
    - **models**: Available models.
    - **options.baseURL**: API endpoint URL.
@@ -1957,5 +1957,5 @@ If you are having trouble with configuring a provider, check the following:
 
 2. For custom providers, check the opencode config and:
    - Make sure the provider ID used in the `/connect` command matches the ID in your opencode config.
-   - The right npm package is used for the provider. For example, use `@ai-sdk/cerebras` for Cerebras. And for all other OpenAI-compatible providers, use `@ai-sdk/openai-compatible`.
+   - The right npm package is used for the provider. For example, use `@ai-sdk/cerebras` for Cerebras. And for all other OpenAI-compatible providers, use `@ai-sdk/openai-compatible` (for `/v1/chat/completions`); if a model uses `/v1/responses`, use `@ai-sdk/openai`. For mixed setups under one provider, you can override per model via `provider.npm`.
    - Check correct API endpoint is used in the `options.baseURL` field.
