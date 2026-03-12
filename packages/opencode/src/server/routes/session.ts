@@ -612,15 +612,14 @@ export const SessionRoutes = lazy(() =>
           return c.json([])
         }
 
-        const limit = Math.min(query.limit, 500)
         const page = await MessageV2.page({
           sessionID,
-          limit,
+          limit: query.limit,
           before: query.before,
         })
         if (page.cursor) {
           const url = new URL(c.req.url)
-          url.searchParams.set("limit", limit.toString())
+          url.searchParams.set("limit", query.limit.toString())
           url.searchParams.set("before", page.cursor)
           c.header("Access-Control-Expose-Headers", "Link, X-Next-Cursor")
           c.header("Link", `<${url.toString()}>; rel=\"next\"`)

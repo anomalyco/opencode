@@ -10,9 +10,8 @@ import { Log } from "../../src/util/log"
 const root = path.join(__dirname, "../..")
 Log.init({ print: false })
 
-async function fill(sessionID: string, count: number) {
+async function fill(sessionID: string, count: number, time = (i: number) => Date.now() + i) {
   const ids: string[] = []
-  const base = Date.now()
   for (let i = 0; i < count; i++) {
     const id = Identifier.ascending("message")
     ids.push(id)
@@ -20,7 +19,7 @@ async function fill(sessionID: string, count: number) {
       id,
       sessionID,
       role: "user",
-      time: { created: base + i },
+      time: { created: time(i) },
       agent: "test",
       model: { providerID: "test", modelID: "test" },
       tools: {},
@@ -94,6 +93,24 @@ describe("session messages endpoint", () => {
 
         const miss = await app.request(`/session/ses_missing/message?limit=2`)
         expect(miss.status).toBe(404)
+
+        await Session.remove(session.id)
+      },
+    })
+  })
+
+  test("does not truncate large legacy limit requests", async () => {
+    await Instance.provide({
+      directory: root,
+      fn: async () => {
+        const session = await Session.create({})
+        await fill(session.id, 520)
+        const app = Server.Default()
+
+        const res = await app.request(`/session/${session.id}/message?limit=510`)
+        expect(res.status).toBe(200)
+        const body = (await res.json()) as MessageV2.WithParts[]
+        expect(body).toHaveLength(510)
 
         await Session.remove(session.id)
       },

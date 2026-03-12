@@ -9,9 +9,8 @@ import { Log } from "../../src/util/log"
 const root = path.join(__dirname, "../..")
 Log.init({ print: false })
 
-async function fill(sessionID: string, count: number) {
+async function fill(sessionID: string, count: number, time = (i: number) => Date.now() + i) {
   const ids: string[] = []
-  const base = Date.now()
   for (let i = 0; i < count; i++) {
     const id = Identifier.ascending("message")
     ids.push(id)
@@ -19,7 +18,7 @@ async function fill(sessionID: string, count: number) {
       id,
       sessionID,
       role: "user",
-      time: { created: base + i },
+      time: { created: time(i) },
       agent: "test",
       model: { providerID: "test", modelID: "test" },
       tools: {},
@@ -74,6 +73,24 @@ describe("session message pagination", () => {
 
         const items = await Array.fromAsync(MessageV2.stream(session.id))
         expect(items.map((item) => item.info.id)).toEqual(ids.slice().reverse())
+
+        await Session.remove(session.id)
+      },
+    })
+  })
+
+  test("accepts cursors generated from fractional timestamps", async () => {
+    await Instance.provide({
+      directory: root,
+      fn: async () => {
+        const session = await Session.create({})
+        const ids = await fill(session.id, 4, (i) => 1000.5 + i)
+
+        const a = await MessageV2.page({ sessionID: session.id, limit: 2 })
+        const b = await MessageV2.page({ sessionID: session.id, limit: 2, before: a.cursor! })
+
+        expect(a.items.map((item) => item.info.id)).toEqual(ids.slice(-2))
+        expect(b.items.map((item) => item.info.id)).toEqual(ids.slice(0, 2))
 
         await Session.remove(session.id)
       },
