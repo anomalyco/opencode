@@ -1,0 +1,14 @@
+# Exclude development files from npm package
+demo/
+docs/
+scripts/
+lib/**/*.test.ts
+.git*
+*.log
+node_modules/
+bun.lock
+roadmap.md
+AGENTS.md
+run-demo.sh
+vite.config.js
+tsconfig.json

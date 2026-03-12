@@ -1,0 +1,8 @@
+node_modules/
+dist/
+coverage/
+*.wasm
+.git/
+.vite/
+bun.lock
+ghostty/

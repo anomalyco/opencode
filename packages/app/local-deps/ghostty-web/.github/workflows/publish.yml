@@ -1,0 +1,237 @@
+name: publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_run:
+    workflows: ['ci']
+    types:
+      - completed
+    branches:
+      - main
+
+permissions:
+  contents: write # Required for creating GitHub releases
+  id-token: write # Required for OIDC trusted publishing
+
+jobs:
+  publish:
+    name: publish to npm
+    runs-on: ubuntu-latest
+    # Only run if CI workflow succeeded (for workflow_run trigger)
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'push' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0 # Required for git describe to find tags
+          submodules: recursive
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Setup Zig
+        uses: ./.github/actions/setup-zig
+        with:
+          version: 0.15.2
+
+      - name: Build WASM
+        run: ./scripts/build-wasm.sh
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Check formatting
+        run: bun run fmt
+
+      - name: Run linter
+        run: bun run lint
+
+      - name: Check types
+        run: bun run typecheck
+
+      - name: Run tests
+        run: bun test
+
+      - name: Build library
+        run: bun run build
+
+      - name: Setup Node.js for npm
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      # Ensure npm 11.5.1 or later for trusted publishing
+      - run: npm install -g npm@latest
+
+      - name: Detect trigger type
+        id: detect
+        run: |
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            echo "is_tag=true" >> $GITHUB_OUTPUT
+            echo "trigger_type=tag" >> $GITHUB_OUTPUT
+            echo "trigger_name=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+            echo "📦 Detected tag push: ${GITHUB_REF#refs/tags/}"
+          else
+            echo "is_tag=false" >> $GITHUB_OUTPUT
+            echo "trigger_type=branch" >> $GITHUB_OUTPUT
+            echo "trigger_name=${GITHUB_REF#refs/heads/}" >> $GITHUB_OUTPUT
+            echo "🚧 Detected branch push: ${GITHUB_REF#refs/heads/}"
+          fi
+
+      - name: Generate version
+        id: version
+        run: |
+          if [[ "${{ steps.detect.outputs.is_tag }}" == "true" ]]; then
+            # For tags, extract version from git tag (strip 'v' prefix)
+            NPM_VERSION="${GITHUB_REF#refs/tags/v}"
+            NPM_TAG="latest"
+            echo "📦 Publishing stable release: ${NPM_VERSION}"
+          else
+            # Get base version from latest tag for pre-releases
+            LATEST_TAG=$(git describe --tags --abbrev=0)
+            BASE_VERSION="${LATEST_TAG#v}"
+            # For main branch, create a pre-release version using git describe
+            # Format: 0.3.0-next.5.g1a2b3c4 (base-next.commits.hash)
+            GIT_COMMIT=$(git rev-parse --short HEAD)
+            COMMITS_SINCE_TAG=$(git rev-list --count HEAD ^$(git describe --tags --abbrev=0 2>/dev/null || echo HEAD) 2>/dev/null || echo "0")
+            NPM_VERSION="${BASE_VERSION}-next.${COMMITS_SINCE_TAG}.g${GIT_COMMIT}"
+            NPM_TAG="next"
+            echo "🚧 Publishing pre-release: ${NPM_VERSION}"
+          fi
+
+          echo "version=${NPM_VERSION}" >> $GITHUB_OUTPUT
+          echo "tag=${NPM_TAG}" >> $GITHUB_OUTPUT
+
+          # Update package.json with the new version
+          node -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('package.json')); pkg.version = '${NPM_VERSION}'; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');"
+
+          echo "Updated package.json to version ${NPM_VERSION}"
+
+      - name: Check if version exists
+        id: check-exists
+        run: |
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          VERSION="${{ steps.version.outputs.version }}"
+
+          if npm view "${PACKAGE_NAME}@${VERSION}" version &>/dev/null; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Version ${VERSION} already exists on npm"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Version ${VERSION} does not exist, will publish"
+          fi
+
+      - name: Publish to npm (with OIDC trusted publishing)
+        if: steps.check-exists.outputs.exists == 'false'
+        run: npm publish --tag ${{ steps.version.outputs.tag }} --provenance --access public
+
+      - name: Update dist-tag (version already exists)
+        if: steps.check-exists.outputs.exists == 'true' && steps.detect.outputs.is_tag == 'true'
+        run: |
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="${{ steps.version.outputs.tag }}"
+
+          echo "Version ${VERSION} already published, updating dist-tag to ${TAG}"
+          npm dist-tag add "${PACKAGE_NAME}@${VERSION}" "${TAG}"
+
+      - name: Skip (pre-release already exists)
+        if: steps.check-exists.outputs.exists == 'true' && steps.detect.outputs.is_tag != 'true'
+        run: |
+          echo "⏭️ Pre-release version already exists, skipping"
+
+      - name: Create GitHub Release
+        if: steps.detect.outputs.is_tag == 'true'
+        run: gh release create "${{ steps.detect.outputs.trigger_name }}" --title "${{ steps.detect.outputs.trigger_name }}" --generate-notes --verify-tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  publish-demo:
+    name: publish @ghostty-web/demo to npm
+    runs-on: ubuntu-latest
+    needs: publish
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'push' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: Setup Node.js for npm
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - run: npm install -g npm@latest
+
+      - name: Detect trigger type
+        id: detect
+        run: |
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            echo "is_tag=true" >> $GITHUB_OUTPUT
+            echo "trigger_name=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          else
+            echo "is_tag=false" >> $GITHUB_OUTPUT
+            echo "trigger_name=${GITHUB_REF#refs/heads/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate demo version
+        id: version
+        working-directory: demo
+        run: |
+          if [[ "${{ steps.detect.outputs.is_tag }}" == "true" ]]; then
+            # For tags, extract version from git tag (strip 'v' prefix)
+            NPM_VERSION="${GITHUB_REF#refs/tags/v}"
+            NPM_TAG="latest"
+            # Pin to exact version to avoid npx cache issues with transitive deps
+            GHOSTTY_WEB_DEP="${NPM_VERSION}"
+          else
+            # Get base version from latest tag for pre-releases
+            LATEST_TAG=$(git describe --tags --abbrev=0)
+            BASE_VERSION="${LATEST_TAG#v}"
+            GIT_COMMIT=$(git rev-parse --short HEAD)
+            COMMITS_SINCE_TAG=$(git rev-list --count HEAD ^${LATEST_TAG})
+            NPM_VERSION="${BASE_VERSION}-next.${COMMITS_SINCE_TAG}.g${GIT_COMMIT}"
+            NPM_TAG="next"
+            # Pin to exact version to avoid npx cache issues with transitive deps
+            GHOSTTY_WEB_DEP="${NPM_VERSION}"
+          fi
+
+          echo "version=${NPM_VERSION}" >> $GITHUB_OUTPUT
+          echo "tag=${NPM_TAG}" >> $GITHUB_OUTPUT
+
+          # Update version and ghostty-web dependency
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json'));
+            pkg.version = '${NPM_VERSION}';
+            pkg.dependencies['ghostty-web'] = '${GHOSTTY_WEB_DEP}';
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+          echo "Updated demo package.json: version=${NPM_VERSION}, ghostty-web=${GHOSTTY_WEB_DEP}"
+
+      - name: Check if demo version exists
+        id: check-exists
+        working-directory: demo
+        run: |
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          VERSION="${{ steps.version.outputs.version }}"
+
+          if npm view "${PACKAGE_NAME}@${VERSION}" version &>/dev/null; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Publish demo to npm
+        if: steps.check-exists.outputs.exists == 'false'
+        working-directory: demo
+        run: npm publish --tag ${{ steps.version.outputs.tag }} --provenance --access public

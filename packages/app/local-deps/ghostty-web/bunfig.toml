@@ -1,0 +1,7 @@
+# Bun Configuration
+# https://bun.sh/docs/runtime/bunfig
+
+[test]
+# Preload Happy DOM before running tests to provide browser-like globals
+# (window, document, HTMLElement, etc.)
+preload = "./happydom.ts"

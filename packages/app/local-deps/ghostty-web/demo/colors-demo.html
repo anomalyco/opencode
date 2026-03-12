@@ -1,0 +1,550 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ANSI Colors Demo - Ghostty WASM</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        padding: 20px;
+      }
+
+      .container {
+        max-width: 1400px;
+        margin: 0 auto;
+      }
+
+      header {
+        text-align: center;
+        color: white;
+        margin-bottom: 30px;
+      }
+
+      h1 {
+        font-size: 2.5rem;
+        margin-bottom: 10px;
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+      }
+
+      .subtitle {
+        opacity: 0.9;
+        font-size: 1.1rem;
+      }
+
+      .demo-section {
+        background: white;
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+      }
+
+      .demo-section h2 {
+        color: #333;
+        margin-bottom: 15px;
+        font-size: 1.5rem;
+        border-bottom: 2px solid #667eea;
+        padding-bottom: 10px;
+      }
+
+      .terminal-wrapper {
+        background: #1e1e1e;
+        border-radius: 8px;
+        padding: 15px;
+        overflow: auto;
+      }
+
+      #terminal-container {
+        min-height: 400px;
+      }
+
+      .controls {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 15px;
+      }
+
+      button {
+        background: #667eea;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: all 0.2s;
+      }
+
+      button:hover {
+        background: #5568d3;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+      }
+
+      button:active {
+        transform: translateY(0);
+      }
+
+      .info {
+        background: #f0f4ff;
+        border-left: 4px solid #667eea;
+        padding: 15px;
+        margin-bottom: 15px;
+        border-radius: 4px;
+      }
+
+      .info p {
+        color: #333;
+        line-height: 1.6;
+      }
+
+      code {
+        background: rgba(102, 126, 234, 0.1);
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-family: 'Monaco', 'Menlo', monospace;
+        font-size: 0.9em;
+        color: #667eea;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>🎨 ANSI Colors Demo</h1>
+        <p class="subtitle">Comprehensive showcase of terminal color capabilities</p>
+      </header>
+
+      <div class="demo-section">
+        <h2>Color Demonstrations</h2>
+
+        <div class="info">
+          <p>
+            This demo showcases all ANSI color capabilities supported by the terminal:
+            <strong>16 standard colors</strong>, <strong>256-color palette</strong>,
+            <strong>RGB true colors</strong>, and various <strong>text styles</strong>.
+          </p>
+        </div>
+
+        <div class="controls">
+          <button onclick="showStandardColors()">Standard Colors (16)</button>
+          <button onclick="show256Colors()">256-Color Palette</button>
+          <button onclick="showRGBColors()">RGB True Colors</button>
+          <button onclick="showTextStyles()">Text Styles</button>
+          <button onclick="showCombinations()">Combinations</button>
+          <button onclick="showAll()">Show All</button>
+          <button onclick="clearTerminal()">Clear</button>
+        </div>
+
+        <div class="terminal-wrapper">
+          <div id="terminal-container"></div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module">
+      import { init, Terminal } from '../lib/index.ts';
+      import { FitAddon } from '../lib/addons/fit.ts';
+
+      let term;
+      let fitAddon;
+
+      // =========================================================================
+      // Initialization
+      // =========================================================================
+
+      async function initApp() {
+        try {
+          // Initialize WASM
+          await init();
+
+          // Create terminal with dark theme
+          term = new Terminal({
+            cols: 120,
+            rows: 40,
+            theme: {
+              background: '#1e1e1e',
+              foreground: '#d4d4d4',
+              cursor: '#ffffff',
+              black: '#000000',
+              red: '#cd3131',
+              green: '#0dbc79',
+              yellow: '#e5e510',
+              blue: '#2472c8',
+              magenta: '#bc3fbc',
+              cyan: '#11a8cd',
+              white: '#e5e5e5',
+              brightBlack: '#666666',
+              brightRed: '#f14c4c',
+              brightGreen: '#23d18b',
+              brightYellow: '#f5f543',
+              brightBlue: '#3b8eea',
+              brightMagenta: '#d670d6',
+              brightCyan: '#29b8db',
+              brightWhite: '#ffffff',
+            },
+            fontFamily: "'Monaco', 'Menlo', 'Consolas', 'Courier New', monospace",
+            fontSize: 14,
+            scrollback: 10000,
+          });
+
+          // Add FitAddon
+          fitAddon = new FitAddon();
+          term.loadAddon(fitAddon);
+
+          // Open terminal
+          const container = document.getElementById('terminal-container');
+          term.open(container);
+          fitAddon.fit();
+
+          // Handle resize
+          window.addEventListener('resize', () => {
+            fitAddon.fit();
+          });
+
+          // Show welcome message
+          showWelcome();
+        } catch (error) {
+          console.error('Failed to initialize terminal:', error);
+        }
+      }
+
+      // =========================================================================
+      // Helper Functions
+      // =========================================================================
+
+      function writeln(text) {
+        term.write(text + '\r\n');
+      }
+
+      function clearTerminal() {
+        term.clear();
+      }
+
+      // =========================================================================
+      // Demo Functions
+      // =========================================================================
+
+      function showWelcome() {
+        term.clear();
+        writeln(
+          '\x1b[1;36m╔════════════════════════════════════════════════════════════════════════════════╗\x1b[0m'
+        );
+        writeln(
+          '\x1b[1;36m║\x1b[0m                    \x1b[1;35m🎨 ANSI Color Capabilities Demo\x1b[0m                        \x1b[1;36m║\x1b[0m'
+        );
+        writeln(
+          '\x1b[1;36m╚════════════════════════════════════════════════════════════════════════════════╝\x1b[0m'
+        );
+        writeln('');
+        writeln('This terminal supports:');
+        writeln('  • 16 standard ANSI colors (8 normal + 8 bright)');
+        writeln('  • 256-color palette (xterm colors)');
+        writeln('  • RGB true color (24-bit)');
+        writeln('  • Text styles: bold, italic, underline, dim, inverse, strikethrough');
+        writeln('');
+        writeln('\x1b[1;33mClick the buttons above to explore different color modes!\x1b[0m');
+        writeln('');
+      }
+
+      window.showStandardColors = function () {
+        term.clear();
+        writeln('\x1b[1;36m═══ Standard 16 ANSI Colors ═══\x1b[0m');
+        writeln('');
+
+        // Foreground colors (30-37)
+        writeln('\x1b[1mForeground Colors (Normal):\x1b[0m');
+        writeln(
+          '\x1b[30m■\x1b[0m Black (30)     \x1b[31m■\x1b[0m Red (31)       \x1b[32m■\x1b[0m Green (32)     \x1b[33m■\x1b[0m Yellow (33)'
+        );
+        writeln(
+          '\x1b[34m■\x1b[0m Blue (34)      \x1b[35m■\x1b[0m Magenta (35)   \x1b[36m■\x1b[0m Cyan (36)      \x1b[37m■\x1b[0m White (37)'
+        );
+        writeln('');
+
+        // Bright foreground colors (90-97)
+        writeln('\x1b[1mForeground Colors (Bright):\x1b[0m');
+        writeln('\x1b[90m■\x1b[0m Bright Black (90)   \x1b[91m■\x1b[0m Bright Red (91)');
+        writeln('\x1b[92m■\x1b[0m Bright Green (92)   \x1b[93m■\x1b[0m Bright Yellow (93)');
+        writeln('\x1b[94m■\x1b[0m Bright Blue (94)    \x1b[95m■\x1b[0m Bright Magenta (95)');
+        writeln('\x1b[96m■\x1b[0m Bright Cyan (96)    \x1b[97m■\x1b[0m Bright White (97)');
+        writeln('');
+
+        // Background colors (40-47)
+        writeln('\x1b[1mBackground Colors (Normal):\x1b[0m');
+        writeln(
+          '\x1b[40m  Black  \x1b[0m \x1b[41m  Red    \x1b[0m \x1b[42m  Green  \x1b[0m \x1b[43m  Yellow \x1b[0m'
+        );
+        writeln(
+          '\x1b[44m  Blue   \x1b[0m \x1b[45m Magenta \x1b[0m \x1b[46m  Cyan   \x1b[0m \x1b[47m\x1b[30m  White  \x1b[0m'
+        );
+        writeln('');
+
+        // Bright background colors (100-107)
+        writeln('\x1b[1mBackground Colors (Bright):\x1b[0m');
+        writeln(
+          '\x1b[100m Br.Black \x1b[0m \x1b[101m Br.Red   \x1b[0m \x1b[102m\x1b[30m Br.Green \x1b[0m \x1b[103m\x1b[30m Br.Yellow\x1b[0m'
+        );
+        writeln(
+          '\x1b[104m Br.Blue  \x1b[0m \x1b[105m Br.Magenta\x1b[0m \x1b[106m\x1b[30m Br.Cyan  \x1b[0m \x1b[107m\x1b[30m Br.White \x1b[0m'
+        );
+        writeln('');
+
+        // Examples
+        writeln('\x1b[1mExamples:\x1b[0m');
+        writeln('\x1b[31mRed text\x1b[0m on \x1b[44mblue background\x1b[0m');
+        writeln('\x1b[1;32mBold green\x1b[0m with \x1b[4;33munderlined yellow\x1b[0m');
+        writeln('');
+      };
+
+      window.show256Colors = function () {
+        term.clear();
+        writeln('\x1b[1;36m═══ 256-Color Palette ═══\x1b[0m');
+        writeln('');
+
+        // System colors (0-15) - already shown in standard colors
+        writeln('\x1b[1mSystem Colors (0-15):\x1b[0m');
+        let line = '';
+        for (let i = 0; i < 16; i++) {
+          line += `\x1b[48;5;${i}m  \x1b[0m`;
+          if ((i + 1) % 8 === 0) {
+            writeln(line + `  (${i - 7}-${i})`);
+            line = '';
+          }
+        }
+        writeln('');
+
+        // 216 color cube (16-231)
+        writeln('\x1b[1m216 Color Cube (16-231):\x1b[0m');
+        for (let r = 0; r < 6; r++) {
+          line = '';
+          for (let g = 0; g < 6; g++) {
+            for (let b = 0; b < 6; b++) {
+              const color = 16 + r * 36 + g * 6 + b;
+              line += `\x1b[48;5;${color}m \x1b[0m`;
+            }
+            line += ' ';
+          }
+          writeln(line);
+        }
+        writeln('');
+
+        // Grayscale ramp (232-255)
+        writeln('\x1b[1mGrayscale Ramp (232-255):\x1b[0m');
+        line = '';
+        for (let i = 232; i <= 255; i++) {
+          line += `\x1b[48;5;${i}m \x1b[0m`;
+        }
+        writeln(line + '  (232-255)');
+        writeln('');
+
+        // Examples
+        writeln('\x1b[1mExamples:\x1b[0m');
+        writeln('\x1b[38;5;208mOrange text (208)\x1b[0m');
+        writeln('\x1b[38;5;51mCyan text (51)\x1b[0m');
+        writeln('\x1b[38;5;201mPink text (201)\x1b[0m');
+        writeln('\x1b[48;5;17m\x1b[38;5;226m Yellow on dark blue \x1b[0m');
+        writeln('');
+      };
+
+      window.showRGBColors = function () {
+        term.clear();
+        writeln('\x1b[1;36m═══ RGB True Color (24-bit) ═══\x1b[0m');
+        writeln('');
+
+        writeln('\x1b[1mRGB Color Examples:\x1b[0m');
+        writeln('');
+
+        // Rainbow gradient
+        writeln('Rainbow Gradient:');
+        const rainbowColors = [
+          [255, 0, 0], // Red
+          [255, 127, 0], // Orange
+          [255, 255, 0], // Yellow
+          [0, 255, 0], // Green
+          [0, 0, 255], // Blue
+          [75, 0, 130], // Indigo
+          [148, 0, 211], // Violet
+        ];
+
+        let line = '';
+        for (const [r, g, b] of rainbowColors) {
+          line += `\x1b[38;2;${r};${g};${b}m████\x1b[0m `;
+        }
+        writeln(line);
+        writeln('');
+
+        // Specific RGB examples
+        writeln('\x1b[1mCustom RGB Colors:\x1b[0m');
+        writeln('\x1b[38;2;255;105;180mHot Pink (255, 105, 180)\x1b[0m');
+        writeln('\x1b[38;2;64;224;208mTurquoise (64, 224, 208)\x1b[0m');
+        writeln('\x1b[38;2;255;215;0mGold (255, 215, 0)\x1b[0m');
+        writeln('\x1b[38;2;138;43;226mBlue Violet (138, 43, 226)\x1b[0m');
+        writeln('\x1b[38;2;0;128;0mForest Green (0, 128, 0)\x1b[0m');
+        writeln('');
+
+        // Gradient bars
+        writeln('\x1b[1mRed Gradient:\x1b[0m');
+        line = '';
+        for (let i = 0; i <= 255; i += 8) {
+          line += `\x1b[38;2;${i};0;0m█\x1b[0m`;
+        }
+        writeln(line);
+        writeln('');
+
+        writeln('\x1b[1mGreen Gradient:\x1b[0m');
+        line = '';
+        for (let i = 0; i <= 255; i += 8) {
+          line += `\x1b[38;2;0;${i};0m█\x1b[0m`;
+        }
+        writeln(line);
+        writeln('');
+
+        writeln('\x1b[1mBlue Gradient:\x1b[0m');
+        line = '';
+        for (let i = 0; i <= 255; i += 8) {
+          line += `\x1b[38;2;0;0;${i}m█\x1b[0m`;
+        }
+        writeln(line);
+        writeln('');
+
+        // Background examples
+        writeln('\x1b[1mRGB Backgrounds:\x1b[0m');
+        writeln('\x1b[48;2;220;20;60m\x1b[37m Crimson background \x1b[0m');
+        writeln('\x1b[48;2;46;139;87m\x1b[37m Sea green background \x1b[0m');
+        writeln('\x1b[48;2;70;130;180m\x1b[37m Steel blue background \x1b[0m');
+        writeln('');
+      };
+
+      window.showTextStyles = function () {
+        term.clear();
+        writeln('\x1b[1;36m═══ Text Styles ═══\x1b[0m');
+        writeln('');
+
+        writeln('\x1b[1mBasic Styles:\x1b[0m');
+        writeln('\x1b[1mBold text (SGR 1)\x1b[0m');
+        writeln('\x1b[2mDim text (SGR 2)\x1b[0m');
+        writeln('\x1b[3mItalic text (SGR 3)\x1b[0m');
+        writeln('\x1b[4mUnderline text (SGR 4)\x1b[0m');
+        writeln('\x1b[7mInverse/Reverse video (SGR 7)\x1b[0m');
+        writeln('\x1b[9mStrikethrough text (SGR 9)\x1b[0m');
+        writeln('');
+
+        writeln('\x1b[1mCombined Styles with Colors:\x1b[0m');
+        writeln('\x1b[1;31mBold Red\x1b[0m');
+        writeln('\x1b[1;4;32mBold Underlined Green\x1b[0m');
+        writeln('\x1b[3;36mItalic Cyan\x1b[0m');
+        writeln('\x1b[1;3;4;35mBold Italic Underlined Magenta\x1b[0m');
+        writeln('\x1b[9;90mStrikethrough Gray\x1b[0m');
+        writeln('');
+
+        writeln('\x1b[1mWith Backgrounds:\x1b[0m');
+        writeln('\x1b[1;37;44mBold white on blue\x1b[0m');
+        writeln('\x1b[4;33;41mUnderlined yellow on red\x1b[0m');
+        writeln('\x1b[7;32mInverse green\x1b[0m (swaps fg/bg)');
+        writeln('');
+
+        writeln('\x1b[1mDemonstration:\x1b[0m');
+        writeln(
+          'Normal → \x1b[1mBold\x1b[0m → \x1b[2mDim\x1b[0m → \x1b[3mItalic\x1b[0m → \x1b[4mUnderline\x1b[0m → Normal'
+        );
+        writeln('');
+      };
+
+      window.showCombinations = function () {
+        term.clear();
+        writeln('\x1b[1;36m═══ Style & Color Combinations ═══\x1b[0m');
+        writeln('');
+
+        writeln('\x1b[1mError/Warning Styles:\x1b[0m');
+        writeln('\x1b[1;31m[ERROR]\x1b[0m Something went wrong!');
+        writeln('\x1b[1;33m[WARNING]\x1b[0m This is a warning message');
+        writeln('\x1b[1;32m[SUCCESS]\x1b[0m Operation completed successfully');
+        writeln('\x1b[1;36m[INFO]\x1b[0m Informational message');
+        writeln('');
+
+        writeln('\x1b[1mSyntax Highlighting Example:\x1b[0m');
+        writeln('\x1b[35mfunction\x1b[0m \x1b[33mhelloWorld\x1b[0m() {');
+        writeln('  \x1b[34mconst\x1b[0m \x1b[36mmessage\x1b[0m = \x1b[32m"Hello, World!"\x1b[0m;');
+        writeln('  \x1b[36mconsole\x1b[0m.\x1b[33mlog\x1b[0m(\x1b[36mmessage\x1b[0m);');
+        writeln('  \x1b[35mreturn\x1b[0m \x1b[34mtrue\x1b[0m;');
+        writeln('}');
+        writeln('');
+
+        writeln('\x1b[1mUI Elements:\x1b[0m');
+        writeln('\x1b[1;37;44m  PRIMARY BUTTON  \x1b[0m');
+        writeln('\x1b[1;30;47m  SECONDARY BUTTON  \x1b[0m');
+        writeln('\x1b[1;37;42m  SUCCESS BUTTON  \x1b[0m');
+        writeln('\x1b[1;37;41m  DANGER BUTTON  \x1b[0m');
+        writeln('');
+
+        writeln('\x1b[1mProgress Indicators:\x1b[0m');
+        writeln('[\x1b[1;32m████████████\x1b[0m\x1b[2m············\x1b[0m] 50%');
+        writeln('[\x1b[1;36m████████████████████\x1b[0m\x1b[2m····\x1b[0m] 80%');
+        writeln('[\x1b[1;32m████████████████████████\x1b[0m] 100% Complete!');
+        writeln('');
+
+        writeln('\x1b[1mTables with Colors:\x1b[0m');
+        writeln('╔═══════════╦═══════╦═══════╗');
+        writeln('║ \x1b[1mName\x1b[0m      ║ \x1b[1mStatus\x1b[0m║ \x1b[1mValue\x1b[0m ║');
+        writeln('╠═══════════╬═══════╬═══════╣');
+        writeln('║ Service A ║ \x1b[1;32m  ON\x1b[0m  ║  \x1b[36m100\x1b[0m  ║');
+        writeln('║ Service B ║ \x1b[1;31m  OFF\x1b[0m ║  \x1b[36m0\x1b[0m    ║');
+        writeln('║ Service C ║ \x1b[1;33m WARN\x1b[0m ║  \x1b[36m50\x1b[0m   ║');
+        writeln('╚═══════════╩═══════╩═══════╝');
+        writeln('');
+      };
+
+      window.showAll = function () {
+        showStandardColors();
+        writeln('');
+        writeln('\x1b[1;35m' + '═'.repeat(80) + '\x1b[0m');
+        writeln('');
+
+        // Add 256 colors (abbreviated)
+        writeln('\x1b[1;36m═══ 256-Color Palette (Sample) ═══\x1b[0m');
+        writeln('');
+        let line = '';
+        for (let i = 0; i < 256; i++) {
+          line += `\x1b[48;5;${i}m \x1b[0m`;
+          if ((i + 1) % 32 === 0) {
+            writeln(line);
+            line = '';
+          }
+        }
+        writeln('');
+        writeln('\x1b[1;35m' + '═'.repeat(80) + '\x1b[0m');
+        writeln('');
+
+        // RGB samples
+        writeln('\x1b[1;36m═══ RGB True Color (Samples) ═══\x1b[0m');
+        writeln('');
+        writeln(
+          '\x1b[38;2;255;105;180m█\x1b[0m Hot Pink  \x1b[38;2;64;224;208m█\x1b[0m Turquoise  \x1b[38;2;255;215;0m█\x1b[0m Gold  \x1b[38;2;138;43;226m█\x1b[0m Blue Violet'
+        );
+        writeln('');
+
+        writeln('\x1b[1;35m' + '═'.repeat(80) + '\x1b[0m');
+        writeln('');
+
+        showTextStyles();
+      };
+
+      // Make functions globally available
+      window.clearTerminal = clearTerminal;
+
+      // Initialize on page load
+      initApp();
+    </script>
+  </body>
+</html>

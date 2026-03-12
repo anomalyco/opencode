@@ -1,0 +1,64 @@
+name: 'Setup Zig'
+description: 'Install Zig compiler'
+inputs:
+  version:
+    description: 'Zig version to install'
+    required: true
+    default: '0.15.2'
+runs:
+  using: 'composite'
+  steps:
+    - name: Cache Zig
+      uses: actions/cache@v4
+      id: cache-zig
+      with:
+        path: |
+          ~/zig
+        key: zig-${{ runner.os }}-${{ inputs.version }}
+
+    - name: Download and install Zig
+      if: steps.cache-zig.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        set -e
+        VERSION="${{ inputs.version }}"
+
+        # Determine platform
+        if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+          PLATFORM="linux"
+          ARCH="x86_64"
+        elif [[ "$OSTYPE" == "darwin"* ]]; then
+          PLATFORM="macos"
+          if [[ "$(uname -m)" == "arm64" ]]; then
+            ARCH="aarch64"
+          else
+            ARCH="x86_64"
+          fi
+        else
+          echo "Unsupported OS: $OSTYPE"
+          exit 1
+        fi
+
+        # Download from ziglang.org
+        # Note: Format changed in 0.14.1+ from zig-linux-x86_64 to zig-x86_64-linux
+        TARBALL="zig-${ARCH}-${PLATFORM}-${VERSION}.tar.xz"
+        URL="https://ziglang.org/download/${VERSION}/${TARBALL}"
+
+        echo "Downloading Zig ${VERSION} for ${PLATFORM}-${ARCH}..."
+        curl --retry 3 --retry-delay 5 -L -o "/tmp/${TARBALL}" "${URL}"
+
+        # Extract to home directory
+        mkdir -p ~/zig
+        tar -xf "/tmp/${TARBALL}" -C ~/zig --strip-components=1
+
+        echo "Zig ${VERSION} installed to ~/zig"
+
+    - name: Add Zig to PATH
+      shell: bash
+      run: |
+        echo "$HOME/zig" >> $GITHUB_PATH
+
+    - name: Verify Zig installation
+      shell: bash
+      run: |
+        zig version

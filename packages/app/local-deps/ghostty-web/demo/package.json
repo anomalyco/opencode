@@ -1,0 +1,42 @@
+{
+  "name": "@ghostty-web/demo",
+  "version": "0.3.0",
+  "description": "Cross-platform demo server for ghostty-web terminal emulator",
+  "type": "module",
+  "bin": {
+    "ghostty-web-demo": "./bin/demo.js"
+  },
+  "scripts": {
+    "start": "node bin/demo.js",
+    "dev": "node bin/demo.js --dev"
+  },
+  "dependencies": {
+    "@lydell/node-pty": "^1.0.1",
+    "ghostty-web": "latest",
+    "ws": "^8.18.0"
+  },
+  "files": [
+    "bin",
+    "README.md"
+  ],
+  "keywords": [
+    "terminal",
+    "terminal-emulator",
+    "ghostty",
+    "demo",
+    "pty",
+    "shell"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/coder/ghostty-web.git",
+    "directory": "demo"
+  },
+  "bugs": "https://github.com/coder/ghostty-web/issues",
+  "homepage": "https://github.com/coder/ghostty-web/tree/main/demo#readme",
+  "license": "MIT",
+  "author": "Coder",
+  "publishConfig": {
+    "access": "public"
+  }
+}
