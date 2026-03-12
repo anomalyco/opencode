@@ -1667,7 +1667,9 @@ export namespace ACP {
   ): ModelOption[] {
     const includeVariants = options.includeVariants ?? false
     return providers.flatMap((provider) => {
-      const unsorted: Array<{ id: string; name: string; variants?: Record<string, any> }> = Object.values(provider.models)
+      const unsorted: Array<{ id: string; name: string; variants?: Record<string, any> }> = Object.values(
+        provider.models,
+      )
       const models = Provider.sort(unsorted)
       return models.flatMap((model) => {
         const base: ModelOption = {
