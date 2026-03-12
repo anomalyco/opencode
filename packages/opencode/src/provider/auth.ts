@@ -1,4 +1,6 @@
 import { Instance } from "@/project/instance"
+import { runtime } from "@/effect/runtime"
+import { AuthService } from "@/auth/service"
 import { Plugin } from "../plugin"
 import { map, filter, pipe, fromEntries, mapValues } from "remeda"
 import z from "zod"
@@ -9,6 +11,10 @@ import { Auth } from "@/auth"
 import { ProviderID } from "./schema"
 
 export namespace ProviderAuth {
+  function set(key: string, info: Auth.Info) {
+    return runtime.runPromise(AuthService.use((service) => service.set(key, info)))
+  }
+
   const state = Instance.state(async () => {
     const methods = pipe(
       await Plugin.list(),
@@ -94,7 +100,7 @@ export namespace ProviderAuth {
 
       if (result?.type === "success") {
         if ("key" in result) {
-          await Auth.set(input.providerID, {
+          await set(input.providerID, {
             type: "api",
             key: result.key,
           })
@@ -109,7 +115,7 @@ export namespace ProviderAuth {
           if (result.accountId) {
             info.accountId = result.accountId
           }
-          await Auth.set(input.providerID, info)
+          await set(input.providerID, info)
         }
         return
       }
@@ -124,7 +130,7 @@ export namespace ProviderAuth {
       key: z.string(),
     }),
     async (input) => {
-      await Auth.set(input.providerID, {
+      await set(input.providerID, {
         type: "api",
         key: input.key,
       })
