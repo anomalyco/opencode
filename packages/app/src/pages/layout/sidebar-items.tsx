@@ -10,7 +10,6 @@ import { base64Encode } from "@opencode-ai/util/encode"
 import { getFilename } from "@opencode-ai/util/path"
 import { A, useNavigate, useParams } from "@solidjs/router"
 import { type Accessor, createMemo, For, type JSX, Match, onCleanup, Show, Switch } from "solid-js"
-import { getSessionPrefetch, SESSION_PREFETCH_TTL } from "@/context/global-sync/session-prefetch"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { getAvatarColors, type LocalProject, useLayout } from "@/context/layout"
@@ -228,13 +227,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   const hoverMessages = createMemo(() =>
     sessionStore.message[props.session.id]?.filter((message): message is UserMessage => message.role === "user"),
   )
-  const hoverReady = createMemo(() => {
-    if (sessionStore.message[props.session.id] === undefined) return false
-    if (props.session.id === params.id) return true
-    const info = getSessionPrefetch(props.session.directory, props.session.id)
-    if (!info) return false
-    return Date.now() - info.at < SESSION_PREFETCH_TTL
-  })
+  const hoverReady = createMemo(() => hoverMessages() !== undefined)
   const hoverAllowed = createMemo(() => !props.mobile && props.sidebarExpanded())
   const hoverEnabled = createMemo(() => (props.popover ?? true) && hoverAllowed())
   const isActive = createMemo(() => props.session.id === params.id)
