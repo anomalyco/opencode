@@ -344,6 +344,17 @@ function urls(text: string | undefined) {
     })
 }
 
+function sessionLink(id: string | undefined, path: string, href?: (id: string) => string | undefined) {
+  if (!id) return
+
+  const direct = href?.(id)
+  if (direct) return direct
+
+  const idx = path.indexOf("/session")
+  if (idx === -1) return
+  return `${path.slice(0, idx)}/session/${id}`
+}
+
 const CONTEXT_GROUP_TOOLS = new Set(["read", "glob", "grep", "list"])
 const HIDDEN_TOOLS = new Set(["todowrite", "todoread"])
 
@@ -1215,6 +1226,7 @@ function ToolFileAccordion(props: { path: string; actions?: JSX.Element; childre
 }
 
 PART_MAPPING["tool"] = function ToolPartDisplay(props) {
+  const data = useData()
   const i18n = useI18n()
   const part = () => props.part as ToolPart
   if (part().tool === "todowrite" || part().tool === "todoread") return null
@@ -1229,6 +1241,21 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const input = () => part().state?.input ?? emptyInput
   // @ts-expect-error
   const partMetadata = () => part().state?.metadata ?? emptyMetadata
+  const taskId = createMemo(() => {
+    if (part().tool !== "task") return
+    const value = partMetadata().sessionId
+    if (typeof value === "string" && value) return value
+  })
+  const taskHref = createMemo(() => {
+    if (part().tool !== "task") return
+    return sessionLink(taskId(), useLocation().pathname, data.sessionHref)
+  })
+  const taskSubtitle = createMemo(() => {
+    if (part().tool !== "task") return undefined
+    const value = input().description
+    if (typeof value === "string" && value) return value
+    return taskId()
+  })
 
   const render = createMemo(() => ToolRegistry.render(part().tool) ?? GenericTool)
 
@@ -1248,7 +1275,15 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
                   </div>
                 )
               }
-              return <ToolErrorCard tool={part().tool} error={error()} defaultOpen={props.defaultOpen} />
+              return (
+                <ToolErrorCard
+                  tool={part().tool}
+                  error={error()}
+                  defaultOpen={props.defaultOpen}
+                  subtitle={taskSubtitle()}
+                  href={taskHref()}
+                />
+              )
             }}
           </Match>
           <Match when={true}>
@@ -1625,25 +1660,14 @@ ToolRegistry.register({
       return raw[0]!.toUpperCase() + raw.slice(1)
     })
     const title = createMemo(() => agentTitle(i18n, type()))
-    const description = createMemo(() => {
+    const subtitle = createMemo(() => {
       const value = props.input.description
-      if (typeof value === "string") return value
-      return undefined
+      if (typeof value === "string" && value) return value
+      return childSessionId()
     })
     const running = createMemo(() => props.status === "pending" || props.status === "running")
 
-    const href = createMemo(() => {
-      const sessionId = childSessionId()
-      if (!sessionId) return
-
-      const direct = data.sessionHref?.(sessionId)
-      if (direct) return direct
-
-      const path = location.pathname
-      const idx = path.indexOf("/session")
-      if (idx === -1) return
-      return `${path.slice(0, idx)}/session/${sessionId}`
-    })
+    const href = createMemo(() => sessionLink(childSessionId(), location.pathname, data.sessionHref))
 
     const titleContent = () => <TextShimmer text={title()} active={running()} />
 
@@ -1653,7 +1677,7 @@ ToolRegistry.register({
           <span data-slot="basic-tool-tool-title" class="capitalize agent-title">
             {titleContent()}
           </span>
-          <Show when={description()}>
+          <Show when={subtitle()}>
             <Switch>
               <Match when={href()}>
                 <a
@@ -1662,11 +1686,11 @@ ToolRegistry.register({
                   href={href()!}
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {description()}
+                  {subtitle()}
                 </a>
               </Match>
               <Match when={true}>
-                <span data-slot="basic-tool-tool-subtitle">{description()}</span>
+                <span data-slot="basic-tool-tool-subtitle">{subtitle()}</span>
               </Match>
             </Switch>
           </Show>
