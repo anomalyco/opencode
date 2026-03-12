@@ -54,6 +54,7 @@ export namespace ModelsDev {
       context: z.number(),
       input: z.number().optional(),
       output: z.number(),
+      tools: z.number().optional(),
     }),
     modalities: z
       .object({
