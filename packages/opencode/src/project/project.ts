@@ -15,6 +15,7 @@ import { existsSync } from "fs"
 import { git } from "../util/git"
 import { Glob } from "../util/glob"
 import { which } from "../util/which"
+import { ProjectID } from "./schema"
 
 export namespace Project {
   const log = Log.create({ service: "project" })
@@ -33,7 +34,7 @@ export namespace Project {
 
   export const Info = z
     .object({
-      id: z.string(),
+      id: ProjectID.zod,
       worktree: z.string(),
       vcs: z.literal("git").optional(),
       name: z.string().optional(),
@@ -73,7 +74,7 @@ export namespace Project {
         ? { url: row.icon_url ?? undefined, color: row.icon_color ?? undefined }
         : undefined
     return {
-      id: row.id,
+      id: ProjectID.make(row.id),
       worktree: row.worktree,
       vcs: row.vcs ? Info.shape.vcs.parse(row.vcs) : undefined,
       name: row.name ?? undefined,
@@ -91,6 +92,7 @@ export namespace Project {
   function readCachedId(dir: string) {
     return Filesystem.readText(path.join(dir, "opencode"))
       .then((x) => x.trim())
+      .then(ProjectID.make)
       .catch(() => undefined)
   }
 
@@ -111,7 +113,7 @@ export namespace Project {
 
         if (!gitBinary) {
           return {
-            id: id ?? "global",
+            id: id ?? ProjectID.global,
             worktree: sandbox,
             sandbox,
             vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
@@ -130,7 +132,7 @@ export namespace Project {
 
         if (!worktree) {
           return {
-            id: id ?? "global",
+            id: id ?? ProjectID.global,
             worktree: sandbox,
             sandbox,
             vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
@@ -160,14 +162,14 @@ export namespace Project {
 
           if (!roots) {
             return {
-              id: "global",
+              id: ProjectID.global,
               worktree: sandbox,
               sandbox,
               vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
             }
           }
 
-          id = roots[0]
+          id = roots[0] ? ProjectID.make(roots[0]) : undefined
           if (id) {
             await Filesystem.write(path.join(dotgit, "opencode"), id).catch(() => undefined)
           }
@@ -175,7 +177,7 @@ export namespace Project {
 
         if (!id) {
           return {
-            id: "global",
+            id: ProjectID.global,
             worktree: sandbox,
             sandbox,
             vcs: "git",
@@ -208,7 +210,7 @@ export namespace Project {
       }
 
       return {
-        id: "global",
+        id: ProjectID.global,
         worktree: "/",
         sandbox: "/",
         vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
@@ -273,7 +275,7 @@ export namespace Project {
     // Runs after upsert so the target project row exists (FK constraint).
     // Runs on every startup because sessions created before git init
     // accumulate under "global" and need migrating whenever they appear.
-    if (data.id !== "global") {
+    if (data.id !== ProjectID.global) {
       await migrateFromGlobal(data.id, data.worktree)
     }
     GlobalBus.emit("event", {
@@ -309,12 +311,12 @@ export namespace Project {
     return
   }
 
-  async function migrateFromGlobal(id: string, worktree: string) {
-    const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, "global")).get())
+  async function migrateFromGlobal(id: ProjectID, worktree: string) {
+    const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, ProjectID.global)).get())
     if (!row) return
 
     const sessions = Database.use((db) =>
-      db.select().from(SessionTable).where(eq(SessionTable.project_id, "global")).all(),
+      db.select().from(SessionTable).where(eq(SessionTable.project_id, ProjectID.global)).all(),
     )
     if (sessions.length === 0) return
 
@@ -324,14 +326,14 @@ export namespace Project {
       // Skip sessions that belong to a different directory
       if (row.directory && row.directory !== worktree) return
 
-      log.info("migrating session", { sessionID: row.id, from: "global", to: id })
+      log.info("migrating session", { sessionID: row.id, from: ProjectID.global, to: id })
       Database.use((db) => db.update(SessionTable).set({ project_id: id }).where(eq(SessionTable.id, row.id)).run())
     }).catch((error) => {
       log.error("failed to migrate sessions from global to project", { error, projectId: id })
     })
   }
 
-  export function setInitialized(id: string) {
+  export function setInitialized(id: ProjectID) {
     Database.use((db) =>
       db
         .update(ProjectTable)
@@ -353,7 +355,7 @@ export namespace Project {
     )
   }
 
-  export function get(id: string): Info | undefined {
+  export function get(id: ProjectID): Info | undefined {
     const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
     if (!row) return undefined
     return fromRow(row)
@@ -376,12 +378,13 @@ export namespace Project {
 
   export const update = fn(
     z.object({
-      projectID: z.string(),
+      projectID: ProjectID.zod,
       name: z.string().optional(),
       icon: Info.shape.icon.optional(),
       commands: Info.shape.commands.optional(),
     }),
     async (input) => {
+      const id = ProjectID.make(input.projectID)
       const result = Database.use((db) =>
         db
           .update(ProjectTable)
@@ -392,7 +395,7 @@ export namespace Project {
             commands: input.commands,
             time_updated: Date.now(),
           })
-          .where(eq(ProjectTable.id, input.projectID))
+          .where(eq(ProjectTable.id, id))
           .returning()
           .get(),
       )
@@ -408,7 +411,7 @@ export namespace Project {
     },
   )
 
-  export async function sandboxes(id: string) {
+  export async function sandboxes(id: ProjectID) {
     const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
     if (!row) return []
     const data = fromRow(row)
@@ -420,7 +423,7 @@ export namespace Project {
     return valid
   }
 
-  export async function addSandbox(id: string, directory: string) {
+  export async function addSandbox(id: ProjectID, directory: string) {
     const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
     if (!row) throw new Error(`Project not found: ${id}`)
     const sandboxes = [...row.sandboxes]
@@ -444,7 +447,7 @@ export namespace Project {
     return data
   }
 
-  export async function removeSandbox(id: string, directory: string) {
+  export async function removeSandbox(id: ProjectID, directory: string) {
     const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
     if (!row) throw new Error(`Project not found: ${id}`)
     const sandboxes = row.sandboxes.filter((s) => s !== directory)

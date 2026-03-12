@@ -24,17 +24,17 @@ const loginEffect = Effect.fn("login")(function* (url: string) {
   const s = Prompt.spinner()
   yield* s.start("Waiting for authorization...")
 
-  const poll = (wait: number): Effect.Effect<PollResult, AccountError> =>
+  const poll = (wait: Duration.Duration): Effect.Effect<PollResult, AccountError> =>
     Effect.gen(function* () {
       yield* Effect.sleep(wait)
       const result = yield* service.poll(login)
       if (result._tag === "PollPending") return yield* poll(wait)
-      if (result._tag === "PollSlow") return yield* poll(wait + 5000)
+      if (result._tag === "PollSlow") return yield* poll(Duration.sum(wait, Duration.seconds(5)))
       return result
     })
 
-  const result = yield* poll(login.interval * 1000).pipe(
-    Effect.timeout(Duration.seconds(login.expiry)),
+  const result = yield* poll(login.interval).pipe(
+    Effect.timeout(login.expiry),
     Effect.catchTag("TimeoutError", () => Effect.succeed(new PollExpired())),
   )
 

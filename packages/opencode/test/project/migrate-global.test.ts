@@ -3,6 +3,8 @@ import { Project } from "../../src/project/project"
 import { Database, eq } from "../../src/storage/db"
 import { SessionTable } from "../../src/session/session.sql"
 import { ProjectTable } from "../../src/project/project.sql"
+import { ProjectID } from "../../src/project/schema"
+import { SessionID } from "../../src/session/schema"
 import { Log } from "../../src/util/log"
 import { $ } from "bun"
 import { tmpdir } from "../fixture/fixture"
@@ -10,10 +12,10 @@ import { tmpdir } from "../fixture/fixture"
 Log.init({ print: false })
 
 function uid() {
-  return crypto.randomUUID()
+  return SessionID.make(crypto.randomUUID())
 }
 
-function seed(opts: { id: string; dir: string; project: string }) {
+function seed(opts: { id: SessionID; dir: string; project: ProjectID }) {
   const now = Date.now()
   Database.use((db) =>
     db
@@ -37,7 +39,7 @@ function ensureGlobal() {
     db
       .insert(ProjectTable)
       .values({
-        id: "global",
+        id: ProjectID.global,
         worktree: "/",
         time_created: Date.now(),
         time_updated: Date.now(),
@@ -56,17 +58,17 @@ describe("migrateFromGlobal", () => {
     await $`git config user.name "Test"`.cwd(tmp.path).quiet()
     await $`git config user.email "test@opencode.test"`.cwd(tmp.path).quiet()
     const { project: pre } = await Project.fromDirectory(tmp.path)
-    expect(pre.id).toBe("global")
+    expect(pre.id).toBe(ProjectID.global)
 
     // 2. Seed a session under "global" with matching directory
     const id = uid()
-    seed({ id, dir: tmp.path, project: "global" })
+    seed({ id, dir: tmp.path, project: ProjectID.global })
 
     // 3. Make a commit so the project gets a real ID
     await $`git commit --allow-empty -m "root"`.cwd(tmp.path).quiet()
 
     const { project: real } = await Project.fromDirectory(tmp.path)
-    expect(real.id).not.toBe("global")
+    expect(real.id).not.toBe(ProjectID.global)
 
     // 4. The session should have been migrated to the real project ID
     const row = Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, id)).get())
@@ -78,7 +80,7 @@ describe("migrateFromGlobal", () => {
     // 1. Create a repo with a commit — real project ID created immediately
     await using tmp = await tmpdir({ git: true })
     const { project } = await Project.fromDirectory(tmp.path)
-    expect(project.id).not.toBe("global")
+    expect(project.id).not.toBe(ProjectID.global)
 
     // 2. Ensure "global" project row exists (as it would from a prior no-git session)
     ensureGlobal()
@@ -87,7 +89,7 @@ describe("migrateFromGlobal", () => {
     //    This simulates a session created before git init that wasn't
     //    present when the real project row was first created.
     const id = uid()
-    seed({ id, dir: tmp.path, project: "global" })
+    seed({ id, dir: tmp.path, project: ProjectID.global })
 
     // 4. Call fromDirectory again — project row already exists,
     //    so the current code skips migration entirely. This is the bug.
@@ -101,13 +103,13 @@ describe("migrateFromGlobal", () => {
   test("migrates sessions with empty directory", async () => {
     await using tmp = await tmpdir({ git: true })
     const { project } = await Project.fromDirectory(tmp.path)
-    expect(project.id).not.toBe("global")
+    expect(project.id).not.toBe(ProjectID.global)
 
     ensureGlobal()
 
     // Legacy sessions may lack a directory value
     const id = uid()
-    seed({ id, dir: "", project: "global" })
+    seed({ id, dir: "", project: ProjectID.global })
 
     await Project.fromDirectory(tmp.path)
 
@@ -120,19 +122,19 @@ describe("migrateFromGlobal", () => {
   test("does not steal sessions from unrelated directories", async () => {
     await using tmp = await tmpdir({ git: true })
     const { project } = await Project.fromDirectory(tmp.path)
-    expect(project.id).not.toBe("global")
+    expect(project.id).not.toBe(ProjectID.global)
 
     ensureGlobal()
 
     // Seed a session under "global" but for a DIFFERENT directory
     const id = uid()
-    seed({ id, dir: "/some/other/dir", project: "global" })
+    seed({ id, dir: "/some/other/dir", project: ProjectID.global })
 
     await Project.fromDirectory(tmp.path)
 
     const row = Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, id)).get())
     expect(row).toBeDefined()
     // Should remain under "global" — not stolen
-    expect(row!.project_id).toBe("global")
+    expect(row!.project_id).toBe(ProjectID.global)
   })
 })
