@@ -7,7 +7,6 @@ import { useSpring } from "@opencode-ai/ui/motion-spring"
 import { TextReveal } from "@opencode-ai/ui/text-reveal"
 import { TextStrikethrough } from "@opencode-ai/ui/text-strikethrough"
 import { Index, createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
-import { createStore } from "solid-js/store"
 
 function dot(status: Todo["status"]) {
   if (status !== "in_progress") return undefined
@@ -39,26 +38,10 @@ export function SessionTodoDock(props: {
   title: string
   collapseLabel: string
   expandLabel: string
-  dockProgress?: number
-  visualDuration?: number
-  bounce?: number
-  expandVisualDuration?: number
-  expandBounce?: number
-  collapseVisualDuration?: number
-  collapseBounce?: number
-  subtitleDuration?: number
-  subtitleTravel?: number
-  subtitleEdge?: number
-  countDuration?: number
-  countMask?: number
-  countMaskHeight?: number
-  countWidthDuration?: number
+  dockProgress: number
 }) {
-  const [store, setStore] = createStore({
-    collapsed: false,
-  })
-
-  const toggle = () => setStore("collapsed", (value) => !value)
+  const [collapsed, setCollapsed] = createSignal(false)
+  const toggle = () => setCollapsed((value) => !value)
 
   const total = createMemo(() => props.todos.length)
   const done = createMemo(() => props.todos.filter((todo) => todo.status === "completed").length)
@@ -73,19 +56,8 @@ export function SessionTodoDock(props: {
   )
 
   const preview = createMemo(() => active()?.content ?? "")
-  const config = createMemo(() =>
-    store.collapsed
-      ? {
-          visualDuration: props.collapseVisualDuration ?? props.visualDuration ?? 0.3,
-          bounce: props.collapseBounce ?? props.bounce ?? 0,
-        }
-      : {
-          visualDuration: props.expandVisualDuration ?? props.visualDuration ?? 0.3,
-          bounce: props.expandBounce ?? props.bounce ?? 0,
-        },
-  )
-  const collapse = useSpring(() => (store.collapsed ? 1 : 0), config)
-  const dock = createMemo(() => Math.max(0, Math.min(1, props.dockProgress ?? 1)))
+  const collapse = useSpring(() => (collapsed() ? 1 : 0), { visualDuration: 0.3, bounce: 0 })
+  const dock = createMemo(() => Math.max(0, Math.min(1, props.dockProgress)))
   const shut = createMemo(() => 1 - dock())
   const value = createMemo(() => Math.max(0, Math.min(1, collapse())))
   const hide = createMemo(() => Math.max(value(), shut()))
@@ -133,10 +105,10 @@ export function SessionTodoDock(props: {
             class="text-14-regular text-text-strong cursor-default inline-flex items-baseline shrink-0 whitespace-nowrap overflow-visible"
             aria-label={label()}
             style={{
-              "--tool-motion-odometer-ms": `${props.countDuration ?? 600}ms`,
-              "--tool-motion-mask": `${props.countMask ?? 18}%`,
-              "--tool-motion-mask-height": `${props.countMaskHeight ?? 0}px`,
-              "--tool-motion-spring-ms": `${props.countWidthDuration ?? 560}ms`,
+              "--tool-motion-odometer-ms": "600ms",
+              "--tool-motion-mask": "18%",
+              "--tool-motion-mask-height": "0px",
+              "--tool-motion-spring-ms": "560ms",
               opacity: `${Math.max(0, Math.min(1, 1 - shut()))}`,
             }}
           >
@@ -155,10 +127,10 @@ export function SessionTodoDock(props: {
           >
             <TextReveal
               class="text-14-regular text-text-base cursor-default"
-              text={store.collapsed ? preview() : undefined}
-              duration={props.subtitleDuration ?? 600}
-              travel={props.subtitleTravel ?? 25}
-              edge={props.subtitleEdge ?? 17}
+              text={collapsed() ? preview() : undefined}
+              duration={600}
+              travel={25}
+              edge={17}
               spring="cubic-bezier(0.34, 1, 0.64, 1)"
               springSoft="cubic-bezier(0.34, 1, 0.64, 1)"
               growOnly
@@ -168,7 +140,7 @@ export function SessionTodoDock(props: {
           <div class="ml-auto">
             <IconButton
               data-action="session-todo-toggle-button"
-              data-collapsed={store.collapsed ? "true" : "false"}
+              data-collapsed={collapsed() ? "true" : "false"}
               icon="chevron-down"
               size="normal"
               variant="ghost"
@@ -181,14 +153,14 @@ export function SessionTodoDock(props: {
                 event.stopPropagation()
                 toggle()
               }}
-              aria-label={store.collapsed ? props.expandLabel : props.collapseLabel}
+              aria-label={collapsed() ? props.expandLabel : props.collapseLabel}
             />
           </div>
         </div>
 
         <div
           data-slot="session-todo-list"
-          aria-hidden={store.collapsed || off()}
+          aria-hidden={collapsed() || off()}
           classList={{
             "pointer-events-none": hide() > 0.1,
           }}
@@ -197,7 +169,7 @@ export function SessionTodoDock(props: {
             opacity: `${Math.max(0, Math.min(1, 1 - hide()))}`,
           }}
         >
-          <TodoList todos={props.todos} open={!store.collapsed} />
+          <TodoList todos={props.todos} open={!collapsed()} />
         </div>
       </div>
     </DockTray>

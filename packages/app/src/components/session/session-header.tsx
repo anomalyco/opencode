@@ -10,7 +10,6 @@ import { TextField } from "@opencode-ai/ui/text-field"
 import { showToast } from "@opencode-ai/ui/toast"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { getFilename } from "@opencode-ai/util/path"
-import { useParams } from "@solidjs/router"
 import { createEffect, createMemo, For, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
@@ -23,6 +22,7 @@ import { useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
 import { focusTerminalById } from "@/pages/session/helpers"
+import { useSessionLayout } from "@/pages/session/session-layout"
 import { decode64 } from "@/utils/base64"
 import { Persist, persisted } from "@/utils/persist"
 import { StatusPopover } from "../status-popover"
@@ -225,13 +225,13 @@ function useSessionShare(args: {
 export function SessionHeader() {
   const globalSDK = useGlobalSDK()
   const layout = useLayout()
-  const params = useParams()
   const command = useCommand()
   const server = useServer()
   const sync = useSync()
   const platform = usePlatform()
   const language = useLanguage()
   const terminal = useTerminal()
+  const { params, view } = useSessionLayout()
 
   const projectDirectory = createMemo(() => decode64(params.dir) ?? "")
   const project = createMemo(() => {
@@ -249,8 +249,6 @@ export function SessionHeader() {
   const currentSession = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
   const showShare = createMemo(() => shareEnabled() && !!params.id)
-  const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
-  const view = createMemo(() => layout.view(sessionKey))
   const os = createMemo(() => detectOS(platform))
 
   const [exists, setExists] = createStore<Partial<Record<OpenApp, boolean>>>({
@@ -282,10 +280,7 @@ export function SessionHeader() {
         Promise.resolve(platform.checkAppExists?.(app.openWith))
           .then((value) => Boolean(value))
           .catch(() => false)
-          .then((ok) => {
-            console.debug(`[session-header] App "${app.label}" (${app.openWith}): ${ok ? "exists" : "does not exist"}`)
-            return [app.id, ok] as const
-          }),
+          .then((ok) => [app.id, ok] as const),
       ),
     ).then((entries) => {
       setExists(Object.fromEntries(entries) as Partial<Record<OpenApp, boolean>>)
