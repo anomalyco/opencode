@@ -5,18 +5,9 @@ import { filter, fromEntries, map, mapValues, pipe } from "remeda"
 import type { AuthOuathResult } from "@opencode-ai/plugin"
 import { NamedError } from "@opencode-ai/util/error"
 import * as Auth from "@/auth/service"
+import * as ScopedState from "@/util/scoped-state"
 import { ProviderID } from "./schema"
 import z from "zod"
-
-const state = Instance.state(async () => {
-  const methods = pipe(
-    await Plugin.list(),
-    filter((x) => x.auth?.provider !== undefined),
-    map((x) => [x.auth!.provider, x.auth!] as const),
-    fromEntries(),
-  )
-  return { methods, pending: {} as Record<string, AuthOuathResult> }
-})
 
 export type Method = {
   type: "oauth" | "api"
@@ -71,10 +62,23 @@ export class ProviderAuthService extends ServiceMap.Service<ProviderAuthService,
     ProviderAuthService,
     Effect.gen(function* () {
       const auth = yield* Auth.AuthService
+      const state = yield* ScopedState.make({
+        root: () => Instance.directory,
+        lookup: () =>
+          Effect.promise(async () => {
+            const methods = pipe(
+              await Plugin.list(),
+              filter((x) => x.auth?.provider !== undefined),
+              map((x) => [x.auth!.provider, x.auth!] as const),
+              fromEntries(),
+            )
+            return { methods, pending: {} as Record<string, AuthOuathResult> }
+          }),
+      })
 
       const methods = Effect.fn("ProviderAuthService.methods")(() =>
-        Effect.promise(() =>
-          state().then((x) =>
+        ScopedState.get(state).pipe(
+          Effect.map((x) =>
             mapValues(x.methods, (y) =>
               y.methods.map(
                 (z): Method => ({
@@ -91,15 +95,11 @@ export class ProviderAuthService extends ServiceMap.Service<ProviderAuthService,
         providerID: ProviderID
         method: number
       }) {
-        const item = yield* Effect.promise(() => state().then((x) => x.methods[input.providerID]))
+        const item = (yield* ScopedState.get(state)).methods[input.providerID]
         const method = item.methods[input.method]
         if (method.type !== "oauth") return
         const result = yield* Effect.promise(() => method.authorize())
-        yield* Effect.promise(() =>
-          state().then((x) => {
-            x.pending[input.providerID] = result
-          }),
-        )
+        ;(yield* ScopedState.get(state)).pending[input.providerID] = result
         return {
           url: result.url,
           method: result.method,
@@ -112,7 +112,7 @@ export class ProviderAuthService extends ServiceMap.Service<ProviderAuthService,
         method: number
         code?: string
       }) {
-        const match = yield* Effect.promise(() => state().then((x) => x.pending[input.providerID]))
+        const match = (yield* ScopedState.get(state)).pending[input.providerID]
         if (!match) return yield* Effect.fail(new OauthMissing({ providerID: input.providerID }))
 
         const result =
