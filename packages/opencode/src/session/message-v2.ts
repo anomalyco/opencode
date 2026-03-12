@@ -622,7 +622,7 @@ export namespace MessageV2 {
           parts: [],
         }
         for (const part of msg.parts) {
-          if (part.type === "text")
+          if (part.type === "text" && !part.synthetic)
             assistantMessage.parts.push({
               type: "text",
               text: part.text,
@@ -694,7 +694,7 @@ export namespace MessageV2 {
           }
         }
         if (assistantMessage.parts.length > 0) {
-          result.push(assistantMessage)
+          if (assistantMessage.parts.length > 0) result.push(assistantMessage)
           // Inject pending media as a user message for providers that don't support
           // media (images, PDFs) in tool results
           if (media.length > 0) {
