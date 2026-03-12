@@ -63,6 +63,9 @@ export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
   let anchor: BoxRenderable
   let autocomplete: AutocompleteRef
+  
+  const [vimMode, setVimMode] = createSignal(false)
+  const [vimState, setVimState] = createSignal<{ mode: 'normal' | 'insert', pendingCommand?: string }>({ mode: 'insert' })
 
   const keybind = useKeybind()
   const local = useLocal()
@@ -96,6 +99,61 @@ export function Prompt(props: PromptProps) {
   const agentStyleId = syntax().getStyleId("extmark.agent")!
   const pasteStyleId = syntax().getStyleId("extmark.paste")!
   let promptPartTypeId = 0
+  
+  // Load vim mode preference
+  const [vimEnabled] = createSignal(false)
+  createEffect(() => {
+    const configVim = sync.data.config.vim_mode
+    // Config file takes precedence, default off
+    if (configVim === true) {
+      setVimMode(true)
+      setVimState({ mode: 'insert' })
+    } else if (configVim === false) {
+      setVimMode(false)
+    }
+  })
+  
+  onMount(async () => {
+    const vimSetting = await kv.get("vim_mode_enabled")
+    // Only use KV if config doesn't have vim_mode set
+    if (sync.data.config.vim_mode === undefined && vimSetting) {
+      setVimMode(vimSetting === "true")
+      if (vimSetting === "true") {
+        setVimState({ mode: 'insert' })
+      }
+    }
+  })
+  
+  command.register(() => [
+    {
+      title: vimMode() ? "Disable Vim Mode" : "Enable Vim Mode",
+      value: "vim.toggle",
+      category: "Input",
+      slash: {
+        name: "vim",
+        aliases: ["vim-mode"],
+      },
+      onSelect: async () => {
+        const newMode = !vimMode()
+        setVimMode(newMode)
+        await kv.set("vim_mode_enabled", newMode.toString())
+        if (newMode) {
+          setVimState({ mode: 'insert' })
+          toast.show({
+            variant: "info",
+            message: "Vim mode enabled (Insert mode)",
+            duration: 2000,
+          })
+        } else {
+          toast.show({
+            variant: "info",
+            message: "Vim mode disabled",
+            duration: 2000,
+          })
+        }
+      },
+    },
+  ])
 
   sdk.event.on(TuiEvent.PromptAppend.type, (evt) => {
     if (!input || input.isDestroyed) return
@@ -771,7 +829,8 @@ export function Prompt(props: PromptProps) {
       const example = SHELL_PLACEHOLDERS[store.placeholder % SHELL_PLACEHOLDERS.length]
       return `Run a command... "${example}"`
     }
-    return `Ask anything... "${PLACEHOLDERS[store.placeholder % PLACEHOLDERS.length]}"`
+    const vim = vimMode() ? `Vim ${vimState().mode} | ` : ""
+    return `${vim}Ask anything... "${PLACEHOLDERS[store.placeholder % PLACEHOLDERS.length]}"`
   })
 
   const spinnerDef = createMemo(() => {
@@ -851,6 +910,197 @@ export function Prompt(props: PromptProps) {
                 if (props.disabled) {
                   e.preventDefault()
                   return
+                }
+                
+                // Handle vim mode keybindings
+                if (vimMode() && store.mode === "normal" && !autocomplete.visible) {
+                  const vim = vimState()
+                  
+                  // Escape key - switch to normal mode from insert
+                  if (e.name === "escape" && vim.mode === 'insert') {
+                    setVimState({ mode: 'normal' })
+                    toast.show({
+                      variant: "info",
+                      message: "Vim: Normal mode",
+                      duration: 1000,
+                    })
+                    e.preventDefault()
+                    return
+                  }
+                  
+                  // 'i' key - switch to insert mode
+                  if (vim.mode === 'normal' && e.name === 'i' && !e.ctrl && !e.meta) {
+                    // Check for capital I using sequence
+                    const isCapital = e.sequence === 'I'
+                    if (isCapital) {
+                      // Insert at beginning of line - move to start of current visual line
+                      const cursor = input.visualCursor
+                      const lineStartOffset = cursor.offset - cursor.visualCol
+                      input.cursorOffset = lineStartOffset
+                    }
+                    setVimState({ mode: 'insert' })
+                    toast.show({
+                      variant: "info",
+                      message: isCapital ? "Vim: Insert at BOL" : "Vim: Insert mode",
+                      duration: 1000,
+                    })
+                    e.preventDefault()
+                    return
+                  }
+                  
+                  // In normal mode, handle hjkl navigation
+                  if (vim.mode === 'normal') {
+                    // Handle pending commands first
+                    if (vim.pendingCommand) {
+                      e.preventDefault()
+                      if (vim.pendingCommand === 'd') {
+                        if (e.name === 'd') {
+                          // dd - delete line
+                          const cursor = input.visualCursor
+                          const lines = input.plainText.split('\n')
+                          lines.splice(cursor.visualRow, 1)
+                          input.setText(lines.join('\n'))
+                          input.visualCursor = { visualRow: Math.min(cursor.visualRow, lines.length - 1), visualCol: 0 }
+                          setVimState({ mode: 'normal' })
+                          return
+                        }
+                        setVimState({ mode: 'normal' })
+                        return
+                      }
+                      if (vim.pendingCommand === 'c') {
+                        if (e.name === 'w') {
+                          // cw - change word
+                          const text = input.plainText
+                          let pos = input.cursorOffset
+                          while (pos < text.length && /\s/.test(text[pos])) pos++
+                          let end = pos
+                          while (end < text.length && /\w/.test(text[end])) end++
+                          if (end > pos) {
+                            input.deleteRange(input.visualCursor.visualRow, input.visualCursor.visualCol, 
+                                             input.visualCursor.visualRow, input.visualCursor.visualCol + (end - pos))
+                            setVimState({ mode: 'insert' })
+                            return
+                          }
+                          setVimState({ mode: 'normal' })
+                          return
+                        }
+                        setVimState({ mode: 'normal' })
+                        return
+                      }
+                    }
+                    
+                    // 'd' key - handle both lowercase d and capital D
+                    if (e.name === 'd' && !e.ctrl && !e.meta) {
+                      const isCapital = e.sequence === 'D'
+                      if (isCapital) {
+                        // Delete to end of line and enter insert mode
+                        const cursor = input.visualCursor
+                        const lines = input.plainText.split('\n')
+                        const line = lines[cursor.visualRow]
+                        lines[cursor.visualRow] = line.substring(0, cursor.visualCol)
+                        const newText = lines.join('\n')
+                        input.setText(newText)
+                        // Keep cursor at same visual column (now at end of line)
+                        const newCol = cursor.visualCol
+                        // Calculate new offset - cursor stays at same visual position
+                        const newOffset = cursor.offset - (cursor.visualCol - newCol)
+                        input.cursorOffset = newOffset
+                        setVimState({ mode: 'insert' })
+                        e.preventDefault()
+                        return
+                      } else {
+                        // Wait for second d
+                        setVimState({ mode: 'normal', pendingCommand: 'd' })
+                        e.preventDefault()
+                                                return
+                      }
+                    }
+                    
+                    
+                    switch (e.name) {
+                      case 'h':
+                        if (!e.ctrl && !e.meta) {
+                          input.cursorOffset = Math.max(0, input.cursorOffset - 1)
+                          e.preventDefault()
+                          return
+                        }
+                        break
+                      case 'l':
+                        if (!e.ctrl && !e.meta) {
+                          input.cursorOffset = Math.min(input.plainText.length, input.cursorOffset + 1)
+                          e.preventDefault()
+                          return
+                        }
+                        break
+                      case 'x':
+                        if (!e.ctrl && !e.meta) {
+                          // Delete character under cursor
+                          const cursor = input.visualCursor
+                          const text = input.plainText
+                          if (cursor.offset < text.length) {
+                            input.deleteRange(cursor.visualRow, cursor.visualCol, cursor.visualRow, cursor.visualCol + 1)
+                          }
+                          e.preventDefault()
+                          return
+                        }
+                        break
+                      case 'c':
+                        if (!e.ctrl && !e.meta) {
+                          // Wait for motion (only w supported)
+                          setVimState({ mode: 'normal', pendingCommand: 'c' })
+                          e.preventDefault()
+                          return
+                        }
+                        break
+                      case 'j':
+                        if (!e.ctrl && !e.meta) {
+                          // Move down visual line
+                          const visualRow = input.visualCursor.visualRow
+                          if (visualRow < input.height - 1) {
+                            input.visualCursor = { visualRow: visualRow + 1, visualCol: input.visualCursor.visualCol }
+                          }
+                          e.preventDefault()
+                          return
+                        }
+                        break
+                      case 'k':
+                        if (!e.ctrl && !e.meta) {
+                          // Move up visual line
+                          const visualRow = input.visualCursor.visualRow
+                          if (visualRow > 0) {
+                            input.visualCursor = { visualRow: visualRow - 1, visualCol: input.visualCursor.visualCol }
+                          }
+                          e.preventDefault()
+                          return
+                        }
+                        break
+                      case '0':
+                        if (!e.ctrl && !e.meta) {
+                          // Go to beginning of line
+                          input.cursorOffset = input.visualCursor.offset - input.visualCursor.visualCol
+                          e.preventDefault()
+                          return
+                        }
+                        break
+                      case '$':
+                        if (!e.ctrl && !e.meta) {
+                          // Go to end of line
+                          const lines = input.plainText.split('\n')
+                          const currentLine = input.visualCursor.visualRow
+                          const currentLineStart = lines.slice(0, currentLine).join('\n').length + (currentLine > 0 ? 1 : 0)
+                          const currentLineEnd = currentLineStart + lines[currentLine].length
+                          input.cursorOffset = currentLineEnd
+                          e.preventDefault()
+                          return
+                        }
+                        break
+                    }
+                    // In normal mode with vim enabled, prevent most keypresses except for navigation
+                    if (!e.ctrl && !e.meta) {
+                      e.preventDefault()
+                      return
+                    }
+                  }
                 }
                 // Handle clipboard paste (Ctrl+V) - check for images first on Windows
                 // This is needed because Windows terminal doesn't properly send image data
