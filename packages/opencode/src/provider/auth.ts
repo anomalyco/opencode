@@ -5,6 +5,9 @@ import { fn } from "@/util/fn"
 import * as S from "./auth-service"
 import { ProviderID } from "./schema"
 
+// Separate runtime: ProviderAuthService can't join the shared runtime because
+// runtime.ts → auth-service.ts → provider/auth.ts creates a circular import.
+// AuthService is stateless file I/O so the duplicate instance is harmless.
 const rt = ManagedRuntime.make(S.ProviderAuthService.defaultLayer)
 
 function runPromise<A>(f: (service: S.ProviderAuthService.Service) => Effect.Effect<A, S.ProviderAuthError>) {
