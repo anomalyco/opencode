@@ -15,6 +15,7 @@ import { Agent } from "../../agent/agent"
 import { Snapshot } from "@/snapshot"
 import { Log } from "../../util/log"
 import { PermissionNext } from "@/permission/next"
+import { PermissionID } from "@/permission/schema"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 
@@ -957,7 +958,7 @@ export const SessionRoutes = lazy(() =>
         "param",
         z.object({
           sessionID: SessionID.zod,
-          permissionID: z.string(),
+          permissionID: PermissionID.zod,
         }),
       ),
       validator("json", z.object({ response: PermissionNext.Reply })),
