@@ -125,6 +125,8 @@ export const dict = {
   "ui.message.collapse": "Zwiń wiadomość",
   "ui.message.copy": "Kopiuj",
   "ui.message.copyMessage": "Kopiuj wiadomość",
+  "ui.message.forkMessage": "Rozwidlij do nowej sesji",
+  "ui.message.revertMessage": "Zresetuj do tego punktu",
   "ui.message.copyResponse": "Kopiuj odpowiedź",
   "ui.message.copied": "Skopiowano!",
   "ui.message.interrupted": "Przerwano",
