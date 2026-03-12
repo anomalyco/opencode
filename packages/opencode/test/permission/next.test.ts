@@ -523,7 +523,7 @@ test("reply - once resolves the pending ask", async () => {
     directory: tmp.path,
     fn: async () => {
       const askPromise = PermissionNext.ask({
-        id: PermissionID.make("prm_test1"),
+        id: PermissionID.make("per_test1"),
         sessionID: SessionID.make("session_test"),
         permission: "bash",
         patterns: ["ls"],
@@ -533,7 +533,7 @@ test("reply - once resolves the pending ask", async () => {
       })
 
       await PermissionNext.reply({
-        requestID: PermissionID.make("prm_test1"),
+        requestID: PermissionID.make("per_test1"),
         reply: "once",
       })
 
@@ -548,7 +548,7 @@ test("reply - reject throws RejectedError", async () => {
     directory: tmp.path,
     fn: async () => {
       const askPromise = PermissionNext.ask({
-        id: PermissionID.make("prm_test2"),
+        id: PermissionID.make("per_test2"),
         sessionID: SessionID.make("session_test"),
         permission: "bash",
         patterns: ["ls"],
@@ -558,7 +558,7 @@ test("reply - reject throws RejectedError", async () => {
       })
 
       await PermissionNext.reply({
-        requestID: PermissionID.make("prm_test2"),
+        requestID: PermissionID.make("per_test2"),
         reply: "reject",
       })
 
@@ -573,7 +573,7 @@ test("reply - always persists approval and resolves", async () => {
     directory: tmp.path,
     fn: async () => {
       const askPromise = PermissionNext.ask({
-        id: PermissionID.make("prm_test3"),
+        id: PermissionID.make("per_test3"),
         sessionID: SessionID.make("session_test"),
         permission: "bash",
         patterns: ["ls"],
@@ -583,7 +583,7 @@ test("reply - always persists approval and resolves", async () => {
       })
 
       await PermissionNext.reply({
-        requestID: PermissionID.make("prm_test3"),
+        requestID: PermissionID.make("per_test3"),
         reply: "always",
       })
 
@@ -614,7 +614,7 @@ test("reply - reject cancels all pending for same session", async () => {
     directory: tmp.path,
     fn: async () => {
       const askPromise1 = PermissionNext.ask({
-        id: PermissionID.make("prm_test4a"),
+        id: PermissionID.make("per_test4a"),
         sessionID: SessionID.make("session_same"),
         permission: "bash",
         patterns: ["ls"],
@@ -624,7 +624,7 @@ test("reply - reject cancels all pending for same session", async () => {
       })
 
       const askPromise2 = PermissionNext.ask({
-        id: PermissionID.make("prm_test4b"),
+        id: PermissionID.make("per_test4b"),
         sessionID: SessionID.make("session_same"),
         permission: "edit",
         patterns: ["foo.ts"],
@@ -639,7 +639,7 @@ test("reply - reject cancels all pending for same session", async () => {
 
       // Reject the first one
       await PermissionNext.reply({
-        requestID: PermissionID.make("prm_test4a"),
+        requestID: PermissionID.make("per_test4a"),
         reply: "reject",
       })
 
