@@ -1580,12 +1580,80 @@ export namespace LSPServer {
           BUN_BE_BUN: "1",
         },
       })
+      // Detect WordPress projects (core, themes, or plugins)
+      const isWordPress = await (async () => {
+        // Check 1: WordPress core files (for full WP installations)
+        const wpCoreFiles = [
+          "wp-config.php",
+          "wp-content",
+          "wp-admin",
+          "wp-includes",
+          "wp-settings.php",
+          "wp-load.php",
+        ]
+        for (const wpFile of wpCoreFiles) {
+          const wpPath = path.join(root, wpFile)
+          if (await pathExists(wpPath)) {
+            log.info("WordPress core installation detected", { file: wpFile, root })
+            return true
+          }
+        }
+
+        // Check 2: WordPress plugin/theme headers in PHP files
+        // Plugins and themes don't have core files but have specific headers
+        const phpFiles = await fs.readdir(root).then(files =>
+          files.filter(f => f.endsWith(".php")).map(f => path.join(root, f))
+        ).catch(() => [])
+
+        for (const phpFile of phpFiles.slice(0, 10)) { // Check up to 10 PHP files
+          const content = await fs.readFile(phpFile, "utf-8").catch(() => null)
+          if (!content) continue
+
+          // WordPress plugin header: Plugin Name: xxx
+          // WordPress theme header: Theme Name: xxx
+          // Both use the WordPress PHP header pattern
+          if (
+            /\*\s*Plugin Name:/.test(content) ||
+            /\*\s*Theme Name:/.test(content) ||
+            /\*\s*Text Domain:\s*\S+/.test(content)
+          ) {
+            log.info("WordPress plugin/theme detected", { file: path.basename(phpFile), root })
+            return true
+          }
+          // Check for WordPress function calls in the first 2000 chars
+          const wpFunctions = [
+            "add_action(",
+            "add_filter(",
+            "do_action(",
+            "apply_filters(",
+            "wp_enqueue_script(",
+            "wp_enqueue_style(",
+            "register_activation_hook(",
+            "register_deactivation_hook(",
+            "register_uninstall_hook(",
+          ]
+          const sample = content.slice(0, 2000)
+          if (wpFunctions.some(fn => sample.includes(fn))) {
+            log.info("WordPress code patterns detected", { file: path.basename(phpFile), root })
+            return true
+          }
+        }
+
+        return false
+      })()
+
       return {
         process: proc,
         initialization: {
           telemetry: {
             enabled: false,
           },
+          // Include WordPress stubs for WordPress projects
+          ...(isWordPress && {
+            intelephense: {
+              stubs: ["wordpress"],
+            },
+          }),
         },
       }
     },
