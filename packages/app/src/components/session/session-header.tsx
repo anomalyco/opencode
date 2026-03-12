@@ -322,7 +322,7 @@ export function SessionHeader() {
                       <div class="flex h-[24px] box-border items-center rounded-md border border-border-weak-base bg-surface-panel overflow-hidden">
                         <Button
                           variant="ghost"
-                          class="rounded-none h-full py-0 pr-3 pl-0.5 gap-1.5 border-none shadow-none disabled:!cursor-default"
+                          class="rounded-none h-full py-0 pr-1.5 pl-px gap-1.5 border-none shadow-none disabled:!cursor-default"
                           classList={{
                             "bg-surface-raised-base-active": opening(),
                           }}
@@ -340,7 +340,6 @@ export function SessionHeader() {
                           </div>
                           <span class="text-12-regular text-text-strong">{language.t("common.open")}</span>
                         </Button>
-                        <div class="self-stretch w-px bg-border-weak-base" />
                         <DropdownMenu
                           gutter={4}
                           placement="bottom-end"
@@ -352,7 +351,7 @@ export function SessionHeader() {
                             icon="chevron-down"
                             variant="ghost"
                             disabled={opening()}
-                            class="rounded-none h-full w-[24px] p-0 border-none shadow-none data-[expanded]:bg-surface-raised-base-active disabled:!cursor-default"
+                            class="rounded-none h-full w-[20px] p-0 border-none shadow-none data-[expanded]:bg-surface-raised-base-active disabled:!cursor-default"
                             classList={{
                               "bg-surface-raised-base-active": opening(),
                             }}
