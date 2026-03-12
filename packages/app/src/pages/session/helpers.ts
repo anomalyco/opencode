@@ -1,4 +1,4 @@
-import { batch, createEffect, on, onCleanup, onMount, type Accessor } from "solid-js"
+import { batch, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 
 export const focusTerminalById = (id: string) => {
@@ -117,57 +117,3 @@ export const createSizing = () => {
 }
 
 export type Sizing = ReturnType<typeof createSizing>
-
-export const createPresence = (open: Accessor<boolean>, wait = 200) => {
-  const [state, setState] = createStore({
-    show: open(),
-    open: open(),
-  })
-  let frame: number | undefined
-  let t: number | undefined
-
-  const clear = () => {
-    if (frame !== undefined) {
-      cancelAnimationFrame(frame)
-      frame = undefined
-    }
-    if (t !== undefined) {
-      clearTimeout(t)
-      t = undefined
-    }
-  }
-
-  createEffect(
-    on(open, (next) => {
-      clear()
-
-      if (next) {
-        if (state.show) {
-          setState("open", true)
-          return
-        }
-
-        setState({ show: true, open: false })
-        frame = requestAnimationFrame(() => {
-          frame = undefined
-          setState("open", true)
-        })
-        return
-      }
-
-      if (!state.show) return
-      setState("open", false)
-      t = window.setTimeout(() => {
-        t = undefined
-        setState("show", false)
-      }, wait)
-    }),
-  )
-
-  onCleanup(clear)
-
-  return {
-    show: () => state.show,
-    open: () => state.open,
-  }
-}

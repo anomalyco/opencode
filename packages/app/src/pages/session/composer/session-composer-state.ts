@@ -8,29 +8,20 @@ import { useLanguage } from "@/context/language"
 import { usePermission } from "@/context/permission"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
-import { todoState } from "./session-composer-helpers"
 import { sessionPermissionRequest, sessionQuestionRequest } from "./session-request-tree"
 
-const idle = { type: "idle" as const }
-
-export function createSessionComposerBlocked() {
-  const params = useParams()
-  const permission = usePermission()
-  const sdk = useSDK()
-  const sync = useSync()
-  const permissionRequest = createMemo(() =>
-    sessionPermissionRequest(sync.data.session, sync.data.permission, params.id, (item) => {
-      return !permission.autoResponds(item, sdk.directory)
-    }),
-  )
-  const questionRequest = createMemo(() => sessionQuestionRequest(sync.data.session, sync.data.question, params.id))
-
-  return createMemo(() => {
-    const id = params.id
-    if (!id) return false
-    return !!permissionRequest() || !!questionRequest()
-  })
+export const todoState = (input: {
+  count: number
+  done: boolean
+  live: boolean
+}): "hide" | "clear" | "open" | "close" => {
+  if (input.count === 0) return "hide"
+  if (!input.live) return "clear"
+  if (!input.done) return "open"
+  return "close"
 }
+
+const idle = { type: "idle" as const }
 
 export function createSessionComposerState(options?: { closeMs?: number | (() => number) }) {
   const params = useParams()
