@@ -47,6 +47,7 @@ import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
 import { Truncate } from "@/tool/truncation"
+import type { Brand } from "effect"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -268,7 +269,7 @@ export namespace SessionPrompt {
   }
 
   async function btwLoop(input: {
-    sessionID: string
+    sessionID: SessionID
     userMessage: MessageV2.WithParts
   }): Promise<MessageV2.WithParts> {
     const { sessionID } = input
@@ -286,7 +287,7 @@ export namespace SessionPrompt {
       // toModelMessages includes the pending btw question as the final user turn
       const messages = MessageV2.toModelMessages(msgs, model)
       const assistantMessage = (await Session.updateMessage({
-        id: Identifier.ascending("message"),
+        id: MessageID.ascending(),
         parentID: input.userMessage.info.id,
         role: "assistant",
         sessionID,
@@ -318,7 +319,7 @@ export namespace SessionPrompt {
     }
   }
 
-  export function cancel(sessionID: string) {
+  export function cancel(sessionID: SessionID) {
     log.info("cancel", { sessionID })
     const s = state()
     const match = s[sessionID]
