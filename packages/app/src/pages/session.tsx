@@ -46,7 +46,7 @@ import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { same } from "@/utils/same"
 import { formatServerError } from "@/utils/server-errors"
-import { sortMessages, splitMessages } from "@opencode-ai/util/message"
+import { sortMessages } from "@opencode-ai/util/message"
 
 const emptyUserMessages: UserMessage[] = []
 
@@ -412,7 +412,8 @@ export default function Page() {
   const visibleUserMessages = createMemo(
     () => {
       const revert = revertMessageID()
-      return splitMessages(userMessages(), revert).before as UserMessage[]
+      if (!revert) return userMessages()
+      return userMessages().filter((m) => m.id < revert)
     },
     emptyUserMessages,
     {
