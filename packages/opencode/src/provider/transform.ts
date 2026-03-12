@@ -172,6 +172,71 @@ export namespace ProviderTransform {
     return msgs
   }
 
+  function extractBase64(data: string): string {
+    // Recursively strip all data URL prefixes to get pure base64
+    const comma = data.indexOf(",")
+    if (comma === -1) return data
+    const body = data.slice(comma + 1)
+    if (!body.startsWith("data:")) return body
+    return extractBase64(body)
+  }
+
+  function splitToolMedia(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
+    const unsupported = [
+      "@ai-sdk/openai",
+      "@ai-sdk/openai-compatible",
+      "@ai-sdk/anthropic",
+      "@ai-sdk/google-vertex/anthropic",
+    ]
+    if (!unsupported.includes(model.api.npm)) return msgs
+
+    return msgs.flatMap((msg) => {
+      if (msg.role !== "tool" || !Array.isArray(msg.content)) return [msg]
+
+      const media = msg.content.flatMap((part) => {
+        if (part.type !== "tool-result") return []
+        if (part.output.type !== "content") return []
+        return part.output.value.flatMap((item, index) => {
+          if (item.type !== "media") return []
+          // Always extract pure base64 and rebuild data URL to avoid nested prefixes
+          console.log(`[transform.ts] splitToolMedia item[${index}].data:`, item.data.substring(0, 100))
+          const base64 = item.data.startsWith("data:") ? extractBase64(item.data) : item.data
+          const result = `data:${item.mediaType};base64,${base64}`
+          console.log(`[transform.ts] splitToolMedia result[${index}]:`, result.substring(0, 100))
+          return [
+            {
+              type: "file" as const,
+              mediaType: item.mediaType,
+              data: result,
+            },
+          ]
+        })
+      })
+
+      if (media.length === 0) return [msg]
+
+      const content = msg.content.map((part) => {
+        if (part.type !== "tool-result") return part
+        if (part.output.type !== "content") return part
+        return {
+          ...part,
+          output: {
+            type: "text" as const,
+            value: part.output.value.flatMap((item) => (item.type === "text" ? [item.text] : [])).join("\n\n"),
+          },
+        }
+      })
+
+      return [
+        { ...msg, content },
+        {
+          role: "user" as const,
+          content: [{ type: "text" as const, text: "Attached image(s) from tool result:" }, ...media],
+        },
+      ]
+    })
+  }
+
   function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
     const system = msgs.filter((msg) => msg.role === "system").slice(0, 2)
     const final = msgs.filter((msg) => msg.role !== "system").slice(-2)
@@ -251,6 +316,7 @@ export namespace ProviderTransform {
   }
 
   export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
+    msgs = splitToolMedia(msgs, model)
     msgs = unsupportedParts(msgs, model)
     msgs = normalizeMessages(msgs, model, options)
     if (

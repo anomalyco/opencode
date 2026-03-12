@@ -18,6 +18,89 @@ function isFileId(data: string, prefixes?: readonly string[]): boolean {
   return prefixes.some((prefix) => data.startsWith(prefix))
 }
 
+function extractBase64(data: string): string {
+  // Recursively strip all data URL prefixes to get pure base64
+  const comma = data.indexOf(",")
+  if (comma === -1) return data
+  const body = data.slice(comma + 1)
+  if (!body.startsWith("data:")) return body
+  return extractBase64(body)
+}
+
+function dataUrl(data: string, mediaType: string) {
+  console.log('[openai-compatible/responses] dataUrl input:', data.substring(0, 100))
+  const type = mediaType === "image/*" ? "image/jpeg" : mediaType
+  // If already a complete data URL, extract and rebuild
+  if (data.startsWith("data:")) {
+    const base64 = extractBase64(data)
+    const result = `data:${type};base64,${base64}`
+    console.log('[openai-compatible/responses] dataUrl output:', result.substring(0, 100))
+    return result
+  }
+  // If pure base64, add prefix
+  const result = `data:${type};base64,${data}`
+  console.log('[openai-compatible/responses] dataUrl output:', result.substring(0, 100))
+  return result
+}
+
+function imageUrl(data: string | Uint8Array | URL, mediaType: string) {
+  if (data instanceof URL) return data.toString()
+  if (typeof data === "string") {
+    if (isFileId(data)) return data
+    return dataUrl(data, mediaType)
+  }
+  const type = mediaType === "image/*" ? "image/jpeg" : mediaType
+  return `data:${type};base64,${convertToBase64(data)}`
+}
+
+function image(data: string, mediaType: string) {
+  return {
+    type: "input_image" as const,
+    image_url: dataUrl(data, mediaType),
+  }
+}
+
+function toolMedia(output: { type: string; value: unknown }) {
+  if (output.type !== "content") return []
+  if (!Array.isArray(output.value)) return []
+  const result = output.value.flatMap((part, index) => {
+    if (!part || typeof part !== "object") return []
+    if (!("type" in part) || part.type !== "media") return []
+    if (!("mediaType" in part) || typeof part.mediaType !== "string") return []
+    if (!("data" in part) || typeof part.data !== "string") return []
+    if (!part.mediaType.startsWith("image/")) return []
+    console.log(`[openai-compatible/responses] toolMedia part[${index}].data:`, part.data.substring(0, 100))
+    const img = image(part.data, part.mediaType)
+    console.log(`[openai-compatible/responses] toolMedia result[${index}]:`, img.image_url.substring(0, 100))
+    return [img]
+  })
+  console.log(`[openai-compatible/responses] toolMedia total count: ${result.length}`)
+  return result
+}
+
+function toolText(output: { type: string; value: unknown }) {
+  switch (output.type) {
+    case "text":
+    case "error-text":
+      return typeof output.value === "string" ? output.value : JSON.stringify(output.value)
+    case "content":
+      if (!Array.isArray(output.value)) return JSON.stringify(output.value)
+      return output.value
+        .flatMap((part) => {
+          if (!part || typeof part !== "object") return []
+          if (!("type" in part) || part.type !== "text") return []
+          if (!("text" in part) || typeof part.text !== "string") return []
+          return [part.text]
+        })
+        .join("\n\n")
+    case "json":
+    case "error-json":
+      return JSON.stringify(output.value)
+  }
+
+  return JSON.stringify(output.value)
+}
+
 export async function convertToOpenAIResponsesInput({
   prompt,
   systemMessageMode,
@@ -75,6 +158,7 @@ export async function convertToOpenAIResponsesInput({
               case "file": {
                 if (part.mediaType.startsWith("image/")) {
                   const mediaType = part.mediaType === "image/*" ? "image/jpeg" : part.mediaType
+                  console.log(`[openai-compatible/responses] user file part.data:`, typeof part.data === 'string' ? part.data.substring(0, 100) : part.data)
 
                   return {
                     type: "input_image",
@@ -83,7 +167,11 @@ export async function convertToOpenAIResponsesInput({
                       : typeof part.data === "string" && isFileId(part.data, fileIdPrefixes)
                         ? { file_id: part.data }
                         : {
-                            image_url: `data:${mediaType};base64,${convertToBase64(part.data)}`,
+                            image_url: (() => {
+                              const url = imageUrl(part.data, mediaType)
+                              console.log(`[openai-compatible/responses] user file image_url:`, url.substring(0, 100))
+                              return url
+                            })(),
                           }),
                     detail: part.providerOptions?.openai?.imageDetail,
                   }
@@ -262,24 +350,21 @@ export async function convertToOpenAIResponsesInput({
             break
           }
 
-          let contentValue: string
-          switch (output.type) {
-            case "text":
-            case "error-text":
-              contentValue = output.value
-              break
-            case "content":
-            case "json":
-            case "error-json":
-              contentValue = JSON.stringify(output.value)
-              break
-          }
+          const contentValue = toolText(output)
 
           input.push({
             type: "function_call_output",
             call_id: part.toolCallId,
             output: contentValue,
           })
+
+          const media = toolMedia(output)
+          if (media.length > 0) {
+            input.push({
+              role: "user",
+              content: [{ type: "input_text", text: "Attached image(s) from tool result:" }, ...media],
+            })
+          }
         }
 
         break

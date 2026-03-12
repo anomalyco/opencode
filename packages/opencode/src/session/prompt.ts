@@ -59,6 +59,65 @@ IMPORTANT:
 
 const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
 
+function toolOutput(result: { output: string; attachments?: Array<{ mime: string; url: string }> }) {
+  const attachments = (result.attachments ?? []).filter((attachment) => {
+    return attachment.url.startsWith("data:") && attachment.url.includes(",")
+  })
+
+  const media = (url: string): string => {
+    console.log('[prompt.ts] toolOutput media() input:', url.substring(0, 100))
+    // If not a data URL, return as-is
+    if (!url.startsWith("data:")) return url
+
+    const comma = url.indexOf(",")
+    if (comma === -1) return url
+
+    const prefix = url.slice(0, comma + 1) // e.g., "data:image/png;base64,"
+    const body = url.slice(comma + 1)
+
+    // If body is nested data URL, recursively extract and rebuild
+    if (body.startsWith("data:")) {
+      const extracted = media(body)
+      // If extracted is a data URL, strip its prefix and use our prefix
+      if (extracted.startsWith("data:")) {
+        const extractedComma = extracted.indexOf(",")
+        if (extractedComma !== -1) {
+          const result = prefix + extracted.slice(extractedComma + 1)
+          console.log('[prompt.ts] toolOutput media() output:', result.substring(0, 100))
+          return result
+        }
+      }
+      const result = prefix + extracted
+      console.log('[prompt.ts] toolOutput media() output:', result.substring(0, 100))
+      return result
+    }
+
+    // Body is pure base64, return complete data URL
+    const result = prefix + body
+    console.log('[prompt.ts] toolOutput media() output:', result.substring(0, 100))
+    return result
+  }
+
+  if (attachments.length === 0) {
+    return {
+      type: "text" as const,
+      value: result.output,
+    }
+  }
+
+  return {
+    type: "content" as const,
+    value: [
+      { type: "text" as const, text: result.output },
+      ...attachments.map((attachment) => ({
+        type: "media" as const,
+        mediaType: attachment.mime,
+        data: media(attachment.url),
+      })),
+    ],
+  }
+}
+
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
 
@@ -948,6 +1007,9 @@ export namespace SessionPrompt {
             hookOpts(ctx.sessionID, input.processor.message.id),
           )
           return output
+        },
+        toModelOutput(result) {
+          return toolOutput(result)
         },
       })
     }

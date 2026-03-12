@@ -266,6 +266,16 @@ describe("session.message-v2.toModelMessage", () => {
   test("converts assistant tool completion into tool-call + tool-result messages with attachments", () => {
     const userID = "m-user"
     const assistantID = "m-assistant"
+    const imageModel = {
+      ...model,
+      capabilities: {
+        ...model.capabilities,
+        input: {
+          ...model.capabilities.input,
+          image: true,
+        },
+      },
+    }
 
     const input: MessageV2.WithParts[] = [
       {
@@ -315,7 +325,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([
+    expect(MessageV2.toModelMessages(input, imageModel)).toStrictEqual([
       {
         role: "user",
         content: [{ type: "text", text: "run tool" }],
@@ -342,14 +352,119 @@ describe("session.message-v2.toModelMessage", () => {
             toolCallId: "call-1",
             toolName: "bash",
             output: {
-              type: "content",
-              value: [
-                { type: "text", text: "ok" },
-                { type: "media", mediaType: "image/png", data: "Zm9v" },
-              ],
+              type: "text",
+              value: "ok",
             },
             providerOptions: { openai: { tool: "meta" } },
           },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Attached image(s) from tool result:" },
+          {
+            type: "file",
+            mediaType: "image/png",
+            data: "data:image/png;base64,Zm9v",
+            filename: undefined,
+          },
+        ],
+      },
+    ])
+  })
+
+  test("falls back to a user image message when tool results include media but model input has no image support", () => {
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+    const noImageModel = {
+      ...model,
+      capabilities: {
+        ...model.capabilities,
+        input: {
+          ...model.capabilities.input,
+          image: false,
+        },
+      },
+    }
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "run question",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "tool",
+            callID: "call-1",
+            tool: "question",
+            state: {
+              status: "completed",
+              input: { questions: [{ question: "What do you see?" }] },
+              output: 'User has answered your questions: "What do you see?"="[image: proof.png]".',
+              title: "Question",
+              metadata: {},
+              time: { start: 0, end: 1 },
+              attachments: [
+                {
+                  ...basePart(assistantID, "file-1"),
+                  type: "file",
+                  mime: "image/png",
+                  filename: "proof.png",
+                  url: "data:image/png;base64,Zm9v",
+                },
+              ],
+            },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    expect(MessageV2.toModelMessages(input, noImageModel)).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "run question" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call-1",
+            toolName: "question",
+            input: { questions: [{ question: "What do you see?" }] },
+            providerExecuted: undefined,
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-1",
+            toolName: "question",
+            output: {
+              type: "text",
+              value: 'User has answered your questions: "What do you see?"="[image: proof.png]".',
+            },
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Attached image(s) from tool result:" },
+          { type: "file", mediaType: "image/png", data: "data:image/png;base64,Zm9v", filename: undefined },
         ],
       },
     ])

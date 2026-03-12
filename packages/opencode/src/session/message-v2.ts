@@ -516,8 +516,12 @@ export namespace MessageV2 {
     // Only apply this workaround if the model actually supports image input -
     // otherwise there's no point extracting images.
     const supportsMediaInToolResults = (() => {
+      if (!model.capabilities.input.image) return false
       if (model.api.npm === "@ai-sdk/anthropic") return true
-      if (model.api.npm === "@ai-sdk/openai") return true
+      // Removed @ai-sdk/openai from this list because it doesn't properly handle
+      // nested data URLs in tool result attachments. When supportsMediaInToolResults=false,
+      // the media() function cleans up nested data URLs before injection.
+      // if (model.api.npm === "@ai-sdk/openai") return true
       if (model.api.npm === "@ai-sdk/amazon-bedrock") return true
       if (model.api.npm === "@ai-sdk/google-vertex/anthropic") return true
       if (model.api.npm === "@ai-sdk/google") {
@@ -526,6 +530,40 @@ export namespace MessageV2 {
       }
       return false
     })()
+
+    const media = (url: string): string => {
+      console.log('[message-v2.ts] media() input:', url.substring(0, 100))
+      // If not a data URL, return as-is
+      if (!url.startsWith("data:")) return url
+
+      const comma = url.indexOf(",")
+      if (comma === -1) return url
+
+      const prefix = url.slice(0, comma + 1) // e.g., "data:image/png;base64,"
+      const body = url.slice(comma + 1)
+
+      // If body is nested data URL, recursively extract and rebuild
+      if (body.startsWith("data:")) {
+        const extracted = media(body)
+        // If extracted is a data URL, strip its prefix and use our prefix
+        if (extracted.startsWith("data:")) {
+          const extractedComma = extracted.indexOf(",")
+          if (extractedComma !== -1) {
+            const result = prefix + extracted.slice(extractedComma + 1)
+            console.log('[message-v2.ts] media() output:', result.substring(0, 100))
+            return result
+          }
+        }
+        const result = prefix + extracted
+        console.log('[message-v2.ts] media() output:', result.substring(0, 100))
+        return result
+      }
+
+      // Body is pure base64, return complete data URL
+      const result = prefix + body
+      console.log('[message-v2.ts] media() output:', result.substring(0, 100))
+      return result
+    }
 
     const toModelOutput = (output: unknown) => {
       if (typeof output === "string") {
@@ -548,10 +586,7 @@ export namespace MessageV2 {
             ...attachments.map((attachment) => ({
               type: "media",
               mediaType: attachment.mime,
-              data: iife(() => {
-                const commaIndex = attachment.url.indexOf(",")
-                return commaIndex === -1 ? attachment.url : attachment.url.slice(commaIndex + 1)
-              }),
+              data: media(attachment.url),
             })),
           ],
         }

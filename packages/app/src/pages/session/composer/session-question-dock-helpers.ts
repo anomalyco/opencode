@@ -1,20 +1,34 @@
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
+import type { ImageAttachmentPart } from "@/context/prompt"
 
-export type QuestionImage = {
-  type: "image"
-  id: string
-  mime: string
-  url: string
-  filename?: string
+export type QuestionImage = ImageAttachmentPart
+
+function extractBase64(url: string): string {
+  // Recursively strip all data URL prefixes to get pure base64
+  const comma = url.indexOf(",")
+  if (comma === -1) return url
+  const body = url.slice(comma + 1)
+  if (!body.startsWith("data:")) return body
+  return extractBase64(body)
+}
+
+function dataUrl(url: string, mime: string) {
+  // If already a complete data URL, extract and rebuild
+  if (url.startsWith("data:")) {
+    const base64 = extractBase64(url)
+    return `data:${mime};base64,${base64}`
+  }
+  // If pure base64, add prefix
+  return `data:${mime};base64,${url}`
 }
 
 export function questionAttachments(images: QuestionImage[] | undefined) {
   return (images ?? []).map((item) => ({
     type: "image" as const,
     id: item.id,
-    filename: item.filename ?? "image",
+    filename: item.filename,
     mime: item.mime,
-    dataUrl: item.url,
+    dataUrl: item.dataUrl,
   }))
 }
 
@@ -35,13 +49,20 @@ export function questionReply(
   answers: QuestionAnswer[],
   images: QuestionImage[][],
 ): QuestionAnswer[] {
-  return questions.map((_, i) => [
+  const result = questions.map((_, i) => [
     ...(answers[i] ?? []),
-    ...(images[i] ?? []).map((item) => ({
-      type: "image" as const,
-      mime: item.mime,
-      url: item.url,
-      filename: item.filename,
-    })),
+    ...(images[i] ?? []).map((item) => {
+      const url = dataUrl(item.dataUrl, item.mime)
+      console.log('[session-question-dock-helpers.ts] questionReply item.dataUrl:', item.dataUrl.substring(0, 100))
+      console.log('[session-question-dock-helpers.ts] questionReply result url:', url.substring(0, 100))
+      return {
+        type: "image" as const,
+        mime: item.mime,
+        url,
+        filename: item.filename,
+      }
+    }),
   ])
+  console.log('[session-question-dock-helpers.ts] questionReply final result:', JSON.stringify(result, null, 2).substring(0, 500))
+  return result
 }
