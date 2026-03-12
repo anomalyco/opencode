@@ -20,10 +20,11 @@ import { createStore } from "solid-js/store"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Select } from "@opencode-ai/ui/select"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
+import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
 import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@opencode-ai/ui/toast"
 import { base64Encode, checksum } from "@opencode-ai/util/encode"
-import { useNavigate, useParams, useSearchParams } from "@solidjs/router"
+import { useNavigate, useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
 import { useComments } from "@/context/comments"
 import { useGlobalSync } from "@/context/global-sync"
@@ -37,6 +38,7 @@ import { createSessionComposerState, SessionComposerRegion } from "@/pages/sessi
 import { createOpenReviewFile, createSizing, focusTerminalById } from "@/pages/session/helpers"
 import { MessageTimeline } from "@/pages/session/message-timeline"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
+import { useSessionLayout } from "@/pages/session/session-layout"
 import { resetSessionModel, syncSessionModel } from "@/pages/session/session-model-helpers"
 import { SessionMobileTabs } from "@/pages/session/session-mobile-tabs"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
@@ -264,13 +266,13 @@ export default function Page() {
   const sync = useSync()
   const dialog = useDialog()
   const language = useLanguage()
-  const params = useParams()
   const navigate = useNavigate()
   const sdk = useSDK()
   const prompt = usePrompt()
   const comments = useComments()
   const terminal = useTerminal()
   const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
+  const { params, sessionKey, tabs, view } = useSessionLayout()
 
   createEffect(() => {
     if (!untrack(() => prompt.ready())) return
@@ -298,11 +300,8 @@ export default function Page() {
 
   const composer = createSessionComposerState()
 
-  const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const workspaceKey = createMemo(() => params.dir ?? "")
   const workspaceTabs = createMemo(() => layout.tabs(workspaceKey))
-  const tabs = createMemo(() => layout.tabs(sessionKey))
-  const view = createMemo(() => layout.view(sessionKey))
 
   createEffect(
     on(
@@ -670,11 +669,7 @@ export default function Page() {
   const selectionPreview = (path: string, selection: FileSelection) => {
     const content = file.get(path)?.content?.content
     if (!content) return undefined
-    const start = Math.max(1, Math.min(selection.startLine, selection.endLine))
-    const end = Math.max(selection.startLine, selection.endLine)
-    const lines = content.split("\n").slice(start - 1, end)
-    if (lines.length === 0) return undefined
-    return lines.slice(0, 2).join("\n")
+    return previewSelectedLines(content, { start: selection.startLine, end: selection.endLine })
   }
 
   const addCommentToContext = (input: {

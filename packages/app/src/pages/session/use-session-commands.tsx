@@ -1,7 +1,8 @@
 import { createMemo } from "solid-js"
-import { useNavigate, useParams } from "@solidjs/router"
+import { useNavigate } from "@solidjs/router"
 import { useCommand, type CommandOption } from "@/context/command"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
 import { useFile, selectionFromLines, type FileSelection, type SelectedLineRange } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
@@ -19,7 +20,7 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { findLast } from "@opencode-ai/util/array"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { UserMessage } from "@opencode-ai/sdk/v2"
-import { canAddSelectionContext } from "@/pages/session/session-command-helpers"
+import { useSessionLayout } from "@/pages/session/session-layout"
 
 export type SessionCommandContext = {
   navigateMessageByOffset: (offset: number) => void
@@ -46,12 +47,9 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const sync = useSync()
   const terminal = useTerminal()
   const layout = useLayout()
-  const params = useParams()
   const navigate = useNavigate()
+  const { params, tabs, view } = useSessionLayout()
 
-  const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
-  const tabs = createMemo(() => layout.tabs(sessionKey))
-  const view = createMemo(() => layout.view(sessionKey))
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
 
   const idle = { type: "idle" as const }
@@ -72,16 +70,20 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const selectionPreview = (path: string, selection: FileSelection) => {
     const content = file.get(path)?.content?.content
     if (!content) return undefined
-    const start = Math.max(1, Math.min(selection.startLine, selection.endLine))
-    const end = Math.max(selection.startLine, selection.endLine)
-    const lines = content.split("\n").slice(start - 1, end)
-    if (lines.length === 0) return undefined
-    return lines.slice(0, 2).join("\n")
+    return previewSelectedLines(content, { start: selection.startLine, end: selection.endLine })
   }
 
   const addSelectionToContext = (path: string, selection: FileSelection) => {
     const preview = selectionPreview(path, selection)
     prompt.context.add({ type: "file", path, selection, preview })
+  }
+
+  const canAddSelectionContext = () => {
+    const active = tabs().active()
+    if (!active) return false
+    const path = file.pathFromTab(active)
+    if (!path) return false
+    return file.selectedLines(path) != null
   }
 
   const navigateMessageByOffset = actions.navigateMessageByOffset
@@ -136,11 +138,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.context.addSelection"),
       description: language.t("command.context.addSelection.description"),
       keybind: "mod+shift+l",
-      disabled: !canAddSelectionContext({
-        active: tabs().active(),
-        pathFromTab: file.pathFromTab,
-        selectedLines: file.selectedLines,
-      }),
+      disabled: !canAddSelectionContext(),
       onSelect: () => {
         const active = tabs().active()
         if (!active) return

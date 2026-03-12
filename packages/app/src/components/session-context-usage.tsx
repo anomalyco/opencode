@@ -2,12 +2,12 @@ import { Match, Show, Switch, createMemo } from "solid-js"
 import { Tooltip, type TooltipProps } from "@opencode-ai/ui/tooltip"
 import { ProgressCircle } from "@opencode-ai/ui/progress-circle"
 import { Button } from "@opencode-ai/ui/button"
-import { useParams } from "@solidjs/router"
 
 import { useLayout } from "@/context/layout"
 import { useSync } from "@/context/sync"
 import { useLanguage } from "@/context/language"
 import { getSessionContextMetrics } from "@/components/session/session-context-metrics"
+import { useSessionLayout } from "@/pages/session/session-layout"
 
 interface SessionContextUsageProps {
   variant?: "button" | "indicator"
@@ -27,14 +27,11 @@ function openSessionContext(args: {
 
 export function SessionContextUsage(props: SessionContextUsageProps) {
   const sync = useSync()
-  const params = useParams()
   const layout = useLayout()
   const language = useLanguage()
+  const { params, tabs, view } = useSessionLayout()
 
   const variant = createMemo(() => props.variant ?? "button")
-  const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
-  const tabs = createMemo(() => layout.tabs(sessionKey))
-  const view = createMemo(() => layout.view(sessionKey))
   const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
 
   const usd = createMemo(

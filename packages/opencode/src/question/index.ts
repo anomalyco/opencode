@@ -80,20 +80,15 @@ export namespace Question {
     ),
   }
 
-  const state = Instance.state(async () => {
-    const pending: Record<
-      string,
-      {
-        info: Request
-        resolve: (answers: Answer[]) => void
-        reject: (e: any) => void
-      }
-    > = {}
+  interface PendingEntry {
+    info: Request
+    resolve: (answers: Answer[]) => void
+    reject: (e: any) => void
+  }
 
-    return {
-      pending,
-    }
-  })
+  const state = Instance.state(async () => ({
+    pending: new Map<QuestionID, PendingEntry>(),
+  }))
 
   export async function ask(input: {
     sessionID: SessionID
@@ -112,23 +107,23 @@ export namespace Question {
         questions: input.questions,
         tool: input.tool,
       }
-      s.pending[id] = {
+      s.pending.set(id, {
         info,
         resolve,
         reject,
-      }
+      })
       Bus.publish(Event.Asked, info)
     })
   }
 
-  export async function reply(input: { requestID: string; answers: Answer[] }): Promise<void> {
+  export async function reply(input: { requestID: QuestionID; answers: Answer[] }): Promise<void> {
     const s = await state()
-    const existing = s.pending[input.requestID]
+    const existing = s.pending.get(input.requestID)
     if (!existing) {
       log.warn("reply for unknown request", { requestID: input.requestID })
       return
     }
-    delete s.pending[input.requestID]
+    s.pending.delete(input.requestID)
 
     log.info("replied", { requestID: input.requestID, answers: input.answers })
 
@@ -141,14 +136,14 @@ export namespace Question {
     existing.resolve(input.answers)
   }
 
-  export async function reject(requestID: string): Promise<void> {
+  export async function reject(requestID: QuestionID): Promise<void> {
     const s = await state()
-    const existing = s.pending[requestID]
+    const existing = s.pending.get(requestID)
     if (!existing) {
       log.warn("reject for unknown request", { requestID })
       return
     }
-    delete s.pending[requestID]
+    s.pending.delete(requestID)
 
     log.info("rejected", { requestID })
 
@@ -167,6 +162,6 @@ export namespace Question {
   }
 
   export async function list() {
-    return state().then((x) => Object.values(x.pending).map((x) => x.info))
+    return state().then((x) => Array.from(x.pending.values(), (x) => x.info))
   }
 }
