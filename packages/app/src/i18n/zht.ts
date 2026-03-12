@@ -456,6 +456,7 @@ export const dict = {
 
   "session.tab.session": "工作階段",
   "session.tab.review": "審查",
+  "session.tab.preview": "Preview",
   "session.tab.context": "上下文",
   "session.panel.reviewAndFiles": "審查與檔案",
   "session.review.filesChanged": "{{count}} 個檔案變更",
@@ -467,6 +468,10 @@ export const dict = {
   "session.files.selectToOpen": "選取要開啟的檔案",
   "session.files.all": "所有檔案",
   "session.files.binaryContent": "二進位檔案（無法顯示內容）",
+  "session.preview.empty": "Select a file to preview",
+  "session.preview.unsupported": "Preview is not available for this file type",
+  "session.preview.deletedUnavailable": "Preview is not available because this file cannot be read",
+  "session.preview.openCode": "Open code",
   "session.messages.renderEarlier": "顯示更早的訊息",
   "session.messages.loadingEarlier": "正在載入更早的訊息...",
   "session.messages.loadEarlier": "載入更早的訊息",

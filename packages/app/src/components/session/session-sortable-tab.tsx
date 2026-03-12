@@ -3,7 +3,7 @@ import type { JSX } from "solid-js"
 import { createSortable } from "@thisbeyond/solid-dnd"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
-import { TooltipKeybind } from "@opencode-ai/ui/tooltip"
+import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { getFilename } from "@opencode-ai/util/path"
 import { useFile } from "@/context/file"
@@ -25,12 +25,21 @@ export function FileVisual(props: { path: string; active?: boolean }): JSX.Eleme
   )
 }
 
-export function SortableTab(props: { tab: string; onTabClose: (tab: string) => void }): JSX.Element {
+export function SortableTab(props: {
+  tab: string
+  onPreview: (path: string) => void
+  onTabClose: (tab: string) => void
+}): JSX.Element {
   const file = useFile()
   const language = useLanguage()
   const command = useCommand()
   const sortable = createSortable(props.tab)
   const path = createMemo(() => file.pathFromTab(props.tab))
+  const openPreview = () => {
+    const value = path()
+    if (!value) return
+    props.onPreview(value)
+  }
   return (
     // @ts-ignore
     <div use:sortable classList={{ "h-full": true, "opacity-0": sortable.isActiveDraggable }}>
@@ -38,19 +47,30 @@ export function SortableTab(props: { tab: string; onTabClose: (tab: string) => v
         <Tabs.Trigger
           value={props.tab}
           closeButton={
-            <TooltipKeybind
-              title={language.t("common.closeTab")}
-              keybind={command.keybind("tab.close")}
-              placement="bottom"
-            >
-              <IconButton
-                icon="close-small"
-                variant="ghost"
-                class="h-5 w-5"
-                onClick={() => props.onTabClose(props.tab)}
-                aria-label={language.t("common.closeTab")}
-              />
-            </TooltipKeybind>
+            <div class="flex items-center gap-1">
+              <Tooltip value={language.t("session.tab.preview")} placement="bottom">
+                <IconButton
+                  icon="eye"
+                  variant="ghost"
+                  class="h-5 w-5"
+                  onClick={openPreview}
+                  aria-label={language.t("session.tab.preview")}
+                />
+              </Tooltip>
+              <TooltipKeybind
+                title={language.t("common.closeTab")}
+                keybind={command.keybind("tab.close")}
+                placement="bottom"
+              >
+                <IconButton
+                  icon="close-small"
+                  variant="ghost"
+                  class="h-5 w-5"
+                  onClick={() => props.onTabClose(props.tab)}
+                  aria-label={language.t("common.closeTab")}
+                />
+              </TooltipKeybind>
+            </div>
           }
           hideCloseButton
           onMiddleClick={() => props.onTabClose(props.tab)}

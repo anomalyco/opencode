@@ -35,14 +35,17 @@ export function SessionSidePanel(props: {
   hasReview: boolean
   reviewCount: number
   reviewTab: boolean
+  previewOpen: () => boolean
   contextOpen: () => boolean
   openedTabs: () => string[]
   activeTab: () => string
   activeFileTab: () => string | undefined
   tabs: () => ReturnType<ReturnType<typeof useLayout>["tabs"]>
   openTab: (value: string) => void
+  openPreviewFile: (path: string) => void
   showAllFiles: () => void
   reviewPanel: () => JSX.Element
+  previewPanel: () => JSX.Element
   messages: () => unknown[]
   visibleUserMessages: () => unknown[]
   view: () => ReturnType<ReturnType<typeof useLayout>["view"]>
@@ -97,7 +100,10 @@ export function SessionSidePanel(props: {
                     <div class="sticky top-0 shrink-0 flex">
                       <Tabs.List
                         ref={(el: HTMLDivElement) => {
-                          const stop = createFileTabListSync({ el, contextOpen: props.contextOpen })
+                          const stop = createFileTabListSync({
+                            el,
+                            pinnedCount: () => Number(props.previewOpen()) + Number(props.contextOpen()),
+                          })
                           onCleanup(stop)
                         }}
                       >
@@ -111,6 +117,26 @@ export function SessionSidePanel(props: {
                                 </div>
                               </Show>
                             </div>
+                          </Tabs.Trigger>
+                        </Show>
+                        <Show when={props.previewOpen()}>
+                          <Tabs.Trigger
+                            value="preview"
+                            closeButton={
+                              <Tooltip value={props.language.t("common.closeTab")} placement="bottom">
+                                <IconButton
+                                  icon="close-small"
+                                  variant="ghost"
+                                  class="h-5 w-5"
+                                  onClick={() => props.tabs().close("preview")}
+                                  aria-label={props.language.t("common.closeTab")}
+                                />
+                              </Tooltip>
+                            }
+                            hideCloseButton
+                            onMiddleClick={() => props.tabs().close("preview")}
+                          >
+                            <div>{props.language.t("session.tab.preview")}</div>
                           </Tabs.Trigger>
                         </Show>
                         <Show when={props.contextOpen()}>
@@ -138,7 +164,13 @@ export function SessionSidePanel(props: {
                         </Show>
                         <SortableProvider ids={props.openedTabs()}>
                           <For each={props.openedTabs()}>
-                            {(tab) => <SortableTab tab={tab} onTabClose={props.tabs().close} />}
+                            {(tab) => (
+                              <SortableTab
+                                tab={tab}
+                                onPreview={props.openPreviewFile}
+                                onTabClose={props.tabs().close}
+                              />
+                            )}
                           </For>
                         </SortableProvider>
                         <StickyAddButton>
@@ -166,6 +198,12 @@ export function SessionSidePanel(props: {
                     <Show when={props.reviewTab}>
                       <Tabs.Content value="review" class="flex flex-col h-full overflow-hidden contain-strict">
                         <Show when={props.activeTab() === "review"}>{props.reviewPanel()}</Show>
+                      </Tabs.Content>
+                    </Show>
+
+                    <Show when={props.previewOpen()}>
+                      <Tabs.Content value="preview" class="flex flex-col h-full overflow-hidden contain-strict">
+                        <Show when={props.activeTab() === "preview"}>{props.previewPanel()}</Show>
                       </Tabs.Content>
                     </Show>
 

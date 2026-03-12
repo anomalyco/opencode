@@ -446,6 +446,7 @@ export const dict = {
 
   "session.tab.session": "Sesija",
   "session.tab.review": "Pregled",
+  "session.tab.preview": "Preview",
   "session.tab.context": "Kontekst",
   "session.panel.reviewAndFiles": "Pregled i datoteke",
   "session.review.filesChanged": "Izmijenjeno {{count}} datoteka",
@@ -458,6 +459,10 @@ export const dict = {
   "session.files.selectToOpen": "Odaberi datoteku za otvaranje",
   "session.files.all": "Sve datoteke",
   "session.files.binaryContent": "Binarna datoteka (sadržaj se ne može prikazati)",
+  "session.preview.empty": "Select a file to preview",
+  "session.preview.unsupported": "Preview is not available for this file type",
+  "session.preview.deletedUnavailable": "Preview is not available because this file cannot be read",
+  "session.preview.openCode": "Open code",
 
   "session.messages.renderEarlier": "Prikaži ranije poruke",
   "session.messages.loadingEarlier": "Učitavanje ranijih poruka...",

@@ -1,3 +1,4 @@
+node_modules
 plans/
 bun.lock
 package.json

@@ -483,6 +483,7 @@ export const dict = {
 
   "session.tab.session": "Session",
   "session.tab.review": "Review",
+  "session.tab.preview": "Preview",
   "session.tab.context": "Context",
   "session.panel.reviewAndFiles": "Review and files",
   "session.review.filesChanged": "{{count}} Files Changed",
@@ -495,6 +496,11 @@ export const dict = {
   "session.files.selectToOpen": "Select a file to open",
   "session.files.all": "All files",
   "session.files.binaryContent": "Binary file (content cannot be displayed)",
+  "session.preview.empty": "Select a file to preview",
+  "session.preview.unsupported": "Preview is not available for this file type",
+  "session.preview.deletedUnavailable": "Preview is not available because this file cannot be read",
+  "session.preview.openCode": "Open code",
+  "session.preview.exportPdf": "Export PDF",
 
   "session.messages.renderEarlier": "Render earlier messages",
   "session.messages.loadingEarlier": "Loading earlier messages...",

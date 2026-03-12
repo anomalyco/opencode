@@ -33,6 +33,20 @@ export const createOpenReviewFile = (input: {
   }
 }
 
+export const createOpenPreviewFile = (input: {
+  showAllFiles: () => void
+  openTab: (tab: string) => void
+  setPreviewPath: (path: string) => void
+  loadFile: (path: string) => void
+}) => {
+  return (path: string) => {
+    input.showAllFiles()
+    input.setPreviewPath(path)
+    input.openTab("preview")
+    input.loadFile(path)
+  }
+}
+
 export const combineCommandSections = (sections: readonly (readonly CommandOption[])[]) => {
   return sections.flatMap((section) => section)
 }

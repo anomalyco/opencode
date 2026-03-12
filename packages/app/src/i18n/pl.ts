@@ -422,6 +422,7 @@ export const dict = {
 
   "session.tab.session": "Sesja",
   "session.tab.review": "Przegląd",
+  "session.tab.preview": "Preview",
   "session.tab.context": "Kontekst",
   "session.panel.reviewAndFiles": "Przegląd i pliki",
   "session.review.filesChanged": "Zmieniono {{count}} plików",
@@ -433,6 +434,10 @@ export const dict = {
   "session.files.selectToOpen": "Wybierz plik do otwarcia",
   "session.files.all": "Wszystkie pliki",
   "session.files.binaryContent": "Plik binarny (zawartość nie może być wyświetlona)",
+  "session.preview.empty": "Select a file to preview",
+  "session.preview.unsupported": "Preview is not available for this file type",
+  "session.preview.deletedUnavailable": "Preview is not available because this file cannot be read",
+  "session.preview.openCode": "Open code",
   "session.messages.renderEarlier": "Renderuj wcześniejsze wiadomości",
   "session.messages.loadingEarlier": "Ładowanie wcześniejszych wiadomości...",
   "session.messages.loadEarlier": "Załaduj wcześniejsze wiadomości",

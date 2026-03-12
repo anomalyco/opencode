@@ -7,8 +7,8 @@ describe("nextTabListScrollLeft", () => {
       prevScrollWidth: 500,
       scrollWidth: 420,
       clientWidth: 300,
-      prevContextOpen: false,
-      contextOpen: false,
+      prevPinnedCount: 0,
+      pinnedCount: 0,
     })
 
     expect(left).toBeUndefined()
@@ -19,8 +19,8 @@ describe("nextTabListScrollLeft", () => {
       prevScrollWidth: 400,
       scrollWidth: 500,
       clientWidth: 320,
-      prevContextOpen: false,
-      contextOpen: true,
+      prevPinnedCount: 0,
+      pinnedCount: 1,
     })
 
     expect(left).toBe(0)
@@ -31,8 +31,8 @@ describe("nextTabListScrollLeft", () => {
       prevScrollWidth: 500,
       scrollWidth: 780,
       clientWidth: 300,
-      prevContextOpen: true,
-      contextOpen: true,
+      prevPinnedCount: 1,
+      pinnedCount: 1,
     })
 
     expect(left).toBe(480)

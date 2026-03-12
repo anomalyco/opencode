@@ -424,6 +424,7 @@ export const dict = {
 
   "session.tab.session": "เซสชัน",
   "session.tab.review": "ตรวจสอบ",
+  "session.tab.preview": "Preview",
   "session.tab.context": "บริบท",
   "session.panel.reviewAndFiles": "ตรวจสอบและไฟล์",
   "session.review.filesChanged": "{{count}} ไฟล์ที่เปลี่ยนแปลง",
@@ -436,6 +437,10 @@ export const dict = {
   "session.files.selectToOpen": "เลือกไฟล์เพื่อเปิด",
   "session.files.all": "ไฟล์ทั้งหมด",
   "session.files.binaryContent": "ไฟล์ไบนารี (ไม่สามารถแสดงเนื้อหาได้)",
+  "session.preview.empty": "Select a file to preview",
+  "session.preview.unsupported": "Preview is not available for this file type",
+  "session.preview.deletedUnavailable": "Preview is not available because this file cannot be read",
+  "session.preview.openCode": "Open code",
 
   "session.messages.renderEarlier": "แสดงข้อความก่อนหน้า",
   "session.messages.loadingEarlier": "กำลังโหลดข้อความก่อนหน้า...",

@@ -40,10 +40,10 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { SessionHeader, SessionContextTab, SortableTab, FileVisual, NewSessionView } from "@/components/session"
 import { navMark, navParams } from "@/utils/perf"
 import { same } from "@/utils/same"
-import { createOpenReviewFile, focusTerminalById, getTabReorderIndex } from "@/pages/session/helpers"
+import { createOpenPreviewFile, createOpenReviewFile, focusTerminalById, getTabReorderIndex } from "@/pages/session/helpers"
 import { createScrollSpy } from "@/pages/session/scroll-spy"
-import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
 import { FileTabContent } from "@/pages/session/file-tabs"
+import { SessionPreviewTab } from "@/pages/session/preview-tab"
 import {
   SessionReviewTab,
   StickyAddButton,
@@ -267,11 +267,11 @@ export default function Page() {
   const openTab = (value: string) => {
     const next = normalizeTab(value)
     tabs().open(next)
+    openReviewPanel()
 
     const path = file.pathFromTab(next)
     if (!path) return
     file.load(path)
-    openReviewPanel()
   }
 
   createEffect(() => {
@@ -882,10 +882,11 @@ export default function Page() {
   }
 
   const contextOpen = createMemo(() => tabs().active() === "context" || tabs().all().includes("context"))
+  const previewOpen = createMemo(() => tabs().active() === "preview" || tabs().all().includes("preview"))
   const openedTabs = createMemo(() =>
     tabs()
       .all()
-      .filter((tab) => tab !== "context" && tab !== "review"),
+      .filter((tab) => tab !== "context" && tab !== "preview" && tab !== "review"),
   )
 
   const mobileChanges = createMemo(() => !isDesktop() && store.mobileTab === "changes")
@@ -952,6 +953,12 @@ export default function Page() {
     openTab: tabs().open,
     loadFile: file.load,
   })
+  const openPreviewFile = createOpenPreviewFile({
+    showAllFiles,
+    openTab,
+    setPreviewPath: view().preview.setPath,
+    loadFile: file.load,
+  })
 
   const changesOptions = ["session", "turn"] as const
   const changesOptionsList = [...changesOptions]
@@ -999,7 +1006,7 @@ export default function Page() {
           comments={comments.all()}
           focusedComment={comments.focus()}
           onFocusedCommentChange={comments.setFocus}
-          onViewFile={openReviewFile}
+          onViewFile={openPreviewFile}
           classes={input.classes}
         />
       </Match>
@@ -1020,7 +1027,7 @@ export default function Page() {
             comments={comments.all()}
             focusedComment={comments.focus()}
             onFocusedCommentChange={comments.setFocus}
-            onViewFile={openReviewFile}
+            onViewFile={openPreviewFile}
             classes={input.classes}
           />
         </Show>
@@ -1045,6 +1052,16 @@ export default function Page() {
         })}
       </div>
     </div>
+  )
+
+  const previewPanel = () => (
+    <SessionPreviewTab
+      path={view().preview.path}
+      file={file}
+      view={view}
+      language={language}
+      onOpenCode={openReviewFile}
+    />
   )
 
   createEffect(
@@ -1150,11 +1167,13 @@ export default function Page() {
   const activeTab = createMemo(() => {
     const active = tabs().active()
     if (active === "context") return "context"
+    if (active === "preview" && previewOpen()) return "preview"
     if (active === "review" && reviewTab()) return "review"
     if (active && file.pathFromTab(active)) return normalizeTab(active)
 
     const first = openedTabs()[0]
     if (first) return first
+    if (previewOpen()) return "preview"
     if (contextOpen()) return "context"
     if (reviewTab() && hasReview()) return "review"
     return "empty"
@@ -1169,7 +1188,7 @@ export default function Page() {
   createEffect(() => {
     if (!layout.ready()) return
     if (tabs().active()) return
-    if (openedTabs().length === 0 && !contextOpen() && !(reviewTab() && hasReview())) return
+    if (openedTabs().length === 0 && !previewOpen() && !contextOpen() && !(reviewTab() && hasReview())) return
 
     const next = activeTab()
     if (next === "empty") return
@@ -1208,6 +1227,11 @@ export default function Page() {
     const first = openedTabs()[0]
     if (first) {
       tabs().setActive(first)
+      return
+    }
+
+    if (previewOpen()) {
+      tabs().setActive("preview")
       return
     }
 
@@ -1702,14 +1726,17 @@ export default function Page() {
           hasReview={hasReview()}
           reviewCount={reviewCount()}
           reviewTab={reviewTab()}
+          previewOpen={previewOpen}
           contextOpen={contextOpen}
           openedTabs={openedTabs}
           activeTab={activeTab}
           activeFileTab={activeFileTab}
           tabs={tabs}
           openTab={openTab}
+          openPreviewFile={openPreviewFile}
           showAllFiles={showAllFiles}
           reviewPanel={reviewPanel}
+          previewPanel={previewPanel}
           messages={messages as () => unknown[]}
           visibleUserMessages={visibleUserMessages as () => unknown[]}
           view={view}

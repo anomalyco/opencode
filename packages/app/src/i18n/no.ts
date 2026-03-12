@@ -423,6 +423,7 @@ export const dict = {
 
   "session.tab.session": "Sesjon",
   "session.tab.review": "Gjennomgang",
+  "session.tab.preview": "Preview",
   "session.tab.context": "Kontekst",
   "session.panel.reviewAndFiles": "Gjennomgang og filer",
   "session.review.filesChanged": "{{count}} filer endret",
@@ -434,6 +435,10 @@ export const dict = {
   "session.files.selectToOpen": "Velg en fil å åpne",
   "session.files.all": "Alle filer",
   "session.files.binaryContent": "Binær fil (innhold kan ikke vises)",
+  "session.preview.empty": "Select a file to preview",
+  "session.preview.unsupported": "Preview is not available for this file type",
+  "session.preview.deletedUnavailable": "Preview is not available because this file cannot be read",
+  "session.preview.openCode": "Open code",
   "session.messages.renderEarlier": "Vis tidligere meldinger",
   "session.messages.loadingEarlier": "Laster inn tidligere meldinger...",
   "session.messages.loadEarlier": "Last inn tidligere meldinger",

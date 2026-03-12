@@ -33,6 +33,7 @@ type SessionTabs = {
 type SessionView = {
   scroll: Record<string, SessionScroll>
   reviewOpen?: string[]
+  previewPath?: string
   pendingMessage?: string
   pendingMessageAt?: number
 }
@@ -725,6 +726,23 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
               setStore("sessionView", session, "reviewOpen", open)
             },
           },
+          preview: {
+            path: createMemo(() => s().previewPath),
+            setPath(path: string | undefined) {
+              const session = key()
+              const current = store.sessionView[session]
+              if (!current) {
+                setStore("sessionView", session, {
+                  scroll: {},
+                  previewPath: path,
+                })
+                return
+              }
+
+              if (current.previewPath === path) return
+              setStore("sessionView", session, "previewPath", path)
+            },
+          },
         }
       },
       tabs(sessionKey: string | Accessor<string>) {
@@ -764,7 +782,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
               return
             }
 
-            if (tab === "context") {
+            if (tab === "context" || tab === "preview") {
               const all = [tab, ...current.all.filter((x) => x !== tab)]
               if (!store.sessionTabs[session]) {
                 setStore("sessionTabs", session, { all, active: tab })

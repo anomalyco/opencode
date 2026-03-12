@@ -424,6 +424,7 @@ export const dict = {
 
   "session.tab.session": "Сессия",
   "session.tab.review": "Обзор",
+  "session.tab.preview": "Preview",
   "session.tab.context": "Контекст",
   "session.panel.reviewAndFiles": "Обзор и файлы",
   "session.review.filesChanged": "{{count}} файлов изменено",
@@ -435,6 +436,10 @@ export const dict = {
   "session.files.selectToOpen": "Выберите файл, чтобы открыть",
   "session.files.all": "Все файлы",
   "session.files.binaryContent": "Двоичный файл (содержимое не может быть отображено)",
+  "session.preview.empty": "Select a file to preview",
+  "session.preview.unsupported": "Preview is not available for this file type",
+  "session.preview.deletedUnavailable": "Preview is not available because this file cannot be read",
+  "session.preview.openCode": "Open code",
   "session.messages.renderEarlier": "Показать предыдущие сообщения",
   "session.messages.loadingEarlier": "Загрузка предыдущих сообщений...",
   "session.messages.loadEarlier": "Загрузить предыдущие сообщения",

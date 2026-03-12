@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { combineCommandSections, createOpenReviewFile, focusTerminalById, getTabReorderIndex } from "./helpers"
+import { combineCommandSections, createOpenPreviewFile, createOpenReviewFile, focusTerminalById, getTabReorderIndex } from "./helpers"
 
 describe("createOpenReviewFile", () => {
   test("opens and loads selected review file", () => {
@@ -17,6 +17,22 @@ describe("createOpenReviewFile", () => {
     openReviewFile("src/a.ts")
 
     expect(calls).toEqual(["show", "tab:src/a.ts", "open:file://src/a.ts", "load:src/a.ts"])
+  })
+})
+
+describe("createOpenPreviewFile", () => {
+  test("stores and opens selected preview file", () => {
+    const calls: string[] = []
+    const openPreviewFile = createOpenPreviewFile({
+      showAllFiles: () => calls.push("show"),
+      openTab: (tab) => calls.push(`open:${tab}`),
+      setPreviewPath: (path) => calls.push(`preview:${path}`),
+      loadFile: (path) => calls.push(`load:${path}`),
+    })
+
+    openPreviewFile("src/a.html")
+
+    expect(calls).toEqual(["show", "preview:src/a.html", "open:preview", "load:src/a.html"])
   })
 })
 

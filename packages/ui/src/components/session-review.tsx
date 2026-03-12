@@ -60,6 +60,7 @@ export interface SessionReviewProps {
   readFile?: (path: string) => Promise<FileContent | undefined>
 }
 
+const htmlExtensions = new Set(["html", "htm"])
 const imageExtensions = new Set(["png", "jpg", "jpeg", "gif", "webp", "avif", "bmp", "ico", "tif", "tiff", "heic"])
 const audioExtensions = new Set(["mp3", "wav", "ogg", "m4a", "aac", "flac", "opus"])
 
@@ -85,6 +86,10 @@ function isImageFile(file: string): boolean {
   return imageExtensions.has(getExtension(file))
 }
 
+function isHtmlFile(file: string): boolean {
+  return htmlExtensions.has(getExtension(file))
+}
+
 function isAudioFile(file: string): boolean {
   return audioExtensions.has(getExtension(file))
 }
@@ -96,6 +101,12 @@ function dataUrl(content: FileContent | undefined): string | undefined {
   if (!mime) return
   if (!mime.startsWith("image/") && !mime.startsWith("audio/")) return
   return `data:${mime};base64,${content.content}`
+}
+
+function textContent(content: FileContent | undefined): string | undefined {
+  if (!content) return
+  if (content.type !== "text") return
+  return content.content
 }
 
 function dataUrlFromValue(value: unknown): string | undefined {
@@ -335,17 +346,25 @@ export const SessionReview = (props: SessionReviewProps) => {
                 const isAdded = () => diff.status === "added" || (beforeText().length === 0 && afterText().length > 0)
                 const isDeleted = () =>
                   diff.status === "deleted" || (afterText().length === 0 && beforeText().length > 0)
+                const isHtml = () => isHtmlFile(diff.file)
                 const isImage = () => isImageFile(diff.file)
                 const isAudio = () => isAudioFile(diff.file)
+                const fallbackHtml = () => (isDeleted() ? beforeText() : afterText())
 
                 const diffImageSrc = dataUrlFromValue(diff.after) ?? dataUrlFromValue(diff.before)
                 const [imageSrc, setImageSrc] = createSignal<string | undefined>(diffImageSrc)
                 const [imageStatus, setImageStatus] = createSignal<"idle" | "loading" | "error">("idle")
 
+                const [htmlSrc, setHtmlSrc] = createSignal<string | undefined>(
+                  isDeleted() ? fallbackHtml() || undefined : undefined,
+                )
+                const [htmlStatus, setHtmlStatus] = createSignal<"idle" | "loading" | "error">("idle")
+
                 const diffAudioSrc = dataUrlFromValue(diff.after) ?? dataUrlFromValue(diff.before)
                 const [audioSrc, setAudioSrc] = createSignal<string | undefined>(diffAudioSrc)
                 const [audioStatus, setAudioStatus] = createSignal<"idle" | "loading" | "error">("idle")
                 const [audioMime, setAudioMime] = createSignal<string | undefined>(undefined)
+                const showHtmlPreview = () => isHtml() && !!htmlSrc()
 
                 const selectedLines = createMemo(() => {
                   const current = selection()
@@ -416,6 +435,52 @@ export const SessionReview = (props: SessionReviewProps) => {
                   if (!range) return
                   setDraft("")
                   scheduleAnchors()
+                })
+
+                createEffect(() => {
+                  if (!open().includes(diff.file)) return
+                  if (!isHtml()) return
+                  if (htmlSrc()) return
+                  if (htmlStatus() !== "idle") return
+                  if (isDeleted()) {
+                    const fallback = fallbackHtml()
+                    if (fallback) setHtmlSrc(fallback)
+                    return
+                  }
+
+                  const reader = props.readFile
+                  if (!reader) {
+                    const fallback = fallbackHtml()
+                    if (fallback) setHtmlSrc(fallback)
+                    return
+                  }
+
+                  setHtmlStatus("loading")
+                  reader(diff.file)
+                    .then((result) => {
+                      const src = textContent(result)
+                      if (!src) {
+                        const fallback = fallbackHtml()
+                        if (fallback) {
+                          setHtmlSrc(fallback)
+                          setHtmlStatus("idle")
+                          return
+                        }
+                        setHtmlStatus("error")
+                        return
+                      }
+                      setHtmlSrc(src)
+                      setHtmlStatus("idle")
+                    })
+                    .catch(() => {
+                      const fallback = fallbackHtml()
+                      if (fallback) {
+                        setHtmlSrc(fallback)
+                        setHtmlStatus("idle")
+                        return
+                      }
+                      setHtmlStatus("error")
+                    })
                 })
 
                 createEffect(() => {
@@ -572,6 +637,22 @@ export const SessionReview = (props: SessionReviewProps) => {
                         }}
                       >
                         <Switch>
+                          <Match when={showHtmlPreview()}>
+                            <div data-slot="session-review-html-container">
+                              <iframe
+                                data-slot="session-review-html"
+                                srcdoc={htmlSrc()}
+                                sandbox="allow-scripts"
+                                title={diff.file}
+                                onLoad={() => props.onDiffRendered?.()}
+                              />
+                            </div>
+                          </Match>
+                          <Match when={isHtml() && htmlStatus() === "loading"}>
+                            <div data-slot="session-review-html-container">
+                              <span data-slot="session-review-image-placeholder">Loading...</span>
+                            </div>
+                          </Match>
                           <Match when={isImage() && imageSrc()}>
                             <div data-slot="session-review-image-container">
                               <img data-slot="session-review-image" src={imageSrc()} alt={diff.file} />
@@ -617,7 +698,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                           </Match>
                         </Switch>
 
-                        <For each={comments()}>
+                        <For each={showHtmlPreview() ? [] : comments()}>
                           {(comment) => (
                             <LineComment
                               id={comment.id}
@@ -638,7 +719,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                           )}
                         </For>
 
-                        <Show when={draftRange()}>
+                        <Show when={!showHtmlPreview() && draftRange()}>
                           {(range) => (
                             <Show when={draftTop() !== undefined}>
                               <LineCommentEditor

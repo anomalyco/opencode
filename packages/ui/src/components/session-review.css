@@ -181,6 +181,19 @@
     background: var(--background-stronger);
   }
 
+  [data-slot="session-review-html-container"] {
+    padding: 12px;
+    background: var(--background-stronger);
+  }
+
+  [data-slot="session-review-html"] {
+    width: 100%;
+    min-height: 60vh;
+    border: 1px solid var(--border-weak-base);
+    border-radius: 8px;
+    background: white;
+  }
+
   [data-slot="session-review-image"] {
     max-width: 100%;
     max-height: 60vh;

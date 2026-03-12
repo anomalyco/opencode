@@ -419,6 +419,7 @@ export const dict = {
 
   "session.tab.session": "جلسة",
   "session.tab.review": "مراجعة",
+  "session.tab.preview": "Preview",
   "session.tab.context": "سياق",
   "session.panel.reviewAndFiles": "المراجعة والملفات",
   "session.review.filesChanged": "تم تغيير {{count}} ملفات",
@@ -430,6 +431,10 @@ export const dict = {
   "session.files.selectToOpen": "اختر ملفًا لفتحه",
   "session.files.all": "كل الملفات",
   "session.files.binaryContent": "ملف ثنائي (لا يمكن عرض المحتوى)",
+  "session.preview.empty": "Select a file to preview",
+  "session.preview.unsupported": "Preview is not available for this file type",
+  "session.preview.deletedUnavailable": "Preview is not available because this file cannot be read",
+  "session.preview.openCode": "Open code",
   "session.messages.renderEarlier": "عرض الرسائل السابقة",
   "session.messages.loadingEarlier": "جارٍ تحميل الرسائل السابقة...",
   "session.messages.loadEarlier": "تحميل الرسائل السابقة",

@@ -415,6 +415,7 @@ export const dict = {
 
   "session.tab.session": "セッション",
   "session.tab.review": "レビュー",
+  "session.tab.preview": "Preview",
   "session.tab.context": "コンテキスト",
   "session.panel.reviewAndFiles": "レビューとファイル",
   "session.review.filesChanged": "{{count}} ファイル変更",
@@ -426,6 +427,10 @@ export const dict = {
   "session.files.selectToOpen": "開くファイルを選択",
   "session.files.all": "すべてのファイル",
   "session.files.binaryContent": "バイナリファイル（内容を表示できません）",
+  "session.preview.empty": "Select a file to preview",
+  "session.preview.unsupported": "Preview is not available for this file type",
+  "session.preview.deletedUnavailable": "Preview is not available because this file cannot be read",
+  "session.preview.openCode": "Open code",
   "session.messages.renderEarlier": "以前のメッセージを表示",
   "session.messages.loadingEarlier": "以前のメッセージを読み込み中...",
   "session.messages.loadEarlier": "以前のメッセージを読み込む",
