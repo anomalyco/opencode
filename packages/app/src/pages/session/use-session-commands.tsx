@@ -19,7 +19,6 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { findLast } from "@opencode-ai/util/array"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { UserMessage } from "@opencode-ai/sdk/v2"
-import { canAddSelectionContext } from "@/pages/session/session-command-helpers"
 
 export type SessionCommandContext = {
   navigateMessageByOffset: (offset: number) => void
@@ -84,6 +83,14 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     prompt.context.add({ type: "file", path, selection, preview })
   }
 
+  const canAddSelectionContext = () => {
+    const active = tabs().active()
+    if (!active) return false
+    const path = file.pathFromTab(active)
+    if (!path) return false
+    return file.selectedLines(path) != null
+  }
+
   const navigateMessageByOffset = actions.navigateMessageByOffset
   const setActiveMessage = actions.setActiveMessage
   const focusInput = actions.focusInput
@@ -136,11 +143,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.context.addSelection"),
       description: language.t("command.context.addSelection.description"),
       keybind: "mod+shift+l",
-      disabled: !canAddSelectionContext({
-        active: tabs().active(),
-        pathFromTab: file.pathFromTab,
-        selectedLines: file.selectedLines,
-      }),
+      disabled: !canAddSelectionContext(),
       onSelect: () => {
         const active = tabs().active()
         if (!active) return
