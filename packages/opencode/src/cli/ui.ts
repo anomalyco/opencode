@@ -70,7 +70,7 @@ export namespace UI {
           continue
         }
         if (char === " ") {
-          parts.push(" ")
+          parts.push("\u00A0")
           continue
         }
         parts.push(fg, char, reset)
@@ -79,6 +79,7 @@ export namespace UI {
     }
     glyphs.left.forEach((row, index) => {
       if (pad) result.push(pad)
+      if (index === 0) result.push(left.fg)
       result.push(draw(row, left.fg, left.shadow, left.bg))
       result.push(gap)
       const other = glyphs.right[index] ?? ""
