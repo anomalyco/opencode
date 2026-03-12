@@ -61,7 +61,7 @@ let _aliases: Set<string> | null = null
     if (shellName === "zsh") {
       dumpCmd = "alias 2>/dev/null; echo __FNAMES__; print -l ${(k)functions} 2>/dev/null || true"
     } else if (shellName === "bash") {
-      dumpCmd = "shopt -s expand_aliases 2>/dev/null || true; alias 2>/dev/null; echo __FNAMES__; declare -F 2>/dev/null | awk '{print $3}'"
+      dumpCmd = "shopt -s expand_aliases 2>/dev/null || true; alias 2>/dev/null; echo __FNAMES__; compgen -A function"
     } else {
       dumpCmd = "alias 2>/dev/null; echo __FNAMES__"
     }
