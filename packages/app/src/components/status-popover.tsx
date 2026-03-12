@@ -14,7 +14,7 @@ import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
 import { normalizeServerUrl, ServerConnection, useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
-import { checkServerHealth, type ServerHealth } from "@/utils/server-health"
+import { useCheckServerHealth, type ServerHealth } from "@/utils/server-health"
 import { DialogSelectServer } from "./dialog-select-server"
 
 const pollMs = 10_000
@@ -53,7 +53,8 @@ const listServersByHealth = (
   })
 }
 
-const useServerHealth = (servers: Accessor<ServerConnection.Any[]>, fetcher: typeof fetch) => {
+const useServerHealth = (servers: Accessor<ServerConnection.Any[]>) => {
+  const checkServerHealth = useCheckServerHealth()
   const [status, setStatus] = createStore({} as Record<ServerConnection.Key, ServerHealth | undefined>)
 
   createEffect(() => {
@@ -64,7 +65,7 @@ const useServerHealth = (servers: Accessor<ServerConnection.Any[]>, fetcher: typ
       const results: Record<string, ServerHealth> = {}
       await Promise.all(
         list.map(async (conn) => {
-          results[ServerConnection.key(conn)] = await checkServerHealth(conn.http, fetcher)
+          results[ServerConnection.key(conn)] = await checkServerHealth(conn.http)
         }),
       )
       if (dead) return
@@ -168,7 +169,6 @@ export function StatusPopover() {
   const language = useLanguage()
   const navigate = useNavigate()
 
-  const fetcher = platform.fetch ?? globalThis.fetch
   const servers = createMemo(() => {
     const current = server.current
     const list = server.list
@@ -176,10 +176,10 @@ export function StatusPopover() {
     if (list.every((item) => ServerConnection.key(item) !== ServerConnection.key(current))) return [current, ...list]
     return [current, ...list.filter((item) => ServerConnection.key(item) !== ServerConnection.key(current))]
   })
-  const health = useServerHealth(servers, fetcher)
+  const health = useServerHealth(servers)
   const sortedServers = createMemo(() => listServersByHealth(servers(), server.key, health))
   const mcp = useMcpToggle({ sync, sdk, language })
-  const defaultServer = useDefaultServerKey(platform.getDefaultServerUrl)
+  const defaultServer = useDefaultServerKey(platform.getDefaultServer)
   const mcpNames = createMemo(() => Object.keys(sync.data.mcp ?? {}).sort((a, b) => a.localeCompare(b)))
   const mcpStatus = (name: string) => sync.data.mcp?.[name]?.status
   const mcpConnected = createMemo(() => mcpNames().filter((name) => mcpStatus(name) === "connected").length)
