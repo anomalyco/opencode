@@ -26,7 +26,6 @@ import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Select } from "@opencode-ai/ui/select"
-import { RadioGroup } from "@opencode-ai/ui/radio-group"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ModelSelectorPopover } from "@/components/dialog-select-model"
 import { DialogSelectModelUnpaid } from "@/components/dialog-select-model-unpaid"
@@ -1487,36 +1486,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   />
                 </TooltipKeybind>
               </div>
-            </div>
-            <div class="shrink-0">
-              <RadioGroup
-                options={["shell", "normal"] as const}
-                current={store.mode}
-                value={(mode) => mode}
-                label={(mode) => (
-                  <TooltipKeybind
-                    placement="top"
-                    gutter={4}
-                    openDelay={2000}
-                    title={language.t(mode === "shell" ? "prompt.mode.shell" : "prompt.mode.normal")}
-                    keybind={command.keybind(mode === "shell" ? "prompt.mode.shell" : "prompt.mode.normal")}
-                    class="size-full flex items-center justify-center"
-                  >
-                    <Icon
-                      name={mode === "shell" ? "console" : "prompt"}
-                      class="size-[18px]"
-                      classList={{
-                        "text-icon-strong-base": store.mode === mode,
-                        "text-icon-weak": store.mode !== mode,
-                      }}
-                    />
-                  </TooltipKeybind>
-                )}
-                onSelect={(mode) => mode && setMode(mode)}
-                fill
-                pad="none"
-                class="w-[68px]"
-              />
             </div>
           </div>
         </DockTray>
