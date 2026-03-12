@@ -274,3 +274,82 @@ test("question with 50 items demonstrates scrolling behavior", async ({ page, sd
     })
   })
 })
+
+test("custom answer with long question maintains scrollable text area", async ({ page, sdk, gotoSession }) => {
+  await withDockSession(sdk, "e2e question scroll custom answer", async (session) => {
+    await withDockSeed(sdk, session.id, async () => {
+      await gotoSession(session.id)
+
+      const longQuestionText = [
+        "This is a long question with custom answer enabled.",
+        "The question text should remain scrollable even when the custom textarea is expanded.",
+        ...Array.from({ length: 40 }, (_, i) => `Line ${i + 4}: Additional context to ensure scrolling is necessary.`),
+      ].join("\n")
+
+      await seedSessionQuestion(sdk, {
+        sessionID: session.id,
+        questions: [
+          {
+            header: "Custom Answer Test",
+            question: longQuestionText,
+            options: [
+              { label: "Option A", description: "Predefined option A" },
+              { label: "Option B", description: "Predefined option B" },
+            ],
+            custom: true,
+          },
+        ],
+      })
+
+      const dock = page.locator(questionDockSelector)
+      await expect.poll(() => dock.count(), { timeout: 10_000 }).toBe(1)
+
+      const questionText = dock.locator('[data-slot="question-text"]')
+      await expect(questionText).toBeVisible()
+
+      await page.waitForTimeout(250)
+
+      const scrollHeightBefore = await questionText.evaluate((el) => el.scrollHeight)
+      const clientHeight = await questionText.evaluate((el) => el.clientHeight)
+      expect(scrollHeightBefore).toBeGreaterThan(clientHeight)
+
+      const customOption = dock.locator('[data-slot="question-option"][data-custom="true"]').first()
+      await expect(customOption).toBeVisible()
+
+      await customOption.click()
+
+      await page.waitForTimeout(250)
+
+      const textarea = dock.locator('[data-slot="question-custom-input"]')
+      await expect(textarea).toBeVisible()
+
+      const customAnswer = [
+        "This is a multi-line custom answer.",
+        "Line 2 of the custom answer.",
+        "Line 3 with more details.",
+        "Line 4 to ensure the textarea expands.",
+        "Line 5 for additional context.",
+      ].join("\n")
+
+      await textarea.fill(customAnswer)
+
+      await page.waitForTimeout(250)
+
+      const scrollHeightAfter = await questionText.evaluate((el) => el.scrollHeight)
+      const clientHeightAfter = await questionText.evaluate((el) => el.clientHeight)
+
+      expect(scrollHeightAfter).toBeGreaterThan(clientHeightAfter)
+
+      const options = dock.locator('[data-slot="question-option"]')
+      await expect.poll(() => options.count()).toBe(3)
+
+      const customOptionVisible = dock.locator('[data-slot="question-option"][data-custom="true"]')
+      await expect(customOptionVisible).toHaveCount(1)
+
+      await dock.getByRole("button", { name: /submit/i }).click()
+
+      await expect.poll(() => page.locator(questionDockSelector).count(), { timeout: 10_000 }).toBe(0)
+      await expect(page.locator(promptSelector)).toBeVisible()
+    })
+  })
+})
