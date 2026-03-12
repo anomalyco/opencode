@@ -4,6 +4,7 @@ import { SessionID } from "./schema"
 import z from "zod"
 import { Database, eq, asc } from "../storage/db"
 import { TodoTable } from "./session.sql"
+import { max } from "drizzle-orm"
 
 export namespace Todo {
   export const Info = z
@@ -53,5 +54,28 @@ export namespace Todo {
       status: row.status,
       priority: row.priority,
     }))
+  }
+
+  export function append(input: { sessionID: SessionID; todo: Info }) {
+    Database.transaction((db) => {
+      const row = db
+        .select({ position: max(TodoTable.position) })
+        .from(TodoTable)
+        .where(eq(TodoTable.session_id, input.sessionID))
+        .get()
+      db.insert(TodoTable)
+        .values({
+          session_id: input.sessionID,
+          content: input.todo.content,
+          status: input.todo.status,
+          priority: input.todo.priority,
+          position: (row?.position ?? -1) + 1,
+        })
+        .run()
+    })
+    Bus.publish(Event.Updated, {
+      sessionID: input.sessionID,
+      todos: get(input.sessionID),
+    })
   }
 }
