@@ -27,6 +27,31 @@ import open from "open"
 export namespace MCP {
   const log = Log.create({ service: "mcp" })
   const DEFAULT_TIMEOUT = 30_000
+  const LIST_TOOLS_RETRY_ATTEMPTS = 3
+  const LIST_TOOLS_RETRY_DELAY_MS = 1000
+
+  async function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms))
+  }
+
+  async function withRetry<T>(
+    fn: () => Promise<T>,
+    opts: { attempts: number; delayMs: number; onRetry?: (attempt: number, error: unknown) => void },
+  ): Promise<T> {
+    let lastError: unknown
+    for (let attempt = 1; attempt <= opts.attempts; attempt++) {
+      try {
+        return await fn()
+      } catch (e) {
+        lastError = e
+        if (attempt < opts.attempts) {
+          opts.onRetry?.(attempt, e)
+          await sleep(opts.delayMs)
+        }
+      }
+    }
+    throw lastError
+  }
 
   export const Resource = z
     .object({
@@ -620,14 +645,29 @@ export namespace MCP {
 
     const toolsResults = await Promise.all(
       connectedClients.map(async ([clientName, client]) => {
-        const toolsResult = await client.listTools().catch((e) => {
-          log.error("failed to get tools", { clientName, error: e.message })
+        const toolsResult = await withRetry(
+          () => client.listTools(),
+          {
+            attempts: LIST_TOOLS_RETRY_ATTEMPTS,
+            delayMs: LIST_TOOLS_RETRY_DELAY_MS,
+            onRetry: (attempt, error) => {
+              log.warn("listTools failed, retrying", {
+                clientName,
+                attempt,
+                maxAttempts: LIST_TOOLS_RETRY_ATTEMPTS,
+                error: error instanceof Error ? error.message : String(error),
+              })
+            },
+          },
+        ).catch((e) => {
+          log.error("failed to get tools after retries", { clientName, error: e.message })
           const failedStatus = {
             status: "failed" as const,
             error: e instanceof Error ? e.message : String(e),
           }
           s.status[clientName] = failedStatus
-          delete s.clients[clientName]
+          // Don't delete the client immediately - allow reconnection attempts
+          // The client will be recreated on next state() call if needed
           return undefined
         })
         return { clientName, client, toolsResult }
