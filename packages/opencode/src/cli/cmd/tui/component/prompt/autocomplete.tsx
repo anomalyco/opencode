@@ -153,7 +153,8 @@ export function Autocomplete(props: {
     const currentCursorOffset = input.cursorOffset
 
     const charAfterCursor = props.value.at(currentCursorOffset)
-    const needsSpace = charAfterCursor !== " "
+    const charBeforeTrigger = store.index > 0 ? props.value.at(store.index - 1) : undefined
+    const needsSpace = charAfterCursor !== " " && charBeforeTrigger !== "("
     const append = "@" + text + (needsSpace ? " " : "")
 
     input.cursorOffset = store.index
@@ -535,7 +536,8 @@ export function Autocomplete(props: {
 
         const between = text.slice(idx)
         const before = idx === 0 ? undefined : value[idx - 1]
-        if ((before === undefined || /\s/.test(before)) && !between.match(/\s/)) {
+        const parenBefore = before === "(" && (idx <= 1 || /\s/.test(value[idx - 2]))
+        if ((before === undefined || /\s/.test(before) || parenBefore) && !between.match(/\s/)) {
           show("@")
           setStore("index", idx)
         }
@@ -585,7 +587,11 @@ export function Autocomplete(props: {
             const cursorOffset = props.input().cursorOffset
             const charBeforeCursor =
               cursorOffset === 0 ? undefined : props.input().getTextRange(cursorOffset - 1, cursorOffset)
-            const canTrigger = charBeforeCursor === undefined || charBeforeCursor === "" || /\s/.test(charBeforeCursor)
+            const parenTrigger =
+              charBeforeCursor === "(" &&
+              (cursorOffset <= 1 || /\s/.test(props.input().getTextRange(cursorOffset - 2, cursorOffset - 1)))
+            const canTrigger =
+              charBeforeCursor === undefined || charBeforeCursor === "" || /\s/.test(charBeforeCursor) || parenTrigger
             if (canTrigger) show("@")
           }
 
