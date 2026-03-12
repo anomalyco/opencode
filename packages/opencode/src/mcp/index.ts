@@ -28,6 +28,10 @@ export namespace MCP {
   const log = Log.create({ service: "mcp" })
   const DEFAULT_TIMEOUT = 30_000
 
+  // P0-6: Cache listTools results per server to avoid redundant network requests.
+  // Invalidated on ToolListChanged notification, disconnect, or reconnect.
+  const toolsCache = new Map<string, { tools: MCPToolDef[] }>()
+
   export const Resource = z
     .object({
       name: z.string(),
@@ -112,6 +116,7 @@ export namespace MCP {
   function registerNotificationHandlers(client: MCPClient, serverName: string) {
     client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
       log.info("tools list changed notification received", { server: serverName })
+      toolsCache.delete(serverName)
       Bus.publish(ToolsChanged, { server: serverName })
     })
   }
@@ -242,6 +247,7 @@ export namespace MCP {
           }),
         ),
       )
+      toolsCache.clear()
       pendingOAuthTransports.clear()
     },
   )
@@ -293,6 +299,7 @@ export namespace MCP {
 
   export async function add(name: string, mcp: Config.Mcp) {
     const s = await state()
+    toolsCache.delete(name)
     const result = await create(name, mcp)
     if (!result) {
       const status = {
@@ -563,6 +570,7 @@ export namespace MCP {
       return
     }
 
+    toolsCache.delete(name)
     const result = await create(name, { ...mcp, enabled: true })
 
     if (!result) {
@@ -597,6 +605,7 @@ export namespace MCP {
       })
       delete s.clients[name]
     }
+    toolsCache.delete(name)
     s.status[name] = { status: "disabled" }
   }
 
@@ -614,6 +623,12 @@ export namespace MCP {
 
     const toolsResults = await Promise.all(
       connectedClients.map(async ([clientName, client]) => {
+        // P0-6: Use cached listTools result if available
+        const cached = toolsCache.get(clientName)
+        if (cached) {
+          return { clientName, client, toolsResult: cached }
+        }
+
         const toolsResult = await client.listTools().catch((e) => {
           log.error("failed to get tools", { clientName, error: e.message })
           const failedStatus = {
@@ -624,6 +639,12 @@ export namespace MCP {
           delete s.clients[clientName]
           return undefined
         })
+
+        // Cache the result on success
+        if (toolsResult) {
+          toolsCache.set(clientName, toolsResult)
+        }
+
         return { clientName, client, toolsResult }
       }),
     )
