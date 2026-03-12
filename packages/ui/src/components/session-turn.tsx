@@ -7,7 +7,7 @@ import { Binary } from "@opencode-ai/util/binary"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { createEffect, createMemo, createSignal, For, on, ParentProps, Show } from "solid-js"
 import { Dynamic } from "solid-js/web"
-import { AssistantParts, Message, Part, PART_MAPPING } from "./message-part"
+import { AssistantParts, Message, Part, PART_MAPPING, type UserActions } from "./message-part"
 import { Card } from "./card"
 import { Accordion } from "./accordion"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
@@ -141,6 +141,7 @@ export function SessionTurn(
   props: ParentProps<{
     sessionID: string
     messageID: string
+    actions?: UserActions
     showReasoningSummaries?: boolean
     shellToolDefaultOpen?: boolean
     editToolDefaultOpen?: boolean
@@ -395,7 +396,13 @@ export function SessionTurn(
               class={props.classes?.container}
             >
               <div data-slot="session-turn-message-content" aria-live="off">
-                <Message message={message()!} parts={parts()} interrupted={interrupted()} queued={queued()} />
+                <Message
+                  message={message()!}
+                  parts={parts()}
+                  actions={props.actions}
+                  interrupted={interrupted()}
+                  queued={queued()}
+                />
               </div>
               <Show when={compaction()}>
                 <div data-slot="session-turn-compaction">
