@@ -614,7 +614,7 @@
   align-items: center;
   justify-content: flex-start;
   gap: 0px;
-  cursor: pointer;
+  cursor: default;
 
   [data-slot="context-tool-group-title"] {
     flex-shrink: 1;
@@ -623,6 +623,7 @@
 
   [data-slot="collapsible-arrow"] {
     color: var(--icon-weaker);
+    cursor: pointer;
   }
 }
 
