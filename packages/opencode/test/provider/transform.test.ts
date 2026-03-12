@@ -1495,6 +1495,163 @@ describe("ProviderTransform.message - providerOptions key remapping", () => {
   })
 })
 
+describe("ProviderTransform.message - tool media splitting", () => {
+  const createModel = (providerID: string, npm: string) =>
+    ({
+      id: `${providerID}/test-model`,
+      providerID,
+      api: {
+        id: "test-model",
+        url: "https://api.test.com",
+        npm,
+      },
+      name: "Test Model",
+      capabilities: {
+        temperature: true,
+        reasoning: false,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: true },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 0.001, output: 0.002, cache: { read: 0.0001, write: 0.0002 } },
+      limit: { context: 128000, output: 8192 },
+      status: "active",
+      options: {},
+      headers: {},
+    }) as any
+
+  test("splits tool media into a follow-up user message for openai-compatible providers", () => {
+    const model = createModel("evroc", "@ai-sdk/openai-compatible")
+    const msgs = [
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-1",
+            toolName: "question",
+            output: {
+              type: "content",
+              value: [
+                { type: "text", text: "Attached" },
+                { type: "media", mediaType: "image/png", data: "AAECAw==" },
+              ],
+            },
+          },
+        ],
+      },
+    ] as any[]
+
+    expect(ProviderTransform.message(msgs, model, {})).toEqual([
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-1",
+            toolName: "question",
+            output: { type: "text", value: "Attached" },
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Attached image(s) from tool result:" },
+          { type: "file", mediaType: "image/png", data: "data:image/png;base64,AAECAw==" },
+        ],
+      },
+    ])
+  })
+
+  test("splits tool media into a follow-up user message for anthropic providers", () => {
+    const model = createModel("anthropic", "@ai-sdk/anthropic")
+    const msgs = [
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-1",
+            toolName: "question",
+            output: {
+              type: "content",
+              value: [
+                { type: "text", text: "Attached" },
+                { type: "media", mediaType: "image/png", data: "AAECAw==" },
+              ],
+            },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {}) as any[]
+
+    expect(result).toHaveLength(2)
+    expect(result[0].role).toBe("tool")
+    expect(result[0].content).toEqual([
+      {
+        type: "tool-result",
+        toolCallId: "call-1",
+        toolName: "question",
+        output: { type: "text", value: "Attached" },
+      },
+    ])
+    expect(result[1].role).toBe("user")
+    expect(result[1].content).toEqual([
+      { type: "text", text: "Attached image(s) from tool result:" },
+      { type: "file", mediaType: "image/png", data: "data:image/png;base64,AAECAw==" },
+    ])
+  })
+
+  test("splits tool media into a follow-up user message for openai providers", () => {
+    const model = createModel("openai", "@ai-sdk/openai")
+    const msgs = [
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-1",
+            toolName: "question",
+            output: {
+              type: "content",
+              value: [
+                { type: "text", text: "Attached" },
+                { type: "media", mediaType: "image/png", data: "AAECAw==" },
+              ],
+            },
+          },
+        ],
+      },
+    ] as any[]
+
+    expect(ProviderTransform.message(msgs, model, {})).toEqual([
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-1",
+            toolName: "question",
+            output: { type: "text", value: "Attached" },
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Attached image(s) from tool result:" },
+          { type: "file", mediaType: "image/png", data: "data:image/png;base64,AAECAw==" },
+        ],
+      },
+    ])
+  })
+})
+
 describe("ProviderTransform.message - claude w/bedrock custom inference profile", () => {
   test("adds cachePoint", () => {
     const model = {

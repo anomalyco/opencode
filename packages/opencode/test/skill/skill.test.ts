@@ -1,9 +1,10 @@
-import { test, expect } from "bun:test"
+import { test, expect, spyOn } from "bun:test"
 import { Skill } from "../../src/skill"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import path from "path"
 import fs from "fs/promises"
+import { Log } from "../../src/util/log"
 
 async function createGlobalSkill(homeDir: string) {
   const skillDir = path.join(homeDir, ".claude", "skills", "global-test-skill")
@@ -385,4 +386,41 @@ description: A skill in the .opencode/skills directory.
       expect(dirs.length).toBe(4)
     },
   })
+})
+
+test("does not warn when the same skill file is discovered twice", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    config: {
+      skills: {
+        paths: ["./.claude"],
+      },
+    },
+    init: async (dir) => {
+      const skillDir = path.join(dir, ".claude", "skills", "echo")
+      await Bun.write(
+        path.join(skillDir, "SKILL.md"),
+        `---
+name: echo
+description: Duplicate path test skill.
+---
+
+# Echo
+`,
+      )
+    },
+  })
+
+  const warn = spyOn(Log.create({ service: "skill" }), "warn")
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const skills = await Skill.all()
+      expect(skills.length).toBe(1)
+      expect(skills[0].name).toBe("echo")
+    },
+  })
+
+  expect(warn).not.toHaveBeenCalled()
 })

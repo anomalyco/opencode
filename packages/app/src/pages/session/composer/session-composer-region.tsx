@@ -19,6 +19,7 @@ export function SessionComposerRegion(props: {
   newSessionWorktree: string
   onNewSessionWorktreeReset: () => void
   onSubmit: () => void
+  onSubmitted?: () => void
   onResponseSubmit: () => void
   setPromptDockRef: (el: HTMLDivElement) => void
   visualDuration?: number
@@ -222,6 +223,7 @@ export function SessionComposerRegion(props: {
                 newSessionWorktree={props.newSessionWorktree}
                 onNewSessionWorktreeReset={props.onNewSessionWorktreeReset}
                 onSubmit={props.onSubmit}
+                onSubmitted={props.onSubmitted}
               />
             </div>
           </Show>

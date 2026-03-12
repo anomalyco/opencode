@@ -160,6 +160,11 @@ export namespace MCP {
     return typeof entry === "object" && entry !== null && "type" in entry
   }
 
+  function missing(method: string, err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return /method not found/i.test(msg) && msg.includes(method)
+  }
+
   async function descendants(pid: number): Promise<number[]> {
     if (process.platform === "win32") return []
     const pids: number[] = []
@@ -215,6 +220,7 @@ export namespace MCP {
       return {
         status,
         clients,
+        promptless: new Set<string>(),
       }
     },
     async (state) => {
@@ -247,8 +253,15 @@ export namespace MCP {
   )
 
   // Helper function to fetch prompts for a specific client
-  async function fetchPromptsForClient(clientName: string, client: Client) {
+  async function fetchPromptsForClient(clientName: string, client: Client, promptless: Set<string>) {
+    if (promptless.has(clientName)) return
+
     const prompts = await client.listPrompts().catch((e) => {
+      if (missing("prompts/list", e)) {
+        promptless.add(clientName)
+        log.debug("client does not support prompts", { clientName })
+        return undefined
+      }
       log.error("failed to get prompts", { clientName, error: e.message })
       return undefined
     })
@@ -654,7 +667,7 @@ export namespace MCP {
               return []
             }
 
-            return Object.entries((await fetchPromptsForClient(clientName, client)) ?? {})
+            return Object.entries((await fetchPromptsForClient(clientName, client, s.promptless)) ?? {})
           }),
         )
       ).flat(),

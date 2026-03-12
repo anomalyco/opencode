@@ -46,6 +46,7 @@ import { same } from "@/utils/same"
 import { formatServerError } from "@/utils/server-errors"
 
 const emptyUserMessages: UserMessage[] = []
+const scrollBottomThreshold = 16
 
 type SessionHistoryWindowInput = {
   sessionID: () => string | undefined
@@ -74,6 +75,9 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
   const turnBottomThreshold = 24
 
   let prevTop = 0
+  let preserveA: number | undefined
+  let preserveB: number | undefined
+  let preserving = false
 
   const [state, setState] = createStore({
     turnID: undefined as string | undefined,
@@ -117,19 +121,34 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
     },
   )
 
+  const clearPreserve = () => {
+    if (preserveA !== undefined) cancelAnimationFrame(preserveA)
+    if (preserveB !== undefined) cancelAnimationFrame(preserveB)
+    preserveA = undefined
+    preserveB = undefined
+    preserving = false
+  }
+
   const preserveScroll = (fn: () => void) => {
     const el = input.scroller()
     if (!el) {
       fn()
       return
     }
+
+    clearPreserve()
+    preserving = true
     const beforeTop = el.scrollTop
     const beforeHeight = el.scrollHeight
     fn()
-    requestAnimationFrame(() => {
-      const delta = el.scrollHeight - beforeHeight
-      if (!delta) return
-      el.scrollTop = beforeTop + delta
+    preserveA = requestAnimationFrame(() => {
+      preserveA = undefined
+      preserveB = requestAnimationFrame(() => {
+        preserveB = undefined
+        const delta = el.scrollHeight - beforeHeight
+        if (delta) el.scrollTop = beforeTop + delta
+        preserving = false
+      })
     })
   }
 
@@ -211,6 +230,7 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
 
   const onScrollerScroll = () => {
     if (!input.userScrolled()) return
+    if (preserving) return
     const el = input.scroller()
     if (!el) return
 
@@ -240,6 +260,7 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
       input.sessionID,
       () => {
         prevTop = 0
+        clearPreserve()
         setState({ prefetchUntil: 0, prefetchNoGrowth: 0 })
       },
       { defer: true },
@@ -1108,6 +1129,7 @@ export default function Page() {
   const autoScroll = createAutoScroll({
     working: () => true,
     overflowAnchor: "dynamic",
+    bottomThreshold: scrollBottomThreshold,
   })
 
   let scrollStateFrame: number | undefined
@@ -1122,7 +1144,7 @@ export default function Page() {
   const updateScrollState = (el: HTMLDivElement) => {
     const max = el.scrollHeight - el.clientHeight
     const overflow = max > 1
-    const bottom = !overflow || el.scrollTop >= max - 2
+    const bottom = !overflow || max - el.scrollTop <= scrollBottomThreshold
 
     if (ui.scroll.overflow === overflow && ui.scroll.bottom === bottom) return
     setUi("scroll", { overflow, bottom })
@@ -1226,13 +1248,18 @@ export default function Page() {
 
       const el = scroller
       const delta = next - dockHeight
-      const stick = el
-        ? !autoScroll.userScrolled() || el.scrollHeight - el.clientHeight - el.scrollTop < 10 + Math.max(0, delta)
-        : false
+      const gap = el ? el.scrollHeight - el.clientHeight - el.scrollTop : 0
+      const stick = el ? !autoScroll.userScrolled() || gap <= scrollBottomThreshold + Math.max(0, delta) : false
 
       dockHeight = next
 
-      if (stick) autoScroll.forceScrollToBottom()
+      if (el && stick) {
+        requestAnimationFrame(() => {
+          if (scroller !== el) return
+          const top = el.scrollHeight - el.clientHeight - gap
+          el.scrollTop = top > 0 ? top : 0
+        })
+      }
 
       if (el) scheduleScrollState(el)
       scrollSpy.markDirty()
@@ -1372,6 +1399,9 @@ export default function Page() {
             onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
             onSubmit={() => {
               comments.clear()
+              resumeScroll()
+            }}
+            onSubmitted={() => {
               resumeScroll()
             }}
             onResponseSubmit={resumeScroll}

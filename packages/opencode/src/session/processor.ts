@@ -259,7 +259,7 @@ export namespace SessionProcessor {
                 case "tool-result": {
                   const match = toolcalls[value.toolCallId]
                   if (match && match.state.status === "running") {
-                    await Session.updatePart({
+                    const part = {
                       ...match,
                       state: {
                         status: "completed",
@@ -273,7 +273,8 @@ export namespace SessionProcessor {
                         },
                         attachments: value.output.attachments,
                       },
-                    })
+                    } satisfies MessageV2.ToolPart
+                    await Session.updatePart(part)
 
                     delete toolcalls[value.toolCallId]
                   }

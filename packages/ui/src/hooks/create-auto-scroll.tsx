@@ -40,6 +40,10 @@ export function createAutoScroll(options: AutoScrollOptions) {
 
   const threshold = () => options.bottomThreshold ?? 10
 
+  const atBottom = (el: HTMLElement) => {
+    return distanceFromBottom(el) <= threshold()
+  }
+
   const [store, setStore] = createStore({
     contentRef: undefined as HTMLElement | undefined,
     userScrolled: false,
@@ -81,7 +85,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
       return false
     }
 
-    return Math.abs(el.scrollTop - a.top) < 2
+    return Math.abs(el.scrollTop - a.top) <= threshold() || atBottom(el)
   }
 
   const scrollToBottomNow = (behavior: ScrollBehavior) => {
@@ -107,8 +111,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
 
     if (!force && store.userScrolled) return
 
-    const distance = distanceFromBottom(el)
-    if (distance < 2) {
+    if (atBottom(el)) {
       markAuto(el)
       return
     }
@@ -152,7 +155,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
       return
     }
 
-    if (distanceFromBottom(el) < threshold()) {
+    if (atBottom(el)) {
       if (store.userScrolled) setStore("userScrolled", false)
       return
     }

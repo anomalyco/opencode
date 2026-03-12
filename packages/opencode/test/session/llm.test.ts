@@ -454,14 +454,17 @@ describe("session.llm.stream", () => {
 
     const request = waitRequest(
       "/responses",
-      createEventResponse([
-        {
-          error: {
-            message: "Too many requests",
-            type: "too_many_requests",
+      createEventResponse(
+        [
+          {
+            error: {
+              message: "Too many requests",
+              type: "too_many_requests",
+            },
           },
-        },
-      ], true),
+        ],
+        true,
+      ),
     )
 
     await using tmp = await tmpdir({

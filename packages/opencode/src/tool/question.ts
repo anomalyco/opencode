@@ -30,8 +30,6 @@ function format(part: Question.Part) {
 function file(part: Question.Part) {
   if (typeof part === "string") return
   const result = dataUrl(part.url, part.mime)
-  console.log('[question.ts] file() input:', part.url.substring(0, 100))
-  console.log('[question.ts] file() output:', result.substring(0, 100))
   return {
     type: "file" as const,
     mime: part.mime,

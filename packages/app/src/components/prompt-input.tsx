@@ -65,6 +65,7 @@ interface PromptInputProps {
   newSessionWorktree?: string
   onNewSessionWorktreeReset?: () => void
   onSubmit?: () => void
+  onSubmitted?: () => void
 }
 
 const EXAMPLES = [
@@ -1010,6 +1011,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     newSessionWorktree: () => props.newSessionWorktree,
     onNewSessionWorktreeReset: props.onNewSessionWorktreeReset,
     onSubmit: props.onSubmit,
+    onSubmitted: props.onSubmitted,
   })
 
   const handleKeyDown = (event: KeyboardEvent) => {

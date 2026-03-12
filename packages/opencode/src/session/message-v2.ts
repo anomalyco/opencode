@@ -532,7 +532,6 @@ export namespace MessageV2 {
     })()
 
     const media = (url: string): string => {
-      console.log('[message-v2.ts] media() input:', url.substring(0, 100))
       // If not a data URL, return as-is
       if (!url.startsWith("data:")) return url
 
@@ -549,20 +548,14 @@ export namespace MessageV2 {
         if (extracted.startsWith("data:")) {
           const extractedComma = extracted.indexOf(",")
           if (extractedComma !== -1) {
-            const result = prefix + extracted.slice(extractedComma + 1)
-            console.log('[message-v2.ts] media() output:', result.substring(0, 100))
-            return result
+            return prefix + extracted.slice(extractedComma + 1)
           }
         }
-        const result = prefix + extracted
-        console.log('[message-v2.ts] media() output:', result.substring(0, 100))
-        return result
+        return prefix + extracted
       }
 
       // Body is pure base64, return complete data URL
-      const result = prefix + body
-      console.log('[message-v2.ts] media() output:', result.substring(0, 100))
-      return result
+      return prefix + body
     }
 
     const toModelOutput = (output: unknown) => {

@@ -199,10 +199,8 @@ export namespace ProviderTransform {
         return part.output.value.flatMap((item, index) => {
           if (item.type !== "media") return []
           // Always extract pure base64 and rebuild data URL to avoid nested prefixes
-          console.log(`[transform.ts] splitToolMedia item[${index}].data:`, item.data.substring(0, 100))
           const base64 = item.data.startsWith("data:") ? extractBase64(item.data) : item.data
           const result = `data:${item.mediaType};base64,${base64}`
-          console.log(`[transform.ts] splitToolMedia result[${index}]:`, result.substring(0, 100))
           return [
             {
               type: "file" as const,

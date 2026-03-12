@@ -28,19 +28,14 @@ function extractBase64(data: string): string {
 }
 
 function dataUrl(data: string, mediaType: string) {
-  console.log('[openai-compatible/responses] dataUrl input:', data.substring(0, 100))
   const type = mediaType === "image/*" ? "image/jpeg" : mediaType
   // If already a complete data URL, extract and rebuild
   if (data.startsWith("data:")) {
     const base64 = extractBase64(data)
-    const result = `data:${type};base64,${base64}`
-    console.log('[openai-compatible/responses] dataUrl output:', result.substring(0, 100))
-    return result
+    return `data:${type};base64,${base64}`
   }
   // If pure base64, add prefix
-  const result = `data:${type};base64,${data}`
-  console.log('[openai-compatible/responses] dataUrl output:', result.substring(0, 100))
-  return result
+  return `data:${type};base64,${data}`
 }
 
 function imageUrl(data: string | Uint8Array | URL, mediaType: string) {
@@ -63,19 +58,14 @@ function image(data: string, mediaType: string) {
 function toolMedia(output: { type: string; value: unknown }) {
   if (output.type !== "content") return []
   if (!Array.isArray(output.value)) return []
-  const result = output.value.flatMap((part, index) => {
+  return output.value.flatMap((part) => {
     if (!part || typeof part !== "object") return []
     if (!("type" in part) || part.type !== "media") return []
     if (!("mediaType" in part) || typeof part.mediaType !== "string") return []
     if (!("data" in part) || typeof part.data !== "string") return []
     if (!part.mediaType.startsWith("image/")) return []
-    console.log(`[openai-compatible/responses] toolMedia part[${index}].data:`, part.data.substring(0, 100))
-    const img = image(part.data, part.mediaType)
-    console.log(`[openai-compatible/responses] toolMedia result[${index}]:`, img.image_url.substring(0, 100))
-    return [img]
+    return [image(part.data, part.mediaType)]
   })
-  console.log(`[openai-compatible/responses] toolMedia total count: ${result.length}`)
-  return result
 }
 
 function toolText(output: { type: string; value: unknown }) {
@@ -158,7 +148,6 @@ export async function convertToOpenAIResponsesInput({
               case "file": {
                 if (part.mediaType.startsWith("image/")) {
                   const mediaType = part.mediaType === "image/*" ? "image/jpeg" : part.mediaType
-                  console.log(`[openai-compatible/responses] user file part.data:`, typeof part.data === 'string' ? part.data.substring(0, 100) : part.data)
 
                   return {
                     type: "input_image",
@@ -166,13 +155,7 @@ export async function convertToOpenAIResponsesInput({
                       ? { image_url: part.data.toString() }
                       : typeof part.data === "string" && isFileId(part.data, fileIdPrefixes)
                         ? { file_id: part.data }
-                        : {
-                            image_url: (() => {
-                              const url = imageUrl(part.data, mediaType)
-                              console.log(`[openai-compatible/responses] user file image_url:`, url.substring(0, 100))
-                              return url
-                            })(),
-                          }),
+                        : { image_url: imageUrl(part.data, mediaType) }),
                     detail: part.providerOptions?.openai?.imageDetail,
                   }
                 } else if (part.mediaType === "application/pdf") {

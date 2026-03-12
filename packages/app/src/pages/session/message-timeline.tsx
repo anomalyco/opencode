@@ -105,6 +105,7 @@ function createTimelineStaging(input: TimelineStageInput) {
   const [state, setState] = createStore({
     activeSession: "",
     completedSession: "",
+    stagedSession: "",
     count: 0,
   })
 
@@ -141,6 +142,7 @@ function createTimelineStaging(input: TimelineStageInput) {
           isWindowed &&
           total > input.config.init &&
           state.completedSession !== sessionKey &&
+          state.stagedSession !== sessionKey &&
           state.activeSession !== sessionKey
         if (!shouldStage) {
           setState({ activeSession: "", count: total })
@@ -148,7 +150,7 @@ function createTimelineStaging(input: TimelineStageInput) {
         }
 
         let count = Math.min(total, input.config.init)
-        setState({ activeSession: sessionKey, count })
+        setState({ activeSession: sessionKey, stagedSession: sessionKey, count })
 
         const step = () => {
           if (input.sessionKey() !== sessionKey) {
@@ -513,8 +515,8 @@ export function MessageTimeline(props: {
           }}
           onScroll={(e) => {
             props.onScheduleScrollState(e.currentTarget)
-            if (!props.hasScrollGesture()) return
             props.onAutoScrollHandleScroll()
+            if (!props.hasScrollGesture()) return
             props.onTurnBackfillScroll()
             props.onMarkScrollGesture(e.currentTarget)
             if (props.isDesktop) props.onScrollSpyScroll()

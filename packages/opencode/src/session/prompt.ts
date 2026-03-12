@@ -65,7 +65,6 @@ function toolOutput(result: { output: string; attachments?: Array<{ mime: string
   })
 
   const media = (url: string): string => {
-    console.log('[prompt.ts] toolOutput media() input:', url.substring(0, 100))
     // If not a data URL, return as-is
     if (!url.startsWith("data:")) return url
 
@@ -82,20 +81,14 @@ function toolOutput(result: { output: string; attachments?: Array<{ mime: string
       if (extracted.startsWith("data:")) {
         const extractedComma = extracted.indexOf(",")
         if (extractedComma !== -1) {
-          const result = prefix + extracted.slice(extractedComma + 1)
-          console.log('[prompt.ts] toolOutput media() output:', result.substring(0, 100))
-          return result
+          return prefix + extracted.slice(extractedComma + 1)
         }
       }
-      const result = prefix + extracted
-      console.log('[prompt.ts] toolOutput media() output:', result.substring(0, 100))
-      return result
+      return prefix + extracted
     }
 
     // Body is pure base64, return complete data URL
-    const result = prefix + body
-    console.log('[prompt.ts] toolOutput media() output:', result.substring(0, 100))
-    return result
+    return prefix + body
   }
 
   if (attachments.length === 0) {

@@ -10,6 +10,7 @@ import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
 import { usePlatform } from "@/context/platform"
+import type { ImageAttachmentPart } from "@/context/prompt"
 import { ACCEPTED_IMAGE_TYPES } from "@/components/prompt-input/attachments"
 import { PromptImageAttachments } from "@/components/prompt-input/image-attachments"
 import { uuid } from "@/utils/uuid"
@@ -26,7 +27,7 @@ function textPart(part: QuestionAnswer[number]): part is string {
 
 export const questionCache = new Map<
   string,
-  { tab: number; answers: QuestionAnswer[]; custom: string[]; customOn: boolean[]; images: Image[][] }
+  { tab: number; answers: QuestionAnswer[]; custom: string[]; customOn: boolean[]; images: ImageAttachmentPart[][] }
 >()
 
 export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit: () => void }> = (props) => {
@@ -273,8 +274,8 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
         type: "image" as const,
         id: uuid(),
         mime: file.type,
-        url,
-        filename: file.name,
+        dataUrl: url,
+        filename: file.name || "image",
       },
     ])
   }
