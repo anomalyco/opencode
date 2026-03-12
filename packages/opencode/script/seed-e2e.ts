@@ -11,16 +11,17 @@ const seed = async () => {
   const { Instance } = await import("../src/project/instance")
   const { InstanceBootstrap } = await import("../src/project/bootstrap")
   const { Session } = await import("../src/session")
-  const { Identifier } = await import("../src/id/id")
+  const { MessageID, PartID } = await import("../src/session/schema")
   const { Project } = await import("../src/project/project")
+  const { ModelID, ProviderID } = await import("../src/provider/schema")
 
   await Instance.provide({
     directory: dir,
     init: InstanceBootstrap,
     fn: async () => {
       const session = await Session.create({ title })
-      const messageID = Identifier.descending("message")
-      const partID = Identifier.descending("part")
+      const messageID = MessageID.ascending()
+      const partID = PartID.ascending()
       const message = {
         id: messageID,
         sessionID: session.id,
@@ -28,8 +29,8 @@ const seed = async () => {
         time: { created: now },
         agent: "build",
         model: {
-          providerID,
-          modelID,
+          providerID: ProviderID.make(providerID),
+          modelID: ModelID.make(modelID),
         },
       }
       const part = {

@@ -1,15 +1,12 @@
 import { Accordion as Kobalte } from "@kobalte/core/accordion"
-import { Accessor, createContext, splitProps, useContext } from "solid-js"
+import { splitProps } from "solid-js"
 import type { ComponentProps, ParentProps } from "solid-js"
-import { MorphChevron } from "./morph-chevron"
 
 export interface AccordionProps extends ComponentProps<typeof Kobalte> {}
 export interface AccordionItemProps extends ComponentProps<typeof Kobalte.Item> {}
 export interface AccordionHeaderProps extends ComponentProps<typeof Kobalte.Header> {}
 export interface AccordionTriggerProps extends ComponentProps<typeof Kobalte.Trigger> {}
 export interface AccordionContentProps extends ComponentProps<typeof Kobalte.Content> {}
-
-const AccordionItemContext = createContext<Accessor<boolean>>()
 
 function AccordionRoot(props: AccordionProps) {
   const [split, rest] = splitProps(props, ["class", "classList"])
@@ -25,19 +22,17 @@ function AccordionRoot(props: AccordionProps) {
   )
 }
 
-function AccordionItem(props: AccordionItemProps & { expanded?: boolean }) {
-  const [split, rest] = splitProps(props, ["class", "classList", "expanded"])
+function AccordionItem(props: AccordionItemProps) {
+  const [split, rest] = splitProps(props, ["class", "classList"])
   return (
-    <AccordionItemContext.Provider value={() => split.expanded ?? false}>
-      <Kobalte.Item
-        {...rest}
-        data-slot="accordion-item"
-        classList={{
-          ...(split.classList ?? {}),
-          [split.class ?? ""]: !!split.class,
-        }}
-      />
-    </AccordionItemContext.Provider>
+    <Kobalte.Item
+      {...rest}
+      data-slot="accordion-item"
+      classList={{
+        ...(split.classList ?? {}),
+        [split.class ?? ""]: !!split.class,
+      }}
+    />
   )
 }
 
@@ -89,25 +84,9 @@ function AccordionContent(props: ParentProps<AccordionContentProps>) {
   )
 }
 
-export interface AccordionArrowProps extends ComponentProps<"div"> {
-  expanded?: boolean
-}
-
-function AccordionArrow(props: AccordionArrowProps = {}) {
-  const [local, rest] = splitProps(props, ["expanded"])
-  const contextExpanded = useContext(AccordionItemContext)
-  const isExpanded = () => local.expanded ?? contextExpanded?.() ?? false
-  return (
-    <div data-slot="accordion-arrow" {...rest}>
-      <MorphChevron expanded={isExpanded()} />
-    </div>
-  )
-}
-
 export const Accordion = Object.assign(AccordionRoot, {
   Item: AccordionItem,
   Header: AccordionHeader,
   Trigger: AccordionTrigger,
   Content: AccordionContent,
-  Arrow: AccordionArrow,
 })

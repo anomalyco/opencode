@@ -1,71 +1,93 @@
-import { createEffect, createMemo, Show, type ParentProps } from "solid-js"
-import { useNavigate, useParams } from "@solidjs/router"
-import { SDKProvider, useSDK } from "@/context/sdk"
+import { batch, createEffect, createMemo, Show, type ParentProps } from "solid-js"
+import { createStore } from "solid-js/store"
+import { useLocation, useNavigate, useParams } from "@solidjs/router"
+import { SDKProvider } from "@/context/sdk"
 import { SyncProvider, useSync } from "@/context/sync"
 import { LocalProvider } from "@/context/local"
+import { useGlobalSDK } from "@/context/global-sdk"
 
 import { DataProvider } from "@opencode-ai/ui/context"
-import { iife } from "@opencode-ai/util/iife"
-import type { QuestionAnswer } from "@opencode-ai/sdk/v2"
+import { base64Encode } from "@opencode-ai/util/encode"
 import { decode64 } from "@/utils/base64"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useLanguage } from "@/context/language"
+function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
+  const navigate = useNavigate()
+  const sync = useSync()
+  const slug = createMemo(() => base64Encode(props.directory))
+
+  return (
+    <DataProvider
+      data={sync.data}
+      directory={props.directory}
+      onNavigateToSession={(sessionID: string) => navigate(`/${slug()}/session/${sessionID}`)}
+      onSessionHref={(sessionID: string) => `/${slug()}/session/${sessionID}`}
+    >
+      <LocalProvider>{props.children}</LocalProvider>
+    </DataProvider>
+  )
+}
 
 export default function Layout(props: ParentProps) {
   const params = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const language = useLanguage()
-  const directory = createMemo(() => {
-    return decode64(params.dir) ?? ""
-  })
+  const globalSDK = useGlobalSDK()
+  const directory = createMemo(() => decode64(params.dir) ?? "")
+  const [state, setState] = createStore({ invalid: "", resolved: "" })
 
   createEffect(() => {
     if (!params.dir) return
-    if (directory()) return
-    showToast({
-      variant: "error",
-      title: language.t("common.requestFailed"),
-      description: "Invalid directory in URL.",
-    })
-    navigate("/")
+    const raw = directory()
+    if (!raw) {
+      if (state.invalid === params.dir) return
+      setState("invalid", params.dir)
+      showToast({
+        variant: "error",
+        title: language.t("common.requestFailed"),
+        description: language.t("directory.error.invalidUrl"),
+      })
+      navigate("/", { replace: true })
+      return
+    }
+
+    const current = params.dir
+    globalSDK
+      .createClient({
+        directory: raw,
+        throwOnError: true,
+      })
+      .path.get()
+      .then((x) => {
+        if (params.dir !== current) return
+        const next = x.data?.directory ?? raw
+        batch(() => {
+          setState("invalid", "")
+          setState("resolved", next)
+        })
+        if (next === raw) return
+        const path = location.pathname.slice(current.length + 1)
+        navigate(`/${base64Encode(next)}${path}${location.search}${location.hash}`, { replace: true })
+      })
+      .catch(() => {
+        if (params.dir !== current) return
+        batch(() => {
+          setState("invalid", "")
+          setState("resolved", raw)
+        })
+      })
   })
+
   return (
-    <Show when={directory()}>
-      <SDKProvider directory={directory()}>
-        <SyncProvider>
-          {iife(() => {
-            const sync = useSync()
-            const sdk = useSDK()
-            const respond = (input: {
-              sessionID: string
-              permissionID: string
-              response: "once" | "always" | "reject"
-            }) => sdk.client.permission.respond(input)
-
-            const replyToQuestion = (input: { requestID: string; answers: QuestionAnswer[] }) =>
-              sdk.client.question.reply(input)
-
-            const rejectQuestion = (input: { requestID: string }) => sdk.client.question.reject(input)
-
-            const navigateToSession = (sessionID: string) => {
-              navigate(`/${params.dir}/session/${sessionID}`)
-            }
-
-            return (
-              <DataProvider
-                data={sync.data}
-                directory={directory()}
-                onPermissionRespond={respond}
-                onQuestionReply={replyToQuestion}
-                onQuestionReject={rejectQuestion}
-                onNavigateToSession={navigateToSession}
-              >
-                <LocalProvider>{props.children}</LocalProvider>
-              </DataProvider>
-            )
-          })}
-        </SyncProvider>
-      </SDKProvider>
+    <Show when={state.resolved}>
+      {(resolved) => (
+        <SDKProvider directory={resolved}>
+          <SyncProvider>
+            <DirectoryDataProvider directory={resolved()}>{props.children}</DirectoryDataProvider>
+          </SyncProvider>
+        </SDKProvider>
+      )}
     </Show>
   )
 }

@@ -60,7 +60,7 @@ You are producing plain text that will later be styled by the CLI. Follow these 
 
 ## Final answer structure and style guidelines
 
-- Plain text; CLI handles styling. Use structure only when it helps scanability.
+- Plain text; CLI handles styling. Use structure only when it helps scannability.
 - Headers: optional; short Title Case (1-3 words) wrapped in **…**; no blank line before the first bullet; add only if they truly help.
 - Bullets: use - ; merge related points; keep to one line when possible; 4–6 per list ordered by importance; keep phrasing consistent.
 - Monospace: backticks for commands/paths/env vars/code ids and inline examples; use for literal keyword bullets; never combine with **.

@@ -1,4 +1,3 @@
-import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
 import z from "zod"
@@ -7,9 +6,13 @@ import { Global } from "../global"
 import { Instance } from "../project/instance"
 import { InstanceBootstrap } from "../project/bootstrap"
 import { Project } from "../project/project"
-import { Storage } from "../storage/storage"
+import { Database, eq } from "../storage/db"
+import { ProjectTable } from "../project/project.sql"
+import type { ProjectID } from "../project/schema"
 import { fn } from "../util/fn"
 import { Log } from "../util/log"
+import { Process } from "../util/process"
+import { git } from "../util/git"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 
@@ -219,6 +222,51 @@ export namespace Worktree {
     return [outputText(result.stderr), outputText(result.stdout)].filter(Boolean).join("\n")
   }
 
+  function failed(result: { stdout?: Uint8Array; stderr?: Uint8Array }) {
+    return [outputText(result.stderr), outputText(result.stdout)].filter(Boolean).flatMap((chunk) =>
+      chunk
+        .split("\n")
+        .map((line) => line.trim())
+        .flatMap((line) => {
+          const match = line.match(/^warning:\s+failed to remove\s+(.+):\s+/i)
+          if (!match) return []
+          const value = match[1]?.trim().replace(/^['"]|['"]$/g, "")
+          if (!value) return []
+          return [value]
+        }),
+    )
+  }
+
+  async function prune(root: string, entries: string[]) {
+    const base = await canonical(root)
+    await Promise.all(
+      entries.map(async (entry) => {
+        const target = await canonical(path.resolve(root, entry))
+        if (target === base) return
+        if (!target.startsWith(`${base}${path.sep}`)) return
+        await fs.rm(target, { recursive: true, force: true }).catch(() => undefined)
+      }),
+    )
+  }
+
+  async function sweep(root: string) {
+    const first = await git(["clean", "-ffdx"], { cwd: root })
+    if (first.exitCode === 0) return first
+
+    const entries = failed(first)
+    if (!entries.length) return first
+
+    await prune(root, entries)
+    return git(["clean", "-ffdx"], { cwd: root })
+  }
+
+  async function canonical(input: string) {
+    const abs = path.resolve(input)
+    const real = await fs.realpath(abs).catch(() => abs)
+    const normalized = path.normalize(real)
+    return process.platform === "win32" ? normalized.toLowerCase() : normalized
+  }
+
   async function candidate(root: string, base?: string) {
     for (const attempt of Array.from({ length: 26 }, (_, i) => i)) {
       const name = base ? (attempt === 0 ? base : `${base}-${randomName()}`) : randomName()
@@ -228,7 +276,9 @@ export namespace Worktree {
       if (await exists(directory)) continue
 
       const ref = `refs/heads/${branch}`
-      const branchCheck = await $`git show-ref --verify --quiet ${ref}`.quiet().nothrow().cwd(Instance.worktree)
+      const branchCheck = await git(["show-ref", "--verify", "--quiet", ref], {
+        cwd: Instance.worktree,
+      })
       if (branchCheck.exitCode === 0) continue
 
       return Info.parse({ name, branch, directory })
@@ -239,9 +289,9 @@ export namespace Worktree {
 
   async function runStartCommand(directory: string, cmd: string) {
     if (process.platform === "win32") {
-      return $`cmd /c ${cmd}`.nothrow().cwd(directory)
+      return Process.run(["cmd", "/c", cmd], { cwd: directory, nothrow: true })
     }
-    return $`bash -lc ${cmd}`.nothrow().cwd(directory)
+    return Process.run(["bash", "-lc", cmd], { cwd: directory, nothrow: true })
   }
 
   type StartKind = "project" | "worktree"
@@ -251,7 +301,7 @@ export namespace Worktree {
     if (!text) return true
 
     const ran = await runStartCommand(directory, text)
-    if (ran.exitCode === 0) return true
+    if (ran.code === 0) return true
 
     log.error("worktree start command failed", {
       kind,
@@ -261,8 +311,9 @@ export namespace Worktree {
     return false
   }
 
-  async function runStartScripts(directory: string, input: { projectID: string; extra?: string }) {
-    const project = await Storage.read<Project.Info>(["project", input.projectID]).catch(() => undefined)
+  async function runStartScripts(directory: string, input: { projectID: ProjectID; extra?: string }) {
+    const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, input.projectID)).get())
+    const project = row ? Project.fromRow(row) : undefined
     const startup = project?.commands?.start?.trim() ?? ""
     const ok = await runStartScript(directory, startup, "project")
     if (!ok) return false
@@ -272,7 +323,7 @@ export namespace Worktree {
     return true
   }
 
-  function queueStartScripts(directory: string, input: { projectID: string; extra?: string }) {
+  function queueStartScripts(directory: string, input: { projectID: ProjectID; extra?: string }) {
     setTimeout(() => {
       const start = async () => {
         await runStartScripts(directory, input)
@@ -284,7 +335,7 @@ export namespace Worktree {
     }, 0)
   }
 
-  export const create = fn(CreateInput.optional(), async (input) => {
+  export async function makeWorktreeInfo(name?: string): Promise<Info> {
     if (Instance.project.vcs !== "git") {
       throw new NotGitError({ message: "Worktrees are only supported for git projects" })
     }
@@ -292,13 +343,14 @@ export namespace Worktree {
     const root = path.join(Global.Path.data, "worktree", Instance.project.id)
     await fs.mkdir(root, { recursive: true })
 
-    const base = input?.name ? slug(input.name) : ""
-    const info = await candidate(root, base || undefined)
+    const base = name ? slug(name) : ""
+    return candidate(root, base || undefined)
+  }
 
-    const created = await $`git worktree add --no-checkout -b ${info.branch} ${info.directory}`
-      .quiet()
-      .nothrow()
-      .cwd(Instance.worktree)
+  export async function createFromInfo(info: Info, startCommand?: string) {
+    const created = await git(["worktree", "add", "--no-checkout", "-b", info.branch, info.directory], {
+      cwd: Instance.worktree,
+    })
     if (created.exitCode !== 0) {
       throw new CreateFailedError({ message: errorText(created) || "Failed to create git worktree" })
     }
@@ -306,10 +358,11 @@ export namespace Worktree {
     await Project.addSandbox(Instance.project.id, info.directory).catch(() => undefined)
 
     const projectID = Instance.project.id
-    const extra = input?.startCommand?.trim()
-    setTimeout(() => {
+    const extra = startCommand?.trim()
+
+    return () => {
       const start = async () => {
-        const populated = await $`git reset --hard`.quiet().nothrow().cwd(info.directory)
+        const populated = await git(["reset", "--hard"], { cwd: info.directory })
         if (populated.exitCode !== 0) {
           const message = errorText(populated) || "Failed to populate worktree"
           log.error("worktree checkout failed", { directory: info.directory, message })
@@ -361,11 +414,20 @@ export namespace Worktree {
         await runStartScripts(info.directory, { projectID, extra })
       }
 
-      void start().catch((error) => {
+      return start().catch((error) => {
         log.error("worktree start task failed", { directory: info.directory, error })
       })
-    }, 0)
+    }
+  }
 
+  export const create = fn(CreateInput.optional(), async (input) => {
+    const info = await makeWorktreeInfo(input?.name)
+    const bootstrap = await createFromInfo(info, input?.startCommand)
+    // This is needed due to how worktrees currently work in the
+    // desktop app
+    setTimeout(() => {
+      bootstrap()
+    }, 0)
     return info
   })
 
@@ -374,42 +436,91 @@ export namespace Worktree {
       throw new NotGitError({ message: "Worktrees are only supported for git projects" })
     }
 
-    const directory = path.resolve(input.directory)
-    const list = await $`git worktree list --porcelain`.quiet().nothrow().cwd(Instance.worktree)
+    const directory = await canonical(input.directory)
+    const locate = async (stdout: Uint8Array | undefined) => {
+      const lines = outputText(stdout)
+        .split("\n")
+        .map((line) => line.trim())
+      const entries = lines.reduce<{ path?: string; branch?: string }[]>((acc, line) => {
+        if (!line) return acc
+        if (line.startsWith("worktree ")) {
+          acc.push({ path: line.slice("worktree ".length).trim() })
+          return acc
+        }
+        const current = acc[acc.length - 1]
+        if (!current) return acc
+        if (line.startsWith("branch ")) {
+          current.branch = line.slice("branch ".length).trim()
+        }
+        return acc
+      }, [])
+
+      return (async () => {
+        for (const item of entries) {
+          if (!item.path) continue
+          const key = await canonical(item.path)
+          if (key === directory) return item
+        }
+      })()
+    }
+
+    const clean = (target: string) =>
+      fs
+        .rm(target, {
+          recursive: true,
+          force: true,
+          maxRetries: 5,
+          retryDelay: 100,
+        })
+        .catch((error) => {
+          const message = error instanceof Error ? error.message : String(error)
+          throw new RemoveFailedError({ message: message || "Failed to remove git worktree directory" })
+        })
+
+    const stop = async (target: string) => {
+      if (!(await exists(target))) return
+      await git(["fsmonitor--daemon", "stop"], { cwd: target })
+    }
+
+    const list = await git(["worktree", "list", "--porcelain"], { cwd: Instance.worktree })
     if (list.exitCode !== 0) {
       throw new RemoveFailedError({ message: errorText(list) || "Failed to read git worktrees" })
     }
 
-    const lines = outputText(list.stdout)
-      .split("\n")
-      .map((line) => line.trim())
-    const entries = lines.reduce<{ path?: string; branch?: string }[]>((acc, line) => {
-      if (!line) return acc
-      if (line.startsWith("worktree ")) {
-        acc.push({ path: line.slice("worktree ".length).trim() })
-        return acc
-      }
-      const current = acc[acc.length - 1]
-      if (!current) return acc
-      if (line.startsWith("branch ")) {
-        current.branch = line.slice("branch ".length).trim()
-      }
-      return acc
-    }, [])
+    const entry = await locate(list.stdout)
 
-    const entry = entries.find((item) => item.path && path.resolve(item.path) === directory)
     if (!entry?.path) {
-      throw new RemoveFailedError({ message: "Worktree not found" })
+      const directoryExists = await exists(directory)
+      if (directoryExists) {
+        await stop(directory)
+        await clean(directory)
+      }
+      return true
     }
 
-    const removed = await $`git worktree remove --force ${entry.path}`.quiet().nothrow().cwd(Instance.worktree)
+    await stop(entry.path)
+    const removed = await git(["worktree", "remove", "--force", entry.path], {
+      cwd: Instance.worktree,
+    })
     if (removed.exitCode !== 0) {
-      throw new RemoveFailedError({ message: errorText(removed) || "Failed to remove git worktree" })
+      const next = await git(["worktree", "list", "--porcelain"], { cwd: Instance.worktree })
+      if (next.exitCode !== 0) {
+        throw new RemoveFailedError({
+          message: errorText(removed) || errorText(next) || "Failed to remove git worktree",
+        })
+      }
+
+      const stale = await locate(next.stdout)
+      if (stale?.path) {
+        throw new RemoveFailedError({ message: errorText(removed) || "Failed to remove git worktree" })
+      }
     }
+
+    await clean(entry.path)
 
     const branch = entry.branch?.replace(/^refs\/heads\//, "")
     if (branch) {
-      const deleted = await $`git branch -D ${branch}`.quiet().nothrow().cwd(Instance.worktree)
+      const deleted = await git(["branch", "-D", branch], { cwd: Instance.worktree })
       if (deleted.exitCode !== 0) {
         throw new RemoveFailedError({ message: errorText(deleted) || "Failed to delete worktree branch" })
       }
@@ -423,12 +534,13 @@ export namespace Worktree {
       throw new NotGitError({ message: "Worktrees are only supported for git projects" })
     }
 
-    const directory = path.resolve(input.directory)
-    if (directory === path.resolve(Instance.worktree)) {
+    const directory = await canonical(input.directory)
+    const primary = await canonical(Instance.worktree)
+    if (directory === primary) {
       throw new ResetFailedError({ message: "Cannot reset the primary workspace" })
     }
 
-    const list = await $`git worktree list --porcelain`.quiet().nothrow().cwd(Instance.worktree)
+    const list = await git(["worktree", "list", "--porcelain"], { cwd: Instance.worktree })
     if (list.exitCode !== 0) {
       throw new ResetFailedError({ message: errorText(list) || "Failed to read git worktrees" })
     }
@@ -450,12 +562,18 @@ export namespace Worktree {
       return acc
     }, [])
 
-    const entry = entries.find((item) => item.path && path.resolve(item.path) === directory)
+    const entry = await (async () => {
+      for (const item of entries) {
+        if (!item.path) continue
+        const key = await canonical(item.path)
+        if (key === directory) return item
+      }
+    })()
     if (!entry?.path) {
       throw new ResetFailedError({ message: "Worktree not found" })
     }
 
-    const remoteList = await $`git remote`.quiet().nothrow().cwd(Instance.worktree)
+    const remoteList = await git(["remote"], { cwd: Instance.worktree })
     if (remoteList.exitCode !== 0) {
       throw new ResetFailedError({ message: errorText(remoteList) || "Failed to list git remotes" })
     }
@@ -474,18 +592,19 @@ export namespace Worktree {
           : ""
 
     const remoteHead = remote
-      ? await $`git symbolic-ref refs/remotes/${remote}/HEAD`.quiet().nothrow().cwd(Instance.worktree)
+      ? await git(["symbolic-ref", `refs/remotes/${remote}/HEAD`], { cwd: Instance.worktree })
       : { exitCode: 1, stdout: undefined, stderr: undefined }
 
     const remoteRef = remoteHead.exitCode === 0 ? outputText(remoteHead.stdout) : ""
     const remoteTarget = remoteRef ? remoteRef.replace(/^refs\/remotes\//, "") : ""
     const remoteBranch = remote && remoteTarget.startsWith(`${remote}/`) ? remoteTarget.slice(`${remote}/`.length) : ""
 
-    const mainCheck = await $`git show-ref --verify --quiet refs/heads/main`.quiet().nothrow().cwd(Instance.worktree)
-    const masterCheck = await $`git show-ref --verify --quiet refs/heads/master`
-      .quiet()
-      .nothrow()
-      .cwd(Instance.worktree)
+    const mainCheck = await git(["show-ref", "--verify", "--quiet", "refs/heads/main"], {
+      cwd: Instance.worktree,
+    })
+    const masterCheck = await git(["show-ref", "--verify", "--quiet", "refs/heads/master"], {
+      cwd: Instance.worktree,
+    })
     const localBranch = mainCheck.exitCode === 0 ? "main" : masterCheck.exitCode === 0 ? "master" : ""
 
     const target = remoteBranch ? `${remote}/${remoteBranch}` : localBranch
@@ -494,7 +613,7 @@ export namespace Worktree {
     }
 
     if (remoteBranch) {
-      const fetch = await $`git fetch ${remote} ${remoteBranch}`.quiet().nothrow().cwd(Instance.worktree)
+      const fetch = await git(["fetch", remote, remoteBranch], { cwd: Instance.worktree })
       if (fetch.exitCode !== 0) {
         throw new ResetFailedError({ message: errorText(fetch) || `Failed to fetch ${target}` })
       }
@@ -506,32 +625,36 @@ export namespace Worktree {
 
     const worktreePath = entry.path
 
-    const resetToTarget = await $`git reset --hard ${target}`.quiet().nothrow().cwd(worktreePath)
+    const resetToTarget = await git(["reset", "--hard", target], { cwd: worktreePath })
     if (resetToTarget.exitCode !== 0) {
       throw new ResetFailedError({ message: errorText(resetToTarget) || "Failed to reset worktree to target" })
     }
 
-    const clean = await $`git clean -fdx`.quiet().nothrow().cwd(worktreePath)
+    const clean = await sweep(worktreePath)
     if (clean.exitCode !== 0) {
       throw new ResetFailedError({ message: errorText(clean) || "Failed to clean worktree" })
     }
 
-    const update = await $`git submodule update --init --recursive --force`.quiet().nothrow().cwd(worktreePath)
+    const update = await git(["submodule", "update", "--init", "--recursive", "--force"], { cwd: worktreePath })
     if (update.exitCode !== 0) {
       throw new ResetFailedError({ message: errorText(update) || "Failed to update submodules" })
     }
 
-    const subReset = await $`git submodule foreach --recursive git reset --hard`.quiet().nothrow().cwd(worktreePath)
+    const subReset = await git(["submodule", "foreach", "--recursive", "git", "reset", "--hard"], {
+      cwd: worktreePath,
+    })
     if (subReset.exitCode !== 0) {
       throw new ResetFailedError({ message: errorText(subReset) || "Failed to reset submodules" })
     }
 
-    const subClean = await $`git submodule foreach --recursive git clean -fdx`.quiet().nothrow().cwd(worktreePath)
+    const subClean = await git(["submodule", "foreach", "--recursive", "git", "clean", "-fdx"], {
+      cwd: worktreePath,
+    })
     if (subClean.exitCode !== 0) {
       throw new ResetFailedError({ message: errorText(subClean) || "Failed to clean submodules" })
     }
 
-    const status = await $`git status --porcelain=v1`.quiet().nothrow().cwd(worktreePath)
+    const status = await git(["-c", "core.fsmonitor=false", "status", "--porcelain=v1"], { cwd: worktreePath })
     if (status.exitCode !== 0) {
       throw new ResetFailedError({ message: errorText(status) || "Failed to read git status" })
     }

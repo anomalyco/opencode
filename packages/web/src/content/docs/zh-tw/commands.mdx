@@ -1,0 +1,322 @@
+---
+title: 指令
+description: 為重複任務建立自訂指令。
+---
+
+自訂指令允許您指定一個提示詞，當在 TUI 中執行該指令時會執行這個提示詞。
+
+```bash frame="none"
+/my-command
+```
+
+自訂指令是 `/init`、`/undo`、`/redo`、`/share`、`/help` 等內建指令之外的補充。[了解更多](/docs/tui#commands)。
+
+---
+
+## 建立指令檔案
+
+在 `commands/` 目錄中建立 markdown 檔案來定義自訂指令。
+
+建立 `.opencode/commands/test.md`：
+
+```md title=".opencode/commands/test.md"
+---
+description: Run tests with coverage
+agent: build
+model: anthropic/claude-3-5-sonnet-20241022
+---
+
+Run the full test suite with coverage report and show any failures.
+Focus on the failing tests and suggest fixes.
+```
+
+frontmatter 定義指令屬性，內容則成為範本。
+
+透過輸入 `/` 後跟指令名稱來使用該指令。
+
+```bash frame="none"
+"/test"
+```
+
+---
+
+## 設定
+
+您可以透過 OpenCode 設定或在 `commands/` 目錄中建立 markdown 檔案來新增自訂指令。
+
+---
+
+### JSON
+
+在 OpenCode [設定](/docs/config)中使用 `command` 選項：
+
+```json title="opencode.jsonc" {4-12}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "command": {
+    // This becomes the name of the command
+    "test": {
+      // This is the prompt that will be sent to the LLM
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
+      // This is shown as the description in the TUI
+      "description": "Run tests with coverage",
+      "agent": "build",
+      "model": "anthropic/claude-3-5-sonnet-20241022"
+    }
+  }
+}
+```
+
+現在您可以在 TUI 中執行這個指令：
+
+```bash frame="none"
+/test
+```
+
+---
+
+### Markdown
+
+您還可以使用 markdown 檔案定義指令。將它們放在：
+
+- 全域：`~/.config/opencode/commands/`
+- 專案層級：`.opencode/commands/`
+
+```markdown title="~/.config/opencode/commands/test.md"
+---
+description: Run tests with coverage
+agent: build
+model: anthropic/claude-3-5-sonnet-20241022
+---
+
+Run the full test suite with coverage report and show any failures.
+Focus on the failing tests and suggest fixes.
+```
+
+markdown 檔案名稱即為指令名稱。例如，`test.md` 允許您執行：
+
+```bash frame="none"
+/test
+```
+
+---
+
+## 提示詞設定
+
+自訂指令的提示詞支援多種特殊佔位符和語法。
+
+---
+
+### 參數
+
+使用 `$ARGUMENTS` 佔位符向指令傳遞參數。
+
+```md title=".opencode/commands/component.md"
+---
+description: Create a new component
+---
+
+Create a new React component named $ARGUMENTS with TypeScript support.
+Include proper typing and basic structure.
+```
+
+帶參數執行指令：
+
+```bash frame="none"
+/component Button
+```
+
+`$ARGUMENTS` 將被替換為 `Button`。
+
+您還可以使用位置參數存取各個參數：
+
+- `$1` - 第一個參數
+- `$2` - 第二個參數
+- `$3` - 第三個參數
+- 以此類推...
+
+例如：
+
+```md title=".opencode/commands/create-file.md"
+---
+description: Create a new file with content
+---
+
+Create a file named $1 in the directory $2
+with the following content: $3
+```
+
+執行指令：
+
+```bash frame="none"
+/create-file config.json src "{ \"key\": \"value\" }"
+```
+
+替換結果為：
+
+- `$1` 替換為 `config.json`
+- `$2` 替換為 `src`
+- `$3` 替換為 `{ "key": "value" }`
+
+---
+
+### Shell 輸出
+
+使用 _!`command`_ 將 [bash 指令](/docs/tui#bash-commands)輸出注入到提示詞中。
+
+例如，建立一個分析測試覆蓋率的自訂指令：
+
+```md title=".opencode/commands/analyze-coverage.md"
+---
+description: Analyze test coverage
+---
+
+Here are the current test results:
+!`npm test`
+
+Based on these results, suggest improvements to increase coverage.
+```
+
+或者查看最近的變更：
+
+```md title=".opencode/commands/review-changes.md"
+---
+description: Review recent changes
+---
+
+Recent git commits:
+!`git log --oneline -10`
+
+Review these changes and suggest any improvements.
+```
+
+指令在專案的根目錄中執行，其輸出會成為提示詞的一部分。
+
+---
+
+### 檔案參照
+
+使用 `@` 後跟檔案名稱在指令中參照檔案。
+
+```md title=".opencode/commands/review-component.md"
+---
+description: Review component
+---
+
+Review the component in @src/components/Button.tsx.
+Check for performance issues and suggest improvements.
+```
+
+檔案內容會自動包含在提示詞中。
+
+---
+
+## 選項
+
+讓我們詳細了解各設定選項。
+
+---
+
+### Template
+
+`template` 選項定義執行指令時傳送給 LLM 的提示詞。
+
+```json title="opencode.json"
+{
+  "command": {
+    "test": {
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes."
+    }
+  }
+}
+```
+
+這是一個**必需的**設定選項。
+
+---
+
+### Description
+
+使用 `description` 選項提供指令功能的簡要說明。
+
+```json title="opencode.json"
+{
+  "command": {
+    "test": {
+      "description": "Run tests with coverage"
+    }
+  }
+}
+```
+
+當您輸入指令時，這將在 TUI 中顯示為說明。
+
+---
+
+### Agent
+
+使用 `agent` 設定可選擇指定由哪個[代理](/docs/agents)執行此指令。
+如果這是一個[子代理](/docs/agents/#subagents)，該指令預設會觸發子代理呼叫。
+要停用此行為，請將 `subtask` 設定為 `false`。
+
+```json title="opencode.json"
+{
+  "command": {
+    "review": {
+      "agent": "plan"
+    }
+  }
+}
+```
+
+這是一個**可選的**設定選項。如果未指定，預設使用您當前的代理。
+
+---
+
+### Subtask
+
+使用 `subtask` 布林值強制指令觸發[子代理](/docs/agents/#subagents)呼叫。
+如果您希望指令不污染主要上下文，這會很有用，它會**強制**代理作為子代理執行，
+即使[代理](/docs/agents)設定中的 `mode` 設定為 `primary`。
+
+```json title="opencode.json"
+{
+  "command": {
+    "analyze": {
+      "subtask": true
+    }
+  }
+}
+```
+
+這是一個**可選的**設定選項。
+
+---
+
+### Model
+
+使用 `model` 設定覆寫此指令的預設模型。
+
+```json title="opencode.json"
+{
+  "command": {
+    "analyze": {
+      "model": "anthropic/claude-3-5-sonnet-20241022"
+    }
+  }
+}
+```
+
+這是一個**可選的**設定選項。
+
+---
+
+## 內建指令
+
+OpenCode 包含多個內建指令，如 `/init`、`/undo`、`/redo`、`/share`、`/help`；[了解更多](/docs/tui#commands)。
+
+:::note
+自訂指令可以覆寫內建指令。
+:::
+
+如果您定義了同名的自訂指令，它將覆寫內建指令。

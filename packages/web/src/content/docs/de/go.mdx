@@ -1,0 +1,145 @@
+---
+title: Go
+description: Kostengünstiges Abonnement für Open-Coding-Modelle.
+---
+
+import config from "../../../../config.mjs"
+export const console = config.console
+export const email = `mailto:${config.email}`
+
+OpenCode Go ist ein kostengünstiges Abonnement für **10 $/Monat**, das dir zuverlässigen Zugriff auf beliebte Open-Coding-Modelle bietet.
+
+:::note
+OpenCode Go befindet sich derzeit in der Beta-Phase.
+:::
+
+Go funktioniert wie jeder andere Anbieter in OpenCode. Du abonnierst OpenCode Go und erhältst deinen API-Schlüssel. Es ist **völlig optional** und du musst es nicht nutzen, um OpenCode zu verwenden.
+
+Es wurde primär für internationale Nutzer entwickelt, mit Modellen, die in den USA, der EU und Singapur gehostet werden, um einen stabilen weltweiten Zugriff zu gewährleisten.
+
+---
+
+## Hintergrund
+
+Offene Modelle sind wirklich gut geworden. Sie erreichen bei Coding-Aufgaben mittlerweile eine Leistung, die der von proprietären Modellen nahekommt. Und da viele Anbieter sie wettbewerbsfähig bereitstellen können, sind sie in der Regel deutlich günstiger.
+
+Es kann jedoch schwierig sein, einen zuverlässigen Zugang mit niedriger Latenz zu erhalten. Die Anbieter variieren in Qualität und Verfügbarkeit.
+
+:::tip
+Wir haben eine ausgewählte Gruppe von Modellen und Anbietern getestet, die gut mit OpenCode funktionieren.
+:::
+
+Um dies zu lösen, haben wir einige Dinge getan:
+
+1. Wir haben eine ausgewählte Gruppe offener Modelle getestet und mit deren Teams darüber gesprochen, wie man sie am besten betreibt.
+2. Anschließend haben wir mit einigen Anbietern zusammengearbeitet, um sicherzustellen, dass diese korrekt bereitgestellt werden.
+3. Schließlich haben wir die Kombination aus Modell und Anbieter einem Benchmark unterzogen und eine Liste erstellt, die wir guten Gewissens empfehlen können.
+
+OpenCode Go gibt dir Zugriff auf diese Modelle für **10 $/Monat**.
+
+---
+
+## Wie es funktioniert
+
+OpenCode Go funktioniert wie jeder andere Anbieter in OpenCode.
+
+1. Du meldest dich bei **<a href={console}>OpenCode Zen</a>** an, abonnierst Go und kopierst deinen API-Schlüssel.
+2. Du führst den Befehl `/connect` in der TUI aus, wählst `OpenCode Go` und fügst deinen API-Schlüssel ein.
+3. Führe `/models` in der TUI aus, um die Liste der über Go verfügbaren Modelle zu sehen.
+
+:::note
+Nur ein Mitglied pro Workspace kann OpenCode Go abonnieren.
+:::
+
+Die aktuelle Liste der Modelle umfasst:
+
+- **GLM-5**
+- **Kimi K2.5**
+- **MiniMax M2.5**
+
+Die Liste der Modelle kann sich ändern, wenn wir neue testen und hinzufügen.
+
+---
+
+## Nutzungslimits
+
+OpenCode Go beinhaltet die folgenden Limits:
+
+- **5-Stunden-Limit** — 12 $ Nutzung
+- **Wöchentliches Limit** — 30 $ Nutzung
+- **Monatliches Limit** — 60 $ Nutzung
+
+Die Limits sind in Dollarwerten definiert. Das bedeutet, dass deine tatsächliche Anzahl an Anfragen von dem verwendeten Modell abhängt. Günstigere Modelle wie MiniMax M2.5 ermöglichen mehr Anfragen, während kostenintensivere Modelle wie GLM-5 weniger zulassen.
+
+Die untenstehende Tabelle bietet eine geschätzte Anzahl an Anfragen basierend auf typischen Go-Nutzungsmustern:
+
+|                     | GLM-5 | Kimi K2.5 | MiniMax M2.5 |
+| ------------------- | ----- | --------- | ------------ |
+| Anfragen pro 5 Std. | 1.150 | 1.850     | 30.000       |
+| Anfragen pro Woche  | 2.880 | 4.630     | 75.000       |
+| Anfragen pro Monat  | 5.750 | 9.250     | 150.000      |
+
+Die Schätzungen basieren auf beobachteten durchschnittlichen Nutzungsmustern:
+
+- GLM-5 — 700 Input-, 52.000 Cached-, 150 Output-Token pro Anfrage
+- Kimi K2.5 — 870 Input-, 55.000 Cached-, 200 Output-Token pro Anfrage
+- MiniMax M2.5 — 300 Input-, 55.000 Cached-, 125 Output-Token pro Anfrage
+
+Du kannst deine aktuelle Nutzung in der **<a href={console}>Konsole</a>** verfolgen.
+
+:::tip
+Wenn du das Nutzungslimit erreichst, kannst du weiterhin die kostenlosen Modelle verwenden.
+:::
+
+Nutzungslimits können sich ändern, da wir aus der frühen Nutzung und dem Feedback lernen.
+
+---
+
+### Preise
+
+OpenCode Go ist ein Abonnementplan für **10 $/Monat**. Unten stehen die Preise **pro 1 Mio. Token**.
+
+| Modell       | Input  | Output | Cached Read |
+| ------------ | ------ | ------ | ----------- |
+| GLM-5        | 1,00 $ | 3,20 $ | 0,20 $      |
+| Kimi K2.5    | 0,60 $ | 3,00 $ | 0,10 $      |
+| MiniMax M2.5 | 0,30 $ | 1,20 $ | 0,03 $      |
+
+---
+
+### Nutzung über Limits hinaus
+
+Wenn du auch Guthaben auf deinem Zen-Konto hast, kannst du die Option **Use balance** in der Konsole aktivieren. Wenn aktiviert, greift Go auf dein Zen-Guthaben zurück, nachdem du deine Nutzungslimits erreicht hast, anstatt Anfragen zu blockieren.
+
+---
+
+## Endpunkte
+
+Du kannst auch über die folgenden API-Endpunkte auf Go-Modelle zugreifen.
+
+| Modell       | Modell-ID    | Endpunkt                                         | AI SDK Paket                |
+| ------------ | ------------ | ------------------------------------------------ | --------------------------- |
+| GLM-5        | glm-5        | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K2.5    | kimi-k2.5    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiniMax M2.5 | minimax-m2.5 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+
+Die [Modell-ID](/docs/config/#models) in deiner OpenCode-Konfiguration verwendet das Format `opencode-go/<model-id>`. Zum Beispiel würdest du für Kimi K2.5 `opencode-go/kimi-k2.5` in deiner Konfiguration verwenden.
+
+---
+
+## Datenschutz
+
+Der Plan wurde primär für internationale Nutzer entwickelt, mit Modellen, die in den USA, der EU und Singapur gehostet werden, um einen stabilen weltweiten Zugriff zu gewährleisten.
+
+<a href={email}>Kontaktiere uns</a>, wenn du Fragen hast.
+
+---
+
+## Ziele
+
+Wir haben OpenCode Go erstellt, um:
+
+1. AI-Coding für mehr Menschen durch ein kostengünstiges Abonnement **zugänglich** zu machen.
+2. **Zuverlässigen** Zugriff auf die besten Open-Coding-Modelle zu bieten.
+3. Modelle zu kuratieren, die für den Einsatz von Coding-Agents **getestet und gebenchmarkt** sind.
+4. **Keinen Lock-in** zu haben, indem wir dir ermöglichen, jeden anderen Anbieter ebenfalls mit OpenCode zu nutzen.
