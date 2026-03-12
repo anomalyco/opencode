@@ -1,11 +1,12 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
+import { SessionID, MessageID } from "@/session/schema"
 import z from "zod"
 import { Log } from "../util/log"
-import { Identifier } from "../id/id"
 import { Plugin } from "../plugin"
 import { Instance } from "../project/instance"
 import { Wildcard } from "../util/wildcard"
+import { PermissionID } from "./schema"
 
 export namespace Permission {
   const log = Log.create({ service: "permission" })
@@ -21,11 +22,11 @@ export namespace Permission {
 
   export const Info = z
     .object({
-      id: z.string(),
+      id: PermissionID.zod,
       type: z.string(),
       pattern: z.union([z.string(), z.array(z.string())]).optional(),
-      sessionID: z.string(),
-      messageID: z.string(),
+      sessionID: SessionID.zod,
+      messageID: MessageID.zod,
       callID: z.string().optional(),
       message: z.string(),
       metadata: z.record(z.string(), z.any()),
@@ -43,8 +44,8 @@ export namespace Permission {
     Replied: BusEvent.define(
       "permission.replied",
       z.object({
-        sessionID: z.string(),
-        permissionID: z.string(),
+        sessionID: SessionID.zod,
+        permissionID: PermissionID.zod,
         response: z.string(),
       }),
     ),
@@ -117,7 +118,7 @@ export namespace Permission {
     const keys = toKeys(input.pattern, input.type)
     if (covered(keys, approvedForSession)) return
     const info: Info = {
-      id: Identifier.ascending("permission"),
+      id: PermissionID.ascending(),
       type: input.type,
       pattern: input.pattern,
       sessionID: input.sessionID,

@@ -1,4 +1,5 @@
 import { BusEvent } from "@/bus/bus-event"
+import { SessionID, MessageID } from "@/session/schema"
 import z from "zod"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
@@ -14,9 +15,9 @@ export namespace Command {
       "command.executed",
       z.object({
         name: z.string(),
-        sessionID: Identifier.schema("session"),
+        sessionID: SessionID.zod,
         arguments: z.string(),
-        messageID: Identifier.schema("message"),
+        messageID: MessageID.zod,
       }),
     ),
   }

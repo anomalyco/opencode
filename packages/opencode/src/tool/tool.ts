@@ -2,6 +2,7 @@ import z from "zod"
 import type { MessageV2 } from "../session/message-v2"
 import type { Agent } from "../agent/agent"
 import type { PermissionNext } from "../permission/next"
+import type { SessionID, MessageID } from "../session/schema"
 import { Truncate } from "./truncation"
 
 export namespace Tool {
@@ -14,8 +15,8 @@ export namespace Tool {
   }
 
   export type Context<M extends Metadata = Metadata> = {
-    sessionID: string
-    messageID: string
+    sessionID: SessionID
+    messageID: MessageID
     agent: string
     abort: AbortSignal
     callID?: string
