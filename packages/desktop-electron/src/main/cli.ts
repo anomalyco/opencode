@@ -107,7 +107,7 @@ export function syncCli() {
 
   let version = ""
   try {
-    version = execFileSync(installPath, ["--version"]).toString().trim()
+    version = execFileSync(installPath, ["--version"], { windowsHide: true }).toString().trim()
   } catch {
     return
   }
@@ -147,7 +147,7 @@ export function spawnCommand(args: string, extraEnv: Record<string, string>) {
   console.log(`[cli] Executing: ${cmd} ${cmdArgs.join(" ")}`)
   const child = spawn(cmd, cmdArgs, {
     env: envs,
-    detached: true,
+    detached: process.platform !== "win32",
     windowsHide: true,
     stdio: ["ignore", "pipe", "pipe"],
   })

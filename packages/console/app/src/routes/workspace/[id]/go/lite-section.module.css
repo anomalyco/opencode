@@ -167,6 +167,11 @@
     color: var(--color-text-secondary);
     line-height: 1.5;
     margin-top: var(--space-2);
+
+    strong {
+      color: var(--color-text);
+      font-weight: 600;
+    }
   }
 
   [data-slot="promo-models-title"] {

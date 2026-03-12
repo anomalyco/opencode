@@ -77,7 +77,7 @@ function cacheThemeVariants(theme: DesktopTheme, themeId: string) {
 
 export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   name: "Theme",
-  init: (props: { defaultTheme?: string }) => {
+  init: (props: { defaultTheme?: string; onThemeApplied?: (theme: DesktopTheme, mode: "light" | "dark") => void }) => {
     const [store, setStore] = createStore({
       themes: DEFAULT_THEMES as Record<string, DesktopTheme>,
       themeId: normalize(props.defaultTheme) ?? "oc-2",
@@ -119,10 +119,15 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       }
     })
 
+    const applyTheme = (theme: DesktopTheme, themeId: string, mode: "light" | "dark") => {
+      applyThemeCss(theme, themeId, mode)
+      props.onThemeApplied?.(theme, mode)
+    }
+
     createEffect(() => {
       const theme = store.themes[store.themeId]
       if (theme) {
-        applyThemeCss(theme, store.themeId, store.mode)
+        applyTheme(theme, store.themeId, store.mode)
       }
     })
 
@@ -171,7 +176,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
             ? getSystemMode()
             : store.previewScheme
           : store.mode
-        applyThemeCss(theme, next, previewMode)
+        applyTheme(theme, next, previewMode)
       },
       previewColorScheme: (scheme: ColorScheme) => {
         setStore("previewScheme", scheme)
@@ -179,7 +184,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
         const id = store.previewThemeId ?? store.themeId
         const theme = store.themes[id]
         if (theme) {
-          applyThemeCss(theme, id, previewMode)
+          applyTheme(theme, id, previewMode)
         }
       },
       commitPreview: () => {
@@ -197,7 +202,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
         setStore("previewScheme", null)
         const theme = store.themes[store.themeId]
         if (theme) {
-          applyThemeCss(theme, store.themeId, store.mode)
+          applyTheme(theme, store.themeId, store.mode)
         }
       },
     }

@@ -131,6 +131,7 @@ declare module "sst" {
       "value": string
     }
     "ZEN_LITE_PRICE": {
+      "firstMonth50Coupon": string
       "price": string
       "product": string
       "type": "sst.sst.Linkable"
