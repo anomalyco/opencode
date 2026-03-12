@@ -62,6 +62,9 @@ declare global {
       deepLinks?: string[]
       wsl?: boolean
     }
+    api?: {
+      setTitlebar?: (theme: { mode: "light" | "dark" }) => Promise<void>
+    }
   }
 }
 
@@ -115,7 +118,11 @@ export function AppBaseProviders(props: ParentProps) {
   return (
     <MetaProvider>
       <Font />
-      <ThemeProvider>
+      <ThemeProvider
+        onThemeApplied={(_, mode) => {
+          void window.api?.setTitlebar?.({ mode })
+        }}
+      >
         <LanguageProvider>
           <UiI18nBridge>
             <ErrorBoundary fallback={(error) => <ErrorPage error={error} />}>
