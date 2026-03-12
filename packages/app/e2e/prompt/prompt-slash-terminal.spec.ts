@@ -19,11 +19,16 @@ test("/terminal toggles the terminal panel", async ({ page, gotoSession }) => {
   // which can steal focus from the prompt and prevent fill() from triggering
   // the slash popover. Re-attempt click+fill until all retries are exhausted
   // and the popover appears.
-  await expect.poll(async () => {
-    await prompt.click().catch(() => false)
-    await prompt.fill("/terminal").catch(() => false)
-    return slash.isVisible().catch(() => false)
-  }, { timeout: 10_000 }).toBe(true)
+  await expect
+    .poll(
+      async () => {
+        await prompt.click().catch(() => false)
+        await prompt.fill("/terminal").catch(() => false)
+        return slash.isVisible().catch(() => false)
+      },
+      { timeout: 10_000 },
+    )
+    .toBe(true)
   await page.keyboard.press("Enter")
   await expect(terminal).not.toBeVisible()
 })
