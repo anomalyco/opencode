@@ -1,10 +1,10 @@
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
-import { Identifier } from "@/id/id"
 import { SessionID, MessageID } from "@/session/schema"
 import { Instance } from "@/project/instance"
 import { Log } from "@/util/log"
 import z from "zod"
+import { QuestionID } from "./schema"
 
 export namespace Question {
   const log = Log.create({ service: "question" })
@@ -34,7 +34,7 @@ export namespace Question {
 
   export const Request = z
     .object({
-      id: Identifier.schema("question"),
+      id: QuestionID.zod,
       sessionID: SessionID.zod,
       questions: z.array(Info).describe("Questions to ask"),
       tool: z
@@ -67,7 +67,7 @@ export namespace Question {
       "question.replied",
       z.object({
         sessionID: SessionID.zod,
-        requestID: z.string(),
+        requestID: QuestionID.zod,
         answers: z.array(Answer),
       }),
     ),
@@ -75,7 +75,7 @@ export namespace Question {
       "question.rejected",
       z.object({
         sessionID: SessionID.zod,
-        requestID: z.string(),
+        requestID: QuestionID.zod,
       }),
     ),
   }
@@ -101,7 +101,7 @@ export namespace Question {
     tool?: { messageID: MessageID; callID: string }
   }): Promise<Answer[]> {
     const s = await state()
-    const id = Identifier.ascending("question")
+    const id = QuestionID.ascending()
 
     log.info("asking", { id, questions: input.questions.length })
 
