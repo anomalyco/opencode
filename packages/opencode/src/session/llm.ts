@@ -215,7 +215,7 @@ export namespace LLM {
             }
           : input.model.providerID !== "anthropic"
             ? {
-                "User-Agent": `Mammouth-Code/${Installation.VERSION}`,
+                "User-Agent": `mammouth-code/${Installation.VERSION}`,
               }
             : undefined),
         ...input.model.headers,

@@ -136,8 +136,8 @@ async function showRemovalSummary(targets: RemovalTargets, method: Installation.
       brew: "brew uninstall mammouth",
       choco: "choco uninstall mammouth",
       scoop: "scoop uninstall mammouth",
-      paru: "paru -R mammouth-code",
-      yay: "yay -R mammouth-code",
+      paru: "paru -R mammouth",
+      yay: "yay -R mammouth",
     }
     prompts.log.info(`  ✓ Package: ${cmds[method] || method}`)
   }
@@ -189,8 +189,8 @@ async function executeUninstall(method: Installation.Method, targets: RemovalTar
       brew: ["brew", "uninstall", "mammouth"],
       choco: ["choco", "uninstall", "mammouth"],
       scoop: ["scoop", "uninstall", "mammouth"],
-      paru: ["paru", "-R", "mammouth-code"],
-      yay: ["yay", "-R", "mammouth-code"],
+      paru: ["paru", "-R", "mammouth"],
+      yay: ["yay", "-R", "mammouth"],
     }
 
     const cmd = cmds[method]
