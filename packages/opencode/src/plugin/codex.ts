@@ -377,7 +377,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
         if (!provider.models["gpt-5.3-codex"]) {
           const model = {
             id: ModelID.make("gpt-5.3-codex"),
-            providerID: ProviderID.make("openai"),
+            providerID: ProviderID.openai,
             api: {
               id: "gpt-5.3-codex",
               url: "https://chatgpt.com/backend-api/codex",
