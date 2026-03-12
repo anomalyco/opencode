@@ -154,7 +154,7 @@ describe("session.message-v2.toModelMessage", () => {
     expect(MessageV2.toModelMessages(input, model)).toStrictEqual([])
   })
 
-  test("includes synthetic text parts", () => {
+  test("keeps synthetic user text but drops synthetic assistant text", () => {
     const messageID = "m-user"
 
     const input: MessageV2.WithParts[] = [
@@ -186,10 +186,6 @@ describe("session.message-v2.toModelMessage", () => {
       {
         role: "user",
         content: [{ type: "text", text: "hello" }],
-      },
-      {
-        role: "assistant",
-        content: [{ type: "text", text: "assistant" }],
       },
     ])
   })
