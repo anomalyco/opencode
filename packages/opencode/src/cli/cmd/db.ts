@@ -5,7 +5,7 @@ import { Database as BunDatabase } from "bun:sqlite"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
 import { JsonMigration } from "../../storage/json-migration"
-import { EOL } from "os"
+import { EOL, constants } from "os"
 
 const QueryCommand = cmd({
   command: "$0 [query]",
@@ -24,14 +24,16 @@ const QueryCommand = cmd({
       })
   },
   handler: async (args: { query?: string; format: string }) => {
-    const query = args.query as string | undefined
+    const query = args.query
     if (query) {
       const db = new BunDatabase(Database.Path, { readonly: true })
       try {
         const result = db.query(query).all() as Record<string, unknown>[]
         if (args.format === "json") {
           console.log(JSON.stringify(result, null, 2))
-        } else if (result.length > 0) {
+          return
+        }
+        if (result.length > 0) {
           const keys = Object.keys(result[0])
           console.log(keys.join("\t"))
           for (const row of result) {
@@ -41,14 +43,55 @@ const QueryCommand = cmd({
       } catch (err) {
         UI.error(err instanceof Error ? err.message : String(err))
         process.exit(1)
+      } finally {
+        db.close()
       }
-      db.close()
       return
     }
     const child = spawn("sqlite3", [Database.Path], {
       stdio: "inherit",
     })
-    await new Promise((resolve) => child.on("close", resolve))
+
+    const tty = process.stdin.isTTY
+    const hups = process.listeners("SIGHUP")
+    const noop = () => {}
+    const int = tty ? noop : () => child.kill("SIGINT")
+    const quit = tty ? noop : () => child.kill("SIGQUIT")
+    const term = () => child.kill("SIGTERM")
+    const hup = () => child.kill("SIGHUP")
+    process.on("SIGINT", int)
+    process.on("SIGQUIT", quit)
+    process.on("SIGTERM", term)
+    hups.forEach((fn) => process.off("SIGHUP", fn))
+    process.on("SIGHUP", hup)
+
+    const result = await new Promise<
+      { kind: "error"; err: Error } | { kind: "close"; code: number | null; sig: NodeJS.Signals | null }
+    >((resolve) => {
+      child.once("error", (err) => resolve({ kind: "error", err }))
+      child.once("close", (code, sig) => resolve({ kind: "close", code, sig }))
+    }).finally(() => {
+      process.off("SIGINT", int)
+      process.off("SIGQUIT", quit)
+      process.off("SIGTERM", term)
+      process.off("SIGHUP", hup)
+      hups.forEach((fn) => process.on("SIGHUP", fn))
+    })
+
+    if (result.kind === "error") {
+      UI.error(`Failed to start sqlite3: ${result.err.message}`)
+      process.exit(1)
+    }
+
+    if (result.sig) {
+      const code = constants.signals[result.sig]
+      if (result.sig === "SIGHUP") process.exit(code ? 128 + code : 1)
+      setTimeout(() => process.exit(code ? 128 + code : 1), 50)
+      process.kill(process.pid, result.sig)
+      return
+    }
+
+    if (result.code != null && result.code !== 0) process.exit(result.code)
   },
 })
 
