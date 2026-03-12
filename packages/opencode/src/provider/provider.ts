@@ -761,7 +761,7 @@ export namespace Provider {
         input: model.cost?.input ?? 0,
         output: model.cost?.output ?? 0,
         cache: {
-          read: model.cost?.cache_read ?? 0,
+          read: model.cost?.cache_read ?? model.cost?.input ?? 0,
           write: model.cost?.cache_write ?? 0,
         },
         experimentalOver200K: model.cost?.context_over_200k
@@ -922,7 +922,12 @@ export namespace Provider {
             input: model?.cost?.input ?? existingModel?.cost?.input ?? 0,
             output: model?.cost?.output ?? existingModel?.cost?.output ?? 0,
             cache: {
-              read: model?.cost?.cache_read ?? existingModel?.cost?.cache.read ?? 0,
+              read:
+                model?.cost?.cache_read ??
+                existingModel?.cost?.cache.read ??
+                model?.cost?.input ??
+                existingModel?.cost?.input ??
+                0,
               write: model?.cost?.cache_write ?? existingModel?.cost?.cache.write ?? 0,
             },
           },

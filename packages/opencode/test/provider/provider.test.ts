@@ -493,6 +493,98 @@ test("model cost defaults to zero when not specified", async () => {
   })
 })
 
+test("cache read cost falls back to input cost when not specified", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "test-provider": {
+              name: "Test Provider",
+              npm: "@ai-sdk/openai-compatible",
+              env: [],
+              models: {
+                "test-model": {
+                  name: "Test Model",
+                  tool_call: true,
+                  limit: { context: 128000, output: 4096 },
+                  cost: {
+                    input: 5,
+                    output: 15,
+                  },
+                },
+              },
+              options: {
+                apiKey: "test-key",
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await Provider.list()
+      const model = providers[ProviderID.make("test-provider")].models["test-model"]
+      expect(model.cost.input).toBe(5)
+      expect(model.cost.output).toBe(15)
+      expect(model.cost.cache.read).toBe(5)
+      expect(model.cost.cache.write).toBe(0)
+    },
+  })
+})
+
+test("cache read cost uses explicit value when provided", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "test-provider": {
+              name: "Test Provider",
+              npm: "@ai-sdk/openai-compatible",
+              env: [],
+              models: {
+                "test-model": {
+                  name: "Test Model",
+                  tool_call: true,
+                  limit: { context: 128000, output: 4096 },
+                  cost: {
+                    input: 5,
+                    output: 15,
+                    cache_read: 1,
+                    cache_write: 2,
+                  },
+                },
+              },
+              options: {
+                apiKey: "test-key",
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await Provider.list()
+      const model = providers[ProviderID.make("test-provider")].models["test-model"]
+      expect(model.cost.input).toBe(5)
+      expect(model.cost.output).toBe(15)
+      expect(model.cost.cache.read).toBe(1)
+      expect(model.cost.cache.write).toBe(2)
+    },
+  })
+})
+
 test("model options are merged from existing model", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
