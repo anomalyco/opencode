@@ -1,0 +1,268 @@
+{
+  "$schema": "https://opencode.ai/theme.json",
+  "defs": {
+    "ink": "#100F0F",
+    "char": "#100F0F",
+    "panel": "#1C1B1A",
+    "panel_hi": "#282726",
+    "menu": "#343331",
+    "line_soft": "#403E3C",
+    "line": "#575653",
+    "line_strong": "#6F6E69",
+    "text": "#e4e9ef",
+    "muted": "#7a8490",
+    "green": "#20e28f",
+    "green_soft": "#68f2b5",
+    "mint": "#63d8c1",
+    "lime": "#98ca5b",
+    "green_dim": "#169565",
+    "green_bg": "#0d2418",
+    "green_bg_soft": "#113021",
+    "orange": "#f5a13a",
+    "orange_soft": "#ffc877",
+    "amber": "#ffbf69",
+    "orange_dim": "#bf7724",
+    "orange_bg": "#2b1b0d",
+    "orange_bg_soft": "#372314",
+    "red": "#ff6b6b",
+    "red_soft": "#ff9d9d",
+    "red_bg": "#311417",
+    "red_bg_soft": "#3a1a1e",
+    "cyan": "#67d6fb",
+    "cyan_soft": "#9feaff",
+    "blue_bg": "#0a131a",
+    "paper": "#f7f4ed",
+    "paper_panel": "#efebe0",
+    "paper_hi": "#e2ddd0",
+    "paper_menu": "#d8d2c4",
+    "paper_line": "#c2baa9",
+    "paper_line_strong": "#a89f8c",
+    "paper_text": "#191714",
+    "paper_muted": "#6f6858",
+    "paper_green": "#118f59",
+    "paper_green_soft": "#18a969",
+    "paper_mint": "#147f74",
+    "paper_lime": "#6a861c",
+    "paper_green_bg": "#ddf3e6",
+    "paper_orange": "#ae6416",
+    "paper_orange_soft": "#c97825",
+    "paper_amber": "#ba7421",
+    "paper_orange_bg": "#f5e2d0",
+    "paper_red": "#c24a4a",
+    "paper_red_soft": "#dd6a6a",
+    "paper_red_bg": "#f5dddd",
+    "paper_cyan": "#0d7f9a",
+    "paper_blue_bg": "#e6edf2"
+  },
+  "theme": {
+    "primary": {
+      "dark": "green",
+      "light": "paper_green"
+    },
+    "secondary": {
+      "dark": "mint",
+      "light": "paper_mint"
+    },
+    "accent": {
+      "dark": "orange",
+      "light": "paper_orange"
+    },
+    "error": {
+      "dark": "red",
+      "light": "paper_red"
+    },
+    "warning": {
+      "dark": "amber",
+      "light": "paper_amber"
+    },
+    "success": {
+      "dark": "lime",
+      "light": "paper_lime"
+    },
+    "info": {
+      "dark": "cyan",
+      "light": "paper_cyan"
+    },
+    "text": {
+      "dark": "text",
+      "light": "paper_text"
+    },
+    "textMuted": {
+      "dark": "muted",
+      "light": "paper_muted"
+    },
+    "selectedListItemText": {
+      "dark": "char",
+      "light": "paper_text"
+    },
+    "background": {
+      "dark": "ink",
+      "light": "paper"
+    },
+    "backgroundPanel": {
+      "dark": "panel",
+      "light": "paper_panel"
+    },
+    "backgroundElement": {
+      "dark": "panel_hi",
+      "light": "paper_hi"
+    },
+    "backgroundMenu": {
+      "dark": "menu",
+      "light": "paper_menu"
+    },
+    "border": {
+      "dark": "line",
+      "light": "paper_line"
+    },
+    "borderActive": {
+      "dark": "green",
+      "light": "paper_green_soft"
+    },
+    "borderSubtle": {
+      "dark": "line_soft",
+      "light": "paper_line"
+    },
+    "diffAdded": {
+      "dark": "green",
+      "light": "paper_green"
+    },
+    "diffRemoved": {
+      "dark": "red",
+      "light": "paper_red"
+    },
+    "diffContext": {
+      "dark": "muted",
+      "light": "paper_muted"
+    },
+    "diffHunkHeader": {
+      "dark": "cyan",
+      "light": "paper_cyan"
+    },
+    "diffHighlightAdded": {
+      "dark": "green_soft",
+      "light": "paper_green_soft"
+    },
+    "diffHighlightRemoved": {
+      "dark": "red_soft",
+      "light": "paper_red_soft"
+    },
+    "diffAddedBg": {
+      "dark": "green_bg",
+      "light": "paper_green_bg"
+    },
+    "diffRemovedBg": {
+      "dark": "red_bg",
+      "light": "paper_red_bg"
+    },
+    "diffContextBg": {
+      "dark": "panel",
+      "light": "paper_blue_bg"
+    },
+    "diffLineNumber": {
+      "dark": "muted",
+      "light": "paper_muted"
+    },
+    "diffAddedLineNumberBg": {
+      "dark": "green_bg_soft",
+      "light": "paper_green_bg"
+    },
+    "diffRemovedLineNumberBg": {
+      "dark": "red_bg_soft",
+      "light": "paper_red_bg"
+    },
+    "markdownText": {
+      "dark": "text",
+      "light": "paper_text"
+    },
+    "markdownHeading": {
+      "dark": "orange",
+      "light": "paper_orange"
+    },
+    "markdownLink": {
+      "dark": "cyan",
+      "light": "paper_cyan"
+    },
+    "markdownLinkText": {
+      "dark": "green_soft",
+      "light": "paper_green"
+    },
+    "markdownCode": {
+      "dark": "green_soft",
+      "light": "paper_green"
+    },
+    "markdownBlockQuote": {
+      "dark": "orange",
+      "light": "paper_orange"
+    },
+    "markdownEmph": {
+      "dark": "orange",
+      "light": "paper_orange"
+    },
+    "markdownStrong": {
+      "dark": "text",
+      "light": "paper_text"
+    },
+    "markdownHorizontalRule": {
+      "dark": "line_strong",
+      "light": "paper_line_strong"
+    },
+    "markdownListItem": {
+      "dark": "orange",
+      "light": "paper_orange"
+    },
+    "markdownListEnumeration": {
+      "dark": "orange_soft",
+      "light": "paper_orange_soft"
+    },
+    "markdownImage": {
+      "dark": "cyan",
+      "light": "paper_cyan"
+    },
+    "markdownImageText": {
+      "dark": "green_soft",
+      "light": "paper_green"
+    },
+    "markdownCodeBlock": {
+      "dark": "text",
+      "light": "paper_text"
+    },
+    "syntaxComment": {
+      "dark": "muted",
+      "light": "paper_muted"
+    },
+    "syntaxKeyword": {
+      "dark": "orange",
+      "light": "paper_orange"
+    },
+    "syntaxFunction": {
+      "dark": "green_soft",
+      "light": "paper_green_soft"
+    },
+    "syntaxVariable": {
+      "dark": "text",
+      "light": "paper_text"
+    },
+    "syntaxString": {
+      "dark": "green",
+      "light": "paper_green"
+    },
+    "syntaxNumber": {
+      "dark": "orange_soft",
+      "light": "paper_orange_soft"
+    },
+    "syntaxType": {
+      "dark": "cyan",
+      "light": "paper_cyan"
+    },
+    "syntaxOperator": {
+      "dark": "orange",
+      "light": "paper_orange"
+    },
+    "syntaxPunctuation": {
+      "dark": "text",
+      "light": "paper_text"
+    },
+    "thinkingOpacity": 0.64
+  }
+}

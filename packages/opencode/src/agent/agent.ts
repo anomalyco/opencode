@@ -78,6 +78,7 @@ export namespace Agent {
       build: {
         name: "build",
         description: "The default agent. Executes tools based on configured permissions.",
+        color: "primary",
         options: {},
         permission: PermissionNext.merge(
           defaults,
@@ -93,6 +94,7 @@ export namespace Agent {
       plan: {
         name: "plan",
         description: "Plan mode. Disallows all edit tools.",
+        color: "accent",
         options: {},
         permission: PermissionNext.merge(
           defaults,
@@ -116,6 +118,7 @@ export namespace Agent {
       general: {
         name: "general",
         description: `General-purpose agent for researching complex questions and executing multi-step tasks. Use this agent to execute multiple units of work in parallel.`,
+        color: "secondary",
         permission: PermissionNext.merge(
           defaults,
           PermissionNext.fromConfig({
@@ -130,6 +133,7 @@ export namespace Agent {
       },
       explore: {
         name: "explore",
+        color: "info",
         permission: PermissionNext.merge(
           defaults,
           PermissionNext.fromConfig({
