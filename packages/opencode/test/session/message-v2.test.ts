@@ -2,11 +2,14 @@ import { describe, expect, test } from "bun:test"
 import { APICallError } from "ai"
 import { MessageV2 } from "../../src/session/message-v2"
 import type { Provider } from "../../src/provider/provider"
+import { ModelID, ProviderID } from "../../src/provider/schema"
+import { SessionID, MessageID, PartID } from "../../src/session/schema"
 
-const sessionID = "session"
+const sessionID = SessionID.make("session")
+const providerID = ProviderID.make("test")
 const model: Provider.Model = {
-  id: "test-model",
-  providerID: "test",
+  id: ModelID.make("test-model"),
+  providerID,
   api: {
     id: "test-model",
     url: "https://example.com",
@@ -60,7 +63,7 @@ function userInfo(id: string): MessageV2.User {
     role: "user",
     time: { created: 0 },
     agent: "user",
-    model: { providerID: "test", modelID: "test" },
+    model: { providerID, modelID: ModelID.make("test") },
     tools: {},
     mode: "",
   } as unknown as MessageV2.User
@@ -97,9 +100,9 @@ function assistantInfo(
 
 function basePart(messageID: string, id: string) {
   return {
-    id,
+    id: PartID.make(id),
     sessionID,
-    messageID,
+    messageID: MessageID.make(messageID),
   }
 }
 
@@ -928,7 +931,7 @@ describe("session.message-v2.fromError", () => {
         code: "context_length_exceeded",
       },
     }
-    const result = MessageV2.fromError(input, { providerID: "test" })
+    const result = MessageV2.fromError(input, { providerID })
 
     expect(result).toStrictEqual({
       name: "ContextOverflowError",
@@ -963,7 +966,7 @@ describe("session.message-v2.fromError", () => {
           message: item.code === "invalid_prompt" ? item.message : undefined,
         },
       }
-      const result = MessageV2.fromError(input, { providerID: "test" })
+      const result = MessageV2.fromError(input, { providerID })
 
       expect(result).toStrictEqual({
         name: "APIError",
@@ -995,7 +998,7 @@ describe("session.message-v2.fromError", () => {
         responseHeaders: { "content-type": "application/json" },
         isRetryable: false,
       })
-      const result = MessageV2.fromError(error, { providerID: "test" })
+      const result = MessageV2.fromError(error, { providerID })
       expect(MessageV2.ContextOverflowError.isInstance(result)).toBe(true)
     })
   })
@@ -1010,14 +1013,14 @@ describe("session.message-v2.fromError", () => {
         responseHeaders: { "content-type": "application/json" },
         isRetryable: false,
       }),
-      { providerID: "test" },
+      { providerID },
     )
     expect(MessageV2.ContextOverflowError.isInstance(result)).toBe(false)
     expect(MessageV2.APIError.isInstance(result)).toBe(true)
   })
 
   test("serializes unknown inputs", () => {
-    const result = MessageV2.fromError(123, { providerID: "test" })
+    const result = MessageV2.fromError(123, { providerID })
 
     expect(result).toStrictEqual({
       name: "UnknownError",
