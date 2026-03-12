@@ -52,7 +52,7 @@ import { useCommandDialog } from "@tui/component/dialog-command"
 import type { DialogContext } from "@tui/ui/dialog"
 import { useKeybind } from "@tui/context/keybind"
 import { Header } from "./header"
-import { parsePatch } from "diff"
+import { diffLines, parsePatch } from "diff"
 import { useDialog } from "../../ui/dialog"
 import { TodoItem } from "../../component/todo-item"
 import { DialogMessage } from "./dialog-message"
@@ -81,17 +81,18 @@ import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { formatTranscript } from "../../util/transcript"
 import { UI } from "@/cli/ui.ts"
 import { useTuiConfig } from "../../context/tui-config"
+import { DialogPrompt } from "../../ui/dialog-prompt.tsx"
 
 addDefaultParsers(parsers.parsers)
 
 class CustomSpeedScroll implements ScrollAcceleration {
-  constructor(private speed: number) {}
+  constructor(private speed: number) { }
 
   tick(_now?: number): number {
     return this.speed
   }
 
-  reset(): void {}
+  reset(): void { }
 }
 
 const context = createContext<{
@@ -510,7 +511,7 @@ export function Session() {
       },
       onSelect: async (dialog) => {
         const status = sync.data.session_status?.[route.sessionID]
-        if (status?.type !== "idle") await sdk.client.session.abort({ sessionID: route.sessionID }).catch(() => {})
+        if (status?.type !== "idle") await sdk.client.session.abort({ sessionID: route.sessionID }).catch(() => { })
         const revert = session()?.revert?.messageID
         const message = messages().findLast((x) => (!revert || x.id < revert) && x.role === "user")
         if (!message) return
@@ -614,6 +615,28 @@ export function Session() {
       onSelect: (dialog) => {
         setShowThinking((prev) => !prev)
         dialog.clear()
+      },
+    },
+    {
+      title: "Ask a quick question",
+      description: "Ask a quick question about your current work without adding to the conversation history.",
+      value: "session.btw",
+      keybind: "btw",
+      category: "Session",
+      slash: {
+        name: "btw",
+      },
+      onSelect: (dialog) => {
+        dialog.replace(() => (
+          <DialogPrompt
+            title="Btw Prompt"
+            placeholder="Ask a quick question"
+            onConfirm={(value) => {
+              console.log(value);
+              dialog.clear()
+            }}
+          />
+        ));
       },
     },
     {
