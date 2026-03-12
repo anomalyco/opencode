@@ -285,7 +285,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
           hideLabel
         />
         <div class="flex items-center gap-3">
-          <Button size="large" onClick={platform.restart}>
+          <Button size="large" onClick={platform.restart} disabled={store.clearing}>
             {language.t("error.page.action.restart")}
           </Button>
           <Show when={platform.clearCache}>

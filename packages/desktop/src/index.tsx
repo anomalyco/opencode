@@ -247,9 +247,15 @@ const createPlatform = (): Platform => {
           if (api) await api.clear().catch(() => undefined)
 
           const store = await Store.load(name).catch(() => null)
-          if (!store) return
-          await store.clear().catch(() => undefined)
-          await store.save().catch(() => undefined)
+          if (store) {
+            await store.clear().catch(() => undefined)
+            await store.save().catch(() => undefined)
+            return
+          }
+
+          const fresh = await Store.load(name, { defaults: {}, createNew: true }).catch(() => null)
+          if (!fresh) return
+          await fresh.save().catch(() => undefined)
         }),
       )
     }
@@ -330,7 +336,9 @@ const createPlatform = (): Platform => {
 
     clearCache: async () => {
       await disk.clear()
-      await getCurrentWebview().clearAllBrowsingData()
+      await getCurrentWebview()
+        .clearAllBrowsingData()
+        .catch(() => undefined)
       await reboot()
     },
 
