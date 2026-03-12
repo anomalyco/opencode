@@ -530,6 +530,11 @@ export const dict = {
   "session.todo.title": "Todos",
   "session.todo.collapse": "Collapse",
   "session.todo.expand": "Expand",
+  "session.revertDock.summary.one": "{{count}} rolled back message",
+  "session.revertDock.summary.other": "{{count}} rolled back messages",
+  "session.revertDock.collapse": "Collapse rolled back messages",
+  "session.revertDock.expand": "Expand rolled back messages",
+  "session.revertDock.restore": "Restore message",
 
   "session.new.title": "Build anything",
   "session.new.worktree.main": "Main branch",

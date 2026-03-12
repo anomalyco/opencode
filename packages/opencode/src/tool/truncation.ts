@@ -7,6 +7,7 @@ import type { Agent } from "../agent/agent"
 import { Scheduler } from "../scheduler"
 import { Filesystem } from "../util/filesystem"
 import { Glob } from "../util/glob"
+import { ToolID } from "./schema"
 
 export namespace Truncate {
   export const MAX_LINES = 2000
@@ -90,7 +91,7 @@ export namespace Truncate {
     const unit = hitBytes ? "bytes" : "lines"
     const preview = out.join("\n")
 
-    const id = Identifier.ascending("tool")
+    const id = ToolID.ascending()
     const filepath = path.join(DIR, id)
     await Filesystem.write(filepath, text)
 
