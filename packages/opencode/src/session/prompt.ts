@@ -237,7 +237,7 @@ export namespace SessionPrompt {
     return parts
   }
 
-  function start(sessionID: string) {
+  function start(sessionID: SessionID) {
     const s = state()
     if (s[sessionID]) return
     const controller = new AbortController()
@@ -248,7 +248,7 @@ export namespace SessionPrompt {
     return controller.signal
   }
 
-  function resume(sessionID: string) {
+  function resume(sessionID: SessionID) {
     const s = state()
     if (!s[sessionID]) return
 
