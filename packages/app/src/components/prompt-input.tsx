@@ -83,6 +83,7 @@ interface PromptInputProps {
   onQueue?: (draft: FollowupDraft) => void
   onAbort?: () => void
   onSubmit?: () => void
+  onSubmitted?: () => void
 }
 
 const EXAMPLES = [
@@ -1141,6 +1142,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     onQueue: props.onQueue,
     onAbort: props.onAbort,
     onSubmit: props.onSubmit,
+    onSubmitted: props.onSubmitted,
   })
 
   const handleKeyDown = (event: KeyboardEvent) => {

@@ -28,6 +28,7 @@ export function SessionComposerRegion(props: {
   onNewSessionWorktreeChange?: (worktree: string) => void
   onNewSessionWorktreeReset: () => void
   onSubmit: () => void
+  onSubmitted?: () => void
   onResponseSubmit: () => void
   followup?: {
     queue: () => boolean
@@ -249,50 +250,13 @@ export function SessionComposerRegion(props: {
                 "margin-top": `${-lift()}px`,
               }}
             >
-              <Show when={props.followup?.items.length}>
-                <SessionFollowupDock
-                  items={props.followup!.items}
-                  sending={props.followup!.sending}
-                  onSend={props.followup!.onSend}
-                  onEdit={props.followup!.onEdit}
-                />
-              </Show>
-              <Show
-                when={child()}
-                fallback={
-                  <Show when={!props.state.blocked()}>
-                    <PromptInput
-                      variant={props.placement === "inline" ? "new-session" : undefined}
-                      ref={props.inputRef}
-                      newSessionWorktree={props.newSessionWorktree}
-                      onNewSessionWorktreeChange={props.onNewSessionWorktreeChange}
-                      onNewSessionWorktreeReset={props.onNewSessionWorktreeReset}
-                      edit={props.followup?.edit}
-                      onEditLoaded={props.followup?.onEditLoaded}
-                      shouldQueue={props.followup?.queue}
-                      onQueue={props.followup?.onQueue}
-                      onAbort={props.followup?.onAbort}
-                      onSubmit={props.onSubmit}
-                    />
-                  </Show>
-                }
-              >
-                <div
-                  ref={props.inputRef}
-                  class="w-full rounded-[12px] border border-border-weak-base bg-background-base p-3 text-16-regular text-text-weak"
-                >
-                  <span>{language.t("session.child.promptDisabled")} </span>
-                  <Show when={parentID()}>
-                    <button
-                      type="button"
-                      class="text-text-base transition-colors hover:text-text-strong"
-                      onClick={openParent}
-                    >
-                      {language.t("session.child.backToParent")}
-                    </button>
-                  </Show>
-                </div>
-              </Show>
+              <PromptInput
+                ref={props.inputRef}
+                newSessionWorktree={props.newSessionWorktree}
+                onNewSessionWorktreeReset={props.onNewSessionWorktreeReset}
+                onSubmit={props.onSubmit}
+                onSubmitted={props.onSubmitted}
+              />
             </div>
           </Show>
         </Show>

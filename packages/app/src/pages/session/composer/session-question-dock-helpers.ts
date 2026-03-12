@@ -49,12 +49,10 @@ export function questionReply(
   answers: QuestionAnswer[],
   images: QuestionImage[][],
 ): QuestionAnswer[] {
-  const result = questions.map((_, i) => [
+  return questions.map((_, i) => [
     ...(answers[i] ?? []),
     ...(images[i] ?? []).map((item) => {
       const url = dataUrl(item.dataUrl, item.mime)
-      console.log('[session-question-dock-helpers.ts] questionReply item.dataUrl:', item.dataUrl.substring(0, 100))
-      console.log('[session-question-dock-helpers.ts] questionReply result url:', url.substring(0, 100))
       return {
         type: "image" as const,
         mime: item.mime,
@@ -63,6 +61,4 @@ export function questionReply(
       }
     }),
   ])
-  console.log('[session-question-dock-helpers.ts] questionReply final result:', JSON.stringify(result, null, 2).substring(0, 500))
-  return result
 }

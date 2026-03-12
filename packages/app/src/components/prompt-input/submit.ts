@@ -190,6 +190,7 @@ type PromptSubmitInput = {
   onQueue?: (draft: FollowupDraft) => void
   onAbort?: () => void
   onSubmit?: () => void
+  onSubmitted?: () => void
 }
 
 type CommentItem = {
@@ -542,6 +543,10 @@ export function createPromptSubmit(input: PromptSubmitInput) {
 
     removeCommentItems(commentItems)
     clearInput()
+    addOptimisticMessage()
+    requestAnimationFrame(() => {
+      input.onSubmitted?.()
+    })
 
     const waitForWorktree = async () => {
       const worktree = WorktreeState.get(sessionDirectory)

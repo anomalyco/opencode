@@ -116,6 +116,35 @@ describe("user messages", () => {
     ])
   })
 
+  test("should reuse data urls for user image parts", () => {
+    const result = convertToCopilotMessages([
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Hi" },
+          {
+            type: "file",
+            data: "data:image/png;base64,AAECAw==",
+            mediaType: "image/png",
+          },
+        ],
+      },
+    ])
+
+    expect(result).toEqual([
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Hi" },
+          {
+            type: "image_url",
+            image_url: { url: "data:image/png;base64,AAECAw==" },
+          },
+        ],
+      },
+    ])
+  })
+
   test("should handle multiple text parts without flattening", () => {
     const result = convertToCopilotMessages([
       {
@@ -317,6 +346,117 @@ describe("tool calls", () => {
       tool_call_id: "call2",
       content: "Result 2",
     })
+  })
+
+  test("should forward tool result images as a follow-up user message", () => {
+    const result = convertToCopilotMessages([
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-1",
+            toolName: "question",
+            output: {
+              type: "content",
+              value: [
+                { type: "text", text: "User attached an image" },
+                { type: "media", mediaType: "image/png", data: "AAECAw==" },
+              ],
+            },
+          },
+        ],
+      },
+    ])
+
+    expect(result).toEqual([
+      {
+        role: "tool",
+        tool_call_id: "call-1",
+        content: "User attached an image",
+      },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Attached image(s) from tool result:" },
+          { type: "image_url", image_url: { url: "data:image/png;base64,AAECAw==" } },
+        ],
+      },
+    ])
+  })
+
+  test("should reuse tool result image data urls", () => {
+    const result = convertToCopilotMessages([
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-1",
+            toolName: "question",
+            output: {
+              type: "content",
+              value: [
+                { type: "text", text: "User attached an image" },
+                { type: "media", mediaType: "image/png", data: "data:image/png;base64,AAECAw==" },
+              ],
+            },
+          },
+        ],
+      },
+    ])
+
+    expect(result).toEqual([
+      {
+        role: "tool",
+        tool_call_id: "call-1",
+        content: "User attached an image",
+      },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Attached image(s) from tool result:" },
+          { type: "image_url", image_url: { url: "data:image/png;base64,AAECAw==" } },
+        ],
+      },
+    ])
+  })
+
+  test("should normalize nested tool result image data urls", () => {
+    const result = convertToCopilotMessages([
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-1",
+            toolName: "question",
+            output: {
+              type: "content",
+              value: [
+                { type: "text", text: "User attached an image" },
+                { type: "media", mediaType: "image/png", data: "data:image/png;base64,data:image/png;base64,AAECAw==" },
+              ],
+            },
+          },
+        ],
+      },
+    ])
+
+    expect(result).toEqual([
+      {
+        role: "tool",
+        tool_call_id: "call-1",
+        content: "User attached an image",
+      },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Attached image(s) from tool result:" },
+          { type: "image_url", image_url: { url: "data:image/png;base64,AAECAw==" } },
+        ],
+      },
+    ])
   })
 
   test("should handle text plus multiple tool calls", () => {

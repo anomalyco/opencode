@@ -1,5 +1,4 @@
-import { describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { test, expect, spyOn } from "bun:test"
 import { Skill } from "../../src/skill"
 import { Discovery } from "../../src/skill/discovery"
 import { RuntimeFlags } from "../../src/effect/runtime-flags"
@@ -12,6 +11,7 @@ import { provideInstance, provideTmpdirInstance, tmpdir } from "../fixture/fixtu
 import { testEffect } from "../lib/effect"
 import path from "path"
 import fs from "fs/promises"
+import { Log } from "../../src/util/log"
 
 const node = CrossSpawnSpawner.defaultLayer
 
@@ -566,4 +566,41 @@ description: A skill in the .opencode/skills directory.
       { git: true },
     ),
   )
+})
+
+test("does not warn when the same skill file is discovered twice", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    config: {
+      skills: {
+        paths: ["./.claude"],
+      },
+    },
+    init: async (dir) => {
+      const skillDir = path.join(dir, ".claude", "skills", "echo")
+      await Bun.write(
+        path.join(skillDir, "SKILL.md"),
+        `---
+name: echo
+description: Duplicate path test skill.
+---
+
+# Echo
+`,
+      )
+    },
+  })
+
+  const warn = spyOn(Log.create({ service: "skill" }), "warn")
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const skills = await Skill.all()
+      expect(skills.length).toBe(1)
+      expect(skills[0].name).toBe("echo")
+    },
+  })
+
+  expect(warn).not.toHaveBeenCalled()
 })

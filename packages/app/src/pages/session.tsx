@@ -99,13 +99,7 @@ import { formatServerError } from "@/utils/server-errors"
 import { useUsageExceededDialogs } from "./session/usage-exceeded-dialogs"
 
 const emptyUserMessages: UserMessage[] = []
-type FollowupItem = FollowupDraft & { id: string }
-type FollowupEdit = Pick<FollowupItem, "id" | "prompt" | "context">
-const emptyFollowups: FollowupItem[] = []
-
-type ChangeMode = "git" | "branch" | "turn"
-type VcsMode = "git" | "branch"
-const USE_NEW_SESSION_DESIGN = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
+const scrollBottomThreshold = 16
 
 type SessionHistoryWindowInput = {
   sessionID: () => string | undefined
@@ -134,6 +128,9 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
   const turnBottomThreshold = 24
 
   let prevTop = 0
+  let preserveA: number | undefined
+  let preserveB: number | undefined
+  let preserving = false
 
   const [state, setState] = createStore({
     shift: false,
@@ -149,11 +146,47 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
     shiftFrame = undefined
   }
 
-  const scheduleShiftReset = () => {
-    cancelShiftReset()
-    shiftFrame = requestAnimationFrame(() => {
-      shiftFrame = undefined
-      setState("shift", false)
+  const renderedUserMessages = createMemo(
+    () => {
+      const msgs = input.visibleUserMessages()
+      const start = turnStart()
+      if (start <= 0) return msgs
+      return msgs.slice(start)
+    },
+    emptyUserMessages,
+    {
+      equals: same,
+    },
+  )
+
+  const clearPreserve = () => {
+    if (preserveA !== undefined) cancelAnimationFrame(preserveA)
+    if (preserveB !== undefined) cancelAnimationFrame(preserveB)
+    preserveA = undefined
+    preserveB = undefined
+    preserving = false
+  }
+
+  const preserveScroll = (fn: () => void) => {
+    const el = input.scroller()
+    if (!el) {
+      fn()
+      return
+    }
+
+    clearPreserve()
+    preserving = true
+    const beforeTop = el.scrollTop
+    const beforeHeight = el.scrollHeight
+    fn()
+    preserveA = requestAnimationFrame(() => {
+      preserveA = undefined
+      preserveB = requestAnimationFrame(() => {
+        preserveB = undefined
+        const delta = el.scrollHeight - beforeHeight
+        if (delta) el.scrollTop = beforeTop + delta
+        preserving = false
+      })
     })
   }
 
@@ -210,6 +243,7 @@ export default function Page() {
 
   const onScrollerScroll = () => {
     if (!input.userScrolled()) return
+    if (preserving) return
     const el = input.scroller()
     if (!el) return
 
@@ -239,6 +273,7 @@ export default function Page() {
       input.sessionID,
       () => {
         prevTop = 0
+        clearPreserve()
         setState({ prefetchUntil: 0, prefetchNoGrowth: 0 })
       },
       { defer: true },
@@ -1637,6 +1672,7 @@ export default function Page() {
   const autoScroll = createAutoScroll({
     working: () => true,
     overflowAnchor: "dynamic",
+    bottomThreshold: scrollBottomThreshold,
   })
 
   let scrollStateFrame: number | undefined
@@ -1649,8 +1685,7 @@ export default function Page() {
     const max = el.scrollHeight - el.clientHeight
     const distance = max - el.scrollTop
     const overflow = max > 1
-    const bottom = !overflow || distance <= 2
-    const jump = overflow && distance > jumpThreshold(el)
+    const bottom = !overflow || max - el.scrollTop <= scrollBottomThreshold
 
     if (ui.scroll.overflow === overflow && ui.scroll.bottom === bottom && ui.scroll.jump === jump) return
     setUi("scroll", { overflow, bottom, jump })
@@ -2062,13 +2097,18 @@ export default function Page() {
 
       const el = scroller
       const delta = next - dockHeight
-      const stick = el
-        ? !autoScroll.userScrolled() || el.scrollHeight - el.clientHeight - el.scrollTop < 10 + Math.max(0, delta)
-        : false
+      const gap = el ? el.scrollHeight - el.clientHeight - el.scrollTop : 0
+      const stick = el ? !autoScroll.userScrolled() || gap <= scrollBottomThreshold + Math.max(0, delta) : false
 
       dockHeight = next
 
-      if (stick) autoScroll.forceScrollToBottom()
+      if (el && stick) {
+        requestAnimationFrame(() => {
+          if (scroller !== el) return
+          const top = el.scrollHeight - el.clientHeight - gap
+          el.scrollTop = top > 0 ? top : 0
+        })
+      }
 
       if (el) scheduleScrollState(el)
       fill()
@@ -2475,68 +2515,27 @@ export default function Page() {
             </Switch>
           </div>
 
-          {/* Prompt input */}
-          <div
-            ref={(el) => (promptDock = el)}
-            class="absolute inset-x-0 bottom-0 pt-12 pb-4 flex flex-col justify-center items-center z-50 px-4 md:px-0 bg-gradient-to-t from-background-stronger via-background-stronger to-transparent pointer-events-none"
-          >
-            <div
-              classList={{
-                "w-full px-4 pointer-events-auto": true,
-              }}
-              style={{
-                "max-width": centered() ? "var(--session-content-width)" : undefined,
-              }}
-            >
-              <Show when={request()} keyed>
-                {(perm) => (
-                  <div data-component="tool-part-wrapper" data-permission="true" class="mb-3">
-                    <BasicTool
-                      icon="checklist"
-                      locked
-                      defaultOpen
-                      trigger={{
-                        title: language.t("notification.permission.title"),
-                        subtitle:
-                          perm.permission === "doom_loop"
-                            ? language.t("settings.permissions.tool.doom_loop.title")
-                            : perm.permission,
-                      }}
-                    >
-                      <Show when={perm.patterns.length > 0}>
-                        <div class="flex flex-col gap-1 py-2 px-3 max-h-40 overflow-y-auto no-scrollbar">
-                          <For each={perm.patterns}>
-                            {(pattern) => <code class="text-12-regular text-text-base break-all">{pattern}</code>}
-                          </For>
-                        </div>
-                      </Show>
-                      <Show when={perm.permission === "doom_loop"}>
-                        <div class="text-12-regular text-text-weak pb-2 px-3">
-                          {language.t("settings.permissions.tool.doom_loop.description")}
-                        </div>
-                      </Show>
-                    </BasicTool>
-                    <div data-component="permission-prompt">
-                      <div data-slot="permission-actions">
-                        <Button variant="ghost" size="small" onClick={() => decide("reject")} disabled={ui.responding}>
-                          {language.t("ui.permission.deny")}
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          size="small"
-                          onClick={() => decide("always")}
-                          disabled={ui.responding}
-                        >
-                          {language.t("ui.permission.allowAlways")}
-                        </Button>
-                        <Button variant="primary" size="small" onClick={() => decide("once")} disabled={ui.responding}>
-                          {language.t("ui.permission.allowOnce")}
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </Show>
+          <SessionComposerRegion
+            state={composer}
+            ready={!store.deferRender && messagesReady()}
+            centered={centered()}
+            inputRef={(el) => {
+              inputRef = el
+            }}
+            newSessionWorktree={newSessionWorktree()}
+            onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
+            onSubmit={() => {
+              comments.clear()
+              resumeScroll()
+            }}
+            onSubmitted={() => {
+              resumeScroll()
+            }}
+            onResponseSubmit={resumeScroll}
+            setPromptDockRef={(el) => {
+              promptDock = el
+            }}
+          />
 
           <Show when={desktopReviewOpen()}>
             <div onPointerDown={() => size.start()}>

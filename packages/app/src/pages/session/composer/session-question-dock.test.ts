@@ -15,7 +15,13 @@ describe("session question dock helpers", () => {
   test("marks custom answers with images as answered even after editing closes", () => {
     expect(
       questionAnswered([], "", true, [
-        { type: "image", id: "img_1", mime: "image/png", url: "data:image/png;base64,AAAA", filename: "proof.png" },
+        {
+          type: "image",
+          id: "img_1",
+          mime: "image/png",
+          dataUrl: "data:image/png;base64,AAAA",
+          filename: "proof.png",
+        },
       ]),
     ).toBe(true)
   })
@@ -23,7 +29,13 @@ describe("session question dock helpers", () => {
   test("maps stored images into preview attachments", () => {
     expect(
       questionAttachments([
-        { type: "image", id: "img_1", mime: "image/png", url: "data:image/png;base64,AAAA", filename: "proof.png" },
+        {
+          type: "image",
+          id: "img_1",
+          mime: "image/png",
+          dataUrl: "data:image/png;base64,AAAA",
+          filename: "proof.png",
+        },
       ]),
     ).toEqual([
       {
@@ -47,10 +59,46 @@ describe("session question dock helpers", () => {
           },
         ],
         [["details"]],
-        [[{ type: "image", id: "img_1", mime: "image/png", url: "data:image/png;base64,BBBB", filename: "proof.png" }]],
+        [
+          [
+            {
+              type: "image",
+              id: "img_1",
+              mime: "image/png",
+              dataUrl: "data:image/png;base64,BBBB",
+              filename: "proof.png",
+            },
+          ],
+        ],
       ),
     ).toEqual([
       ["details", { type: "image", mime: "image/png", url: "data:image/png;base64,BBBB", filename: "proof.png" }],
     ])
+  })
+
+  test("normalizes nested image data urls for reply payload", () => {
+    expect(
+      questionReply(
+        [
+          {
+            question: "Test image paste",
+            header: "Image",
+            options: [{ label: "ok", description: "ok" }],
+          },
+        ],
+        [[]],
+        [
+          [
+            {
+              type: "image",
+              id: "img_1",
+              mime: "image/png",
+              dataUrl: "data:image/png;base64,data:image/png;base64,BBBB",
+              filename: "proof.png",
+            },
+          ],
+        ],
+      ),
+    ).toEqual([[{ type: "image", mime: "image/png", url: "data:image/png;base64,BBBB", filename: "proof.png" }]])
   })
 })

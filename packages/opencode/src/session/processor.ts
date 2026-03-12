@@ -261,7 +261,7 @@ const log = Log.create({ service: "session.processor" })
                 case "tool-result": {
                   const match = toolcalls[value.toolCallId]
                   if (match && match.state.status === "running") {
-                    await Session.updatePart({
+                    const part = {
                       ...match,
                       state: {
                         status: "completed",
@@ -275,7 +275,8 @@ const log = Log.create({ service: "session.processor" })
                         },
                         attachments: value.output.attachments,
                       },
-                    })
+                    } satisfies MessageV2.ToolPart
+                    await Session.updatePart(part)
 
                     delete toolcalls[value.toolCallId]
                   }
