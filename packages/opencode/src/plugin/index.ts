@@ -12,6 +12,7 @@ import { Session } from "../session"
 import { NamedError } from "@opencode-ai/util/error"
 import { CopilotAuthPlugin } from "./copilot"
 import { gitlabAuthPlugin as GitlabAuthPlugin } from "@gitlab/opencode-gitlab-auth"
+import { installAdaptor } from "../control-plane/adaptors"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
@@ -41,6 +42,13 @@ export namespace Plugin {
       directory: Instance.directory,
       get serverUrl(): URL {
         return Server.url ?? new URL("http://localhost:4096")
+      },
+      async workspaceFetch(dir, req, init) {
+        const { WorkspaceServer } = await import("../control-plane/workspace-server/server")
+        const url = req instanceof Request || req instanceof URL ? req : new URL(req, "http://opencode.internal")
+        const headers = new Headers(init?.headers ?? (req instanceof Request ? req.headers : undefined))
+        headers.set("x-opencode-directory", dir)
+        return WorkspaceServer.App().fetch(new Request(url, { ...init, headers }))
       },
       $: Bun.$,
     }
@@ -103,6 +111,15 @@ export namespace Plugin {
         })
     }
 
+    for (const hook of hooks) {
+      const adaptors = hook["workspace.adaptor"]
+      if (!adaptors) continue
+      for (const [type, adaptor] of Object.entries(adaptors)) {
+        log.info("installing workspace adaptor", { type })
+        installAdaptor(type, adaptor)
+      }
+    }
+
     return {
       hooks,
       input,
@@ -110,7 +127,7 @@ export namespace Plugin {
   })
 
   export async function trigger<
-    Name extends Exclude<keyof Required<Hooks>, "auth" | "event" | "tool">,
+    Name extends Exclude<keyof Required<Hooks>, "auth" | "event" | "tool" | "workspace.adaptor">,
     Input = Parameters<Required<Hooks>[Name]>[0],
     Output = Parameters<Required<Hooks>[Name]>[1],
   >(name: Name, input: Input, output: Output): Promise<Output> {

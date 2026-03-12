@@ -51,13 +51,20 @@ export namespace Workspace {
     branch: Info.shape.branch,
     projectID: ProjectID.zod,
     extra: Info.shape.extra,
+    projectDirectory: z.string().optional(),
   })
 
   export const create = fn(CreateInput, async (input) => {
     const id = WorkspaceID.ascending(input.id)
     const adaptor = await getAdaptor(input.type)
 
-    const config = await adaptor.configure({ ...input, id, name: null, directory: null })
+    const config = await adaptor.configure({
+      ...input,
+      id,
+      name: null,
+      directory: null,
+      projectDirectory: input.projectDirectory,
+    })
 
     const info: Info = {
       id,
@@ -67,6 +74,7 @@ export namespace Workspace {
       directory: config.directory ?? null,
       extra: config.extra ?? null,
       projectID: input.projectID,
+      projectDirectory: input.projectDirectory,
     }
 
     Database.use((db) => {

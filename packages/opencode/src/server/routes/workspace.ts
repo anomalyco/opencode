@@ -5,9 +5,40 @@ import { Workspace } from "../../control-plane/workspace"
 import { Instance } from "../../project/instance"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
+import { listTypes, detectAdaptor } from "../../control-plane/adaptors"
+
+const TypesResponse = z
+  .object({
+    types: z.array(z.string()),
+    detected: z.string().optional(),
+  })
+  .meta({ ref: "WorkspaceTypes" })
 
 export const WorkspaceRoutes = lazy(() =>
   new Hono()
+    .get(
+      "/types",
+      describeRoute({
+        summary: "List workspace types",
+        description: "List available workspace adaptor types and detect the best match for the current project.",
+        operationId: "experimental.workspace.types",
+        responses: {
+          200: {
+            description: "Available workspace types",
+            content: {
+              "application/json": {
+                schema: resolver(TypesResponse),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        const types = listTypes()
+        const result = await detectAdaptor(Instance.worktree).catch(() => undefined)
+        return c.json({ types, detected: result?.type })
+      },
+    )
     .post(
       "/",
       describeRoute({
@@ -30,12 +61,14 @@ export const WorkspaceRoutes = lazy(() =>
         "json",
         Workspace.create.schema.omit({
           projectID: true,
+          projectDirectory: true,
         }),
       ),
       async (c) => {
         const body = c.req.valid("json")
         const workspace = await Workspace.create({
           projectID: Instance.project.id,
+          projectDirectory: Instance.worktree,
           ...body,
         })
         return c.json(workspace)

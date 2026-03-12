@@ -12,6 +12,8 @@ import { zodToJsonSchema } from "zod-to-json-schema"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 import { WorkspaceRoutes } from "./workspace"
+import { detectAdaptor } from "../../control-plane/adaptors"
+import { Workspace } from "../../control-plane/workspace"
 
 export const ExperimentalRoutes = lazy(() =>
   new Hono()
@@ -94,7 +96,8 @@ export const ExperimentalRoutes = lazy(() =>
       "/worktree",
       describeRoute({
         summary: "Create worktree",
-        description: "Create a new git worktree for the current project and run any configured startup scripts.",
+        description:
+          "Create a new git worktree for the current project and run any configured startup scripts. If a plugin adaptor is detected, creates a workspace through that adaptor instead.",
         operationId: "worktree.create",
         responses: {
           200: {
@@ -110,6 +113,17 @@ export const ExperimentalRoutes = lazy(() =>
       }),
       validator("json", Worktree.create.schema),
       async (c) => {
+        const detected = await detectAdaptor(Instance.worktree).catch(() => undefined)
+        if (detected) {
+          const workspace = await Workspace.create({
+            type: detected.type,
+            branch: null,
+            projectID: Instance.project.id,
+            projectDirectory: Instance.worktree,
+            extra: null,
+          })
+          return c.json(workspace)
+        }
         const body = c.req.valid("json")
         const worktree = await Worktree.create(body)
         return c.json(worktree)

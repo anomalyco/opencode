@@ -82,9 +82,15 @@ function DialogWorkspaceCreate(props: { onSelect: (workspaceID: string) => Promi
   const sdk = useSDK()
   const toast = useToast()
   const [creating, setCreating] = createSignal<string>()
+  const [types, setTypes] = createSignal<{ types: string[]; detected?: string }>({ types: ["worktree"] })
 
   onMount(() => {
     dialog.setSize("medium")
+    void sdk
+      .fetch(`${sdk.url}/experimental/workspace/types`)
+      .then((res) => res.json() as Promise<{ types: string[]; detected?: string }>)
+      .then((data) => setTypes(data))
+      .catch(() => {})
   })
 
   const options = createMemo(() => {
@@ -98,13 +104,12 @@ function DialogWorkspaceCreate(props: { onSelect: (workspaceID: string) => Promi
         },
       ]
     }
-    return [
-      {
-        title: "Worktree",
-        value: "worktree" as const,
-        description: "Create a local git worktree",
-      },
-    ]
+    const info = types()
+    return info.types.map((t) => ({
+      title: t.charAt(0).toUpperCase() + t.slice(1),
+      value: t,
+      description: t === info.detected ? "Detected" : undefined,
+    }))
   })
 
   const createWorkspace = async (type: string) => {

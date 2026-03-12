@@ -1,11 +1,11 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
-import path from "path"
 import z from "zod"
 import { Log } from "@/util/log"
 import { Instance } from "./instance"
 import { FileWatcher } from "@/file/watcher"
 import { git } from "@/util/git"
+import { Plugin } from "@/plugin"
 
 const log = Log.create({ service: "vcs" })
 
@@ -32,16 +32,22 @@ export namespace Vcs {
     const result = await git(["rev-parse", "--abbrev-ref", "HEAD"], {
       cwd: Instance.worktree,
     })
-    if (result.exitCode !== 0) return
+    if (result.exitCode !== 0) return pluginBranch()
     const text = result.text().trim()
-    if (!text) return
+    if (!text) return pluginBranch()
     return text
+  }
+
+  async function pluginBranch() {
+    const output = { branch: undefined as string | undefined }
+    await Plugin.trigger("vcs.branch", { directory: Instance.worktree, vcs: Instance.project.vcs }, output)
+    return output.branch
   }
 
   const state = Instance.state(
     async () => {
       if (Instance.project.vcs !== "git") {
-        return { branch: async () => undefined, unsubscribe: undefined }
+        return { branch: async () => pluginBranch(), unsubscribe: undefined }
       }
       let current = await currentBranch()
       log.info("initialized", { branch: current })

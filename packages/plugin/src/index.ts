@@ -23,12 +23,41 @@ export type ProviderContext = {
   options: Record<string, any>
 }
 
+export type WorkspaceAdaptorInfo = {
+  id: string
+  type: string
+  branch: string | null
+  name: string | null
+  directory: string | null
+  extra: unknown | null
+  projectID: string
+  /**
+   * The root directory of the project this workspace belongs to.
+   * Use this instead of the plugin-load-time `directory` when the
+   * adaptor needs to run commands in the project root (e.g., VCS
+   * operations). This is set at call time and reflects the currently
+   * active project, not the project that was active when the plugin
+   * loaded.
+   */
+  projectDirectory?: string
+}
+
+export type WorkspaceAdaptor = {
+  detect?(directory: string): boolean | Promise<boolean>
+  configure(info: WorkspaceAdaptorInfo): WorkspaceAdaptorInfo | Promise<WorkspaceAdaptorInfo>
+  create(info: WorkspaceAdaptorInfo): Promise<void>
+  remove(info: WorkspaceAdaptorInfo): Promise<void>
+  reset?(info: WorkspaceAdaptorInfo): Promise<void>
+  fetch(info: WorkspaceAdaptorInfo, input: RequestInfo | URL, init?: RequestInit): Promise<Response>
+}
+
 export type PluginInput = {
   client: ReturnType<typeof createOpencodeClient>
   project: Project
   directory: string
   worktree: string
   serverUrl: URL
+  workspaceFetch: (directory: string, input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
   $: BunShell
 }
 
@@ -231,4 +260,35 @@ export interface Hooks {
    * Modify tool definitions (description and parameters) sent to LLM
    */
   "tool.definition"?: (input: { toolID: string }, output: { description: string; parameters: any }) => Promise<void>
+  /**
+   * Register workspace adaptors. Each key is a workspace type name
+   * (e.g. "jj") and the value implements the adaptor interface.
+   *
+   * ```ts
+   * "workspace.adaptor": {
+   *   jj: {
+   *     detect(dir) { return existsSync(join(dir, ".jj")) },
+   *     configure(info) { ... },
+   *     async create(info) { ... },
+   *     async remove(info) { ... },
+   *     fetch(info, input, init) { ... },
+   *   }
+   * }
+   * ```
+   */
+  "workspace.adaptor"?: {
+    [type: string]: WorkspaceAdaptor
+  }
+  /**
+   * Called to detect the current VCS branch. Plugins can set
+   * `output.branch` to provide branch info for non-git VCS systems
+   * or when git is in a detached HEAD state.
+   *
+   * ```ts
+   * async "vcs.branch"(input, output) {
+   *   output.branch = "my-branch"
+   * }
+   * ```
+   */
+  "vcs.branch"?: (input: { directory: string; vcs?: string }, output: { branch?: string }) => Promise<void>
 }
