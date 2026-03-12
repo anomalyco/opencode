@@ -6,6 +6,7 @@ import { useSync } from "./sync"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { useProviders } from "@/hooks/use-providers"
 import { useModels } from "@/context/models"
+import { Persist, persisted } from "@/utils/persist"
 import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "./model-variant"
 
 export type ModelKey = { providerID: string; modelID: string }
@@ -93,11 +94,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const model = (() => {
       const models = useModels()
 
-      const [ephemeral, setEphemeral] = createStore<{
-        model: Record<string, ModelKey | undefined>
-      }>({
-        model: {},
-      })
+      const [store, setStore] = persisted(
+        Persist.workspace(sdk.directory, "local-model"),
+        createStore<{
+          model: Record<string, ModelKey | undefined>
+        }>({
+          model: {},
+        }),
+      )
 
       const resolveConfigured = () => {
         if (!sync.data.config.model) return
@@ -136,7 +140,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         const a = agent.current()
         if (!a) return undefined
         const key = getFirstValidModel(
-          () => ephemeral.model[a.name],
+          () => store.model[a.name],
           () => a.model,
           fallbackModel,
         )
@@ -173,7 +177,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         batch(() => {
           const currentAgent = agent.current()
           const next = model ?? fallbackModel()
-          if (currentAgent) setEphemeral("model", currentAgent.name, next)
+          if (currentAgent) setStore("model", currentAgent.name, next)
           if (model) models.setVisibility(model, true)
           if (options?.recent && model) models.recent.push(model)
         })

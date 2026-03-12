@@ -89,6 +89,37 @@ describe("syncSessionModel", () => {
 })
 
 describe("resetSessionModel", () => {
+  test("keeps the current model selection for new sessions", () => {
+    const calls: unknown[] = []
+
+    resetSessionModel({
+      agent: {
+        current() {
+          return {
+            model: { providerID: "anthropic", modelID: "claude-sonnet-4" },
+            variant: "high",
+          }
+        },
+        set() {},
+      },
+      model: {
+        set(value) {
+          calls.push(["model", value])
+        },
+        current() {
+          return { id: "gpt-5", provider: { id: "openai" } }
+        },
+        variant: {
+          set(value) {
+            calls.push(["variant", value])
+          },
+        },
+      },
+    })
+
+    expect(calls).toEqual([])
+  })
+
   test("restores the current agent defaults", () => {
     const calls: unknown[] = []
 

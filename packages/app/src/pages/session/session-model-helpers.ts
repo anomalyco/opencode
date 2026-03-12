@@ -26,6 +26,7 @@ type Local = {
 }
 
 export const resetSessionModel = (local: Local) => {
+  if (local.model.current()) return
   const agent = local.agent.current()
   if (!agent) return
   batch(() => {
