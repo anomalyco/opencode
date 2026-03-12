@@ -216,7 +216,7 @@ export function StatusPopover() {
           </div>
           <div
             classList={{
-              "absolute top-0 -right-px size-1.5 rounded-full": true,
+              "absolute -top-px -right-px size-1.5 rounded-full": true,
               "bg-icon-success-base": overallHealthy(),
               "bg-icon-critical-base": !overallHealthy() && server.healthy() !== undefined,
               "bg-border-weak-base": server.healthy() === undefined,

@@ -14,8 +14,8 @@
 }
 
 @utility badge-mask-tight {
-  -webkit-mask-image: radial-gradient(circle 5px at calc(100% - 2px) 3px, transparent 5px, black 5.5px);
-  mask-image: radial-gradient(circle 5px at calc(100% - 2px) 3px, transparent 5px, black 5.5px);
+  -webkit-mask-image: radial-gradient(circle 5px at calc(100% - 2px) 2px, transparent 5px, black 5.5px);
+  mask-image: radial-gradient(circle 5px at calc(100% - 2px) 2px, transparent 5px, black 5.5px);
 }
 
 @utility truncate-start {
