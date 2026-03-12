@@ -97,6 +97,7 @@
   }
 
   [data-slot="dropdown-menu-group-label"] {
+    display: block;
     padding: 4px 8px;
     font-family: var(--font-family-sans);
     font-size: var(--font-size-x-small);

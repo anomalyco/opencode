@@ -360,10 +360,13 @@ export function SessionHeader() {
                             aria-label={language.t("session.header.open.menu")}
                           />
                           <DropdownMenu.Portal>
-                            <DropdownMenu.Content class="[&_[data-slot=dropdown-menu-item]]:pl-1 [&_[data-slot=dropdown-menu-radio-item]]:pl-1">
+                            <DropdownMenu.Content class="[&_[data-slot=dropdown-menu-item]]:pl-1 [&_[data-slot=dropdown-menu-radio-item]]:pl-1 [&_[data-slot=dropdown-menu-radio-item]+[data-slot=dropdown-menu-radio-item]]:mt-1">
                               <DropdownMenu.Group>
-                                <DropdownMenu.GroupLabel>{language.t("session.header.openIn")}</DropdownMenu.GroupLabel>
+                                <DropdownMenu.GroupLabel class="!px-1 !py-1">
+                                  {language.t("session.header.openIn")}
+                                </DropdownMenu.GroupLabel>
                                 <DropdownMenu.RadioGroup
+                                  class="mt-1"
                                   value={current().id}
                                   onChange={(value) => {
                                     if (!OPEN_APPS.includes(value as OpenApp)) return
