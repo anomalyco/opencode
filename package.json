@@ -10,7 +10,7 @@
     "dev:desktop": "bun --cwd packages/desktop tauri dev",
     "dev:web": "bun --cwd packages/app dev",
     "dev:storybook": "bun --cwd packages/storybook storybook",
-    "typecheck": "bun turbo typecheck --filter='!@opencode-ai/app' --filter='!@opencode-ai/desktop' --filter='!@opencode-ai/ui' --filter='!@opencode-ai/console-*' --filter='!@opencode-ai/enterprise' --filter='!@opencode-ai/slack'",
+    "typecheck": "bun turbo typecheck --filter='!@opencode-ai/app' --filter='!@opencode-ai/desktop' --filter='!@opencode-ai/ui' --filter='!@opencode-ai/console-*' --filter='!@opencode-ai/enterprise' --filter='!@opencode-ai/slack' --filter='!@opencode-ai/desktop-electron'",
     "prepare": "husky",
     "random": "echo 'Random script'",
     "hello": "echo 'Hello World!'",
