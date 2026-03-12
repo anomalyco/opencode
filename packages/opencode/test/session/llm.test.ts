@@ -7,6 +7,7 @@ import { Instance } from "../../src/project/instance"
 import { Provider } from "../../src/provider/provider"
 import { ProviderTransform } from "../../src/provider/transform"
 import { ModelsDev } from "../../src/provider/models"
+import { ProviderID } from "../../src/provider/schema"
 import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
 import type { Agent } from "../../src/agent/agent"
@@ -282,7 +283,7 @@ describe("session.llm.stream", () => {
           role: "user",
           time: { created: Date.now() },
           agent: agent.name,
-          model: { providerID, modelID: resolved.id },
+          model: { providerID: ProviderID.make(providerID), modelID: resolved.id },
           variant: "high",
         } satisfies MessageV2.User
 
@@ -411,7 +412,7 @@ describe("session.llm.stream", () => {
           role: "user",
           time: { created: Date.now() },
           agent: agent.name,
-          model: { providerID: "openai", modelID: resolved.id },
+          model: { providerID: ProviderID.make("openai"), modelID: resolved.id },
           variant: "high",
         } satisfies MessageV2.User
 
@@ -534,7 +535,7 @@ describe("session.llm.stream", () => {
           role: "user",
           time: { created: Date.now() },
           agent: agent.name,
-          model: { providerID, modelID: resolved.id },
+          model: { providerID: ProviderID.make(providerID), modelID: resolved.id },
         } satisfies MessageV2.User
 
         const stream = await LLM.stream({
@@ -635,7 +636,7 @@ describe("session.llm.stream", () => {
           role: "user",
           time: { created: Date.now() },
           agent: agent.name,
-          model: { providerID, modelID: resolved.id },
+          model: { providerID: ProviderID.make(providerID), modelID: resolved.id },
         } satisfies MessageV2.User
 
         const stream = await LLM.stream({

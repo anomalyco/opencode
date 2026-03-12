@@ -13,6 +13,7 @@ import { LLM } from "./llm"
 import { Config } from "@/config/config"
 import { SessionCompaction } from "./compaction"
 import { PermissionNext } from "@/permission/next"
+import { ProviderID } from "@/provider/schema"
 import { Question } from "@/question"
 import { PartID } from "./schema"
 import type { SessionID, MessageID } from "./schema"
@@ -356,7 +357,7 @@ export namespace SessionProcessor {
               error: e,
               stack: JSON.stringify(e.stack),
             })
-            const error = MessageV2.fromError(e, { providerID: input.model.providerID })
+            const error = MessageV2.fromError(e, { providerID: ProviderID.make(input.model.providerID) })
             if (MessageV2.ContextOverflowError.isInstance(error)) {
               needsCompaction = true
               Bus.publish(Session.Event.Error, {
