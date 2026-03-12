@@ -1,8 +1,6 @@
 import { test, expect } from "../fixtures"
 import { cleanupSession, clearSessionDockSeed, seedSessionQuestion } from "../actions"
 import { questionDockSelector, promptSelector } from "../selectors"
-import path from "node:path"
-import fs from "node:fs/promises"
 
 type Sdk = Parameters<typeof clearSessionDockSeed>[0]
 
@@ -26,15 +24,7 @@ async function withDockSeed<T>(sdk: Sdk, sessionID: string, fn: () => Promise<T>
 
 test.setTimeout(120_000)
 
-const screenshotsDir = path.join(process.cwd(), "test-screenshots", "question-scroll")
-
-async function ensureScreenshotDir() {
-  await fs.mkdir(screenshotsDir, { recursive: true })
-}
-
 test("question with long text shows scrollable content and visible options", async ({ page, sdk, gotoSession }) => {
-  await ensureScreenshotDir()
-
   await withDockSession(sdk, "e2e question scroll long text", async (session) => {
     await withDockSeed(sdk, session.id, async () => {
       await gotoSession(session.id)
@@ -69,64 +59,34 @@ test("question with long text shows scrollable content and visible options", asy
       await expect.poll(() => dock.count(), { timeout: 10_000 }).toBe(1)
       await expect(page.locator(promptSelector)).toHaveCount(0)
 
-      const timestamp = Date.now()
-
       const questionText = dock.locator('[data-slot="question-text"]')
       await expect(questionText).toBeVisible()
 
       const scrollHeight = await questionText.evaluate((el) => el.scrollHeight)
       const clientHeight = await questionText.evaluate((el) => el.clientHeight)
-      console.log(`Question text scrollHeight: ${scrollHeight}px, clientHeight: ${clientHeight}px`)
+      expect(scrollHeight).toBeGreaterThan(clientHeight)
 
-      const screenshot1Path = path.join(screenshotsDir, `question-long-initial-${timestamp}.png`)
-      await dock.screenshot({ path: screenshot1Path })
-      console.log(`Screenshot saved (top): ${screenshot1Path}`)
+      await questionText.evaluate((el) => {
+        el.scrollTop = el.scrollHeight / 2
+      })
 
-      if (scrollHeight > clientHeight) {
-        console.log("✓ Question text is scrollable (scrollHeight > clientHeight)")
-
-        await questionText.evaluate((el) => {
-          el.scrollTop = el.scrollHeight / 2
-        })
-
-        const screenshotScrollPath = path.join(screenshotsDir, `question-long-scrolled-${timestamp}.png`)
-        await dock.screenshot({ path: screenshotScrollPath })
-        console.log(`Screenshot saved (middle): ${screenshotScrollPath}`)
-
-        await questionText.evaluate((el) => {
-          el.scrollTop = 0
-        })
-      }
+      await questionText.evaluate((el) => {
+        el.scrollTop = 0
+      })
 
       const options = dock.locator('[data-slot="question-option"]')
       await expect.poll(() => options.count(), { timeout: 5000 }).toBe(3)
 
-      const screenshot2Path = path.join(screenshotsDir, `question-long-options-visible-${timestamp}.png`)
-      await dock.screenshot({ path: screenshot2Path })
-      console.log(`Screenshot saved (options visible): ${screenshot2Path}`)
-
-      // Click first option
       await options.first().click()
-
-      // Screenshot 3: After selecting an option
-      const screenshot3Path = path.join(screenshotsDir, `question-long-option-selected-${timestamp}.png`)
-      await dock.screenshot({ path: screenshot3Path })
-      console.log(`Screenshot saved: ${screenshot3Path}`)
-
-      // Submit the answer
       await dock.getByRole("button", { name: /submit/i }).click()
 
       await expect.poll(() => page.locator(questionDockSelector).count(), { timeout: 10_000 }).toBe(0)
       await expect(page.locator(promptSelector)).toBeVisible()
-
-      console.log("✓ Long question scroll test completed successfully")
     })
   })
 })
 
 test("question with multiple tabs and long text handles scrolling correctly", async ({ page, sdk, gotoSession }) => {
-  await ensureScreenshotDir()
-
   await withDockSession(sdk, "e2e question scroll multiple tabs", async (session) => {
     await withDockSeed(sdk, session.id, async () => {
       await gotoSession(session.id)
@@ -168,38 +128,23 @@ test("question with multiple tabs and long text handles scrolling correctly", as
       const dock = page.locator(questionDockSelector)
       await expect.poll(() => dock.count(), { timeout: 10_000 }).toBe(1)
 
-      const timestamp = Date.now()
+      const questionText = dock.locator('[data-slot="question-text"]')
+      await expect(questionText).toBeVisible()
 
-      // Screenshot 4: First question with long text
-      const screenshot4Path = path.join(screenshotsDir, `question-multi-tab-1-${timestamp}.png`)
-      await dock.screenshot({ path: screenshot4Path })
-      console.log(`Screenshot saved: ${screenshot4Path}`)
-
-      // Select option on first question
       await dock.locator('[data-slot="question-option"]').first().click()
-
-      // Move to second question
       await dock.getByRole("button", { name: /next/i }).click()
 
-      // Screenshot 5: Second question with long text
-      const screenshot5Path = path.join(screenshotsDir, `question-multi-tab-2-${timestamp}.png`)
-      await dock.screenshot({ path: screenshot5Path })
-      console.log(`Screenshot saved: ${screenshot5Path}`)
+      await expect(questionText).toBeVisible()
 
-      // Select option on second question and submit
       await dock.locator('[data-slot="question-option"]').first().click()
       await dock.getByRole("button", { name: /submit/i }).click()
 
       await expect.poll(() => page.locator(questionDockSelector).count(), { timeout: 10_000 }).toBe(0)
-
-      console.log("✓ Multiple tabs with long text test completed successfully")
     })
   })
 })
 
 test("question with moderate text displays without unnecessary scrolling", async ({ page, sdk, gotoSession }) => {
-  await ensureScreenshotDir()
-
   await withDockSession(sdk, "e2e question scroll moderate text", async (session) => {
     await withDockSeed(sdk, session.id, async () => {
       await gotoSession(session.id)
@@ -228,16 +173,12 @@ test("question with moderate text displays without unnecessary scrolling", async
       const dock = page.locator(questionDockSelector)
       await expect.poll(() => dock.count(), { timeout: 10_000 }).toBe(1)
 
-      const timestamp = Date.now()
-
-      // Screenshot 6: Moderate length question
-      const screenshot6Path = path.join(screenshotsDir, `question-moderate-${timestamp}.png`)
-      await dock.screenshot({ path: screenshot6Path })
-      console.log(`Screenshot saved: ${screenshot6Path}`)
-
-      // Verify everything is visible without scrolling issues
       const questionText = dock.locator('[data-slot="question-text"]')
       await expect(questionText).toBeVisible()
+
+      const scrollHeight = await questionText.evaluate((el) => el.scrollHeight)
+      const clientHeight = await questionText.evaluate((el) => el.clientHeight)
+      expect(scrollHeight).toBe(clientHeight)
 
       const options = dock.locator('[data-slot="question-option"]')
       await expect.poll(() => options.count()).toBe(2)
@@ -246,15 +187,11 @@ test("question with moderate text displays without unnecessary scrolling", async
       await dock.getByRole("button", { name: /submit/i }).click()
 
       await expect.poll(() => page.locator(questionDockSelector).count(), { timeout: 10_000 }).toBe(0)
-
-      console.log("✓ Moderate text question test completed successfully")
     })
   })
 })
 
 test("question with 50 items demonstrates scrolling behavior", async ({ page, sdk, gotoSession }) => {
-  await ensureScreenshotDir()
-
   await withDockSession(sdk, "e2e question scroll 50 items", async (session) => {
     await withDockSeed(sdk, session.id, async () => {
       await gotoSession(session.id)
@@ -288,59 +225,32 @@ test("question with 50 items demonstrates scrolling behavior", async ({ page, sd
       const dock = page.locator(questionDockSelector)
       await expect.poll(() => dock.count(), { timeout: 10_000 }).toBe(1)
 
-      const timestamp = Date.now()
-
       const questionText = dock.locator('[data-slot="question-text"]')
       await expect(questionText).toBeVisible()
 
-      const screenshot1Path = path.join(screenshotsDir, `question-50-items-top-${timestamp}.png`)
-      await dock.screenshot({ path: screenshot1Path })
-      console.log(`Screenshot saved (top): ${screenshot1Path}`)
-
       const scrollHeight = await questionText.evaluate((el) => el.scrollHeight)
       const clientHeight = await questionText.evaluate((el) => el.clientHeight)
-      console.log(`Question text scrollHeight: ${scrollHeight}px, clientHeight: ${clientHeight}px`)
+      expect(scrollHeight).toBeGreaterThan(clientHeight)
 
-      if (scrollHeight > clientHeight) {
-        console.log("✓ Question text is scrollable (scrollHeight > clientHeight)")
+      await questionText.evaluate((el) => {
+        el.scrollTop = el.scrollHeight / 2
+      })
 
-        await questionText.evaluate((el) => {
-          el.scrollTop = el.scrollHeight / 2
-        })
+      await questionText.evaluate((el) => {
+        el.scrollTop = el.scrollHeight
+      })
 
-        const screenshot2Path = path.join(screenshotsDir, `question-50-items-middle-${timestamp}.png`)
-        await dock.screenshot({ path: screenshot2Path })
-        console.log(`Screenshot saved (middle): ${screenshot2Path}`)
-
-        await questionText.evaluate((el) => {
-          el.scrollTop = el.scrollHeight
-        })
-
-        const screenshot3Path = path.join(screenshotsDir, `question-50-items-bottom-${timestamp}.png`)
-        await dock.screenshot({ path: screenshot3Path })
-        console.log(`Screenshot saved (bottom): ${screenshot3Path}`)
-
-        await questionText.evaluate((el) => {
-          el.scrollTop = 0
-        })
-      } else {
-        console.log("⚠ Question text is not scrollable (all content fits)")
-      }
+      await questionText.evaluate((el) => {
+        el.scrollTop = 0
+      })
 
       const options = dock.locator('[data-slot="question-option"]')
       await expect.poll(() => options.count()).toBe(2)
 
       await options.first().click()
-
-      const screenshot4Path = path.join(screenshotsDir, `question-50-items-selected-${timestamp}.png`)
-      await dock.screenshot({ path: screenshot4Path })
-      console.log(`Screenshot saved (selected): ${screenshot4Path}`)
-
       await dock.getByRole("button", { name: /submit/i }).click()
 
       await expect.poll(() => page.locator(questionDockSelector).count(), { timeout: 10_000 }).toBe(0)
-
-      console.log("✓ 50 items scrolling test completed successfully")
     })
   })
 })
