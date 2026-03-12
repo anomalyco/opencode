@@ -1,5 +1,7 @@
 const key = (directory: string, sessionID: string) => `${directory}\n${sessionID}`
 
+export const SESSION_PREFETCH_TTL = 15_000
+
 type Meta = {
   limit: number
   complete: boolean
@@ -8,6 +10,9 @@ type Meta = {
 
 const cache = new Map<string, Meta>()
 const inflight = new Map<string, Promise<Meta | undefined>>()
+const rev = new Map<string, number>()
+
+const version = (id: string) => rev.get(id) ?? 0
 
 export function getSessionPrefetch(directory: string, sessionID: string) {
   return cache.get(key(directory, sessionID))
@@ -17,16 +22,26 @@ export function getSessionPrefetchPromise(directory: string, sessionID: string) 
   return inflight.get(key(directory, sessionID))
 }
 
+export function clearSessionPrefetchInflight() {
+  inflight.clear()
+}
+
+export function isSessionPrefetchCurrent(directory: string, sessionID: string, value: number) {
+  return version(key(directory, sessionID)) === value
+}
+
 export function runSessionPrefetch(input: {
   directory: string
   sessionID: string
-  task: () => Promise<Meta | undefined>
+  task: (value: number) => Promise<Meta | undefined>
 }) {
   const id = key(input.directory, input.sessionID)
   const pending = inflight.get(id)
   if (pending) return pending
 
-  const promise = input.task().finally(() => {
+  const value = version(id)
+
+  const promise = input.task(value).finally(() => {
     if (inflight.get(id) === promise) inflight.delete(id)
   })
 
@@ -52,6 +67,7 @@ export function clearSessionPrefetch(directory: string, sessionIDs: Iterable<str
   for (const sessionID of sessionIDs) {
     if (!sessionID) continue
     const id = key(directory, sessionID)
+    rev.set(id, version(id) + 1)
     cache.delete(id)
     inflight.delete(id)
   }
@@ -59,12 +75,11 @@ export function clearSessionPrefetch(directory: string, sessionIDs: Iterable<str
 
 export function clearSessionPrefetchDirectory(directory: string) {
   const prefix = `${directory}\n`
-  for (const id of [...cache.keys()]) {
+  const keys = new Set([...cache.keys(), ...inflight.keys()])
+  for (const id of keys) {
     if (!id.startsWith(prefix)) continue
+    rev.set(id, version(id) + 1)
     cache.delete(id)
-  }
-  for (const id of [...inflight.keys()]) {
-    if (!id.startsWith(prefix)) continue
     inflight.delete(id)
   }
 }

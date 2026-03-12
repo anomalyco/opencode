@@ -27,7 +27,7 @@ import { base64Encode, checksum } from "@opencode-ai/util/encode"
 import { useNavigate, useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
 import { useComments } from "@/context/comments"
-import { getSessionPrefetch } from "@/context/global-sync/session-prefetch"
+import { getSessionPrefetch, SESSION_PREFETCH_TTL } from "@/context/global-sync/session-prefetch"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
@@ -51,7 +51,6 @@ import { same } from "@/utils/same"
 import { formatServerError } from "@/utils/server-errors"
 
 const emptyUserMessages: UserMessage[] = []
-const refreshTTL = 15_000
 
 type SessionHistoryWindowInput = {
   sessionID: () => string | undefined
@@ -640,7 +639,7 @@ export default function Page() {
         : (() => {
             const info = getSessionPrefetch(sdk.directory, id)
             if (!info) return true
-            return Date.now() - info.at > refreshTTL
+            return Date.now() - info.at > SESSION_PREFETCH_TTL
           })()
       const todos = untrack(() => sync.data.todo[id] !== undefined || globalSync.data.session_todo[id] !== undefined)
 

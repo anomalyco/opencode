@@ -35,7 +35,15 @@ import { showToast, Toast, toaster } from "@opencode-ai/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { clearWorkspaceTerminals } from "@/context/terminal"
 import { dropSessionCaches, pickSessionCacheEvictions } from "@/context/global-sync/session-cache"
-import { clearSessionPrefetch, runSessionPrefetch, setSessionPrefetch } from "@/context/global-sync/session-prefetch"
+import {
+  clearSessionPrefetchInflight,
+  clearSessionPrefetch,
+  getSessionPrefetch,
+  isSessionPrefetchCurrent,
+  runSessionPrefetch,
+  SESSION_PREFETCH_TTL,
+  setSessionPrefetch,
+} from "@/context/global-sync/session-prefetch"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
 import { Binary } from "@opencode-ai/util/binary"
@@ -664,8 +672,8 @@ export default function Layout(props: ParentProps) {
 
   const prefetchChunk = 200
   const prefetchConcurrency = 2
-  const prefetchPendingLimit = 6
-  const span = 3
+  const prefetchPendingLimit = 10
+  const span = 4
   const prefetchToken = { value: 0 }
   const prefetchQueues = new Map<string, PrefetchQueue>()
 
@@ -703,10 +711,17 @@ export default function Layout(props: ParentProps) {
     globalSDK.url
 
     prefetchToken.value += 1
-    for (const q of prefetchQueues.values()) {
+    clearSessionPrefetchInflight()
+    prefetchQueues.clear()
+  })
+
+  createEffect(() => {
+    const visible = new Set(visibleSessionDirs())
+    for (const [directory, q] of prefetchQueues) {
+      if (visible.has(directory)) continue
       q.pending.length = 0
       q.pendingSet.clear()
-      q.inflight.clear()
+      if (q.running === 0) prefetchQueues.delete(directory)
     }
   })
 
@@ -745,10 +760,11 @@ export default function Layout(props: ParentProps) {
     return runSessionPrefetch({
       directory,
       sessionID,
-      task: () =>
+      task: (rev) =>
         retry(() => globalSDK.client.session.messages({ directory, sessionID, limit: prefetchChunk }))
           .then((messages) => {
             if (prefetchToken.value !== token) return
+            if (!isSessionPrefetchCurrent(directory, sessionID, rev)) return
 
             const items = (messages.data ?? []).filter((x) => !!x?.info?.id)
             const next = items.map((x) => x.info).filter((m): m is Message => !!m?.id)
@@ -772,6 +788,8 @@ export default function Layout(props: ParentProps) {
               current.filter((item): item is Message => !!item?.id),
               sorted,
             )
+
+            if (!isSessionPrefetchCurrent(directory, sessionID, rev)) return
 
             batch(() => {
               if (stale.length > 0) {
@@ -827,7 +845,12 @@ export default function Layout(props: ParentProps) {
     if (!directory) return
 
     const [store] = globalSync.child(directory, { bootstrap: false })
-    const cached = untrack(() => store.message[session.id] !== undefined)
+    const cached = untrack(() => {
+      if (store.message[session.id] === undefined) return false
+      const info = getSessionPrefetch(directory, session.id)
+      if (!info) return false
+      return Date.now() - info.at < SESSION_PREFETCH_TTL
+    })
     if (cached) return
 
     const q = queueFor(directory)
@@ -1857,6 +1880,7 @@ export default function Layout(props: ParentProps) {
 
   const workspaceSidebarCtx: WorkspaceSidebarContext = {
     currentDir,
+    navList: currentSessions,
     sidebarExpanded,
     sidebarHovering,
     nav: () => state.nav,
@@ -1902,6 +1926,7 @@ export default function Layout(props: ParentProps) {
     workspaceIds,
     workspaceLabel,
     sessionProps: {
+      navList: currentSessions,
       sidebarExpanded,
       sidebarHovering,
       nav: () => state.nav,
