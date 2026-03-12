@@ -26,6 +26,8 @@
             pkg-config
             openssl
             git
+            xclip
+            xsel
           ];
         };
       });

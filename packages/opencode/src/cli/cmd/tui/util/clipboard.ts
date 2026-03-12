@@ -4,6 +4,10 @@ import clipboardy from "clipboardy"
 import { lazy } from "../../../../util/lazy.js"
 import { tmpdir } from "os"
 import path from "path"
+import { createHash } from "crypto"
+import { Log } from "@/util/log"
+
+const log = Log.create({ service: "tui.clipboard" })
 
 /**
  * Writes text to clipboard via OSC 52 escape sequence.
@@ -11,13 +15,27 @@ import path from "path"
  * the terminal emulator handle the clipboard locally.
  */
 function writeOsc52(text: string): void {
-  if (!process.stdout.isTTY) return
+  if (!process.stdout.isTTY) {
+    log.debug("osc52.skip", { reason: "stdout_not_tty" })
+    return
+  }
+
   const base64 = Buffer.from(text).toString("base64")
   const osc52 = `\x1b]52;c;${base64}\x07`
   // tmux and screen require DCS passthrough wrapping
   const passthrough = process.env["TMUX"] || process.env["STY"]
   const sequence = passthrough ? `\x1bPtmux;\x1b${osc52}\x1b\\` : osc52
-  process.stdout.write(sequence)
+  try {
+    process.stdout.write(sequence)
+    log.debug("osc52.write", {
+      passthrough: Boolean(passthrough),
+      bytes: sequence.length,
+    })
+  } catch (error) {
+    log.warn("osc52.write_failed", {
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
 }
 
 export namespace Clipboard {
@@ -76,55 +94,109 @@ export namespace Clipboard {
   const getCopyMethod = lazy(() => {
     const os = platform()
 
+    const env = {
+      DISPLAY: process.env["DISPLAY"],
+      WAYLAND_DISPLAY: process.env["WAYLAND_DISPLAY"],
+      TMUX: Boolean(process.env["TMUX"]),
+      STY: Boolean(process.env["STY"]),
+    }
+
     if (os === "darwin" && Bun.which("osascript")) {
-      console.log("clipboard: using osascript")
-      return async (text: string) => {
+      log.info("copy_method.selected", { method: "osascript", ...env })
+      return {
+        name: "osascript",
+        copy: async (text: string) => {
         const escaped = text.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
         await $`osascript -e 'set the clipboard to "${escaped}"'`.nothrow().quiet()
+        },
       }
     }
 
     if (os === "linux") {
       if (process.env["WAYLAND_DISPLAY"] && Bun.which("wl-copy")) {
-        console.log("clipboard: using wl-copy")
-        return async (text: string) => {
-          const proc = Bun.spawn(["wl-copy"], { stdin: "pipe", stdout: "ignore", stderr: "ignore" })
-          proc.stdin.write(text)
-          proc.stdin.end()
-          await proc.exited.catch(() => {})
+        log.info("copy_method.selected", { method: "wl-copy", ...env })
+        return {
+          name: "wl-copy",
+          copy: async (text: string) => {
+            const proc = Bun.spawn(["wl-copy"], { stdin: "pipe", stdout: "ignore", stderr: "ignore" })
+            proc.stdin.write(text)
+            proc.stdin.end()
+            const exitCode = await proc.exited.catch((error) => {
+              const msg = error instanceof Error ? error.message : String(error)
+              log.error("copy_method.failed", {
+                method: "wl-copy",
+                error: msg,
+              })
+              throw new Error(`wl-copy failed: ${msg}`)
+            })
+            if (exitCode !== 0) {
+              log.error("copy_method.nonzero_exit", { method: "wl-copy", exitCode })
+              throw new Error(`wl-copy exited with code ${exitCode}`)
+            }
+          },
         }
       }
       if (Bun.which("xclip")) {
-        console.log("clipboard: using xclip")
-        return async (text: string) => {
-          const proc = Bun.spawn(["xclip", "-selection", "clipboard"], {
-            stdin: "pipe",
-            stdout: "ignore",
-            stderr: "ignore",
-          })
-          proc.stdin.write(text)
-          proc.stdin.end()
-          await proc.exited.catch(() => {})
+        log.info("copy_method.selected", { method: "xclip", ...env })
+        return {
+          name: "xclip",
+          copy: async (text: string) => {
+            const proc = Bun.spawn(["xclip", "-selection", "clipboard"], {
+              stdin: "pipe",
+              stdout: "ignore",
+              stderr: "ignore",
+            })
+            proc.stdin.write(text)
+            proc.stdin.end()
+            const exitCode = await proc.exited.catch((error) => {
+              const msg = error instanceof Error ? error.message : String(error)
+              log.error("copy_method.failed", {
+                method: "xclip",
+                error: msg,
+              })
+              throw new Error(`xclip failed: ${msg}`)
+            })
+            if (exitCode !== 0) {
+              log.error("copy_method.nonzero_exit", { method: "xclip", exitCode })
+              throw new Error(`xclip exited with code ${exitCode}`)
+            }
+          },
         }
       }
       if (Bun.which("xsel")) {
-        console.log("clipboard: using xsel")
-        return async (text: string) => {
-          const proc = Bun.spawn(["xsel", "--clipboard", "--input"], {
-            stdin: "pipe",
-            stdout: "ignore",
-            stderr: "ignore",
-          })
-          proc.stdin.write(text)
-          proc.stdin.end()
-          await proc.exited.catch(() => {})
+        log.info("copy_method.selected", { method: "xsel", ...env })
+        return {
+          name: "xsel",
+          copy: async (text: string) => {
+            const proc = Bun.spawn(["xsel", "--clipboard", "--input"], {
+              stdin: "pipe",
+              stdout: "ignore",
+              stderr: "ignore",
+            })
+            proc.stdin.write(text)
+            proc.stdin.end()
+            const exitCode = await proc.exited.catch((error) => {
+              const msg = error instanceof Error ? error.message : String(error)
+              log.error("copy_method.failed", {
+                method: "xsel",
+                error: msg,
+              })
+              throw new Error(`xsel failed: ${msg}`)
+            })
+            if (exitCode !== 0) {
+              log.error("copy_method.nonzero_exit", { method: "xsel", exitCode })
+              throw new Error(`xsel exited with code ${exitCode}`)
+            }
+          },
         }
       }
     }
 
     if (os === "win32") {
-      console.log("clipboard: using powershell")
-      return async (text: string) => {
+      log.info("copy_method.selected", { method: "powershell", ...env })
+      return {
+        name: "powershell",
+        copy: async (text: string) => {
         // Pipe via stdin to avoid PowerShell string interpolation ($env:FOO, $(), etc.)
         const proc = Bun.spawn(
           [
@@ -143,18 +215,51 @@ export namespace Clipboard {
 
         proc.stdin.write(text)
         proc.stdin.end()
-        await proc.exited.catch(() => {})
+        const exitCode = await proc.exited.catch((error) => {
+          const msg = error instanceof Error ? error.message : String(error)
+          log.error("copy_method.failed", {
+            method: "powershell",
+            error: msg,
+          })
+          throw new Error(`PowerShell copy failed: ${msg}`)
+        })
+        if (exitCode !== 0) {
+          log.error("copy_method.nonzero_exit", { method: "powershell", exitCode })
+          throw new Error(`PowerShell copy exited with code ${exitCode}`)
+        }
+        },
       }
     }
 
-    console.log("clipboard: no native support")
-    return async (text: string) => {
-      await clipboardy.write(text).catch(() => {})
+    log.info("copy_method.selected", { method: "clipboardy", ...env })
+    return {
+      name: "clipboardy",
+      copy: async (text: string) => {
+        await clipboardy.write(text).catch((error) => {
+          const msg = error instanceof Error ? error.message : String(error)
+          log.error("copy_method.failed", {
+            method: "clipboardy",
+            error: msg,
+          })
+          throw new Error(msg)
+        })
+      },
     }
   })
 
   export async function copy(text: string): Promise<void> {
+    const digest = createHash("sha256").update(text).digest("hex").slice(0, 12)
+    const method = getCopyMethod()
+    log.debug("copy.request", {
+      method: method.name,
+      tty: Boolean(process.stdout.isTTY),
+      length: text.length,
+      sha256_12: digest,
+      DISPLAY: process.env["DISPLAY"],
+      WAYLAND_DISPLAY: process.env["WAYLAND_DISPLAY"],
+    })
+
     writeOsc52(text)
-    await getCopyMethod()(text)
+    await method.copy(text)
   }
 }
