@@ -386,7 +386,13 @@ case $current_shell in
         config_files="${ZDOTDIR:-$HOME}/.zshrc ${ZDOTDIR:-$HOME}/.zshenv $XDG_CONFIG_HOME/zsh/.zshrc $XDG_CONFIG_HOME/zsh/.zshenv"
     ;;
     bash)
-        config_files="$HOME/.bashrc $HOME/.bash_profile $HOME/.profile $XDG_CONFIG_HOME/bash/.bashrc $XDG_CONFIG_HOME/bash/.bash_profile"
+        # On macOS, Terminal.app and iTerm open login shells which source .bash_profile,
+        # not .bashrc. Prioritize .bash_profile on macOS to ensure PATH is set correctly.
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            config_files="$HOME/.bash_profile $HOME/.bashrc $HOME/.profile $XDG_CONFIG_HOME/bash/.bash_profile $XDG_CONFIG_HOME/bash/.bashrc"
+        else
+            config_files="$HOME/.bashrc $HOME/.bash_profile $HOME/.profile $XDG_CONFIG_HOME/bash/.bashrc $XDG_CONFIG_HOME/bash/.bash_profile"
+        fi
     ;;
     ash)
         config_files="$HOME/.ashrc $HOME/.profile /etc/profile"
