@@ -67,6 +67,7 @@ export function ServerRow(props: ServerRowProps) {
     <Tooltip
       class="flex-1 min-w-0"
       value={tooltipValue()}
+      contentStyle={{ "max-width": "none", "white-space": "nowrap" }}
       placement="top-start"
       inactive={!truncated() && !props.conn.displayName}
     >
