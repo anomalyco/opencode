@@ -110,6 +110,10 @@ const allTargets: {
   },
   {
     os: "win32",
+    arch: "arm64",
+  },
+  {
+    os: "win32",
     arch: "x64",
   },
   {
@@ -174,7 +178,6 @@ for (const item of targets) {
     conditions: ["browser"],
     tsconfig: "./tsconfig.json",
     plugins: [solidPlugin],
-    sourcemap: "external",
     compile: {
       autoloadBunfig: false,
       autoloadDotenv: false,
