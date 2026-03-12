@@ -1,6 +1,7 @@
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { Identifier } from "@/id/id"
+import { SessionID, MessageID } from "@/session/schema"
 import { Instance } from "@/project/instance"
 import { Log } from "@/util/log"
 import z from "zod"
@@ -34,11 +35,11 @@ export namespace Question {
   export const Request = z
     .object({
       id: Identifier.schema("question"),
-      sessionID: Identifier.schema("session"),
+      sessionID: SessionID.zod,
       questions: z.array(Info).describe("Questions to ask"),
       tool: z
         .object({
-          messageID: z.string(),
+          messageID: MessageID.zod,
           callID: z.string(),
         })
         .optional(),
@@ -65,7 +66,7 @@ export namespace Question {
     Replied: BusEvent.define(
       "question.replied",
       z.object({
-        sessionID: z.string(),
+        sessionID: SessionID.zod,
         requestID: z.string(),
         answers: z.array(Answer),
       }),
@@ -73,7 +74,7 @@ export namespace Question {
     Rejected: BusEvent.define(
       "question.rejected",
       z.object({
-        sessionID: z.string(),
+        sessionID: SessionID.zod,
         requestID: z.string(),
       }),
     ),
@@ -95,9 +96,9 @@ export namespace Question {
   })
 
   export async function ask(input: {
-    sessionID: string
+    sessionID: SessionID
     questions: Info[]
-    tool?: { messageID: string; callID: string }
+    tool?: { messageID: MessageID; callID: string }
   }): Promise<Answer[]> {
     const s = await state()
     const id = Identifier.ascending("question")

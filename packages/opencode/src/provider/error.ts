@@ -40,14 +40,6 @@ export namespace ProviderError {
     return /^4(00|13)\s*(status code)?\s*\(no body\)/i.test(message)
   }
 
-  function error(providerID: string, error: APICallError) {
-    if (providerID.includes("github-copilot") && error.statusCode === 403) {
-      return "Please reauthenticate with the copilot provider to ensure your credentials work properly with OpenCode."
-    }
-
-    return error.message
-  }
-
   function message(providerID: string, e: APICallError) {
     return iife(() => {
       const msg = e.message
@@ -60,10 +52,6 @@ export namespace ProviderError {
         return "Unknown error"
       }
 
-      const transformed = error(providerID, e)
-      if (transformed !== msg) {
-        return transformed
-      }
       if (!e.responseBody || (e.statusCode && msg !== STATUS_CODES[e.statusCode])) {
         return msg
       }

@@ -2,11 +2,13 @@ import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { Config } from "@/config/config"
 import { Identifier } from "@/id/id"
+import { SessionID, MessageID } from "@/session/schema"
 import { Instance } from "@/project/instance"
 import { Database, eq } from "@/storage/db"
 import { PermissionTable } from "@/session/session.sql"
 import { fn } from "@/util/fn"
 import { Log } from "@/util/log"
+import { ProjectID } from "@/project/schema"
 import { Wildcard } from "@/util/wildcard"
 import os from "os"
 import z from "zod"
@@ -68,14 +70,14 @@ export namespace PermissionNext {
   export const Request = z
     .object({
       id: Identifier.schema("permission"),
-      sessionID: Identifier.schema("session"),
+      sessionID: SessionID.zod,
       permission: z.string(),
       patterns: z.string().array(),
       metadata: z.record(z.string(), z.any()),
       always: z.string().array(),
       tool: z
         .object({
-          messageID: z.string(),
+          messageID: MessageID.zod,
           callID: z.string(),
         })
         .optional(),
@@ -90,7 +92,7 @@ export namespace PermissionNext {
   export type Reply = z.infer<typeof Reply>
 
   export const Approval = z.object({
-    projectID: z.string(),
+    projectID: ProjectID.zod,
     patterns: z.string().array(),
   })
 
@@ -99,7 +101,7 @@ export namespace PermissionNext {
     Replied: BusEvent.define(
       "permission.replied",
       z.object({
-        sessionID: z.string(),
+        sessionID: SessionID.zod,
         requestID: z.string(),
         reply: Reply,
       }),
