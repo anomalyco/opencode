@@ -124,9 +124,10 @@ export function Prompt(props: PromptProps) {
   const [store, setStore] = createStore<{
     prompt: PromptInfo
     mode: "normal" | "shell"
-    extmarkToPartIndex: Map<number, number>
+    partByExtmark: Map<number, number>
     interrupt: number
     placeholder: number
+    expanded: Set<number>
   }>({
     placeholder: Math.floor(Math.random() * PLACEHOLDERS.length),
     prompt: {
@@ -134,8 +135,9 @@ export function Prompt(props: PromptProps) {
       parts: [],
     },
     mode: "normal",
-    extmarkToPartIndex: new Map(),
+    partByExtmark: new Map(),
     interrupt: 0,
+    expanded: new Set(),
   })
 
   createEffect(
@@ -179,6 +181,8 @@ export function Prompt(props: PromptProps) {
         onSelect: (dialog) => {
           input.extmarks.clear()
           input.clear()
+          setStore("partByExtmark", new Map())
+          setStore("expanded", new Set())
           dialog.clear()
         },
       },
@@ -381,7 +385,8 @@ export function Prompt(props: PromptProps) {
         input: "",
         parts: [],
       })
-      setStore("extmarkToPartIndex", new Map())
+      setStore("partByExtmark", new Map())
+      setStore("expanded", new Set())
     },
     submit() {
       submit()
@@ -395,7 +400,8 @@ export function Prompt(props: PromptProps) {
 
   function restoreExtmarksFromParts(parts: PromptInfo["parts"]) {
     input.extmarks.clear()
-    setStore("extmarkToPartIndex", new Map())
+    setStore("partByExtmark", new Map())
+    setStore("expanded", new Set())
 
     parts.forEach((part, partIndex) => {
       let start = 0
@@ -416,7 +422,7 @@ export function Prompt(props: PromptProps) {
       } else if (part.type === "text" && part.source?.text) {
         start = part.source.text.start
         end = part.source.text.end
-        virtualText = part.source.text.value
+        virtualText = part.source.text.value || summary(part.text)
         styleId = pasteStyleId
       }
 
@@ -427,8 +433,9 @@ export function Prompt(props: PromptProps) {
           virtual: true,
           styleId,
           typeId: promptPartTypeId,
-        })
-        setStore("extmarkToPartIndex", (map: Map<number, number>) => {
+          onMouseUp: part.type === "text" ? (id: number) => toggle(id) : undefined,
+        } as any)
+        setStore("partByExtmark", (map: Map<number, number>) => {
           const newMap = new Map(map)
           newMap.set(extmarkId, partIndex)
           return newMap
@@ -445,7 +452,7 @@ export function Prompt(props: PromptProps) {
         const newParts: typeof draft.prompt.parts = []
 
         for (const extmark of allExtmarks) {
-          const partIndex = draft.extmarkToPartIndex.get(extmark.id)
+          const partIndex = draft.partByExtmark.get(extmark.id)
           if (partIndex !== undefined) {
             const part = draft.prompt.parts[partIndex]
             if (part) {
@@ -458,6 +465,9 @@ export function Prompt(props: PromptProps) {
               } else if (part.type === "text" && part.source?.text) {
                 part.source.text.start = extmark.start
                 part.source.text.end = extmark.end
+                if (draft.expanded.has(extmark.id)) {
+                  part.text = read(part, extmark)
+                }
               }
               newMap.set(extmark.id, newParts.length)
               newParts.push(part)
@@ -465,7 +475,7 @@ export function Prompt(props: PromptProps) {
           }
         }
 
-        draft.extmarkToPartIndex = newMap
+        draft.partByExtmark = newMap
         draft.prompt.parts = newParts
       }),
     )
@@ -486,7 +496,8 @@ export function Prompt(props: PromptProps) {
         input.extmarks.clear()
         input.clear()
         setStore("prompt", { input: "", parts: [] })
-        setStore("extmarkToPartIndex", new Map())
+        setStore("partByExtmark", new Map())
+        setStore("expanded", new Set())
         dialog.clear()
       },
     },
@@ -569,7 +580,7 @@ export function Prompt(props: PromptProps) {
     const sortedExtmarks = allExtmarks.sort((a: { start: number }, b: { start: number }) => b.start - a.start)
 
     for (const extmark of sortedExtmarks) {
-      const partIndex = store.extmarkToPartIndex.get(extmark.id)
+      const partIndex = store.partByExtmark.get(extmark.id)
       if (partIndex !== undefined) {
         const part = store.prompt.parts[partIndex]
         if (part?.type === "text" && part.text) {
@@ -660,7 +671,8 @@ export function Prompt(props: PromptProps) {
       input: "",
       parts: [],
     })
-    setStore("extmarkToPartIndex", new Map())
+    setStore("partByExtmark", new Map())
+    setStore("expanded", new Set())
     props.onSubmit?.()
 
     // temporary hack to make sure the message is sent
@@ -688,7 +700,8 @@ export function Prompt(props: PromptProps) {
       virtual: true,
       styleId: pasteStyleId,
       typeId: promptPartTypeId,
-    })
+      onMouseUp: (id: number) => toggle(id),
+    } as any)
 
     setStore(
       produce((draft) => {
@@ -704,9 +717,90 @@ export function Prompt(props: PromptProps) {
             },
           },
         })
-        draft.extmarkToPartIndex.set(extmarkId, partIndex)
+        draft.partByExtmark.set(extmarkId, partIndex)
       }),
     )
+  }
+
+  function lines(text: string) {
+    return (text.match(/\n/g)?.length ?? 0) + 1
+  }
+
+  function summary(text: string) {
+    return `[Pasted ~${lines(text)} lines]`
+  }
+
+  function read(part: Extract<PromptInfo["parts"][number], { type: "text" }>, extmark: { start: number; end: number }) {
+    if (!part.source?.text) return part.text
+    return input.plainText.slice(extmark.start, extmark.end)
+  }
+
+  function toggle(id: number) {
+    if (!input || input.isDestroyed) return
+
+    const idx = store.partByExtmark.get(id)
+    if (idx === undefined) return
+
+    const part = store.prompt.parts[idx]
+    if (!part || part.type !== "text" || !part.source?.text) return
+
+    const extmark = input.extmarks.get(id)
+    if (!extmark) return
+
+    const start = extmark.start
+    const end = extmark.end
+    const viewport = input.editorView.getViewport()
+    const cursor = input.visualCursor.offset
+
+    const open = store.expanded.has(id)
+    const next = open ? read(part, extmark) : part.text
+    const tag = summary(next)
+    const text = open ? tag : next
+    const cur =
+      cursor < start
+        ? cursor
+        : cursor > end
+          ? cursor + text.length - (end - start)
+          : Math.min(start + text.length, cursor)
+    const from = input.editBuffer.offsetToPosition(start)
+    const to = input.editBuffer.offsetToPosition(end + 1)
+    if (!from || !to) return
+
+    input.extmarks.delete(id)
+    input.editBuffer.deleteRange(from.row, from.col, to.row, to.col)
+    input.editBuffer.setCursorByOffset(start)
+    input.editBuffer.insertText(text + " ")
+    const nextId = input.extmarks.create({
+      start,
+      end: start + text.length,
+      virtual: open,
+      styleId: pasteStyleId,
+      typeId: promptPartTypeId,
+      onMouseUp: (id: number) => toggle(id),
+    } as any)
+
+    setStore(
+      produce((draft) => {
+        draft.partByExtmark.delete(id)
+        draft.partByExtmark.set(nextId, idx)
+        const item = draft.prompt.parts[idx]
+        if (item?.type === "text" && item.source?.text) {
+          item.text = next
+          item.source.text.value = tag
+        }
+        if (draft.expanded.has(id)) {
+          draft.expanded.delete(id)
+          draft.expanded.delete(nextId)
+        } else {
+          draft.expanded.add(nextId)
+        }
+      }),
+    )
+
+    input.editBuffer.setCursorByOffset(cur)
+    input.editorView.setViewport(viewport.offsetX, viewport.offsetY, viewport.width, viewport.height, false)
+    input.getLayoutNode().markDirty()
+    renderer.requestRender()
   }
 
   async function pasteImage(file: { filename?: string; content: string; mime: string }) {
@@ -746,7 +840,7 @@ export function Prompt(props: PromptProps) {
       produce((draft) => {
         const partIndex = draft.prompt.parts.length
         draft.prompt.parts.push(part)
-        draft.extmarkToPartIndex.set(extmarkId, partIndex)
+        draft.partByExtmark.set(extmarkId, partIndex)
       }),
     )
     return
@@ -805,7 +899,7 @@ export function Prompt(props: PromptProps) {
           setStore("prompt", produce(cb))
         }}
         setExtmark={(partIndex, extmarkId) => {
-          setStore("extmarkToPartIndex", (map: Map<number, number>) => {
+          setStore("partByExtmark", (map: Map<number, number>) => {
             const newMap = new Map(map)
             newMap.set(extmarkId, partIndex)
             return newMap
@@ -876,7 +970,8 @@ export function Prompt(props: PromptProps) {
                     input: "",
                     parts: [],
                   })
-                  setStore("extmarkToPartIndex", new Map())
+                  setStore("partByExtmark", new Map())
+                  setStore("expanded", new Set())
                   return
                 }
                 if (keybind.match("app_exit", e)) {
@@ -977,13 +1072,12 @@ export function Prompt(props: PromptProps) {
                   } catch {}
                 }
 
-                const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
                 if (
-                  (lineCount >= 3 || pastedContent.length > 150) &&
+                  (lines(pastedContent) >= 3 || pastedContent.length > 150) &&
                   !sync.data.config.experimental?.disable_paste_summary
                 ) {
                   event.preventDefault()
-                  pasteText(pastedContent, `[Pasted ~${lineCount} lines]`)
+                  pasteText(pastedContent, summary(pastedContent))
                   return
                 }
 

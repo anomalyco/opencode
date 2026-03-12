@@ -114,7 +114,7 @@ export function Home() {
           <Logo />
         </box>
         <box height={1} minHeight={0} flexShrink={1} />
-        <box width="100%" maxWidth={75} zIndex={1000} paddingTop={1} flexShrink={0}>
+        <box width="100%" maxWidth={75} zIndex={1000} paddingTop={1} height={10} minHeight={10} flexShrink={0}>
           <Prompt
             ref={(r) => {
               prompt = r
