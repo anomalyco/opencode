@@ -24,7 +24,7 @@
       "syntax-constant": "#007b80",
       "syntax-critical": "#ff8c00",
       "syntax-diff-delete": "#ff8c00",
-      "syntax-diff-unknown": "#a753ae"
+      "syntax-diff-unknown": "#a753ae",
       "surface-critical-base": "#FFF2F0"
     }
   },
@@ -50,7 +50,7 @@
       "syntax-constant": "#93e9f6",
       "syntax-critical": "#fab283",
       "syntax-diff-delete": "#fab283",
-      "syntax-diff-unknown": "#edb2f1"
+      "syntax-diff-unknown": "#edb2f1",
       "surface-critical-base": "#1F0603"
     }
   }
