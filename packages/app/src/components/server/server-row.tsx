@@ -65,22 +65,26 @@ export function ServerRow(props: ServerRowProps) {
 
   return (
     <Tooltip
-      class="flex-1"
+      class="flex-1 min-w-0"
       value={tooltipValue()}
+      contentStyle={{ "max-width": "none", "white-space": "nowrap" }}
       placement="top-start"
       inactive={!truncated() && !props.conn.displayName}
     >
       <div class={props.class} classList={{ "opacity-50": props.dimmed }}>
-        <div class="flex flex-col items-start">
-          <div class="flex flex-row items-center gap-2">
-            <span ref={nameRef} class={props.nameClass ?? "truncate"}>
+        <div class="flex flex-col items-start min-w-0 w-full">
+          <div class="flex flex-row items-center gap-2 min-w-0 w-full">
+            <span ref={nameRef} class={`${props.nameClass ?? "truncate"} min-w-0`}>
               {name()}
             </span>
             <Show
               when={badge()}
               fallback={
                 <Show when={props.status?.version}>
-                  <span ref={versionRef} class={props.versionClass ?? "text-text-weak text-14-regular truncate"}>
+                  <span
+                    ref={versionRef}
+                    class={`${props.versionClass ?? "text-text-weak text-14-regular truncate"} min-w-0`}
+                  >
                     v{props.status?.version}
                   </span>
                 </Show>
