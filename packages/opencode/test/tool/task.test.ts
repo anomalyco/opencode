@@ -150,7 +150,8 @@ describe("tool.task", () => {
         const toolDenied = await TaskTool.init({ agent: agentWithAllModelsDenied })
 
         // When all models are denied, the models list should be empty
-        expect(toolDenied.description).toContain("Available models for the model parameter:\n\n")
+        // Use regex to handle both \n and \r\n line endings (Windows CI)
+        expect(toolDenied.description).toMatch(/Available models for the model parameter:\r?\n\r?\n/)
 
         // Create a mock agent with no model restrictions
         const agentWithNoRestrictions: Agent.Info = {
@@ -164,7 +165,7 @@ describe("tool.task", () => {
         const toolAllowed = await TaskTool.init({ agent: agentWithNoRestrictions })
 
         // With no restrictions, there should be models (not empty after the header)
-        expect(toolAllowed.description).not.toContain("Available models for the model parameter:\n\n")
+        expect(toolAllowed.description).not.toMatch(/Available models for the model parameter:\r?\n\r?\n/)
         expect(toolAllowed.description).toContain("Available models for the model parameter:")
       },
     })
