@@ -752,12 +752,6 @@ export function MessageTimeline(props: {
               <For each={rendered()}>
                 {(messageID) => {
                   const active = createMemo(() => activeMessageID() === messageID)
-                  const queued = createMemo(() => {
-                    if (active()) return false
-                    const activeID = activeMessageID()
-                    if (activeID) return messageID > activeID
-                    return false
-                  })
                   const comments = createMemo(() => messageComments(sync.data.part[messageID] ?? []), [], {
                     equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
                   })
@@ -817,7 +811,6 @@ export function MessageTimeline(props: {
                         messageID={messageID}
                         actions={props.actions}
                         active={active()}
-                        queued={queued()}
                         status={active() ? sessionStatus() : undefined}
                         showReasoningSummaries={settings.general.showReasoningSummaries()}
                         shellToolDefaultOpen={settings.general.shellToolPartsExpanded()}

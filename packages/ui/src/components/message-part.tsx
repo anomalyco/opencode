@@ -132,7 +132,6 @@ export interface MessageProps {
   actions?: UserActions
   showAssistantCopyPartID?: string | null
   interrupted?: boolean
-  queued?: boolean
   showReasoningSummaries?: boolean
 }
 
@@ -686,7 +685,6 @@ export function Message(props: MessageProps) {
             parts={props.parts}
             actions={props.actions}
             interrupted={props.interrupted}
-            queued={props.queued}
           />
         )}
       </Match>
@@ -883,7 +881,6 @@ export function UserMessageDisplay(props: {
   parts: PartType[]
   actions?: UserActions
   interrupted?: boolean
-  queued?: boolean
 }) {
   const data = useData()
   const dialog = useDialog()
@@ -981,7 +978,6 @@ export function UserMessageDisplay(props: {
               <div
                 data-slot="user-message-attachment"
                 data-type={file.mime.startsWith("image/") ? "image" : "file"}
-                data-queued={props.queued ? "" : undefined}
                 onClick={() => {
                   if (file.mime.startsWith("image/") && file.url) {
                     openImagePreview(file.url, file.filename)
@@ -1010,14 +1006,9 @@ export function UserMessageDisplay(props: {
       <Show when={text()}>
         <>
           <div data-slot="user-message-body">
-            <div data-slot="user-message-text" data-queued={props.queued ? "" : undefined}>
+            <div data-slot="user-message-text">
               <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
             </div>
-            <Show when={props.queued}>
-              <div data-slot="user-message-queued-indicator">
-                <TextShimmer text={i18n.t("ui.message.queued")} />
-              </div>
-            </Show>
           </div>
           <div data-slot="user-message-copy-wrapper" data-interrupted={props.interrupted ? "" : undefined}>
             <Show when={metaHead() || metaTail()}>
