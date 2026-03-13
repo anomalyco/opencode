@@ -1416,7 +1416,7 @@ export const layer = Layer.effect(
         source: "config",
         models: mapValues(base?.models ?? {}, (model) => ({
           ...model,
-          providerID,
+          providerID: ProviderID.make(providerID),
         })),
       }
 

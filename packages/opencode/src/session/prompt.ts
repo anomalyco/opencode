@@ -134,8 +134,8 @@ export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
 
   async function hookPart(input: {
-    sessionID: string
-    messageID: string
+    sessionID: SessionID
+    messageID: MessageID
     plugin: string
     hook: string
     stage: "before" | "after" | "error"
@@ -143,7 +143,7 @@ export namespace SessionPrompt {
   }) {
     const now = Date.now()
     await Session.updatePart({
-      id: Identifier.ascending("part"),
+      id: PartID.ascending(),
       messageID: input.messageID,
       sessionID: input.sessionID,
       type: "tool",
@@ -178,7 +178,7 @@ export namespace SessionPrompt {
     })
   }
 
-  function hookOpts(sessionID: string, messageID: string) {
+  function hookOpts(sessionID: SessionID, messageID: MessageID) {
     return {
       onInvoke: async (event: {
         plugin: string
@@ -2721,8 +2721,16 @@ export const layer = Layer.effect(
       add(candidates, model)
     }
     add(candidates, await Provider.getModel(input.providerID, input.modelID).catch(() => undefined))
-    add(candidates, await Provider.getModel("AxonHub-anthropic", "claude-haiku-4-5").catch(() => undefined))
-    add(candidates, await Provider.getModel("AxonHub", "gpt-5-nano").catch(() => undefined))
+    add(
+      candidates,
+      await Provider.getModel(ProviderID.make("AxonHub-anthropic"), ModelID.make("claude-haiku-4-5")).catch(
+        () => undefined,
+      ),
+    )
+    add(
+      candidates,
+      await Provider.getModel(ProviderID.make("AxonHub"), ModelID.make("gpt-5-nano")).catch(() => undefined),
+    )
     add(candidates, await Provider.getSmallModel(input.providerID).catch(() => undefined))
     if (!candidates.length) return
 
@@ -2779,7 +2787,7 @@ export const layer = Layer.effect(
     }
   }
 
-  export async function generateTitle(input: { sessionID: string }) {
+  export async function generateTitle(input: { sessionID: SessionID }) {
     const session = await Session.get(input.sessionID)
     const history = await Session.messages({ sessionID: input.sessionID })
     const blocked = (model: Provider.Model) =>
@@ -2822,16 +2830,25 @@ export const layer = Layer.effect(
     // 1. Title agent's configured model (if any)
     // 2. The session's original model (proven to work for chat)
     // 3. getSmallModel fallback from the session's provider
-    const providerID = firstRealUser.info.role === "user" ? firstRealUser.info.model.providerID : "anthropic"
-    const modelID = firstRealUser.info.role === "user" ? firstRealUser.info.model.modelID : "claude-3-5-sonnet-20241022"
+    const providerID = firstRealUser.info.role === "user" ? firstRealUser.info.model.providerID : ProviderID.anthropic
+    const modelID =
+      firstRealUser.info.role === "user" ? firstRealUser.info.model.modelID : ModelID.make("claude-3-5-sonnet-20241022")
 
     const candidates: Provider.Model[] = []
     if (agent.model) {
       add(candidates, await Provider.getModel(agent.model.providerID, agent.model.modelID).catch(() => undefined))
     }
     add(candidates, await Provider.getModel(providerID, modelID).catch(() => undefined))
-    add(candidates, await Provider.getModel("AxonHub-anthropic", "claude-haiku-4-5").catch(() => undefined))
-    add(candidates, await Provider.getModel("AxonHub", "gpt-5-nano").catch(() => undefined))
+    add(
+      candidates,
+      await Provider.getModel(ProviderID.make("AxonHub-anthropic"), ModelID.make("claude-haiku-4-5")).catch(
+        () => undefined,
+      ),
+    )
+    add(
+      candidates,
+      await Provider.getModel(ProviderID.make("AxonHub"), ModelID.make("gpt-5-nano")).catch(() => undefined),
+    )
     add(candidates, await Provider.getSmallModel(providerID).catch(() => undefined))
 
     if (candidates.length === 0) throw new Error("No available model for title generation")
