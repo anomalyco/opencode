@@ -251,7 +251,7 @@ export const dict = {
 
   "go.title": "OpenCode Go | Rimelige kodemodeller for alle",
   "go.meta.description":
-    "Go er et abonnement til $10/måned med rause grenser på 5 timer for GLM-5, Kimi K2.5 og MiniMax M2.5.",
+    "Go starter på $5 for den første måneden, deretter $10/måned, med sjenerøse 5-timers forespørselsgrenser for GLM-5, Kimi K2.5 og MiniMax M2.5.",
   "go.hero.title": "Rimelige kodemodeller for alle",
   "go.hero.body":
     "Go bringer agent-koding til programmerere over hele verden. Med rause grenser og pålitelig tilgang til de mest kapable åpen kildekode-modellene, kan du bygge med kraftige agenter uten å bekymre deg for kostnader eller tilgjengelighet.",
@@ -260,7 +260,9 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Abonner på Go",
   "go.cta.price": "$10/måned",
-  "go.pricing.body": "Bruk med hvilken som helst agent. Fyll på kreditt om nødvendig. Avslutt når som helst.",
+  "go.cta.promo": "$5 første måned",
+  "go.pricing.body":
+    "Bruk med hvilken som helst agent. $5 første måned, deretter $10/måned. Fyll på kreditt ved behov. Avslutt når som helst.",
   "go.graph.free": "Gratis",
   "go.graph.freePill": "Big Pickle og gratis modeller",
   "go.graph.go": "Go",
@@ -292,20 +294,21 @@ export const dict = {
   "go.testimonials.frank.quote": "Jeg skulle ønske jeg fortsatt var hos Nvidia.",
   "go.problem.title": "Hvilket problem løser Go?",
   "go.problem.body":
-    "Vi fokuserer på å bringe OpenCode-opplevelsen til så mange mennesker som mulig. OpenCode Go er et rimelig ($10/måned) abonnement designet for å bringe agent-koding til programmerere over hele verden. Det gir rause grenser og pålitelig tilgang til de mest kapable åpen kildekode-modellene.",
+    "Vi fokuserer på å bringe OpenCode-opplevelsen til så mange som mulig. OpenCode Go er et rimelig abonnement: $5 for den første måneden, deretter $10/måned. Det gir sjenerøse grenser og pålitelig tilgang til de mest kapable åpen kildekode-modellene.",
   "go.problem.subtitle": " ",
   "go.problem.item1": "Rimelig abonnementspris",
   "go.problem.item2": "Rause grenser og pålitelig tilgang",
   "go.problem.item3": "Bygget for så mange programmerere som mulig",
   "go.problem.item4": "Inkluderer GLM-5, Kimi K2.5 og MiniMax M2.5",
   "go.how.title": "Hvordan Go fungerer",
-  "go.how.body": "Go er et abonnement til $10/måned som du kan bruke med OpenCode eller hvilken som helst agent.",
+  "go.how.body":
+    "Go starter på $5 for den første måneden, deretter $10/måned. Du kan bruke det med OpenCode eller hvilken som helst agent.",
   "go.how.step1.title": "Opprett en konto",
   "go.how.step1.beforeLink": "følg",
   "go.how.step1.link": "oppsettsinstruksjonene",
   "go.how.step2.title": "Abonner på Go",
-  "go.how.step2.link": "$10/måned",
-  "go.how.step2.afterLink": "med rause grenser",
+  "go.how.step2.link": "$5 første måned",
+  "go.how.step2.afterLink": "deretter $10/måned med sjenerøse grenser",
   "go.how.step3.title": "Begynn å kode",
   "go.how.step3.body": "med pålitelig tilgang til åpen kildekode-modeller",
   "go.privacy.title": "Personvernet ditt er viktig for oss",
@@ -322,11 +325,11 @@ export const dict = {
   "go.faq.a2": "Go inkluderer GLM-5, Kimi K2.5 og MiniMax M2.5, med rause grenser og pålitelig tilgang.",
   "go.faq.q3": "Er Go det samme som Zen?",
   "go.faq.a3":
-    "Nei. Zen er pay-as-you-go, mens Go er et abonnement til $10/måned med rause grenser og pålitelig tilgang til åpen kildekode-modellene GLM-5, Kimi K2.5 og MiniMax M2.5.",
+    "Nei. Zen er betaling etter bruk, mens Go starter på $5 for den første måneden, deretter $10/måned, med sjenerøse grenser og pålitelig tilgang til åpen kildekode-modellene GLM-5, Kimi K2.5 og MiniMax M2.5.",
   "go.faq.q4": "Hva koster Go?",
   "go.faq.a4.p1.beforePricing": "Go koster",
-  "go.faq.a4.p1.pricingLink": "$10/måned",
-  "go.faq.a4.p1.afterPricing": "med rause grenser.",
+  "go.faq.a4.p1.pricingLink": "$5 første måned",
+  "go.faq.a4.p1.afterPricing": "deretter $10/måned med sjenerøse grenser.",
   "go.faq.a4.p2.beforeAccount": "Du kan administrere abonnementet ditt i din",
   "go.faq.a4.p2.accountLink": "konto",
   "go.faq.a4.p3": "Avslutt når som helst.",
@@ -415,12 +418,15 @@ export const dict = {
   "black.subscribe.success.chargeNotice": "Kortet ditt vil bli belastet når abonnementet aktiveres",
 
   "workspace.nav.zen": "Zen",
+  "workspace.nav.go": "Go",
+  "workspace.nav.usage": "Bruk",
   "workspace.nav.apiKeys": "API-nøkler",
   "workspace.nav.members": "Medlemmer",
   "workspace.nav.billing": "Fakturering",
   "workspace.nav.settings": "Innstillinger",
 
   "workspace.home.banner.beforeLink": "Pålitelige optimaliserte modeller for kodeagenter.",
+  "workspace.lite.banner.beforeLink": "Lavkost kodemodeller for alle.",
   "workspace.home.billing.loading": "Laster...",
   "workspace.home.billing.enable": "Aktiver fakturering",
   "workspace.home.billing.currentBalance": "Gjeldende saldo",
@@ -540,6 +546,8 @@ export const dict = {
   "workspace.billing.loading": "Laster...",
   "workspace.billing.addAction": "Legg til",
   "workspace.billing.addBalance": "Legg til saldo",
+  "workspace.billing.alipay": "Alipay",
+  "workspace.billing.wechat": "WeChat Pay",
   "workspace.billing.linkedToStripe": "Koblet til Stripe",
   "workspace.billing.manage": "Administrer",
   "workspace.billing.enable": "Aktiver fakturering",
@@ -622,7 +630,6 @@ export const dict = {
   "workspace.lite.time.minute": "minutt",
   "workspace.lite.time.minutes": "minutter",
   "workspace.lite.time.fewSeconds": "noen få sekunder",
-  "workspace.lite.subscription.title": "Go-abonnement",
   "workspace.lite.subscription.message": "Du abonnerer på OpenCode Go.",
   "workspace.lite.subscription.manage": "Administrer abonnement",
   "workspace.lite.subscription.rollingUsage": "Løpende bruk",
@@ -632,12 +639,13 @@ export const dict = {
   "workspace.lite.subscription.useBalance": "Bruk din tilgjengelige saldo etter å ha nådd bruksgrensene",
   "workspace.lite.subscription.selectProvider":
     'Velg "OpenCode Go" som leverandør i opencode-konfigurasjonen din for å bruke Go-modeller.',
-  "workspace.lite.other.title": "Go-abonnement",
+  "workspace.lite.black.message":
+    "Du abonnerer for øyeblikket på OpenCode Black eller står på venteliste. Vennligst avslutt abonnementet først hvis du vil bytte til Go.",
   "workspace.lite.other.message":
     "Et annet medlem i dette arbeidsområdet abonnerer allerede på OpenCode Go. Kun ett medlem per arbeidsområde kan abonnere.",
-  "workspace.lite.promo.title": "OpenCode Go",
   "workspace.lite.promo.description":
-    "OpenCode Go er et abonnement til $10 per måned som gir pålitelig tilgang til populære åpne kodemodeller med rause bruksgrenser.",
+    "OpenCode Go starter på {{price}}, deretter $10/måned, og gir pålitelig tilgang til populære åpne kodingsmodeller med sjenerøse bruksgrenser.",
+  "workspace.lite.promo.price": "$5 for den første måneden",
   "workspace.lite.promo.modelsTitle": "Hva som er inkludert",
   "workspace.lite.promo.footer":
     "Planen er primært designet for internasjonale brukere, med modeller driftet i USA, EU og Singapore for stabil global tilgang. Priser og bruksgrenser kan endres etter hvert som vi lærer fra tidlig bruk og tilbakemeldinger.",

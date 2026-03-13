@@ -103,6 +103,12 @@ export const stripeWebhook = new stripe.WebhookEndpoint("StripeWebhookEndpoint",
 const zenLiteProduct = new stripe.Product("ZenLite", {
   name: "OpenCode Go",
 })
+const zenLiteCouponFirstMonth50 = new stripe.Coupon("ZenLiteCouponFirstMonth50", {
+  name: "First month 50% off",
+  percentOff: 50,
+  appliesToProducts: [zenLiteProduct.id],
+  duration: "once",
+})
 const zenLitePrice = new stripe.Price("ZenLitePrice", {
   product: zenLiteProduct.id,
   currency: "usd",
@@ -116,6 +122,7 @@ const ZEN_LITE_PRICE = new sst.Linkable("ZEN_LITE_PRICE", {
   properties: {
     product: zenLiteProduct.id,
     price: zenLitePrice.id,
+    firstMonth50Coupon: zenLiteCouponFirstMonth50.id,
   },
 })
 
