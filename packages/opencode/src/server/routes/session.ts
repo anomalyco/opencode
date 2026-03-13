@@ -19,6 +19,7 @@ import { PermissionID } from "@/permission/schema"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
+import { Instance } from "../../project/instance"
 
 const log = Log.create({ service: "server" })
 
@@ -520,27 +521,32 @@ export const SessionRoutes = lazy(() =>
         const sessionID = c.req.valid("param").sessionID
         const body = c.req.valid("json")
         const session = await Session.get(sessionID)
-        await SessionRevert.cleanup(session)
-        const msgs = await Session.messages({ sessionID })
-        let currentAgent = await Agent.defaultAgent()
-        for (let i = msgs.length - 1; i >= 0; i--) {
-          const info = msgs[i].info
-          if (info.role === "user") {
-            currentAgent = info.agent || (await Agent.defaultAgent())
-            break
-          }
-        }
-        await SessionCompaction.create({
-          sessionID,
-          agent: currentAgent,
-          model: {
-            providerID: body.providerID,
-            modelID: body.modelID,
+        return Instance.provide({
+          directory: session.directory,
+          async fn() {
+            await SessionRevert.cleanup(session)
+            const msgs = await Session.messages({ sessionID })
+            let currentAgent = await Agent.defaultAgent()
+            for (let i = msgs.length - 1; i >= 0; i--) {
+              const info = msgs[i].info
+              if (info.role === "user") {
+                currentAgent = info.agent || (await Agent.defaultAgent())
+                break
+              }
+            }
+            await SessionCompaction.create({
+              sessionID,
+              agent: currentAgent,
+              model: {
+                providerID: body.providerID,
+                modelID: body.modelID,
+              },
+              auto: body.auto,
+            })
+            await SessionPrompt.loop({ sessionID })
+            return c.json(true)
           },
-          auto: body.auto,
         })
-        await SessionPrompt.loop({ sessionID })
-        return c.json(true)
       },
     )
     .get(
@@ -761,13 +767,19 @@ export const SessionRoutes = lazy(() =>
       ),
       validator("json", SessionPrompt.PromptInput.omit({ sessionID: true })),
       async (c) => {
-        c.status(200)
-        c.header("Content-Type", "application/json")
-        return stream(c, async (stream) => {
-          const sessionID = c.req.valid("param").sessionID
-          const body = c.req.valid("json")
-          const msg = await SessionPrompt.prompt({ ...body, sessionID })
-          stream.write(JSON.stringify(msg))
+        const sessionID = c.req.valid("param").sessionID
+        const session = await Session.get(sessionID)
+        return Instance.provide({
+          directory: session.directory,
+          async fn() {
+            c.status(200)
+            c.header("Content-Type", "application/json")
+            return stream(c, async (stream) => {
+              const body = c.req.valid("json")
+              const msg = await SessionPrompt.prompt({ ...body, sessionID })
+              stream.write(JSON.stringify(msg))
+            })
+          },
         })
       },
     )
@@ -793,12 +805,18 @@ export const SessionRoutes = lazy(() =>
       ),
       validator("json", SessionPrompt.PromptInput.omit({ sessionID: true })),
       async (c) => {
-        c.status(204)
-        c.header("Content-Type", "application/json")
-        return stream(c, async () => {
-          const sessionID = c.req.valid("param").sessionID
-          const body = c.req.valid("json")
-          SessionPrompt.prompt({ ...body, sessionID })
+        const sessionID = c.req.valid("param").sessionID
+        const session = await Session.get(sessionID)
+        return Instance.provide({
+          directory: session.directory,
+          async fn() {
+            c.status(204)
+            c.header("Content-Type", "application/json")
+            return stream(c, async () => {
+              const body = c.req.valid("json")
+              SessionPrompt.prompt({ ...body, sessionID })
+            })
+          },
         })
       },
     )
@@ -834,9 +852,15 @@ export const SessionRoutes = lazy(() =>
       validator("json", SessionPrompt.CommandInput.omit({ sessionID: true })),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
-        const body = c.req.valid("json")
-        const msg = await SessionPrompt.command({ ...body, sessionID })
-        return c.json(msg)
+        const session = await Session.get(sessionID)
+        return Instance.provide({
+          directory: session.directory,
+          async fn() {
+            const body = c.req.valid("json")
+            const msg = await SessionPrompt.command({ ...body, sessionID })
+            return c.json(msg)
+          },
+        })
       },
     )
     .post(
@@ -866,9 +890,15 @@ export const SessionRoutes = lazy(() =>
       validator("json", SessionPrompt.ShellInput.omit({ sessionID: true })),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
-        const body = c.req.valid("json")
-        const msg = await SessionPrompt.shell({ ...body, sessionID })
-        return c.json(msg)
+        const session = await Session.get(sessionID)
+        return Instance.provide({
+          directory: session.directory,
+          async fn() {
+            const body = c.req.valid("json")
+            const msg = await SessionPrompt.shell({ ...body, sessionID })
+            return c.json(msg)
+          },
+        })
       },
     )
     .post(
