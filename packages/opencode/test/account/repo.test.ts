@@ -2,7 +2,7 @@ import { expect } from "bun:test"
 import { Effect, Layer, Option } from "effect"
 
 import { AccountRepo } from "../../src/account/repo"
-import { AccountID, OrgID } from "../../src/account/schema"
+import { AccessToken, AccountID, OrgID, RefreshToken } from "../../src/account/schema"
 import { Database } from "../../src/storage/db"
 import { testEffect } from "../fixture/effect"
 
@@ -41,8 +41,8 @@ it.effect(
         id,
         email: "test@example.com",
         url: "https://control.example.com",
-        accessToken: "at_123",
-        refreshToken: "rt_456",
+        accessToken: AccessToken.make("at_123"),
+        refreshToken: RefreshToken.make("rt_456"),
         expiry: Date.now() + 3600_000,
         orgID: Option.some(OrgID.make("org-1")),
       }),
@@ -51,7 +51,7 @@ it.effect(
     const row = yield* AccountRepo.use((r) => r.getRow(id))
     expect(Option.isSome(row)).toBe(true)
     const value = Option.getOrThrow(row)
-    expect(value.id).toBe("user-1")
+    expect(value.id).toBe(AccountID.make("user-1"))
     expect(value.email).toBe("test@example.com")
 
     const active = yield* AccountRepo.use((r) => r.active())
@@ -70,8 +70,8 @@ it.effect(
         id: id1,
         email: "first@example.com",
         url: "https://control.example.com",
-        accessToken: "at_1",
-        refreshToken: "rt_1",
+        accessToken: AccessToken.make("at_1"),
+        refreshToken: RefreshToken.make("rt_1"),
         expiry: Date.now() + 3600_000,
         orgID: Option.some(OrgID.make("org-1")),
       }),
@@ -82,8 +82,8 @@ it.effect(
         id: id2,
         email: "second@example.com",
         url: "https://control.example.com",
-        accessToken: "at_2",
-        refreshToken: "rt_2",
+        accessToken: AccessToken.make("at_2"),
+        refreshToken: RefreshToken.make("rt_2"),
         expiry: Date.now() + 3600_000,
         orgID: Option.some(OrgID.make("org-2")),
       }),
@@ -108,8 +108,8 @@ it.effect(
         id: id1,
         email: "a@example.com",
         url: "https://control.example.com",
-        accessToken: "at_1",
-        refreshToken: "rt_1",
+        accessToken: AccessToken.make("at_1"),
+        refreshToken: RefreshToken.make("rt_1"),
         expiry: Date.now() + 3600_000,
         orgID: Option.none(),
       }),
@@ -120,8 +120,8 @@ it.effect(
         id: id2,
         email: "b@example.com",
         url: "https://control.example.com",
-        accessToken: "at_2",
-        refreshToken: "rt_2",
+        accessToken: AccessToken.make("at_2"),
+        refreshToken: RefreshToken.make("rt_2"),
         expiry: Date.now() + 3600_000,
         orgID: Option.some(OrgID.make("org-1")),
       }),
@@ -143,8 +143,8 @@ it.effect(
         id,
         email: "test@example.com",
         url: "https://control.example.com",
-        accessToken: "at_1",
-        refreshToken: "rt_1",
+        accessToken: AccessToken.make("at_1"),
+        refreshToken: RefreshToken.make("rt_1"),
         expiry: Date.now() + 3600_000,
         orgID: Option.none(),
       }),
@@ -168,8 +168,8 @@ it.effect(
         id: id1,
         email: "first@example.com",
         url: "https://control.example.com",
-        accessToken: "at_1",
-        refreshToken: "rt_1",
+        accessToken: AccessToken.make("at_1"),
+        refreshToken: RefreshToken.make("rt_1"),
         expiry: Date.now() + 3600_000,
         orgID: Option.none(),
       }),
@@ -180,8 +180,8 @@ it.effect(
         id: id2,
         email: "second@example.com",
         url: "https://control.example.com",
-        accessToken: "at_2",
-        refreshToken: "rt_2",
+        accessToken: AccessToken.make("at_2"),
+        refreshToken: RefreshToken.make("rt_2"),
         expiry: Date.now() + 3600_000,
         orgID: Option.none(),
       }),
@@ -208,8 +208,8 @@ it.effect(
         id,
         email: "test@example.com",
         url: "https://control.example.com",
-        accessToken: "old_token",
-        refreshToken: "old_refresh",
+        accessToken: AccessToken.make("old_token"),
+        refreshToken: RefreshToken.make("old_refresh"),
         expiry: 1000,
         orgID: Option.none(),
       }),
@@ -219,16 +219,16 @@ it.effect(
     yield* AccountRepo.use((r) =>
       r.persistToken({
         accountID: id,
-        accessToken: "new_token",
-        refreshToken: "new_refresh",
+        accessToken: AccessToken.make("new_token"),
+        refreshToken: RefreshToken.make("new_refresh"),
         expiry: Option.some(expiry),
       }),
     )
 
     const row = yield* AccountRepo.use((r) => r.getRow(id))
     const value = Option.getOrThrow(row)
-    expect(value.access_token).toBe("new_token")
-    expect(value.refresh_token).toBe("new_refresh")
+    expect(value.access_token).toBe(AccessToken.make("new_token"))
+    expect(value.refresh_token).toBe(RefreshToken.make("new_refresh"))
     expect(value.token_expiry).toBe(expiry)
   }),
 )
@@ -243,8 +243,8 @@ it.effect(
         id,
         email: "test@example.com",
         url: "https://control.example.com",
-        accessToken: "old_token",
-        refreshToken: "old_refresh",
+        accessToken: AccessToken.make("old_token"),
+        refreshToken: RefreshToken.make("old_refresh"),
         expiry: 1000,
         orgID: Option.none(),
       }),
@@ -253,8 +253,8 @@ it.effect(
     yield* AccountRepo.use((r) =>
       r.persistToken({
         accountID: id,
-        accessToken: "new_token",
-        refreshToken: "new_refresh",
+        accessToken: AccessToken.make("new_token"),
+        refreshToken: RefreshToken.make("new_refresh"),
         expiry: Option.none(),
       }),
     )
@@ -274,8 +274,8 @@ it.effect(
         id,
         email: "test@example.com",
         url: "https://control.example.com",
-        accessToken: "at_v1",
-        refreshToken: "rt_v1",
+        accessToken: AccessToken.make("at_v1"),
+        refreshToken: RefreshToken.make("rt_v1"),
         expiry: 1000,
         orgID: Option.some(OrgID.make("org-1")),
       }),
@@ -286,8 +286,8 @@ it.effect(
         id,
         email: "test@example.com",
         url: "https://control.example.com",
-        accessToken: "at_v2",
-        refreshToken: "rt_v2",
+        accessToken: AccessToken.make("at_v2"),
+        refreshToken: RefreshToken.make("rt_v2"),
         expiry: 2000,
         orgID: Option.some(OrgID.make("org-2")),
       }),
@@ -298,7 +298,7 @@ it.effect(
 
     const row = yield* AccountRepo.use((r) => r.getRow(id))
     const value = Option.getOrThrow(row)
-    expect(value.access_token).toBe("at_v2")
+    expect(value.access_token).toBe(AccessToken.make("at_v2"))
 
     const active = yield* AccountRepo.use((r) => r.active())
     expect(Option.getOrThrow(active).active_org_id).toBe(OrgID.make("org-2"))
@@ -315,8 +315,8 @@ it.effect(
         id,
         email: "test@example.com",
         url: "https://control.example.com",
-        accessToken: "at_1",
-        refreshToken: "rt_1",
+        accessToken: AccessToken.make("at_1"),
+        refreshToken: RefreshToken.make("rt_1"),
         expiry: Date.now() + 3600_000,
         orgID: Option.some(OrgID.make("org-1")),
       }),
