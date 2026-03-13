@@ -567,8 +567,11 @@ export namespace MessageV2 {
     // for providers that don't support media in tool results.
     //
     // OpenAI-compatible APIs only support string content in tool results, so we need
-    // to extract media and inject as user messages. Other SDKs (anthropic, google,
-    // bedrock) handle type: "content" with media parts natively.
+    // to extract media and inject as user messages. Other SDKs (anthropic, google)
+    // handle type: "content" with media parts natively.
+    //
+    // Bedrock is a special case: the SDK only supports images in tool results,
+    // so non-image media (PDFs, etc.) need to be extracted and injected as user messages.
     //
     // Only apply this workaround if the model actually supports image input -
     // otherwise there's no point extracting images.
@@ -704,10 +707,27 @@ export namespace MessageV2 {
               // (images, PDFs) to be sent as a separate user message
               const mediaAttachments = attachments.filter((a) => isMedia(a.mime))
               const nonMediaAttachments = attachments.filter((a) => !isMedia(a.mime))
+
+              // Bedrock SDK only supports images in tool results, not other media types (PDFs, etc.)
+              // This is an SDK limitation - the Bedrock API does support DocumentBlock in tool results
+              // Extract non-image media to be injected as user messages
+              const isBedrock = model.api.npm === "@ai-sdk/amazon-bedrock"
+              const bedrockNonImages = isBedrock ? mediaAttachments.filter((a) => !a.mime.startsWith("image/")) : []
+              const bedrockImages = isBedrock ? mediaAttachments.filter((a) => a.mime.startsWith("image/")) : mediaAttachments
+
               if (!supportsMediaInToolResults && mediaAttachments.length > 0) {
                 media.push(...mediaAttachments)
               }
-              const finalAttachments = supportsMediaInToolResults ? attachments : nonMediaAttachments
+              // Bedrock: extract non-image media even though it "supports" media in tool results
+              if (bedrockNonImages.length > 0) {
+                media.push(...bedrockNonImages)
+              }
+
+              const finalAttachments = supportsMediaInToolResults
+                ? isBedrock
+                  ? [...nonMediaAttachments, ...bedrockImages]
+                  : attachments
+                : nonMediaAttachments
 
               const output =
                 finalAttachments.length > 0
