@@ -30,6 +30,8 @@ const text = async (locator: Locator) => ((await locator.textContent()) ?? "").t
 
 const modelKey = (state: Probe | null) => (state?.model ? `${state.model.providerID}:${state.model.modelID}` : null)
 
+const dirKey = (state: Probe | null) => state?.dir ?? ""
+
 async function probe(page: Page): Promise<Probe | null> {
   return page.evaluate(() => {
     const win = window as Window & {
@@ -41,6 +43,21 @@ async function probe(page: Page): Promise<Probe | null> {
     }
     return win.__opencode_e2e?.model?.current ?? null
   })
+}
+
+async function currentDir(page: Page) {
+  let hit = ""
+  await expect
+    .poll(
+      async () => {
+        const next = dirKey(await probe(page))
+        if (next) hit = next
+        return next
+      },
+      { timeout: 30_000 },
+    )
+    .not.toBe("")
+  return hit
 }
 
 async function read(page: Page): Promise<Footer> {
@@ -172,6 +189,7 @@ async function chooseOtherModel(page: Page): Promise<Footer> {
 async function goto(page: Page, directory: string, sessionID?: string) {
   await page.goto(sessionPath(directory, sessionID))
   await expect(page.locator(promptSelector)).toBeVisible()
+  await expect.poll(async () => dirKey(await probe(page)), { timeout: 30_000 }).toBe(directory)
 }
 
 async function submit(page: Page, value: string) {
@@ -242,34 +260,7 @@ async function newWorkspaceSession(page: Page, slug: string) {
   const next = await waitSlug(page)
   await expect(page).toHaveURL(new RegExp(`/${next}/session(?:[/?#]|$)`))
   await expect(page.locator(promptSelector)).toBeVisible()
-}
-
-async function seedModel(directory: string, title: string, modelID: string) {
-  const sdk = createSdk(directory)
-  const session = await sdk.session.create({ title }).then((x) => x.data)
-  if (!session?.id) throw new Error("Session create did not return an id")
-
-  await sdk.session.promptAsync({
-    sessionID: session.id,
-    noReply: true,
-    agent: "build",
-    model: { providerID: "opencode", modelID },
-    parts: [{ type: "text", text: `seed model ${modelID} ${Date.now()}` }],
-  })
-
-  await expect
-    .poll(
-      async () => {
-        const items = await sdk.session.messages({ sessionID: session.id, limit: 20 }).then((x) => x.data ?? [])
-        const msg = [...items].reverse().find((item) => item.info.role === "user")?.info
-        if (!msg || msg.role !== "user") return null
-        return `${msg.model.providerID}:${msg.model.modelID}`
-      },
-      { timeout: 30_000 },
-    )
-    .toBe(`opencode:${modelID}`)
-
-  return session.id
+  return currentDir(page)
 }
 
 test("session model and variant restore per session without leaking into new sessions", async ({
@@ -327,27 +318,32 @@ test("session model restore across workspaces", async ({ page, withProject }) =>
     await setWorkspacesEnabled(page, slug, true)
 
     const one = await createWorkspace(page, slug, [])
-    trackDirectory(one.directory)
-    await newWorkspaceSession(page, one.slug)
+    const oneDir = await newWorkspaceSession(page, one.slug)
+    trackDirectory(oneDir)
 
-    const second = await seedModel(one.directory, `workspace one ${Date.now()}`, "big-pickle")
-    trackSession(second, one.directory)
+    const secondState = await chooseOtherModel(page)
+    const second = await submit(page, `workspace one ${Date.now()}`)
+    trackSession(second, oneDir)
+    await waitUser(oneDir, second)
 
     const two = await createWorkspace(page, slug, [one.slug])
-    trackDirectory(two.directory)
-    await newWorkspaceSession(page, two.slug)
+    const twoDir = await newWorkspaceSession(page, two.slug)
+    trackDirectory(twoDir)
 
-    const third = await seedModel(two.directory, `workspace two ${Date.now()}`, "alpha-gpt-5.3-codex-spark")
-    trackSession(third, two.directory)
+    await ensureVariant(page, twoDir)
+    const thirdState = await chooseDifferentVariant(page)
+    const third = await submit(page, `workspace two ${Date.now()}`)
+    trackSession(third, twoDir)
+    await waitUser(twoDir, third)
 
     await goto(page, root, first)
     await waitFooter(page, firstState)
 
-    await goto(page, one.directory, second)
-    await waitModel(page, "opencode:big-pickle")
+    await goto(page, oneDir, second)
+    await waitFooter(page, secondState)
 
-    await goto(page, two.directory, third)
-    await waitModel(page, "opencode:alpha-gpt-5.3-codex-spark")
+    await goto(page, twoDir, third)
+    await waitFooter(page, thirdState)
 
     await goto(page, root, first)
     await waitFooter(page, firstState)
