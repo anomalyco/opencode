@@ -1,87 +1,115 @@
-import { expect, test } from "bun:test"
+import { afterEach, expect, test } from "bun:test"
 
-import { State } from "../../src/project/state"
+import { Instance } from "../../src/project/instance"
+import { tmpdir } from "../fixture/fixture"
 
-test("State.create caches values for the same key", async () => {
-  let key = "a"
-  let n = 0
-  const state = State.create(
-    () => key,
-    () => ({ n: ++n }),
-  )
-
-  const a = state()
-  const b = state()
-
-  expect(a).toBe(b)
-  expect(n).toBe(1)
-
-  await State.dispose("a")
+afterEach(async () => {
+  await Instance.disposeAll()
 })
 
-test("State.create isolates values by key", async () => {
-  let key = "a"
+test("Instance.state caches values for the same instance", async () => {
+  await using tmp = await tmpdir()
   let n = 0
-  const state = State.create(
-    () => key,
-    () => ({ n: ++n }),
-  )
+  const state = Instance.state(() => ({ n: ++n }))
 
-  const a = state()
-  key = "b"
-  const b = state()
-  key = "a"
-  const c = state()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const a = state()
+      const b = state()
+      expect(a).toBe(b)
+      expect(n).toBe(1)
+    },
+  })
+})
 
-  expect(a).toBe(c)
-  expect(a).not.toBe(b)
+test("Instance.state isolates values by directory", async () => {
+  await using a = await tmpdir()
+  await using b = await tmpdir()
+  let n = 0
+  const state = Instance.state(() => ({ n: ++n }))
+
+  const x = await Instance.provide({
+    directory: a.path,
+    fn: async () => state(),
+  })
+  const y = await Instance.provide({
+    directory: b.path,
+    fn: async () => state(),
+  })
+  const z = await Instance.provide({
+    directory: a.path,
+    fn: async () => state(),
+  })
+
+  expect(x).toBe(z)
+  expect(x).not.toBe(y)
   expect(n).toBe(2)
-
-  await State.dispose("a")
-  await State.dispose("b")
 })
 
-test("State.dispose clears a key and runs cleanup", async () => {
+test("Instance.state is disposed on instance reload", async () => {
+  await using tmp = await tmpdir()
   const seen: string[] = []
-  let key = "a"
   let n = 0
-  const state = State.create(
-    () => key,
+  const state = Instance.state(
     () => ({ n: ++n }),
     async (value) => {
       seen.push(String(value.n))
     },
   )
 
-  const a = state()
-  await State.dispose("a")
-  const b = state()
+  const a = await Instance.provide({
+    directory: tmp.path,
+    fn: async () => state(),
+  })
+  await Instance.reload({ directory: tmp.path })
+  const b = await Instance.provide({
+    directory: tmp.path,
+    fn: async () => state(),
+  })
 
   expect(a).not.toBe(b)
   expect(seen).toEqual(["1"])
-
-  await State.dispose("a")
 })
 
-test("State.create dedupes concurrent promise initialization", async () => {
-  const gate = Promise.withResolvers<void>()
-  let n = 0
-  const state = State.create(
-    () => "a",
-    async () => {
-      n += 1
-      await gate.promise
-      return { n }
+test("Instance.state is disposed on disposeAll", async () => {
+  await using a = await tmpdir()
+  await using b = await tmpdir()
+  const seen: string[] = []
+  const state = Instance.state(
+    () => ({ dir: Instance.directory }),
+    async (value) => {
+      seen.push(value.dir)
     },
   )
 
-  const task = Promise.all([state(), state()])
-  await Promise.resolve()
-  expect(n).toBe(1)
+  await Instance.provide({
+    directory: a.path,
+    fn: async () => state(),
+  })
+  await Instance.provide({
+    directory: b.path,
+    fn: async () => state(),
+  })
+  await Instance.disposeAll()
 
-  gate.resolve()
-  const [a, b] = await task
+  expect(seen.sort()).toEqual([a.path, b.path].sort())
+})
+
+test("Instance.state dedupes concurrent promise initialization", async () => {
+  await using tmp = await tmpdir()
+  let n = 0
+  const state = Instance.state(async () => {
+    n += 1
+    await Bun.sleep(10)
+    return { n }
+  })
+
+  const [a, b] = await Instance.provide({
+    directory: tmp.path,
+    fn: async () => Promise.all([state(), state()]),
+  })
+
   expect(a).toBe(b)
-
-  await State.dispose("a")
+  expect(n).toBe(1)
 })
