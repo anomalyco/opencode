@@ -70,7 +70,11 @@ async function createSessionFromWorkspace(page: Page, slug: string, text: string
 }
 
 async function sessionDirectory(directory: string, sessionID: string) {
-  const info = await createSdk(directory)
+  // Normalize directory path for consistent comparison on Windows
+  // (convert backslashes to forward slashes and uppercase drive letter)
+  const normalizedDir = directory.replace(/\\/g, "/").replace(/^([a-z]):/, (_, drive) => drive.toUpperCase() + ":")
+
+  const info = await createSdk(normalizedDir)
     .session.get({ sessionID })
     .then((x) => x.data)
     .catch(() => undefined)
