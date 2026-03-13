@@ -573,8 +573,8 @@ test("reply - reject with message throws CorrectedError", async () => {
     directory: tmp.path,
     fn: async () => {
       const askPromise = PermissionNext.ask({
-        id: "permission_test_corrected",
-        sessionID: "session_test",
+        id: PermissionID.make("permission_test_corrected"),
+        sessionID: SessionID.make("session_test"),
         permission: "bash",
         patterns: ["ls"],
         metadata: {},
@@ -583,7 +583,7 @@ test("reply - reject with message throws CorrectedError", async () => {
       })
 
       await PermissionNext.reply({
-        requestID: "permission_test_corrected",
+        requestID: PermissionID.make("permission_test_corrected"),
         reply: "reject",
         message: "Use a different approach instead",
       })
