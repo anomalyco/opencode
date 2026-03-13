@@ -5,7 +5,7 @@ import { filter, fromEntries, map, pipe } from "remeda"
 import type { AuthOuathResult } from "@opencode-ai/plugin"
 import { NamedError } from "@opencode-ai/util/error"
 import * as Auth from "@/auth/service"
-import * as InstanceState from "@/util/instance-state"
+import { InstanceState } from "@/util/instance-state"
 import { ProviderID } from "./schema"
 import z from "zod"
 
@@ -78,7 +78,7 @@ export class ProviderAuthService extends ServiceMap.Service<ProviderAuthService,
               map((x) => [x.auth!.provider, x.auth!] as const),
               fromEntries(),
             )
-            return { methods, pending: {} as Record<string, AuthOuathResult> }
+            return { methods, pending: new Map<string, AuthOuathResult>() }
           }),
       })
 
@@ -97,7 +97,7 @@ export class ProviderAuthService extends ServiceMap.Service<ProviderAuthService,
         const result = yield* Effect.promise(() => method.authorize())
 
         const s = yield* InstanceState.get(state)
-        s.pending[input.providerID] = result
+        s.pending.set(input.providerID, result)
         return {
           url: result.url,
           method: result.method,
@@ -110,7 +110,7 @@ export class ProviderAuthService extends ServiceMap.Service<ProviderAuthService,
         method: number
         code?: string
       }) {
-        const match = (yield* InstanceState.get(state)).pending[input.providerID]
+        const match = (yield* InstanceState.get(state)).pending.get(input.providerID)
         if (!match) return yield* Effect.fail(new OauthMissing({ providerID: input.providerID }))
 
         if (match.method === "code" && !input.code)

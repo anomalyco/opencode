@@ -2,10 +2,10 @@ import { afterEach, expect, test } from "bun:test"
 import { Effect } from "effect"
 
 import { Instance } from "../../src/project/instance"
-import * as InstanceState from "../../src/util/instance-state"
+import { InstanceState } from "../../src/util/instance-state"
 import { tmpdir } from "../fixture/fixture"
 
-async function access<A, E>(state: InstanceState.InstanceState<A, E>, dir: string) {
+async function access<A, E>(state: InstanceState.State<A, E>, dir: string) {
   return Instance.provide({
     directory: dir,
     fn: () => Effect.runPromise(InstanceState.get(state)),

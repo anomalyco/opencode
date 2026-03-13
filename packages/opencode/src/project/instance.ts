@@ -6,7 +6,7 @@ import { State } from "./state"
 import { iife } from "@/util/iife"
 import { GlobalBus } from "@/bus/global"
 import { Filesystem } from "@/util/filesystem"
-import * as InstanceState from "@/util/instance-state"
+import { InstanceState } from "@/util/instance-state"
 
 interface Context {
   directory: string
