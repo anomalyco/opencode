@@ -1,5 +1,6 @@
 import { createEffect, createSignal, For, Match, on, onCleanup, Show, Switch, type JSX } from "solid-js"
 import { animate, type AnimationPlaybackControls } from "motion"
+import { useI18n } from "../context/i18n"
 import { Collapsible } from "./collapsible"
 import type { IconProps } from "./icon"
 import { TextShimmer } from "./text-shimmer"
@@ -228,12 +229,14 @@ export function GenericTool(props: {
   hideDetails?: boolean
   input?: Record<string, unknown>
 }) {
+  const i18n = useI18n()
+
   return (
     <BasicTool
       icon="mcp"
       status={props.status}
       trigger={{
-        title: `Called \`${props.tool}\``,
+        title: i18n.t("ui.basicTool.called", { tool: props.tool }),
         subtitle: label(props.input),
         args: args(props.input),
       }}

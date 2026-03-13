@@ -2166,7 +2166,7 @@ export default function Layout(props: ParentProps) {
                   {language.t("command.provider.connect")}
                 </Button>
                 <Button size="large" variant="ghost" onClick={() => setStore("gettingStartedDismissed", true)}>
-                  Not yet
+                  {language.t("toast.update.action.notYet")}
                 </Button>
               </div>
             </div>

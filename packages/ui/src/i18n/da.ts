@@ -144,4 +144,16 @@ export const dict = {
   "ui.question.multiHint": "Vælg alle der gælder",
   "ui.question.singleHint": "Vælg ét svar",
   "ui.question.custom.placeholder": "Skriv dit svar...",
+
+  "ui.fileSearch.placeholder": "Find",
+  "ui.fileSearch.previousMatch": "Forrige match",
+  "ui.fileSearch.nextMatch": "Næste match",
+  "ui.fileSearch.close": "Luk søgning",
+  "ui.tool.task": "Opgave",
+  "ui.tool.skill": "Færdighed",
+  "ui.basicTool.called": "Kaldte `{{tool}}`",
+  "ui.toolErrorCard.failed": "Fejlede",
+  "ui.toolErrorCard.copyError": "Kopier fejl",
+  "ui.message.duration.seconds": "{{count}}s",
+  "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
 }
