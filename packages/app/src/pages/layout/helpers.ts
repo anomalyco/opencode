@@ -8,7 +8,7 @@ export const workspaceKey = (directory: string) => {
   return directory.replace(/[\\/]+$/, "")
 }
 
-export function sortSessions(now: number) {
+function sortSessions(now: number) {
   const oneMinuteAgo = now - 60 * 1000
   return (a: Session, b: Session) => {
     const aUpdated = a.time.updated ?? a.time.created
@@ -22,7 +22,7 @@ export function sortSessions(now: number) {
   }
 }
 
-export const isRootVisibleSession = (session: Session, directory: string) =>
+const isRootVisibleSession = (session: Session, directory: string) =>
   workspaceKey(session.directory) === workspaceKey(directory) && !session.parentID && !session.time?.archived
 
 export const sortedRootSessions = (store: { session: Session[]; path: { directory: string } }, now: number) =>
@@ -52,14 +52,6 @@ export const childMapByParent = (sessions: Session[]) => {
     map.set(session.parentID, [session.id])
   }
   return map
-}
-
-export function getDraggableId(event: unknown): string | undefined {
-  if (typeof event !== "object" || event === null) return undefined
-  if (!("draggable" in event)) return undefined
-  const draggable = (event as { draggable?: { id?: unknown } }).draggable
-  if (!draggable) return undefined
-  return typeof draggable.id === "string" ? draggable.id : undefined
 }
 
 export const displayName = (project: { name?: string; worktree: string }) =>
@@ -98,5 +90,3 @@ export const effectiveWorkspaceOrder = (local: string, dirs: string[], persisted
 
   return [...result, ...live.values()]
 }
-
-export const syncWorkspaceOrder = effectiveWorkspaceOrder

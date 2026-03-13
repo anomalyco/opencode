@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { Card } from "./card"
+import { Card, CardActions, CardDescription, CardTitle } from "./card"
 import { Button } from "./button"
 
 const docs = `### Overview
@@ -49,15 +49,13 @@ export default {
   render: (props: { variant?: "normal" | "error" | "warning" | "success" | "info" }) => {
     return (
       <Card variant={props.variant}>
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 500 }}>Card title</div>
-            <div style={{ color: "var(--text-weak)", fontSize: "13px" }}>Small supporting text.</div>
-          </div>
-          <Button size="small" variant="ghost">
+        <CardTitle variant={props.variant}>Card title</CardTitle>
+        <CardDescription>Small supporting text.</CardDescription>
+        <CardActions>
+          <Button size="small" variant="secondary">
             Action
           </Button>
-        </div>
+        </CardActions>
       </Card>
     )
   },
