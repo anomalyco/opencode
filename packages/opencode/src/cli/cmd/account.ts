@@ -192,3 +192,28 @@ export const OrgsCommand = cmd({
     await runtime.runPromise(orgsEffect())
   },
 })
+
+export const ConsoleCommand = cmd({
+  command: "console",
+  describe: "manage opencode console account",
+  builder: (yargs) =>
+    yargs
+      .command({
+        ...LoginCommand,
+        describe: "log in to opencode console",
+      })
+      .command({
+        ...LogoutCommand,
+        describe: "log out from opencode console",
+      })
+      .command({
+        ...SwitchCommand,
+        describe: "switch active console org",
+      })
+      .command({
+        ...OrgsCommand,
+        describe: "list console orgs",
+      })
+      .demandCommand(),
+  async handler() {},
+})
