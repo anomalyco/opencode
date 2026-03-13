@@ -1,4 +1,3 @@
-import { $ } from "bun"
 import path from "path"
 import fs from "fs/promises"
 import { Filesystem } from "../util/filesystem"
@@ -9,11 +8,16 @@ import z from "zod"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
 import { Scheduler } from "../scheduler"
+import { Process } from "@/util/process"
 
 export namespace Snapshot {
   const log = Log.create({ service: "snapshot" })
   const hour = 60 * 60 * 1000
   const prune = "7.days"
+
+  function args(git: string, cmd: string[]) {
+    return ["--git-dir", git, "--work-tree", Instance.worktree, ...cmd]
+  }
 
   export function init() {
     Scheduler.register({
@@ -25,7 +29,7 @@ export namespace Snapshot {
   }
 
   export async function cleanup() {
-    if (Instance.project.vcs !== "git" || Flag.OPENCODE_CLIENT === "acp") return
+    if (Instance.project.vcs !== "git") return
     const cfg = await Config.get()
     if (cfg.snapshot === false) return
     const git = gitdir()
@@ -34,13 +38,13 @@ export namespace Snapshot {
       .then(() => true)
       .catch(() => false)
     if (!exists) return
-    const result = await $`git --git-dir ${git} --work-tree ${Instance.worktree} gc --prune=${prune}`
-      .quiet()
-      .cwd(Instance.directory)
-      .nothrow()
-    if (result.exitCode !== 0) {
+    const result = await Process.run(["git", ...args(git, ["gc", `--prune=${prune}`])], {
+      cwd: Instance.directory,
+      nothrow: true,
+    })
+    if (result.code !== 0) {
       log.warn("cleanup failed", {
-        exitCode: result.exitCode,
+        exitCode: result.code,
         stderr: result.stderr.toString(),
         stdout: result.stdout.toString(),
       })
@@ -50,32 +54,32 @@ export namespace Snapshot {
   }
 
   export async function track() {
-    if (Instance.project.vcs !== "git" || Flag.OPENCODE_CLIENT === "acp") return
+    if (Instance.project.vcs !== "git") return
     const cfg = await Config.get()
     if (cfg.snapshot === false) return
     const git = gitdir()
     if (await fs.mkdir(git, { recursive: true })) {
-      await $`git init`
-        .env({
+      await Process.run(["git", "init"], {
+        env: {
           ...process.env,
           GIT_DIR: git,
           GIT_WORK_TREE: Instance.worktree,
-        })
-        .quiet()
-        .nothrow()
+        },
+        nothrow: true,
+      })
+
       // Configure git to not convert line endings on Windows
-      await $`git --git-dir ${git} config core.autocrlf false`.quiet().nothrow()
-      await $`git --git-dir ${git} config core.longpaths true`.quiet().nothrow()
-      await $`git --git-dir ${git} config core.symlinks true`.quiet().nothrow()
-      await $`git --git-dir ${git} config core.fsmonitor false`.quiet().nothrow()
+      await Process.run(["git", "--git-dir", git, "config", "core.autocrlf", "false"], { nothrow: true })
+      await Process.run(["git", "--git-dir", git, "config", "core.longpaths", "true"], { nothrow: true })
+      await Process.run(["git", "--git-dir", git, "config", "core.symlinks", "true"], { nothrow: true })
+      await Process.run(["git", "--git-dir", git, "config", "core.fsmonitor", "false"], { nothrow: true })
       log.info("initialized")
     }
     await add(git)
-    const hash = await $`git --git-dir ${git} --work-tree ${Instance.worktree} write-tree`
-      .quiet()
-      .cwd(Instance.directory)
-      .nothrow()
-      .text()
+    const hash = await Process.text(["git", ...args(git, ["write-tree"])], {
+      cwd: Instance.directory,
+      nothrow: true,
+    }).then((x) => x.text)
     log.info("tracking", { hash, cwd: Instance.directory, git })
     return hash.trim()
   }
@@ -89,19 +93,32 @@ export namespace Snapshot {
   export async function patch(hash: string): Promise<Patch> {
     const git = gitdir()
     await add(git)
-    const result =
-      await $`git -c core.autocrlf=false -c core.longpaths=true -c core.symlinks=true -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff --name-only ${hash} -- .`
-        .quiet()
-        .cwd(Instance.directory)
-        .nothrow()
+    const result = await Process.text(
+      [
+        "git",
+        "-c",
+        "core.autocrlf=false",
+        "-c",
+        "core.longpaths=true",
+        "-c",
+        "core.symlinks=true",
+        "-c",
+        "core.quotepath=false",
+        ...args(git, ["diff", "--no-ext-diff", "--name-only", hash, "--", "."]),
+      ],
+      {
+        cwd: Instance.directory,
+        nothrow: true,
+      },
+    )
 
     // If git diff fails, return empty patch
-    if (result.exitCode !== 0) {
-      log.warn("failed to get diff", { hash, exitCode: result.exitCode })
+    if (result.code !== 0) {
+      log.warn("failed to get diff", { hash, exitCode: result.code })
       return { hash, files: [] }
     }
 
-    const files = result.text()
+    const files = result.text
     return {
       hash,
       files: files
@@ -116,20 +133,37 @@ export namespace Snapshot {
   export async function restore(snapshot: string) {
     log.info("restore", { commit: snapshot })
     const git = gitdir()
-    const result =
-      await $`git -c core.longpaths=true -c core.symlinks=true --git-dir ${git} --work-tree ${Instance.worktree} read-tree ${snapshot} && git -c core.longpaths=true -c core.symlinks=true --git-dir ${git} --work-tree ${Instance.worktree} checkout-index -a -f`
-        .quiet()
-        .cwd(Instance.worktree)
-        .nothrow()
-
-    if (result.exitCode !== 0) {
+    const result = await Process.run(
+      ["git", "-c", "core.longpaths=true", "-c", "core.symlinks=true", ...args(git, ["read-tree", snapshot])],
+      {
+        cwd: Instance.worktree,
+        nothrow: true,
+      },
+    )
+    if (result.code === 0) {
+      const checkout = await Process.run(
+        ["git", "-c", "core.longpaths=true", "-c", "core.symlinks=true", ...args(git, ["checkout-index", "-a", "-f"])],
+        {
+          cwd: Instance.worktree,
+          nothrow: true,
+        },
+      )
+      if (checkout.code === 0) return
       log.error("failed to restore snapshot", {
         snapshot,
-        exitCode: result.exitCode,
-        stderr: result.stderr.toString(),
-        stdout: result.stdout.toString(),
+        exitCode: checkout.code,
+        stderr: checkout.stderr.toString(),
+        stdout: checkout.stdout.toString(),
       })
+      return
     }
+
+    log.error("failed to restore snapshot", {
+      snapshot,
+      exitCode: result.code,
+      stderr: result.stderr.toString(),
+      stdout: result.stdout.toString(),
+    })
   }
 
   export async function revert(patches: Patch[]) {
@@ -139,19 +173,37 @@ export namespace Snapshot {
       for (const file of item.files) {
         if (files.has(file)) continue
         log.info("reverting", { file, hash: item.hash })
-        const result =
-          await $`git -c core.longpaths=true -c core.symlinks=true --git-dir ${git} --work-tree ${Instance.worktree} checkout ${item.hash} -- ${file}`
-            .quiet()
-            .cwd(Instance.worktree)
-            .nothrow()
-        if (result.exitCode !== 0) {
+        const result = await Process.run(
+          [
+            "git",
+            "-c",
+            "core.longpaths=true",
+            "-c",
+            "core.symlinks=true",
+            ...args(git, ["checkout", item.hash, "--", file]),
+          ],
+          {
+            cwd: Instance.worktree,
+            nothrow: true,
+          },
+        )
+        if (result.code !== 0) {
           const relativePath = path.relative(Instance.worktree, file)
-          const checkTree =
-            await $`git -c core.longpaths=true -c core.symlinks=true --git-dir ${git} --work-tree ${Instance.worktree} ls-tree ${item.hash} -- ${relativePath}`
-              .quiet()
-              .cwd(Instance.worktree)
-              .nothrow()
-          if (checkTree.exitCode === 0 && checkTree.text().trim()) {
+          const checkTree = await Process.text(
+            [
+              "git",
+              "-c",
+              "core.longpaths=true",
+              "-c",
+              "core.symlinks=true",
+              ...args(git, ["ls-tree", item.hash, "--", relativePath]),
+            ],
+            {
+              cwd: Instance.worktree,
+              nothrow: true,
+            },
+          )
+          if (checkTree.code === 0 && checkTree.text.trim()) {
             log.info("file existed in snapshot but checkout failed, keeping", {
               file,
             })
@@ -168,23 +220,36 @@ export namespace Snapshot {
   export async function diff(hash: string) {
     const git = gitdir()
     await add(git)
-    const result =
-      await $`git -c core.autocrlf=false -c core.longpaths=true -c core.symlinks=true -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff ${hash} -- .`
-        .quiet()
-        .cwd(Instance.worktree)
-        .nothrow()
+    const result = await Process.text(
+      [
+        "git",
+        "-c",
+        "core.autocrlf=false",
+        "-c",
+        "core.longpaths=true",
+        "-c",
+        "core.symlinks=true",
+        "-c",
+        "core.quotepath=false",
+        ...args(git, ["diff", "--no-ext-diff", hash, "--", "."]),
+      ],
+      {
+        cwd: Instance.worktree,
+        nothrow: true,
+      },
+    )
 
-    if (result.exitCode !== 0) {
+    if (result.code !== 0) {
       log.warn("failed to get diff", {
         hash,
-        exitCode: result.exitCode,
+        exitCode: result.code,
         stderr: result.stderr.toString(),
         stdout: result.stdout.toString(),
       })
       return ""
     }
 
-    return result.text().trim()
+    return result.text.trim()
   }
 
   export const FileDiff = z
@@ -205,12 +270,24 @@ export namespace Snapshot {
     const result: FileDiff[] = []
     const status = new Map<string, "added" | "deleted" | "modified">()
 
-    const statuses =
-      await $`git -c core.autocrlf=false -c core.longpaths=true -c core.symlinks=true -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff --name-status --no-renames ${from} ${to} -- .`
-        .quiet()
-        .cwd(Instance.directory)
-        .nothrow()
-        .text()
+    const statuses = await Process.text(
+      [
+        "git",
+        "-c",
+        "core.autocrlf=false",
+        "-c",
+        "core.longpaths=true",
+        "-c",
+        "core.symlinks=true",
+        "-c",
+        "core.quotepath=false",
+        ...args(git, ["diff", "--no-ext-diff", "--name-status", "--no-renames", from, to, "--", "."]),
+      ],
+      {
+        cwd: Instance.directory,
+        nothrow: true,
+      },
+    ).then((x) => x.text)
 
     for (const line of statuses.trim().split("\n")) {
       if (!line) continue
@@ -220,26 +297,57 @@ export namespace Snapshot {
       status.set(file, kind)
     }
 
-    for await (const line of $`git -c core.autocrlf=false -c core.longpaths=true -c core.symlinks=true -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff --no-renames --numstat ${from} ${to} -- .`
-      .quiet()
-      .cwd(Instance.directory)
-      .nothrow()
-      .lines()) {
+    for (const line of await Process.lines(
+      [
+        "git",
+        "-c",
+        "core.autocrlf=false",
+        "-c",
+        "core.longpaths=true",
+        "-c",
+        "core.symlinks=true",
+        "-c",
+        "core.quotepath=false",
+        ...args(git, ["diff", "--no-ext-diff", "--no-renames", "--numstat", from, to, "--", "."]),
+      ],
+      {
+        cwd: Instance.directory,
+        nothrow: true,
+      },
+    )) {
       if (!line) continue
       const [additions, deletions, file] = line.split("\t")
       const isBinaryFile = additions === "-" && deletions === "-"
       const before = isBinaryFile
         ? ""
-        : await $`git -c core.autocrlf=false -c core.longpaths=true -c core.symlinks=true --git-dir ${git} --work-tree ${Instance.worktree} show ${from}:${file}`
-            .quiet()
-            .nothrow()
-            .text()
+        : await Process.text(
+            [
+              "git",
+              "-c",
+              "core.autocrlf=false",
+              "-c",
+              "core.longpaths=true",
+              "-c",
+              "core.symlinks=true",
+              ...args(git, ["show", `${from}:${file}`]),
+            ],
+            { nothrow: true },
+          ).then((x) => x.text)
       const after = isBinaryFile
         ? ""
-        : await $`git -c core.autocrlf=false -c core.longpaths=true -c core.symlinks=true --git-dir ${git} --work-tree ${Instance.worktree} show ${to}:${file}`
-            .quiet()
-            .nothrow()
-            .text()
+        : await Process.text(
+            [
+              "git",
+              "-c",
+              "core.autocrlf=false",
+              "-c",
+              "core.longpaths=true",
+              "-c",
+              "core.symlinks=true",
+              ...args(git, ["show", `${to}:${file}`]),
+            ],
+            { nothrow: true },
+          ).then((x) => x.text)
       const added = isBinaryFile ? 0 : parseInt(additions)
       const deleted = isBinaryFile ? 0 : parseInt(deletions)
       result.push({
@@ -261,10 +369,22 @@ export namespace Snapshot {
 
   async function add(git: string) {
     await syncExclude(git)
-    await $`git -c core.autocrlf=false -c core.longpaths=true -c core.symlinks=true --git-dir ${git} --work-tree ${Instance.worktree} add .`
-      .quiet()
-      .cwd(Instance.directory)
-      .nothrow()
+    await Process.run(
+      [
+        "git",
+        "-c",
+        "core.autocrlf=false",
+        "-c",
+        "core.longpaths=true",
+        "-c",
+        "core.symlinks=true",
+        ...args(git, ["add", "."]),
+      ],
+      {
+        cwd: Instance.directory,
+        nothrow: true,
+      },
+    )
   }
 
   async function syncExclude(git: string) {
@@ -281,11 +401,10 @@ export namespace Snapshot {
   }
 
   async function excludes() {
-    const file = await $`git rev-parse --path-format=absolute --git-path info/exclude`
-      .quiet()
-      .cwd(Instance.worktree)
-      .nothrow()
-      .text()
+    const file = await Process.text(["git", "rev-parse", "--path-format=absolute", "--git-path", "info/exclude"], {
+      cwd: Instance.worktree,
+      nothrow: true,
+    }).then((x) => x.text)
     if (!file.trim()) return
     const exists = await fs
       .stat(file.trim())
