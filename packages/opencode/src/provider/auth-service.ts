@@ -91,12 +91,10 @@ export class ProviderAuthService extends ServiceMap.Service<ProviderAuthService,
         providerID: ProviderID
         method: number
       }) {
-        const authHook = (yield* InstanceState.get(state)).methods[input.providerID]
-        const method = authHook.methods[input.method]
+        const s = yield* InstanceState.get(state)
+        const method = s.methods[input.providerID].methods[input.method]
         if (method.type !== "oauth") return
         const result = yield* Effect.promise(() => method.authorize())
-
-        const s = yield* InstanceState.get(state)
         s.pending.set(input.providerID, result)
         return {
           url: result.url,
@@ -110,7 +108,8 @@ export class ProviderAuthService extends ServiceMap.Service<ProviderAuthService,
         method: number
         code?: string
       }) {
-        const match = (yield* InstanceState.get(state)).pending.get(input.providerID)
+        const s = yield* InstanceState.get(state)
+        const match = s.pending.get(input.providerID)
         if (!match) return yield* Effect.fail(new OauthMissing({ providerID: input.providerID }))
 
         if (match.method === "code" && !input.code)
