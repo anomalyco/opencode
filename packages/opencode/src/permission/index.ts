@@ -15,9 +15,13 @@ export namespace Permission {
     return pattern === undefined ? [type] : Array.isArray(pattern) ? pattern : [pattern]
   }
 
-  function covered(keys: string[], approved: Record<string, boolean>): boolean {
-    const pats = Object.keys(approved)
-    return keys.every((k) => pats.some((p) => Wildcard.match(k, p)))
+  function covered(keys: string[], approved: Map<string, boolean>): boolean {
+    return keys.every((k) => {
+      for (const p of approved.keys()) {
+        if (Wildcard.match(k, p)) return true
+      }
+      return false
+    })
   }
 
   export const Info = z
@@ -39,6 +43,12 @@ export namespace Permission {
     })
   export type Info = z.infer<typeof Info>
 
+  interface PendingEntry {
+    info: Info
+    resolve: () => void
+    reject: (e: any) => void
+  }
+
   export const Event = {
     Updated: BusEvent.define("permission.updated", Info),
     Replied: BusEvent.define(
@@ -52,31 +62,13 @@ export namespace Permission {
   }
 
   const state = Instance.state(
-    () => {
-      const pending: {
-        [sessionID: string]: {
-          [permissionID: string]: {
-            info: Info
-            resolve: () => void
-            reject: (e: any) => void
-          }
-        }
-      } = {}
-
-      const approved: {
-        [sessionID: string]: {
-          [permissionID: string]: boolean
-        }
-      } = {}
-
-      return {
-        pending,
-        approved,
-      }
-    },
+    () => ({
+      pending: new Map<SessionID, Map<PermissionID, PendingEntry>>(),
+      approved: new Map<SessionID, Map<string, boolean>>(),
+    }),
     async (state) => {
-      for (const pending of Object.values(state.pending)) {
-        for (const item of Object.values(pending)) {
+      for (const session of state.pending.values()) {
+        for (const item of session.values()) {
           item.reject(new RejectedError(item.info.sessionID, item.info.id, item.info.callID, item.info.metadata))
         }
       }
@@ -90,8 +82,8 @@ export namespace Permission {
   export function list() {
     const { pending } = state()
     const result: Info[] = []
-    for (const items of Object.values(pending)) {
-      for (const item of Object.values(items)) {
+    for (const session of pending.values()) {
+      for (const item of session.values()) {
         result.push(item.info)
       }
     }
@@ -114,9 +106,9 @@ export namespace Permission {
       toolCallID: input.callID,
       pattern: input.pattern,
     })
-    const approvedForSession = approved[input.sessionID] || {}
+    const approvedForSession = approved.get(input.sessionID)
     const keys = toKeys(input.pattern, input.type)
-    if (covered(keys, approvedForSession)) return
+    if (approvedForSession && covered(keys, approvedForSession)) return
     const info: Info = {
       id: PermissionID.ascending(),
       type: input.type,
@@ -142,13 +134,13 @@ export namespace Permission {
         return
     }
 
-    pending[input.sessionID] = pending[input.sessionID] || {}
+    if (!pending.has(input.sessionID)) pending.set(input.sessionID, new Map())
     return new Promise<void>((resolve, reject) => {
-      pending[input.sessionID][info.id] = {
+      pending.get(input.sessionID)!.set(info.id, {
         info,
         resolve,
         reject,
-      }
+      })
       Bus.publish(Event.Updated, info)
     })
   }
@@ -159,9 +151,11 @@ export namespace Permission {
   export function respond(input: { sessionID: Info["sessionID"]; permissionID: Info["id"]; response: Response }) {
     log.info("response", input)
     const { pending, approved } = state()
-    const match = pending[input.sessionID]?.[input.permissionID]
-    if (!match) return
-    delete pending[input.sessionID][input.permissionID]
+    const session = pending.get(input.sessionID)
+    const match = session?.get(input.permissionID)
+    if (!session || !match) return
+    session.delete(input.permissionID)
+    if (session.size === 0) pending.delete(input.sessionID)
     Bus.publish(Event.Replied, {
       sessionID: input.sessionID,
       permissionID: input.permissionID,
@@ -173,30 +167,35 @@ export namespace Permission {
     }
     match.resolve()
     if (input.response === "always") {
-      approved[input.sessionID] = approved[input.sessionID] || {}
+      if (!approved.has(input.sessionID)) approved.set(input.sessionID, new Map())
+      const approvedSession = approved.get(input.sessionID)!
       const approveKeys = toKeys(match.info.pattern, match.info.type)
       for (const k of approveKeys) {
-        approved[input.sessionID][k] = true
+        approvedSession.set(k, true)
       }
-      const items = pending[input.sessionID]
+      const items = pending.get(input.sessionID)
       if (!items) return
-      for (const item of Object.values(items)) {
+      const toRespond: Info[] = []
+      for (const item of items.values()) {
         const itemKeys = toKeys(item.info.pattern, item.info.type)
-        if (covered(itemKeys, approved[input.sessionID])) {
-          respond({
-            sessionID: item.info.sessionID,
-            permissionID: item.info.id,
-            response: input.response,
-          })
+        if (covered(itemKeys, approvedSession)) {
+          toRespond.push(item.info)
         }
+      }
+      for (const item of toRespond) {
+        respond({
+          sessionID: item.sessionID,
+          permissionID: item.id,
+          response: input.response,
+        })
       }
     }
   }
 
   export class RejectedError extends Error {
     constructor(
-      public readonly sessionID: string,
-      public readonly permissionID: string,
+      public readonly sessionID: SessionID,
+      public readonly permissionID: PermissionID,
       public readonly toolCallID?: string,
       public readonly metadata?: Record<string, any>,
       public readonly reason?: string,
