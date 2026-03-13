@@ -1,0 +1,228 @@
+diff --git a/dist/index.js b/dist/index.js
+index 9e03c73f6aafc7b279c6b3b34776cf4d73d6b58d..89f9a440f8fa0247264d0e96e404db2db3addca5 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -281,6 +281,19 @@
+ }
+ 
+ // src/chat/openai-compatible-chat-language-model.ts
++function isCompleteToolPayload(text) {
++  const json = text.trim();
++  if (!json) return false;
++  if (!json.startsWith("{") && !json.startsWith("[")) return false;
++  return (0, import_provider_utils2.isParsableJson)(json);
++}
++function pickCompleteToolPayload(raw, part, done) {
++  if (!raw || !isCompleteToolPayload(part)) return;
++  const prev = raw.trim();
++  const next = part.trim();
++  if (!prev) return;
++  if (next.startsWith(prev) || done) return part;
++}
+ var OpenAICompatibleChatLanguageModel = class {
+   // type inferred via constructor
+   constructor(modelId, config) {
+@@ -632,10 +645,12 @@ var OpenAICompatibleChatLanguageModel = class {
+                       name: toolCallDelta.function.name,
+                       arguments: (_c = toolCallDelta.function.arguments) != null ? _c : ""
+                     },
++                    full: void 0,
+                     hasFinished: false
+                   };
+                   const toolCall2 = toolCalls[index];
+                   if (((_d = toolCall2.function) == null ? void 0 : _d.name) != null && ((_e = toolCall2.function) == null ? void 0 : _e.arguments) != null) {
++                    const input = toolCall2.full != null ? toolCall2.full : toolCall2.function.arguments;
+                     if (toolCall2.function.arguments.length > 0) {
+                       controller.enqueue({
+                         type: "tool-input-delta",
+@@ -643,7 +658,7 @@ var OpenAICompatibleChatLanguageModel = class {
+                         delta: toolCall2.function.arguments
+                       });
+                     }
+-                    if ((0, import_provider_utils2.isParsableJson)(toolCall2.function.arguments)) {
++                    if ((0, import_provider_utils2.isParsableJson)(input)) {
+                       controller.enqueue({
+                         type: "tool-input-end",
+                         id: toolCall2.id
+@@ -652,7 +667,7 @@ var OpenAICompatibleChatLanguageModel = class {
+                         type: "tool-call",
+                         toolCallId: (_f = toolCall2.id) != null ? _f : (0, import_provider_utils2.generateId)(),
+                         toolName: toolCall2.function.name,
+-                        input: toolCall2.function.arguments
++                        input
+                       });
+                       toolCall2.hasFinished = true;
+                     }
+@@ -664,14 +679,25 @@ var OpenAICompatibleChatLanguageModel = class {
+                   continue;
+                 }
+                 if (((_g = toolCallDelta.function) == null ? void 0 : _g.arguments) != null) {
+-                  toolCall.function.arguments += (_i = (_h = toolCallDelta.function) == null ? void 0 : _h.arguments) != null ? _i : "";
++                  const part = (_i = (_h = toolCallDelta.function) == null ? void 0 : _h.arguments) != null ? _i : "";
++                  const full = pickCompleteToolPayload(
++                    toolCall.function.arguments,
++                    part,
++                    choice.finish_reason === "tool_calls"
++                  );
++                  if (full != null) {
++                    toolCall.full = full;
++                  } else {
++                    toolCall.function.arguments += part;
++                    controller.enqueue({
++                      type: "tool-input-delta",
++                      id: toolCall.id,
++                      delta: part
++                    });
++                  }
+                 }
+-                controller.enqueue({
+-                  type: "tool-input-delta",
+-                  id: toolCall.id,
+-                  delta: (_j = toolCallDelta.function.arguments) != null ? _j : ""
+-                });
+-                if (((_k = toolCall.function) == null ? void 0 : _k.name) != null && ((_l = toolCall.function) == null ? void 0 : _l.arguments) != null && (0, import_provider_utils2.isParsableJson)(toolCall.function.arguments)) {
++                const input = toolCall.full != null ? toolCall.full : toolCall.function.arguments;
++                if (((_k = toolCall.function) == null ? void 0 : _k.name) != null && input != null && (0, import_provider_utils2.isParsableJson)(input)) {
+                   controller.enqueue({
+                     type: "tool-input-end",
+                     id: toolCall.id
+@@ -680,7 +706,7 @@ var OpenAICompatibleChatLanguageModel = class {
+                     type: "tool-call",
+                     toolCallId: (_m = toolCall.id) != null ? _m : (0, import_provider_utils2.generateId)(),
+                     toolName: toolCall.function.name,
+-                    input: toolCall.function.arguments
++                    input
+                   });
+                   toolCall.hasFinished = true;
+                 }
+@@ -698,6 +724,7 @@ var OpenAICompatibleChatLanguageModel = class {
+             for (const toolCall of toolCalls.filter(
+               (toolCall2) => !toolCall2.hasFinished
+             )) {
++              const input = toolCall.full != null ? toolCall.full : toolCall.function.arguments;
+               controller.enqueue({
+                 type: "tool-input-end",
+                 id: toolCall.id
+@@ -706,7 +733,7 @@ var OpenAICompatibleChatLanguageModel = class {
+                 type: "tool-call",
+                 toolCallId: (_a2 = toolCall.id) != null ? _a2 : (0, import_provider_utils2.generateId)(),
+                 toolName: toolCall.function.name,
+-                input: toolCall.function.arguments
++                input
+               });
+             }
+             const providerMetadata = {
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 60129adf9bb5f0f7646d1ac77b5f9e6206517d20..9e9f9cf3bc851d74bfd2bf67150a51392978a8f8 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -265,6 +265,19 @@
+ }
+ 
+ // src/chat/openai-compatible-chat-language-model.ts
++function isCompleteToolPayload(text) {
++  const json = text.trim();
++  if (!json) return false;
++  if (!json.startsWith("{") && !json.startsWith("[")) return false;
++  return isParsableJson(json);
++}
++function pickCompleteToolPayload(raw, part, done) {
++  if (!raw || !isCompleteToolPayload(part)) return;
++  const prev = raw.trim();
++  const next = part.trim();
++  if (!prev) return;
++  if (next.startsWith(prev) || done) return part;
++}
+ var OpenAICompatibleChatLanguageModel = class {
+   // type inferred via constructor
+   constructor(modelId, config) {
+@@ -616,10 +629,12 @@ var OpenAICompatibleChatLanguageModel = class {
+                       name: toolCallDelta.function.name,
+                       arguments: (_c = toolCallDelta.function.arguments) != null ? _c : ""
+                     },
++                    full: void 0,
+                     hasFinished: false
+                   };
+                   const toolCall2 = toolCalls[index];
+                   if (((_d = toolCall2.function) == null ? void 0 : _d.name) != null && ((_e = toolCall2.function) == null ? void 0 : _e.arguments) != null) {
++                    const input = toolCall2.full != null ? toolCall2.full : toolCall2.function.arguments;
+                     if (toolCall2.function.arguments.length > 0) {
+                       controller.enqueue({
+                         type: "tool-input-delta",
+@@ -627,7 +642,7 @@ var OpenAICompatibleChatLanguageModel = class {
+                         delta: toolCall2.function.arguments
+                       });
+                     }
+-                    if (isParsableJson(toolCall2.function.arguments)) {
++                    if (isParsableJson(input)) {
+                       controller.enqueue({
+                         type: "tool-input-end",
+                         id: toolCall2.id
+@@ -636,7 +651,7 @@ var OpenAICompatibleChatLanguageModel = class {
+                         type: "tool-call",
+                         toolCallId: (_f = toolCall2.id) != null ? _f : generateId(),
+                         toolName: toolCall2.function.name,
+-                        input: toolCall2.function.arguments
++                        input
+                       });
+                       toolCall2.hasFinished = true;
+                     }
+@@ -648,14 +663,25 @@ var OpenAICompatibleChatLanguageModel = class {
+                   continue;
+                 }
+                 if (((_g = toolCallDelta.function) == null ? void 0 : _g.arguments) != null) {
+-                  toolCall.function.arguments += (_i = (_h = toolCallDelta.function) == null ? void 0 : _h.arguments) != null ? _i : "";
++                  const part = (_i = (_h = toolCallDelta.function) == null ? void 0 : _h.arguments) != null ? _i : "";
++                  const full = pickCompleteToolPayload(
++                    toolCall.function.arguments,
++                    part,
++                    choice.finish_reason === "tool_calls"
++                  );
++                  if (full != null) {
++                    toolCall.full = full;
++                  } else {
++                    toolCall.function.arguments += part;
++                    controller.enqueue({
++                      type: "tool-input-delta",
++                      id: toolCall.id,
++                      delta: part
++                    });
++                  }
+                 }
+-                controller.enqueue({
+-                  type: "tool-input-delta",
+-                  id: toolCall.id,
+-                  delta: (_j = toolCallDelta.function.arguments) != null ? _j : ""
+-                });
+-                if (((_k = toolCall.function) == null ? void 0 : _k.name) != null && ((_l = toolCall.function) == null ? void 0 : _l.arguments) != null && isParsableJson(toolCall.function.arguments)) {
++                const input = toolCall.full != null ? toolCall.full : toolCall.function.arguments;
++                if (((_k = toolCall.function) == null ? void 0 : _k.name) != null && input != null && isParsableJson(input)) {
+                   controller.enqueue({
+                     type: "tool-input-end",
+                     id: toolCall.id
+@@ -664,7 +690,7 @@ var OpenAICompatibleChatLanguageModel = class {
+                     type: "tool-call",
+                     toolCallId: (_m = toolCall.id) != null ? _m : generateId(),
+                     toolName: toolCall.function.name,
+-                    input: toolCall.function.arguments
++                    input
+                   });
+                   toolCall.hasFinished = true;
+                 }
+@@ -682,6 +708,7 @@ var OpenAICompatibleChatLanguageModel = class {
+             for (const toolCall of toolCalls.filter(
+               (toolCall2) => !toolCall2.hasFinished
+             )) {
++              const input = toolCall.full != null ? toolCall.full : toolCall.function.arguments;
+               controller.enqueue({
+                 type: "tool-input-end",
+                 id: toolCall.id
+@@ -690,7 +717,7 @@ var OpenAICompatibleChatLanguageModel = class {
+                 type: "tool-call",
+                 toolCallId: (_a2 = toolCall.id) != null ? _a2 : generateId(),
+                 toolName: toolCall.function.name,
+-                input: toolCall.function.arguments
++                input
+               });
+             }
+             const providerMetadata = {

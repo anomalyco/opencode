@@ -50,6 +50,21 @@ export type OpenAICompatibleChatConfig = {
   supportedUrls?: () => LanguageModelV2["supportedUrls"]
 }
 
+function whole(text: string) {
+  const json = text.trim()
+  if (!json) return false
+  if (!json.startsWith("{") && !json.startsWith("[")) return false
+  return isParsableJson(json)
+}
+
+function pick(raw: string, part: string, done: boolean) {
+  if (!raw || !whole(part)) return
+  const prev = raw.trim()
+  const next = part.trim()
+  if (!prev) return
+  if (next.startsWith(prev) || done) return part
+}
+
 export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
   readonly specificationVersion = "v2"
 
@@ -329,6 +344,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
         name: string
         arguments: string
       }
+      full?: string
       hasFinished: boolean
     }> = []
 
@@ -550,6 +566,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
                   const toolCall = toolCalls[index]
 
                   if (toolCall.function?.name != null && toolCall.function?.arguments != null) {
+                    const input = toolCall.full ?? toolCall.function.arguments
                     // send delta if the argument text has already started:
                     if (toolCall.function.arguments.length > 0) {
                       controller.enqueue({
@@ -561,7 +578,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
 
                     // check if tool call is complete
                     // (some providers send the full tool call in one chunk):
-                    if (isParsableJson(toolCall.function.arguments)) {
+                    if (isParsableJson(input)) {
                       controller.enqueue({
                         type: "tool-input-end",
                         id: toolCall.id,
@@ -571,7 +588,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
                         type: "tool-call",
                         toolCallId: toolCall.id ?? generateId(),
                         toolName: toolCall.function.name,
-                        input: toolCall.function.arguments,
+                        input,
                         providerMetadata: reasoningOpaque ? { copilot: { reasoningOpaque } } : undefined,
                       })
                       toolCall.hasFinished = true
@@ -589,22 +606,24 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
                 }
 
                 if (toolCallDelta.function?.arguments != null) {
-                  toolCall.function!.arguments += toolCallDelta.function?.arguments ?? ""
+                  const part = toolCallDelta.function.arguments
+                  const full = pick(toolCall.function!.arguments, part, choice.finish_reason === "tool_calls")
+                  if (full) {
+                    toolCall.full = full
+                  } else {
+                    toolCall.function!.arguments += part
+                    controller.enqueue({
+                      type: "tool-input-delta",
+                      id: toolCall.id,
+                      delta: part,
+                    })
+                  }
                 }
 
-                // send delta
-                controller.enqueue({
-                  type: "tool-input-delta",
-                  id: toolCall.id,
-                  delta: toolCallDelta.function.arguments ?? "",
-                })
+                const input = toolCall.full ?? toolCall.function.arguments
 
                 // check if tool call is complete
-                if (
-                  toolCall.function?.name != null &&
-                  toolCall.function?.arguments != null &&
-                  isParsableJson(toolCall.function.arguments)
-                ) {
+                if (toolCall.function?.name != null && input != null && isParsableJson(input)) {
                   controller.enqueue({
                     type: "tool-input-end",
                     id: toolCall.id,
@@ -614,7 +633,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
                     type: "tool-call",
                     toolCallId: toolCall.id ?? generateId(),
                     toolName: toolCall.function.name,
-                    input: toolCall.function.arguments,
+                    input,
                     providerMetadata: reasoningOpaque ? { copilot: { reasoningOpaque } } : undefined,
                   })
                   toolCall.hasFinished = true
@@ -639,6 +658,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
 
             // go through all tool calls and send the ones that are not finished
             for (const toolCall of toolCalls.filter((toolCall) => !toolCall.hasFinished)) {
+              const input = toolCall.full ?? toolCall.function.arguments
               controller.enqueue({
                 type: "tool-input-end",
                 id: toolCall.id,
@@ -648,7 +668,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
                 type: "tool-call",
                 toolCallId: toolCall.id ?? generateId(),
                 toolName: toolCall.function.name,
-                input: toolCall.function.arguments,
+                input,
               })
             }
 

@@ -14,6 +14,7 @@ async function convertReadableStreamToArray<T>(stream: ReadableStream<T>): Promi
 }
 
 const TEST_PROMPT: LanguageModelV2Prompt = [{ role: "user", content: [{ type: "text", text: "Hello" }] }]
+const GLM_ARGS = `{"command":"ls","description":"Lists files in current directory"}`
 
 // Fixtures from copilot_test.exs
 const FIXTURES = {
@@ -69,6 +70,30 @@ const FIXTURES = {
   reasoningOpaqueWithToolCallsNoReasoningText: [
     `data: {"choices":[{"index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"function":{"arguments":"{}","name":"read_file"},"id":"call_reasoning_only","index":0,"type":"function"}],"reasoning_opaque":"opaque-xyz"}}],"created":1769917420,"id":"opaque-only","usage":{"completion_tokens":0,"prompt_tokens":0,"prompt_tokens_details":{"cached_tokens":0},"total_tokens":0,"reasoning_tokens":0},"model":"gemini-3-flash-preview"}`,
     `data: {"choices":[{"finish_reason":"tool_calls","index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"function":{"arguments":"{}","name":"read_file"},"id":"call_reasoning_only_2","index":1,"type":"function"}]}}],"created":1769917420,"id":"opaque-only","usage":{"completion_tokens":12,"prompt_tokens":123,"prompt_tokens_details":{"cached_tokens":0},"total_tokens":135,"reasoning_tokens":0},"model":"gemini-3-flash-preview"}`,
+    `data: [DONE]`,
+  ],
+
+  glmToolCallDeltaOnly: [
+    `data: {"id":"chatcmpl-glm-delta","object":"chat.completion.chunk","created":1677652288,"model":"glm-4.5","choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"id":"call_glm_delta","index":0,"function":{"name":"bash","arguments":"{\\"command\\":\\""}}],"content":null},"finish_reason":null}],"usage":null}`,
+    `data: {"id":"chatcmpl-glm-delta","object":"chat.completion.chunk","created":1677652288,"model":"glm-4.5","choices":[{"index":0,"delta":{"tool_calls":[{"id":null,"index":0,"function":{"name":null,"arguments":"ls\\""}}],"content":null},"finish_reason":null}],"usage":null}`,
+    `data: {"id":"chatcmpl-glm-delta","object":"chat.completion.chunk","created":1677652288,"model":"glm-4.5","choices":[{"index":0,"delta":{"tool_calls":[{"id":null,"index":0,"function":{"name":null,"arguments":",\\"description\\":\\"Lists files in current directory\\""}}],"content":null},"finish_reason":null}],"usage":null}`,
+    `data: {"id":"chatcmpl-glm-delta","object":"chat.completion.chunk","created":1677652288,"model":"glm-4.5","choices":[{"index":0,"delta":{"tool_calls":[{"id":null,"index":0,"function":{"name":null,"arguments":"}"}}],"content":null},"finish_reason":"tool_calls"}],"usage":null}`,
+    `data: [DONE]`,
+  ],
+
+  glmToolCallRepeat: [
+    `data: {"id":"chatcmpl-glm-repeat","object":"chat.completion.chunk","created":1677652288,"model":"glm-4.5","choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"id":"call_glm_repeat","index":0,"function":{"name":"bash","arguments":"{\\"command\\":\\""}}],"content":null},"finish_reason":null}],"usage":null}`,
+    `data: {"id":"chatcmpl-glm-repeat","object":"chat.completion.chunk","created":1677652288,"model":"glm-4.5","choices":[{"index":0,"delta":{"tool_calls":[{"id":null,"index":0,"function":{"name":null,"arguments":"ls\\""}}],"content":null},"finish_reason":null}],"usage":null}`,
+    `data: {"id":"chatcmpl-glm-repeat","object":"chat.completion.chunk","created":1677652288,"model":"glm-4.5","choices":[{"index":0,"delta":{"tool_calls":[{"id":null,"index":0,"function":{"name":null,"arguments":",\\"description\\":\\"Lists files in current directory\\""}}],"content":null},"finish_reason":null}],"usage":null}`,
+    `data: {"id":"chatcmpl-glm-repeat","object":"chat.completion.chunk","created":1677652288,"model":"glm-4.5","choices":[{"index":0,"delta":{"tool_calls":[{"id":null,"index":0,"function":{"name":null,"arguments":"{\\"command\\":\\"ls\\",\\"description\\":\\"Lists files in current directory\\"}"}}],"content":null},"finish_reason":"tool_calls"}],"usage":null}`,
+    `data: [DONE]`,
+  ],
+
+  glmToolCallFullBeforeFinish: [
+    `data: {"id":"chatcmpl-glm-full","object":"chat.completion.chunk","created":1677652288,"model":"glm-4.5","choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"id":"call_glm_full","index":0,"function":{"name":"bash","arguments":"{\\"command\\":\\""}}],"content":null},"finish_reason":null}],"usage":null}`,
+    `data: {"id":"chatcmpl-glm-full","object":"chat.completion.chunk","created":1677652288,"model":"glm-4.5","choices":[{"index":0,"delta":{"tool_calls":[{"id":null,"index":0,"function":{"name":null,"arguments":"ls\\""}}],"content":null},"finish_reason":null}],"usage":null}`,
+    `data: {"id":"chatcmpl-glm-full","object":"chat.completion.chunk","created":1677652288,"model":"glm-4.5","choices":[{"index":0,"delta":{"tool_calls":[{"id":null,"index":0,"function":{"name":null,"arguments":"{\\"command\\":\\"ls\\",\\"description\\":\\"Lists files in current directory\\"}"}}],"content":null},"finish_reason":null}],"usage":null}`,
+    `data: {"id":"chatcmpl-glm-full","object":"chat.completion.chunk","created":1677652288,"model":"glm-4.5","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}],"usage":null}`,
     `data: [DONE]`,
   ],
 }
@@ -206,6 +231,88 @@ describe("doStream", () => {
         inputTokens: 19581,
         outputTokens: 53,
       },
+    })
+  })
+
+  test("should keep delta-only streamed tool arguments unchanged", async () => {
+    const mockFetch = createMockFetch(FIXTURES.glmToolCallDeltaOnly)
+    const model = createModel(mockFetch)
+
+    const { stream } = await model.doStream({
+      prompt: TEST_PROMPT,
+      includeRawChunks: false,
+    })
+
+    const parts = await convertReadableStreamToArray(stream)
+    const deltas = parts.filter((p) => p.type === "tool-input-delta")
+
+    expect(deltas).toMatchObject([
+      { type: "tool-input-delta", id: "call_glm_delta", delta: "{\"command\":\"" },
+      { type: "tool-input-delta", id: "call_glm_delta", delta: "ls\"" },
+      {
+        type: "tool-input-delta",
+        id: "call_glm_delta",
+        delta: ",\"description\":\"Lists files in current directory\"",
+      },
+      { type: "tool-input-delta", id: "call_glm_delta", delta: "}" },
+    ])
+
+    const toolCall = parts.find((p) => p.type === "tool-call" && p.toolCallId === "call_glm_delta")
+    expect(toolCall).toMatchObject({
+      type: "tool-call",
+      toolCallId: "call_glm_delta",
+      toolName: "bash",
+      input: GLM_ARGS,
+    })
+    expect(JSON.parse((toolCall as { input: string }).input)).toEqual({
+      command: "ls",
+      description: "Lists files in current directory",
+    })
+  })
+
+  test("should replace partial streamed tool arguments with a repeated full payload", async () => {
+    const mockFetch = createMockFetch(FIXTURES.glmToolCallRepeat)
+    const model = createModel(mockFetch)
+
+    const { stream } = await model.doStream({
+      prompt: TEST_PROMPT,
+      includeRawChunks: false,
+    })
+
+    const parts = await convertReadableStreamToArray(stream)
+    const toolCall = parts.find((p) => p.type === "tool-call" && p.toolCallId === "call_glm_repeat")
+
+    expect(toolCall).toMatchObject({
+      type: "tool-call",
+      toolCallId: "call_glm_repeat",
+      toolName: "bash",
+      input: GLM_ARGS,
+    })
+    expect(JSON.parse((toolCall as { input: string }).input)).toEqual({
+      command: "ls",
+      description: "Lists files in current directory",
+    })
+  })
+
+  test("should accept a full tool payload before the final tool_calls chunk", async () => {
+    const mockFetch = createMockFetch(FIXTURES.glmToolCallFullBeforeFinish)
+    const model = createModel(mockFetch)
+
+    const { stream } = await model.doStream({
+      prompt: TEST_PROMPT,
+      includeRawChunks: false,
+    })
+
+    const parts = await convertReadableStreamToArray(stream)
+    const toolCalls = parts.filter((p) => p.type === "tool-call")
+    const toolCall = toolCalls[0]
+
+    expect(toolCalls).toHaveLength(1)
+    expect(toolCall).toMatchObject({
+      type: "tool-call",
+      toolCallId: "call_glm_full",
+      toolName: "bash",
+      input: GLM_ARGS,
     })
   })
 
