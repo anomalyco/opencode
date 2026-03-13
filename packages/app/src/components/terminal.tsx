@@ -519,7 +519,7 @@ export const Terminal = (props: TerminalProps) => {
         if (event.code !== 1000) {
           if (once.value) return
           once.value = true
-          local.onConnectError?.(new Error(`WebSocket closed abnormally: ${event.code}`))
+          local.onConnectError?.(new Error(language.t("terminal.connectionLost.abnormalClose", { code: event.code })))
         }
       }
       socket.addEventListener("close", handleClose)

@@ -12,6 +12,7 @@ import { type BaseRouterProps, Navigate, Route, Router } from "@solidjs/router"
 import { type Duration, Effect } from "effect"
 import {
   type Component,
+  createMemo,
   createResource,
   createSignal,
   ErrorBoundary,
@@ -67,7 +68,7 @@ const SessionIndexRoute = () => <Navigate href="session" />
 
 function UiI18nBridge(props: ParentProps) {
   const language = useLanguage()
-  return <I18nProvider value={{ locale: language.locale, t: language.t }}>{props.children}</I18nProvider>
+  return <I18nProvider value={{ locale: language.intl, t: language.t }}>{props.children}</I18nProvider>
 }
 
 declare global {
@@ -218,8 +219,12 @@ function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean }>) {
 }
 
 function ConnectionError(props: { onRetry?: () => void; onServerSelected?: (key: ServerConnection.Key) => void }) {
+  const language = useLanguage()
   const server = useServer()
   const others = () => server.list.filter((s) => ServerConnection.key(s) !== server.key)
+  const name = createMemo(() => server.name || server.key)
+  const serverToken = "\u0000server\u0000"
+  const unreachable = createMemo(() => language.t("app.server.unreachable", { server: serverToken }).split(serverToken))
 
   const timer = setInterval(() => props.onRetry?.(), 1000)
   onCleanup(() => clearInterval(timer))
@@ -229,13 +234,15 @@ function ConnectionError(props: { onRetry?: () => void; onServerSelected?: (key:
       <div class="flex flex-col items-center max-w-md text-center">
         <Splash class="w-12 h-15 mb-4" />
         <p class="text-14-regular text-text-base">
-          Could not reach <span class="text-text-strong font-medium">{server.name || server.key}</span>
+          {unreachable()[0]}
+          <span class="text-text-strong font-medium">{name()}</span>
+          {unreachable()[1]}
         </p>
-        <p class="mt-1 text-12-regular text-text-weak">Retrying automatically...</p>
+        <p class="mt-1 text-12-regular text-text-weak">{language.t("app.server.retrying")}</p>
       </div>
       <Show when={others().length > 0}>
         <div class="flex flex-col gap-2 w-full max-w-sm">
-          <span class="text-12-regular text-text-base text-center">Other servers</span>
+          <span class="text-12-regular text-text-base text-center">{language.t("app.server.otherServers")}</span>
           <div class="flex flex-col gap-1 bg-surface-base rounded-lg p-2">
             <For each={others()}>
               {(conn) => {
