@@ -797,6 +797,37 @@ test("serializes concurrent config dependency installs", async () => {
   expect(await Filesystem.exists(path.join(dirs[1], "package.json"))).toBe(true)
 })
 
+test("skips installs for project .opencode when local deps are available upstream", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await fs.mkdir(path.join(dir, "node_modules", "@opencode-ai", "plugin"), { recursive: true })
+      await fs.mkdir(path.join(dir, ".opencode"), { recursive: true })
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      expect(await Config.needsInstall(path.join(tmp.path, ".opencode"))).toBe(false)
+    },
+  })
+})
+
+test("still installs for project .opencode when shared local deps are missing", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await fs.mkdir(path.join(dir, ".opencode"), { recursive: true })
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      expect(await Config.needsInstall(path.join(tmp.path, ".opencode"))).toBe(true)
+    },
+  })
+})
+
 test("resolves scoped npm plugins in config", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

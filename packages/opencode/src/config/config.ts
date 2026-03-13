@@ -332,7 +332,25 @@ export namespace Config {
     }
   }
 
+  async function shared(dir: string) {
+    if (!Installation.isLocal()) return false
+
+    const roots = [Instance.directory, Instance.worktree].filter(Boolean)
+    for (const root of roots) {
+      const rel = path.relative(root, dir)
+      if (path.isAbsolute(rel) || rel.startsWith("..")) continue
+      if (await Filesystem.exists(path.join(root, "node_modules", "@opencode-ai", "plugin"))) return true
+    }
+
+    return false
+  }
+
   export async function needsInstall(dir: string) {
+    if (await shared(dir)) {
+      log.debug("config dir can use shared local dependencies, skipping dependency install", { dir })
+      return false
+    }
+
     // Some config dirs may be read-only.
     // Installing deps there will fail; skip installation in that case.
     const writable = await isWritable(dir)
