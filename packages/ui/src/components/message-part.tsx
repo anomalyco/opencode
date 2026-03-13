@@ -12,6 +12,7 @@ import {
   Index,
   type JSX,
 } from "solid-js"
+import { createStore } from "solid-js/store"
 import stripAnsi from "strip-ansi"
 import { Dynamic } from "solid-js/web"
 import {
@@ -885,8 +886,12 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
   const data = useData()
   const dialog = useDialog()
   const i18n = useI18n()
-  const [copied, setCopied] = createSignal(false)
-  const [busy, setBusy] = createSignal<"fork" | "revert" | undefined>()
+  const [state, setState] = createStore({
+    copied: false,
+    busy: undefined as "fork" | "revert" | undefined,
+  })
+  const copied = () => state.copied
+  const busy = () => state.busy
 
   const textPart = createMemo(
     () => props.parts?.find((p) => p.type === "text" && !(p as TextPart).synthetic) as TextPart | undefined,
@@ -946,14 +951,14 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
     const content = text()
     if (!content) return
     await navigator.clipboard.writeText(content)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    setState("copied", true)
+    setTimeout(() => setState("copied", false), 2000)
   }
 
   const run = (kind: "fork" | "revert") => {
     const act = kind === "fork" ? props.actions?.fork : props.actions?.revert
     if (!act || busy()) return
-    setBusy(kind)
+    setState("busy", kind)
     void Promise.resolve()
       .then(() =>
         act({
@@ -962,7 +967,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
         }),
       )
       .finally(() => {
-        if (busy() === kind) setBusy(undefined)
+        if (busy() === kind) setState("busy", undefined)
       })
   }
 
