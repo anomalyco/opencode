@@ -1,59 +1,16 @@
 import { cmd } from "./cmd"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
-import { Installation } from "../../installation"
+import { WorkspaceServer } from "../../control-plane/workspace-server/server"
 
 export const WorkspaceServeCommand = cmd({
   command: "workspace-serve",
   builder: (yargs) => withNetworkOptions(yargs),
-  describe: "starts a remote workspace websocket server",
+  describe: "starts a remote workspace event server",
   handler: async (args) => {
     const opts = await resolveNetworkOptions(args)
-    const server = Bun.serve<{ id: string }>({
-      hostname: opts.hostname,
-      port: opts.port,
-      fetch(req, server) {
-        const url = new URL(req.url)
-        if (url.pathname === "/ws") {
-          const id = Bun.randomUUIDv7()
-          if (server.upgrade(req, { data: { id } })) return
-          return new Response("Upgrade failed", { status: 400 })
-        }
-
-        if (url.pathname === "/health") {
-          return new Response("ok", {
-            status: 200,
-            headers: {
-              "content-type": "text/plain; charset=utf-8",
-            },
-          })
-        }
-
-        return new Response(
-          JSON.stringify({
-            service: "workspace-server",
-            ws: `ws://${server.hostname}:${server.port}/ws`,
-          }),
-          {
-            status: 200,
-            headers: {
-              "content-type": "application/json; charset=utf-8",
-            },
-          },
-        )
-      },
-      websocket: {
-        open(ws) {
-          ws.send(JSON.stringify({ type: "ready", id: ws.data.id }))
-        },
-        message(ws, msg) {
-          const text = typeof msg === "string" ? msg : msg.toString()
-          ws.send(JSON.stringify({ type: "message", id: ws.data.id, text }))
-        },
-        close() {},
-      },
-    })
-
-    console.log(`workspace websocket server listening on ws://${server.hostname}:${server.port}/ws`)
+    const server = WorkspaceServer.Listen(opts)
+    console.log(`workspace event server listening on http://${server.hostname}:${server.port}/event`)
     await new Promise(() => {})
+    await server.stop()
   },
 })

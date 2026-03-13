@@ -116,6 +116,10 @@ function contextItemKey(item: ContextItem) {
   return `${key}:c=${digest.slice(0, 8)}`
 }
 
+function isCommentItem(item: ContextItem | (ContextItem & { key: string })) {
+  return item.type === "file" && !!item.comment?.trim()
+}
+
 function createPromptActions(
   setStore: SetStoreFunction<{
     prompt: Prompt
@@ -189,6 +193,26 @@ function createPromptSession(dir: string, id: string | undefined) {
       remove(key: string) {
         setStore("context", "items", (items) => items.filter((x) => x.key !== key))
       },
+      removeComment(path: string, commentID: string) {
+        setStore("context", "items", (items) =>
+          items.filter((item) => !(item.type === "file" && item.path === path && item.commentID === commentID)),
+        )
+      },
+      updateComment(path: string, commentID: string, next: Partial<FileContextItem> & { comment?: string }) {
+        setStore("context", "items", (items) =>
+          items.map((item) => {
+            if (item.type !== "file" || item.path !== path || item.commentID !== commentID) return item
+            const value = { ...item, ...next }
+            return { ...value, key: contextItemKey(value) }
+          }),
+        )
+      },
+      replaceComments(items: FileContextItem[]) {
+        setStore("context", "items", (current) => [
+          ...current.filter((item) => !isCommentItem(item)),
+          ...items.map((item) => ({ ...item, key: contextItemKey(item) })),
+        ])
+      },
     },
     set: actions.set,
     reset: actions.reset,
@@ -251,6 +275,10 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
         items: () => session().context.items(),
         add: (item: ContextItem) => session().context.add(item),
         remove: (key: string) => session().context.remove(key),
+        removeComment: (path: string, commentID: string) => session().context.removeComment(path, commentID),
+        updateComment: (path: string, commentID: string, next: Partial<FileContextItem> & { comment?: string }) =>
+          session().context.updateComment(path, commentID, next),
+        replaceComments: (items: FileContextItem[]) => session().context.replaceComments(items),
       },
       set: (prompt: Prompt, cursorPosition?: number) => session().set(prompt, cursorPosition),
       reset: () => session().reset(),

@@ -14,10 +14,11 @@ OpenCode støtter både **JSON** og **JSONC** (JSON med kommentarer) formater.
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
-  // Theme configuration
-  "theme": "opencode",
   "model": "anthropic/claude-sonnet-4-5",
   "autoupdate": true,
+  "server": {
+    "port": 4096,
+  },
 }
 ```
 
@@ -301,12 +302,12 @@ Bærer-tokens (`AWS_BEARER_TOKEN_BEDROCK` eller `/connect`) har forrang over pro
 
 ### Temaer
 
-Du kan konfigurere temaet du vil bruke i OpenCode-konfigurasjonen gjennom alternativet `theme`.
+Angi UI-temaet ditt i `tui.json`.
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "theme": ""
+  "$schema": "https://opencode.ai/tui.json",
+  "theme": "tokyonight"
 }
 ```
 
@@ -406,11 +407,11 @@ Du kan også definere kommandoer ved å bruke markdown-filer i `~/.config/openco
 
 ### Tastebindinger
 
-Du kan tilpasse tastebindingene dine gjennom alternativet `keybinds`.
+Tilpass tastebindinger i `tui.json`.
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/tui.json",
   "keybinds": {}
 }
 ```
@@ -490,13 +491,15 @@ Du kan styre kontekstkomprimering gjennom alternativet `compaction`.
   "$schema": "https://opencode.ai/config.json",
   "compaction": {
     "auto": true,
-    "prune": true
+    "prune": true,
+    "reserved": 10000
   }
 }
 ```
 
 - `auto` - Komprimer økten automatisk når konteksten er full (standard: `true`).
 - `prune` - Fjern gamle verktøyutdata for å spare tokens (standard: `true`).
+- `reserved` - Token-buffer for komprimering. Etterlater nok vindu til å unngå overflyt under komprimering
 
 ---
 
