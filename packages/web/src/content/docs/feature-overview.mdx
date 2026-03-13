@@ -1,0 +1,209 @@
+---
+title: Feature overview
+description: A stakeholder-facing map of OpenCode's current product surfaces and capabilities.
+---
+
+OpenCode is an open source AI coding agent built around a shared core and exposed through multiple interfaces. This page is intended for adjacent teams and integration owners who need to understand what exists today without reading the full codebase.
+
+---
+
+## What ships today
+
+OpenCode currently ships as:
+
+- **Terminal UI** for day-to-day agentic coding work
+- **CLI** for scripting, automation, and headless runs
+- **Web UI** for browser-based access to the same sessions
+- **Desktop app** as a native wrapper around the shared app experience
+- **IDE integration** for editor-aware launch and context sharing
+- **SDK + HTTP server** for programmatic control and third-party clients
+- **Workflow integrations** for GitHub, GitLab, and Slack
+
+The root repo describes this as a provider-agnostic AI coding agent with a client/server architecture, while the core CLI registers commands for local runs, servers, sessions, MCP, GitHub, PR flows, export/import, stats, and more.
+
+---
+
+## Primary user surfaces
+
+### TUI and CLI
+
+The main product surface is the `opencode` CLI and terminal UI in `packages/opencode`.
+
+Key capabilities include:
+
+- Interactive coding sessions
+- Non-interactive `opencode run` automation
+- Session lifecycle management
+- Agent switching and subagent orchestration
+- Project-aware prompts, shell execution, and file operations
+- Export, import, stats, model selection, and provider auth
+
+This is the operational core that other clients attach to.
+
+### Web and desktop
+
+- `opencode web` starts a browser UI backed by the same server and session model
+- The desktop app provides a native shell around the shared app experience
+- The docs explicitly describe the desktop app as running a local OpenCode server sidecar in the background
+
+This means web and desktop are not separate products with separate logic. They are alternate clients on top of the same backend model.
+
+### IDE
+
+The VS Code extension and IDE docs show these current features:
+
+- Quick launch into a split terminal
+- Start a fresh session from the editor
+- Pass current selection or active tab as context
+- Insert file references with line ranges
+
+### Team workflows
+
+OpenCode already supports several collaboration surfaces:
+
+- **GitHub**: issue triage, fix/implement flows, PR review, comment-triggered automation
+- **GitLab**: CI-based execution and Duo-driven issue / MR workflows
+- **Slack**: threaded conversations mapped to OpenCode sessions
+- **Share links**: publish conversation URLs for collaboration when enabled
+
+---
+
+## Core platform capabilities
+
+### 1. Session and project management
+
+The current architecture is multi-project and multi-session.
+
+- One instance can manage multiple projects
+- Each project can have multiple sessions
+- Sessions support children, fork, abort, revert, unrevert, summarize, diff, and share
+- Todos are stored per session
+
+This is visible both in the product docs and in the `specs/project.md` API outline.
+
+### 2. Agent system
+
+OpenCode ships with built-in **Build** and **Plan** primary agents, plus **General** and **Explore** subagents.
+
+Current agent capabilities include:
+
+- Primary vs subagent modes
+- Per-agent model selection
+- Tool availability control
+- Per-agent permissions
+- Max step limits
+- Custom prompt files
+- Markdown or JSON-defined custom agents
+
+This gives teams a way to standardize different operating modes without forking the core product.
+
+### 3. Tools, permissions, and extensibility
+
+The built-in tool layer currently covers:
+
+- Shell execution
+- File read/write/edit/patch flows
+- Grep, glob, and list search
+- Todo tracking
+- Web fetch/search
+- Question prompts
+- Skills
+- Experimental LSP features
+
+Permissions can be set globally or per agent, which makes the platform suitable for both fast local usage and more controlled review-oriented workflows.
+
+### 4. MCP, custom tools, plugins, and skills
+
+OpenCode already supports four major extension mechanisms:
+
+- **MCP servers** for external tools and services
+- **Custom tools** defined in project or global config directories
+- **Plugins** with lifecycle hooks, custom tools, and event subscriptions
+- **Skills** loaded on demand through `SKILL.md` files
+
+In practice, this means other teams can integrate internal systems without changing the core CLI package.
+
+### 5. Provider-agnostic model access
+
+The repo and docs show broad model-provider support, with provider auth, model listing, and configuration flowing through the same runtime.
+
+This is an important product feature for partner teams because OpenCode is not tied to a single model vendor.
+
+### 6. Server and SDK
+
+OpenCode exposes its backend over HTTP and ships a type-safe JS SDK.
+
+Current platform-level capabilities include:
+
+- Headless server via `opencode serve`
+- OpenAPI spec at `/doc`
+- APIs for projects, sessions, messages, commands, files, tools, MCP, agents, auth, and TUI control
+- Type-safe JS/TS client via `@opencode-ai/sdk`
+
+This is the main integration surface for building external clients, automations, or internal control planes.
+
+### 7. Enterprise controls
+
+The current enterprise story centers on deployment and governance rather than a separate code authoring model.
+
+Documented controls include:
+
+- Centralized config
+- SSO integration
+- Internal AI gateway routing
+- Share disabling for compliance-sensitive environments
+- Self-hosting direction for share infrastructure
+
+---
+
+## Package map by responsibility
+
+| Area                   | Main package(s)                                 | Responsibility                                    |
+| ---------------------- | ----------------------------------------------- | ------------------------------------------------- |
+| Core runtime           | `packages/opencode`                             | CLI, TUI runtime, sessions, agents, tools, server |
+| Shared app UI          | `packages/app`                                  | Reusable UI for browser/native clients            |
+| Desktop                | `packages/desktop`, `packages/desktop-electron` | Native clients around shared app flows            |
+| Public docs            | `packages/web`                                  | Starlight docs site                               |
+| SDK                    | `packages/sdk/js`                               | Type-safe programmatic client                     |
+| Extensibility          | `packages/plugin`                               | Plugin and tool SDK                               |
+| Shared UI kit          | `packages/ui`                                   | Common components, themes, and styles             |
+| Slack integration      | `packages/slack`                                | Thread-based Slack bot integration                |
+| Enterprise surface     | `packages/enterprise`                           | Enterprise-focused app surface                    |
+| Serverless/API support | `packages/function`, `packages/console/*`       | Supporting hosted and console flows               |
+
+---
+
+## When another team should use which surface
+
+| Need                                      | Recommended surface                   |
+| ----------------------------------------- | ------------------------------------- |
+| Day-to-day coding with an agent           | TUI / CLI                             |
+| Browser-based access to existing sessions | Web                                   |
+| Native app distribution                   | Desktop                               |
+| Editor-native launch and context sharing  | IDE extension                         |
+| Automation or orchestration from code     | SDK + HTTP server                     |
+| Repo workflows in Git hosting             | GitHub / GitLab integration           |
+| ChatOps-style threaded collaboration      | Slack                                 |
+| Internal system augmentation              | MCP / plugins / custom tools / skills |
+
+---
+
+## What this page should replace
+
+For most stakeholder conversations, teams should not need to inspect `packages/opencode/src` directly.
+
+Instead, start with:
+
+- This page for product scope
+- [CLI](/docs/cli) for command surfaces
+- [Agents](/docs/agents) for execution model
+- [Tools](/docs/tools) for what the model can do
+- [Server](/docs/server) for API surface
+- [SDK](/docs/sdk) for integration work
+- [GitHub](/docs/github), [GitLab](/docs/gitlab), and [Share](/docs/share) for collaboration flows
+
+---
+
+## Current summary
+
+OpenCode is no longer just a terminal coding tool. In its current form, it is a multi-client AI coding platform with shared sessions, configurable agents, tool and permission controls, extensibility hooks, and several integration-ready surfaces for partner products.
