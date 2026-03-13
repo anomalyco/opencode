@@ -32,12 +32,12 @@ export namespace UI {
 
   export function println(...message: string[]) {
     print(...message)
-    Bun.stderr.write(EOL)
+    process.stderr.write(EOL)
   }
 
   export function print(...message: string[]) {
     blank = false
-    Bun.stderr.write(message.join(" "))
+    process.stderr.write(message.join(" "))
   }
 
   let blank = false

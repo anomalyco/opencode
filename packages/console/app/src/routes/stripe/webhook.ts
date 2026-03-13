@@ -306,7 +306,7 @@ export async function POST(input: APIEvent) {
               .update(BillingTable)
               .set({
                 reload: false,
-                reloadError: errorMessage ?? "Payment failed.",
+                reloadError: errorMessage ?? "workspace.reload.error.paymentFailed",
                 timeReloadError: sql`now()`,
               })
               .where(eq(BillingTable.workspaceID, Actor.workspace())),
