@@ -41,8 +41,8 @@ import {
   getSessionPrefetch,
   isSessionPrefetchCurrent,
   runSessionPrefetch,
-  SESSION_PREFETCH_TTL,
   setSessionPrefetch,
+  shouldSkipSessionPrefetch,
 } from "@/context/global-sync/session-prefetch"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
@@ -770,9 +770,11 @@ export default function Layout(props: ParentProps) {
             const next = items.map((x) => x.info).filter((m): m is Message => !!m?.id)
             const sorted = mergeByID([], next)
             const stale = markPrefetched(directory, sessionID)
+            const cursor = messages.response.headers.get("x-next-cursor") ?? undefined
             const meta = {
-              limit: prefetchChunk,
-              complete: sorted.length < prefetchChunk,
+              limit: sorted.length,
+              cursor,
+              complete: !cursor,
               at: Date.now(),
             }
 
@@ -846,10 +848,12 @@ export default function Layout(props: ParentProps) {
 
     const [store] = globalSync.child(directory, { bootstrap: false })
     const cached = untrack(() => {
-      if (store.message[session.id] === undefined) return false
       const info = getSessionPrefetch(directory, session.id)
-      if (!info) return false
-      return Date.now() - info.at < SESSION_PREFETCH_TTL
+      return shouldSkipSessionPrefetch({
+        message: store.message[session.id] !== undefined,
+        info,
+        chunk: prefetchChunk,
+      })
     })
     if (cached) return
 
