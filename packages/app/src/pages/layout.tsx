@@ -1976,7 +1976,7 @@ export default function Layout(props: ParentProps) {
         <Show when={panelProps.project}>
           {(p) => (
             <>
-              <div class="shrink-0 px-2 py-1">
+              <div class="shrink-0 px-1 py-1">
                 <div class="group/project flex items-start justify-between gap-2 p-2 pr-1">
                   <div class="flex flex-col min-w-0">
                     <InlineEditor
