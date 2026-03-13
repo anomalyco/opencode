@@ -99,7 +99,13 @@ export async function handler(
     const dataDumper = createDataDumper(sessionId, requestId, projectId)
     const trialLimiter = createTrialLimiter(modelInfo.trialProvider, ip)
     const trialProvider = await trialLimiter?.check()
-    const rateLimiter = createRateLimiter(modelInfo.allowAnonymous, ip, input.request)
+    const rateLimiter = createRateLimiter(
+      modelInfo.id,
+      modelInfo.allowAnonymous,
+      modelInfo.rateLimit,
+      ip,
+      input.request,
+    )
     await rateLimiter?.check()
     const stickyTracker = createStickyTracker(modelInfo.stickyProvider, sessionId)
     const stickyProvider = await stickyTracker?.get()
@@ -130,6 +136,11 @@ export async function handler(
             ...createBodyConverter(opts.format, providerInfo.format)(body),
             model: providerInfo.model,
             ...(providerInfo.payloadModifier ?? {}),
+            ...Object.fromEntries(
+              Object.entries(providerInfo.payloadMappings ?? {})
+                .map(([k, v]) => [k, input.request.headers.get(v)])
+                .filter(([_k, v]) => !!v),
+            ),
           },
           authInfo?.workspaceID,
         ),

@@ -133,6 +133,7 @@
   [data-slot="session-turn-diffs-count"] {
     color: var(--text-base);
     font-family: var(--font-family-sans);
+    font-variant-numeric: tabular-nums;
     font-size: var(--font-size-base);
     font-weight: var(--font-weight-regular);
     line-height: var(--line-height-x-large);
@@ -171,10 +172,8 @@
 
   [data-slot="session-turn-diff-path"] {
     display: flex;
+    flex-grow: 1;
     min-width: 0;
-    align-items: baseline;
-    overflow: hidden;
-    white-space: nowrap;
 
     font-family: var(--font-family-sans);
     font-size: var(--font-size-small);
@@ -182,24 +181,16 @@
   }
 
   [data-slot="session-turn-diff-directory"] {
-    flex: 1 1 auto;
-    color: var(--text-weak);
-    min-width: 0;
+    color: var(--text-base);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     direction: rtl;
-    unicode-bidi: plaintext;
     text-align: left;
   }
 
   [data-slot="session-turn-diff-filename"] {
     flex-shrink: 0;
-    max-width: 100%;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
     color: var(--text-strong);
     font-weight: var(--font-weight-medium);
   }
