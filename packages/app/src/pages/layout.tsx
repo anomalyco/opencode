@@ -1813,6 +1813,18 @@ export default function Layout(props: ParentProps) {
 
     const state = await WorktreeState.wait(created.directory)
     if (state.status === "failed") {
+      setBusy(created.directory, false)
+      setStore("workspaceExpanded", key, false)
+      if (key !== created.directory) {
+        setStore("workspaceExpanded", created.directory, false)
+      }
+      setStore(
+        "workspaceName",
+        produce((draft) => {
+          delete draft[key]
+        }),
+      )
+      setStore("workspaceOrder", project.worktree, (prev) => (prev ?? []).filter((item) => item !== created.directory))
       showToast({
         title: language.t("workspace.create.failed.title"),
         description: state.message,
