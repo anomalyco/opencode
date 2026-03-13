@@ -115,6 +115,9 @@ jobs:
             target: x86_64-apple-darwin
           - host: macos-latest
             target: aarch64-apple-darwin
+          # github-hosted: blacksmith lacks ARM64 MSVC cross-compilation toolchain
+          - host: windows-2025
+            target: aarch64-pc-windows-msvc
           - host: blacksmith-4vcpu-windows-2025
             target: x86_64-pc-windows-msvc
           - host: blacksmith-4vcpu-ubuntu-2404
@@ -148,6 +151,10 @@ jobs:
           echo "${{ secrets.APPLE_API_KEY_PATH }}" > $RUNNER_TEMP/apple-api-key.p8
 
       - uses: ./.github/actions/setup-bun
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
 
       - name: Cache apt packages
         if: contains(matrix.settings.host, 'ubuntu')
@@ -254,6 +261,10 @@ jobs:
           - host: macos-latest
             target: aarch64-apple-darwin
             platform_flag: --mac --arm64
+          # github-hosted: blacksmith lacks ARM64 MSVC cross-compilation toolchain
+          - host: "windows-2025"
+            target: aarch64-pc-windows-msvc
+            platform_flag: --win --arm64
           - host: "blacksmith-4vcpu-windows-2025"
             target: x86_64-pc-windows-msvc
             platform_flag: --win

@@ -9,17 +9,16 @@ import {
   ServerConnection,
   useCommand,
 } from "@opencode-ai/app"
-import { Splash } from "@opencode-ai/ui/logo"
 import type { AsyncStorage } from "@solid-primitives/storage"
-import { type Accessor, createResource, type JSX, onCleanup, onMount, Show } from "solid-js"
-import { render } from "solid-js/web"
 import { MemoryRouter } from "@solidjs/router"
+import { createEffect, createResource, onCleanup, onMount, Show } from "solid-js"
+import { render } from "solid-js/web"
 import pkg from "../../package.json"
 import { initI18n, t } from "./i18n"
 import { UPDATER_ENABLED } from "./updater"
 import { webviewZoom } from "./webview-zoom"
 import "./styles.css"
-import type { ServerReadyData } from "../preload/types"
+import { useTheme } from "@opencode-ai/ui/theme"
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
@@ -198,11 +197,13 @@ const createPlatform = (): Platform => {
       await window.api.setWslConfig({ enabled })
     },
 
-    getDefaultServerUrl: async () => {
-      return window.api.getDefaultServerUrl().catch(() => null)
+    getDefaultServer: async () => {
+      const url = await window.api.getDefaultServerUrl().catch(() => null)
+      if (!url) return null
+      return ServerConnection.Key.make(url)
     },
 
-    setDefaultServerUrl: async (url: string | null) => {
+    setDefaultServer: async (url: string | null) => {
       await window.api.setDefaultServerUrl(url)
     },
 
@@ -226,7 +227,9 @@ const createPlatform = (): Platform => {
       const image = await window.api.readClipboardImage().catch(() => null)
       if (!image) return null
       const blob = new Blob([image.buffer], { type: "image/png" })
-      return new File([blob], `pasted-image-${Date.now()}.png`, { type: "image/png" })
+      return new File([blob], `pasted-image-${Date.now()}.png`, {
+        type: "image/png",
+      })
     },
   }
 }
@@ -240,12 +243,57 @@ listenForDeepLinks()
 render(() => {
   const platform = createPlatform()
 
+  const [windowCount] = createResource(() => window.api.getWindowCount())
+
+  // Fetch sidecar credentials (available immediately, before health check)
+  const [sidecar] = createResource(() => window.api.awaitInitialization(() => undefined))
+
+  const [defaultServer] = createResource(() =>
+    platform.getDefaultServer?.().then((url) => {
+      if (url) return ServerConnection.key({ type: "http", http: { url } })
+    }),
+  )
+
+  const servers = () => {
+    const data = sidecar()
+    if (!data) return []
+    const server: ServerConnection.Sidecar = {
+      displayName: "Local Server",
+      type: "sidecar",
+      variant: "base",
+      http: {
+        url: data.url,
+        username: data.username ?? undefined,
+        password: data.password ?? undefined,
+      },
+    }
+    return [server] as ServerConnection.Any[]
+  }
+
   function handleClick(e: MouseEvent) {
     const link = (e.target as HTMLElement).closest("a.external-link") as HTMLAnchorElement | null
     if (link?.href) {
       e.preventDefault()
       platform.openLink(link.href)
     }
+  }
+
+  function Inner() {
+    const cmd = useCommand()
+    menuTrigger = (id) => cmd.trigger(id)
+
+    const theme = useTheme()
+
+    createEffect(() => {
+      theme.themeId()
+      theme.mode()
+      const bg = getComputedStyle(document.documentElement).getPropertyValue("--background-base").trim()
+      if (bg) {
+        void window.api.setBackgroundColor(bg)
+      }
+    })
+
+    return null
   }
 
   onMount(() => {
@@ -258,55 +306,21 @@ render(() => {
   return (
     <PlatformProvider value={platform}>
       <AppBaseProviders>
-        <ServerGate>
-          {(data) => {
-            const server: ServerConnection.Sidecar = {
-              displayName: "Local Server",
-              type: "sidecar",
-              variant: "base",
-              http: {
-                url: data().url,
-                username: "opencode",
-                password: data().password ?? undefined,
-              },
-            }
-
-            function Inner() {
-              const cmd = useCommand()
-
-              menuTrigger = (id) => cmd.trigger(id)
-
-              return null
-            }
-
+        <Show when={!defaultServer.loading && !sidecar.loading && !windowCount.loading}>
+          {(_) => {
             return (
-              <AppInterface defaultServer={ServerConnection.key(server)} servers={[server]} router={MemoryRouter}>
+              <AppInterface
+                defaultServer={defaultServer.latest ?? ServerConnection.Key.make("sidecar")}
+                servers={servers()}
+                router={MemoryRouter}
+                disableHealthCheck={(windowCount() ?? 0) > 1}
+              >
                 <Inner />
               </AppInterface>
             )
           }}
-        </ServerGate>
+        </Show>
       </AppBaseProviders>
     </PlatformProvider>
   )
 }, root!)
-
-// Gate component that waits for the server to be ready
-function ServerGate(props: { children: (data: Accessor<ServerReadyData>) => JSX.Element }) {
-  const [serverData] = createResource(() => window.api.awaitInitialization(() => undefined))
-  console.log({ serverData })
-  if (serverData.state === "errored") throw serverData.error
-
-  return (
-    <Show
-      when={serverData.state !== "pending" && serverData()}
-      fallback={
-        <div class="h-screen w-screen flex flex-col items-center justify-center bg-background-base">
-          <Splash class="w-16 h-20 opacity-50 animate-pulse" />
-        </div>
-      }
-    >
-      {(data) => props.children(data)}
-    </Show>
-  )
-}
