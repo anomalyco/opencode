@@ -1580,67 +1580,161 @@ export namespace LSPServer {
           BUN_BE_BUN: "1",
         },
       })
-      // Detect WordPress projects (core, themes, or plugins)
-      const isWordPress = await (async () => {
-        // Check 1: WordPress core files (for full WP installations)
-        const wpCoreFiles = [
-          "wp-config.php",
-          "wp-content",
-          "wp-admin",
-          "wp-includes",
-          "wp-settings.php",
-          "wp-load.php",
-        ]
-        for (const wpFile of wpCoreFiles) {
-          const wpPath = path.join(root, wpFile)
-          if (await pathExists(wpPath)) {
-            log.info("WordPress core installation detected", { file: wpFile, root })
-            return true
+      // Detect WordPress projects and configure Intelephense accordingly.
+      // Detection uses cheap filesystem markers only — no PHP content scanning.
+      const wpDetection: { detected: boolean; hasCore: boolean; corePath?: string } = await (async () => {
+        // Check 1: WordPress core markers (full installations)
+        const coreMarkers = ["wp-config.php", "wp-settings.php", "wp-load.php"]
+        for (const marker of coreMarkers) {
+          if (await pathExists(path.join(root, marker))) {
+            log.info("WordPress core detected", { marker, root })
+            return { detected: true, hasCore: true }
+          }
+        }
+        // Also check parent directories — plugins/themes sit inside wp-content/
+        for (const depth of ["../..", "../../.."]) {
+          const candidate = path.resolve(root, depth)
+          if (await pathExists(path.join(candidate, "wp-load.php"))) {
+            log.info("WordPress core detected via parent", { candidate, root })
+            return { detected: true, hasCore: true, corePath: candidate }
           }
         }
 
-        // Check 2: WordPress plugin/theme headers in PHP files
-        // Plugins and themes don't have core files but have specific headers
-        const phpFiles = await fs.readdir(root).then(files =>
-          files.filter(f => f.endsWith(".php")).map(f => path.join(root, f))
-        ).catch(() => [])
+        // Check 2: Plugin header — main PHP file with "Plugin Name:" in first 8KB
+        const mainPluginFile = path.join(root, path.basename(root) + ".php")
+        const pluginContent = await fs.readFile(mainPluginFile, "utf-8").then((c) => c.slice(0, 8192)).catch(() => null)
+        if (pluginContent && /\*\s*Plugin Name:/i.test(pluginContent)) {
+          log.info("WordPress plugin detected", { file: path.basename(mainPluginFile), root })
+          return { detected: true, hasCore: false }
+        }
 
-        for (const phpFile of phpFiles.slice(0, 10)) { // Check up to 10 PHP files
-          const content = await fs.readFile(phpFile, "utf-8").catch(() => null)
-          if (!content) continue
+        // Check 3: Theme header — style.css with "Theme Name:" in first 8KB
+        const styleContent = await fs.readFile(path.join(root, "style.css"), "utf-8").then((c) => c.slice(0, 8192)).catch(() => null)
+        if (styleContent && /Theme Name:/i.test(styleContent)) {
+          log.info("WordPress theme detected", { root })
+          return { detected: true, hasCore: false }
+        }
 
-          // WordPress plugin header: Plugin Name: xxx
-          // WordPress theme header: Theme Name: xxx
-          // Both use the WordPress PHP header pattern
-          if (
-            /\*\s*Plugin Name:/.test(content) ||
-            /\*\s*Theme Name:/.test(content) ||
-            /\*\s*Text Domain:\s*\S+/.test(content)
-          ) {
-            log.info("WordPress plugin/theme detected", { file: path.basename(phpFile), root })
-            return true
-          }
-          // Check for WordPress function calls in the first 2000 chars
-          const wpFunctions = [
-            "add_action(",
-            "add_filter(",
-            "do_action(",
-            "apply_filters(",
-            "wp_enqueue_script(",
-            "wp_enqueue_style(",
-            "register_activation_hook(",
-            "register_deactivation_hook(",
-            "register_uninstall_hook(",
-          ]
-          const sample = content.slice(0, 2000)
-          if (wpFunctions.some(fn => sample.includes(fn))) {
-            log.info("WordPress code patterns detected", { file: path.basename(phpFile), root })
-            return true
+        // Check 4: composer.json requiring WordPress packages
+        const composerContent = await fs.readFile(path.join(root, "composer.json"), "utf-8").catch(() => null)
+        if (composerContent) {
+          try {
+            const composer = JSON.parse(composerContent)
+            const allDeps = { ...composer.require, ...composer["require-dev"] }
+            const wpPackages = Object.keys(allDeps).some(
+              (pkg) => pkg.startsWith("wordpress/") || pkg.startsWith("wpackagist-") || pkg === "johnpbloch/wordpress" || pkg === "roots/wordpress",
+            )
+            if (wpPackages) {
+              log.info("WordPress composer dependency detected", { root })
+              return { detected: true, hasCore: false }
+            }
+          } catch {
+            // Invalid JSON — ignore
           }
         }
 
-        return false
+        return { detected: false, hasCore: false }
       })()
+
+      // Build Intelephense initialization options for WordPress projects.
+      // Intelephense includes WordPress stubs by default since v1.12, but setting
+      // `stubs` replaces the entire default list. We must include all defaults
+      // alongside "wordpress" to avoid losing standard PHP stubs.
+      const wpInitialization = wpDetection.detected
+        ? {
+            intelephense: {
+              stubs: [
+                // Intelephense defaults (v1.12+)
+                "apache",
+                "bcmath",
+                "bz2",
+                "calendar",
+                "com_dotnet",
+                "Core",
+                "ctype",
+                "curl",
+                "date",
+                "dba",
+                "dom",
+                "enchant",
+                "exif",
+                "FFI",
+                "fileinfo",
+                "filter",
+                "fpm",
+                "ftp",
+                "gd",
+                "gettext",
+                "gmp",
+                "hash",
+                "iconv",
+                "imap",
+                "intl",
+                "json",
+                "ldap",
+                "libxml",
+                "mbstring",
+                "meta",
+                "mysqli",
+                "oci8",
+                "odbc",
+                "openssl",
+                "pcntl",
+                "pcre",
+                "PDO",
+                "pdo_ibm",
+                "pdo_mysql",
+                "pdo_pgsql",
+                "pdo_sqlite",
+                "pgsql",
+                "Phar",
+                "posix",
+                "pspell",
+                "random",
+                "readline",
+                "Reflection",
+                "regex",
+                "session",
+                "shmop",
+                "SimpleXML",
+                "snmp",
+                "soap",
+                "sockets",
+                "sodium",
+                "SPL",
+                "sqlite3",
+                "standard",
+                "superglobals",
+                "sysvmsg",
+                "sysvsem",
+                "sysvshm",
+                "tidy",
+                "tokenizer",
+                "xml",
+                "xmlreader",
+                "xmlrpc",
+                "xmlwriter",
+                "xsl",
+                "Zend OPcache",
+                "zip",
+                "zlib",
+                // WordPress
+                "wordpress",
+              ],
+              // Suppress false positives for types from other plugins/packages
+              // that aren't covered by stubs (especially on Intelephense free tier)
+              diagnostics: {
+                undefinedTypes: false,
+              },
+              // Point Intelephense at WordPress core files when available
+              ...(wpDetection.hasCore && {
+                environment: {
+                  includePaths: [wpDetection.corePath ?? root],
+                },
+              }),
+            },
+          }
+        : {}
 
       return {
         process: proc,
@@ -1648,12 +1742,7 @@ export namespace LSPServer {
           telemetry: {
             enabled: false,
           },
-          // Include WordPress stubs for WordPress projects
-          ...(isWordPress && {
-            intelephense: {
-              stubs: ["wordpress"],
-            },
-          }),
+          ...wpInitialization,
         },
       }
     },
