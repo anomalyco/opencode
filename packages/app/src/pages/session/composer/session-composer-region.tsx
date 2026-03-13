@@ -44,9 +44,9 @@ export function SessionComposerRegion(props: {
 }) {
   const prompt = usePrompt()
   const language = useLanguage()
-  const { sessionKey } = useSessionKey()
+  const route = useSessionKey()
 
-  const handoffPrompt = createMemo(() => getSessionHandoff(sessionKey())?.prompt)
+  const handoffPrompt = createMemo(() => getSessionHandoff(route.sessionKey())?.prompt)
 
   const previewPrompt = () =>
     prompt
@@ -62,7 +62,7 @@ export function SessionComposerRegion(props: {
 
   createEffect(() => {
     if (!prompt.ready()) return
-    setSessionHandoff(sessionKey(), { prompt: previewPrompt() })
+    setSessionHandoff(route.sessionKey(), { prompt: previewPrompt() })
   })
 
   const [store, setStore] = createStore({
@@ -85,7 +85,7 @@ export function SessionComposerRegion(props: {
   }
 
   createEffect(() => {
-    sessionKey()
+    route.sessionKey()
     const ready = props.ready
     const delay = 140
 
@@ -194,6 +194,7 @@ export function SessionComposerRegion(props: {
               >
                 <div ref={(el) => setStore("body", el)}>
                   <SessionTodoDock
+                    sessionID={route.params.id}
                     todos={props.state.todos()}
                     title={language.t("session.todo.title")}
                     collapseLabel={language.t("session.todo.collapse")}
