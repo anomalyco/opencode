@@ -263,7 +263,7 @@ export const dict = {
 
   "prompt.popover.emptyResults": "ไม่พบผลลัพธ์ที่ตรงกัน",
   "prompt.popover.emptyCommands": "ไม่พบคำสั่งที่ตรงกัน",
-  "prompt.dropzone.label": "วางรูปภาพหรือ PDF ที่นี่",
+  "prompt.dropzone.label": "ลากรูปภาพ, PDF หรือไฟล์ข้อความมาวางที่นี่",
   "prompt.dropzone.file.label": "วางเพื่อ @กล่าวถึงไฟล์",
   "prompt.slash.badge.custom": "กำหนดเอง",
   "prompt.slash.badge.skill": "ทักษะ",
@@ -277,8 +277,8 @@ export const dict = {
   "prompt.action.send": "ส่ง",
   "prompt.action.stop": "หยุด",
 
-  "prompt.toast.pasteUnsupported.title": "การวางไม่รองรับ",
-  "prompt.toast.pasteUnsupported.description": "สามารถวางรูปภาพหรือ PDF เท่านั้น",
+  "prompt.toast.pasteUnsupported.title": "ไฟล์แนบที่ไม่รองรับ",
+  "prompt.toast.pasteUnsupported.description": "แนบได้เฉพาะรูปภาพ, PDF หรือไฟล์ข้อความเท่านั้น",
   "prompt.toast.modelAgentRequired.title": "เลือกเอเจนต์และโมเดล",
   "prompt.toast.modelAgentRequired.description": "เลือกเอเจนต์และโมเดลก่อนส่งพร้อมท์",
   "prompt.toast.worktreeCreateFailed.title": "ไม่สามารถสร้าง worktree",

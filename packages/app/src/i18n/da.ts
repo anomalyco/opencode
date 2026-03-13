@@ -262,7 +262,7 @@ export const dict = {
 
   "prompt.popover.emptyResults": "Ingen matchende resultater",
   "prompt.popover.emptyCommands": "Ingen matchende kommandoer",
-  "prompt.dropzone.label": "Slip billeder eller PDF'er her",
+  "prompt.dropzone.label": "Slip billeder, PDF'er eller tekstfiler her",
   "prompt.dropzone.file.label": "Slip for at @nævne fil",
   "prompt.slash.badge.custom": "brugerdefineret",
   "prompt.slash.badge.skill": "skill",
@@ -276,8 +276,8 @@ export const dict = {
   "prompt.action.send": "Send",
   "prompt.action.stop": "Stop",
 
-  "prompt.toast.pasteUnsupported.title": "Ikke understøttet indsæt",
-  "prompt.toast.pasteUnsupported.description": "Kun billeder eller PDF'er kan indsættes her.",
+  "prompt.toast.pasteUnsupported.title": "Ikke understøttet vedhæftning",
+  "prompt.toast.pasteUnsupported.description": "Kun billeder, PDF'er eller tekstfiler kan vedhæftes her.",
   "prompt.toast.modelAgentRequired.title": "Vælg en agent og model",
   "prompt.toast.modelAgentRequired.description": "Vælg en agent og model før du sender en forespørgsel.",
   "prompt.toast.worktreeCreateFailed.title": "Kunne ikke oprette worktree",

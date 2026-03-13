@@ -268,7 +268,7 @@ export const dict = {
 
   "prompt.popover.emptyResults": "Eşleşen sonuç yok",
   "prompt.popover.emptyCommands": "Eşleşen komut yok",
-  "prompt.dropzone.label": "Görsel veya PDF'leri buraya bırakın",
+  "prompt.dropzone.label": "Resimleri, PDF'leri veya metin dosyalarını buraya bırakın",
   "prompt.dropzone.file.label": "@bahsetmek için dosyayı bırakın",
   "prompt.slash.badge.custom": "özel",
   "prompt.slash.badge.skill": "beceri",
@@ -282,8 +282,8 @@ export const dict = {
   "prompt.action.send": "Gönder",
   "prompt.action.stop": "Durdur",
 
-  "prompt.toast.pasteUnsupported.title": "Desteklenmeyen yapıştırma",
-  "prompt.toast.pasteUnsupported.description": "Buraya sadece görsel veya PDF yapıştırılabilir.",
+  "prompt.toast.pasteUnsupported.title": "Desteklenmeyen ek",
+  "prompt.toast.pasteUnsupported.description": "Buraya yalnızca resimler, PDF'ler veya metin dosyaları eklenebilir.",
   "prompt.toast.modelAgentRequired.title": "Bir ajan ve model seçin",
   "prompt.toast.modelAgentRequired.description": "Komut göndermeden önce bir ajan ve model seçin.",
   "prompt.toast.worktreeCreateFailed.title": "Çalışma ağacı oluşturulamadı",

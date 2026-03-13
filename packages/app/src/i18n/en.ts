@@ -264,7 +264,7 @@ export const dict = {
 
   "prompt.popover.emptyResults": "No matching results",
   "prompt.popover.emptyCommands": "No matching commands",
-  "prompt.dropzone.label": "Drop images or PDFs here",
+  "prompt.dropzone.label": "Drop images, PDFs, or text files here",
   "prompt.dropzone.file.label": "Drop to @mention file",
   "prompt.slash.badge.custom": "custom",
   "prompt.slash.badge.skill": "skill",
@@ -278,8 +278,8 @@ export const dict = {
   "prompt.action.send": "Send",
   "prompt.action.stop": "Stop",
 
-  "prompt.toast.pasteUnsupported.title": "Unsupported paste",
-  "prompt.toast.pasteUnsupported.description": "Only images or PDFs can be pasted here.",
+  "prompt.toast.pasteUnsupported.title": "Unsupported attachment",
+  "prompt.toast.pasteUnsupported.description": "Only images, PDFs, or text files can be attached here.",
   "prompt.toast.modelAgentRequired.title": "Select an agent and model",
   "prompt.toast.modelAgentRequired.description": "Choose an agent and model before sending a prompt.",
   "prompt.toast.worktreeCreateFailed.title": "Failed to create worktree",

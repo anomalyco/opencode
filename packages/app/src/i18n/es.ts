@@ -263,7 +263,7 @@ export const dict = {
 
   "prompt.popover.emptyResults": "Sin resultados coincidentes",
   "prompt.popover.emptyCommands": "Sin comandos coincidentes",
-  "prompt.dropzone.label": "Suelta imágenes o PDFs aquí",
+  "prompt.dropzone.label": "Suelta imágenes, PDFs o archivos de texto aquí",
   "prompt.dropzone.file.label": "Suelta para @mencionar archivo",
   "prompt.slash.badge.custom": "personalizado",
   "prompt.slash.badge.skill": "skill",
@@ -277,8 +277,8 @@ export const dict = {
   "prompt.action.send": "Enviar",
   "prompt.action.stop": "Detener",
 
-  "prompt.toast.pasteUnsupported.title": "Pegado no soportado",
-  "prompt.toast.pasteUnsupported.description": "Solo se pueden pegar imágenes o PDFs aquí.",
+  "prompt.toast.pasteUnsupported.title": "Adjunto no compatible",
+  "prompt.toast.pasteUnsupported.description": "Solo se pueden adjuntar imágenes, PDFs o archivos de texto aquí.",
   "prompt.toast.modelAgentRequired.title": "Selecciona un agente y modelo",
   "prompt.toast.modelAgentRequired.description": "Elige un agente y modelo antes de enviar un prompt.",
   "prompt.toast.worktreeCreateFailed.title": "Fallo al crear el árbol de trabajo",
