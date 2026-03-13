@@ -382,7 +382,7 @@ export const SortableWorkspace = (props: {
       }}
     >
       <Collapsible variant="ghost" open={open()} class="shrink-0" onOpenChange={openWrapper}>
-        <div class="px-2 py-1">
+        <div class="py-1">
           <div
             class="group/workspace relative"
             data-component="workspace-item"

@@ -139,7 +139,7 @@ const SessionRow = (props: {
   return (
     <A
       href={`/${props.slug}/session/${props.session.id}`}
-      class={`relative flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none transition-[padding] ${props.mobile ? "pr-7" : ""} group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7 ${props.dense ? "py-0.5" : "py-1"}`}
+      class={`relative flex items-center min-w-0 text-left w-full focus:outline-none transition-[padding] ${props.mobile ? "pr-7" : ""} group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7 ${props.dense ? "py-0.5" : "py-1"}`}
       onPointerDown={props.warmPress}
       onPointerEnter={props.warmHover}
       onPointerLeave={props.cancelHoverPrefetch}
@@ -162,7 +162,7 @@ const SessionRow = (props: {
         />
       </Show>
 
-      <div class="flex items-center w-full">
+      <div class="flex items-center min-w-0 grow-1">
         <div
           class="shrink-0 flex items-center justify-center overflow-hidden transition-[width,margin] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
           style={{
@@ -178,7 +178,7 @@ const SessionRow = (props: {
                 "opacity-0": slot.fade,
               }}
             >
-              <Spinner class="size-[15px]" style={{ color: props.tint() ?? "var(--icon-interactive-base)" }} />
+              <Spinner class="size-4" style={{ color: props.tint() ?? "var(--icon-interactive-base)" }} />
             </div>
           </Show>
         </div>
@@ -266,8 +266,6 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
       (status !== undefined && status.type !== "idle")
     )
   })
-
-  const quiet = createMemo(() => !isWorking() && !hasPermissions() && !hasError() && unseenCount() === 0)
 
   const tint = createMemo(() => {
     const messages = sessionStore.message[props.session.id]
@@ -361,12 +359,8 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   return (
     <div
       data-session-id={props.session.id}
-      class="group/session relative w-full rounded-md cursor-default transition-colors pr-3
+      class="group/session relative w-full rounded-md cursor-default pl-3 pr-3 transition-colors
              hover:bg-surface-raised-base-hover [&:has(:focus-visible)]:bg-surface-raised-base-hover has-[[data-expanded]]:bg-surface-raised-base-hover has-[.active]:bg-surface-base-active"
-      classList={{
-        "pl-3": quiet(),
-        "pl-2": !quiet(),
-      }}
     >
       <Show
         when={hoverEnabled()}
