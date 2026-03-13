@@ -36,6 +36,22 @@ async function terminalID(term: Locator) {
   throw new Error(`Active terminal missing ${terminalAttr}`)
 }
 
+export async function terminalConnects(page: Page, input?: { term?: Locator }) {
+  const term = input?.term ?? page.locator(terminalSelector).first()
+  const id = await terminalID(term)
+  return page.evaluate((id) => {
+    return (window as E2EWindow).__opencode_e2e?.terminal?.terminals?.[id]?.connects ?? 0
+  }, id)
+}
+
+export async function disconnectTerminal(page: Page, input?: { term?: Locator }) {
+  const term = input?.term ?? page.locator(terminalSelector).first()
+  const id = await terminalID(term)
+  await page.evaluate((id) => {
+    ;(window as E2EWindow).__opencode_e2e?.terminal?.controls?.[id]?.disconnect?.()
+  }, id)
+}
+
 async function terminalReady(page: Page, term?: Locator) {
   const next = term ?? page.locator(terminalSelector).first()
   const id = await terminalID(next)
@@ -588,12 +604,19 @@ export async function seedSessionTask(
         .flatMap((message) => message.parts)
         .find((part) => {
           if (part.type !== "tool" || part.tool !== "task") return false
-          if (part.state.input?.description !== input.description) return false
-          return typeof part.state.metadata?.sessionId === "string" && part.state.metadata.sessionId.length > 0
+          if (!("state" in part) || !part.state || typeof part.state !== "object") return false
+          if (!("input" in part.state) || !part.state.input || typeof part.state.input !== "object") return false
+          if (!("description" in part.state.input) || part.state.input.description !== input.description) return false
+          if (!("metadata" in part.state) || !part.state.metadata || typeof part.state.metadata !== "object")
+            return false
+          if (!("sessionId" in part.state.metadata)) return false
+          return typeof part.state.metadata.sessionId === "string" && part.state.metadata.sessionId.length > 0
         })
 
-      if (!part) return
-      const id = part.state.metadata?.sessionId
+      if (!part || !("state" in part) || !part.state || typeof part.state !== "object") return
+      if (!("metadata" in part.state) || !part.state.metadata || typeof part.state.metadata !== "object") return
+      if (!("sessionId" in part.state.metadata)) return
+      const id = part.state.metadata.sessionId
       if (typeof id !== "string" || !id) return
       const child = await sdk.session
         .get({ sessionID: id })

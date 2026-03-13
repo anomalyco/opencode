@@ -31,7 +31,7 @@
   },
   "dark": {
     "palette": {
-      "neutral": "#151515",
+      "neutral": "#1f1f1f",
       "ink": "#f1ece8",
       "primary": "#fab283",
       "success": "#12c905",

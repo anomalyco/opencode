@@ -956,13 +956,15 @@ export default function Page() {
       return (
         <div class={input.emptyClass}>
           <div class="flex flex-col gap-3">
-            <div class="text-14-medium text-text-strong">Create a Git repository</div>
+            <div class="text-14-medium text-text-strong">{language.t("session.review.noVcs.createGit.title")}</div>
             <div class="text-14-regular text-text-base max-w-md" style={{ "line-height": "var(--line-height-normal)" }}>
-              Track, review, and undo changes in this project
+              {language.t("session.review.noVcs.createGit.description")}
             </div>
           </div>
           <Button size="large" disabled={ui.git} onClick={initGit}>
-            {ui.git ? "Creating Git repository..." : "Create Git repository"}
+            {ui.git
+              ? language.t("session.review.noVcs.createGit.actionLoading")
+              : language.t("session.review.noVcs.createGit.action")}
           </Button>
         </div>
       )
