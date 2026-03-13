@@ -6,7 +6,7 @@ import {
   parseDeepLink,
   parseNewSessionDeepLink,
 } from "./deep-links"
-import { type Session } from "@opencode-ai/sdk/v2/client"
+import { type PermissionRequest, type Session } from "@opencode-ai/sdk/v2/client"
 import {
   displayName,
   effectiveWorkspaceOrder,
@@ -146,11 +146,13 @@ describe("layout workspace helpers", () => {
 
   test("detects project permissions with a filter", () => {
     const result = hasProjectPermissions(
+      [session({ id: "root", directory: "/root" }), session({ id: "child", directory: "/root", parentID: "root" })],
       {
-        root: [{ id: "perm-root" }, { id: "perm-hidden" }],
-        child: [{ id: "perm-child" }],
+        root: [{ id: "perm-root" } as PermissionRequest, { id: "perm-hidden" } as PermissionRequest],
+        child: [{ id: "perm-child" } as PermissionRequest],
       },
-      (item) => item.id === "perm-child",
+      "/root",
+      (item: PermissionRequest) => item.id === "perm-child",
     )
 
     expect(result).toBe(true)
@@ -158,9 +160,11 @@ describe("layout workspace helpers", () => {
 
   test("ignores project permissions filtered out", () => {
     const result = hasProjectPermissions(
+      [session({ id: "root", directory: "/root" })],
       {
-        root: [{ id: "perm-root" }],
+        root: [{ id: "perm-root" } as PermissionRequest],
       },
+      "/root",
       () => false,
     )
 

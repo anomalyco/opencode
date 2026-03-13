@@ -1294,17 +1294,6 @@ export default function Page() {
     ),
   )
 
-  createEffect(
-    on(
-      sessionKey,
-      () => {
-        scrollSpy.clear()
-      },
-      { defer: true },
-    ),
-  )
-
-  const anchor = (id: string) => `message-${id}`
   let fill = () => {}
 
   const setScrollRef = (el: HTMLDivElement | undefined) => {
