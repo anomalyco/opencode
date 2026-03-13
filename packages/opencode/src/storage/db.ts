@@ -138,7 +138,16 @@ export namespace Database {
       if (err instanceof Context.NotFound) {
         const effects: (() => void | Promise<void>)[] = []
         const result = ctx.provide({ effects, tx: Client() }, () => callback(Client()))
-        for (const effect of effects) effect()
+        for (const effect of effects) {
+          try {
+            const r = effect()
+            if (r && typeof r === "object" && "catch" in r) {
+              ;(r as Promise<void>).catch((e) => log.error("database effect failed", { error: e }))
+            }
+          } catch (e) {
+            log.error("database effect failed", { error: e })
+          }
+        }
         return result
       }
       throw err
@@ -149,7 +158,14 @@ export namespace Database {
     try {
       ctx.use().effects.push(fn)
     } catch {
-      fn()
+      try {
+        const r = fn()
+        if (r && typeof r === "object" && "catch" in r) {
+          ;(r as Promise<void>).catch((e) => log.error("database effect failed", { error: e }))
+        }
+      } catch (e) {
+        log.error("database effect failed", { error: e })
+      }
     }
   }
 
@@ -162,7 +178,16 @@ export namespace Database {
         const result = (Client().transaction as any)((tx: TxOrDb) => {
           return ctx.provide({ tx, effects }, () => callback(tx))
         })
-        for (const effect of effects) effect()
+        for (const effect of effects) {
+          try {
+            const r = effect()
+            if (r && typeof r === "object" && "catch" in r) {
+              ;(r as Promise<void>).catch((e) => log.error("database effect failed", { error: e }))
+            }
+          } catch (e) {
+            log.error("database effect failed", { error: e })
+          }
+        }
         return result
       }
       throw err
