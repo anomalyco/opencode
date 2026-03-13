@@ -722,9 +722,9 @@ export namespace Config {
       permission: Permission.optional(),
       model_tiers: z
         .object({
-          quick: z.object({ model: z.string(), variant: z.string().optional() }).optional(),
-          standard: z.object({ model: z.string(), variant: z.string().optional() }).optional(),
-          advanced: z.object({ model: z.string(), variant: z.string().optional() }).optional(),
+          quick: z.object({ model: ModelId, variant: z.string().optional() }).optional(),
+          standard: z.object({ model: ModelId, variant: z.string().optional() }).optional(),
+          advanced: z.object({ model: ModelId, variant: z.string().optional() }).optional(),
         })
         .optional()
         .describe("Model tier mappings for this agent"),
@@ -1066,9 +1066,9 @@ export namespace Config {
       ).optional(),
       model_tiers: z
         .object({
-          quick: z.object({ model: z.string(), variant: z.string().optional() }).optional(),
-          standard: z.object({ model: z.string(), variant: z.string().optional() }).optional(),
-          advanced: z.object({ model: z.string(), variant: z.string().optional() }).optional(),
+          quick: z.object({ model: ModelId, variant: z.string().optional() }).optional(),
+          standard: z.object({ model: ModelId, variant: z.string().optional() }).optional(),
+          advanced: z.object({ model: ModelId, variant: z.string().optional() }).optional(),
         })
         .optional()
         .describe("Global model tier mappings"),

@@ -10,10 +10,10 @@ You can also specify a model_tier parameter to control which model the subagent 
 - `standard` for balanced model for most tasks
 - `advanced` for powerful model for complex tasks.
 
-Use this when spawning subagents in parallel with varying complexity. For example: Task(description="Check the file", prompt="/check-file path/to/file.py", model_tier="quick") and Task(description="Analyze the data", prompt="/analyze-data path/to/data.csv", model_tier="advanced"). If not specified, the agent's configured model or parent session's model is used.
+Use this when spawning subagents in parallel with varying complexity. For example: Task(subagent_type="file-checker", description="Check the file", prompt="/check-file path/to/file.py", model_tier="quick") and Task(subagent_type="data-analyzer", description="Analyze the data", prompt="/analyze-data path/to/data.csv", model_tier="advanced"). If not specified, the agent's configured model or parent session's model is used.
 
 When to use Task tool:
-- When you are instructed to execute custom slash commands. Use the Task tool with the slash command invocation as the entire prompt. The slash command can take arguments. For example: Task(description="Check the file", prompt="/check-file path/to/file.py")
+- When you are instructed to execute custom slash commands. Use the Task tool with the slash command invocation as the entire prompt. The slash command can take arguments. For example: Task(subagent_type="file-checker", description="Check the file", prompt="/check-file path/to/file.py")
 
 When NOT to use the Task tool:
 - If you want to read a specific file path, use the Read or Glob tool instead of the Task tool, to find the match more quickly
