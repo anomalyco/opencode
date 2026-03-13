@@ -1185,7 +1185,8 @@ export namespace Provider {
       if (existing) return existing
 
       const customFetch = options["fetch"]
-      const chunkTimeout = options["chunkTimeout"] === false ? false : (options["chunkTimeout"] || DEFAULT_CHUNK_TIMEOUT)
+      const chunkTimeout =
+        options["chunkTimeout"] === false ? false : (options["chunkTimeout"] ?? DEFAULT_CHUNK_TIMEOUT)
       delete options["chunkTimeout"]
 
       options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {

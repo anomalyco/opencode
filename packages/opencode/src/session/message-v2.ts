@@ -2,7 +2,14 @@ import { BusEvent } from "@/bus/bus-event"
 import { SessionID, MessageID, PartID } from "./schema"
 import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
-import { APICallError, convertToModelMessages, LoadAPIKeyError, TypeValidationError, type ModelMessage, type UIMessage } from "ai"
+import {
+  APICallError,
+  convertToModelMessages,
+  LoadAPIKeyError,
+  TypeValidationError,
+  type ModelMessage,
+  type UIMessage,
+} from "ai"
 import { LSP } from "../lsp"
 import { Snapshot } from "@/snapshot"
 import { fn } from "@/util/fn"
@@ -956,8 +963,18 @@ export namespace MessageV2 {
           { cause: e },
         ).toObject()
       case TypeValidationError.isInstance(e): {
-        const body = typeof e.value === "string" ? e.value : JSON.stringify(e.value)
-        const transient = /InternalServerException|ServiceUnavailableException|ThrottlingException|Too Many Requests|BadGatewayException/i.test(body)
+        const body = (() => {
+          if (typeof e.value === "string") return e.value
+          try {
+            return JSON.stringify(e.value) ?? String(e.value)
+          } catch {
+            return String(e.value)
+          }
+        })()
+        const transient =
+          /InternalServerException|ServiceUnavailableException|ThrottlingException|TooManyRequestsException|BadGatewayException|Bad Gateway|Too Many Requests|\b(429|500|502|503|504)\b/i.test(
+            body,
+          )
         if (transient)
           return new MessageV2.APIError(
             {
