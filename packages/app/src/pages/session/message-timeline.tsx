@@ -1,6 +1,6 @@
 import { For, createEffect, createMemo, on, onCleanup, Show, Index, type JSX } from "solid-js"
 import { createStore, produce } from "solid-js/store"
-import { useNavigate, useParams } from "@solidjs/router"
+import { useNavigate } from "@solidjs/router"
 import { Button } from "@opencode-ai/ui/button"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -11,17 +11,23 @@ import { InlineInput } from "@opencode-ai/ui/inline-input"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
+import { TextField } from "@opencode-ai/ui/text-field"
 import type { AssistantMessage, Message as MessageType, Part, TextPart, UserMessage } from "@opencode-ai/sdk/v2"
 import { showToast } from "@opencode-ai/ui/toast"
 import { Binary } from "@opencode-ai/util/binary"
 import { getFilename } from "@opencode-ai/util/path"
+import { Popover as KobaltePopover } from "@kobalte/core/popover"
 import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/message-gesture"
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
+import { useSessionKey } from "@/pages/session/session-layout"
+import { useGlobalSDK } from "@/context/global-sdk"
+import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
+import { messageAgentColor } from "@/utils/agent"
 import { parseCommentNote, readCommentMetadata } from "@/utils/comment-note"
 
 type MessageComment = {
@@ -35,6 +41,11 @@ type MessageComment = {
 
 const emptyMessages: MessageType[] = []
 const idle = { type: "idle" as const }
+
+type UserActions = {
+  fork?: (input: { sessionID: string; messageID: string }) => Promise<void> | void
+  revert?: (input: { sessionID: string; messageID: string }) => Promise<void> | void
+}
 
 const messageComments = (parts: Part[]): MessageComment[] =>
   parts.flatMap((part) => {
@@ -186,6 +197,7 @@ function createTimelineStaging(input: TimelineStageInput) {
 export function MessageTimeline(props: {
   mobileChanges: boolean
   mobileFallback: JSX.Element
+  actions?: UserActions
   scroll: { overflow: boolean; bottom: boolean }
   onResumeScroll: () => void
   setScrollRef: (el: HTMLDivElement | undefined) => void
@@ -207,16 +219,17 @@ export function MessageTimeline(props: {
 }) {
   let touchGesture: number | undefined
 
-  const params = useParams()
   const navigate = useNavigate()
+  const globalSDK = useGlobalSDK()
   const sdk = useSDK()
   const sync = useSync()
   const settings = useSettings()
   const dialog = useDialog()
   const language = useLanguage()
+  const { params, sessionKey } = useSessionKey()
+  const platform = usePlatform()
 
   const rendered = createMemo(() => props.renderedUserMessages.map((message) => message.id))
-  const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const sessionID = createMemo(() => params.id)
   const sessionMessages = createMemo(() => {
     const id = sessionID()
@@ -234,6 +247,7 @@ export function MessageTimeline(props: {
     return sync.data.session_status[id] ?? idle
   })
   const working = createMemo(() => !!pending() || sessionStatus().type !== "idle")
+  const tint = createMemo(() => messageAgentColor(sessionMessages(), sync.data.agent))
 
   const [slot, setSlot] = createStore({
     open: false,
@@ -292,6 +306,8 @@ export function MessageTimeline(props: {
     return sync.session.get(id)
   })
   const titleValue = createMemo(() => info()?.title)
+  const shareUrl = createMemo(() => info()?.share?.url)
+  const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
   const parentID = createMemo(() => info()?.parentID)
   const showHeader = createMemo(() => !!(titleValue() || parentID()))
   const stageCfg = { init: 1, batch: 3 }
@@ -308,8 +324,54 @@ export function MessageTimeline(props: {
     saving: false,
     menuOpen: false,
     pendingRename: false,
+    pendingShare: false,
   })
   let titleRef: HTMLInputElement | undefined
+
+  const [share, setShare] = createStore({
+    open: false,
+    dismiss: null as "escape" | "outside" | null,
+  })
+
+  let more: HTMLButtonElement | undefined
+
+  const [req, setReq] = createStore({ share: false, unshare: false })
+
+  const shareSession = () => {
+    const id = sessionID()
+    if (!id || req.share) return
+    if (!shareEnabled()) return
+    setReq("share", true)
+    globalSDK.client.session
+      .share({ sessionID: id, directory: sdk.directory })
+      .catch((err: unknown) => {
+        console.error("Failed to share session", err)
+      })
+      .finally(() => {
+        setReq("share", false)
+      })
+  }
+
+  const unshareSession = () => {
+    const id = sessionID()
+    if (!id || req.unshare) return
+    if (!shareEnabled()) return
+    setReq("unshare", true)
+    globalSDK.client.session
+      .unshare({ sessionID: id, directory: sdk.directory })
+      .catch((err: unknown) => {
+        console.error("Failed to unshare session", err)
+      })
+      .finally(() => {
+        setReq("unshare", false)
+      })
+  }
+
+  const viewShare = () => {
+    const url = shareUrl()
+    if (!url) return
+    platform.openLink(url)
+  }
 
   const errorMessage = (err: unknown) => {
     if (err && typeof err === "object" && "data" in err) {
@@ -323,7 +385,15 @@ export function MessageTimeline(props: {
   createEffect(
     on(
       sessionKey,
-      () => setTitle({ draft: "", editing: false, saving: false, menuOpen: false, pendingRename: false }),
+      () =>
+        setTitle({
+          draft: "",
+          editing: false,
+          saving: false,
+          menuOpen: false,
+          pendingRename: false,
+          pendingShare: false,
+        }),
       { defer: true },
     ),
   )
@@ -621,7 +691,7 @@ export function MessageTimeline(props: {
                               "opacity-0": slot.fade,
                             }}
                           >
-                            <Spinner class="size-4" style={{ color: "var(--icon-interactive-base)" }} />
+                            <Spinner class="size-4" style={{ color: tint() ?? "var(--icon-interactive-base)" }} />
                           </div>
                         </Show>
                       </div>
@@ -672,23 +742,42 @@ export function MessageTimeline(props: {
                           gutter={4}
                           placement="bottom-end"
                           open={title.menuOpen}
-                          onOpenChange={(open) => setTitle("menuOpen", open)}
+                          onOpenChange={(open) => {
+                            setTitle("menuOpen", open)
+                            if (open) return
+                          }}
                         >
                           <DropdownMenu.Trigger
                             as={IconButton}
                             icon="dot-grid"
                             variant="ghost"
                             class="size-6 rounded-md data-[expanded]:bg-surface-base-active"
+                            classList={{
+                              "bg-surface-base-active": share.open || title.pendingShare,
+                            }}
                             aria-label={language.t("common.moreOptions")}
+                            aria-expanded={title.menuOpen || share.open || title.pendingShare}
+                            ref={(el: HTMLButtonElement) => {
+                              more = el
+                            }}
                           />
                           <DropdownMenu.Portal>
                             <DropdownMenu.Content
                               style={{ "min-width": "104px" }}
                               onCloseAutoFocus={(event) => {
-                                if (!title.pendingRename) return
-                                event.preventDefault()
-                                setTitle("pendingRename", false)
-                                openTitleEditor()
+                                if (title.pendingRename) {
+                                  event.preventDefault()
+                                  setTitle("pendingRename", false)
+                                  openTitleEditor()
+                                  return
+                                }
+                                if (title.pendingShare) {
+                                  event.preventDefault()
+                                  requestAnimationFrame(() => {
+                                    setShare({ open: true, dismiss: null })
+                                    setTitle("pendingShare", false)
+                                  })
+                                }
                               }}
                             >
                               <DropdownMenu.Item
@@ -699,6 +788,17 @@ export function MessageTimeline(props: {
                               >
                                 <DropdownMenu.ItemLabel>{language.t("common.rename")}</DropdownMenu.ItemLabel>
                               </DropdownMenu.Item>
+                              <Show when={shareEnabled()}>
+                                <DropdownMenu.Item
+                                  onSelect={() => {
+                                    setTitle({ pendingShare: true, menuOpen: false })
+                                  }}
+                                >
+                                  <DropdownMenu.ItemLabel>
+                                    {language.t("session.share.action.share")}
+                                  </DropdownMenu.ItemLabel>
+                                </DropdownMenu.Item>
+                              </Show>
                               <DropdownMenu.Item onSelect={() => void archiveSession(id())}>
                                 <DropdownMenu.ItemLabel>{language.t("common.archive")}</DropdownMenu.ItemLabel>
                               </DropdownMenu.Item>
@@ -711,6 +811,104 @@ export function MessageTimeline(props: {
                             </DropdownMenu.Content>
                           </DropdownMenu.Portal>
                         </DropdownMenu>
+
+                        <KobaltePopover
+                          open={share.open}
+                          anchorRef={() => more}
+                          placement="bottom-end"
+                          gutter={4}
+                          modal={false}
+                          onOpenChange={(open) => {
+                            if (open) setShare("dismiss", null)
+                            setShare("open", open)
+                          }}
+                        >
+                          <KobaltePopover.Portal>
+                            <KobaltePopover.Content
+                              data-component="popover-content"
+                              style={{ "min-width": "320px" }}
+                              onEscapeKeyDown={(event) => {
+                                setShare({ dismiss: "escape", open: false })
+                                event.preventDefault()
+                                event.stopPropagation()
+                              }}
+                              onPointerDownOutside={() => {
+                                setShare({ dismiss: "outside", open: false })
+                              }}
+                              onFocusOutside={() => {
+                                setShare({ dismiss: "outside", open: false })
+                              }}
+                              onCloseAutoFocus={(event) => {
+                                if (share.dismiss === "outside") event.preventDefault()
+                                setShare("dismiss", null)
+                              }}
+                            >
+                              <div class="flex flex-col p-3">
+                                <div class="flex flex-col gap-1">
+                                  <div class="text-13-medium text-text-strong">
+                                    {language.t("session.share.popover.title")}
+                                  </div>
+                                  <div class="text-12-regular text-text-weak">
+                                    {shareUrl()
+                                      ? language.t("session.share.popover.description.shared")
+                                      : language.t("session.share.popover.description.unshared")}
+                                  </div>
+                                </div>
+                                <div class="mt-3 flex flex-col gap-2">
+                                  <Show
+                                    when={shareUrl()}
+                                    fallback={
+                                      <Button
+                                        size="large"
+                                        variant="primary"
+                                        class="w-full"
+                                        onClick={shareSession}
+                                        disabled={req.share}
+                                      >
+                                        {req.share
+                                          ? language.t("session.share.action.publishing")
+                                          : language.t("session.share.action.publish")}
+                                      </Button>
+                                    }
+                                  >
+                                    <div class="flex flex-col gap-2">
+                                      <TextField
+                                        value={shareUrl() ?? ""}
+                                        readOnly
+                                        copyable
+                                        copyKind="link"
+                                        tabIndex={-1}
+                                        class="w-full"
+                                      />
+                                      <div class="grid grid-cols-2 gap-2">
+                                        <Button
+                                          size="large"
+                                          variant="secondary"
+                                          class="w-full shadow-none border border-border-weak-base"
+                                          onClick={unshareSession}
+                                          disabled={req.unshare}
+                                        >
+                                          {req.unshare
+                                            ? language.t("session.share.action.unpublishing")
+                                            : language.t("session.share.action.unpublish")}
+                                        </Button>
+                                        <Button
+                                          size="large"
+                                          variant="primary"
+                                          class="w-full"
+                                          onClick={viewShare}
+                                          disabled={req.unshare}
+                                        >
+                                          {language.t("session.share.action.view")}
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  </Show>
+                                </div>
+                              </div>
+                            </KobaltePopover.Content>
+                          </KobaltePopover.Portal>
+                        </KobaltePopover>
                       </div>
                     )}
                   </Show>
@@ -746,12 +944,6 @@ export function MessageTimeline(props: {
               <For each={rendered()}>
                 {(messageID) => {
                   const active = createMemo(() => activeMessageID() === messageID)
-                  const queued = createMemo(() => {
-                    if (active()) return false
-                    const activeID = activeMessageID()
-                    if (activeID) return messageID > activeID
-                    return false
-                  })
                   const comments = createMemo(() => messageComments(sync.data.part[messageID] ?? []), [], {
                     equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
                   })
@@ -774,27 +966,31 @@ export function MessageTimeline(props: {
                                 {(commentAccessor: () => MessageComment) => {
                                   const comment = createMemo(() => commentAccessor())
                                   return (
-                                    <div class="shrink-0 max-w-[260px] rounded-[6px] border border-border-weak-base bg-background-stronger px-2.5 py-2">
-                                      <div class="flex items-center gap-1.5 min-w-0 text-11-medium text-text-strong">
-                                        <FileIcon
-                                          node={{ path: comment().path, type: "file" }}
-                                          class="size-3.5 shrink-0"
-                                        />
-                                        <span class="truncate">{getFilename(comment().path)}</span>
-                                        <Show when={comment().selection}>
-                                          {(selection) => (
-                                            <span class="shrink-0 text-text-weak">
-                                              {selection().startLine === selection().endLine
-                                                ? `:${selection().startLine}`
-                                                : `:${selection().startLine}-${selection().endLine}`}
-                                            </span>
-                                          )}
-                                        </Show>
-                                      </div>
-                                      <div class="pt-1 text-12-regular text-text-strong whitespace-pre-wrap break-words">
-                                        {comment().comment}
-                                      </div>
-                                    </div>
+                                    <Show when={comment()}>
+                                      {(c) => (
+                                        <div class="shrink-0 max-w-[260px] rounded-[6px] border border-border-weak-base bg-background-stronger px-2.5 py-2">
+                                          <div class="flex items-center gap-1.5 min-w-0 text-11-medium text-text-strong">
+                                            <FileIcon
+                                              node={{ path: c().path, type: "file" }}
+                                              class="size-3.5 shrink-0"
+                                            />
+                                            <span class="truncate">{getFilename(c().path)}</span>
+                                            <Show when={c().selection}>
+                                              {(selection) => (
+                                                <span class="shrink-0 text-text-weak">
+                                                  {selection().startLine === selection().endLine
+                                                    ? `:${selection().startLine}`
+                                                    : `:${selection().startLine}-${selection().endLine}`}
+                                                </span>
+                                              )}
+                                            </Show>
+                                          </div>
+                                          <div class="pt-1 text-12-regular text-text-strong whitespace-pre-wrap break-words">
+                                            {c().comment}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </Show>
                                   )
                                 }}
                               </Index>
@@ -805,8 +1001,8 @@ export function MessageTimeline(props: {
                       <SessionTurn
                         sessionID={sessionID() ?? ""}
                         messageID={messageID}
+                        actions={props.actions}
                         active={active()}
-                        queued={queued()}
                         status={active() ? sessionStatus() : undefined}
                         showReasoningSummaries={settings.general.showReasoningSummaries()}
                         shellToolDefaultOpen={settings.general.shellToolPartsExpanded()}

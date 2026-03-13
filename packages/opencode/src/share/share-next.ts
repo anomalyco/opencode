@@ -2,7 +2,9 @@ import { Bus } from "@/bus"
 import { Account } from "@/account"
 import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider"
+import { ProviderID, ModelID } from "@/provider/schema"
 import { Session } from "@/session"
+import type { SessionID } from "@/session/schema"
 import { MessageV2 } from "@/session/message-v2"
 import { Database, eq } from "@/storage/db"
 import { SessionShareTable } from "./share.sql"
@@ -109,7 +111,7 @@ export namespace ShareNext {
     })
   }
 
-  export async function create(sessionID: string) {
+  export async function create(sessionID: SessionID) {
     if (disabled) return { id: "", url: "", secret: "" }
     log.info("creating share", { sessionID })
     const req = await request()
@@ -140,7 +142,7 @@ export namespace ShareNext {
     return result
   }
 
-  function get(sessionID: string) {
+  function get(sessionID: SessionID) {
     const row = Database.use((db) =>
       db.select().from(SessionShareTable).where(eq(SessionShareTable.session_id, sessionID)).get(),
     )
@@ -186,7 +188,7 @@ export namespace ShareNext {
   }
 
   const queue = new Map<string, { timeout: NodeJS.Timeout; data: Map<string, Data> }>()
-  async function sync(sessionID: string, data: Data[]) {
+  async function sync(sessionID: SessionID, data: Data[]) {
     if (disabled) return
     const existing = queue.get(sessionID)
     if (existing) {
@@ -225,7 +227,7 @@ export namespace ShareNext {
     queue.set(sessionID, { timeout, data: dataMap })
   }
 
-  export async function remove(sessionID: string) {
+  export async function remove(sessionID: SessionID) {
     if (disabled) return
     log.info("removing share", { sessionID })
     const share = get(sessionID)
@@ -248,7 +250,7 @@ export namespace ShareNext {
     Database.use((db) => db.delete(SessionShareTable).where(eq(SessionShareTable.session_id, sessionID)).run())
   }
 
-  async function fullSync(sessionID: string) {
+  async function fullSync(sessionID: SessionID) {
     log.info("full sync", { sessionID })
     const session = await Session.get(sessionID)
     const diffs = await Session.diff(sessionID)
@@ -261,7 +263,7 @@ export namespace ShareNext {
             .map((m) => (m.info as SDK.UserMessage).model)
             .map((m) => [`${m.providerID}/${m.modelID}`, m] as const),
         ).values(),
-      ).map((m) => Provider.getModel(m.providerID, m.modelID).then((item) => item)),
+      ).map((m) => Provider.getModel(ProviderID.make(m.providerID), ModelID.make(m.modelID)).then((item) => item)),
     )
     await sync(sessionID, [
       {
