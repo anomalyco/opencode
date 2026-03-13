@@ -118,6 +118,20 @@ describe("ProviderTransform.options - setCacheKey", () => {
     })
     expect(result.store).toBe(false)
   })
+
+  test("should set prompt_cache_key for openrouter provider", () => {
+    const model = {
+      ...mockModel,
+      providerID: "openrouter",
+      api: {
+        id: "anthropic/claude-sonnet-4-5",
+        url: "https://openrouter.ai/api/v1",
+        npm: "@openrouter/ai-sdk-provider",
+      },
+    }
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result.prompt_cache_key).toBe(sessionID)
+  })
 })
 
 describe("ProviderTransform.options - zai/zhipuai thinking", () => {
@@ -2271,6 +2285,7 @@ describe("ProviderTransform.message - cache control on gateway", () => {
       openrouter: {
         cacheControl: {
           type: "ephemeral",
+          ttl: "1h",
         },
       },
       bedrock: {

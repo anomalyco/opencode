@@ -351,7 +351,7 @@ function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage
       cacheControl: { type: "ephemeral" },
     },
     openrouter: {
-      cacheControl: { type: "ephemeral" },
+      cacheControl: { type: "ephemeral", ttl: "1h" },
     },
     bedrock: {
       cachePoint: { type: "default" },
