@@ -1427,7 +1427,7 @@ export namespace Provider {
     }
   }
 
-  export type ModelReference = { modelID: string; providerID: string; variant?: string }
+  export type ModelReference = { modelID: ModelID; providerID: ProviderID; variant?: string }
 
   export type ModelTier = "quick" | "standard" | "advanced"
 

@@ -45,12 +45,14 @@ export namespace Agent {
       steps: z.number().int().positive().optional(),
       modelTiers: z
         .object({
-          quick: z.object({ modelID: z.string(), providerID: z.string(), variant: z.string().optional() }).optional(),
+          quick: z
+            .object({ modelID: ModelID.zod, providerID: ProviderID.zod, variant: z.string().optional() })
+            .optional(),
           standard: z
-            .object({ modelID: z.string(), providerID: z.string(), variant: z.string().optional() })
+            .object({ modelID: ModelID.zod, providerID: ProviderID.zod, variant: z.string().optional() })
             .optional(),
           advanced: z
-            .object({ modelID: z.string(), providerID: z.string(), variant: z.string().optional() })
+            .object({ modelID: ModelID.zod, providerID: ProviderID.zod, variant: z.string().optional() })
             .optional(),
         })
         .optional(),

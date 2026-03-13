@@ -4,6 +4,7 @@ import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Agent } from "../../src/agent/agent"
 import { PermissionNext } from "../../src/permission/next"
+import { ModelID, ProviderID } from "../../src/provider/schema"
 
 // Helper to evaluate permission for a tool with wildcard pattern
 function evalPerm(agent: Agent.Info | undefined, permission: string): PermissionNext.Action | undefined {
@@ -584,8 +585,8 @@ test("resolveModel uses agent model as highest priority", async () => {
       const agent = await Agent.get("custom")
       const model = await Agent.resolveModel(agent, "quick", undefined)
 
-      expect(model.providerID).toBe("openai")
-      expect(model.modelID).toBe("gpt-5")
+      expect(model.providerID).toBe(ProviderID.make("openai"))
+      expect(model.modelID).toBe(ModelID.make("gpt-5"))
     },
   })
 })
@@ -596,7 +597,7 @@ test("resolveModel falls back to parent session model when no tier", async () =>
     directory: tmp.path,
     fn: async () => {
       const agent = await Agent.get("build")
-      const parentModel = { modelID: "gpt-5", providerID: "openai" }
+      const parentModel = { modelID: ModelID.make("gpt-5"), providerID: ProviderID.make("openai") }
       const model = await Agent.resolveModel(agent!, undefined, parentModel)
 
       expect(model).toEqual(parentModel)
@@ -624,11 +625,11 @@ test("resolveModel hierarchy: agent tier > global tier > parent session", async 
     directory: tmp.path,
     fn: async () => {
       const agent = await Agent.get("custom")
-      const parentModel = { modelID: "gpt-5", providerID: "openai" }
+      const parentModel = { modelID: ModelID.make("gpt-5"), providerID: ProviderID.make("openai") }
       const model = await Agent.resolveModel(agent!, "quick", parentModel)
 
-      expect(model.providerID).toBe("anthropic")
-      expect(model.modelID).toBe("claude-sonnet-4-5")
+      expect(model.providerID).toBe(ProviderID.make("anthropic"))
+      expect(model.modelID).toBe(ModelID.make("claude-sonnet-4-5"))
     },
   })
 })
@@ -653,11 +654,11 @@ test("resolveModel uses global tier when agent tier not defined", async () => {
     directory: tmp.path,
     fn: async () => {
       const agent = await Agent.get("custom")
-      const parentModel = { modelID: "gpt-5", providerID: "openai" }
+      const parentModel = { modelID: ModelID.make("gpt-5"), providerID: ProviderID.make("openai") }
       const model = await Agent.resolveModel(agent!, "quick", parentModel)
 
-      expect(model.providerID).toBe("anthropic")
-      expect(model.modelID).toBe("claude-haiku-4-5")
+      expect(model.providerID).toBe(ProviderID.make("anthropic"))
+      expect(model.modelID).toBe(ModelID.make("claude-haiku-4-5"))
     },
   })
 })
@@ -675,7 +676,7 @@ test("resolveModel falls back to parent session when tier not configured", async
     directory: tmp.path,
     fn: async () => {
       const agent = await Agent.get("custom")
-      const parentModel = { modelID: "gpt-5", providerID: "openai" }
+      const parentModel = { modelID: ModelID.make("gpt-5"), providerID: ProviderID.make("openai") }
       const model = await Agent.resolveModel(agent!, "quick", parentModel)
 
       expect(model).toEqual(parentModel)
@@ -826,8 +827,8 @@ test("resolveModel extracts variant from agent tier", async () => {
       const agent = await Agent.get("custom")
       const model = await Agent.resolveModel(agent, "quick", undefined)
 
-      expect(model.modelID).toBe("gpt-4o-mini")
-      expect(model.providerID).toBe("openai")
+      expect(model.modelID).toBe(ModelID.make("gpt-4o-mini"))
+      expect(model.providerID).toBe(ProviderID.make("openai"))
       expect(model.variant).toBe("minimal")
     },
   })
@@ -851,8 +852,8 @@ test("resolveModel extracts variant from global tier", async () => {
       const agent = await Agent.get("custom")
       const model = await Agent.resolveModel(agent, "quick", undefined)
 
-      expect(model.modelID).toBe("claude-haiku-4-5")
-      expect(model.providerID).toBe("anthropic")
+      expect(model.modelID).toBe(ModelID.make("claude-haiku-4-5"))
+      expect(model.providerID).toBe(ProviderID.make("anthropic"))
       expect(model.variant).toBe("minimal")
     },
   })
@@ -880,7 +881,7 @@ test("resolveModel uses agent tier variant over global tier variant", async () =
       const agent = await Agent.get("custom")
       const model = await Agent.resolveModel(agent, "quick", undefined)
 
-      expect(model.providerID).toBe("anthropic")
+      expect(model.providerID).toBe(ProviderID.make("anthropic"))
       expect(model.variant).toBe("agent-variant")
     },
   })
@@ -903,7 +904,7 @@ test("resolveModel returns no variant when using explicit agent model", async ()
       const agent = await Agent.get("custom")
       const model = await Agent.resolveModel(agent, "quick", undefined)
 
-      expect(model.modelID).toBe("gpt-4o")
+      expect(model.modelID).toBe(ModelID.make("gpt-4o"))
       expect(model.variant).toBeUndefined()
     },
   })

@@ -26,7 +26,7 @@ const parameters = z.object({
   model_tier: z
     .enum(["quick", "standard", "advanced"])
     .describe(
-      "Model tier for this subagent: 'quick' for fast/inexpensive, 'standard' for balanced, 'advanced' for powerful",
+      "Model tier for this subagent: 'quick' for fast and inexpensive model for simple tasks, 'standard' for balanced model for most tasks, 'advanced' for powerful model for complex tasks",
     )
     .optional(),
 })

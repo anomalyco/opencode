@@ -4,6 +4,7 @@ import { Instance } from "../../src/project/instance"
 import { Auth } from "../../src/auth"
 import { AccessToken, Account, AccountID, OrgID } from "../../src/account"
 import { Provider } from "../../src/provider/provider"
+import { ModelID, ProviderID } from "../../src/provider/schema"
 import { tmpdir } from "../fixture/fixture"
 import path from "path"
 import fs from "fs/promises"
@@ -2144,14 +2145,14 @@ test("agent-level model_tiers config parses variant correctly", async () => {
 
 test("parseTierConfig extracts variant from tier config", () => {
   const result = Provider.parseTierConfig({ model: "openai/gpt-4o-mini", variant: "minimal" })
-  expect(result.modelID).toBe("gpt-4o-mini")
-  expect(result.providerID).toBe("openai")
+  expect(result.modelID).toBe(ModelID.make("gpt-4o-mini"))
+  expect(result.providerID).toBe(ProviderID.make("openai"))
   expect(result.variant).toBe("minimal")
 })
 
 test("parseTierConfig works without variant", () => {
   const result = Provider.parseTierConfig({ model: "openai/gpt-4o-mini" })
-  expect(result.modelID).toBe("gpt-4o-mini")
-  expect(result.providerID).toBe("openai")
+  expect(result.modelID).toBe(ModelID.make("gpt-4o-mini"))
+  expect(result.providerID).toBe(ProviderID.make("openai"))
   expect(result.variant).toBeUndefined()
 })
