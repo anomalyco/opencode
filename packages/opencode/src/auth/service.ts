@@ -1,39 +1,32 @@
 import path from "path"
-import { Effect, Layer, Schema, ServiceMap } from "effect"
-import z from "zod"
+import { Effect, Layer, Record, Result, Schema, ServiceMap } from "effect"
 import { Global } from "../global"
 import { Filesystem } from "../util/filesystem"
 
 export const OAUTH_DUMMY_KEY = "opencode-oauth-dummy-key"
 
-export const Oauth = z
-  .object({
-    type: z.literal("oauth"),
-    refresh: z.string(),
-    access: z.string(),
-    expires: z.number(),
-    accountId: z.string().optional(),
-    enterpriseUrl: z.string().optional(),
-  })
-  .meta({ ref: "OAuth" })
+export class Oauth extends Schema.Class<Oauth>("OAuth")({
+  type: Schema.Literal("oauth"),
+  refresh: Schema.String,
+  access: Schema.String,
+  expires: Schema.Number,
+  accountId: Schema.optional(Schema.String),
+  enterpriseUrl: Schema.optional(Schema.String),
+}) {}
 
-export const Api = z
-  .object({
-    type: z.literal("api"),
-    key: z.string(),
-  })
-  .meta({ ref: "ApiAuth" })
+export class Api extends Schema.Class<Api>("ApiAuth")({
+  type: Schema.Literal("api"),
+  key: Schema.String,
+}) {}
 
-export const WellKnown = z
-  .object({
-    type: z.literal("wellknown"),
-    key: z.string(),
-    token: z.string(),
-  })
-  .meta({ ref: "WellKnownAuth" })
+export class WellKnown extends Schema.Class<WellKnown>("WellKnownAuth")({
+  type: Schema.Literal("wellknown"),
+  key: Schema.String,
+  token: Schema.String,
+}) {}
 
-export const Info = z.discriminatedUnion("type", [Oauth, Api, WellKnown]).meta({ ref: "Auth" })
-export type Info = z.infer<typeof Info>
+export const Info = Schema.Union([Oauth, Api, WellKnown])
+export type Info = Schema.Schema.Type<typeof Info>
 
 export class AuthServiceError extends Schema.TaggedErrorClass<AuthServiceError>()("AuthServiceError", {
   message: Schema.String,
@@ -57,19 +50,13 @@ export class AuthService extends ServiceMap.Service<AuthService, AuthService.Ser
   static readonly layer = Layer.effect(
     AuthService,
     Effect.gen(function* () {
+      const decode = Schema.decodeUnknownOption(Info)
+
       const all = Effect.fn("AuthService.all")(() =>
         Effect.tryPromise({
           try: async () => {
             const data = await Filesystem.readJson<Record<string, unknown>>(file).catch(() => ({}))
-            return Object.entries(data).reduce(
-              (acc, [key, value]) => {
-                const parsed = Info.safeParse(value)
-                if (!parsed.success) return acc
-                acc[key] = parsed.data
-                return acc
-              },
-              {} as Record<string, Info>,
-            )
+            return Record.filterMap(data, (value) => Result.fromOption(decode(value), () => undefined))
           },
           catch: fail("Failed to read auth data"),
         }),

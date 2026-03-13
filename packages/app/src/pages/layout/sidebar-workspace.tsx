@@ -32,6 +32,7 @@ type InlineEditorComponent = (props: {
 
 export type WorkspaceSidebarContext = {
   currentDir: Accessor<string>
+  navList: Accessor<Session[]>
   sidebarExpanded: Accessor<boolean>
   sidebarHovering: Accessor<boolean>
   nav: Accessor<HTMLElement | undefined>
@@ -265,6 +266,8 @@ const WorkspaceSessionList = (props: {
       {(session) => (
         <SessionItem
           session={session}
+          list={props.sessions()}
+          navList={props.ctx.navList}
           slug={props.slug()}
           mobile={props.mobile}
           popover={props.popover}
