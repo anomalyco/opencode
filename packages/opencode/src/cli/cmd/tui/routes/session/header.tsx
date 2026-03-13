@@ -7,6 +7,7 @@ import { SplitBorder } from "@tui/component/border"
 import type { AssistantMessage, Session } from "@opencode-ai/sdk/v2"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import { useKeybind } from "../../context/keybind"
+import { Flag } from "@/flag/flag"
 import { useTerminalDimensions } from "@opentui/solid"
 
 const Title = (props: { session: Accessor<Session> }) => {
@@ -24,6 +25,17 @@ const ContextInfo = (props: { context: Accessor<string | undefined>; cost: Acces
     <Show when={props.context()}>
       <text fg={theme.textMuted} wrapMode="none" flexShrink={0}>
         {props.context()} ({props.cost()})
+      </text>
+    </Show>
+  )
+}
+
+const WorkspaceInfo = (props: { workspace: Accessor<string | undefined> }) => {
+  const { theme } = useTheme()
+  return (
+    <Show when={props.workspace()}>
+      <text fg={theme.textMuted} wrapMode="none" flexShrink={0}>
+        {props.workspace()}
       </text>
     </Show>
   )
@@ -59,6 +71,14 @@ export function Header() {
     return result
   })
 
+  const workspace = createMemo(() => {
+    const id = session()?.workspaceID
+    if (!id) return "Workspace local"
+    const info = sync.workspace.get(id)
+    if (!info) return `Workspace ${id}`
+    return `Workspace ${id} (${info.type})`
+  })
+
   const { theme } = useTheme()
   const keybind = useKeybind()
   const command = useCommandDialog()
@@ -83,9 +103,19 @@ export function Header() {
           <Match when={session()?.parentID}>
             <box flexDirection="column" gap={1}>
               <box flexDirection={narrow() ? "column" : "row"} justifyContent="space-between" gap={narrow() ? 1 : 0}>
-                <text fg={theme.text}>
-                  <b>Subagent session</b>
-                </text>
+                {Flag.OPENCODE_EXPERIMENTAL_WORKSPACES ? (
+                  <box flexDirection="column">
+                    <text fg={theme.text}>
+                      <b>Subagent session</b>
+                    </text>
+                    <WorkspaceInfo workspace={workspace} />
+                  </box>
+                ) : (
+                  <text fg={theme.text}>
+                    <b>Subagent session</b>
+                  </text>
+                )}
+
                 <ContextInfo context={context} cost={cost} />
               </box>
               <box flexDirection="row" gap={2}>
@@ -124,7 +154,14 @@ export function Header() {
           </Match>
           <Match when={true}>
             <box flexDirection={narrow() ? "column" : "row"} justifyContent="space-between" gap={1}>
-              <Title session={session} />
+              {Flag.OPENCODE_EXPERIMENTAL_WORKSPACES ? (
+                <box flexDirection="column">
+                  <Title session={session} />
+                  <WorkspaceInfo workspace={workspace} />
+                </box>
+              ) : (
+                <Title session={session} />
+              )}
               <ContextInfo context={context} cost={cost} />
             </box>
           </Match>

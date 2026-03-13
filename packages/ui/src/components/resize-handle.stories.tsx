@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { createSignal } from "solid-js"
+import { createStore } from "solid-js/store"
 import * as mod from "./resize-handle"
 
 const docs = `### Overview
@@ -94,8 +95,12 @@ export const Vertical = {
 
 export const Collapse = {
   render: () => {
-    const [size, setSize] = createSignal(200)
-    const [collapsed, setCollapsed] = createSignal(false)
+    const [state, setState] = createStore({
+      size: 200,
+      collapsed: false,
+    })
+    const size = () => state.size
+    const collapsed = () => state.collapsed
     return (
       <div style={{ display: "grid", gap: "8px" }}>
         <div style={{ color: "var(--text-weak)", "font-size": "12px" }}>
@@ -116,10 +121,10 @@ export const Collapse = {
           max={360}
           collapseThreshold={100}
           onResize={(next) => {
-            setCollapsed(false)
-            setSize(next)
+            setState("collapsed", false)
+            setState("size", next)
           }}
-          onCollapse={() => setCollapsed(true)}
+          onCollapse={() => setState("collapsed", true)}
           style="height:24px;border:1px dashed color-mix(in oklab, var(--text-base) 20%, transparent)"
         />
       </div>
