@@ -164,6 +164,9 @@ import type {
   McpConnectResponses,
   McpDisconnectData,
   McpDisconnectResponses,
+  LspKillData,
+  LspKillResponses,
+  LspKillAllResponses,
   LspStatusData,
   LspStatusResponses,
   FormatterStatusData,
@@ -980,6 +983,26 @@ class Lsp extends _HeyApiClient {
   public status<ThrowOnError extends boolean = false>(options?: Options<LspStatusData, ThrowOnError>) {
     return (options?.client ?? this._client).get<LspStatusResponses, unknown, ThrowOnError>({
       url: "/lsp",
+      ...options,
+    })
+  }
+
+  /**
+   * Kill all LSP servers
+   */
+  public killAll<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this._client).post<LspKillAllResponses, unknown, ThrowOnError>({
+      url: "/lsp/killall",
+      ...options,
+    })
+  }
+
+  /**
+   * Kill LSP server
+   */
+  public kill<ThrowOnError extends boolean = false>(options: Options<LspKillData, ThrowOnError>) {
+    return (options.client ?? this._client).post<LspKillResponses, unknown, ThrowOnError>({
+      url: "/lsp/{name}/kill",
       ...options,
     })
   }

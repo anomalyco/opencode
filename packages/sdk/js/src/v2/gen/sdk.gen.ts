@@ -56,6 +56,8 @@ import type {
   GlobalUpgradeErrors,
   GlobalUpgradeResponses,
   InstanceDisposeResponses,
+  LspKillAllResponses,
+  LspKillResponses,
   LspStatusResponses,
   McpAddErrors,
   McpAddResponses,
@@ -4284,6 +4286,68 @@ export class Lsp extends HeyApiClient {
     )
     return (options?.client ?? this.client).get<LspStatusResponses, unknown, ThrowOnError>({
       url: "/lsp",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Kill all LSP servers
+   *
+   * Kill all running LSP server instances.
+   */
+  public killAll<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<LspKillAllResponses, unknown, ThrowOnError>({
+      url: "/lsp/killall",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Kill LSP server
+   *
+   * Kill all running instances of a specific LSP server.
+   */
+  public kill<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<LspKillResponses, unknown, ThrowOnError>({
+      url: "/lsp/{name}/kill",
       ...options,
       ...params,
     })

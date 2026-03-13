@@ -34,6 +34,7 @@ import { createColors, createFrames } from "../../ui/spinner.ts"
 import { useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
 import { DialogAlert } from "../../ui/dialog-alert"
+import { DialogSelect } from "../../ui/dialog-select"
 import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { createFadeIn } from "../../util/signal"
@@ -411,6 +412,19 @@ export function Prompt(props: PromptProps) {
           ))
         },
       },
+      {
+        title: "List LSP servers",
+        value: "lsp.list",
+        category: "System",
+        description: "Use /lsps kill <name> to stop one",
+        slash: {
+          name: "lsps",
+        },
+        onSelect: async (dialog) => {
+          dialog.clear()
+          await runLsps("/lsps")
+        },
+      },
     ]
   })
 
@@ -571,6 +585,89 @@ export function Prompt(props: PromptProps) {
     )
   }
 
+  async function showLsps() {
+    const result = await sdk.client.lsp.status().catch(() => undefined)
+    if (!result || result.error) {
+      toast.show({ message: "Failed to list LSP servers", variant: "error" })
+      return
+    }
+
+    const data = result.data ?? []
+    if (data.length === 0) {
+      toast.show({ message: "No LSP servers running", variant: "warning" })
+      return
+    }
+
+    dialog.replace(() => (
+      <DialogSelect
+        title="LSP Servers"
+        options={data.map((item) => ({
+          title: item.name,
+          value: item.name,
+          description: `/lsps kill ${item.name}`,
+          footer: item.root || ".",
+        }))}
+        onSelect={async (option) => {
+          await runLsps(`/lsps kill ${option.value}`)
+          await showLsps()
+        }}
+      />
+    ))
+  }
+
+  async function runLsps(input: string) {
+    const rest = input.replace(/^\/lsps/, "").trim()
+
+    if (!rest) {
+      await showLsps()
+      return true
+    }
+
+    if (rest === "kill") {
+      toast.show({ message: "Usage: /lsps kill <name>", variant: "warning" })
+      return true
+    }
+
+    if (rest === "killall") {
+      const result = await sdk.client.lsp.killAll().catch(() => undefined)
+      if (!result || result.error) {
+        toast.show({ message: "Failed to kill LSP servers", variant: "error" })
+        return true
+      }
+      if (!result.data) {
+        toast.show({ message: "No LSP servers running", variant: "warning" })
+        return true
+      }
+      toast.show({ message: "Killed all LSP servers", variant: "success" })
+      return true
+    }
+
+    if (!rest.startsWith("kill ")) {
+      toast.show({ message: "Unknown /lsps command", variant: "warning" })
+      return true
+    }
+
+    const name = rest.slice("kill".length).trim()
+    if (!name) {
+      toast.show({ message: "Usage: /lsps kill <name>", variant: "warning" })
+      return true
+    }
+
+    const result = await sdk.client.lsp.kill({ name }).catch(() => undefined)
+    if (!result || result.error) {
+      toast.show({ message: `Failed to kill LSP server ${name}`, variant: "error" })
+      return true
+    }
+
+    if (!result.data) {
+      toast.show({ message: `No running LSP server named ${name}`, variant: "warning" })
+      return true
+    }
+
+    toast.show({ message: `Killed LSP server ${name}`, variant: "success" })
+    return true
+  }
+
   command.register(() => [
     {
       title: "Stash prompt",
@@ -644,6 +741,19 @@ export function Prompt(props: PromptProps) {
       void exit()
       return true
     }
+
+    if (store.mode === "normal" && trimmed.match(/^\/lsps(?:\s|$)/)) {
+      await runLsps(trimmed)
+      input.extmarks.clear()
+      setStore("prompt", {
+        input: "",
+        parts: [],
+      })
+      setStore("extmarkToPartIndex", new Map())
+      input.clear()
+      return
+    }
+
     const selectedModel = local.model.current()
     if (!selectedModel) {
       void promptModelWarning()

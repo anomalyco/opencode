@@ -135,6 +135,8 @@ interface State {
 export interface Interface {
   readonly init: () => Effect.Effect<void>
   readonly status: () => Effect.Effect<Status[]>
+  readonly kill: (name: string) => Effect.Effect<boolean>
+  readonly killAll: () => Effect.Effect<boolean>
   readonly hasClients: (file: string) => Effect.Effect<boolean>
   readonly touchFile: (input: string, diagnostics?: "document" | "full") => Effect.Effect<void>
   readonly diagnostics: () => Effect.Effect<Record<string, LSPClient.Diagnostic[]>>
@@ -342,6 +344,64 @@ export const layer = Layer.effect(
       return result
     })
 
+    const kill = Effect.fn("LSP.kill")(function* (name: string) {
+      const s = yield* InstanceState.get(state)
+      return yield* Effect.promise(async () => {
+        const matches = s.clients.filter((client) => client.serverID === name)
+
+        if (matches.length > 0) {
+          s.clients = s.clients.filter((client) => client.serverID !== name)
+        }
+
+        await Promise.all(
+          matches.map((client) =>
+            client.shutdown().catch((error) => {
+              log.error(`Failed to shutdown LSP client ${name}`, { error })
+            }),
+          ),
+        )
+
+        const spawning = [...s.spawning.keys()].filter((key) => key.endsWith(name))
+        for (const key of spawning) {
+          s.spawning.delete(key)
+        }
+
+        const broken = [...s.broken].filter((key) => key.endsWith(name))
+        for (const key of broken) {
+          s.broken.delete(key)
+        }
+
+        const changed = matches.length > 0 || spawning.length > 0 || broken.length > 0
+        if (!changed) return false
+        await Bus.publish(Event.Updated, {})
+        return true
+      })
+    })
+
+    const killAll = Effect.fn("LSP.killAll")(function* () {
+      const s = yield* InstanceState.get(state)
+      return yield* Effect.promise(async () => {
+        const clients = [...s.clients]
+        if (clients.length === 0 && s.spawning.size === 0 && s.broken.size === 0) return false
+
+        s.clients = []
+
+        await Promise.all(
+          clients.map((client) =>
+            client.shutdown().catch((error) => {
+              log.error(`Failed to shutdown LSP client ${client.serverID}`, { error })
+            }),
+          ),
+        )
+
+        s.spawning.clear()
+        s.broken.clear()
+
+        await Bus.publish(Event.Updated, {})
+        return true
+      })
+    })
+
     const hasClients = Effect.fn("LSP.hasClients")(function* (file: string) {
       const ctx = yield* InstanceState.context
       const s = yield* InstanceState.get(state)
@@ -499,6 +559,8 @@ export const layer = Layer.effect(
     return Service.of({
       init,
       status,
+      kill,
+      killAll,
       hasClients,
       touchFile,
       diagnostics,

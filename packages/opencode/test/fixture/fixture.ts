@@ -43,10 +43,19 @@ type TmpDirOptions<T> = {
   init?: (dir: string) => Promise<T>
   dispose?: (dir: string) => Promise<T>
 }
+
+function gitIdentity() {
+  process.env.GIT_AUTHOR_NAME ??= "opencode-test"
+  process.env.GIT_AUTHOR_EMAIL ??= "opencode-test@localhost"
+  process.env.GIT_COMMITTER_NAME ??= process.env.GIT_AUTHOR_NAME
+  process.env.GIT_COMMITTER_EMAIL ??= process.env.GIT_AUTHOR_EMAIL
+}
+
 export async function tmpdir<T>(options?: TmpDirOptions<T>) {
   const dirpath = sanitizePath(path.join(os.tmpdir(), "opencode-test-" + Math.random().toString(36).slice(2)))
   await fs.mkdir(dirpath, { recursive: true })
   if (options?.git) {
+    gitIdentity()
     await $`git init`.cwd(dirpath).quiet()
     await $`git config core.fsmonitor false`.cwd(dirpath).quiet()
     await $`git config commit.gpgsign false`.cwd(dirpath).quiet()

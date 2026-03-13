@@ -5472,6 +5472,49 @@ export type LspStatusResponses = {
 
 export type LspStatusResponse = LspStatusResponses[keyof LspStatusResponses]
 
+export type LspKillAllData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/lsp/killall"
+}
+
+export type LspKillAllResponses = {
+  /**
+   * Whether any LSP server instances were killed
+   */
+  200: boolean
+}
+
+export type LspKillAllResponse = LspKillAllResponses[keyof LspKillAllResponses]
+
+export type LspKillData = {
+  body?: never
+  path: {
+    /**
+     * LSP server name
+     */
+    name: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/lsp/{name}/kill"
+}
+
+export type LspKillResponses = {
+  /**
+   * Whether any LSP server instances were killed
+   */
+  200: boolean
+}
+
+export type LspKillResponse = LspKillResponses[keyof LspKillResponses]
+
 export type FormatterStatusData = {
   body?: never
   path?: never

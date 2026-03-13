@@ -272,6 +272,58 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono => {
           return yield* lsp.status()
         }),
     )
+    .post(
+      "/lsp/killall",
+      describeRoute({
+        summary: "Kill all LSP servers",
+        description: "Kill all running LSP server instances.",
+        operationId: "lsp.killAll",
+        responses: {
+          200: {
+            description: "Whether any LSP server instances were killed",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+        },
+      }),
+      async (c) =>
+        jsonRequest("InstanceRoutes.lsp.killAll", c, function* () {
+          const lsp = yield* LSP.Service
+          return yield* lsp.killAll()
+        }),
+    )
+    .post(
+      "/lsp/:name/kill",
+      describeRoute({
+        summary: "Kill LSP server",
+        description: "Kill all running instances of a specific LSP server.",
+        operationId: "lsp.kill",
+        responses: {
+          200: {
+            description: "Whether any LSP server instances were killed",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          name: z.string().meta({ description: "LSP server name" }),
+        }),
+      ),
+      async (c) =>
+        jsonRequest("InstanceRoutes.lsp.kill", c, function* () {
+          const lsp = yield* LSP.Service
+          return yield* lsp.kill(c.req.valid("param").name)
+        }),
+    )
     .get(
       "/formatter",
       describeRoute({
