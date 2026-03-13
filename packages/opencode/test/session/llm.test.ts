@@ -764,7 +764,7 @@ describe("session.llm.stream", () => {
     if (!server) throw new Error("Server not initialized")
 
     const providerID = "xai" as Parameters<typeof Provider.getModel>[0]
-    const modelID = "grok-4"
+    const modelID = "grok-4" as Parameters<typeof Provider.getModel>[1]
     await loadFixture(providerID, modelID)
 
     const request = waitRequest(
@@ -860,7 +860,7 @@ describe("session.llm.stream", () => {
     if (!server) throw new Error("Server not initialized")
 
     const providerID = "xai" as Parameters<typeof Provider.getModel>[0]
-    const modelID = "grok-4"
+    const modelID = "grok-4" as Parameters<typeof Provider.getModel>[1]
     await loadFixture(providerID, modelID)
 
     const request = waitRequest(
