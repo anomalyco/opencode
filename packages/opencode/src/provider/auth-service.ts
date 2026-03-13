@@ -9,16 +9,26 @@ import { InstanceState } from "@/util/instance-state"
 import { ProviderID } from "./schema"
 import z from "zod"
 
-export type Method = {
-  type: "oauth" | "api"
-  label: string
-}
+export const Method = z
+  .object({
+    type: z.union([z.literal("oauth"), z.literal("api")]),
+    label: z.string(),
+  })
+  .meta({
+    ref: "ProviderAuthMethod",
+  })
+export type Method = z.infer<typeof Method>
 
-export type Authorization = {
-  url: string
-  method: "auto" | "code"
-  instructions: string
-}
+export const Authorization = z
+  .object({
+    url: z.string(),
+    method: z.union([z.literal("auto"), z.literal("code")]),
+    instructions: z.string(),
+  })
+  .meta({
+    ref: "ProviderAuthAuthorization",
+  })
+export type Authorization = z.infer<typeof Authorization>
 
 export const OauthMissing = NamedError.create(
   "ProviderAuthOauthMissing",
