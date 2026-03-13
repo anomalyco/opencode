@@ -57,21 +57,29 @@ function object(input: unknown) {
 }
 
 export async function parseSchema(input: string) {
-  try {
-    return object(JSON.parse(input))
-  } catch {
-    const file = path.resolve(process.cwd(), input)
-    if (!(await Filesystem.exists(file))) {
-      throw new Error("Invalid schema. Pass a JSON object or a path to a JSON file.")
-    }
-    const text = await Filesystem.readText(file).catch(() => {
-      throw new Error(`Failed to read schema file: ${input}`)
-    })
+  const json = (() => {
     try {
-      return object(JSON.parse(text))
+      return JSON.parse(input)
     } catch {
-      throw new Error(`Invalid JSON schema in file: ${input}`)
+      return undefined
     }
+  })()
+
+  if (json !== undefined) {
+    return object(json)
+  }
+
+  const file = path.resolve(process.cwd(), input)
+  if (!(await Filesystem.exists(file))) {
+    throw new Error("Invalid schema. Pass a JSON object or a path to a JSON file.")
+  }
+  const text = await Filesystem.readText(file).catch(() => {
+    throw new Error(`Failed to read schema file: ${input}`)
+  })
+  try {
+    return object(JSON.parse(text))
+  } catch {
+    throw new Error(`Invalid JSON schema in file: ${input}`)
   }
 }
 
