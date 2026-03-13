@@ -1045,6 +1045,18 @@ export namespace Provider {
       }
     }
 
+    // load config options into providers BEFORE custom loaders,
+    // so that config-defined providers (e.g. "openai") exist in providers[]
+    // when custom loaders check for them (autoload || providers[providerID]).
+    for (const [id, provider] of configProviders) {
+      const providerID = ProviderID.make(id)
+      const partial: Partial<Info> = { source: "config" }
+      if (provider.env) partial.env = provider.env
+      if (provider.name) partial.name = provider.name
+      if (provider.options) partial.options = provider.options
+      mergeProvider(providerID, partial)
+    }
+
     for (const [id, fn] of Object.entries(CUSTOM_LOADERS)) {
       const providerID = ProviderID.make(id)
       if (disabled.has(providerID)) continue
@@ -1063,15 +1075,6 @@ export namespace Provider {
       }
     }
 
-    // load config
-    for (const [id, provider] of configProviders) {
-      const providerID = ProviderID.make(id)
-      const partial: Partial<Info> = { source: "config" }
-      if (provider.env) partial.env = provider.env
-      if (provider.name) partial.name = provider.name
-      if (provider.options) partial.options = provider.options
-      mergeProvider(providerID, partial)
-    }
 
     for (const [id, provider] of Object.entries(providers)) {
       const providerID = ProviderID.make(id)
