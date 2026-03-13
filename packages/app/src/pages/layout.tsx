@@ -1,16 +1,4 @@
-import {
-  batch,
-  createEffect,
-  createMemo,
-  createSignal,
-  For,
-  on,
-  onCleanup,
-  onMount,
-  ParentProps,
-  Show,
-  untrack,
-} from "solid-js"
+import { batch, createEffect, createMemo, For, on, onCleanup, onMount, ParentProps, Show, untrack } from "solid-js"
 import { useNavigate, useParams } from "@solidjs/router"
 import { useLayout, LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
@@ -145,6 +133,10 @@ export default function Layout(props: ParentProps) {
     hoverProject: undefined as string | undefined,
     scrollSessionKey: undefined as string | undefined,
     nav: undefined as HTMLElement | undefined,
+    sortNow: Date.now(),
+    sizing: false,
+    peek: undefined as LocalProject | undefined,
+    peeked: false,
   })
 
   const editor = createInlineEditorController()
@@ -163,14 +155,13 @@ export default function Layout(props: ParentProps) {
   }
   const isBusy = (directory: string) => !!state.busyWorkspaces[workspaceKey(directory)]
   const navLeave = { current: undefined as number | undefined }
-  const [sortNow, setSortNow] = createSignal(Date.now())
-  const [sizing, setSizing] = createSignal(false)
+  const sortNow = () => state.sortNow
   let sizet: number | undefined
   let sortNowInterval: ReturnType<typeof setInterval> | undefined
   const sortNowTimeout = setTimeout(
     () => {
-      setSortNow(Date.now())
-      sortNowInterval = setInterval(() => setSortNow(Date.now()), 60_000)
+      setState("sortNow", Date.now())
+      sortNowInterval = setInterval(() => setState("sortNow", Date.now()), 60_000)
     },
     60_000 - (Date.now() % 60_000),
   )
@@ -196,7 +187,7 @@ export default function Layout(props: ParentProps) {
   })
 
   onMount(() => {
-    const stop = () => setSizing(false)
+    const stop = () => setState("sizing", false)
     window.addEventListener("pointerup", stop)
     window.addEventListener("pointercancel", stop)
     window.addEventListener("blur", stop)
@@ -234,8 +225,6 @@ export default function Layout(props: ParentProps) {
     }, 300)
   }
 
-  const [peek, setPeek] = createSignal<LocalProject | undefined>(undefined)
-  const [peeked, setPeeked] = createSignal(false)
   let peekt: number | undefined
 
   const hoverProjectData = createMemo(() => {
@@ -251,17 +240,17 @@ export default function Layout(props: ParentProps) {
         clearTimeout(peekt)
         peekt = undefined
       }
-      setPeek(p)
-      setPeeked(true)
+      setState("peek", p)
+      setState("peeked", true)
       return
     }
 
-    setPeeked(false)
-    if (peek() === undefined) return
+    setState("peeked", false)
+    if (state.peek === undefined) return
     if (peekt !== undefined) clearTimeout(peekt)
     peekt = window.setTimeout(() => {
       peekt = undefined
-      setPeek(undefined)
+      setState("peek", undefined)
     }, 180)
   })
 
@@ -2245,7 +2234,7 @@ export default function Layout(props: ParentProps) {
             >
               <div class="@container w-full h-full contain-strict">{sidebarContent()}</div>
               <Show when={layout.sidebar.opened()}>
-                <div onPointerDown={() => setSizing(true)}>
+                <div onPointerDown={() => setState("sizing", true)}>
                   <ResizeHandle
                     direction="horizontal"
                     size={layout.sidebar.width()}
@@ -2253,9 +2242,9 @@ export default function Layout(props: ParentProps) {
                     max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.3 + 64}
                     collapseThreshold={244}
                     onResize={(w) => {
-                      setSizing(true)
+                      setState("sizing", true)
                       if (sizet !== undefined) clearTimeout(sizet)
-                      sizet = window.setTimeout(() => setSizing(false), 120)
+                      sizet = window.setTimeout(() => setState("sizing", false), 120)
                       layout.sidebar.resize(w)
                     }}
                     onCollapse={layout.sidebar.close}
@@ -2300,7 +2289,7 @@ export default function Layout(props: ParentProps) {
                 "xl:inset-y-0 xl:right-0 xl:left-[var(--main-left)]": true,
                 "z-20": true,
                 "transition-[left] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[left] motion-reduce:transition-none":
-                  !sizing(),
+                  !state.sizing,
               }}
               style={{
                 "--main-left": layout.sidebar.opened() ? `${Math.max(layout.sidebar.width(), 244)}px` : "4rem",
@@ -2320,11 +2309,11 @@ export default function Layout(props: ParentProps) {
             <div
               classList={{
                 "hidden xl:flex absolute inset-y-0 left-16 z-30": true,
-                "opacity-100 translate-x-0 pointer-events-auto": peeked() && !layout.sidebar.opened(),
-                "opacity-0 -translate-x-2 pointer-events-none": !peeked() || layout.sidebar.opened(),
+                "opacity-100 translate-x-0 pointer-events-auto": state.peeked && !layout.sidebar.opened(),
+                "opacity-0 -translate-x-2 pointer-events-none": !state.peeked || layout.sidebar.opened(),
                 "transition-[opacity,transform] motion-reduce:transition-none": true,
-                "duration-180 ease-out": peeked() && !layout.sidebar.opened(),
-                "duration-120 ease-in": !peeked() || layout.sidebar.opened(),
+                "duration-180 ease-out": state.peeked && !layout.sidebar.opened(),
+                "duration-120 ease-in": !state.peeked || layout.sidebar.opened(),
               }}
               onMouseMove={disarm}
               onMouseEnter={() => {
@@ -2336,19 +2325,19 @@ export default function Layout(props: ParentProps) {
                 arm()
               }}
             >
-              <Show when={peek()}>
-                <SidebarPanel project={peek()} merged={false} />
+              <Show when={state.peek}>
+                <SidebarPanel project={state.peek} merged={false} />
               </Show>
             </div>
 
             <div
               classList={{
                 "hidden xl:block pointer-events-none absolute inset-y-0 right-0 z-25 overflow-hidden": true,
-                "opacity-100 translate-x-0": peeked() && !layout.sidebar.opened(),
-                "opacity-0 -translate-x-2": !peeked() || layout.sidebar.opened(),
+                "opacity-100 translate-x-0": state.peeked && !layout.sidebar.opened(),
+                "opacity-0 -translate-x-2": !state.peeked || layout.sidebar.opened(),
                 "transition-[opacity,transform] motion-reduce:transition-none": true,
-                "duration-180 ease-out": peeked() && !layout.sidebar.opened(),
-                "duration-120 ease-in": !peeked() || layout.sidebar.opened(),
+                "duration-180 ease-out": state.peeked && !layout.sidebar.opened(),
+                "duration-120 ease-in": !state.peeked || layout.sidebar.opened(),
               }}
               style={{ left: `calc(4rem + ${Math.max(Math.max(layout.sidebar.width(), 244) - 64, 0)}px)` }}
             >

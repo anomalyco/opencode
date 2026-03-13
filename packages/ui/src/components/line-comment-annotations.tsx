@@ -1,5 +1,6 @@
 import { type DiffLineAnnotation, type SelectedLineRange } from "@pierre/diffs"
 import { createEffect, createMemo, createSignal, onCleanup, Show, type Accessor, type JSX } from "solid-js"
+import { createStore } from "solid-js/store"
 import { render as renderSolid } from "solid-js/web"
 import { createHoverCommentUtility } from "../pierre/comment-hover"
 import { cloneSelectedLineRange, formatSelectedLineLabel, lineInSelectedRange } from "../pierre/selection-bridge"
@@ -200,8 +201,14 @@ export function createLineCommentAnnotationRenderer<T>(props: {
 }
 
 export function createLineCommentState<T>(props: LineCommentStateProps<T>) {
-  const [draft, setDraft] = createSignal("")
-  const [editing, setEditing] = createSignal<T | null>(null)
+  const [state, setState] = createStore({
+    draft: "",
+    editing: null as T | null,
+  })
+  const draft = () => state.draft
+  const setDraft = (value: string) => setState("draft", value)
+  const editing = () => state.editing
+  const setEditing = (value: T | null) => setState("editing", typeof value === "function" ? () => value : value)
 
   const toRange = (range: SelectedLineRange | null) => (range ? cloneSelectedLineRange(range) : null)
   const setSelected = (range: SelectedLineRange | null) => {
@@ -261,7 +268,7 @@ export function createLineCommentState<T>(props: LineCommentStateProps<T>) {
     closeComment()
     setSelected(range)
     props.setCommenting(null)
-    setEditing(() => id)
+    setEditing(id)
     setDraft(value)
   }
 
