@@ -149,4 +149,16 @@ export const dict = {
   "ui.question.multiHint": "Odaberi sve što važi",
   "ui.question.singleHint": "Odaberi jedan odgovor",
   "ui.question.custom.placeholder": "Unesi svoj odgovor...",
+
+  "ui.fileSearch.placeholder": "Pronađi",
+  "ui.fileSearch.previousMatch": "Prethodno",
+  "ui.fileSearch.nextMatch": "Sljedeće",
+  "ui.fileSearch.close": "Zatvori pretragu",
+  "ui.tool.task": "Zadatak",
+  "ui.tool.skill": "Vještina",
+  "ui.basicTool.called": "Pozvan `{{tool}}`",
+  "ui.toolErrorCard.failed": "Neuspješno",
+  "ui.toolErrorCard.copyError": "Kopiraj grešku",
+  "ui.message.duration.seconds": "{{count}}s",
+  "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
 } satisfies Partial<Record<Keys, string>>

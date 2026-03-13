@@ -100,14 +100,15 @@ describe("migrateFromGlobal", () => {
     expect(row!.project_id).toBe(project.id)
   })
 
-  test("migrates sessions with empty directory", async () => {
+  test("does not claim sessions with empty directory", async () => {
     await using tmp = await tmpdir({ git: true })
     const { project } = await Project.fromDirectory(tmp.path)
     expect(project.id).not.toBe(ProjectID.global)
 
     ensureGlobal()
 
-    // Legacy sessions may lack a directory value
+    // Legacy sessions may lack a directory value.
+    // Without a matching origin directory, they should remain global.
     const id = uid()
     seed({ id, dir: "", project: ProjectID.global })
 
@@ -115,8 +116,7 @@ describe("migrateFromGlobal", () => {
 
     const row = Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, id)).get())
     expect(row).toBeDefined()
-    // Empty directory means "no known origin" — should be claimed
-    expect(row!.project_id).toBe(project.id)
+    expect(row!.project_id).toBe(ProjectID.global)
   })
 
   test("does not steal sessions from unrelated directories", async () => {

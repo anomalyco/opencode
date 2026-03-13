@@ -136,23 +136,23 @@ export function generateScale(seed: HexColor, isDark: boolean): HexColor[] {
 
   const lightSteps = isDark
     ? [
-        0.182,
-        0.21,
-        0.261,
-        0.302,
-        0.341,
-        0.387,
-        0.443,
-        0.514,
-        base.l,
-        Math.max(0, base.l - 0.017),
-        Math.min(0.94, Math.max(0.84, base.l + 0.02)),
-        0.975,
+        0.118,
+        0.138,
+        0.167,
+        0.202,
+        0.246,
+        0.304,
+        0.378,
+        0.468,
+        clamp(base.l * 0.825, 0.53, 0.705),
+        clamp(base.l * 0.89, 0.61, 0.79),
+        clamp(base.l + 0.033, 0.868, 0.943),
+        0.984,
       ]
     : [0.993, 0.983, 0.962, 0.936, 0.906, 0.866, 0.811, 0.74, base.l, Math.max(0, base.l - 0.036), 0.49, 0.27]
 
   const chromaMultipliers = isDark
-    ? [0.34, 0.45, 0.64, 0.82, 0.96, 1.06, 1.14, 1.2, 1.24, 1.28, 1.34, 1.08]
+    ? [0.52, 0.68, 0.86, 1.02, 1.14, 1.24, 1.36, 1.48, 1.56, 1.64, 1.62, 1.15]
     : [0.12, 0.24, 0.46, 0.68, 0.84, 0.98, 1.08, 1.16, 1.22, 1.26, 1.18, 0.98]
 
   for (let i = 0; i < 12; i++) {
@@ -180,26 +180,26 @@ export function generateNeutralScale(seed: HexColor, isDark: boolean, ink?: HexC
     const sink = (tone: number) =>
       oklchToHex({
         l: base.l * (1 - tone),
-        c: base.c * Math.max(0, 1 - tone * 0.3),
+        c: base.c * Math.max(0, 1 - tone * (isDark ? 0.12 : 0.3)),
         h: base.h,
       })
     const bg = isDark
-      ? sink(clamp(0.06 + Math.max(0, base.l - 0.18) * 0.22 + base.c * 1.4, 0.06, 0.14))
+      ? sink(clamp(0.19 + Math.max(0, base.l - 0.12) * 0.33 + base.c * 1.95, 0.17, 0.27))
       : base.l < 0.82
         ? lift(0.86)
         : lift(clamp(0.1 + base.c * 3.2 + Math.max(0, 0.95 - base.l) * 0.35, 0.1, 0.28))
     const steps = isDark
-      ? [0, 0.03, 0.055, 0.085, 0.125, 0.18, 0.255, 0.35, 0.5, 0.67, 0.84, 0.975]
+      ? [0, 0.018, 0.039, 0.064, 0.097, 0.143, 0.212, 0.31, 0.46, 0.649, 0.845, 0.984]
       : [0, 0.022, 0.042, 0.068, 0.102, 0.146, 0.208, 0.296, 0.432, 0.61, 0.81, 0.965]
     return steps.map((step) => mixColors(bg, ink, step))
   }
 
   const base = hexToOklch(seed)
   const scale: HexColor[] = []
-  const neutralChroma = Math.min(base.c, isDark ? 0.05 : 0.04)
+  const neutralChroma = Math.min(base.c, isDark ? 0.068 : 0.04)
 
   const lightSteps = isDark
-    ? [0.2, 0.226, 0.256, 0.277, 0.301, 0.325, 0.364, 0.431, base.l, 0.593, 0.706, 0.946]
+    ? [0.138, 0.156, 0.178, 0.202, 0.232, 0.272, 0.326, 0.404, clamp(base.l * 0.83, 0.43, 0.55), 0.596, 0.719, 0.956]
     : [0.991, 0.979, 0.964, 0.946, 0.931, 0.913, 0.891, 0.83, base.l, 0.617, 0.542, 0.205]
 
   for (let i = 0; i < 12; i++) {

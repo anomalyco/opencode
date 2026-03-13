@@ -9,7 +9,8 @@ import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { getFilename } from "@opencode-ai/util/path"
 import { A, useNavigate, useParams } from "@solidjs/router"
-import { type Accessor, createMemo, For, type JSX, Match, onCleanup, Show, Switch } from "solid-js"
+import { type Accessor, createEffect, createMemo, For, type JSX, on, onCleanup, Show } from "solid-js"
+import { createStore } from "solid-js/store"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { getAvatarColors, type LocalProject, useLayout } from "@/context/layout"
@@ -101,46 +102,94 @@ const SessionRow = (props: {
   warmPress: () => void
   warmFocus: () => void
   cancelHoverPrefetch: () => void
-}): JSX.Element => (
-  <A
-    href={`/${props.slug}/session/${props.session.id}`}
-    class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none transition-[padding] ${props.mobile ? "pr-7" : ""} group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7 ${props.dense ? "py-0.5" : "py-1"}`}
-    onPointerDown={props.warmPress}
-    onPointerEnter={props.warmHover}
-    onPointerLeave={props.cancelHoverPrefetch}
-    onFocus={props.warmFocus}
-    onClick={() => {
-      props.setHoverSession(undefined)
-      if (props.sidebarOpened()) return
-      props.clearHoverProjectSoon()
-    }}
-  >
-    <div class="flex items-center gap-1 w-full">
-      <div
-        class="shrink-0 size-6 flex items-center justify-center"
-        style={{ color: props.tint() ?? "var(--icon-interactive-base)" }}
-      >
-        <Switch fallback={<Icon name="dash" size="small" class="text-icon-weak" />}>
-          <Match when={props.isWorking()}>
-            <Spinner class="size-[15px]" />
-          </Match>
-          <Match when={props.hasPermissions()}>
-            <div class="size-1.5 rounded-full bg-surface-warning-strong" />
-          </Match>
-          <Match when={props.hasError()}>
-            <div class="size-1.5 rounded-full bg-text-diff-delete-base" />
-          </Match>
-          <Match when={props.unseenCount() > 0}>
-            <div class="size-1.5 rounded-full bg-text-interactive-base" />
-          </Match>
-        </Switch>
+}): JSX.Element => {
+  const [slot, setSlot] = createStore({
+    open: false,
+    show: false,
+    fade: false,
+  })
+
+  let f: number | undefined
+  const clear = () => {
+    if (f !== undefined) window.clearTimeout(f)
+    f = undefined
+  }
+
+  onCleanup(clear)
+  createEffect(
+    on(
+      () => props.isWorking(),
+      (on, prev) => {
+        clear()
+        if (on) {
+          setSlot({ open: true, show: true, fade: false })
+          return
+        }
+        if (prev) {
+          setSlot({ open: false, show: true, fade: true })
+          f = window.setTimeout(() => setSlot({ show: false, fade: false }), 260)
+          return
+        }
+        setSlot({ open: false, show: false, fade: false })
+      },
+      { defer: true },
+    ),
+  )
+
+  return (
+    <A
+      href={`/${props.slug}/session/${props.session.id}`}
+      class={`relative flex items-center min-w-0 text-left w-full focus:outline-none transition-[padding] ${props.mobile ? "pr-7" : ""} group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7 ${props.dense ? "py-0.5" : "py-1"}`}
+      onPointerDown={props.warmPress}
+      onPointerEnter={props.warmHover}
+      onPointerLeave={props.cancelHoverPrefetch}
+      onFocus={props.warmFocus}
+      onClick={() => {
+        props.setHoverSession(undefined)
+        if (props.sidebarOpened()) return
+        props.clearHoverProjectSoon()
+      }}
+    >
+      <Show when={!props.isWorking() && (props.hasPermissions() || props.hasError() || props.unseenCount() > 0)}>
+        <div
+          classList={{
+            "absolute left-0 top-1/2 -translate-y-1/2 size-1.5 rounded-full": true,
+            "bg-surface-warning-strong": props.hasPermissions(),
+            "bg-text-diff-delete-base": !props.hasPermissions() && props.hasError(),
+            "bg-text-interactive-base": !props.hasPermissions() && !props.hasError() && props.unseenCount() > 0,
+          }}
+          aria-hidden="true"
+        />
+      </Show>
+
+      <div class="flex items-center min-w-0 grow-1">
+        <div
+          class="shrink-0 flex items-center justify-center overflow-hidden transition-[width,margin] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
+          style={{
+            width: slot.open ? "16px" : "0px",
+            "margin-right": slot.open ? "8px" : "0px",
+          }}
+          aria-hidden="true"
+        >
+          <Show when={slot.show}>
+            <div
+              class="transition-opacity duration-200 ease-out"
+              classList={{
+                "opacity-0": slot.fade,
+              }}
+            >
+              <Spinner class="size-4" style={{ color: props.tint() ?? "var(--icon-interactive-base)" }} />
+            </div>
+          </Show>
+        </div>
+
+        <span class="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate">
+          {props.session.title}
+        </span>
       </div>
-      <span class="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate">
-        {props.session.title}
-      </span>
-    </div>
-  </A>
-)
+    </A>
+  )
+}
 
 const SessionHoverPreview = (props: {
   mobile?: boolean
@@ -204,8 +253,18 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   })
   const isWorking = createMemo(() => {
     if (hasPermissions()) return false
+    const pending = (sessionStore.message[props.session.id] ?? []).findLast(
+      (message) =>
+        message.role === "assistant" &&
+        typeof (message as { time?: { completed?: unknown } }).time?.completed !== "number",
+    )
     const status = sessionStore.session_status[props.session.id]
-    return status?.type === "busy" || status?.type === "retry"
+    return (
+      pending !== undefined ||
+      status?.type === "busy" ||
+      status?.type === "retry" ||
+      (status !== undefined && status.type !== "idle")
+    )
   })
 
   const tint = createMemo(() => {
@@ -300,7 +359,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   return (
     <div
       data-session-id={props.session.id}
-      class="group/session relative w-full rounded-md cursor-default transition-colors pl-2 pr-3
+      class="group/session relative w-full rounded-md cursor-default pl-3 pr-3 transition-colors
              hover:bg-surface-raised-base-hover [&:has(:focus-visible)]:bg-surface-raised-base-hover has-[[data-expanded]]:bg-surface-raised-base-hover has-[.active]:bg-surface-base-active"
     >
       <Show
