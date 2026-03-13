@@ -1977,7 +1977,7 @@ export default function Layout(props: ParentProps) {
           {(p) => (
             <>
               <div class="shrink-0 pl-1 py-1">
-                <div class="group/project flex items-start justify-between gap-2 p-2 pr-1">
+                <div class="group/project flex items-start justify-between gap-2 py-2 pl-2 pr-0">
                   <div class="flex flex-col min-w-0">
                     <InlineEditor
                       id={`project:${projectId()}`}
