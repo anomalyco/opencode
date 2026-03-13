@@ -1441,8 +1441,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     options={agentNames()}
                     current={local.agent.current()?.name ?? ""}
                     onSelect={local.agent.set}
-                    class="capitalize max-w-[160px]"
-                    valueClass="truncate text-13-regular"
+                    class="capitalize max-w-[160px] text-text-base"
+                    valueClass="truncate text-13-regular text-text-base"
                     triggerStyle={control()}
                     variant="ghost"
                   />
@@ -1460,7 +1460,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         as="div"
                         variant="ghost"
                         size="normal"
-                        class="min-w-0 max-w-[320px] text-13-regular group"
+                        class="min-w-0 max-w-[320px] text-13-regular text-text-base group"
                         style={control()}
                         onClick={() => dialog.show(() => <DialogSelectModelUnpaid />)}
                       >
@@ -1491,7 +1491,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         variant: "ghost",
                         size: "normal",
                         style: control(),
-                        class: "min-w-0 max-w-[320px] text-13-regular group",
+                        class: "min-w-0 max-w-[320px] text-13-regular text-text-base group",
                       }}
                     >
                       <Show when={local.model.current()?.provider?.id}>
@@ -1520,8 +1520,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     current={local.model.variant.current() ?? "default"}
                     label={(x) => (x === "default" ? language.t("common.default") : x)}
                     onSelect={(x) => local.model.variant.set(x === "default" ? undefined : x)}
-                    class="capitalize max-w-[160px]"
-                    valueClass="truncate text-13-regular"
+                    class="capitalize max-w-[160px] text-text-base"
+                    valueClass="truncate text-13-regular text-text-base"
                     triggerStyle={control()}
                     variant="ghost"
                   />
@@ -1545,11 +1545,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     aria-label={acceptLabel()}
                     aria-pressed={accepting()}
                   >
-                    <Icon
-                      name="chevron-double-right"
-                      size="small"
-                      classList={{ "text-icon-success-base": accepting() }}
-                    />
+                    <Icon name="shield" size="small" classList={{ "text-icon-success-base": accepting() }} />
                   </Button>
                 </TooltipKeybind>
               </div>
