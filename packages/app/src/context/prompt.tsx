@@ -1,6 +1,6 @@
 import { createStore, type SetStoreFunction } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { batch, createMemo, createRoot, onCleanup } from "solid-js"
+import { batch, createEffect, createMemo, createRoot, createSignal, onCleanup, untrack } from "solid-js"
 import { useParams } from "@solidjs/router"
 import type { FileSelection } from "@/context/file"
 import { Persist, persisted } from "@/utils/persist"
@@ -50,7 +50,22 @@ export type FileContextItem = {
 
 export type ContextItem = FileContextItem
 
+type State = {
+  prompt: Prompt
+  cursor?: number
+  context: {
+    items: (ContextItem & { key: string })[]
+  }
+}
+
+type Pics = {
+  synced: boolean
+  items: ImageAttachmentPart[]
+}
+
 export const DEFAULT_PROMPT: Prompt = [{ type: "text", content: "", start: 0, end: 0 }]
+
+const PROMPT_SYNC_MS = 250
 
 function isSelectionEqual(a?: FileSelection, b?: FileSelection) {
   if (!a && !b) return true
@@ -100,6 +115,76 @@ function clonePrompt(prompt: Prompt): Prompt {
   return prompt.map(clonePart)
 }
 
+function cloneContextItem(item: ContextItem & { key: string }) {
+  return {
+    ...item,
+    selection: cloneSelection(item.selection),
+  }
+}
+
+function cloneContextItems(items: (ContextItem & { key: string })[]) {
+  return items.map(cloneContextItem)
+}
+
+function cloneImages(items: ImageAttachmentPart[]) {
+  return items.map((item) => ({ ...item }))
+}
+
+function sameImages(a: ImageAttachmentPart[], b: ImageAttachmentPart[]) {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i]
+    const y = b[i]
+    if (x.id !== y.id) return false
+    if (x.filename !== y.filename) return false
+    if (x.mime !== y.mime) return false
+    if (x.dataUrl !== y.dataUrl) return false
+  }
+  return true
+}
+
+function sameContext(a: (ContextItem & { key: string })[], b: (ContextItem & { key: string })[]) {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i]
+    const y = b[i]
+    if (x.key !== y.key) return false
+    if (x.type !== y.type) return false
+    if (x.path !== y.path) return false
+    if (x.comment !== y.comment) return false
+    if (x.commentID !== y.commentID) return false
+    if (x.commentOrigin !== y.commentOrigin) return false
+    if (x.preview !== y.preview) return false
+    if (!isSelectionEqual(x.selection, y.selection)) return false
+  }
+  return true
+}
+
+function stripImages(prompt: Prompt): Prompt {
+  return prompt.filter((part) => part.type !== "image")
+}
+
+function pickImages(prompt: Prompt): ImageAttachmentPart[] {
+  return prompt.filter((part): part is ImageAttachmentPart => part.type === "image")
+}
+
+function state(): State {
+  return {
+    prompt: clonePrompt(DEFAULT_PROMPT),
+    cursor: undefined,
+    context: {
+      items: [],
+    },
+  }
+}
+
+function images(): Pics {
+  return {
+    synced: false,
+    items: [],
+  }
+}
+
 function contextItemKey(item: ContextItem) {
   if (item.type !== "file") return item.type
   const start = item.selection?.startLine
@@ -120,15 +205,7 @@ function isCommentItem(item: ContextItem | (ContextItem & { key: string })) {
   return item.type === "file" && !!item.comment?.trim()
 }
 
-function createPromptActions(
-  setStore: SetStoreFunction<{
-    prompt: Prompt
-    cursor?: number
-    context: {
-      items: (ContextItem & { key: string })[]
-    }
-  }>,
-) {
+function createPromptActions(setStore: SetStoreFunction<State>) {
   return {
     set(prompt: Prompt, cursorPosition?: number) {
       const next = clonePrompt(prompt)
@@ -159,22 +236,100 @@ type PromptCacheEntry = {
 function createPromptSession(dir: string, id: string | undefined) {
   const legacy = `${dir}/prompt${id ? "/" + id : ""}.v2`
 
-  const [store, setStore, _, ready] = persisted(
-    Persist.scoped(dir, id, "prompt", [legacy]),
-    createStore<{
-      prompt: Prompt
-      cursor?: number
-      context: {
-        items: (ContextItem & { key: string })[]
-      }
-    }>({
-      prompt: clonePrompt(DEFAULT_PROMPT),
-      cursor: undefined,
-      context: {
-        items: [],
-      },
-    }),
-  )
+  const [draft, setDraft, , draftReady] = persisted(Persist.scoped(dir, id, "prompt", [legacy]), createStore(state()))
+
+  const [pics, setPics, , picsReady] = persisted(Persist.scoped(dir, id, "prompt-image"), createStore(images()))
+
+  const [store, setStore] = createStore(state())
+  const [hydrated, setHydrated] = createSignal(false)
+
+  const prompt = createMemo(() => stripImages(store.prompt), clonePrompt(DEFAULT_PROMPT), {
+    equals: isPromptEqual,
+  })
+  const picsList = createMemo(() => pickImages(store.prompt), [] as ImageAttachmentPart[], {
+    equals: sameImages,
+  })
+  const ready = createMemo(() => hydrated() && draftReady() && picsReady())
+
+  let promptt: ReturnType<typeof setTimeout> | undefined
+  let pict: ReturnType<typeof setTimeout> | undefined
+
+  const clear = () => {
+    if (promptt !== undefined) clearTimeout(promptt)
+    if (pict !== undefined) clearTimeout(pict)
+  }
+
+  onCleanup(clear)
+
+  createEffect(() => {
+    if (!draftReady() || !picsReady()) return
+    if (hydrated()) return
+
+    const base = stripImages(draft.prompt)
+    const legacyPics = pickImages(draft.prompt)
+    const nextPics = pics.synced || pics.items.length > 0 ? pics.items : legacyPics
+
+    batch(() => {
+      setStore({
+        prompt: clonePrompt([...base, ...nextPics]),
+        cursor: draft.cursor,
+        context: {
+          items: cloneContextItems(draft.context.items),
+        },
+      })
+      setHydrated(true)
+    })
+
+    if (!pics.synced && legacyPics.length > 0) {
+      setPics({ synced: true, items: cloneImages(legacyPics) })
+    }
+  })
+
+  createEffect(() => {
+    if (!hydrated()) return
+    prompt()
+    store.cursor
+    store.context.items
+    if (promptt !== undefined) clearTimeout(promptt)
+
+    promptt = setTimeout(() => {
+      promptt = undefined
+      const next = clonePrompt(prompt())
+      const items = cloneContextItems(store.context.items)
+      const samePrompt = isPromptEqual(stripImages(untrack(() => draft.prompt)), next)
+      const sameCursor = untrack(() => draft.cursor) === store.cursor
+      const sameItems = sameContext(
+        untrack(() => draft.context.items),
+        items,
+      )
+      if (samePrompt && sameCursor && sameItems) return
+
+      batch(() => {
+        setDraft("prompt", next)
+        setDraft("cursor", store.cursor)
+        setDraft("context", "items", items)
+      })
+    }, PROMPT_SYNC_MS)
+  })
+
+  createEffect(() => {
+    if (!hydrated()) return
+    picsList()
+    if (pict !== undefined) clearTimeout(pict)
+
+    pict = setTimeout(() => {
+      pict = undefined
+      const next = cloneImages(picsList())
+      if (
+        sameImages(
+          untrack(() => pics.items),
+          next,
+        )
+      )
+        if (untrack(() => pics.synced)) return
+      setPics({ synced: true, items: next })
+    }, PROMPT_SYNC_MS)
+  })
 
   const actions = createPromptActions(setStore)
 

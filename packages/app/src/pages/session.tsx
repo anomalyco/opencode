@@ -526,11 +526,58 @@ export default function Page() {
     return key
   }, sessionKey())
 
+  type Job = {
+    frame?: number
+    timer?: number
+    idle?: number
+  }
+
+  const syncMs = SESSION_PREFETCH_TTL
+  const todoMs = 30_000
+  const diffMs = 30_000
+  const at = {
+    sync: new Map<string, number>(),
+    todo: new Map<string, number>(),
+    diff: new Map<string, number>(),
+  }
+
+  const key = (dir: string, id: string) => `${dir}\n${id}`
+  const due = (map: Map<string, number>, id: string, ttl: number) => Date.now() - (map.get(id) ?? 0) >= ttl
+  const touch = (map: Map<string, number>, id: string) => map.set(id, Date.now())
+
+  const clearJob = (job: Job) => {
+    if (job.frame !== undefined) cancelAnimationFrame(job.frame)
+    if (job.timer !== undefined) window.clearTimeout(job.timer)
+    if (job.idle !== undefined && typeof window.cancelIdleCallback === "function") {
+      window.cancelIdleCallback(job.idle)
+    }
+    job.frame = undefined
+    job.timer = undefined
+    job.idle = undefined
+  }
+
+  const queueJob = (job: Job, run: VoidFunction, delay = 180) => {
+    clearJob(job)
+    job.frame = requestAnimationFrame(() => {
+      job.frame = undefined
+      job.timer = window.setTimeout(() => {
+        job.timer = undefined
+        const fire = () => {
+          job.idle = undefined
+          run()
+        }
+        if (typeof window.requestIdleCallback !== "function") {
+          fire()
+          return
+        }
+        job.idle = window.requestIdleCallback(fire, { timeout: 500 })
+      }, delay)
+    })
+  }
+
   let reviewFrame: number | undefined
-  let refreshFrame: number | undefined
-  let refreshTimer: number | undefined
-  let diffFrame: number | undefined
-  let diffTimer: number | undefined
+  const refreshJob: Job = {}
+  const diffJob: Job = {}
 
   createComputed((prev) => {
     const open = desktopReviewOpen()
@@ -690,17 +737,16 @@ export default function Page() {
 
   createEffect(
     on([() => sdk.directory, () => params.id] as const, ([, id]) => {
-      if (refreshFrame !== undefined) cancelAnimationFrame(refreshFrame)
-      if (refreshTimer !== undefined) window.clearTimeout(refreshTimer)
-      refreshFrame = undefined
-      refreshTimer = undefined
+      clearJob(refreshJob)
       if (!id) return
 
+      const dir = sdk.directory
+      const idKey = key(dir, id)
       const cached = untrack(() => sync.data.message[id] !== undefined)
       const stale = !cached
         ? false
         : (() => {
-            const info = getSessionPrefetch(sdk.directory, id)
+            const info = getSessionPrefetch(dir, id)
             if (!info) return true
             return Date.now() - info.at > SESSION_PREFETCH_TTL
           })()
@@ -710,17 +756,31 @@ export default function Page() {
         void sync.session.sync(id)
       })
 
-      refreshFrame = requestAnimationFrame(() => {
-        refreshFrame = undefined
-        refreshTimer = window.setTimeout(() => {
-          refreshTimer = undefined
+      queueJob(
+        refreshJob,
+        () => {
           if (params.id !== id) return
+          if (sdk.directory !== dir) return
+
           untrack(() => {
-            if (stale) void sync.session.sync(id, { force: true })
-            void sync.session.todo(id, todos ? { force: true } : undefined)
+            if (!todos) {
+              touch(at.todo, idKey)
+              void sync.session.todo(id)
+            }
+
+            if (stale && due(at.sync, idKey, syncMs)) {
+              touch(at.sync, idKey)
+              void sync.session.sync(id, { force: true })
+            }
+
+            if (todos && due(at.todo, idKey, todoMs)) {
+              touch(at.todo, idKey)
+              void sync.session.todo(id, { force: true })
+            }
           })
-        }, 0)
-      })
+        },
+        cached ? 220 : 450,
+      )
     }),
   )
 
@@ -1111,20 +1171,6 @@ export default function Page() {
     requestAnimationFrame(() => attempt(0))
   })
 
-  createEffect(() => {
-    const id = params.id
-    if (!id) return
-
-    const wants = isDesktop()
-      ? desktopFileTreeOpen() || (desktopReviewOpen() && activeTab() === "review")
-      : store.mobileTab === "changes"
-    if (!wants) return
-    if (sync.data.session_diff[id] !== undefined) return
-    if (sync.status === "loading") return
-
-    void sync.session.diff(id)
-  })
-
   createEffect(
     on(
       () =>
@@ -1133,26 +1179,38 @@ export default function Page() {
           isDesktop()
             ? desktopFileTreeOpen() || (desktopReviewOpen() && activeTab() === "review")
             : store.mobileTab === "changes",
+          sync.status,
         ] as const,
-      ([key, wants]) => {
-        if (diffFrame !== undefined) cancelAnimationFrame(diffFrame)
-        if (diffTimer !== undefined) window.clearTimeout(diffTimer)
-        diffFrame = undefined
-        diffTimer = undefined
+      ([session, wants, status]) => {
+        clearJob(diffJob)
         if (!wants) return
 
         const id = params.id
         if (!id) return
-        if (!untrack(() => sync.data.session_diff[id] !== undefined)) return
+        if (status === "loading") return
 
-        diffFrame = requestAnimationFrame(() => {
-          diffFrame = undefined
-          diffTimer = window.setTimeout(() => {
-            diffTimer = undefined
-            if (sessionKey() !== key) return
+        const dir = sdk.directory
+        const idKey = key(dir, id)
+        const cached = untrack(() => sync.data.session_diff[id] !== undefined)
+
+        queueJob(
+          diffJob,
+          () => {
+            if (sessionKey() !== session) return
+            if (sdk.directory !== dir) return
+
+            if (!cached) {
+              touch(at.diff, idKey)
+              void sync.session.diff(id)
+              return
+            }
+
+            if (!due(at.diff, idKey, diffMs)) return
+            touch(at.diff, idKey)
             void sync.session.diff(id, { force: true })
-          }, 0)
-        })
+          },
+          cached ? 240 : 160,
+        )
       },
       { defer: true },
     ),
@@ -1640,10 +1698,8 @@ export default function Page() {
   onCleanup(() => {
     document.removeEventListener("keydown", handleKeyDown)
     if (reviewFrame !== undefined) cancelAnimationFrame(reviewFrame)
-    if (refreshFrame !== undefined) cancelAnimationFrame(refreshFrame)
-    if (refreshTimer !== undefined) window.clearTimeout(refreshTimer)
-    if (diffFrame !== undefined) cancelAnimationFrame(diffFrame)
-    if (diffTimer !== undefined) window.clearTimeout(diffTimer)
+    clearJob(refreshJob)
+    clearJob(diffJob)
     if (scrollStateFrame !== undefined) cancelAnimationFrame(scrollStateFrame)
     if (fillFrame !== undefined) cancelAnimationFrame(fillFrame)
   })

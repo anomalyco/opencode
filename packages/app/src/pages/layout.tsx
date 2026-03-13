@@ -670,14 +670,14 @@ export default function Layout(props: ParentProps) {
     running: number
   }
 
-  const prefetchChunk = 200
-  const prefetchConcurrency = 2
-  const prefetchPendingLimit = 10
-  const span = 4
+  const prefetchChunk = 80
+  const prefetchConcurrency = 1
+  const prefetchPendingLimit = 6
+  const span = 1
   const prefetchToken = { value: 0 }
   const prefetchQueues = new Map<string, PrefetchQueue>()
 
-  const PREFETCH_MAX_SESSIONS_PER_DIR = 10
+  const PREFETCH_MAX_SESSIONS_PER_DIR = 6
   const prefetchedByDir = new Map<string, Set<string>>()
 
   const lruFor = (directory: string) => {

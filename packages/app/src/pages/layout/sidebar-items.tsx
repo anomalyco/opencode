@@ -261,12 +261,11 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
     hoverPrefetch.current = undefined
   }
   const scheduleHoverPrefetch = () => {
-    warm(1, "high")
     if (hoverPrefetch.current !== undefined) return
     hoverPrefetch.current = setTimeout(() => {
       hoverPrefetch.current = undefined
-      warm(2, "low")
-    }, 80)
+      warm(1, "low")
+    }, 160)
   }
 
   onCleanup(cancelHoverPrefetch)
@@ -291,8 +290,8 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
       clearHoverProjectSoon={props.clearHoverProjectSoon}
       sidebarOpened={layout.sidebar.opened}
       warmHover={scheduleHoverPrefetch}
-      warmPress={() => warm(2, "high")}
-      warmFocus={() => warm(2, "high")}
+      warmPress={() => warm(1, "high")}
+      warmFocus={() => warm(1, "high")}
       cancelHoverPrefetch={cancelHoverPrefetch}
     />
   )
