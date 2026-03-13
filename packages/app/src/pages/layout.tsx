@@ -1780,7 +1780,6 @@ export default function Layout(props: ParentProps) {
 
   const createWorkspace = async (project: LocalProject) => {
     clearSidebarHoverState()
-    debugger
     const created = await globalSDK.client.worktree
       .create({ directory: project.worktree })
       .then((x) => x.data)
@@ -1793,7 +1792,6 @@ export default function Layout(props: ParentProps) {
       })
 
     if (!created?.directory) return
-    debugger
 
     WorktreeState.pending(created.directory)
     setBusy(created.directory, true)
