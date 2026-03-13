@@ -163,9 +163,9 @@ export namespace Question {
 
   export async function clearSession(sessionID: string) {
     const s = await state()
-    for (const [id, pending] of Object.entries(s.pending)) {
+    for (const [id, pending] of s.pending.entries()) {
       if (pending.info.sessionID === sessionID) {
-        delete s.pending[id]
+        s.pending.delete(id)
         Bus.publish(Event.Rejected, {
           sessionID: pending.info.sessionID,
           requestID: pending.info.id,
