@@ -547,6 +547,7 @@ export const dict = {
   "workspace.billing.addAction": "追加",
   "workspace.billing.addBalance": "残高を追加",
   "workspace.billing.alipay": "Alipay",
+  "workspace.billing.wechat": "WeChat Pay",
   "workspace.billing.linkedToStripe": "Stripeと連携済み",
   "workspace.billing.manage": "管理",
   "workspace.billing.enable": "課金を有効にする",
