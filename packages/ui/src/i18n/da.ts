@@ -101,6 +101,7 @@ export const dict = {
   "ui.tool.todos.read": "Læs opgaver",
   "ui.tool.questions": "Spørgsmål",
   "ui.tool.agent": "{{type}} Agent",
+  "ui.tool.agent.default": "Agent",
 
   "ui.common.file.one": "fil",
   "ui.common.file.other": "filer",
@@ -122,6 +123,8 @@ export const dict = {
 
   "ui.message.copy": "Kopier",
   "ui.message.copyMessage": "Kopier besked",
+  "ui.message.forkMessage": "Forgren til ny session",
+  "ui.message.revertMessage": "Nulstil til dette punkt",
   "ui.message.copyResponse": "Kopier svar",
   "ui.message.copied": "Kopieret!",
   "ui.message.interrupted": "Afbrudt",
@@ -139,4 +142,16 @@ export const dict = {
   "ui.question.multiHint": "Vælg alle der gælder",
   "ui.question.singleHint": "Vælg ét svar",
   "ui.question.custom.placeholder": "Skriv dit svar...",
+
+  "ui.fileSearch.placeholder": "Find",
+  "ui.fileSearch.previousMatch": "Forrige match",
+  "ui.fileSearch.nextMatch": "Næste match",
+  "ui.fileSearch.close": "Luk søgning",
+  "ui.tool.task": "Opgave",
+  "ui.tool.skill": "Færdighed",
+  "ui.basicTool.called": "Kaldte `{{tool}}`",
+  "ui.toolErrorCard.failed": "Fejlede",
+  "ui.toolErrorCard.copyError": "Kopier fejl",
+  "ui.message.duration.seconds": "{{count}}s",
+  "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
 }

@@ -1,7 +1,7 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Session } from "."
-import { Identifier } from "../id/id"
+import { SessionID, MessageID, PartID } from "./schema"
 import { Instance } from "../project/instance"
 import { Provider } from "../provider/provider"
 import { MessageV2 } from "./message-v2"
@@ -14,94 +14,16 @@ import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
 import { ProviderTransform } from "@/provider/transform"
-import { ulid } from "ulid"
+import { ModelID, ProviderID } from "@/provider/schema"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
-
-  async function hookPart(input: {
-    sessionID: string
-    messageID: string
-    plugin: string
-    hook: string
-    stage: "before" | "after" | "error"
-    error?: string
-  }) {
-    const now = Date.now()
-    await Session.updatePart({
-      id: Identifier.ascending("part"),
-      messageID: input.messageID,
-      sessionID: input.sessionID,
-      type: "tool",
-      callID: ulid(),
-      tool: "hook",
-      state: {
-        status: "completed",
-        input: {
-          hook: input.plugin,
-          hook_type: `${input.stage} ${input.hook}`,
-          event: input.hook,
-        },
-        output: input.error ?? "",
-        title: input.plugin,
-        metadata: {
-          hook: input.plugin,
-          hook_type: `${input.stage} ${input.hook}`,
-          event: input.hook,
-          output: input.error ?? "",
-        },
-        time: {
-          start: now,
-          end: now,
-        },
-      },
-      metadata: {
-        hook: input.plugin,
-        hook_type: `${input.stage} ${input.hook}`,
-        event: input.hook,
-        error: input.error,
-      },
-    })
-  }
-
-  function hookOpts(sessionID: string, messageID: string) {
-    return {
-      onInvoke: async (event: {
-        plugin: string
-        custom: boolean
-        hook: string
-        stage: "before" | "after" | "error"
-        error?: string
-      }) => {
-        if (!event.custom) return
-        try {
-          await hookPart({
-            sessionID,
-            messageID,
-            plugin: event.plugin,
-            hook: event.hook,
-            stage: event.stage,
-            error: event.error,
-          })
-        } catch (err) {
-          log.debug("skip hook timeline part", {
-            sessionID,
-            messageID,
-            plugin: event.plugin,
-            hook: event.hook,
-            stage: event.stage,
-            error: err instanceof Error ? err.message : String(err),
-          })
-        }
-      },
-    }
-  }
 
   export const Event = {
     Compacted: BusEvent.define(
       "session.compacted",
       z.object({
-        sessionID: z.string(),
+        sessionID: SessionID.zod,
       }),
     ),
   }
@@ -134,7 +56,7 @@ export namespace SessionCompaction {
   // goes backwards through parts until there are 40_000 tokens worth of tool
   // calls. then erases output of previous tool calls. idea is to throw away old
   // tool calls that are no longer relevant.
-  export async function prune(input: { sessionID: string }) {
+  export async function prune(input: { sessionID: SessionID }) {
     const config = await Config.get()
     if (config.compaction?.prune === false) return
     log.info("pruning")
@@ -178,9 +100,9 @@ export namespace SessionCompaction {
   }
 
   export async function process(input: {
-    parentID: string
+    parentID: MessageID
     messages: MessageV2.WithParts[]
-    sessionID: string
+    sessionID: SessionID
     abort: AbortSignal
     auto: boolean
     overflow?: boolean
@@ -212,7 +134,7 @@ export namespace SessionCompaction {
       ? await Provider.getModel(agent.model.providerID, agent.model.modelID)
       : await Provider.getModel(userMessage.model.providerID, userMessage.model.modelID)
     const msg = (await Session.updateMessage({
-      id: Identifier.ascending("message"),
+      id: MessageID.ascending(),
       role: "assistant",
       parentID: input.parentID,
       sessionID: input.sessionID,
@@ -248,7 +170,6 @@ export namespace SessionCompaction {
       "experimental.session.compacting",
       { sessionID: input.sessionID },
       { context: [], prompt: undefined },
-      hookOpts(input.sessionID, msg.id),
     )
     const defaultPrompt = `Provide a detailed prompt for continuing our conversation above.
 Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next.
@@ -316,7 +237,7 @@ When constructing the summary, try to stick to this template:
       if (replay) {
         const original = replay.info as MessageV2.User
         const replayMsg = await Session.updateMessage({
-          id: Identifier.ascending("message"),
+          id: MessageID.ascending(),
           role: "user",
           sessionID: input.sessionID,
           time: { created: Date.now() },
@@ -335,14 +256,14 @@ When constructing the summary, try to stick to this template:
               : part
           await Session.updatePart({
             ...replayPart,
-            id: Identifier.ascending("part"),
+            id: PartID.ascending(),
             messageID: replayMsg.id,
             sessionID: input.sessionID,
           })
         }
       } else {
         const continueMsg = await Session.updateMessage({
-          id: Identifier.ascending("message"),
+          id: MessageID.ascending(),
           role: "user",
           sessionID: input.sessionID,
           time: { created: Date.now() },
@@ -355,7 +276,7 @@ When constructing the summary, try to stick to this template:
             : "") +
           "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed."
         await Session.updatePart({
-          id: Identifier.ascending("part"),
+          id: PartID.ascending(),
           messageID: continueMsg.id,
           sessionID: input.sessionID,
           type: "text",
@@ -375,18 +296,18 @@ When constructing the summary, try to stick to this template:
 
   export const create = fn(
     z.object({
-      sessionID: Identifier.schema("session"),
+      sessionID: SessionID.zod,
       agent: z.string(),
       model: z.object({
-        providerID: z.string(),
-        modelID: z.string(),
+        providerID: ProviderID.zod,
+        modelID: ModelID.zod,
       }),
       auto: z.boolean(),
       overflow: z.boolean().optional(),
     }),
     async (input) => {
       const msg = await Session.updateMessage({
-        id: Identifier.ascending("message"),
+        id: MessageID.ascending(),
         role: "user",
         model: input.model,
         sessionID: input.sessionID,
@@ -396,7 +317,7 @@ When constructing the summary, try to stick to this template:
         },
       })
       await Session.updatePart({
-        id: Identifier.ascending("part"),
+        id: PartID.ascending(),
         messageID: msg.id,
         sessionID: msg.sessionID,
         type: "compaction",

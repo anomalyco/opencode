@@ -9,13 +9,10 @@ import {
   ServerConnection,
   useCommand,
 } from "@opencode-ai/app"
-import { Splash } from "@opencode-ai/ui/logo"
 import type { AsyncStorage } from "@solid-primitives/storage"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { getCurrentWebview } from "@tauri-apps/api/webview"
 import { listen } from "@tauri-apps/api/event"
-import { base64Encode } from "@opencode-ai/util/encode"
-import { createSignal, Show, type Accessor, type JSX, createResource, onMount, onCleanup } from "solid-js"
 import { readImage } from "@tauri-apps/plugin-clipboard-manager"
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link"
 import { open, save } from "@tauri-apps/plugin-dialog"
@@ -26,14 +23,16 @@ import { relaunch } from "@tauri-apps/plugin-process"
 import { open as shellOpen } from "@tauri-apps/plugin-shell"
 import { Store } from "@tauri-apps/plugin-store"
 import { check, type Update } from "@tauri-apps/plugin-updater"
+import { createResource, onCleanup, onMount, Show } from "solid-js"
 import { render } from "solid-js/web"
 import pkg from "../package.json"
 import { initI18n, t } from "./i18n"
 import { UPDATER_ENABLED } from "./updater"
 import { webviewZoom } from "./webview-zoom"
 import "./styles.css"
-import { Channel, invoke } from "@tauri-apps/api/core"
-import { commands, ServerReadyData, type InitStep } from "./bindings"
+import { base64Encode } from "@opencode-ai/util/encode"
+import { Channel } from "@tauri-apps/api/core"
+import { commands, type InitStep } from "./bindings"
 import { createMenu } from "./menu"
 
 const root = document.getElementById("root")
@@ -44,23 +43,8 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
 void initI18n()
 
 let update: Update | null = null
-let find = ""
 
 const deepLinkEvent = "opencode:deep-link"
-
-const emitDeepLinks = (urls: string[]) => {
-  if (urls.length === 0) return
-  window.__OPENCODE__ ??= {}
-  const pending = window.__OPENCODE__.deepLinks ?? []
-  window.__OPENCODE__.deepLinks = [...pending, ...urls]
-  window.dispatchEvent(new CustomEvent(deepLinkEvent, { detail: { urls } }))
-}
-
-const listenForDeepLinks = async () => {
-  const startUrls = await getCurrent().catch(() => null)
-  if (startUrls?.length) emitDeepLinks(startUrls)
-  await onOpenUrl((urls) => emitDeepLinks(urls)).catch(() => undefined)
-}
 
 const navigateToPath = (path: string) => {
   const encoded = base64Encode(path)
@@ -110,6 +94,20 @@ const listenForDragDrop = async () => {
         break
     }
   })
+}
+
+const emitDeepLinks = (urls: string[]) => {
+  if (urls.length === 0) return
+  window.__OPENCODE__ ??= {}
+  const pending = window.__OPENCODE__.deepLinks ?? []
+  window.__OPENCODE__.deepLinks = [...pending, ...urls]
+  window.dispatchEvent(new CustomEvent(deepLinkEvent, { detail: { urls } }))
+}
+
+const listenForDeepLinks = async () => {
+  const startUrls = await getCurrent().catch(() => null)
+  if (startUrls?.length) emitDeepLinks(startUrls)
+  await onOpenUrl((urls) => emitDeepLinks(urls)).catch(() => undefined)
 }
 
 const createPlatform = (): Platform => {
@@ -169,39 +167,23 @@ const createPlatform = (): Platform => {
       void shellOpen(url).catch(() => undefined)
     },
 
-    async openInFinder(path: string) {
-      await invoke("open_in_finder", { path })
-    },
-
-    async openInVscode(path: string) {
-      await invoke("open_in_vscode", { path })
-    },
-
-    async openInEditor(editor: string, path: string) {
-      const customPath = await commands.getCustomEditorPath()
-      await commands.openInEditor(editor, path, customPath)
-    },
-
-    async getCustomEditorPath() {
-      return await commands.getCustomEditorPath()
-    },
-
-    async setCustomEditorPath(path: string | null) {
-      await commands.setCustomEditorPath(path)
-    },
-
-    async getDefaultEditor() {
-      return await commands.getDefaultEditor()
-    },
-
-    async setDefaultEditor(editor: string | null) {
-      await commands.setDefaultEditor(editor)
-    },
-
     async filterDirectories(paths: string[]) {
       return commands.filterDirectories(paths)
     },
 
+    async find(query, dir) {
+      const q = query.trim()
+      if (!q) return
+      return (window as Window & { find?: (...args: unknown[]) => boolean }).find?.(
+        q,
+        false,
+        dir === -1,
+        true,
+        false,
+        false,
+        false,
+      )
+    },
     async openPath(path: string, app?: string) {
       await commands.openPath(path, app ?? null)
     },
@@ -436,12 +418,13 @@ const createPlatform = (): Platform => {
       await commands.setWslConfig({ enabled })
     },
 
-    getDefaultServerUrl: async () => {
-      const result = await commands.getDefaultServerUrl().catch(() => null)
-      return result
+    getDefaultServer: async () => {
+      const url = await commands.getDefaultServerUrl().catch(() => null)
+      if (!url) return null
+      return ServerConnection.Key.make(url)
     },
 
-    setDefaultServerUrl: async (url: string | null) => {
+    setDefaultServer: async (url: string | null) => {
       await commands.setDefaultServerUrl(url)
     },
 
@@ -453,6 +436,8 @@ const createPlatform = (): Platform => {
     setDisplayBackend: async (backend) => {
       await commands.setDisplayBackend(backend)
     },
+
+    parseMarkdown: (markdown: string) => commands.parseMarkdownCommand(markdown),
 
     webviewZoom,
 
@@ -486,21 +471,6 @@ const createPlatform = (): Platform => {
         }, "image/png")
       })
     },
-
-    async find(query, dir) {
-      const q = query.trim()
-      if (!q) return
-      find = q
-      return (window as Window & { find?: (...args: unknown[]) => boolean }).find?.(
-        q,
-        false,
-        dir === -1,
-        true,
-        false,
-        false,
-        false,
-      )
-    },
   }
 }
 
@@ -515,11 +485,32 @@ void listenForDragDrop()
 render(() => {
   const platform = createPlatform()
 
+  // Fetch sidecar credentials from Rust (available immediately, before health check)
+  const [sidecar] = createResource(() => commands.awaitInitialization(new Channel<InitStep>() as any))
+
   const [defaultServer] = createResource(() =>
-    platform.getDefaultServerUrl?.().then((url) => {
+    platform.getDefaultServer?.().then((url) => {
       if (url) return ServerConnection.key({ type: "http", http: { url } })
     }),
   )
+
+  // Build the sidecar server connection once credentials arrive
+  const servers = () => {
+    const data = sidecar()
+    if (!data) return []
+    const http = {
+      url: data.url,
+      username: data.username ?? undefined,
+      password: data.password ?? undefined,
+    }
+    const server: ServerConnection.Sidecar = {
+      displayName: t("desktop.server.local"),
+      type: "sidecar",
+      variant: "base",
+      http,
+    }
+    return [server] as ServerConnection.Any[]
+  }
 
   function handleClick(e: MouseEvent) {
     const link = (e.target as HTMLElement).closest("a.external-link") as HTMLAnchorElement | null
@@ -527,6 +518,27 @@ render(() => {
       e.preventDefault()
       platform.openLink(link.href)
     }
+  }
+
+  function Inner() {
+    const cmd = useCommand()
+    menuTrigger = (id) => cmd.trigger(id)
+
+    onMount(() => {
+      const onKeyDown = (event: KeyboardEvent) => {
+        if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return
+        if (event.key.toLowerCase() !== "f") return
+
+        event.preventDefault()
+        event.stopPropagation()
+        cmd.trigger("page.find", "keybind")
+      }
+
+      window.addEventListener("keydown", onKeyDown, { capture: true })
+      onCleanup(() => window.removeEventListener("keydown", onKeyDown, { capture: true }))
+    })
+
+    return null
   }
 
   onMount(() => {
@@ -539,74 +551,19 @@ render(() => {
   return (
     <PlatformProvider value={platform}>
       <AppBaseProviders>
-        <ServerGate>
-          {(data) => {
-            const http = {
-              url: data.url,
-              username: data.username ?? undefined,
-              password: data.password ?? undefined,
-            }
-            const server: ServerConnection.Any = data.is_sidecar
-              ? {
-                  displayName: t("desktop.server.local"),
-                  type: "sidecar",
-                  variant: "base",
-                  http,
-                }
-              : { type: "http", http }
-
-            function Inner() {
-              const cmd = useCommand()
-
-              onMount(() => {
-                const onKeyDown = (event: KeyboardEvent) => {
-                  if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return
-                  if (event.key.toLowerCase() !== "f") return
-
-                  event.preventDefault()
-                  event.stopPropagation()
-                  cmd.trigger("page.find", "keybind")
-                }
-
-                window.addEventListener("keydown", onKeyDown, { capture: true })
-                onCleanup(() => window.removeEventListener("keydown", onKeyDown, { capture: true }))
-              })
-
-              menuTrigger = (id) => cmd.trigger(id)
-
-              return null
-            }
-
+        <Show when={!defaultServer.loading && !sidecar.loading}>
+          {(_) => {
             return (
-              <Show when={!defaultServer.loading}>
-                <AppInterface defaultServer={defaultServer.latest ?? ServerConnection.key(server)} servers={[server]}>
-                  <Inner />
-                </AppInterface>
-              </Show>
+              <AppInterface
+                defaultServer={defaultServer.latest ?? ServerConnection.Key.make("sidecar")}
+                servers={servers()}
+              >
+                <Inner />
+              </AppInterface>
             )
           }}
-        </ServerGate>
+        </Show>
       </AppBaseProviders>
     </PlatformProvider>
   )
 }, root!)
-
-// Gate component that waits for the server to be ready
-function ServerGate(props: { children: (data: ServerReadyData) => JSX.Element }) {
-  const [serverData] = createResource(() => commands.awaitInitialization(new Channel<InitStep>() as any))
-  if (serverData.state === "errored") throw serverData.error
-
-  return (
-    <Show
-      when={serverData.state !== "pending" && serverData()}
-      fallback={
-        <div class="h-screen w-screen flex flex-col items-center justify-center bg-background-base">
-          <Splash class="w-16 h-20 opacity-50 animate-pulse" />
-          <div data-tauri-decorum-tb class="flex flex-row absolute top-0 right-0 z-10 h-10" />
-        </div>
-      }
-    >
-      {(data) => props.children(data())}
-    </Show>
-  )
-}

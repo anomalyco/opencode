@@ -101,6 +101,7 @@ export const dict = {
   "ui.tool.todos.read": "Читать задачи",
   "ui.tool.questions": "Вопросы",
   "ui.tool.agent": "Агент {{type}}",
+  "ui.tool.agent.default": "Агент",
 
   "ui.common.file.one": "файл",
   "ui.common.file.other": "файлов",
@@ -122,6 +123,8 @@ export const dict = {
 
   "ui.message.copy": "Копировать",
   "ui.message.copyMessage": "Копировать сообщение",
+  "ui.message.forkMessage": "Ответвить в новую сессию",
+  "ui.message.revertMessage": "Сбросить до этого момента",
   "ui.message.copyResponse": "Копировать ответ",
   "ui.message.copied": "Скопировано!",
   "ui.message.interrupted": "Прервано",
@@ -139,4 +142,16 @@ export const dict = {
   "ui.question.multiHint": "Выберите все подходящие",
   "ui.question.singleHint": "Выберите один ответ",
   "ui.question.custom.placeholder": "Введите ваш ответ...",
+
+  "ui.fileSearch.placeholder": "Найти",
+  "ui.fileSearch.previousMatch": "Предыдущее",
+  "ui.fileSearch.nextMatch": "Следующее",
+  "ui.fileSearch.close": "Закрыть поиск",
+  "ui.tool.task": "Задача",
+  "ui.tool.skill": "Навык",
+  "ui.basicTool.called": "Вызван `{{tool}}`",
+  "ui.toolErrorCard.failed": "Ошибка",
+  "ui.toolErrorCard.copyError": "Скопировать ошибку",
+  "ui.message.duration.seconds": "{{count}}с",
+  "ui.message.duration.minutesSeconds": "{{minutes}}м {{seconds}}с",
 }

@@ -105,6 +105,7 @@ export const dict: Record<Keys, string> = {
   "ui.tool.todos.read": "Les gjøremål",
   "ui.tool.questions": "Spørsmål",
   "ui.tool.agent": "{{type}}-agent",
+  "ui.tool.agent.default": "Agent",
 
   "ui.common.file.one": "fil",
   "ui.common.file.other": "filer",
@@ -126,6 +127,8 @@ export const dict: Record<Keys, string> = {
 
   "ui.message.copy": "Kopier",
   "ui.message.copyMessage": "Kopier melding",
+  "ui.message.forkMessage": "Forgren til ny sesjon",
+  "ui.message.revertMessage": "Tilbakestill til dette punktet",
   "ui.message.copyResponse": "Kopier svar",
   "ui.message.copied": "Kopiert!",
   "ui.message.interrupted": "Avbrutt",
@@ -143,4 +146,16 @@ export const dict: Record<Keys, string> = {
   "ui.question.multiHint": "Velg alle som gjelder",
   "ui.question.singleHint": "Velg ett svar",
   "ui.question.custom.placeholder": "Skriv svaret ditt...",
+
+  "ui.fileSearch.placeholder": "Finn",
+  "ui.fileSearch.previousMatch": "Forrige treff",
+  "ui.fileSearch.nextMatch": "Neste treff",
+  "ui.fileSearch.close": "Lukk søk",
+  "ui.tool.task": "Oppgave",
+  "ui.tool.skill": "Ferdighet",
+  "ui.basicTool.called": "Kalte `{{tool}}`",
+  "ui.toolErrorCard.failed": "Mislyktes",
+  "ui.toolErrorCard.copyError": "Kopier feil",
+  "ui.message.duration.seconds": "{{count}}s",
+  "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
 }

@@ -1,95 +1,74 @@
-import {
-  batch,
-  createEffect,
-  createMemo,
-  createSignal,
-  For,
-  Match,
-  on,
-  onCleanup,
-  onMount,
-  ParentProps,
-  Show,
-  Switch,
-  untrack,
-  type Accessor,
-  type JSX,
-} from "solid-js"
-import { A, useNavigate, useParams } from "@solidjs/router"
-import { useLayout, getAvatarColors, LocalProject } from "@/context/layout"
+import { batch, createEffect, createMemo, For, on, onCleanup, onMount, ParentProps, Show, untrack } from "solid-js"
+import { useNavigate, useParams } from "@solidjs/router"
+import { useLayout, LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { Persist, persisted } from "@/utils/persist"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { decode64 } from "@/utils/base64"
-import { Avatar } from "@opencode-ai/ui/avatar"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Button } from "@opencode-ai/ui/button"
-import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
-import { InlineInput } from "@opencode-ai/ui/inline-input"
-import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
-import { HoverCard } from "@opencode-ai/ui/hover-card"
-import { Popover } from "@opencode-ai/ui/popover"
-import { MessageNav } from "@opencode-ai/ui/message-nav"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
-import { ContextMenu } from "@opencode-ai/ui/context-menu"
-import { Collapsible } from "@opencode-ai/ui/collapsible"
-import { DiffChanges } from "@opencode-ai/ui/diff-changes"
-import { Spinner } from "@opencode-ai/ui/spinner"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { getFilename } from "@opencode-ai/util/path"
-import { Session, type Message, type TextPart } from "@opencode-ai/sdk/v2/client"
+import { Session, type Message } from "@opencode-ai/sdk/v2/client"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { createStore, produce, reconcile } from "solid-js/store"
-import {
-  DragDropProvider,
-  DragDropSensors,
-  DragOverlay,
-  SortableProvider,
-  closestCenter,
-  createSortable,
-} from "@thisbeyond/solid-dnd"
+import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
 import { useProviders } from "@/hooks/use-providers"
 import { showToast, Toast, toaster } from "@opencode-ai/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { clearWorkspaceTerminals } from "@/context/terminal"
+import { dropSessionCaches, pickSessionCacheEvictions } from "@/context/global-sync/session-cache"
+import {
+  clearSessionPrefetchInflight,
+  clearSessionPrefetch,
+  getSessionPrefetch,
+  isSessionPrefetchCurrent,
+  runSessionPrefetch,
+  setSessionPrefetch,
+  shouldSkipSessionPrefetch,
+} from "@/context/global-sync/session-prefetch"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
 import { Binary } from "@opencode-ai/util/binary"
 import { retry } from "@opencode-ai/util/retry"
 import { playSound, soundSrc } from "@/utils/sound"
 import { createAim } from "@/utils/aim"
+import { setNavigate } from "@/utils/notification-click"
 import { Worktree as WorktreeState } from "@/utils/worktree"
-import { agentColor } from "@/utils/agent"
+import { setSessionHandoff } from "@/pages/session/handoff"
 
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
 import { DialogSelectProvider } from "@/components/dialog-select-provider"
 import { DialogSelectServer } from "@/components/dialog-select-server"
-import { DialogSelectTheme } from "@/components/dialog-select-theme"
 import { DialogSettings } from "@/components/dialog-settings"
 import { useCommand, type CommandOption } from "@/context/command"
-import { ConstrainDragXAxis } from "@/utils/solid-dnd"
+import { ConstrainDragXAxis, getDraggableId } from "@/utils/solid-dnd"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { DialogEditProject } from "@/components/dialog-edit-project"
-import { DialogSwitchProject } from "@/components/dialog-switch-project"
+import { DebugBar } from "@/components/debug-bar"
 import { Titlebar } from "@/components/titlebar"
 import { useServer } from "@/context/server"
 import { useLanguage, type Locale } from "@/context/language"
 import {
-  childMapByParent,
   displayName,
+  effectiveWorkspaceOrder,
   errorMessage,
-  getDraggableId,
   latestRootSession,
-  sortSessions,
   sortedRootSessions,
-  syncWorkspaceOrder,
   workspaceKey,
 } from "./layout/helpers"
-import { collectOpenProjectDeepLinks, deepLinkEvent, drainPendingDeepLinks } from "./layout/deep-links"
+import {
+  collectNewSessionDeepLinks,
+  collectOpenProjectDeepLinks,
+  deepLinkEvent,
+  drainPendingDeepLinks,
+} from "./layout/deep-links"
 import { createInlineEditorController } from "./layout/inline-editor"
 import {
   LocalWorkspace,
@@ -97,11 +76,8 @@ import {
   WorkspaceDragOverlay,
   type WorkspaceSidebarContext,
 } from "./layout/sidebar-workspace"
-import { workspaceOpenState } from "./layout/sidebar-workspace-helpers"
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
-
-const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore, , ready] = persisted(
@@ -114,6 +90,7 @@ export default function Layout(props: ParentProps) {
       workspaceName: {} as Record<string, string>,
       workspaceBranchName: {} as Record<string, Record<string, string>>,
       workspaceExpanded: {} as Record<string, boolean>,
+      gettingStartedDismissed: false,
     }),
   )
 
@@ -132,6 +109,7 @@ export default function Layout(props: ParentProps) {
   const notification = useNotification()
   const permission = usePermission()
   const navigate = useNavigate()
+  setNavigate(navigate)
   const providers = useProviders()
   const dialog = useDialog()
   const command = useCommand()
@@ -155,49 +133,13 @@ export default function Layout(props: ParentProps) {
     hoverProject: undefined as string | undefined,
     scrollSessionKey: undefined as string | undefined,
     nav: undefined as HTMLElement | undefined,
+    sortNow: Date.now(),
+    sizing: false,
+    peek: undefined as LocalProject | undefined,
+    peeked: false,
   })
 
-  const [editor, setEditor] = createStore({
-    active: "" as string,
-    value: "",
-  })
-  const [findbar, setFindbar] = createStore({
-    open: false,
-    q: "",
-  })
-  let findInput: HTMLInputElement | undefined
-
-  const closeFindbar = () => {
-    setFindbar("open", false)
-  }
-
-  const openFindbar = (seed?: string) => {
-    const q = seed?.trim() || findbar.q
-    setFindbar({ open: true, q })
-    queueMicrotask(() => {
-      findInput?.focus()
-      findInput?.select()
-    })
-  }
-
-  const runFindbar = (dir: 1 | -1) => {
-    const q = findbar.q.trim()
-    if (!q) return
-    void platform.find?.(q, dir)
-  }
-
-  const findbarKeyDown = (event: KeyboardEvent) => {
-    if (event.key === "Escape") {
-      event.preventDefault()
-      event.stopPropagation()
-      closeFindbar()
-      return
-    }
-    if (event.key !== "Enter") return
-    event.preventDefault()
-    event.stopPropagation()
-    runFindbar(event.shiftKey ? -1 : 1)
-  }
+  const editor = createInlineEditorController()
   const setBusy = (directory: string, value: boolean) => {
     const key = workspaceKey(directory)
     if (value) {
@@ -213,12 +155,13 @@ export default function Layout(props: ParentProps) {
   }
   const isBusy = (directory: string) => !!state.busyWorkspaces[workspaceKey(directory)]
   const navLeave = { current: undefined as number | undefined }
-  const [sortNow, setSortNow] = createSignal(Date.now())
+  const sortNow = () => state.sortNow
+  let sizet: number | undefined
   let sortNowInterval: ReturnType<typeof setInterval> | undefined
   const sortNowTimeout = setTimeout(
     () => {
-      setSortNow(Date.now())
-      sortNowInterval = setInterval(() => setSortNow(Date.now()), 60_000)
+      setState("sortNow", Date.now())
+      sortNowInterval = setInterval(() => setState("sortNow", Date.now()), 60_000)
     },
     60_000 - (Date.now() % 60_000),
   )
@@ -226,7 +169,7 @@ export default function Layout(props: ParentProps) {
   const aim = createAim({
     enabled: () => !layout.sidebar.opened(),
     active: () => state.hoverProject,
-    el: () => state.nav,
+    el: () => state.nav?.querySelector<HTMLElement>("[data-component='sidebar-rail']") ?? state.nav,
     onActivate: (directory) => {
       globalSync.child(directory)
       setState("hoverProject", directory)
@@ -238,7 +181,21 @@ export default function Layout(props: ParentProps) {
     if (navLeave.current !== undefined) clearTimeout(navLeave.current)
     clearTimeout(sortNowTimeout)
     if (sortNowInterval) clearInterval(sortNowInterval)
+    if (sizet !== undefined) clearTimeout(sizet)
+    if (peekt !== undefined) clearTimeout(peekt)
     aim.reset()
+  })
+
+  onMount(() => {
+    const stop = () => setState("sizing", false)
+    window.addEventListener("pointerup", stop)
+    window.addEventListener("pointercancel", stop)
+    window.addEventListener("blur", stop)
+    onCleanup(() => {
+      window.removeEventListener("pointerup", stop)
+      window.removeEventListener("pointercancel", stop)
+      window.removeEventListener("blur", stop)
+    })
   })
 
   const sidebarHovering = createMemo(() => !layout.sidebar.opened() && state.hoverProject !== undefined)
@@ -251,10 +208,50 @@ export default function Layout(props: ParentProps) {
   const clearHoverProjectSoon = () => queueMicrotask(() => setHoverProject(undefined))
   const setHoverSession = (id: string | undefined) => setState("hoverSession", id)
 
+  const disarm = () => {
+    if (navLeave.current === undefined) return
+    clearTimeout(navLeave.current)
+    navLeave.current = undefined
+  }
+
+  const arm = () => {
+    if (layout.sidebar.opened()) return
+    if (state.hoverProject === undefined) return
+    disarm()
+    navLeave.current = window.setTimeout(() => {
+      navLeave.current = undefined
+      setHoverProject(undefined)
+      setState("hoverSession", undefined)
+    }, 300)
+  }
+
+  let peekt: number | undefined
+
   const hoverProjectData = createMemo(() => {
     const id = state.hoverProject
     if (!id) return
     return layout.projects.list().find((project) => project.worktree === id)
+  })
+
+  createEffect(() => {
+    const p = hoverProjectData()
+    if (p) {
+      if (peekt !== undefined) {
+        clearTimeout(peekt)
+        peekt = undefined
+      }
+      setState("peek", p)
+      setState("peeked", true)
+      return
+    }
+
+    setState("peeked", false)
+    if (state.peek === undefined) return
+    if (peekt !== undefined) clearTimeout(peekt)
+    peekt = window.setTimeout(() => {
+      peekt = undefined
+      setState("peek", undefined)
+    }, 180)
   })
 
   createEffect(() => {
@@ -281,99 +278,11 @@ export default function Layout(props: ParentProps) {
     setState("autoselect", false)
   })
 
-  const editorOpen = (id: string) => editor.active === id
-  const editorValue = () => editor.value
-
-  const openEditor = (id: string, value: string) => {
-    if (!id) return
-    setEditor({ active: id, value })
-  }
-
-  const closeEditor = () => setEditor({ active: "", value: "" })
-
-  const saveEditor = (callback: (next: string) => void) => {
-    const next = editor.value.trim()
-    if (!next) {
-      closeEditor()
-      return
-    }
-    closeEditor()
-    callback(next)
-  }
-
-  const editorKeyDown = (event: KeyboardEvent, callback: (next: string) => void) => {
-    if (event.key === "Enter") {
-      event.preventDefault()
-      saveEditor(callback)
-      return
-    }
-    if (event.key === "Escape") {
-      event.preventDefault()
-      closeEditor()
-    }
-  }
-
-  const InlineEditor = (props: {
-    id: string
-    value: Accessor<string>
-    onSave: (next: string) => void
-    class?: string
-    displayClass?: string
-    editing?: boolean
-    stopPropagation?: boolean
-    openOnDblClick?: boolean
-  }) => {
-    const isEditing = () => props.editing ?? editorOpen(props.id)
-    const stopEvents = () => props.stopPropagation ?? false
-    const allowDblClick = () => props.openOnDblClick ?? true
-    const stopPropagation = (event: Event) => {
-      if (!stopEvents()) return
-      event.stopPropagation()
-    }
-    const handleDblClick = (event: MouseEvent) => {
-      if (!allowDblClick()) return
-      stopPropagation(event)
-      openEditor(props.id, props.value())
-    }
-
-    return (
-      <Show
-        when={isEditing()}
-        fallback={
-          <span
-            class={props.displayClass ?? props.class}
-            onDblClick={handleDblClick}
-            onPointerDown={stopPropagation}
-            onMouseDown={stopPropagation}
-            onClick={stopPropagation}
-            onTouchStart={stopPropagation}
-          >
-            {props.value()}
-          </span>
-        }
-      >
-        <InlineInput
-          ref={(el) => {
-            requestAnimationFrame(() => el.focus())
-          }}
-          value={editorValue()}
-          class={props.class}
-          onInput={(event) => setEditor("value", event.currentTarget.value)}
-          onKeyDown={(event) => {
-            event.stopPropagation()
-            editorKeyDown(event, props.onSave)
-          }}
-          onBlur={() => closeEditor()}
-          onPointerDown={stopPropagation}
-          onClick={stopPropagation}
-          onDblClick={stopPropagation}
-          onMouseDown={stopPropagation}
-          onMouseUp={stopPropagation}
-          onTouchStart={stopPropagation}
-        />
-      </Show>
-    )
-  }
+  const editorOpen = editor.editorOpen
+  const openEditor = editor.openEditor
+  const closeEditor = editor.closeEditor
+  const setEditor = editor.setEditor
+  const InlineEditor = editor.InlineEditor
 
   const clearSidebarHoverState = () => {
     if (layout.sidebar.opened()) return
@@ -512,6 +421,17 @@ export default function Layout(props: ParentProps) {
           return
         }
 
+        if (
+          e.details?.type === "question.replied" ||
+          e.details?.type === "question.rejected" ||
+          e.details?.type === "permission.replied"
+        ) {
+          const props = e.details.properties as { sessionID: string }
+          const sessionKey = `${e.name}:${props.sessionID}`
+          dismissSessionAlert(sessionKey)
+          return
+        }
+
         if (e.details?.type !== "permission.asked" && e.details?.type !== "question.asked") return
         const title =
           e.details.type === "permission.asked"
@@ -636,21 +556,6 @@ export default function Layout(props: ParentProps) {
 
   createEffect(
     on(
-      () => ({ ready: pageReady(), project: currentProject() }),
-      (value) => {
-        if (!value.ready) return
-        const project = value.project
-        if (!project) return
-        const last = server.projects.last()
-        if (last === project.worktree) return
-        server.projects.touch(project.worktree)
-      },
-      { defer: true },
-    ),
-  )
-
-  createEffect(
-    on(
       () => ({ ready: pageReady(), layoutReady: layoutReady(), dir: params.dir, list: layout.projects.list() }),
       (value) => {
         if (!value.ready) return
@@ -707,32 +612,17 @@ export default function Layout(props: ParentProps) {
     return layout.sidebar.workspaces(project.worktree)()
   })
 
-  createEffect(() => {
-    if (!pageReady()) return
-    if (!layoutReady()) return
+  const visibleSessionDirs = createMemo(() => {
     const project = currentProject()
-    if (!project) return
+    if (!project) return [] as string[]
+    if (!workspaceSetting()) return [project.worktree]
 
-    const local = project.worktree
-    const dirs = [project.worktree, ...(project.sandboxes ?? [])]
-    const existing = store.workspaceOrder[project.worktree]
-    if (!existing) {
-      setStore("workspaceOrder", project.worktree, dirs)
-      return
-    }
-
-    const keep = existing.filter((d) => d !== local && dirs.includes(d))
-    const missing = dirs.filter((d) => d !== local && !existing.includes(d))
-    const merged = [local, ...missing, ...keep]
-
-    if (merged.length !== existing.length) {
-      setStore("workspaceOrder", project.worktree, merged)
-      return
-    }
-
-    if (merged.some((d, i) => d !== existing[i])) {
-      setStore("workspaceOrder", project.worktree, merged)
-    }
+    const activeDir = currentDir()
+    return workspaceIds(project).filter((directory) => {
+      const expanded = store.workspaceExpanded[directory] ?? directory === project.worktree
+      const active = directory === activeDir
+      return expanded || active
+    })
   })
 
   createEffect(() => {
@@ -749,25 +639,17 @@ export default function Layout(props: ParentProps) {
   })
 
   const currentSessions = createMemo(() => {
-    const project = currentProject()
-    if (!project) return [] as Session[]
     const now = Date.now()
-    if (workspaceSetting()) {
-      const dirs = workspaceIds(project)
-      const activeDir = currentDir()
-      const result: Session[] = []
-      for (const dir of dirs) {
-        const expanded = store.workspaceExpanded[dir] ?? dir === project.worktree
-        const active = dir === activeDir
-        if (!expanded && !active) continue
-        const [dirStore] = globalSync.child(dir, { bootstrap: true })
-        const dirSessions = sortedRootSessions(dirStore, now)
-        result.push(...dirSessions)
-      }
-      return result
+    const dirs = visibleSessionDirs()
+    if (dirs.length === 0) return [] as Session[]
+
+    const result: Session[] = []
+    for (const dir of dirs) {
+      const [dirStore] = globalSync.child(dir, { bootstrap: true })
+      const dirSessions = sortedRootSessions(dirStore, now)
+      result.push(...dirSessions)
     }
-    const [projectStore] = globalSync.child(project.worktree)
-    return sortedRootSessions(projectStore, now)
+    return result
   })
 
   type PrefetchQueue = {
@@ -778,41 +660,57 @@ export default function Layout(props: ParentProps) {
   }
 
   const prefetchChunk = 200
-  const prefetchConcurrency = 1
-  const prefetchPendingLimit = 6
+  const prefetchConcurrency = 2
+  const prefetchPendingLimit = 10
+  const span = 4
   const prefetchToken = { value: 0 }
   const prefetchQueues = new Map<string, PrefetchQueue>()
 
   const PREFETCH_MAX_SESSIONS_PER_DIR = 10
-  const prefetchedByDir = new Map<string, Map<string, true>>()
+  const prefetchedByDir = new Map<string, Set<string>>()
 
   const lruFor = (directory: string) => {
     const existing = prefetchedByDir.get(directory)
     if (existing) return existing
-    const created = new Map<string, true>()
+    const created = new Set<string>()
     prefetchedByDir.set(directory, created)
     return created
   }
 
   const markPrefetched = (directory: string, sessionID: string) => {
     const lru = lruFor(directory)
-    if (lru.has(sessionID)) lru.delete(sessionID)
-    lru.set(sessionID, true)
-    while (lru.size > PREFETCH_MAX_SESSIONS_PER_DIR) {
-      const oldest = lru.keys().next().value as string | undefined
-      if (!oldest) return
-      lru.delete(oldest)
-    }
+    return pickSessionCacheEvictions({
+      seen: lru,
+      keep: sessionID,
+      limit: PREFETCH_MAX_SESSIONS_PER_DIR,
+      preserve: directory === params.dir && params.id ? [params.id] : undefined,
+    })
   }
+
+  createEffect(() => {
+    const active = new Set(visibleSessionDirs())
+    for (const directory of [...prefetchedByDir.keys()]) {
+      if (active.has(directory)) continue
+      prefetchedByDir.delete(directory)
+    }
+  })
 
   createEffect(() => {
     params.dir
     globalSDK.url
 
     prefetchToken.value += 1
-    for (const q of prefetchQueues.values()) {
+    clearSessionPrefetchInflight()
+    prefetchQueues.clear()
+  })
+
+  createEffect(() => {
+    const visible = new Set(visibleSessionDirs())
+    for (const [directory, q] of prefetchQueues) {
+      if (visible.has(directory)) continue
       q.pending.length = 0
       q.pendingSet.clear()
+      if (q.running === 0) prefetchQueues.delete(directory)
     }
   })
 
@@ -848,35 +746,69 @@ export default function Layout(props: ParentProps) {
   async function prefetchMessages(directory: string, sessionID: string, token: number) {
     const [store, setStore] = globalSync.child(directory, { bootstrap: false })
 
-    return retry(() => globalSDK.client.session.messages({ directory, sessionID, limit: prefetchChunk }))
-      .then((messages) => {
-        if (prefetchToken.value !== token) return
+    return runSessionPrefetch({
+      directory,
+      sessionID,
+      task: (rev) =>
+        retry(() => globalSDK.client.session.messages({ directory, sessionID, limit: prefetchChunk }))
+          .then((messages) => {
+            if (prefetchToken.value !== token) return
+            if (!isSessionPrefetchCurrent(directory, sessionID, rev)) return
 
-        const items = (messages.data ?? []).filter((x) => !!x?.info?.id)
-        const next = items.map((x) => x.info).filter((m): m is Message => !!m?.id)
-        const sorted = mergeByID([], next)
+            const items = (messages.data ?? []).filter((x) => !!x?.info?.id)
+            const next = items.map((x) => x.info).filter((m): m is Message => !!m?.id)
+            const sorted = mergeByID([], next)
+            const stale = markPrefetched(directory, sessionID)
+            const cursor = messages.response.headers.get("x-next-cursor") ?? undefined
+            const meta = {
+              limit: sorted.length,
+              cursor,
+              complete: !cursor,
+              at: Date.now(),
+            }
 
-        const current = store.message[sessionID] ?? []
-        const merged = mergeByID(
-          current.filter((item): item is Message => !!item?.id),
-          sorted,
-        )
+            if (stale.length > 0) {
+              clearSessionPrefetch(directory, stale)
+              for (const id of stale) {
+                globalSync.todo.set(id, undefined)
+              }
+            }
 
-        batch(() => {
-          setStore("message", sessionID, reconcile(merged, { key: "id" }))
-
-          for (const message of items) {
-            const currentParts = store.part[message.info.id] ?? []
-            const mergedParts = mergeByID(
-              currentParts.filter((item): item is (typeof currentParts)[number] & { id: string } => !!item?.id),
-              message.parts.filter((item): item is (typeof message.parts)[number] & { id: string } => !!item?.id),
+            const current = store.message[sessionID] ?? []
+            const merged = mergeByID(
+              current.filter((item): item is Message => !!item?.id),
+              sorted,
             )
 
-            setStore("part", message.info.id, reconcile(mergedParts, { key: "id" }))
-          }
-        })
-      })
-      .catch(() => undefined)
+            if (!isSessionPrefetchCurrent(directory, sessionID, rev)) return
+
+            batch(() => {
+              if (stale.length > 0) {
+                setStore(
+                  produce((draft) => {
+                    dropSessionCaches(draft, stale)
+                  }),
+                )
+              }
+
+              setStore("message", sessionID, reconcile(merged, { key: "id" }))
+              setSessionPrefetch({ directory, sessionID, ...meta })
+
+              for (const message of items) {
+                const currentParts = store.part[message.info.id] ?? []
+                const mergedParts = mergeByID(
+                  currentParts.filter((item): item is (typeof currentParts)[number] & { id: string } => !!item?.id),
+                  message.parts.filter((item): item is (typeof message.parts)[number] & { id: string } => !!item?.id),
+                )
+
+                setStore("part", message.info.id, reconcile(mergedParts, { key: "id" }))
+              }
+            })
+
+            return meta
+          })
+          .catch(() => undefined),
+    })
   }
 
   const pumpPrefetch = (directory: string) => {
@@ -904,17 +836,31 @@ export default function Layout(props: ParentProps) {
     if (!directory) return
 
     const [store] = globalSync.child(directory, { bootstrap: false })
-    const cached = untrack(() => store.message[session.id] !== undefined)
+    const cached = untrack(() => {
+      const info = getSessionPrefetch(directory, session.id)
+      return shouldSkipSessionPrefetch({
+        message: store.message[session.id] !== undefined,
+        info,
+        chunk: prefetchChunk,
+      })
+    })
     if (cached) return
 
     const q = queueFor(directory)
     if (q.inflight.has(session.id)) return
-    if (q.pendingSet.has(session.id)) return
+    if (q.pendingSet.has(session.id)) {
+      if (priority !== "high") return
+      const index = q.pending.indexOf(session.id)
+      if (index > 0) {
+        q.pending.splice(index, 1)
+        q.pending.unshift(session.id)
+      }
+      return
+    }
 
     const lru = lruFor(directory)
     const known = lru.has(session.id)
     if (!known && lru.size >= PREFETCH_MAX_SESSIONS_PER_DIR && priority !== "high") return
-    markPrefetched(directory, session.id)
 
     if (priority === "high") q.pending.unshift(session.id)
     if (priority !== "high") q.pending.push(session.id)
@@ -929,27 +875,29 @@ export default function Layout(props: ParentProps) {
     pumpPrefetch(directory)
   }
 
+  const warm = (sessions: Session[], index: number) => {
+    for (let offset = 1; offset <= span; offset++) {
+      const next = sessions[index + offset]
+      if (next) prefetchSession(next, offset === 1 ? "high" : "low")
+
+      const prev = sessions[index - offset]
+      if (prev) prefetchSession(prev, offset === 1 ? "high" : "low")
+    }
+  }
+
   createEffect(() => {
     const sessions = currentSessions()
-    const id = params.id
+    if (sessions.length === 0) return
 
-    if (!id) {
-      const first = sessions[0]
-      if (first) prefetchSession(first)
-
-      const second = sessions[1]
-      if (second) prefetchSession(second)
-      return
-    }
-
-    const index = sessions.findIndex((s) => s.id === id)
+    const index = params.id ? sessions.findIndex((s) => s.id === params.id) : 0
     if (index === -1) return
 
-    const next = sessions[index + 1]
-    if (next) prefetchSession(next)
+    if (!params.id) {
+      const first = sessions[index]
+      if (first) prefetchSession(first, "high")
+    }
 
-    const prev = sessions[index - 1]
-    if (prev) prefetchSession(prev)
+    warm(sessions, index)
   })
 
   function navigateSessionByOffset(offset: number) {
@@ -968,21 +916,10 @@ export default function Layout(props: ParentProps) {
     const session = sessions[targetIndex]
     if (!session) return
 
-    const next = sessions[(targetIndex + 1) % sessions.length]
-    const prev = sessions[(targetIndex - 1 + sessions.length) % sessions.length]
-
-    if (offset > 0) {
-      if (next) prefetchSession(next, "high")
-      if (prev) prefetchSession(prev)
-    }
-
-    if (offset < 0) {
-      if (prev) prefetchSession(prev, "high")
-      if (next) prefetchSession(next)
-    }
+    prefetchSession(session, "high")
+    warm(sessions, targetIndex)
 
     navigateToSession(session)
-    queueMicrotask(() => scrollToSession(session.id, `${session.directory}:${session.id}`))
   }
 
   function navigateSessionByUnseen(offset: number) {
@@ -1002,22 +939,9 @@ export default function Layout(props: ParentProps) {
       if (notification.session.unseenCount(session.id) === 0) continue
 
       prefetchSession(session, "high")
-
-      const next = sessions[(index + 1) % sessions.length]
-      const prev = sessions[(index - 1 + sessions.length) % sessions.length]
-
-      if (offset > 0) {
-        if (next) prefetchSession(next, "high")
-        if (prev) prefetchSession(prev)
-      }
-
-      if (offset < 0) {
-        if (prev) prefetchSession(prev, "high")
-        if (next) prefetchSession(next)
-      }
+      warm(sessions, index)
 
       navigateToSession(session)
-      queueMicrotask(() => scrollToSession(session.id, `${session.directory}:${session.id}`))
       return
     }
   }
@@ -1048,89 +972,6 @@ export default function Layout(props: ParentProps) {
     }
   }
 
-  async function generateSessionTitle(session: Session) {
-    const [, setStore] = globalSync.child(session.directory)
-    try {
-      const result = await globalSDK.client.session.generateTitle({ sessionID: session.id })
-      if (result.error) {
-        throw result.error
-      }
-      const updated = result.data
-      setStore(
-        produce((draft) => {
-          const match = Binary.search(draft.session, session.id, (s) => s.id)
-          if (match.found) {
-            draft.session[match.index].title = updated.title
-          }
-        }),
-      )
-      showToast({
-        title: language.t("toast.session.generateTitle.success.title"),
-        description: updated.title,
-      })
-    } catch (err) {
-      showToast({
-        title: language.t("toast.session.generateTitle.failed.title"),
-        description: errorMessage(err),
-      })
-    }
-  }
-
-  const collectRemovedSessionIDs = (sessions: Session[], sessionID: string) => {
-    const removed = new Set<string>([sessionID])
-    const byParent = new Map<string, string[]>()
-    for (const item of sessions) {
-      const parentID = item.parentID
-      if (!parentID) continue
-      const existing = byParent.get(parentID)
-      if (existing) {
-        existing.push(item.id)
-        continue
-      }
-      byParent.set(parentID, [item.id])
-    }
-    const stack = [sessionID]
-    while (stack.length) {
-      const parentID = stack.pop()
-      if (!parentID) continue
-      const children = byParent.get(parentID)
-      if (!children) continue
-      for (const child of children) {
-        if (removed.has(child)) continue
-        removed.add(child)
-        stack.push(child)
-      }
-    }
-    return removed
-  }
-
-  async function deleteSession(session: Session) {
-    const result = await globalSDK.client.session
-      .delete({ directory: session.directory, sessionID: session.id })
-      .then((x) => x.data)
-      .catch((err) => {
-        showToast({
-          title: language.t("session.delete.failed.title"),
-          description: errorMessage(err),
-        })
-        return false
-      })
-    if (!result) return false
-
-    const [, setStore] = globalSync.child(session.directory)
-    setStore(
-      produce((draft) => {
-        const removed = collectRemovedSessionIDs(draft.session, session.id)
-        draft.session = draft.session.filter((item) => !removed.has(item.id))
-      }),
-    )
-
-    if (params.id === session.id && params.dir === base64Encode(session.directory)) {
-      navigateWithSidebarReset(`/${base64Encode(session.directory)}/session`)
-    }
-    return true
-  }
-
   command.register("layout", () => {
     const commands: CommandOption[] = [
       {
@@ -1141,30 +982,11 @@ export default function Layout(props: ParentProps) {
         onSelect: () => layout.sidebar.toggle(),
       },
       {
-        id: "page.find",
-        title: language.t("command.page.find"),
-        description: language.t("command.page.find.description"),
-        category: language.t("command.category.view"),
-        keybind: "mod+f",
-        disabled: !platform.find,
-        onSelect: () => openFindbar(window.getSelection?.()?.toString().trim() || ""),
-      },
-      {
         id: "project.open",
         title: language.t("command.project.open"),
         category: language.t("command.category.project"),
         keybind: "mod+o",
         onSelect: () => chooseProject(),
-      },
-      {
-        id: "project.switch",
-        title: language.t("command.project.switch"),
-        category: language.t("command.category.project"),
-        keybind: "mod+t",
-        disabled: layout.projects.list().length === 0,
-        onSelect: () => {
-          dialog.show(() => <DialogSwitchProject onSelect={navigateToProject} />)
-        },
       },
       {
         id: "provider.connect",
@@ -1184,85 +1006,6 @@ export default function Layout(props: ParentProps) {
         category: language.t("command.category.settings"),
         keybind: "mod+comma",
         onSelect: () => openSettings(),
-      },
-      {
-        id: "project.openInFinder",
-        title:
-          platform.os === "macos"
-            ? "Open in Finder"
-            : platform.os === "windows"
-              ? "Open in Explorer"
-              : "Open in File Manager",
-        category: language.t("command.category.project"),
-        disabled: !params.dir || !platform.openInFinder,
-        onSelect: async () => {
-          const directory = params.dir ? decode64(params.dir) : null
-          if (directory && platform.openInFinder) {
-            await platform.openInFinder(directory)
-          }
-        },
-      },
-      {
-        id: "project.openInVscode",
-        title: "Open in VSCode",
-        category: language.t("command.category.project"),
-        disabled: !params.dir || !platform.openInVscode,
-        onSelect: async () => {
-          const directory = params.dir ? decode64(params.dir) : null
-          if (directory && platform.openInVscode) {
-            await platform.openInVscode(directory)
-          }
-        },
-      },
-      {
-        id: "project.openInCursor",
-        title: "Open in Cursor",
-        category: language.t("command.category.project"),
-        disabled: !params.dir || !platform.openInEditor,
-        onSelect: async () => {
-          const directory = params.dir ? decode64(params.dir) : null
-          if (directory && platform.openInEditor) {
-            await platform.openInEditor("cursor", directory)
-          }
-        },
-      },
-      {
-        id: "project.openInSublime",
-        title: "Open in Sublime Text",
-        category: language.t("command.category.project"),
-        disabled: !params.dir || !platform.openInEditor,
-        onSelect: async () => {
-          const directory = params.dir ? decode64(params.dir) : null
-          if (directory && platform.openInEditor) {
-            await platform.openInEditor("sublime", directory)
-          }
-        },
-      },
-      {
-        id: "project.openInZed",
-        title: "Open in Zed",
-        category: language.t("command.category.project"),
-        disabled: !params.dir || !platform.openInEditor,
-        onSelect: async () => {
-          const directory = params.dir ? decode64(params.dir) : null
-          if (directory && platform.openInEditor) {
-            await platform.openInEditor("zed", directory)
-          }
-        },
-      },
-      {
-        id: "project.openInEditor",
-        title: "Open in Editor",
-        category: language.t("command.category.project"),
-        disabled: !params.dir || !platform.openInEditor,
-        onSelect: async () => {
-          const directory = params.dir ? decode64(params.dir) : null
-          if (directory && platform.openInEditor && platform.getDefaultEditor) {
-            const defaultEditor = await platform.getDefaultEditor()
-            const editor = defaultEditor || "vscode"
-            await platform.openInEditor(editor, directory)
-          }
-        },
       },
       {
         id: "session.previous",
@@ -1345,20 +1088,41 @@ export default function Layout(props: ParentProps) {
         keybind: "mod+shift+t",
         onSelect: () => cycleTheme(1),
       },
-      {
-        id: "theme.select",
-        title: language.t("command.theme.select"),
-        category: language.t("command.category.theme"),
-        onSelect: () => dialog.show(() => <DialogSelectTheme />),
-      },
-      {
-        id: "theme.scheme.cycle",
-        title: language.t("command.theme.scheme.cycle"),
-        category: language.t("command.category.theme"),
-        keybind: "mod+shift+s",
-        onSelect: () => cycleColorScheme(1),
-      },
     ]
+
+    for (const [id, definition] of availableThemeEntries()) {
+      commands.push({
+        id: `theme.set.${id}`,
+        title: language.t("command.theme.set", { theme: definition.name ?? id }),
+        category: language.t("command.category.theme"),
+        onSelect: () => theme.commitPreview(),
+        onHighlight: () => {
+          theme.previewTheme(id)
+          return () => theme.cancelPreview()
+        },
+      })
+    }
+
+    commands.push({
+      id: "theme.scheme.cycle",
+      title: language.t("command.theme.scheme.cycle"),
+      category: language.t("command.category.theme"),
+      keybind: "mod+shift+s",
+      onSelect: () => cycleColorScheme(1),
+    })
+
+    for (const scheme of colorSchemeOrder) {
+      commands.push({
+        id: `theme.scheme.${scheme}`,
+        title: language.t("command.theme.scheme.set", { scheme: colorSchemeLabel(scheme) }),
+        category: language.t("command.category.theme"),
+        onSelect: () => theme.commitPreview(),
+        onHighlight: () => {
+          theme.previewColorScheme(scheme)
+          return () => theme.cancelPreview()
+        },
+      })
+    }
 
     commands.push({
       id: "language.cycle",
@@ -1410,34 +1174,96 @@ export default function Layout(props: ParentProps) {
     return meta?.worktree ?? directory
   }
 
+  function activeProjectRoot(directory: string) {
+    return currentProject()?.worktree ?? projectRoot(directory)
+  }
+
+  function touchProjectRoute() {
+    const root = currentProject()?.worktree
+    if (!root) return
+    if (server.projects.last() !== root) server.projects.touch(root)
+    return root
+  }
+
+  function rememberSessionRoute(directory: string, id: string, root = activeProjectRoot(directory)) {
+    setStore("lastProjectSession", root, { directory, id, at: Date.now() })
+    return root
+  }
+
+  function clearLastProjectSession(root: string) {
+    if (!store.lastProjectSession[root]) return
+    setStore(
+      "lastProjectSession",
+      produce((draft) => {
+        delete draft[root]
+      }),
+    )
+  }
+
+  function syncSessionRoute(directory: string, id: string, root = activeProjectRoot(directory)) {
+    rememberSessionRoute(directory, id, root)
+    notification.session.markViewed(id)
+    const expanded = untrack(() => store.workspaceExpanded[directory])
+    if (expanded === false) {
+      setStore("workspaceExpanded", directory, true)
+    }
+    requestAnimationFrame(() => scrollToSession(id, `${directory}:${id}`))
+    return root
+  }
+
   async function navigateToProject(directory: string | undefined) {
     if (!directory) return
     const root = projectRoot(directory)
     server.projects.touch(root)
     const project = layout.projects.list().find((item) => item.worktree === root)
-    const dirs = Array.from(new Set([root, ...(store.workspaceOrder[root] ?? []), ...(project?.sandboxes ?? [])]))
+    let dirs = project
+      ? effectiveWorkspaceOrder(root, [root, ...(project.sandboxes ?? [])], store.workspaceOrder[root])
+      : [root]
+    const canOpen = (value: string | undefined) => {
+      if (!value) return false
+      return dirs.some((item) => workspaceKey(item) === workspaceKey(value))
+    }
+    const refreshDirs = async (target?: string) => {
+      if (!target || target === root || canOpen(target)) return canOpen(target)
+      const listed = await globalSDK.client.worktree
+        .list({ directory: root })
+        .then((x) => x.data ?? [])
+        .catch(() => [] as string[])
+      dirs = effectiveWorkspaceOrder(root, [root, ...listed], store.workspaceOrder[root])
+      return canOpen(target)
+    }
     const openSession = async (target: { directory: string; id: string }) => {
+      if (!canOpen(target.directory)) return false
+      const [data] = globalSync.child(target.directory, { bootstrap: false })
+      if (data.session.some((item) => item.id === target.id)) {
+        setStore("lastProjectSession", root, { directory: target.directory, id: target.id, at: Date.now() })
+        navigateWithSidebarReset(`/${base64Encode(target.directory)}/session/${target.id}`)
+        return true
+      }
       const resolved = await globalSDK.client.session
         .get({ sessionID: target.id })
         .then((x) => x.data)
         .catch(() => undefined)
-      const next = resolved?.directory ? resolved : target
-      setStore("lastProjectSession", root, { directory: next.directory, id: next.id, at: Date.now() })
-      navigateWithSidebarReset(`/${base64Encode(next.directory)}/session/${next.id}`)
+      if (!resolved?.directory) return false
+      if (!canOpen(resolved.directory)) return false
+      setStore("lastProjectSession", root, { directory: resolved.directory, id: resolved.id, at: Date.now() })
+      navigateWithSidebarReset(`/${base64Encode(resolved.directory)}/session/${resolved.id}`)
+      return true
     }
 
     const projectSession = store.lastProjectSession[root]
     if (projectSession?.id) {
-      await openSession(projectSession)
-      return
+      await refreshDirs(projectSession.directory)
+      const opened = await openSession(projectSession)
+      if (opened) return
+      clearLastProjectSession(root)
     }
 
     const latest = latestRootSession(
       dirs.map((item) => globalSync.child(item, { bootstrap: false })[0]),
       Date.now(),
     )
-    if (latest) {
-      await openSession(latest)
+    if (latest && (await openSession(latest))) {
       return
     }
 
@@ -1453,8 +1279,7 @@ export default function Layout(props: ParentProps) {
       ),
       Date.now(),
     )
-    if (fetched) {
-      await openSession(fetched)
+    if (fetched && (await openSession(fetched))) {
       return
     }
 
@@ -1471,31 +1296,22 @@ export default function Layout(props: ParentProps) {
     if (navigate) navigateToProject(directory)
   }
 
-  const deepLinkEvent = "opencode:deep-link"
-
-  const parseDeepLink = (input: string) => {
-    if (!input.startsWith("opencode://")) return
-    const url = new URL(input)
-    if (url.hostname !== "open-project") return
-    const directory = url.searchParams.get("directory")
-    if (!directory) return
-    return directory
-  }
-
   const handleDeepLinks = (urls: string[]) => {
     if (!server.isLocal()) return
-    for (const input of urls) {
-      const directory = parseDeepLink(input)
-      if (!directory) continue
+
+    for (const directory of collectOpenProjectDeepLinks(urls)) {
       openProject(directory)
     }
-  }
 
-  const drainDeepLinks = () => {
-    const pending = window.__OPENCODE__?.deepLinks ?? []
-    if (pending.length === 0) return
-    if (window.__OPENCODE__) window.__OPENCODE__.deepLinks = []
-    handleDeepLinks(pending)
+    for (const link of collectNewSessionDeepLinks(urls)) {
+      openProject(link.directory, false)
+      const slug = base64Encode(link.directory)
+      if (link.prompt) {
+        setSessionHandoff(slug, { prompt: link.prompt })
+      }
+      const href = link.prompt ? `/${slug}/session?prompt=${encodeURIComponent(link.prompt)}` : `/${slug}/session`
+      navigateWithSidebarReset(href)
+    }
   }
 
   onMount(() => {
@@ -1506,63 +1322,10 @@ export default function Layout(props: ParentProps) {
       handleDeepLinks(urls)
     }
 
-    drainDeepLinks()
+    handleDeepLinks(drainPendingDeepLinks(window))
     window.addEventListener(deepLinkEvent, handler as EventListener)
     onCleanup(() => window.removeEventListener(deepLinkEvent, handler as EventListener))
   })
-
-  // Folder drag-drop handling (desktop only - Tauri native drag events)
-  const [folderDragging, setFolderDragging] = createSignal(false)
-  const [fileDragging, setFileDragging] = createSignal(false)
-
-  onMount(() => {
-    if (platform.platform !== "desktop") return
-
-    const dragDropEventName = "opencode:drag-drop"
-
-    const handler = async (event: Event) => {
-      const detail = (event as CustomEvent<{ type: string; paths: string[]; position: { x: number; y: number } }>)
-        .detail
-      if (!detail) return
-
-      if (detail.type === "enter") {
-        if (detail.paths.length > 0 && platform.filterDirectories) {
-          const dirs = await platform.filterDirectories(detail.paths).catch((): string[] => [])
-          const hasFiles = dirs.length < detail.paths.length
-          setFolderDragging(dirs.length > 0)
-          setFileDragging(hasFiles)
-        }
-      } else if (detail.type === "leave") {
-        setFolderDragging(false)
-        setFileDragging(false)
-      } else if (detail.type === "drop") {
-        setFolderDragging(false)
-        setFileDragging(false)
-        if (detail.paths.length === 0 || !platform.filterDirectories) return
-
-        const dirs = await platform.filterDirectories(detail.paths).catch((): string[] => [])
-        const files = detail.paths.filter((p) => !dirs.includes(p))
-
-        // Open directories as projects
-        if (dirs.length > 0) {
-          for (const dir of dirs) {
-            openProject(dir, false)
-          }
-          navigateToProject(dirs[0])
-        }
-
-        // Forward files as @mention attachments
-        if (files.length > 0) {
-          window.dispatchEvent(new CustomEvent("opencode:file-drop", { detail: { paths: files } }))
-        }
-      }
-    }
-
-    window.addEventListener(dragDropEventName, handler as EventListener)
-    onCleanup(() => window.removeEventListener(dragDropEventName, handler as EventListener))
-  })
-
-  const displayName = (project: LocalProject) => project.name || getFilename(project.worktree)
 
   async function renameProject(project: LocalProject, next: string) {
     const current = displayName(project)
@@ -1584,12 +1347,41 @@ export default function Layout(props: ParentProps) {
   }
 
   function closeProject(directory: string) {
-    const index = layout.projects.list().findIndex((x) => x.worktree === directory)
-    const next = layout.projects.list()[index + 1]
+    const list = layout.projects.list()
+    const index = list.findIndex((x) => x.worktree === directory)
+    const active = currentProject()?.worktree === directory
+    if (index === -1) return
+    const next = list[index + 1]
+
+    if (!active) {
+      layout.projects.close(directory)
+      return
+    }
+
+    if (!next) {
+      layout.projects.close(directory)
+      navigate("/")
+      return
+    }
+
+    navigateWithSidebarReset(`/${base64Encode(next.worktree)}/session`)
     layout.projects.close(directory)
-    if (next) navigateToProject(next.worktree)
-    else navigate("/")
+    queueMicrotask(() => {
+      void navigateToProject(next.worktree)
+    })
   }
+
+  function toggleProjectWorkspaces(project: LocalProject) {
+    const enabled = layout.sidebar.workspaces(project.worktree)()
+    if (enabled) {
+      layout.sidebar.toggleWorkspaces(project.worktree)
+      return
+    }
+    if (project.vcs !== "git") return
+    layout.sidebar.toggleWorkspaces(project.worktree)
+  }
+
+  const showEditProjectDialog = (project: LocalProject) => dialog.show(() => <DialogEditProject project={project} />)
 
   async function chooseProject() {
     function resolve(result: string | string[] | null) {
@@ -1617,17 +1409,16 @@ export default function Layout(props: ParentProps) {
     }
   }
 
-  const errorMessage = (err: unknown) => {
-    if (err && typeof err === "object" && "data" in err) {
-      const data = (err as { data?: { message?: string } }).data
-      if (data?.message) return data.message
-    }
-    if (err instanceof Error) return err.message
-    return language.t("common.requestFailed")
-  }
-
-  const deleteWorkspace = async (root: string, directory: string) => {
+  const deleteWorkspace = async (root: string, directory: string, leaveDeletedWorkspace = false) => {
     if (directory === root) return
+
+    const current = currentDir()
+    const currentKey = workspaceKey(current)
+    const deletedKey = workspaceKey(directory)
+    const shouldLeave = leaveDeletedWorkspace || (!!params.dir && currentKey === deletedKey)
+    if (!leaveDeletedWorkspace && shouldLeave) {
+      navigateWithSidebarReset(`/${base64Encode(root)}/session`)
+    }
 
     setBusy(directory, true)
 
@@ -1637,7 +1428,7 @@ export default function Layout(props: ParentProps) {
       .catch((err) => {
         showToast({
           title: language.t("workspace.delete.failed.title"),
-          description: errorMessage(err),
+          description: errorMessage(err, language.t("common.requestFailed")),
         })
         return false
       })
@@ -1645,6 +1436,10 @@ export default function Layout(props: ParentProps) {
     setBusy(directory, false)
 
     if (!result) return
+
+    if (workspaceKey(store.lastProjectSession[root]?.directory ?? "") === workspaceKey(directory)) {
+      clearLastProjectSession(root)
+    }
 
     globalSync.set(
       "project",
@@ -1659,8 +1454,18 @@ export default function Layout(props: ParentProps) {
     layout.projects.close(directory)
     layout.projects.open(root)
 
-    if (params.dir && currentDir() === directory) {
-      navigateToProject(root)
+    if (shouldLeave) return
+
+    const nextCurrent = currentDir()
+    const nextKey = workspaceKey(nextCurrent)
+    const project = layout.projects.list().find((item) => item.worktree === root)
+    const dirs = project
+      ? effectiveWorkspaceOrder(root, [root, ...(project.sandboxes ?? [])], store.workspaceOrder[root])
+      : [root]
+    const valid = dirs.some((item) => workspaceKey(item) === nextKey)
+
+    if (params.dir && projectRoot(nextCurrent) === root && !valid) {
+      navigateWithSidebarReset(`/${base64Encode(root)}/session`)
     }
   }
 
@@ -1693,7 +1498,7 @@ export default function Layout(props: ParentProps) {
       .catch((err) => {
         showToast({
           title: language.t("workspace.reset.failed.title"),
-          description: errorMessage(err),
+          description: errorMessage(err, language.t("common.requestFailed")),
         })
         return false
       })
@@ -1763,8 +1568,12 @@ export default function Layout(props: ParentProps) {
     })
 
     const handleDelete = () => {
+      const leaveDeletedWorkspace = !!params.dir && workspaceKey(currentDir()) === workspaceKey(props.directory)
+      if (leaveDeletedWorkspace) {
+        navigateWithSidebarReset(`/${base64Encode(props.root)}/session`)
+      }
       dialog.close()
-      void deleteWorkspace(props.root, props.directory)
+      void deleteWorkspace(props.root, props.directory, leaveDeletedWorkspace)
     }
 
     const description = () => {
@@ -1872,238 +1681,42 @@ export default function Layout(props: ParentProps) {
     )
   }
 
-  function DialogDeleteSession(props: { session: Session; onDeleted?: () => void }) {
-    const handleDelete = async () => {
-      const ok = await deleteSession(props.session)
-      if (!ok) return
-      props.onDeleted?.()
-      dialog.close()
-    }
-
-    return (
-      <Dialog title={language.t("session.delete.title")} fit>
-        <div class="flex flex-col gap-4 pl-6 pr-2.5 pb-3">
-          <div class="flex flex-col gap-1">
-            <span class="text-14-regular text-text-strong">
-              {language.t("session.delete.confirm", { name: props.session.title })}
-            </span>
-          </div>
-          <div class="flex justify-end gap-2">
-            <Button variant="ghost" size="large" onClick={() => dialog.close()}>
-              {language.t("common.cancel")}
-            </Button>
-            <Button variant="primary" size="large" onClick={handleDelete}>
-              {language.t("session.delete.button")}
-            </Button>
-          </div>
-        </div>
-      </Dialog>
-    )
-  }
-
-  function DialogArchivedSessions(props: { project: LocalProject }) {
-    const [state, setState] = createStore({
-      status: "loading" as "loading" | "ready" | "error",
-      sessions: [] as Session[],
-    })
-
-    const load = async () => {
-      const dirs = [props.project.worktree, ...(props.project.sandboxes ?? [])]
-      const rows = await Promise.all(
-        dirs.map((directory) =>
-          globalSDK.client.session
-            .list({ directory, roots: true })
-            .then((x) => x.data ?? [])
-            .catch(() => []),
-        ),
-      )
-      const sessions = rows
-        .flatMap((list) => list)
-        .filter((item) => item.time.archived !== undefined)
-        .toSorted(sortSessions(Date.now()))
-      setState({ status: "ready", sessions })
-    }
-
-    onMount(() => {
-      load().catch(() => {
-        setState("status", "error")
-      })
-    })
-
-    const removeDeleted = (sessionID: string) => {
-      setState("sessions", (list) => list.filter((item) => item.id !== sessionID))
-    }
-
-    const openSession = (session: Session) => {
-      dialog.close()
-      navigateWithSidebarReset(`/${base64Encode(session.directory)}/session/${session.id}`)
-    }
-
-    const directoryLabel = (session: Session) => {
-      if (session.directory === props.project.worktree) return language.t("workspace.type.local")
-      const [workspace] = globalSync.child(session.directory, { bootstrap: false })
-      return workspaceLabel(session.directory, workspace.vcs?.branch, props.project.id)
-    }
-
-    const restoreSession = async (session: Session) => {
-      try {
-        await globalSDK.client.session.update({
-          directory: session.directory,
-          sessionID: session.id,
-          time: { archived: null },
-        })
-        const [, setChildStore] = globalSync.child(session.directory)
-        setChildStore(
-          produce((draft) => {
-            draft.session.push(session)
-            draft.session.sort((a, b) => b.time.updated - a.time.updated)
-          }),
-        )
-        removeDeleted(session.id)
-      } catch (err) {
-        showToast({
-          title: language.t("session.restore.failed.title"),
-          description: errorMessage(err),
-        })
-      }
-    }
-
-    return (
-      <Dialog title={language.t("sidebar.project.archivedSessions")} fit>
-        <div class="flex flex-col gap-3 pl-6 pr-2.5 pb-3 min-w-[32rem] max-w-[40rem]">
-          <Show when={state.status === "loading"}>
-            <div class="flex items-center gap-2 text-12-regular text-text-weak">
-              <Spinner class="size-4" />
-              {language.t("prompt.loading")}
-            </div>
-          </Show>
-          <Show when={state.status === "error"}>
-            <div class="text-12-regular text-text-weak">{language.t("common.requestFailed")}</div>
-          </Show>
-          <Show when={state.status === "ready" && state.sessions.length === 0}>
-            <div class="text-12-regular text-text-weak">{language.t("sidebar.project.noArchivedSessions")}</div>
-          </Show>
-          <Show when={state.status === "ready" && state.sessions.length > 0}>
-            <div class="max-h-80 overflow-y-auto flex flex-col gap-1 pr-1">
-              <For each={state.sessions}>
-                {(session) => {
-                  const [confirming, setConfirming] = createSignal(false)
-                  let timer: ReturnType<typeof setTimeout> | undefined
-
-                  const startConfirm = () => {
-                    setConfirming(true)
-                    clearTimeout(timer)
-                    timer = setTimeout(() => setConfirming(false), 3000)
-                  }
-
-                  const handleDelete = async () => {
-                    clearTimeout(timer)
-                    const ok = await deleteSession(session)
-                    if (!ok) {
-                      setConfirming(false)
-                      return
-                    }
-                    removeDeleted(session.id)
-                  }
-
-                  onCleanup(() => clearTimeout(timer))
-
-                  return (
-                    <div class="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-surface-raised-base-hover">
-                      <button class="flex-1 min-w-0 text-left" onClick={() => openSession(session)}>
-                        <div class="text-14-regular text-text-strong truncate">{session.title}</div>
-                        <div class="text-12-regular text-text-weak truncate">{directoryLabel(session)}</div>
-                      </button>
-                      <div class="flex items-center gap-1 shrink-0">
-                        <Tooltip value={language.t("session.restore")} placement="top">
-                          <IconButton
-                            icon="arrow-left"
-                            variant="ghost"
-                            class="size-6 rounded-md cursor-pointer"
-                            aria-label={language.t("session.restore")}
-                            onClick={() => void restoreSession(session)}
-                          />
-                        </Tooltip>
-                        <Show
-                          when={confirming()}
-                          fallback={
-                            <Tooltip value={language.t("common.delete")} placement="top">
-                              <IconButton
-                                icon="trash"
-                                variant="ghost"
-                                class="size-6 rounded-md cursor-pointer"
-                                style={{ "--icon-base": "var(--icon-critical-base)" }}
-                                aria-label={language.t("common.delete")}
-                                onClick={startConfirm}
-                              />
-                            </Tooltip>
-                          }
-                        >
-                          <Button
-                            variant="primary"
-                            size="small"
-                            class="shrink-0 cursor-pointer"
-                            style={{
-                              "background-color": "var(--surface-critical-base)",
-                              "border-color": "var(--surface-critical-base)",
-                              color: "var(--text-on-critical-base)",
-                            }}
-                            onClick={handleDelete}
-                          >
-                            {language.t("session.delete.button")}
-                          </Button>
-                        </Show>
-                      </div>
-                    </div>
-                  )
-                }}
-              </For>
-            </div>
-          </Show>
-          <div class="flex justify-end gap-2">
-            <Button variant="ghost" size="large" onClick={() => dialog.close()}>
-              {language.t("common.close")}
-            </Button>
-          </div>
-        </div>
-      </Dialog>
-    )
+  const activeRoute = {
+    session: "",
+    sessionProject: "",
   }
 
   createEffect(
     on(
-      () => ({
-        ready: pageReady(),
-        notifications: notification.ready(),
-        dir: params.dir,
-        id: params.id,
-        list: layout.projects.list(),
-        order: store.workspaceOrder,
-      }),
-      (value) => {
-        if (!value.ready) return
-        if (!value.notifications) return
-        const dir = value.dir
-        if (!dir) return
+      () => [pageReady(), params.dir, params.id, currentProject()?.worktree] as const,
+      ([ready, dir, id]) => {
+        if (!ready || !dir) {
+          activeRoute.session = ""
+          activeRoute.sessionProject = ""
+          return
+        }
+
         const directory = decode64(dir)
         if (!directory) return
-        const root = projectRoot(directory)
-        const project = value.list.find((item) => item.worktree === root)
-        Array.from(new Set([root, directory, ...(value.order[root] ?? []), ...(project?.sandboxes ?? [])]))
-          .filter((item) => notification.project.unseenCount(item) > 0)
-          .forEach((item) => notification.project.markViewed(item))
-        const at = Date.now()
-        const id = value.id
-        if (!id) return
-        setStore("lastProjectSession", root, { directory, id, at })
-        notification.session.markViewed(id)
-        const expanded = untrack(() => store.workspaceExpanded[directory])
-        if (expanded === false) {
-          setStore("workspaceExpanded", directory, true)
+
+        const root = touchProjectRoute() ?? activeProjectRoot(directory)
+
+        if (!id) {
+          activeRoute.session = ""
+          activeRoute.sessionProject = ""
+          return
         }
-        requestAnimationFrame(() => scrollToSession(id, `${directory}:${id}`))
+
+        const session = `${dir}/${id}`
+        if (session !== activeRoute.session) {
+          activeRoute.session = session
+          activeRoute.sessionProject = syncSessionRoute(directory, id, root)
+          return
+        }
+
+        if (root === activeRoute.sessionProject) return
+        activeRoute.sessionProject = rememberSessionRoute(directory, id, root)
       },
-      { defer: true },
     ),
   )
 
@@ -2114,48 +1727,29 @@ export default function Layout(props: ParentProps) {
 
   const loadedSessionDirs = new Set<string>()
 
-  createEffect(() => {
-    const project = currentProject()
-    const workspaces = workspaceSetting()
-    const next = new Set<string>()
-    if (!project) {
-      loadedSessionDirs.clear()
-      return
-    }
+  createEffect(
+    on(
+      visibleSessionDirs,
+      (dirs) => {
+        if (dirs.length === 0) {
+          loadedSessionDirs.clear()
+          return
+        }
 
-    if (workspaces) {
-      const activeDir = currentDir()
-      const dirs = [project.worktree, ...(project.sandboxes ?? [])]
-      for (const directory of dirs) {
-        const expanded = store.workspaceExpanded[directory] ?? directory === project.worktree
-        const active = directory === activeDir
-        if (!expanded && !active) continue
-        next.add(directory)
-      }
-    }
+        const next = new Set(dirs)
+        for (const directory of next) {
+          if (loadedSessionDirs.has(directory)) continue
+          globalSync.project.loadSessions(directory)
+        }
 
-    if (!workspaces) {
-      next.add(project.worktree)
-    }
-
-    for (const directory of next) {
-      if (loadedSessionDirs.has(directory)) continue
-      globalSync.project.loadSessions(directory)
-    }
-
-    loadedSessionDirs.clear()
-    for (const directory of next) {
-      loadedSessionDirs.add(directory)
-    }
-  })
-
-  function getDraggableId(event: unknown): string | undefined {
-    if (typeof event !== "object" || event === null) return undefined
-    if (!("draggable" in event)) return undefined
-    const draggable = (event as { draggable?: { id?: unknown } }).draggable
-    if (!draggable) return undefined
-    return typeof draggable.id === "string" ? draggable.id : undefined
-  }
+        loadedSessionDirs.clear()
+        for (const directory of next) {
+          loadedSessionDirs.add(directory)
+        }
+      },
+      { defer: true },
+    ),
+  )
 
   function handleDragStart(event: unknown) {
     const id = getDraggableId(event)
@@ -2189,15 +1783,11 @@ export default function Layout(props: ParentProps) {
     const extra = directory && directory !== local && !dirs.includes(directory) ? directory : undefined
     const pending = extra ? WorktreeState.get(extra)?.status === "pending" : false
 
-    const existing = store.workspaceOrder[project.worktree]
-    if (!existing) return extra ? [...dirs, extra] : dirs
-
-    const keep = existing.filter((d) => d !== local && dirs.includes(d))
-    const missing = dirs.filter((d) => d !== local && !existing.includes(d))
-    const merged = [local, ...(pending && extra ? [extra] : []), ...missing, ...keep]
-    if (!extra) return merged
-    if (pending) return merged
-    return [...merged, extra]
+    const ordered = effectiveWorkspaceOrder(local, dirs, store.workspaceOrder[project.worktree])
+    if (pending && extra) return [local, extra, ...ordered.filter((item) => item !== local)]
+    if (!extra) return ordered
+    if (pending) return ordered
+    return [...ordered, extra]
   }
 
   const sidebarProject = createMemo(() => {
@@ -2230,859 +1820,15 @@ export default function Layout(props: ParentProps) {
     const [item] = result.splice(fromIndex, 1)
     if (!item) return
     result.splice(toIndex, 0, item)
-    setStore("workspaceOrder", project.worktree, result)
+    setStore(
+      "workspaceOrder",
+      project.worktree,
+      result.filter((directory) => workspaceKey(directory) !== workspaceKey(project.worktree)),
+    )
   }
 
   function handleWorkspaceDragEnd() {
     setStore("activeWorkspace", undefined)
-  }
-
-  const ProjectIcon = (props: { project: LocalProject; class?: string; notify?: boolean }): JSX.Element => {
-    const notification = useNotification()
-    const unseenCount = createMemo(() => notification.project.unseenCount(props.project.worktree))
-    const hasError = createMemo(() => notification.project.unseenHasError(props.project.worktree))
-    const name = createMemo(() => props.project.name || getFilename(props.project.worktree))
-    return (
-      <div class={`relative size-8 shrink-0 rounded ${props.class ?? ""}`}>
-        <div class="size-full rounded overflow-clip">
-          <Avatar
-            fallback={name()}
-            src={
-              props.project.id === OPENCODE_PROJECT_ID
-                ? "https://opencode.ai/favicon.svg"
-                : props.project.icon?.override
-            }
-            {...getAvatarColors(props.project.icon?.color)}
-            class="size-full rounded"
-            classList={{ "badge-mask": unseenCount() > 0 && props.notify }}
-          />
-        </div>
-        <Show when={unseenCount() > 0 && props.notify}>
-          <div
-            classList={{
-              "absolute top-px right-px size-1.5 rounded-full z-10": true,
-              "bg-icon-critical-base": hasError(),
-              "bg-text-interactive-base": !hasError(),
-            }}
-          />
-        </Show>
-      </div>
-    )
-  }
-
-  const SessionItem = (props: {
-    session: Session
-    slug: string
-    mobile?: boolean
-    dense?: boolean
-    popover?: boolean
-    children: Map<string, string[]>
-  }): JSX.Element => {
-    const notification = useNotification()
-    const unseenCount = createMemo(() => notification.session.unseenCount(props.session.id))
-    const hasError = createMemo(() => notification.session.unseenHasError(props.session.id))
-    const [sessionStore] = globalSync.child(props.session.directory)
-    const hasPermissions = createMemo(() => {
-      const permissions = sessionStore.permission?.[props.session.id] ?? []
-      if (permissions.length > 0) return true
-
-      for (const id of props.children.get(props.session.id) ?? []) {
-        const childPermissions = sessionStore.permission?.[id] ?? []
-        if (childPermissions.length > 0) return true
-      }
-      return false
-    })
-    const isWorking = createMemo(() => {
-      if (hasPermissions()) return false
-      const status = sessionStore.session_status[props.session.id]
-      return status?.type === "busy" || status?.type === "retry"
-    })
-
-    const tint = createMemo(() => {
-      const messages = sessionStore.message[props.session.id]
-      if (!messages) return undefined
-      let user: Message | undefined
-      for (let i = messages.length - 1; i >= 0; i--) {
-        const message = messages[i]
-        if (message.role !== "user") continue
-        user = message
-        break
-      }
-      if (!user?.agent) return undefined
-
-      const agent = sessionStore.agent.find((a) => a.name === user.agent)
-      return agentColor(user.agent, agent?.color)
-    })
-
-    const hoverMessages = createMemo(() =>
-      sessionStore.message[props.session.id]?.filter((message) => message.role === "user"),
-    )
-    const hoverReady = createMemo(() => sessionStore.message[props.session.id] !== undefined)
-    const hoverAllowed = createMemo(() => !props.mobile && sidebarExpanded())
-    const hoverEnabled = createMemo(() => (props.popover ?? true) && hoverAllowed())
-    const isActive = createMemo(() => props.session.id === params.id)
-
-    const hoverPrefetch = { current: undefined as ReturnType<typeof setTimeout> | undefined }
-    const cancelHoverPrefetch = () => {
-      if (hoverPrefetch.current === undefined) return
-      clearTimeout(hoverPrefetch.current)
-      hoverPrefetch.current = undefined
-    }
-    const scheduleHoverPrefetch = () => {
-      if (hoverPrefetch.current !== undefined) return
-      hoverPrefetch.current = setTimeout(() => {
-        hoverPrefetch.current = undefined
-        prefetchSession(props.session)
-      }, 200)
-    }
-
-    onCleanup(cancelHoverPrefetch)
-
-    const messageLabel = (message: Message) => {
-      const parts = sessionStore.part[message.id] ?? []
-      const text = parts.find((part): part is TextPart => part?.type === "text" && !part.synthetic && !part.ignored)
-      return text?.text
-    }
-
-    const item = (
-      <A
-        href={`${props.slug}/session/${props.session.id}`}
-        class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none transition-[padding] ${props.mobile ? "pr-7" : ""} group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7 ${props.dense ? "py-0.5" : "py-1"}`}
-        onPointerEnter={scheduleHoverPrefetch}
-        onPointerLeave={cancelHoverPrefetch}
-        onMouseEnter={scheduleHoverPrefetch}
-        onMouseLeave={cancelHoverPrefetch}
-        onFocus={() => prefetchSession(props.session, "high")}
-        onClick={() => {
-          setState("hoverSession", undefined)
-          if (layout.sidebar.opened()) return
-          queueMicrotask(() => setState("hoverProject", undefined))
-        }}
-      >
-        <div class="flex items-center gap-1 w-full">
-          <div
-            class="shrink-0 size-6 flex items-center justify-center"
-            style={{ color: tint() ?? "var(--icon-interactive-base)" }}
-          >
-            <Switch fallback={<Icon name="dash" size="small" class="text-icon-weak" />}>
-              <Match when={isWorking()}>
-                <Spinner class="size-[15px]" />
-              </Match>
-              <Match when={hasPermissions()}>
-                <div class="size-1.5 rounded-full bg-surface-warning-strong" />
-              </Match>
-              <Match when={hasError()}>
-                <div class="size-1.5 rounded-full bg-text-diff-delete-base" />
-              </Match>
-              <Match when={unseenCount() > 0}>
-                <div class="size-1.5 rounded-full bg-text-interactive-base" />
-              </Match>
-            </Switch>
-          </div>
-          <span class="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate">
-            {props.session.title}
-          </span>
-          <Show when={props.session.summary}>
-            {(summary) => (
-              <div class="group-hover/session:hidden group-active/session:hidden group-focus-within/session:hidden">
-                <DiffChanges changes={summary()} />
-              </div>
-            )}
-          </Show>
-        </div>
-      </A>
-    )
-
-    return (
-      <div
-        data-session-id={props.session.id}
-        class="group/session relative w-full rounded-md cursor-default transition-colors pl-2 pr-3
-               hover:outline hover:outline-1 hover:outline-[var(--color-surface-raised-base-active)] [&:has(:focus-visible)]:outline [&:has(:focus-visible)]:outline-1 [&:has(:focus-visible)]:outline-[var(--color-surface-raised-base-active)] has-[[data-expanded]]:bg-surface-raised-base-hover has-[.active]:bg-surface-raised-base-active"
-      >
-        <Show
-          when={hoverEnabled()}
-          fallback={
-            <Tooltip placement={props.mobile ? "bottom" : "right"} value={props.session.title} gutter={10}>
-              {item}
-            </Tooltip>
-          }
-        >
-          <HoverCard
-            openDelay={1000}
-            closeDelay={sidebarHovering() ? 600 : 0}
-            placement="right-start"
-            gutter={16}
-            shift={-2}
-            trigger={item}
-            mount={!props.mobile ? state.nav : undefined}
-            open={state.hoverSession === props.session.id}
-            onOpenChange={(open) => setState("hoverSession", open ? props.session.id : undefined)}
-          >
-            <Show
-              when={hoverReady()}
-              fallback={<div class="text-12-regular text-text-weak">{language.t("session.messages.loading")}</div>}
-            >
-              <div class="overflow-y-auto max-h-72 h-full">
-                <MessageNav
-                  messages={hoverMessages() ?? []}
-                  current={undefined}
-                  getLabel={messageLabel}
-                  onMessageSelect={(message) => {
-                    if (!isActive()) {
-                      layout.pendingMessage.set(
-                        `${base64Encode(props.session.directory)}/${props.session.id}`,
-                        message.id,
-                      )
-                      navigate(`${props.slug}/session/${props.session.id}`)
-                      return
-                    }
-                    window.history.replaceState(null, "", `#message-${message.id}`)
-                    window.dispatchEvent(new HashChangeEvent("hashchange"))
-                  }}
-                  size="normal"
-                  class="w-60"
-                />
-              </div>
-            </Show>
-          </HoverCard>
-        </Show>
-        <div
-          class={`absolute ${props.dense ? "top-0.5 right-0.5" : "top-1 right-1"} flex items-center gap-0.5 transition-opacity`}
-          classList={{
-            "opacity-100 pointer-events-auto": !!props.mobile,
-            "opacity-0 pointer-events-none": !props.mobile,
-            "group-hover/session:opacity-100 group-hover/session:pointer-events-auto": true,
-            "group-focus-within/session:opacity-100 group-focus-within/session:pointer-events-auto": true,
-          }}
-        >
-          <Tooltip value={language.t("session.generateTitle")} placement="top">
-            <IconButton
-              icon="models"
-              variant="ghost"
-              class="size-6 rounded-md cursor-pointer"
-              aria-label={language.t("session.generateTitle")}
-              onClick={(event) => {
-                event.preventDefault()
-                event.stopPropagation()
-                void generateSessionTitle(props.session)
-              }}
-            />
-          </Tooltip>
-          <Tooltip value={language.t("common.archive")} placement="top">
-            <IconButton
-              icon="archive"
-              variant="ghost"
-              class="size-6 rounded-md cursor-pointer"
-              aria-label={language.t("common.archive")}
-              onClick={(event) => {
-                event.preventDefault()
-                event.stopPropagation()
-                void archiveSession(props.session)
-              }}
-            />
-          </Tooltip>
-        </div>
-      </div>
-    )
-  }
-
-  const NewSessionItem = (props: { slug: string; mobile?: boolean; dense?: boolean }): JSX.Element => {
-    const label = language.t("command.session.new")
-    const tooltip = () => props.mobile || !sidebarExpanded()
-    const item = (
-      <A
-        href={`${props.slug}/session`}
-        end
-        class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none ${props.dense ? "py-0.5" : "py-1"}`}
-        onClick={() => {
-          setState("hoverSession", undefined)
-          if (layout.sidebar.opened()) return
-          queueMicrotask(() => setState("hoverProject", undefined))
-        }}
-      >
-        <div class="flex items-center gap-1 w-full">
-          <div class="shrink-0 size-6 flex items-center justify-center">
-            <Icon name="plus-small" size="small" class="text-icon-weak" />
-          </div>
-          <span class="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate">
-            {label}
-          </span>
-        </div>
-      </A>
-    )
-
-    return (
-      <div class="group/session relative w-full rounded-md cursor-default transition-colors pl-2 pr-3 hover:outline hover:outline-1 hover:outline-[var(--color-surface-raised-base-active)] [&:has(:focus-visible)]:outline [&:has(:focus-visible)]:outline-1 [&:has(:focus-visible)]:outline-[var(--color-surface-raised-base-active)] has-[.active]:bg-surface-raised-base-active">
-        <Show
-          when={!tooltip()}
-          fallback={
-            <Tooltip placement={props.mobile ? "bottom" : "right"} value={label} gutter={10}>
-              {item}
-            </Tooltip>
-          }
-        >
-          {item}
-        </Show>
-      </div>
-    )
-  }
-
-  const SessionSkeleton = (props: { count?: number }): JSX.Element => {
-    const items = Array.from({ length: props.count ?? 4 }, (_, index) => index)
-    return (
-      <div class="flex flex-col gap-1">
-        <For each={items}>
-          {() => <div class="h-8 w-full rounded-md bg-surface-raised-base opacity-60 animate-pulse" />}
-        </For>
-      </div>
-    )
-  }
-
-  const ProjectDragOverlay = (): JSX.Element => {
-    const project = createMemo(() => layout.projects.list().find((p) => p.worktree === store.activeProject))
-    return (
-      <Show when={project()}>
-        {(p) => (
-          <div class="bg-background-base rounded-xl p-1">
-            <ProjectIcon project={p()} />
-          </div>
-        )}
-      </Show>
-    )
-  }
-
-  const WorkspaceDragOverlay = (): JSX.Element => {
-    const label = createMemo(() => {
-      const project = sidebarProject()
-      if (!project) return
-      const directory = store.activeWorkspace
-      if (!directory) return
-
-      const [workspaceStore] = globalSync.child(directory, { bootstrap: false })
-      const kind =
-        directory === project.worktree ? language.t("workspace.type.local") : language.t("workspace.type.sandbox")
-      const name = workspaceLabel(directory, workspaceStore.vcs?.branch, project.id)
-      return `${kind} : ${name}`
-    })
-
-    return (
-      <Show when={label()}>
-        {(value) => (
-          <div class="bg-background-base rounded-md px-2 py-1 text-14-medium text-text-strong">{value()}</div>
-        )}
-      </Show>
-    )
-  }
-
-  const SortableWorkspace = (props: { directory: string; project: LocalProject; mobile?: boolean }): JSX.Element => {
-    const sortable = createSortable(props.directory)
-    const [workspaceStore, setWorkspaceStore] = globalSync.child(props.directory, { bootstrap: false })
-    const [menu, setMenu] = createStore({
-      open: false,
-      pendingRename: false,
-    })
-    const slug = createMemo(() => base64Encode(props.directory))
-    const sessions = createMemo(() => sortedRootSessions(workspaceStore, Date.now()))
-    const children = createMemo(() => childMapByParent(workspaceStore.session))
-    const local = createMemo(() => props.directory === props.project.worktree)
-    const active = createMemo(() => currentDir() === props.directory)
-    const workspaceValue = createMemo(() => {
-      const branch = workspaceStore.vcs?.branch
-      const name = branch ?? getFilename(props.directory)
-      return workspaceName(props.directory, props.project.id, branch) ?? name
-    })
-    const open = createMemo(() => store.workspaceExpanded[props.directory] ?? local())
-    const boot = createMemo(() => open() || active())
-    const booted = createMemo((prev) => prev || workspaceStore.status === "complete", false)
-    const hasMore = createMemo(() => workspaceStore.sessionTotal > sessions().length)
-    const busy = createMemo(() => isBusy(props.directory))
-    const wasBusy = createMemo((prev) => prev || busy(), false)
-    const loading = createMemo(() => open() && !booted() && sessions().length === 0 && !wasBusy())
-    const loadMore = async () => {
-      setWorkspaceStore("limit", (limit) => limit + 5)
-      await globalSync.project.loadSessions(props.directory)
-    }
-
-    const workspaceEditActive = createMemo(() => editorOpen(`workspace:${props.directory}`))
-
-    const openWrapper = (value: boolean) => {
-      setStore("workspaceExpanded", props.directory, value)
-      if (value) return
-      if (editorOpen(`workspace:${props.directory}`)) closeEditor()
-    }
-
-    createEffect(() => {
-      if (!boot()) return
-      globalSync.child(props.directory, { bootstrap: true })
-    })
-
-    const header = () => (
-      <div class="flex items-center gap-1 min-w-0 flex-1">
-        <div class="flex items-center justify-center shrink-0 size-6">
-          <Show when={busy()} fallback={<Icon name="branch" size="small" />}>
-            <Spinner class="size-[15px]" />
-          </Show>
-        </div>
-        <span class="text-14-medium text-text-base shrink-0">
-          {local() ? language.t("workspace.type.local") : language.t("workspace.type.sandbox")} :
-        </span>
-        <Show
-          when={!local()}
-          fallback={
-            <span class="text-14-medium text-text-base min-w-0 truncate">
-              {workspaceStore.vcs?.branch ?? getFilename(props.directory)}
-            </span>
-          }
-        >
-          <InlineEditor
-            id={`workspace:${props.directory}`}
-            value={workspaceValue}
-            onSave={(next) => {
-              const trimmed = next.trim()
-              if (!trimmed) return
-              renameWorkspace(props.directory, trimmed, props.project.id, workspaceStore.vcs?.branch)
-              setEditor("value", workspaceValue())
-            }}
-            class="text-14-medium text-text-base min-w-0 truncate"
-            displayClass="text-14-medium text-text-base min-w-0 truncate"
-            editing={workspaceEditActive()}
-            stopPropagation={false}
-            openOnDblClick={false}
-          />
-        </Show>
-        <Icon
-          name={open() ? "chevron-down" : "chevron-right"}
-          size="small"
-          class="shrink-0 text-icon-base opacity-0 transition-opacity group-hover/workspace:opacity-100 group-focus-within/workspace:opacity-100"
-        />
-      </div>
-    )
-
-    return (
-      <div
-        // @ts-ignore
-        use:sortable
-        classList={{
-          "opacity-30": sortable.isActiveDraggable,
-          "opacity-50 pointer-events-none": busy(),
-        }}
-      >
-        <Collapsible variant="ghost" open={open()} class="shrink-0" onOpenChange={openWrapper}>
-          <div class="px-2 py-1">
-            <div
-              class="group/workspace relative"
-              data-component="workspace-item"
-              data-workspace={base64Encode(props.directory)}
-            >
-              <div class="flex items-center gap-1">
-                <Show
-                  when={workspaceEditActive()}
-                  fallback={
-                    <Collapsible.Trigger
-                      class="flex items-center justify-between w-full pl-2 pr-16 py-1.5 rounded-md hover:bg-surface-raised-base-hover"
-                      data-action="workspace-toggle"
-                      data-workspace={base64Encode(props.directory)}
-                    >
-                      {header()}
-                    </Collapsible.Trigger>
-                  }
-                >
-                  <div class="flex items-center justify-between w-full pl-2 pr-16 py-1.5 rounded-md">{header()}</div>
-                </Show>
-                <div
-                  class="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 transition-opacity"
-                  classList={{
-                    "opacity-100 pointer-events-auto": menu.open,
-                    "opacity-0 pointer-events-none": !menu.open,
-                    "group-hover/workspace:opacity-100 group-hover/workspace:pointer-events-auto": true,
-                    "group-focus-within/workspace:opacity-100 group-focus-within/workspace:pointer-events-auto": true,
-                  }}
-                >
-                  <DropdownMenu
-                    modal={!sidebarHovering()}
-                    open={menu.open}
-                    onOpenChange={(open) => setMenu("open", open)}
-                  >
-                    <Tooltip value={language.t("common.moreOptions")} placement="top">
-                      <DropdownMenu.Trigger
-                        as={IconButton}
-                        icon="dot-grid"
-                        variant="ghost"
-                        class="size-6 rounded-md"
-                        data-action="workspace-menu"
-                        data-workspace={base64Encode(props.directory)}
-                        aria-label={language.t("common.moreOptions")}
-                      />
-                    </Tooltip>
-                    <DropdownMenu.Portal mount={!props.mobile ? state.nav : undefined}>
-                      <DropdownMenu.Content
-                        onCloseAutoFocus={(event) => {
-                          if (!menu.pendingRename) return
-                          event.preventDefault()
-                          setMenu("pendingRename", false)
-                          openEditor(`workspace:${props.directory}`, workspaceValue())
-                        }}
-                      >
-                        <DropdownMenu.Item
-                          disabled={local()}
-                          onSelect={() => {
-                            setMenu("pendingRename", true)
-                            setMenu("open", false)
-                          }}
-                        >
-                          <DropdownMenu.ItemLabel>{language.t("common.rename")}</DropdownMenu.ItemLabel>
-                        </DropdownMenu.Item>
-                        <DropdownMenu.Item
-                          disabled={local() || busy()}
-                          onSelect={() =>
-                            dialog.show(() => (
-                              <DialogResetWorkspace root={props.project.worktree} directory={props.directory} />
-                            ))
-                          }
-                        >
-                          <DropdownMenu.ItemLabel>{language.t("common.reset")}</DropdownMenu.ItemLabel>
-                        </DropdownMenu.Item>
-                        <DropdownMenu.Item
-                          disabled={local() || busy()}
-                          onSelect={() =>
-                            dialog.show(() => (
-                              <DialogDeleteWorkspace root={props.project.worktree} directory={props.directory} />
-                            ))
-                          }
-                        >
-                          <DropdownMenu.ItemLabel>{language.t("common.delete")}</DropdownMenu.ItemLabel>
-                        </DropdownMenu.Item>
-                      </DropdownMenu.Content>
-                    </DropdownMenu.Portal>
-                  </DropdownMenu>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <Collapsible.Content>
-            <nav class="flex flex-col gap-1 px-2">
-              <NewSessionItem slug={slug()} mobile={props.mobile} />
-              <Show when={loading()}>
-                <SessionSkeleton />
-              </Show>
-              <For each={sessions()}>
-                {(session) => (
-                  <SessionItem session={session} slug={slug()} mobile={props.mobile} children={children()} />
-                )}
-              </For>
-              <Show when={hasMore()}>
-                <div class="relative w-full py-1">
-                  <Button
-                    variant="ghost"
-                    class="flex w-full text-left justify-start text-14-regular text-text-weak pl-9 pr-10"
-                    size="large"
-                    onClick={(e: MouseEvent) => {
-                      loadMore()
-                      ;(e.currentTarget as HTMLButtonElement).blur()
-                    }}
-                  >
-                    {language.t("common.loadMore")}
-                  </Button>
-                </div>
-              </Show>
-            </nav>
-          </Collapsible.Content>
-        </Collapsible>
-      </div>
-    )
-  }
-
-  const SortableProject = (props: { project: LocalProject; mobile?: boolean }): JSX.Element => {
-    const sortable = createSortable(props.project.worktree)
-    const selected = createMemo(() => {
-      const current = currentDir()
-      return props.project.worktree === current || props.project.sandboxes?.includes(current)
-    })
-
-    const workspaces = createMemo(() => workspaceIds(props.project).slice(0, 2))
-    const workspaceEnabled = createMemo(
-      () => props.project.vcs === "git" && layout.sidebar.workspaces(props.project.worktree)(),
-    )
-    const [open, setOpen] = createSignal(false)
-    const [menu, setMenu] = createSignal(false)
-
-    const preview = createMemo(() => !props.mobile && layout.sidebar.opened())
-    const overlay = createMemo(() => !props.mobile && !layout.sidebar.opened())
-    const active = createMemo(
-      () => menu() || (preview() ? open() : overlay() && state.hoverProject === props.project.worktree),
-    )
-
-    createEffect(() => {
-      if (preview()) return
-      if (!open()) return
-      setOpen(false)
-    })
-
-    const label = (directory: string) => {
-      const [data] = globalSync.child(directory, { bootstrap: false })
-      const kind =
-        directory === props.project.worktree ? language.t("workspace.type.local") : language.t("workspace.type.sandbox")
-      const name = workspaceLabel(directory, data.vcs?.branch, props.project.id)
-      return `${kind} : ${name}`
-    }
-
-    const projectStore = createMemo(() => globalSync.child(props.project.worktree, { bootstrap: false })[0])
-    const projectSessions = createMemo(() => sortedRootSessions(projectStore(), Date.now()).slice(0, 2))
-    const projectChildren = createMemo(() => childMapByParent(projectStore().session))
-    const workspaceSessions = (directory: string) => {
-      const [data] = globalSync.child(directory, { bootstrap: false })
-      return sortedRootSessions(data, Date.now()).slice(0, 2)
-    }
-    const workspaceChildren = (directory: string) => {
-      const [data] = globalSync.child(directory, { bootstrap: false })
-      return childMapByParent(data.session)
-    }
-
-    const projectName = () => props.project.name || getFilename(props.project.worktree)
-    const Trigger = () => (
-      <ContextMenu
-        modal={!sidebarHovering()}
-        onOpenChange={(value) => {
-          setMenu(value)
-          if (value) setOpen(false)
-        }}
-      >
-        <ContextMenu.Trigger
-          as="button"
-          type="button"
-          aria-label={projectName()}
-          data-action="project-switch"
-          data-project={base64Encode(props.project.worktree)}
-          classList={{
-            "flex items-center justify-center size-10 p-1 rounded-lg overflow-hidden transition-colors cursor-default": true,
-            "bg-transparent border-2 border-icon-strong-base hover:bg-surface-base-hover": selected(),
-            "bg-transparent border border-transparent hover:bg-surface-base-hover hover:border-border-weak-base":
-              !selected() && !active(),
-            "bg-surface-base-hover border border-border-weak-base": !selected() && active(),
-          }}
-          onClick={(event: MouseEvent) => {
-            if (preview()) {
-              navigateToProject(props.project.worktree)
-              return
-            }
-
-            event.preventDefault()
-            globalSync.child(props.project.worktree)
-            const currentProject = state.hoverProject === props.project.worktree ? undefined : props.project.worktree
-            setState("hoverProject", currentProject)
-            setState("hoverSession", undefined)
-          }}
-          onKeyDown={(event: KeyboardEvent) => {
-            if (!overlay()) return
-            if (event.key !== "Enter" && event.key !== " ") return
-            event.preventDefault()
-
-            globalSync.child(props.project.worktree)
-            const currentProject = state.hoverProject === props.project.worktree ? undefined : props.project.worktree
-            setState("hoverProject", currentProject)
-            setState("hoverSession", undefined)
-          }}
-        >
-          <ProjectIcon project={props.project} notify />
-        </ContextMenu.Trigger>
-        <ContextMenu.Portal mount={!props.mobile ? state.nav : undefined}>
-          <ContextMenu.Content>
-            <ContextMenu.Item onSelect={() => dialog.show(() => <DialogEditProject project={props.project} />)}>
-              <ContextMenu.ItemLabel>{language.t("common.edit")}</ContextMenu.ItemLabel>
-            </ContextMenu.Item>
-            <ContextMenu.Item
-              data-action="project-workspaces-toggle"
-              data-project={base64Encode(props.project.worktree)}
-              disabled={props.project.vcs !== "git" && !layout.sidebar.workspaces(props.project.worktree)()}
-              onSelect={() => {
-                const enabled = layout.sidebar.workspaces(props.project.worktree)()
-                if (enabled) {
-                  layout.sidebar.toggleWorkspaces(props.project.worktree)
-                  return
-                }
-                if (props.project.vcs !== "git") return
-                layout.sidebar.toggleWorkspaces(props.project.worktree)
-              }}
-            >
-              <ContextMenu.ItemLabel>
-                {layout.sidebar.workspaces(props.project.worktree)()
-                  ? language.t("sidebar.workspaces.disable")
-                  : language.t("sidebar.workspaces.enable")}
-              </ContextMenu.ItemLabel>
-            </ContextMenu.Item>
-            <ContextMenu.Separator />
-            <ContextMenu.Item
-              data-action="project-close-menu"
-              data-project={base64Encode(props.project.worktree)}
-              onSelect={() => closeProject(props.project.worktree)}
-            >
-              <ContextMenu.ItemLabel>{language.t("common.close")}</ContextMenu.ItemLabel>
-            </ContextMenu.Item>
-          </ContextMenu.Content>
-        </ContextMenu.Portal>
-      </ContextMenu>
-    )
-
-    return (
-      // @ts-ignore
-      <div use:sortable classList={{ "opacity-30": sortable.isActiveDraggable }}>
-        <Show when={preview()} fallback={<Trigger />}>
-          <HoverCard
-            open={open() && !menu()}
-            openDelay={999999}
-            closeDelay={0}
-            placement="right-start"
-            gutter={6}
-            trigger={<Trigger />}
-            onOpenChange={(value) => {
-              if (menu()) return
-              // 只允许关闭（value === false），不允许自动悬停打开
-              if (!value) {
-                setOpen(false)
-              }
-              if (value) setState("hoverSession", undefined)
-            }}
-          >
-            <div class="-m-3 p-2 flex flex-col w-72">
-              <div class="px-4 pt-2 pb-1 flex items-center gap-2">
-                <div class="text-14-medium text-text-strong truncate grow">{displayName(props.project)}</div>
-                <Tooltip value={language.t("common.close")} placement="top" gutter={6}>
-                  <IconButton
-                    icon="circle-x"
-                    variant="ghost"
-                    class="shrink-0"
-                    data-action="project-close-hover"
-                    data-project={base64Encode(props.project.worktree)}
-                    aria-label={language.t("common.close")}
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      setOpen(false)
-                      closeProject(props.project.worktree)
-                    }}
-                  />
-                </Tooltip>
-              </div>
-              <div class="px-4 pb-2 text-12-medium text-text-weak">{language.t("sidebar.project.recentSessions")}</div>
-              <div class="px-2 pb-2 flex flex-col gap-2">
-                <Show
-                  when={workspaceEnabled()}
-                  fallback={
-                    <For each={projectSessions()}>
-                      {(session) => (
-                        <SessionItem
-                          session={session}
-                          slug={base64Encode(props.project.worktree)}
-                          dense
-                          mobile={props.mobile}
-                          popover={false}
-                          children={projectChildren()}
-                        />
-                      )}
-                    </For>
-                  }
-                >
-                  <For each={workspaces()}>
-                    {(directory) => {
-                      const sessions = createMemo(() => workspaceSessions(directory))
-                      const children = createMemo(() => workspaceChildren(directory))
-                      return (
-                        <div class="flex flex-col gap-1">
-                          <div class="px-2 py-0.5 flex items-center gap-1 min-w-0">
-                            <div class="shrink-0 size-6 flex items-center justify-center">
-                              <Icon name="branch" size="small" class="text-icon-base" />
-                            </div>
-                            <span class="truncate text-14-medium text-text-base">{label(directory)}</span>
-                          </div>
-                          <For each={sessions()}>
-                            {(session) => (
-                              <SessionItem
-                                session={session}
-                                slug={base64Encode(directory)}
-                                dense
-                                mobile={props.mobile}
-                                popover={false}
-                                children={children()}
-                              />
-                            )}
-                          </For>
-                        </div>
-                      )
-                    }}
-                  </For>
-                </Show>
-              </div>
-              <div class="px-2 py-2 border-t border-border-weak-base">
-                <Button
-                  variant="ghost"
-                  class="flex w-full text-left justify-start text-text-base px-2 hover:bg-transparent active:bg-transparent"
-                  onClick={() => {
-                    layout.sidebar.open()
-                    setOpen(false)
-                    if (selected()) {
-                      return
-                    }
-                    navigateToProject(props.project.worktree)
-                  }}
-                >
-                  {language.t("sidebar.project.viewAllSessions")}
-                </Button>
-              </div>
-            </div>
-          </HoverCard>
-        </Show>
-      </div>
-    )
-  }
-
-  const LocalWorkspace = (props: { project: LocalProject; mobile?: boolean }): JSX.Element => {
-    const workspace = createMemo(() => {
-      const [store, setStore] = globalSync.child(props.project.worktree)
-      return { store, setStore }
-    })
-    const slug = createMemo(() => base64Encode(props.project.worktree))
-    const sessions = createMemo(() => sortedRootSessions(workspace().store, Date.now()))
-    const children = createMemo(() => childMapByParent(workspace().store.session))
-    const booted = createMemo((prev) => prev || workspace().store.status === "complete", false)
-    const loading = createMemo(() => !booted() && sessions().length === 0)
-    const hasMore = createMemo(() => workspace().store.sessionTotal > sessions().length)
-    const loadMore = async () => {
-      workspace().setStore("limit", (limit) => limit + 5)
-      await globalSync.project.loadSessions(props.project.worktree)
-    }
-
-    return (
-      <div
-        ref={(el) => {
-          if (!props.mobile) scrollContainerRef = el
-        }}
-        class="size-full flex flex-col py-2 overflow-y-auto no-scrollbar [overflow-anchor:none]"
-      >
-        <nav class="flex flex-col gap-1 px-2">
-          <Show when={loading()}>
-            <SessionSkeleton />
-          </Show>
-          <For each={sessions()}>
-            {(session) => <SessionItem session={session} slug={slug()} mobile={props.mobile} children={children()} />}
-          </For>
-          <Show when={hasMore()}>
-            <div class="relative w-full py-1">
-              <Button
-                variant="ghost"
-                class="flex w-full text-left justify-start text-14-regular text-text-weak pl-9 pr-10"
-                size="large"
-                onClick={(e: MouseEvent) => {
-                  loadMore()
-                  ;(e.currentTarget as HTMLButtonElement).blur()
-                }}
-              >
-                {language.t("common.loadMore")}
-              </Button>
-            </div>
-          </Show>
-        </nav>
-      </div>
-    )
   }
 
   const createWorkspace = async (project: LocalProject) => {
@@ -3093,7 +1839,7 @@ export default function Layout(props: ParentProps) {
       .catch((err) => {
         showToast({
           title: language.t("workspace.create.failed.title"),
-          description: errorMessage(err),
+          description: errorMessage(err, language.t("common.requestFailed")),
         })
         return undefined
       })
@@ -3116,17 +1862,80 @@ export default function Layout(props: ParentProps) {
       const existing = prev ?? []
       const next = existing.filter((item) => {
         const id = workspaceKey(item)
-        if (id === root) return false
-        return id !== key
+        return id !== root && id !== key
       })
-      return [local, created.directory, ...next]
+      return [created.directory, ...next]
     })
 
     globalSync.child(created.directory)
     navigateWithSidebarReset(`/${base64Encode(created.directory)}/session`)
   }
 
-  const SidebarPanel = (panelProps: { project: LocalProject | undefined; mobile?: boolean }) => {
+  const workspaceSidebarCtx: WorkspaceSidebarContext = {
+    currentDir,
+    navList: currentSessions,
+    sidebarExpanded,
+    sidebarHovering,
+    nav: () => state.nav,
+    hoverSession: () => state.hoverSession,
+    setHoverSession,
+    clearHoverProjectSoon,
+    prefetchSession,
+    archiveSession,
+    workspaceName,
+    renameWorkspace,
+    editorOpen,
+    openEditor,
+    closeEditor,
+    setEditor,
+    InlineEditor,
+    isBusy,
+    workspaceExpanded: (directory, local) => store.workspaceExpanded[directory] ?? local,
+    setWorkspaceExpanded: (directory, value) => setStore("workspaceExpanded", directory, value),
+    showResetWorkspaceDialog: (root, directory) =>
+      dialog.show(() => <DialogResetWorkspace root={root} directory={directory} />),
+    showDeleteWorkspaceDialog: (root, directory) =>
+      dialog.show(() => <DialogDeleteWorkspace root={root} directory={directory} />),
+    setScrollContainerRef: (el, mobile) => {
+      if (!mobile) scrollContainerRef = el
+    },
+  }
+
+  const projectSidebarCtx: ProjectSidebarContext = {
+    currentDir,
+    sidebarOpened: () => layout.sidebar.opened(),
+    sidebarHovering,
+    hoverProject: () => state.hoverProject,
+    nav: () => state.nav,
+    onProjectMouseEnter: (worktree, event) => aim.enter(worktree, event),
+    onProjectMouseLeave: (worktree) => aim.leave(worktree),
+    onProjectFocus: (worktree) => aim.activate(worktree),
+    navigateToProject,
+    openSidebar: () => layout.sidebar.open(),
+    closeProject,
+    showEditProjectDialog,
+    toggleProjectWorkspaces,
+    workspacesEnabled: (project) => project.vcs === "git" && layout.sidebar.workspaces(project.worktree)(),
+    workspaceIds,
+    workspaceLabel,
+    sessionProps: {
+      navList: currentSessions,
+      sidebarExpanded,
+      sidebarHovering,
+      nav: () => state.nav,
+      hoverSession: () => state.hoverSession,
+      setHoverSession,
+      clearHoverProjectSoon,
+      prefetchSession,
+      archiveSession,
+    },
+    setHoverSession,
+  }
+
+  const SidebarPanel = (panelProps: { project: LocalProject | undefined; mobile?: boolean; merged?: boolean }) => {
+    const merged = createMemo(() => panelProps.mobile || (panelProps.merged ?? layout.sidebar.opened()))
+    const hover = createMemo(() => !panelProps.mobile && panelProps.merged === false && !layout.sidebar.opened())
+    const popover = createMemo(() => !!panelProps.mobile || panelProps.merged === false || layout.sidebar.opened())
     const projectName = createMemo(() => {
       const project = panelProps.project
       if (!project) return ""
@@ -3152,10 +1961,17 @@ export default function Layout(props: ParentProps) {
     return (
       <div
         classList={{
-          "flex flex-col min-h-0 bg-background-stronger border border-b-0 border-border-weak-base rounded-tl-[12px]": true,
+          "flex flex-col min-h-0 min-w-0 box-border rounded-tl-[12px] px-2": true,
+          "border border-b-0 border-border-weak-base": !merged(),
+          "border-l border-t border-border-weaker-base": merged(),
+          "bg-background-base": merged() || hover(),
+          "bg-background-stronger": !merged() && !hover(),
           "flex-1 min-w-0": panelProps.mobile,
+          "max-w-full overflow-hidden": panelProps.mobile,
         }}
-        style={{ width: panelProps.mobile ? undefined : `${Math.max(layout.sidebar.width() - 64, 0)}px` }}
+        style={{
+          width: panelProps.mobile ? undefined : `${Math.max(Math.max(layout.sidebar.width(), 244) - 64, 0)}px`,
+        }}
       >
         <Show when={panelProps.project}>
           {(p) => (
@@ -3201,24 +2017,16 @@ export default function Layout(props: ParentProps) {
                       }}
                       aria-label={language.t("common.moreOptions")}
                     />
-                    <DropdownMenu.Portal mount={!panelProps.mobile ? state.nav : undefined}>
+                    <DropdownMenu.Portal>
                       <DropdownMenu.Content class="mt-1">
-                        <DropdownMenu.Item onSelect={() => dialog.show(() => <DialogEditProject project={p()} />)}>
+                        <DropdownMenu.Item onSelect={() => showEditProjectDialog(p())}>
                           <DropdownMenu.ItemLabel>{language.t("common.edit")}</DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
                         <DropdownMenu.Item
                           data-action="project-workspaces-toggle"
                           data-project={base64Encode(p().worktree)}
                           disabled={p().vcs !== "git" && !layout.sidebar.workspaces(p().worktree)()}
-                          onSelect={() => {
-                            const enabled = layout.sidebar.workspaces(p().worktree)()
-                            if (enabled) {
-                              layout.sidebar.toggleWorkspaces(p().worktree)
-                              return
-                            }
-                            if (p().vcs !== "git") return
-                            layout.sidebar.toggleWorkspaces(p().worktree)
-                          }}
+                          onSelect={() => toggleProjectWorkspaces(p())}
                         >
                           <DropdownMenu.ItemLabel>
                             {layout.sidebar.workspaces(p().worktree)()
@@ -3256,60 +2064,32 @@ export default function Layout(props: ParentProps) {
                   fallback={
                     <>
                       <div class="shrink-0 py-4 px-3">
-                        <div class="flex flex-col gap-2">
-                          <TooltipKeybind
-                            title={language.t("command.session.new")}
-                            keybind={command.keybind("session.new")}
-                            placement="top"
-                          >
-                            <Button
-                              size="large"
-                              icon="plus-small"
-                              class="w-full"
-                              onClick={() => navigateWithSidebarReset(`/${base64Encode(p().worktree)}/session`)}
-                            >
-                              {language.t("command.session.new")}
-                            </Button>
-                          </TooltipKeybind>
-                          <Button
-                            size="large"
-                            icon="archive"
-                            variant="ghost"
-                            class="w-full"
-                            onClick={() => dialog.show(() => <DialogArchivedSessions project={p()} />)}
-                          >
-                            {language.t("sidebar.project.viewArchivedSessions")}
-                          </Button>
-                        </div>
+                        <Button
+                          size="large"
+                          icon="plus-small"
+                          class="w-full"
+                          onClick={() => navigateWithSidebarReset(`/${base64Encode(p().worktree)}/session`)}
+                        >
+                          {language.t("command.session.new")}
+                        </Button>
                       </div>
                       <div class="flex-1 min-h-0">
-                        <LocalWorkspace project={p()} mobile={panelProps.mobile} />
+                        <LocalWorkspace
+                          ctx={workspaceSidebarCtx}
+                          project={p()}
+                          sortNow={sortNow}
+                          mobile={panelProps.mobile}
+                          popover={popover()}
+                        />
                       </div>
                     </>
                   }
                 >
                   <>
                     <div class="shrink-0 py-4 px-3">
-                      <div class="flex flex-col gap-2">
-                        <TooltipKeybind
-                          title={language.t("workspace.new")}
-                          keybind={command.keybind("workspace.new")}
-                          placement="top"
-                        >
-                          <Button size="large" icon="plus-small" class="w-full" onClick={() => createWorkspace(p())}>
-                            {language.t("workspace.new")}
-                          </Button>
-                        </TooltipKeybind>
-                        <Button
-                          size="large"
-                          icon="archive"
-                          variant="ghost"
-                          class="w-full"
-                          onClick={() => dialog.show(() => <DialogArchivedSessions project={p()} />)}
-                        >
-                          {language.t("sidebar.project.viewArchivedSessions")}
-                        </Button>
-                      </div>
+                      <Button size="large" icon="plus-small" class="w-full" onClick={() => createWorkspace(p())}>
+                        {language.t("workspace.new")}
+                      </Button>
                     </div>
                     <div class="relative flex-1 min-h-0">
                       <DragDropProvider
@@ -3329,13 +2109,24 @@ export default function Layout(props: ParentProps) {
                           <SortableProvider ids={workspaces()}>
                             <For each={workspaces()}>
                               {(directory) => (
-                                <SortableWorkspace directory={directory} project={p()} mobile={panelProps.mobile} />
+                                <SortableWorkspace
+                                  ctx={workspaceSidebarCtx}
+                                  directory={directory}
+                                  project={p()}
+                                  sortNow={sortNow}
+                                  mobile={panelProps.mobile}
+                                  popover={popover()}
+                                />
                               )}
                             </For>
                           </SortableProvider>
                         </div>
                         <DragOverlay>
-                          <WorkspaceDragOverlay />
+                          <WorkspaceDragOverlay
+                            sidebarProject={sidebarProject}
+                            activeWorkspace={() => store.activeWorkspace}
+                            workspaceLabel={workspaceLabel}
+                          />
                         </DragOverlay>
                       </DragDropProvider>
                     </div>
@@ -3347,257 +2138,214 @@ export default function Layout(props: ParentProps) {
         </Show>
 
         <div
-          class="shrink-0 px-2 py-3 border-t border-border-weak-base"
+          class="shrink-0 px-3 py-3"
           classList={{
-            hidden: !(providers.all().length > 0 && providers.paid().length === 0),
+            hidden: store.gettingStartedDismissed || !(providers.all().length > 0 && providers.paid().length === 0),
           }}
         >
-          <div class="rounded-md bg-background-base shadow-xs-border-base">
-            <div class="p-3 flex flex-col gap-2">
-              <div class="text-12-medium text-text-strong">{language.t("sidebar.gettingStarted.title")}</div>
-              <div class="text-text-base">{language.t("sidebar.gettingStarted.line1")}</div>
-              <div class="text-text-base">{language.t("sidebar.gettingStarted.line2")}</div>
-            </div>
-            <Button
-              class="flex w-full text-left justify-start text-12-medium text-text-strong stroke-[1.5px] rounded-md rounded-t-none shadow-none border-t border-border-weak-base px-3"
-              size="large"
-              icon="plus"
-              onClick={connectProvider}
-            >
-              {language.t("command.provider.connect")}
-            </Button>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  const SidebarContent = (sidebarProps: { mobile?: boolean }) => {
-    const expanded = () => sidebarProps.mobile || layout.sidebar.opened()
-
-    return (
-      <div class="flex h-full w-full overflow-hidden">
-        <div class="w-16 shrink-0 bg-background-base flex flex-col items-center overflow-hidden" onMouseMove={aim.move}>
-          <div class="flex-1 min-h-0 w-full">
-            <DragDropProvider
-              onDragStart={handleDragStart}
-              onDragEnd={handleDragEnd}
-              onDragOver={handleDragOver}
-              collisionDetector={closestCenter}
-            >
-              <DragDropSensors />
-              <ConstrainDragXAxis />
-              <div class="h-full w-full flex flex-col items-center gap-3 px-3 py-2 overflow-y-auto no-scrollbar">
-                <SortableProvider ids={layout.projects.list().map((p) => p.worktree)}>
-                  <For each={layout.projects.list()}>
-                    {(project) => <SortableProject project={project} mobile={sidebarProps.mobile} />}
-                  </For>
-                </SortableProvider>
-                <Tooltip
-                  placement={sidebarProps.mobile ? "bottom" : "right"}
-                  value={
-                    <div class="flex items-center gap-2">
-                      <span>{language.t("command.project.open")}</span>
-                      <Show when={!sidebarProps.mobile}>
-                        <span class="text-icon-base text-12-medium">{command.keybind("project.open")}</span>
-                      </Show>
-                    </div>
-                  }
-                >
-                  <IconButton
-                    icon="plus"
-                    variant="ghost"
-                    size="large"
-                    onClick={chooseProject}
-                    aria-label={language.t("command.project.open")}
-                  />
-                </Tooltip>
+          <div class="rounded-xl bg-background-base shadow-xs-border-base" data-component="getting-started">
+            <div class="p-3 flex flex-col gap-6">
+              <div class="flex flex-col gap-2">
+                <div class="text-14-medium text-text-strong">{language.t("sidebar.gettingStarted.title")}</div>
+                <div class="text-14-regular text-text-base" style={{ "line-height": "var(--line-height-normal)" }}>
+                  {language.t("sidebar.gettingStarted.line1")}
+                </div>
+                <div class="text-14-regular text-text-base" style={{ "line-height": "var(--line-height-normal)" }}>
+                  {language.t("sidebar.gettingStarted.line2")}
+                </div>
               </div>
-              <DragOverlay>
-                <ProjectDragOverlay />
-              </DragOverlay>
-            </DragDropProvider>
-          </div>
-          <div class="shrink-0 w-full pt-3 pb-3 flex flex-col items-center gap-2">
-            <TooltipKeybind
-              placement={sidebarProps.mobile ? "bottom" : "right"}
-              title={language.t("sidebar.settings")}
-              keybind={command.keybind("settings.open")}
-            >
-              <IconButton
-                icon="settings-gear"
-                variant="ghost"
-                size="large"
-                onClick={openSettings}
-                aria-label={language.t("sidebar.settings")}
-              />
-            </TooltipKeybind>
-            <Tooltip placement={sidebarProps.mobile ? "bottom" : "right"} value={language.t("sidebar.help")}>
-              <IconButton
-                icon="help"
-                variant="ghost"
-                size="large"
-                onClick={() => platform.openLink("https://opencode.ai/desktop-feedback")}
-                aria-label={language.t("sidebar.help")}
-              />
-            </Tooltip>
+              <div data-component="getting-started-actions">
+                <Button size="large" icon="plus-small" onClick={connectProvider}>
+                  {language.t("command.provider.connect")}
+                </Button>
+                <Button size="large" variant="ghost" onClick={() => setStore("gettingStartedDismissed", true)}>
+                  {language.t("toast.update.action.notYet")}
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
-
-        <Show when={expanded()}>
-          <SidebarPanel project={currentProject()} mobile={sidebarProps.mobile} />
-        </Show>
       </div>
     )
   }
+
+  const projects = () => layout.projects.list()
+  const projectOverlay = () => <ProjectDragOverlay projects={projects} activeProject={() => store.activeProject} />
+  const sidebarContent = (mobile?: boolean) => (
+    <SidebarContent
+      mobile={mobile}
+      opened={() => layout.sidebar.opened()}
+      aimMove={aim.move}
+      projects={projects}
+      renderProject={(project) => (
+        <SortableProject ctx={projectSidebarCtx} project={project} sortNow={sortNow} mobile={mobile} />
+      )}
+      handleDragStart={handleDragStart}
+      handleDragEnd={handleDragEnd}
+      handleDragOver={handleDragOver}
+      openProjectLabel={language.t("command.project.open")}
+      openProjectKeybind={() => command.keybind("project.open")}
+      onOpenProject={chooseProject}
+      renderProjectOverlay={projectOverlay}
+      settingsLabel={() => language.t("sidebar.settings")}
+      settingsKeybind={() => command.keybind("settings.open")}
+      onOpenSettings={openSettings}
+      helpLabel={() => language.t("sidebar.help")}
+      onOpenHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
+      renderPanel={() =>
+        mobile ? (
+          <SidebarPanel project={currentProject()} mobile />
+        ) : (
+          <Show when={currentProject()}>
+            <SidebarPanel project={currentProject()} merged />
+          </Show>
+        )
+      }
+    />
+  )
 
   return (
-    <div class="relative bg-background-base flex-1 min-h-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
-      <Show when={folderDragging() || fileDragging()}>
-        <div class="fixed inset-0 z-[100] flex items-center justify-center bg-background-base/80 pointer-events-none">
-          <div class="flex flex-col items-center gap-3 text-text-weak">
-            <Show when={folderDragging()} fallback={<Icon name="photo" class="size-12" />}>
-              <Icon name="folder" class="size-12" />
-            </Show>
-            <span class="text-16-medium">
-              {folderDragging() ? language.t("sidebar.dropFolder") : language.t("sidebar.dropFile")}
-            </span>
-          </div>
-        </div>
-      </Show>
+    <div class="relative bg-background-base flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
       <Titlebar />
-      <div class="flex-1 min-h-0 flex">
-        <nav
-          aria-label={language.t("sidebar.nav.projectsAndSessions")}
-          data-component="sidebar-nav-desktop"
-          classList={{
-            "hidden xl:block": true,
-            "relative shrink-0": true,
-          }}
-          style={{ width: layout.sidebar.opened() ? `${Math.max(layout.sidebar.width(), 244)}px` : "64px" }}
-          ref={(el) => {
-            setState("nav", el)
-          }}
-          onMouseEnter={() => {
-            if (navLeave.current === undefined) return
-            clearTimeout(navLeave.current)
-            navLeave.current = undefined
-          }}
-          onMouseLeave={() => {
-            aim.reset()
-            if (!sidebarHovering()) return
+      <div class="flex-1 min-h-0 min-w-0 flex">
+        <div class="flex-1 min-h-0 relative">
+          <div class="size-full relative overflow-x-hidden">
+            <nav
+              aria-label={language.t("sidebar.nav.projectsAndSessions")}
+              data-component="sidebar-nav-desktop"
+              classList={{
+                "hidden xl:block": true,
+                "absolute inset-y-0 left-0": true,
+                "z-10": true,
+              }}
+              style={{ width: `${Math.max(layout.sidebar.width(), 244)}px` }}
+              ref={(el) => {
+                setState("nav", el)
+              }}
+              onMouseEnter={() => {
+                disarm()
+              }}
+              onMouseLeave={() => {
+                aim.reset()
+                if (!sidebarHovering()) return
 
-            if (navLeave.current !== undefined) clearTimeout(navLeave.current)
-            navLeave.current = window.setTimeout(() => {
-              navLeave.current = undefined
-              setHoverProject(undefined)
-              setState("hoverSession", undefined)
-            }, 300)
-          }}
-        >
-          <div class="@container w-full h-full contain-strict">
-            <SidebarContent />
-          </div>
-          <Show when={!layout.sidebar.opened() ? hoverProjectData()?.worktree : undefined} keyed>
-            {(worktree) => (
-              <div class="absolute inset-y-0 left-16 z-50 flex" onMouseEnter={aim.reset}>
-                <SidebarPanel project={hoverProjectData()} />
-              </div>
-            )}
-          </Show>
-          <Show when={layout.sidebar.opened()}>
-            <ResizeHandle
-              direction="horizontal"
-              size={layout.sidebar.width()}
-              min={244}
-              max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.3 + 64}
-              collapseThreshold={244}
-              onResize={layout.sidebar.resize}
-              onCollapse={layout.sidebar.close}
+                arm()
+              }}
+            >
+              <div class="@container w-full h-full contain-strict">{sidebarContent()}</div>
+              <Show when={layout.sidebar.opened()}>
+                <div onPointerDown={() => setState("sizing", true)}>
+                  <ResizeHandle
+                    direction="horizontal"
+                    size={layout.sidebar.width()}
+                    min={244}
+                    max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.3 + 64}
+                    collapseThreshold={244}
+                    onResize={(w) => {
+                      setState("sizing", true)
+                      if (sizet !== undefined) clearTimeout(sizet)
+                      sizet = window.setTimeout(() => setState("sizing", false), 120)
+                      layout.sidebar.resize(w)
+                    }}
+                    onCollapse={layout.sidebar.close}
+                  />
+                </div>
+              </Show>
+            </nav>
+
+            <div
+              class="hidden xl:block pointer-events-none absolute top-0 right-0 z-0 border-t border-border-weaker-base"
+              style={{ left: "calc(4rem + 12px)" }}
             />
-          </Show>
-        </nav>
-        <div class="xl:hidden">
-          <div
-            classList={{
-              "fixed inset-x-0 top-10 bottom-0 z-40 transition-opacity duration-200": true,
-              "opacity-100 pointer-events-auto": layout.mobileSidebar.opened(),
-              "opacity-0 pointer-events-none": !layout.mobileSidebar.opened(),
-            }}
-            onClick={(e) => {
-              if (e.target === e.currentTarget) layout.mobileSidebar.hide()
-            }}
-          />
-          <nav
-            aria-label={language.t("sidebar.nav.projectsAndSessions")}
-            data-component="sidebar-nav-mobile"
-            classList={{
-              "@container fixed top-10 bottom-0 left-0 z-50 w-72 bg-background-base transition-transform duration-200 ease-out": true,
-              "translate-x-0": layout.mobileSidebar.opened(),
-              "-translate-x-full": !layout.mobileSidebar.opened(),
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <SidebarContent mobile />
-          </nav>
-        </div>
 
-        <main
-          classList={{
-            "size-full overflow-x-hidden flex flex-col items-start contain-strict border-t border-border-weak-base": true,
-            "xl:border-l xl:rounded-tl-[12px]": !layout.sidebar.opened(),
-          }}
-        >
-          <Show when={findbar.open && platform.find}>
-            <div class="pointer-events-none absolute top-3 right-3 z-30 w-[min(480px,calc(100%-24px))]">
-              <div class="pointer-events-auto flex flex-row items-center gap-2 rounded-2xl border border-border-weak-base bg-background-stronger/92 px-2 py-2 shadow-lg backdrop-blur-xl">
-                <div class="flex flex-1 min-w-0 flex-row items-center gap-2 rounded-xl bg-surface-panel px-3 ring-1 ring-border-weaker-base/70">
-                  <Icon name="magnifying-glass" size="small" class="shrink-0 text-text-weaker" />
-                  <InlineInput
-                    ref={findInput}
-                    value={findbar.q}
-                    autofocus
-                    placeholder={language.t("common.search.placeholder")}
-                    style={{ "--inline-input-shadow": "none" }}
-                    class="h-10 flex-1 min-w-0 bg-transparent text-14-regular text-text-strong placeholder:text-text-weaker"
-                    onInput={(event) => setFindbar("q", event.currentTarget.value)}
-                    onKeyDown={findbarKeyDown}
-                  />
-                </div>
-                <div class="flex flex-row items-center gap-1 rounded-xl bg-surface-panel px-1.5 py-1 ring-1 ring-border-weaker-base/70">
-                  <IconButton
-                    icon="arrow-left"
-                    variant="ghost"
-                    size="large"
-                    class="rounded-lg text-text-weak hover:text-text-strong"
-                    aria-label={language.t("command.page.find.previous")}
-                    onClick={() => runFindbar(-1)}
-                  />
-                  <IconButton
-                    icon="arrow-right"
-                    variant="ghost"
-                    size="large"
-                    class="rounded-lg text-text-weak hover:text-text-strong"
-                    aria-label={language.t("command.page.find.next")}
-                    onClick={() => runFindbar(1)}
-                  />
-                  <div class="mx-0.5 h-5 w-px bg-border-weaker-base" />
-                  <IconButton
-                    icon="close"
-                    variant="ghost"
-                    size="large"
-                    class="rounded-lg text-text-weak hover:text-text-strong"
-                    aria-label={language.t("common.close")}
-                    onClick={closeFindbar}
-                  />
-                </div>
-              </div>
+            <div class="xl:hidden">
+              <div
+                classList={{
+                  "fixed inset-x-0 top-10 bottom-0 z-40 transition-opacity duration-200": true,
+                  "opacity-100 pointer-events-auto": layout.mobileSidebar.opened(),
+                  "opacity-0 pointer-events-none": !layout.mobileSidebar.opened(),
+                }}
+                onClick={(e) => {
+                  if (e.target === e.currentTarget) layout.mobileSidebar.hide()
+                }}
+              />
+              <nav
+                aria-label={language.t("sidebar.nav.projectsAndSessions")}
+                data-component="sidebar-nav-mobile"
+                classList={{
+                  "@container fixed top-10 bottom-0 left-0 z-50 w-full max-w-[400px] overflow-hidden border-r border-border-weaker-base bg-background-base transition-transform duration-200 ease-out": true,
+                  "translate-x-0": layout.mobileSidebar.opened(),
+                  "-translate-x-full": !layout.mobileSidebar.opened(),
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {sidebarContent(true)}
+              </nav>
             </div>
-          </Show>
-          <Show when={!autoselecting()} fallback={<div class="size-full" />}>
-            {props.children}
-          </Show>
-        </main>
+
+            <div
+              classList={{
+                "absolute inset-0": true,
+                "xl:inset-y-0 xl:right-0 xl:left-[var(--main-left)]": true,
+                "z-20": true,
+                "transition-[left] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[left] motion-reduce:transition-none":
+                  !state.sizing,
+              }}
+              style={{
+                "--main-left": layout.sidebar.opened() ? `${Math.max(layout.sidebar.width(), 244)}px` : "4rem",
+              }}
+            >
+              <main
+                classList={{
+                  "size-full overflow-x-hidden flex flex-col items-start contain-strict border-t border-border-weak-base bg-background-base xl:border-l xl:rounded-tl-[12px]": true,
+                }}
+              >
+                <Show when={!autoselecting()} fallback={<div class="size-full" />}>
+                  {props.children}
+                </Show>
+              </main>
+            </div>
+
+            <div
+              classList={{
+                "hidden xl:flex absolute inset-y-0 left-16 z-30": true,
+                "opacity-100 translate-x-0 pointer-events-auto": state.peeked && !layout.sidebar.opened(),
+                "opacity-0 -translate-x-2 pointer-events-none": !state.peeked || layout.sidebar.opened(),
+                "transition-[opacity,transform] motion-reduce:transition-none": true,
+                "duration-180 ease-out": state.peeked && !layout.sidebar.opened(),
+                "duration-120 ease-in": !state.peeked || layout.sidebar.opened(),
+              }}
+              onMouseMove={disarm}
+              onMouseEnter={() => {
+                disarm()
+                aim.reset()
+              }}
+              onPointerDown={disarm}
+              onMouseLeave={() => {
+                arm()
+              }}
+            >
+              <Show when={state.peek}>
+                <SidebarPanel project={state.peek} merged={false} />
+              </Show>
+            </div>
+
+            <div
+              classList={{
+                "hidden xl:block pointer-events-none absolute inset-y-0 right-0 z-25 overflow-hidden": true,
+                "opacity-100 translate-x-0": state.peeked && !layout.sidebar.opened(),
+                "opacity-0 -translate-x-2": !state.peeked || layout.sidebar.opened(),
+                "transition-[opacity,transform] motion-reduce:transition-none": true,
+                "duration-180 ease-out": state.peeked && !layout.sidebar.opened(),
+                "duration-120 ease-in": !state.peeked || layout.sidebar.opened(),
+              }}
+              style={{ left: `calc(4rem + ${Math.max(Math.max(layout.sidebar.width(), 244) - 64, 0)}px)` }}
+            >
+              <div class="h-full w-px" style={{ "box-shadow": "var(--shadow-sidebar-overlay)" }} />
+            </div>
+          </div>
+        </div>
+        {import.meta.env.DEV && <DebugBar />}
       </div>
       <Toast.Region />
     </div>
