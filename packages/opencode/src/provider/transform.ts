@@ -51,7 +51,11 @@ export namespace ProviderTransform {
   ): ModelMessage[] {
     // Anthropic rejects messages with empty content - filter out empty string messages
     // and remove empty text/reasoning parts from array content
-    if (model.api.npm === "@ai-sdk/anthropic" || model.api.npm === "@ai-sdk/amazon-bedrock") {
+    if (
+      model.api.npm === "@ai-sdk/anthropic" ||
+      model.api.npm === "@ai-sdk/amazon-bedrock" ||
+      model.api.npm === "@ai-sdk/openai-compatible"
+    ) {
       msgs = msgs
         .map((msg) => {
           if (typeof msg.content === "string") {
@@ -59,12 +63,29 @@ export namespace ProviderTransform {
             return msg
           }
           if (!Array.isArray(msg.content)) return msg
-          const filtered = msg.content.filter((part) => {
-            if (part.type === "text" || part.type === "reasoning") {
-              return part.text !== ""
-            }
-            return true
-          })
+          const filtered = msg.content
+            .map((part: any) => {
+              // Filter empty text blocks nested inside tool-result content arrays
+              if (part.type === "tool-result" && part.output?.type === "content" && Array.isArray(part.output.value)) {
+                const cleaned = part.output.value.filter(
+                  (block: any) => block.type !== "text" || (block.text && block.text !== ""),
+                )
+                return {
+                  ...part,
+                  output: {
+                    ...part.output,
+                    value: cleaned.length > 0 ? cleaned : [{ type: "text", text: "[No output]" }],
+                  },
+                }
+              }
+              return part
+            })
+            .filter((part: any) => {
+              if (part.type === "text" || part.type === "reasoning") {
+                return part.text && part.text !== ""
+              }
+              return true
+            })
           if (filtered.length === 0) return undefined
           return { ...msg, content: filtered }
         })
