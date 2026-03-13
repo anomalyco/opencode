@@ -59,12 +59,26 @@ export namespace ProviderTransform {
             return msg
           }
           if (!Array.isArray(msg.content)) return msg
-          const filtered = msg.content.filter((part) => {
-            if (part.type === "text" || part.type === "reasoning") {
-              return part.text !== ""
-            }
-            return true
-          })
+          const filtered = msg.content
+            .map((part) => {
+              // Anthropic rejects tool_result with empty content - replace with placeholder
+              if (part.type === "tool-result") {
+                const p = part as any
+                if (typeof p.content === "string" && p.content === "") {
+                  return { ...part, content: "(empty)" } as typeof part
+                }
+                if (Array.isArray(p.content) && p.content.length === 0) {
+                  return { ...part, content: [{ type: "text", text: "(empty)" }] } as typeof part
+                }
+              }
+              return part
+            })
+            .filter((part) => {
+              if (part.type === "text" || part.type === "reasoning") {
+                return part.text !== ""
+              }
+              return true
+            })
           if (filtered.length === 0) return undefined
           return { ...msg, content: filtered }
         })
@@ -194,7 +208,9 @@ export namespace ProviderTransform {
     }
 
     for (const msg of unique([...system, ...final])) {
-      const useMessageLevelOptions = model.providerID === "anthropic" || model.providerID.includes("bedrock")
+      const isAnthropicSdk =
+        model.api.npm === "@ai-sdk/anthropic" || model.api.npm === "@ai-sdk/google-vertex/anthropic"
+      const useMessageLevelOptions = isAnthropicSdk || model.providerID.includes("bedrock")
       const shouldUseContentOptions = !useMessageLevelOptions && Array.isArray(msg.content) && msg.content.length > 0
 
       if (shouldUseContentOptions) {

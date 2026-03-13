@@ -2653,3 +2653,139 @@ describe("ProviderTransform.variants", () => {
     })
   })
 })
+
+// Custom provider using @ai-sdk/anthropic (e.g. a relay/proxy with baseURL override).
+// providerID is NOT "anthropic", but api.npm IS "@ai-sdk/anthropic".
+const customAnthropicModel = {
+  id: "myrelay/claude-sonnet-4-5",
+  providerID: "myrelay",
+  api: {
+    id: "claude-sonnet-4-5-20250929",
+    url: "https://my-relay.example.com",
+    npm: "@ai-sdk/anthropic",
+  },
+  name: "Claude via relay",
+  capabilities: {
+    temperature: true,
+    reasoning: false,
+    attachment: true,
+    toolcall: true,
+    input: { text: true, audio: false, image: true, video: false, pdf: true },
+    output: { text: true, audio: false, image: false, video: false, pdf: false },
+    interleaved: false,
+  },
+  cost: { input: 0.003, output: 0.015, cache: { read: 0.0003, write: 0.00375 } },
+  limit: { context: 200000, output: 8192 },
+  status: "active",
+  options: {},
+  headers: {},
+} as any
+
+describe("ProviderTransform.message - custom provider with @ai-sdk/anthropic (relay/proxy)", () => {
+  // Bug A: empty tool-result content causes relay crash
+  // When a tool returns "", the Anthropic SDK sends content:"" in tool_result,
+  // which the API (and any relay) rejects with "content field is empty".
+  test("replaces empty string tool-result content with placeholder", () => {
+    const msgs = [
+      { role: "user", content: "Run the bash tool" },
+      {
+        role: "assistant",
+        content: [{ type: "tool-call", toolCallId: "call_1", toolName: "bash", args: { command: "echo hi" } }],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call_1",
+            toolName: "bash",
+            content: "", // tool returned empty string
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, customAnthropicModel, {})
+
+    const toolMsg = result.find((m: any) => m.role === "tool")
+    expect(toolMsg).toBeDefined()
+    const toolResult = toolMsg!.content.find((p: any) => p.type === "tool-result")
+    expect(toolResult).toBeDefined()
+    // must not be empty - relay/Anthropic API would reject ""
+    expect(toolResult!.content).not.toBe("")
+    expect(toolResult!.content).toBeTruthy()
+  })
+
+  test("replaces empty array tool-result content with placeholder", () => {
+    const msgs = [
+      { role: "user", content: "Run the tool" },
+      {
+        role: "assistant",
+        content: [{ type: "tool-call", toolCallId: "call_2", toolName: "read", args: {} }],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call_2",
+            toolName: "read",
+            content: [], // empty array
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, customAnthropicModel, {})
+
+    const toolMsg = result.find((m: any) => m.role === "tool")
+    const toolResult = toolMsg!.content.find((p: any) => p.type === "tool-result")
+    expect(Array.isArray(toolResult!.content) ? toolResult!.content.length : 0).toBeGreaterThan(0)
+  })
+
+  test("keeps non-empty tool-result content unchanged", () => {
+    const msgs = [
+      { role: "user", content: "Run the tool" },
+      {
+        role: "assistant",
+        content: [{ type: "tool-call", toolCallId: "call_3", toolName: "bash", args: {} }],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call_3",
+            toolName: "bash",
+            content: "hello world",
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, customAnthropicModel, {})
+
+    const toolMsg = result.find((m: any) => m.role === "tool")
+    const toolResult = toolMsg!.content.find((p: any) => p.type === "tool-result")
+    expect(toolResult!.content).toBe("hello world")
+  })
+
+  // Bug B: applyCaching must use message-level cacheControl for @ai-sdk/anthropic,
+  // regardless of whether providerID is "anthropic".
+  // When providerID is custom (e.g. "myrelay"), the old code used content-level options
+  // which @ai-sdk/anthropic ignores entirely.
+  test("applyCaching uses message-level providerOptions for @ai-sdk/anthropic custom provider", () => {
+    const msgs = [
+      { role: "system", content: "You are a helpful assistant." },
+      { role: "user", content: "Hello" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, customAnthropicModel, {})
+
+    // With the fix, cacheControl should be at providerOptions on the message, not nested in content parts
+    const systemMsg = result.find((m: any) => m.role === "system")
+    expect(systemMsg).toBeDefined()
+    // Message-level providerOptions should contain anthropic cacheControl
+    expect(systemMsg!.providerOptions?.anthropic?.cacheControl).toBeDefined()
+  })
+})
