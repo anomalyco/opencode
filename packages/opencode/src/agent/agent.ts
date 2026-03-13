@@ -251,7 +251,7 @@ export namespace Agent {
           modelTiers[tier as Provider.ModelTier] = Provider.parseTierConfig(tierConfig)
         }
 
-        item.modelTiers = modelTiers as Record<Provider.ModelTier, Provider.ModelReference>
+        item.modelTiers = modelTiers
       }
     }
 
