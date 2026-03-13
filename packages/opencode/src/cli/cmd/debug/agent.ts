@@ -4,7 +4,7 @@ import { Agent } from "../../../agent/agent"
 import { Provider } from "../../../provider/provider"
 import { Session } from "../../../session"
 import type { MessageV2 } from "../../../session/message-v2"
-import { MessageID, PartID } from "../../../session/schema"
+import { MessageID, PartID, type SessionID } from "../../../session/schema"
 import { ToolRegistry } from "../../../tool/registry"
 import { Instance } from "../../../project/instance"
 import { PermissionNext } from "../../../permission/next"
@@ -40,10 +40,11 @@ export const AgentCommand = cmd({
         )
         process.exit(1)
       }
-      const availableTools = await getAvailableTools(agent)
-      const resolvedTools = await resolveTools(agent, availableTools)
       const toolID = args.tool as string | undefined
       if (toolID) {
+        const session = await Session.create({ title: `Debug tool run (${agent.name})` })
+        const availableTools = await getAvailableTools(agent, session.id)
+        const resolvedTools = await resolveTools(agent, availableTools)
         const tool = availableTools.find((item) => item.id === toolID)
         if (!tool) {
           process.stderr.write(`Tool ${toolID} not found for agent ${agentName}` + EOL)
@@ -54,24 +55,32 @@ export const AgentCommand = cmd({
           process.exit(1)
         }
         const params = parseToolParams(args.params as string | undefined)
-        const ctx = await createToolContext(agent)
+        const ctx = await createToolContext(agent, session.id)
         const result = await tool.execute(params, ctx)
         process.stdout.write(JSON.stringify({ tool: toolID, input: params, result }, null, 2) + EOL)
         return
       }
 
-      const output = {
-        ...agent,
-        tools: resolvedTools,
+      const session = await Session.create({ title: `Debug tool list (${agent.name})` })
+      try {
+        const availableTools = await getAvailableTools(agent, session.id)
+        const resolvedTools = await resolveTools(agent, availableTools)
+
+        const output = {
+          ...agent,
+          tools: resolvedTools,
+        }
+        process.stdout.write(JSON.stringify(output, null, 2) + EOL)
+      } finally {
+        await Session.remove(session.id)
       }
-      process.stdout.write(JSON.stringify(output, null, 2) + EOL)
     })
   },
 })
 
-async function getAvailableTools(agent: Agent.Info) {
+export async function getAvailableTools(agent: Agent.Info, sessionID: SessionID) {
   const model = agent.model ?? (await Provider.defaultModel())
-  return ToolRegistry.tools(model, agent)
+  return ToolRegistry.tools({ model, sessionID, agent })
 }
 
 async function resolveTools(agent: Agent.Info, availableTools: Awaited<ReturnType<typeof getAvailableTools>>) {
@@ -111,14 +120,13 @@ function parseToolParams(input?: string) {
   return parsed as Record<string, unknown>
 }
 
-async function createToolContext(agent: Agent.Info) {
-  const session = await Session.create({ title: `Debug tool run (${agent.name})` })
+async function createToolContext(agent: Agent.Info, sessionID: SessionID) {
   const messageID = MessageID.ascending()
   const model = agent.model ?? (await Provider.defaultModel())
   const now = Date.now()
   const message: MessageV2.Assistant = {
     id: messageID,
-    sessionID: session.id,
+    sessionID,
     role: "assistant",
     time: {
       created: now,
@@ -145,10 +153,10 @@ async function createToolContext(agent: Agent.Info) {
   }
   await Session.updateMessage(message)
 
-  const ruleset = PermissionNext.merge(agent.permission, session.permission ?? [])
+  const ruleset = PermissionNext.merge(agent.permission, (await Session.get(sessionID)).permission ?? [])
 
   return {
-    sessionID: session.id,
+    sessionID,
     messageID,
     callID: PartID.ascending(),
     agent: agent.name,

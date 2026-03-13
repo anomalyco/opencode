@@ -861,7 +861,7 @@ export class Tool extends HeyApiClient {
   /**
    * List tools
    *
-   * Get a list of available tools with their JSON schema parameters for a specific provider and model combination.
+   * Get a list of available tools with their JSON schema parameters for a specific provider, model, and session.
    */
   public list<ThrowOnError extends boolean = false>(
     parameters: {
@@ -869,6 +869,7 @@ export class Tool extends HeyApiClient {
       workspace?: string
       provider: string
       model: string
+      sessionID: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -881,6 +882,7 @@ export class Tool extends HeyApiClient {
             { in: "query", key: "workspace" },
             { in: "query", key: "provider" },
             { in: "query", key: "model" },
+            { in: "query", key: "sessionID" },
           ],
         },
       ],

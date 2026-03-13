@@ -1,11 +1,16 @@
 import path from "path"
+import fs from "fs/promises"
 import { describe, expect, test } from "bun:test"
 import { fileURLToPath } from "url"
 import { Instance } from "../../src/project/instance"
+import { Agent } from "../../src/agent/agent"
+import { Provider } from "../../src/provider/provider"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Session } from "../../src/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { SessionPrompt } from "../../src/session/prompt"
+import { SessionProcessor } from "../../src/session/processor"
+import { MessageID } from "../../src/session/schema"
 import { Log } from "../../src/util/log"
 import { tmpdir } from "../fixture/fixture"
 
@@ -101,6 +106,92 @@ describe("session.prompt missing file", () => {
         expect(text[0]?.startsWith("Called the Read tool with the following input:")).toBe(true)
         expect(text[1]?.includes("Read tool failed to read")).toBe(true)
         expect(text[2]).toBe("after-file")
+
+        await Session.remove(session.id)
+      },
+    })
+  })
+})
+
+describe("session.prompt tool definitions", () => {
+  test("passes session id into prompt tool definitions", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      config: {
+        agent: {
+          build: {
+            model: "openai/gpt-5.2",
+          },
+        },
+      },
+      init: async (dir) => {
+        const plugin = path.join(dir, ".opencode", "plugin")
+        await fs.mkdir(plugin, { recursive: true })
+        await Bun.write(
+          path.join(plugin, "tool-definition.ts"),
+          [
+            "export default async () => ({",
+            '  "tool.definition": async (input, output) => {',
+            "    output.description = JSON.stringify(input)",
+            "  },",
+            "})",
+            "",
+          ].join("\n"),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const agent = await Agent.get("build")
+        if (!agent) throw new Error("expected build agent")
+        const ids = await Provider.defaultModel()
+        const model = await Provider.getModel(ids.providerID, ids.modelID)
+        const message = await Session.updateMessage({
+          id: MessageID.ascending(),
+          parentID: MessageID.ascending(),
+          sessionID: session.id,
+          role: "assistant",
+          mode: agent.name,
+          agent: agent.name,
+          path: { cwd: tmp.path, root: tmp.path },
+          cost: 0,
+          tokens: {
+            input: 0,
+            output: 0,
+            reasoning: 0,
+            cache: { read: 0, write: 0 },
+          },
+          modelID: model.id,
+          providerID: model.providerID,
+          time: { created: Date.now() },
+        })
+        const processor = {
+          message,
+          partFromToolCall() {
+            return undefined
+          },
+        } as unknown as SessionProcessor.Info
+
+        const tools = await SessionPrompt.resolveTools({
+          agent,
+          model,
+          session,
+          processor,
+          bypassAgentCheck: false,
+          messages: [],
+        })
+
+        const bash = tools.bash
+        expect(bash).toBeDefined()
+        if (!bash) throw new Error("expected bash tool")
+        if (!bash.description) throw new Error("expected bash description")
+        expect(JSON.parse(bash.description)).toEqual({
+          toolID: "bash",
+          sessionID: session.id,
+        })
 
         await Session.remove(session.id)
       },

@@ -2445,6 +2445,7 @@ export type ToolListData = {
     workspace?: string
     provider: string
     model: string
+    sessionID: string
   }
   url: "/experimental/tool"
 }
@@ -2454,6 +2455,10 @@ export type ToolListErrors = {
    * Bad request
    */
   400: BadRequestError
+  /**
+   * Session not found
+   */
+  404: unknown
 }
 
 export type ToolListError = ToolListErrors[keyof ToolListErrors]

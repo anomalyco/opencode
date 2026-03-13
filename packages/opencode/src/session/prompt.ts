@@ -788,10 +788,11 @@ export namespace SessionPrompt {
       },
     })
 
-    for (const item of await ToolRegistry.tools(
-      { modelID: ModelID.make(input.model.api.id), providerID: input.model.providerID },
-      input.agent,
-    )) {
+    for (const item of await ToolRegistry.tools({
+      model: { modelID: ModelID.make(input.model.api.id), providerID: input.model.providerID },
+      sessionID: input.session.id,
+      agent: input.agent,
+    })) {
       const schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters))
       tools[item.id] = tool({
         id: item.id as any,

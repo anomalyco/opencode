@@ -8,10 +8,13 @@ import { Instance } from "../../project/instance"
 import { Project } from "../../project/project"
 import { MCP } from "../../mcp"
 import { Session } from "../../session"
+import { SessionID } from "../../session/schema"
 import { zodToJsonSchema } from "zod-to-json-schema"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 import { WorkspaceRoutes } from "./workspace"
+import { NotFoundError } from "../../storage/db"
+import { HTTPException } from "hono/http-exception"
 
 export const ExperimentalRoutes = lazy(() =>
   new Hono()
@@ -43,7 +46,7 @@ export const ExperimentalRoutes = lazy(() =>
       describeRoute({
         summary: "List tools",
         description:
-          "Get a list of available tools with their JSON schema parameters for a specific provider and model combination.",
+          "Get a list of available tools with their JSON schema parameters for a specific provider, model, and session.",
         operationId: "tool.list",
         responses: {
           200: {
@@ -66,6 +69,9 @@ export const ExperimentalRoutes = lazy(() =>
               },
             },
           },
+          404: {
+            description: "Session not found",
+          },
           ...errors(400),
         },
       }),
@@ -74,11 +80,19 @@ export const ExperimentalRoutes = lazy(() =>
         z.object({
           provider: z.string(),
           model: z.string(),
+          sessionID: SessionID.zod,
         }),
       ),
       async (c) => {
-        const { provider, model } = c.req.valid("query")
-        const tools = await ToolRegistry.tools({ providerID: ProviderID.make(provider), modelID: ModelID.make(model) })
+        const { provider, model, sessionID } = c.req.valid("query")
+        await Session.get(sessionID).catch((err) => {
+          if (err instanceof NotFoundError) throw new HTTPException(404, { message: err.message })
+          throw err
+        })
+        const tools = await ToolRegistry.tools({
+          model: { providerID: ProviderID.make(provider), modelID: ModelID.make(model) },
+          sessionID,
+        })
         return c.json(
           tools.map((t) => ({
             id: t.id,

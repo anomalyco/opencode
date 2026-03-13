@@ -31,6 +31,7 @@ import { Truncate } from "./truncation"
 import { ApplyPatchTool } from "./apply_patch"
 import { Glob } from "../util/glob"
 import { pathToFileURL } from "url"
+import { SessionID } from "../session/schema"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -129,25 +130,28 @@ export namespace ToolRegistry {
     return all().then((x) => x.map((t) => t.id))
   }
 
-  export async function tools(
+  export async function tools(input: {
     model: {
       providerID: ProviderID
       modelID: ModelID
-    },
-    agent?: Agent.Info,
-  ) {
+    }
+    sessionID: SessionID
+    agent?: Agent.Info
+  }) {
     const tools = await all()
     const result = await Promise.all(
       tools
         .filter((t) => {
           // Enable websearch/codesearch for zen users OR via enable flag
           if (t.id === "codesearch" || t.id === "websearch") {
-            return model.providerID === ProviderID.opencode || Flag.OPENCODE_ENABLE_EXA
+            return input.model.providerID === ProviderID.opencode || Flag.OPENCODE_ENABLE_EXA
           }
 
           // use apply tool in same format as codex
           const usePatch =
-            model.modelID.includes("gpt-") && !model.modelID.includes("oss") && !model.modelID.includes("gpt-4")
+            input.model.modelID.includes("gpt-") &&
+            !input.model.modelID.includes("oss") &&
+            !input.model.modelID.includes("gpt-4")
           if (t.id === "apply_patch") return usePatch
           if (t.id === "edit" || t.id === "write") return !usePatch
 
@@ -155,12 +159,12 @@ export namespace ToolRegistry {
         })
         .map(async (t) => {
           using _ = log.time(t.id)
-          const tool = await t.init({ agent })
+          const tool = await t.init({ agent: input.agent })
           const output = {
             description: tool.description,
             parameters: tool.parameters,
           }
-          await Plugin.trigger("tool.definition", { toolID: t.id }, output)
+          await Plugin.trigger("tool.definition", { toolID: t.id, sessionID: input.sessionID }, output)
           return {
             id: t.id,
             ...tool,
