@@ -507,27 +507,17 @@ export namespace MessageV2 {
     // call if it begins on a new line, so we sanitize the text by inserting a
     // newline whenever a tool call tag appears immediately after non-newline
     // content.
-    function sanitizeToolCalls(messages: WithParts[]) {
-      for (const msg of messages) {
-        for (const part of msg.parts) {
-          if (part.type === "text" && typeof part.text === "string") {
-            // add a newline before any <tool_call> that isn't already on its own line
-            part.text = part.text.replace(/([^\n])(<tool_call>)/g, "$1\n$2")
-          }
+    const msgs = input.map((m) => ({ ...m, parts: [...m.parts] }))
+    for (const msg of msgs) {
+      for (const part of msg.parts) {
+        if (part.type === "text" && typeof part.text === "string") {
+          part.text = part.text.replace(/([^\n])(<tool_call>)/g, "$1\n$2")
         }
       }
     }
 
-    // copy input so we can sanitize without mutating the original array.
-    // we shallow-copy the message and its parts array; the parts themselves
-    // are left by reference, which lets the sanitizer still alter text but
-    // avoids surprising callers who hold the original `input` array.  after
-    // sanitization we operate on `msgs` when building the output.
-    const msgs = input.map((m) => ({ ...m, parts: [...m.parts] }))
-    sanitizeToolCalls(msgs)
-
     const result: UIMessage[] = []
-    const toolNames = new Set<string>()
+    const names = new Set<string>()
     // Track media from tool results that need to be injected as user messages
     // for providers that don't support media in tool results.
     //
@@ -586,213 +576,119 @@ export namespace MessageV2 {
       if (msg.parts.length === 0) continue
 
       if (msg.info.role === "user") {
-        let content: string | Array<{ type: string; [key: string]: any }> | undefined
-        for (const part of msg.parts) {
-          if (part.type === "text" && !part.ignored)
-            if (content === undefined) {
-              content = part.text
-            } else if (typeof content === "string") {
-              content += part.text
-            } else {
-              content.push({
-                type: "text",
-                text: part.text,
-              })
+        let content: string | Array<{ type: string; [key: string]: unknown }> | undefined
+        for (const p of msg.parts) {
+          if (p.type === "text" && !p.ignored) {
+            content = content === undefined ? p.text : (typeof content === "string" ? content + p.text : [...content, { type: "text", text: p.text }])
+          }
+          if (p.type === "file" && p.mime !== "text/plain" && p.mime !== "application/x-directory") {
+            const txt = options?.stripMedia && isMedia(p.mime) ? `[Attached ${p.mime}: ${p.filename ?? "file"}]` : undefined
+            const file = txt ? undefined : { type: "file" as const, url: p.url, mediaType: p.mime, filename: p.filename }
+            if (txt) {
+              content = content === undefined ? txt : (typeof content === "string" ? content + txt : [...content, { type: "text", text: txt }])
             }
-          // text/plain and directory files are converted into text parts, ignore them
-          if (part.type === "file" && part.mime !== "text/plain" && part.mime !== "application/x-directory") {
-            if (options?.stripMedia && isMedia(part.mime)) {
-              const text = `[Attached ${part.mime}: ${part.filename ?? "file"}]`
-              if (content === undefined) {
-                content = text
-              } else if (typeof content === "string") {
-                content += text
-              } else {
-                content.push({
-                  type: "text",
-                  text,
-                })
-              }
-            } else {
-              const filePart = { type: "file" as const, url: part.url, mediaType: part.mime, filename: part.filename }
-              if (content === undefined) {
-                content = [filePart]
-              } else if (typeof content === "string") {
-                content = [{ type: "text", text: content }, filePart]
-              } else {
-                content.push(filePart)
-              }
+            if (file) {
+              content = content === undefined ? [file] : (typeof content === "string" ? [{ type: "text", text: content }, file] : [...content, file])
             }
           }
-
-          if (part.type === "compaction") {
-            const text = "What did we do so far?"
-            if (content === undefined) {
-              content = text
-            } else if (typeof content === "string") {
-              content += text
-            } else {
-              content.push({
-                type: "text",
-                text,
-              })
-            }
+          if (p.type === "compaction") {
+            const txt = "What did we do so far?"
+            content = content === undefined ? txt : (typeof content === "string" ? content + txt : [...content, { type: "text", text: txt }])
           }
-          if (part.type === "subtask") {
-            const text = "The following tool was executed by the user"
-            if (content === undefined) {
-              content = text
-            } else if (typeof content === "string") {
-              content += text
-            } else {
-              content.push({
-                type: "text",
-                text,
-              })
-            }
+          if (p.type === "subtask") {
+            const txt = "The following tool was executed by the user"
+            content = content === undefined ? txt : (typeof content === "string" ? content + txt : [...content, { type: "text", text: txt }])
           }
         }
         if (content !== undefined) {
-          const userMessage: UIMessage = {
-            id: msg.info.id,
-            role: "user",
-            content,
-          }
-          result.push(userMessage)
+          result.push({ id: msg.info.id, role: "user", content })
         }
       }
 
       if (msg.info.role === "assistant") {
-        const differentModel = `${model.providerID}/${model.id}` !== `${msg.info.providerID}/${msg.info.modelID}`
+        const diff = `${model.providerID}/${model.id}` !== `${msg.info.providerID}/${msg.info.modelID}`
         const media: Array<{ mime: string; url: string }> = []
 
-        if (
-          msg.info.error &&
-          !(
-            MessageV2.AbortedError.isInstance(msg.info.error) &&
-            msg.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
-          )
-        ) {
+        if (msg.info.error && !(MessageV2.AbortedError.isInstance(msg.info.error) && msg.parts.some((p) => p.type !== "step-start" && p.type !== "reasoning"))) {
           continue
         }
-        const assistantMessage: UIMessage = {
-          id: msg.info.id,
-          role: "assistant",
-          content: [],
-        }
-        for (const part of msg.parts) {
-          if (part.type === "text")
-            assistantMessage.content.push({
-              type: "text",
-              text: part.text,
-              ...(differentModel ? {} : { providerMetadata: part.metadata }),
-            })
-          if (part.type === "step-start")
-            assistantMessage.content.push({
-              type: "step-start",
-            })
-          if (part.type === "tool") {
-            toolNames.add(part.tool)
-            if (part.state.status === "completed") {
-              const outputText = part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output
-              const attachments = part.state.time.compacted || options?.stripMedia ? [] : (part.state.attachments ?? [])
 
-              // For providers that don't support media in tool results, extract media files
-              // (images, PDFs) to be sent as a separate user message
-              const mediaAttachments = attachments.filter((a) => isMedia(a.mime))
-              const nonMediaAttachments = attachments.filter((a) => !isMedia(a.mime))
-              if (!supportsMediaInToolResults && mediaAttachments.length > 0) {
-                media.push(...mediaAttachments)
+        const msg_out: UIMessage = { id: msg.info.id, role: "assistant", content: [] }
+        for (const p of msg.parts) {
+          if (p.type === "text") {
+            msg_out.content.push({ type: "text", text: p.text, ...(diff ? {} : { providerMetadata: p.metadata }) })
+          }
+          if (p.type === "step-start") {
+            msg_out.content.push({ type: "step-start" })
+          }
+          if (p.type === "tool") {
+            names.add(p.tool)
+            if (p.state.status === "completed") {
+              const txt = p.state.time.compacted ? "[Old tool result content cleared]" : p.state.output
+              const attach = p.state.time.compacted || options?.stripMedia ? [] : (p.state.attachments ?? [])
+              const media_attach = attach.filter((a) => isMedia(a.mime))
+              const no_media = attach.filter((a) => !isMedia(a.mime))
+              if (!supportsMediaInToolResults && media_attach.length > 0) {
+                media.push(...media_attach)
               }
-              const finalAttachments = supportsMediaInToolResults ? attachments : nonMediaAttachments
-
-              const output =
-                finalAttachments.length > 0
-                  ? {
-                      text: outputText,
-                      attachments: finalAttachments,
-                    }
-                  : outputText
-
-              assistantMessage.content.push({
-                type: ("tool-" + part.tool) as `tool-${string}`,
+              const final = supportsMediaInToolResults ? attach : no_media
+              const out = final.length > 0 ? { text: txt, attachments: final } : txt
+              msg_out.content.push({
+                type: (`tool-${p.tool}`) as `tool-${string}`,
                 state: "output-available",
-                toolCallId: part.callID,
-                input: part.state.input,
-                output,
-                ...(differentModel ? {} : { callProviderMetadata: part.metadata }),
+                toolCallId: p.callID,
+                input: p.state.input,
+                output: out,
+                ...(diff ? {} : { callProviderMetadata: p.metadata }),
               })
             }
-            if (part.state.status === "error")
-              assistantMessage.content.push({
-                type: ("tool-" + part.tool) as `tool-${string}`,
+            if (p.state.status === "error") {
+              msg_out.content.push({
+                type: (`tool-${p.tool}`) as `tool-${string}`,
                 state: "output-error",
-                toolCallId: part.callID,
-                input: part.state.input,
-                errorText: part.state.error,
-                ...(differentModel ? {} : { callProviderMetadata: part.metadata }),
+                toolCallId: p.callID,
+                input: p.state.input,
+                errorText: p.state.error,
+                ...(diff ? {} : { callProviderMetadata: p.metadata }),
               })
-            // Handle pending/running tool calls to prevent dangling tool_use blocks
-            // Anthropic/Claude APIs require every tool_use to have a corresponding tool_result
-            if (part.state.status === "pending" || part.state.status === "running")
-              assistantMessage.content.push({
-                type: ("tool-" + part.tool) as `tool-${string}`,
+            }
+            if (p.state.status === "pending" || p.state.status === "running") {
+              msg_out.content.push({
+                type: (`tool-${p.tool}`) as `tool-${string}`,
                 state: "output-error",
-                toolCallId: part.callID,
-                input: part.state.input,
+                toolCallId: p.callID,
+                input: p.state.input,
                 errorText: "[Tool execution was interrupted]",
-                ...(differentModel ? {} : { callProviderMetadata: part.metadata }),
+                ...(diff ? {} : { callProviderMetadata: p.metadata }),
               })
+            }
           }
-          if (part.type === "reasoning") {
-            assistantMessage.content.push({
-              type: "reasoning",
-              text: part.text,
-              ...(differentModel ? {} : { providerMetadata: part.metadata }),
-            })
+          if (p.type === "reasoning") {
+            msg_out.content.push({ type: "reasoning", text: p.text, ...(diff ? {} : { providerMetadata: p.metadata }) })
           }
         }
-        if (Array.isArray(assistantMessage.content) && assistantMessage.content.length > 0) {
-          result.push(assistantMessage)
-          // Inject pending media as a user message for providers that don't support
-          // media (images, PDFs) in tool results
+        if (Array.isArray(msg_out.content) && msg_out.content.length > 0) {
+          result.push(msg_out)
           if (media.length > 0) {
-            const mediaContent: Array<{ type: "text"; text: string } | { type: "file"; url: string; mediaType: string }> = [
-              {
-                type: "text",
-                text: "Attached image(s) from tool result:",
-              },
-              ...media.map((attachment) => ({
-                type: "file" as const,
-                url: attachment.url,
-                mediaType: attachment.mime,
-              })),
-            ]
             result.push({
               id: MessageID.ascending(),
               role: "user",
-              content: mediaContent,
+              content: [{ type: "text", text: "Attached image(s) from tool result:" }, ...media.map((a) => ({ type: "file" as const, url: a.url, mediaType: a.mime }))],
             })
           }
         }
       }
     }
 
-    const tools = Object.fromEntries(Array.from(toolNames).map((toolName) => [toolName, { toModelOutput }]))
-
-    return convertToModelMessages(
-      result.filter((msg) => {
-        const content = msg.content
-        if (content === undefined) return false
-        if (typeof content === "string") return content.length > 0
-        if (Array.isArray(content)) return content.length > 0 && content.some((part) => part.type !== "step-start")
-        return false
-      }),
-      {
-        //@ts-expect-error (convertToModelMessages expects a ToolSet but only actually needs tools[name]?.toModelOutput)
-        tools,
-      },
-    )
+    const tools = Object.fromEntries(Array.from(names).map((name) => [name, { toModelOutput }]))
+    const isValid = (msg: UIMessage) => {
+      const c = msg.content
+      return c !== undefined && (typeof c === "string" ? c.length > 0 : Array.isArray(c) && c.length > 0 && c.some((p) => p.type !== "step-start"))
+    }
+    return convertToModelMessages(result.filter(isValid), {
+      //@ts-expect-error
+      tools,
+    })
   }
 
   export const stream = fn(SessionID.zod, async function* (sessionID) {
