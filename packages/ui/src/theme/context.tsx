@@ -1,9 +1,9 @@
-import { onMount, onCleanup, createEffect } from "solid-js"
+import { createEffect, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
-import type { DesktopTheme } from "./types"
-import { resolveThemeVariant, themeToCss } from "./resolve"
-import { DEFAULT_THEMES } from "./default-themes"
 import { createSimpleContext } from "../context/helper"
+import { DEFAULT_THEMES } from "./default-themes"
+import { resolveThemeVariant, themeToCss } from "./resolve"
+import type { DesktopTheme } from "./types"
 
 export type ColorScheme = "light" | "dark" | "system"
 
@@ -85,6 +85,14 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       mode: getSystemMode(),
       previewThemeId: null as string | null,
       previewScheme: null as ColorScheme | null,
+    })
+
+    window.addEventListener("storage", (e) => {
+      if (e.key === STORAGE_KEYS.THEME_ID && e.newValue) setStore("themeId", e.newValue)
+      if (e.key === STORAGE_KEYS.COLOR_SCHEME && e.newValue) {
+        setStore("colorScheme", e.newValue as ColorScheme)
+        setStore("mode", e.newValue === "system" ? getSystemMode() : (e.newValue as any))
+      }
     })
 
     onMount(() => {
