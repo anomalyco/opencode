@@ -46,4 +46,6 @@ export const TuiEvent = {
       sessionID: SessionID.zod.describe("Session ID to navigate to"),
     }),
   ),
+  FocusGained: BusEvent.define("tui.focus.gained", z.object({})),
+  FocusLost: BusEvent.define("tui.focus.lost", z.object({})),
 }

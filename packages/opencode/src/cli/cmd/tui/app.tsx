@@ -1,4 +1,4 @@
-import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
+import { render, useKeyboard, useRenderer, useTerminalDimensions, useTerminalFocus } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
 import { Selection } from "@tui/util/selection"
 import { MouseButton, TextAttributes } from "@opentui/core"
@@ -283,6 +283,16 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       const title = session.title.length > 40 ? session.title.slice(0, 37) + "..." : session.title
       renderer.setTerminalTitle(`OC | ${title}`)
     }
+  })
+
+  const focused = useTerminalFocus()
+  let prev = true
+  createEffect(() => {
+    const val = focused()
+    if (val === prev) return
+    prev = val
+    const type = val ? "tui.focus.gained" : "tui.focus.lost"
+    sdk.client.tui.publish({ body: { type, properties: {} } } as any).catch(() => {})
   })
 
   const args = useArgs()
