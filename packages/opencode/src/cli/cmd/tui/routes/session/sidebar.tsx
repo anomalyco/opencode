@@ -61,10 +61,15 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   })
 
   const directory = useDirectory()
-  const [path, ...rest] = directory().split(":")
-  const parts = path.split("/")
-  const prefix = parts.slice(0, -1).join("/") + "/"
-  const tail = parts.at(-1) + (rest.length ? ":" + rest.join(":") : "")
+  const repo = createMemo(() => {
+    const [path, ...rest] = directory().split(":")
+    const parts = path.split("/")
+
+    return {
+      prefix: parts.slice(0, -1).join("/") + "/",
+      tail: parts.at(-1) + (rest.length ? ":" + rest.join(":") : ""),
+    }
+  })
   
   const kv = useKV()
 
@@ -309,8 +314,8 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
             </box>
           </Show>
           <text>
-            <span style={{ fg: theme.textMuted }}>{prefix}</span>
-            <span style={{ fg: theme.text }}>{tail}</span>
+            <span style={{ fg: theme.textMuted }}>{repo().prefix}</span>
+            <span style={{ fg: theme.text }}>{repo().tail}</span>
           </text>
           <text fg={theme.textMuted}>
             <span style={{ fg: theme.success }}>•</span> <b>Open</b>
