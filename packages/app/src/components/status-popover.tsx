@@ -14,7 +14,7 @@ import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
 import { normalizeServerUrl, ServerConnection, useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
-import { checkServerHealth, type ServerHealth } from "@/utils/server-health"
+import { useCheckServerHealth, type ServerHealth } from "@/utils/server-health"
 import { DialogSelectServer } from "./dialog-select-server"
 
 const pollMs = 10_000
@@ -53,7 +53,8 @@ const listServersByHealth = (
   })
 }
 
-const useServerHealth = (servers: Accessor<ServerConnection.Any[]>, fetcher: typeof fetch) => {
+const useServerHealth = (servers: Accessor<ServerConnection.Any[]>) => {
+  const checkServerHealth = useCheckServerHealth()
   const [status, setStatus] = createStore({} as Record<ServerConnection.Key, ServerHealth | undefined>)
 
   createEffect(() => {
@@ -64,7 +65,7 @@ const useServerHealth = (servers: Accessor<ServerConnection.Any[]>, fetcher: typ
       const results: Record<string, ServerHealth> = {}
       await Promise.all(
         list.map(async (conn) => {
-          results[ServerConnection.key(conn)] = await checkServerHealth(conn.http, fetcher)
+          results[ServerConnection.key(conn)] = await checkServerHealth(conn.http)
         }),
       )
       if (dead) return
@@ -168,7 +169,7 @@ export function StatusPopover() {
   const language = useLanguage()
   const navigate = useNavigate()
 
-  const fetcher = platform.fetch ?? globalThis.fetch
+  const [shown, setShown] = createSignal(false)
   const servers = createMemo(() => {
     const current = server.current
     const list = server.list
@@ -176,10 +177,10 @@ export function StatusPopover() {
     if (list.every((item) => ServerConnection.key(item) !== ServerConnection.key(current))) return [current, ...list]
     return [current, ...list.filter((item) => ServerConnection.key(item) !== ServerConnection.key(current))]
   })
-  const health = useServerHealth(servers, fetcher)
+  const health = useServerHealth(servers)
   const sortedServers = createMemo(() => listServersByHealth(servers(), server.key, health))
   const mcp = useMcpToggle({ sync, sdk, language })
-  const defaultServer = useDefaultServerKey(platform.getDefaultServerUrl)
+  const defaultServer = useDefaultServerKey(platform.getDefaultServer)
   const mcpNames = createMemo(() => Object.keys(sync.data.mcp ?? {}).sort((a, b) => a.localeCompare(b)))
   const mcpStatus = (name: string) => sync.data.mcp?.[name]?.status
   const mcpConnected = createMemo(() => mcpNames().filter((name) => mcpStatus(name) === "connected").length)
@@ -199,32 +200,34 @@ export function StatusPopover() {
 
   return (
     <Popover
+      open={shown()}
+      onOpenChange={setShown}
       triggerAs={Button}
       triggerProps={{
         variant: "ghost",
-        class:
-          "rounded-md h-[24px] pr-3 pl-0.5 gap-2 border border-border-weak-base bg-surface-panel shadow-none data-[expanded]:bg-surface-base-active",
+        class: "titlebar-icon w-8 h-6 p-0 box-border",
+        "aria-label": language.t("status.popover.trigger"),
         style: { scale: 1 },
       }}
       trigger={
-        <div class="flex items-center gap-0.5">
-          <div class="size-4 flex items-center justify-center">
-            <div
-              classList={{
-                "size-1.5 rounded-full": true,
-                "bg-icon-success-base": overallHealthy(),
-                "bg-icon-critical-base": !overallHealthy() && server.healthy() !== undefined,
-                "bg-border-weak-base": server.healthy() === undefined,
-              }}
-            />
+        <div class="relative size-4">
+          <div class="badge-mask-tight size-4 flex items-center justify-center">
+            <Icon name={shown() ? "status-active" : "status"} size="small" />
           </div>
-          <span class="text-12-regular text-text-strong">{language.t("status.popover.trigger")}</span>
+          <div
+            classList={{
+              "absolute -top-px -right-px size-1.5 rounded-full": true,
+              "bg-icon-success-base": overallHealthy(),
+              "bg-icon-critical-base": !overallHealthy() && server.healthy() !== undefined,
+              "bg-border-weak-base": server.healthy() === undefined,
+            }}
+          />
         </div>
       }
       class="[&_[data-slot=popover-body]]:p-0 w-[360px] max-w-[calc(100vw-40px)] bg-transparent border-0 shadow-none rounded-xl"
       gutter={4}
       placement="bottom-end"
-      shift={-136}
+      shift={-168}
     >
       <div class="flex items-center gap-1 w-[360px] rounded-xl shadow-[var(--shadow-lg-border-base)]">
         <Tabs

@@ -1,7 +1,7 @@
 import { type HexColor, resolveThemeVariant, useTheme, withAlpha } from "@opencode-ai/ui/theme"
 import { showToast } from "@opencode-ai/ui/toast"
 import type { FitAddon, Ghostty, Terminal as Term } from "ghostty-web"
-import { type ComponentProps, createEffect, createSignal, onCleanup, onMount, splitProps } from "solid-js"
+import { type ComponentProps, createEffect, createMemo, onCleanup, onMount, splitProps } from "solid-js"
 import { SerializeAddon } from "@/addons/serialize"
 import { matchKeybind, parseKeybind } from "@/context/command"
 import { useLanguage } from "@/context/language"
@@ -10,6 +10,7 @@ import { useSDK } from "@/context/sdk"
 import { useServer } from "@/context/server"
 import { monoFontFamily, useSettings } from "@/context/settings"
 import type { LocalPTY } from "@/context/terminal"
+import { terminalAttr, terminalProbe } from "@/testing/terminal"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/utils/runtime-adapters"
 import { terminalWriter } from "@/utils/terminal-writer"
 
@@ -17,8 +18,9 @@ const TOGGLE_TERMINAL_ID = "terminal.toggle"
 const DEFAULT_TOGGLE_TERMINAL_KEYBIND = "ctrl+`"
 export interface TerminalProps extends ComponentProps<"div"> {
   pty: LocalPTY
+  autoFocus?: boolean
   onSubmit?: () => void
-  onCleanup?: (pty: LocalPTY) => void
+  onCleanup?: (pty: Partial<LocalPTY> & { id: string }) => void
   onConnect?: () => void
   onConnectError?: (error: unknown) => void
 }
@@ -126,8 +128,8 @@ const persistTerminal = (input: {
   term: Term | undefined
   addon: SerializeAddon | undefined
   cursor: number
-  pty: LocalPTY
-  onCleanup?: (pty: LocalPTY) => void
+  id: string
+  onCleanup?: (pty: Partial<LocalPTY> & { id: string }) => void
 }) => {
   if (!input.addon || !input.onCleanup || !input.term) return
   const buffer = (() => {
@@ -140,7 +142,7 @@ const persistTerminal = (input: {
   })()
 
   input.onCleanup({
-    ...input.pty,
+    id: input.id,
     buffer,
     cursor: input.cursor,
     rows: input.term.rows,
@@ -157,7 +159,21 @@ export const Terminal = (props: TerminalProps) => {
   const language = useLanguage()
   const server = useServer()
   let container!: HTMLDivElement
-  const [local, others] = splitProps(props, ["pty", "class", "classList", "onConnect", "onConnectError"])
+  const [local, others] = splitProps(props, ["pty", "class", "classList", "autoFocus", "onConnect", "onConnectError"])
+  const id = local.pty.id
+  const probe = terminalProbe(id)
+  const restore = typeof local.pty.buffer === "string" ? local.pty.buffer : ""
+  const restoreSize =
+    restore &&
+    typeof local.pty.cols === "number" &&
+    Number.isSafeInteger(local.pty.cols) &&
+    local.pty.cols > 0 &&
+    typeof local.pty.rows === "number" &&
+    Number.isSafeInteger(local.pty.rows) &&
+    local.pty.rows > 0
+      ? { cols: local.pty.cols, rows: local.pty.rows }
+      : undefined
+  const scrollY = typeof local.pty.scrollY === "number" ? local.pty.scrollY : undefined
   let ws: WebSocket | undefined
   let term: Term | undefined
   let ghostty: Ghostty
@@ -190,7 +206,7 @@ export const Terminal = (props: TerminalProps) => {
   const pushSize = (cols: number, rows: number) => {
     return sdk.client.pty
       .update({
-        ptyID: local.pty.id,
+        ptyID: id,
         size: { cols, rows },
       })
       .catch((err) => {
@@ -204,7 +220,7 @@ export const Terminal = (props: TerminalProps) => {
     const currentTheme = theme.themes()[theme.themeId()]
     if (!currentTheme) return fallback
     const variant = mode === "dark" ? currentTheme.dark : currentTheme.light
-    if (!variant?.seeds) return fallback
+    if (!variant?.seeds && !variant?.palette) return fallback
     const resolved = resolveThemeVariant(variant, mode === "dark")
     const text = resolved["text-stronger"] ?? fallback.foreground
     const background = resolved["background-stronger"] ?? fallback.background
@@ -219,7 +235,7 @@ export const Terminal = (props: TerminalProps) => {
     }
   }
 
-  const [terminalColors, setTerminalColors] = createSignal<TerminalColors>(getTerminalColors())
+  const terminalColors = createMemo(getTerminalColors)
 
   const scheduleFit = () => {
     if (disposed) return
@@ -259,8 +275,7 @@ export const Terminal = (props: TerminalProps) => {
   }
 
   createEffect(() => {
-    const colors = getTerminalColors()
-    setTerminalColors(colors)
+    const colors = terminalColors()
     if (!term) return
     setOptionIfSupported(term, "theme", colors)
   })
@@ -313,24 +328,15 @@ export const Terminal = (props: TerminalProps) => {
   }
 
   onMount(() => {
+    probe.init()
+    cleanups.push(() => probe.drop())
+
     const run = async () => {
       const loaded = await loadGhostty()
       if (disposed) return
 
       const mod = loaded.mod
       const g = loaded.ghostty
-
-      const restore = typeof local.pty.buffer === "string" ? local.pty.buffer : ""
-      const restoreSize =
-        restore &&
-        typeof local.pty.cols === "number" &&
-        Number.isSafeInteger(local.pty.cols) &&
-        local.pty.cols > 0 &&
-        typeof local.pty.rows === "number" &&
-        Number.isSafeInteger(local.pty.rows) &&
-        local.pty.rows > 0
-          ? { cols: local.pty.cols, rows: local.pty.rows }
-          : undefined
 
       const t = new mod.Terminal({
         cursorBlink: true,
@@ -352,7 +358,13 @@ export const Terminal = (props: TerminalProps) => {
       }
       ghostty = g
       term = t
-      output = terminalWriter((data, done) => t.write(data, done))
+      output = terminalWriter((data, done) =>
+        t.write(data, () => {
+          probe.render(data)
+          probe.settle()
+          done?.()
+        }),
+      )
 
       t.attachCustomKeyEventHandler((event) => {
         const key = event.key.toLowerCase()
@@ -386,7 +398,7 @@ export const Terminal = (props: TerminalProps) => {
         handleLinkClick,
       })
 
-      focusTerminal()
+      if (local.autoFocus !== false) focusTerminal()
 
       if (typeof document !== "undefined" && document.fonts) {
         document.fonts.ready.then(scheduleFit)
@@ -428,30 +440,26 @@ export const Terminal = (props: TerminalProps) => {
         await write(restore)
         fit.fit()
         scheduleSize(t.cols, t.rows)
-        if (typeof local.pty.scrollY === "number") t.scrollToLine(local.pty.scrollY)
+        if (scrollY !== undefined) t.scrollToLine(scrollY)
         startResize()
       } else {
         fit.fit()
         scheduleSize(t.cols, t.rows)
         if (restore) {
           await write(restore)
-          if (typeof local.pty.scrollY === "number") t.scrollToLine(local.pty.scrollY)
+          if (scrollY !== undefined) t.scrollToLine(scrollY)
         }
         startResize()
       }
 
-      // t.onScroll((ydisp) => {
-      // console.log("Scroll position:", ydisp)
-      // })
-
       const once = { value: false }
       let closing = false
 
-      const url = new URL(sdk.url + `/pty/${local.pty.id}/connect`)
+      const url = new URL(sdk.url + `/pty/${id}/connect`)
       url.searchParams.set("directory", sdk.directory)
-      url.searchParams.set("cursor", String(start !== undefined ? start : local.pty.buffer ? -1 : 0))
+      url.searchParams.set("cursor", String(start !== undefined ? start : restore ? -1 : 0))
       url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
-      url.username = server.current?.http.username ?? ""
+      url.username = server.current?.http.username ?? "opencode"
       url.password = server.current?.http.password ?? ""
 
       const socket = new WebSocket(url)
@@ -459,6 +467,7 @@ export const Terminal = (props: TerminalProps) => {
       ws = socket
 
       const handleOpen = () => {
+        probe.connect()
         local.onConnect?.()
         scheduleSize(t.cols, t.rows)
       }
@@ -543,7 +552,7 @@ export const Terminal = (props: TerminalProps) => {
     if (ws && ws.readyState !== WebSocket.CLOSED && ws.readyState !== WebSocket.CLOSING) ws.close(1000)
 
     const finalize = () => {
-      persistTerminal({ term, addon: serializeAddon, cursor, pty: local.pty, onCleanup: props.onCleanup })
+      persistTerminal({ term, addon: serializeAddon, cursor, id, onCleanup: props.onCleanup })
       cleanup()
     }
 
@@ -559,6 +568,7 @@ export const Terminal = (props: TerminalProps) => {
     <div
       ref={container}
       data-component="terminal"
+      {...{ [terminalAttr]: id }}
       data-prevent-autofocus
       tabIndex={-1}
       style={{ "background-color": terminalColors().background }}

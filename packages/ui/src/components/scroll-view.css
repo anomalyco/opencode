@@ -19,7 +19,7 @@
   position: absolute;
   right: 0;
   top: 0;
-  width: 16px;
+  width: 12px;
   transition: opacity 200ms ease;
   cursor: default;
   user-select: none;
@@ -29,10 +29,11 @@
 .scroll-view__thumb::after {
   content: "";
   position: absolute;
-  right: 4px;
+  left: 50%;
+  transform: translateX(-50%);
   top: 0;
   bottom: 0;
-  width: 6px;
+  width: 4px;
   border-radius: 9999px;
   background-color: var(--border-weak-base);
   backdrop-filter: blur(4px);
