@@ -55,14 +55,19 @@ export namespace Skill {
   export const state = Instance.state(async () => {
     const skills: Record<string, Info> = {}
     const dirs = new Set<string>()
+    const seen = new Set<string>()
 
     const addSkill = async (match: string) => {
-      const md = await ConfigMarkdown.parse(match).catch((err) => {
+      const file = Filesystem.resolve(match)
+      if (seen.has(file)) return
+      seen.add(file)
+
+      const md = await ConfigMarkdown.parse(file).catch((err) => {
         const message = ConfigMarkdown.FrontmatterError.isInstance(err)
           ? err.data.message
-          : `Failed to parse skill ${match}`
+          : `Failed to parse skill ${file}`
         Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
-        log.error("failed to load skill", { skill: match, err })
+        log.error("failed to load skill", { skill: file, err })
         return undefined
       })
 
@@ -76,16 +81,16 @@ export namespace Skill {
         log.warn("duplicate skill name", {
           name: parsed.data.name,
           existing: skills[parsed.data.name].location,
-          duplicate: match,
+          duplicate: file,
         })
       }
 
-      dirs.add(path.dirname(match))
+      dirs.add(path.dirname(file))
 
       skills[parsed.data.name] = {
         name: parsed.data.name,
         description: parsed.data.description,
-        location: match,
+        location: file,
         content: md.content,
       }
     }

@@ -386,3 +386,39 @@ description: A skill in the .opencode/skills directory.
     },
   })
 })
+
+test("deduplicates symlinked skill directories by canonical path", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      const agentDir = path.join(dir, ".agents", "skills", "shared-skill")
+      const claudeDir = path.join(dir, ".claude", "skills", "shared-skill")
+      await fs.mkdir(agentDir, { recursive: true })
+      await fs.mkdir(path.dirname(claudeDir), { recursive: true })
+      await Bun.write(
+        path.join(agentDir, "SKILL.md"),
+        `---
+name: shared-skill
+description: A shared skill.
+---
+
+# Shared Skill
+`,
+      )
+      await fs.symlink(agentDir, claudeDir, process.platform === "win32" ? "junction" : "dir")
+      return { agentDir }
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const skills = await Skill.all()
+      const dirs = await Skill.dirs()
+      expect(skills.length).toBe(1)
+      expect(skills[0].location).toBe(path.join(tmp.extra.agentDir, "SKILL.md"))
+      expect(dirs).toContain(tmp.extra.agentDir)
+      expect(dirs.length).toBe(1)
+    },
+  })
+})
