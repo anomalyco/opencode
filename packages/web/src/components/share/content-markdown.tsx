@@ -6,12 +6,22 @@ import { CopyButton } from "./copy-button"
 import { createResource, createSignal } from "solid-js"
 import style from "./content-markdown.module.css"
 
+function escapeHtml(str: string): string {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;")
+}
+
+const SAFE_URL_PATTERN = /^(?:https?|mailto|tel):/i
+
 const markedWithShiki = marked.use(
   {
     renderer: {
       link({ href, title, text }) {
-        const titleAttr = title ? ` title="${title}"` : ""
-        return `<a href="${href}"${titleAttr} target="_blank" rel="noopener noreferrer">${text}</a>`
+        if (!SAFE_URL_PATTERN.test(href)) {
+          return `<span>${text}</span>`
+        }
+        const safeHref = escapeHtml(href)
+        const titleAttr = title ? ` title="${escapeHtml(title)}"` : ""
+        return `<a href="${safeHref}"${titleAttr} target="_blank" rel="noopener noreferrer">${text}</a>`
       },
     },
   },
