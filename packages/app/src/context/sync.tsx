@@ -3,6 +3,12 @@ import { createStore, produce, reconcile } from "solid-js/store"
 import { Binary } from "@opencode-ai/util/binary"
 import { retry } from "@opencode-ai/util/retry"
 import { createSimpleContext } from "@opencode-ai/ui/context"
+import {
+  clearSessionPrefetch,
+  getSessionPrefetch,
+  getSessionPrefetchPromise,
+  setSessionPrefetch,
+} from "./global-sync/session-prefetch"
 import { useGlobalSync } from "./global-sync"
 import { useSDK } from "./sdk"
 import type { Message, Part } from "@opencode-ai/sdk/v2/client"
@@ -160,6 +166,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
     const evict = (directory: string, setStore: Setter, sessionIDs: string[]) => {
       if (sessionIDs.length === 0) return
+      clearSessionPrefetch(directory, sessionIDs)
       for (const sessionID of sessionIDs) {
         globalSync.todo.set(sessionID, undefined)
       }
@@ -217,11 +224,24 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             }
             setMeta("limit", key, input.limit)
             setMeta("complete", key, next.complete)
+            setSessionPrefetch({
+              directory: input.directory,
+              sessionID: input.sessionID,
+              limit: input.limit,
+              complete: next.complete,
+            })
           })
         })
         .finally(() => {
-          if (!tracked(input.directory, input.sessionID)) return
-          setMeta("loading", key, false)
+          setMeta(
+            produce((draft) => {
+              if (!tracked(input.directory, input.sessionID)) {
+                delete draft.loading[key]
+                return
+              }
+              draft.loading[key] = false
+            }),
+          )
         })
     }
 
@@ -280,54 +300,82 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             parts: input.parts,
           })
         },
-        async sync(sessionID: string) {
+        async sync(sessionID: string, opts?: { force?: boolean }) {
           const directory = sdk.directory
           const client = sdk.client
           const [store, setStore] = globalSync.child(directory)
           const key = keyFor(directory, sessionID)
-          const hasSession = Binary.search(store.session, sessionID, (s) => s.id).found
 
           touch(directory, setStore, sessionID)
 
-          if (store.message[sessionID] !== undefined && hasSession && meta.limit[key] !== undefined) return
+          const seeded = getSessionPrefetch(directory, sessionID)
+          if (seeded && store.message[sessionID] !== undefined && meta.limit[key] === undefined) {
+            batch(() => {
+              setMeta("limit", key, seeded.limit)
+              setMeta("complete", key, seeded.complete)
+              setMeta("loading", key, false)
+            })
+          }
 
-          const limit = meta.limit[key] ?? messagePageSize
+          return runInflight(inflight, key, async () => {
+            const pending = getSessionPrefetchPromise(directory, sessionID)
+            if (pending) {
+              await pending
+              const seeded = getSessionPrefetch(directory, sessionID)
+              if (seeded && store.message[sessionID] !== undefined && meta.limit[key] === undefined) {
+                batch(() => {
+                  setMeta("limit", key, seeded.limit)
+                  setMeta("complete", key, seeded.complete)
+                  setMeta("loading", key, false)
+                })
+              }
+            }
 
-          const sessionReq = hasSession
-            ? Promise.resolve()
-            : retry(() => client.session.get({ sessionID })).then((session) => {
-                if (!tracked(directory, sessionID)) return
-                const data = session.data
-                if (!data) return
-                setStore(
-                  "session",
-                  produce((draft) => {
-                    const match = Binary.search(draft, sessionID, (s) => s.id)
-                    if (match.found) {
-                      draft[match.index] = data
-                      return
-                    }
-                    draft.splice(match.index, 0, data)
-                  }),
-                )
-              })
+            const hasSession = Binary.search(store.session, sessionID, (s) => s.id).found
+            const cached = store.message[sessionID] !== undefined && meta.limit[key] !== undefined
+            if (cached && hasSession && !opts?.force) return
 
-          const messagesReq = loadMessages({
-            directory,
-            client,
-            setStore,
-            sessionID,
-            limit,
+            const limit = meta.limit[key] ?? messagePageSize
+            const sessionReq =
+              hasSession && !opts?.force
+                ? Promise.resolve()
+                : retry(() => client.session.get({ sessionID })).then((session) => {
+                    if (!tracked(directory, sessionID)) return
+                    const data = session.data
+                    if (!data) return
+                    setStore(
+                      "session",
+                      produce((draft) => {
+                        const match = Binary.search(draft, sessionID, (s) => s.id)
+                        if (match.found) {
+                          draft[match.index] = data
+                          return
+                        }
+                        draft.splice(match.index, 0, data)
+                      }),
+                    )
+                  })
+
+            const messagesReq =
+              cached && !opts?.force
+                ? Promise.resolve()
+                : loadMessages({
+                    directory,
+                    client,
+                    setStore,
+                    sessionID,
+                    limit,
+                  })
+
+            await Promise.all([sessionReq, messagesReq])
           })
-
-          return runInflight(inflight, key, () => Promise.all([sessionReq, messagesReq]).then(() => {}))
         },
-        async diff(sessionID: string) {
+        async diff(sessionID: string, opts?: { force?: boolean }) {
           const directory = sdk.directory
           const client = sdk.client
           const [store, setStore] = globalSync.child(directory)
           touch(directory, setStore, sessionID)
-          if (store.session_diff[sessionID] !== undefined) return
+          if (store.session_diff[sessionID] !== undefined && !opts?.force) return
 
           const key = keyFor(directory, sessionID)
           return runInflight(inflightDiff, key, () =>
@@ -337,7 +385,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             }),
           )
         },
-        async todo(sessionID: string) {
+        async todo(sessionID: string, opts?: { force?: boolean }) {
           const directory = sdk.directory
           const client = sdk.client
           const [store, setStore] = globalSync.child(directory)
@@ -348,7 +396,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             if (cached === undefined) {
               globalSync.todo.set(sessionID, existing)
             }
-            return
+            if (!opts?.force) return
           }
 
           if (cached !== undefined) {

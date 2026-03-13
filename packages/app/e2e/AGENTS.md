@@ -70,6 +70,8 @@ test("test description", async ({ page, sdk, gotoSession }) => {
 - `openSettings(page)` - Open settings dialog
 - `closeDialog(page, dialog)` - Close any dialog
 - `openSidebar(page)` / `closeSidebar(page)` - Toggle sidebar
+- `waitTerminalReady(page, { term? })` - Wait for a mounted terminal to connect and finish rendering output
+- `runTerminal(page, { cmd, token, term?, timeout? })` - Type into the terminal via the browser and wait for rendered output
 - `withSession(sdk, title, callback)` - Create temp session
 - `withProject(...)` - Create temp project/workspace
 - `sessionIDFromUrl(url)` - Read session ID from URL
@@ -166,6 +168,13 @@ import { modKey } from "../utils"
 await page.keyboard.press(`${modKey}+B`) // Toggle sidebar
 await page.keyboard.press(`${modKey}+Comma`) // Open settings
 ```
+
+### Terminal Tests
+
+- In terminal tests, type through the browser. Do not write to the PTY through the SDK.
+- Use `waitTerminalReady(page, { term? })` and `runTerminal(page, { cmd, token, term?, timeout? })` from `actions.ts`.
+- These helpers use the fixture-enabled test-only terminal driver and wait for output after the terminal writer settles.
+- Avoid `waitForTimeout` and custom DOM or `data-*` readiness checks.
 
 ## Writing New Tests
 
