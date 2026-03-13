@@ -893,7 +893,7 @@ export namespace Session {
 
   export const generateTitle = fn(
     z.object({
-      sessionID: Identifier.schema("session"),
+      sessionID: SessionID.zod,
     }),
     async (input) => {
       return SessionPrompt.generateTitle(input)

@@ -23,7 +23,7 @@ import { Flag } from "@/flag/flag"
 import { PermissionNext } from "@/permission/next"
 import { Auth } from "@/auth"
 import { Session } from "."
-import { Identifier } from "@/id/id"
+import { MessageID, PartID, SessionID } from "./schema"
 import { ulid } from "ulid"
 
 export namespace LLM {
@@ -31,8 +31,8 @@ export namespace LLM {
   export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
 
   async function hookPart(input: {
-    sessionID: string
-    messageID: string
+    sessionID: SessionID
+    messageID: MessageID
     plugin: string
     hook: string
     stage: "before" | "after" | "error"
@@ -40,7 +40,7 @@ export namespace LLM {
   }) {
     const now = Date.now()
     await Session.updatePart({
-      id: Identifier.ascending("part"),
+      id: PartID.ascending(),
       messageID: input.messageID,
       sessionID: input.sessionID,
       type: "tool",
@@ -75,7 +75,7 @@ export namespace LLM {
     })
   }
 
-  function hookOpts(sessionID: string, messageID: string) {
+  function hookOpts(sessionID: SessionID, messageID: MessageID) {
     return {
       onInvoke: async (event: {
         plugin: string
@@ -110,7 +110,7 @@ export namespace LLM {
 
   export type StreamInput = {
     user: MessageV2.User
-    sessionID: string
+    sessionID: SessionID
     model: Provider.Model
     agent: Agent.Info
     system: string[]

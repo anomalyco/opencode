@@ -1043,7 +1043,7 @@ export namespace Provider {
         source: "config",
         models: mapValues(base?.models ?? {}, (model) => ({
           ...model,
-          providerID,
+          providerID: ProviderID.make(providerID),
         })),
       }
 

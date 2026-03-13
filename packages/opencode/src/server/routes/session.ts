@@ -375,7 +375,7 @@ export const SessionRoutes = lazy(() =>
       validator(
         "param",
         z.object({
-          sessionID: z.string().meta({ description: "Session ID" }),
+          sessionID: SessionID.zod.meta({ description: "Session ID" }),
         }),
       ),
       async (c) => {

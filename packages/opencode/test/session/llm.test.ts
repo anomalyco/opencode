@@ -499,8 +499,8 @@ describe("session.llm.stream", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const resolved = await Provider.getModel("openai", model.id)
-        const sessionID = "session-test-openai-error"
+        const resolved = await Provider.getModel(ProviderID.openai, ModelID.make(model.id))
+        const sessionID = SessionID.make("ses_test_openai_error")
         const agent = {
           name: "test",
           mode: "primary",
@@ -510,12 +510,12 @@ describe("session.llm.stream", () => {
         } satisfies Agent.Info
 
         const user = {
-          id: "user-openai-error",
+          id: MessageID.make("msg_test_openai_error"),
           sessionID,
           role: "user",
           time: { created: Date.now() },
           agent: agent.name,
-          model: { providerID: "openai", modelID: resolved.id },
+          model: { providerID: ProviderID.openai, modelID: resolved.id },
           variant: "high",
         } satisfies MessageV2.User
 
