@@ -15,11 +15,15 @@ function ensureLoaderStyleElement(): HTMLStyleElement {
   return element
 }
 
+function sanitizeThemeId(id: string): string {
+  return id.replace(/[^a-zA-Z0-9_-]/g, "")
+}
+
 export function applyTheme(theme: DesktopTheme, themeId?: string): void {
   activeTheme = theme
   const lightTokens = resolveThemeVariant(theme.light, false)
   const darkTokens = resolveThemeVariant(theme.dark, true)
-  const targetThemeId = themeId ?? theme.id
+  const targetThemeId = sanitizeThemeId(themeId ?? theme.id)
   const css = buildThemeCss(lightTokens, darkTokens, targetThemeId)
   const themeStyleElement = ensureLoaderStyleElement()
   themeStyleElement.textContent = css
