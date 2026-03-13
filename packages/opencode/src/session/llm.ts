@@ -26,6 +26,22 @@ import { Auth } from "@/auth"
 export namespace LLM {
   const log = Log.create({ service: "llm" })
   export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
+  const XAI_SCHEMA_MAX = 20_000
+  const XAI_TOOL_MAX = 40
+
+  function xaiToolBytes(id: string, tool: Tool) {
+    const schema = tool.inputSchema as { jsonSchema?: unknown }
+    return new TextEncoder().encode(
+      JSON.stringify({
+        type: "function",
+        function: {
+          name: id,
+          description: tool.description,
+          parameters: schema.jsonSchema ?? {},
+        },
+      }),
+    ).length
+  }
 
   export type StreamInput = {
     user: MessageV2.User
@@ -184,6 +200,70 @@ export namespace LLM {
       })
     }
 
+    const all = Object.keys(tools).filter((x) => x !== "invalid")
+    const cap = input.model.limit.tools
+    let active = all
+    if (cap && all.length > cap) {
+      l.warn("capping tools", {
+        total: all.length,
+        limit: cap,
+        dropped: all.length - cap,
+      })
+      active = all.slice(0, cap)
+    }
+
+    const xai = input.model.api.npm === "@ai-sdk/xai" || input.model.id.toLowerCase().includes("grok")
+    if (xai && active.length > 0) {
+      if (active.length > XAI_TOOL_MAX) {
+        const sized = active.map((id) => ({ id, bytes: xaiToolBytes(id, tools[id]!) }))
+        const keep = sized.slice(0, XAI_TOOL_MAX)
+        l.warn("capping xai tool count", {
+          total: sized.length,
+          final: keep.length,
+          dropped: sized.length - keep.length,
+          limit: XAI_TOOL_MAX,
+        })
+        active = keep.map((item) => item.id)
+      }
+
+      const sized = active.map((id) => ({ id, bytes: xaiToolBytes(id, tools[id]!) }))
+      let total = sized.reduce((acc, item) => acc + item.bytes, 0)
+      if (total > XAI_SCHEMA_MAX) {
+        const keep = [...sized]
+        const drop = [...sized].sort((a, b) => b.bytes - a.bytes)
+        for (const item of drop) {
+          if (total <= XAI_SCHEMA_MAX) break
+          if (keep.length <= 1) break
+          const idx = keep.findIndex((v) => v.id === item.id)
+          if (idx < 0) continue
+          keep.splice(idx, 1)
+          total -= item.bytes
+        }
+        l.warn("capping xai tool schema budget", {
+          totalBytes: sized.reduce((acc, item) => acc + item.bytes, 0),
+          finalBytes: total,
+          budget: XAI_SCHEMA_MAX,
+          dropped: sized.length - keep.length,
+          total: sized.length,
+        })
+        active = keep.map((item) => item.id)
+        if (total > XAI_SCHEMA_MAX && input.toolChoice !== "required") {
+          l.warn("dropping all xai tools because single tool exceeds schema budget", {
+            finalBytes: total,
+            budget: XAI_SCHEMA_MAX,
+          })
+          active = []
+        }
+      }
+    }
+
+    let finalTools = tools
+    if (xai) {
+      const keep = new Set(active)
+      if (tools["invalid"]) keep.add("invalid")
+      if (tools["_noop"] && active.length > 0) keep.add("_noop")
+      finalTools = Object.fromEntries(Object.entries(tools).filter(([id]) => keep.has(id)))
+    }
     return streamText({
       onError(error) {
         l.error("stream error", {
@@ -215,8 +295,8 @@ export namespace LLM {
       topP: params.topP,
       topK: params.topK,
       providerOptions: ProviderTransform.providerOptions(input.model, params.options),
-      activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
-      tools,
+      activeTools: active,
+      tools: finalTools,
       toolChoice: input.toolChoice,
       maxOutputTokens,
       abortSignal: input.abort,

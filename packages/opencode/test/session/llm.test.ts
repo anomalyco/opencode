@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test"
 import path from "path"
-import { tool, type ModelMessage } from "ai"
+import { jsonSchema, tool, type ModelMessage } from "ai"
 import z from "zod"
 import { LLM } from "../../src/session/llm"
 import { Global } from "../../src/global"
@@ -107,6 +107,8 @@ type Capture = {
   headers: Headers
   body: Record<string, unknown>
 }
+
+type StreamTools = Parameters<typeof LLM.stream>[0]["tools"]
 
 const state = {
   server: null as ReturnType<typeof Bun.serve> | null,
@@ -753,6 +755,190 @@ describe("session.llm.stream", () => {
         expect(config?.temperature).toBe(0.3)
         expect(config?.topP).toBe(0.8)
         expect(config?.maxOutputTokens).toBe(ProviderTransform.maxOutputTokens(resolved))
+      },
+    })
+  })
+
+  test("caps xai tools by schema budget", async () => {
+    const server = state.server
+    if (!server) throw new Error("Server not initialized")
+
+    const fixture = await loadFixture("xai", "grok-4")
+    const model = fixture.model
+
+    const request = waitRequest(
+      "/chat/completions",
+      new Response(createChatStream("Hello"), {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      }),
+    )
+
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            enabled_providers: ["xai"],
+            provider: {
+              xai: {
+                options: {
+                  apiKey: "test-xai-key",
+                  baseURL: `${server.url.origin}/v1`,
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const resolved = await Provider.getModel(ProviderID.make("xai"), ModelID.make(model.id))
+        const sessionID = SessionID.make("session-test-xai-cap")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+
+        const user = {
+          id: MessageID.make("user-xai-cap"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: ProviderID.make("xai"), modelID: resolved.id },
+        } satisfies MessageV2.User
+
+        const tools: Record<string, unknown> = {}
+        for (let i = 0; i < 120; i++) {
+          const props: Record<string, { type: "string"; description: string }> = {}
+          for (let j = 0; j < 25; j++) {
+            props[`f_${i}_${j}`] = { type: "string", description: "x".repeat(120) }
+          }
+          tools[`tool_${i}`] = tool({
+            description: `tool ${i}`,
+            inputSchema: jsonSchema({ type: "object", properties: props }),
+            execute: async () => ({ output: "", title: "", metadata: {} }),
+          })
+        }
+
+        const stream = await LLM.stream({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          abort: new AbortController().signal,
+          messages: [{ role: "user", content: "Hello" }],
+          tools: tools as StreamTools,
+        })
+
+        for await (const _ of stream.fullStream) {
+        }
+
+        const capture = await request
+        const body = capture.body
+        expect(capture.url.pathname.endsWith("/chat/completions")).toBe(true)
+        expect(Array.isArray(body.tools)).toBe(true)
+        const sent = body.tools as unknown[]
+        expect(sent.length).toBeLessThanOrEqual(40)
+        const bytes = new TextEncoder().encode(JSON.stringify(sent)).length
+        expect(bytes).toBeLessThanOrEqual(20000)
+      },
+    })
+  })
+
+  test("drops single oversized xai tool when tool choice is auto", async () => {
+    const server = state.server
+    if (!server) throw new Error("Server not initialized")
+
+    const fixture = await loadFixture("xai", "grok-4")
+    const model = fixture.model
+
+    const request = waitRequest(
+      "/chat/completions",
+      new Response(createChatStream("Hello"), {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      }),
+    )
+
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            enabled_providers: ["xai"],
+            provider: {
+              xai: {
+                options: {
+                  apiKey: "test-xai-key",
+                  baseURL: `${server.url.origin}/v1`,
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const resolved = await Provider.getModel(ProviderID.make("xai"), ModelID.make(model.id))
+        const sessionID = SessionID.make("session-test-xai-single")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+
+        const user = {
+          id: MessageID.make("user-xai-single"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: ProviderID.make("xai"), modelID: resolved.id },
+        } satisfies MessageV2.User
+
+        const props: Record<string, { type: "string"; description: string }> = {}
+        for (let i = 0; i < 400; i++) {
+          props[`f_${i}`] = { type: "string", description: "x".repeat(220) }
+        }
+        const tools: Record<string, unknown> = {
+          giant: tool({
+            description: "giant",
+            inputSchema: jsonSchema({ type: "object", properties: props }),
+            execute: async () => ({ output: "", title: "", metadata: {} }),
+          }),
+        }
+
+        const stream = await LLM.stream({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          abort: new AbortController().signal,
+          messages: [{ role: "user", content: "Hello" }],
+          tools: tools as StreamTools,
+        })
+
+        for await (const _ of stream.fullStream) {
+        }
+
+        const capture = await request
+        const body = capture.body
+        expect(body.tools).toBeUndefined()
       },
     })
   })
