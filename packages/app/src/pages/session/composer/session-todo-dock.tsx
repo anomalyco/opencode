@@ -8,6 +8,11 @@ import { TextReveal } from "@opencode-ai/ui/text-reveal"
 import { TextStrikethrough } from "@opencode-ai/ui/text-strikethrough"
 import { Index, createEffect, createMemo, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
+import { composerEnabled, composerProbe } from "@/testing/session-composer"
+import { useLanguage } from "@/context/language"
+
+const doneToken = "\u0000done\u0000"
+const totalToken = "\u0000total\u0000"
 
 function dot(status: Todo["status"]) {
   if (status !== "in_progress") return undefined
@@ -35,12 +40,13 @@ function dot(status: Todo["status"]) {
 }
 
 export function SessionTodoDock(props: {
+  sessionID?: string
   todos: Todo[]
-  title: string
   collapseLabel: string
   expandLabel: string
   dockProgress: number
 }) {
+  const language = useLanguage()
   const [store, setStore] = createStore({
     collapsed: false,
     height: 320,
@@ -50,7 +56,12 @@ export function SessionTodoDock(props: {
 
   const total = createMemo(() => props.todos.length)
   const done = createMemo(() => props.todos.filter((todo) => todo.status === "completed").length)
-  const label = createMemo(() => `${done()} of ${total()} ${props.title.toLowerCase()} completed`)
+  const label = createMemo(() => language.t("session.todo.progress", { done: done(), total: total() }))
+  const progress = createMemo(() =>
+    language
+      .t("session.todo.progress", { done: doneToken, total: totalToken })
+      .split(/(\u0000done\u0000|\u0000total\u0000)/),
+  )
 
   const active = createMemo(
     () =>
@@ -69,6 +80,8 @@ export function SessionTodoDock(props: {
   const off = createMemo(() => hide() > 0.98)
   const turn = createMemo(() => Math.max(0, Math.min(1, value())))
   const full = createMemo(() => Math.max(78, store.height))
+  const e2e = composerEnabled()
+  const probe = composerProbe(props.sessionID)
   let contentRef: HTMLDivElement | undefined
 
   createEffect(() => {
@@ -81,6 +94,23 @@ export function SessionTodoDock(props: {
     const observer = new ResizeObserver(update)
     observer.observe(el)
     onCleanup(() => observer.disconnect())
+  })
+
+  createEffect(() => {
+    if (!e2e) return
+
+    probe.set({
+      mounted: true,
+      collapsed: store.collapsed,
+      hidden: store.collapsed || off(),
+      count: props.todos.length,
+      states: props.todos.map((todo) => todo.status),
+    })
+  })
+
+  onCleanup(() => {
+    if (!e2e) return
+    probe.drop()
   })
 
   return (
@@ -106,20 +136,28 @@ export function SessionTodoDock(props: {
           }}
         >
           <span
-            class="text-14-regular text-text-strong cursor-default inline-flex items-baseline shrink-0 whitespace-nowrap overflow-visible"
+            class="text-14-regular text-text-strong cursor-default inline-flex items-baseline shrink-0 overflow-visible"
             aria-label={label()}
             style={{
               "--tool-motion-odometer-ms": "600ms",
               "--tool-motion-mask": "18%",
               "--tool-motion-mask-height": "0px",
               "--tool-motion-spring-ms": "560ms",
+              "white-space": "pre",
               opacity: `${Math.max(0, Math.min(1, 1 - shut()))}`,
             }}
           >
-            <AnimatedNumber value={done()} />
-            <span class="mx-1">of</span>
-            <AnimatedNumber value={total()} />
-            <span>&nbsp;{props.title.toLowerCase()} completed</span>
+            <Index each={progress()}>
+              {(item) =>
+                item() === doneToken ? (
+                  <AnimatedNumber value={done()} />
+                ) : item() === totalToken ? (
+                  <AnimatedNumber value={total()} />
+                ) : (
+                  <span>{item()}</span>
+                )
+              }
+            </Index>
           </span>
           <div
             data-slot="session-todo-preview"

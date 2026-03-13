@@ -121,7 +121,7 @@ function ServerForm(props: ServerFormProps) {
 
   return (
     <div class="px-5">
-      <div class="bg-surface-raised-base rounded-md p-5 flex flex-col gap-3">
+      <div class="bg-surface-base rounded-md p-5 flex flex-col gap-3">
         <div class="flex-1 min-w-0 [&_[data-slot=input-wrapper]]:relative">
           <TextField
             type="text"
@@ -149,7 +149,7 @@ function ServerForm(props: ServerFormProps) {
           <TextField
             type="text"
             label={language.t("dialog.server.add.username")}
-            placeholder="username"
+            placeholder={language.t("dialog.server.add.usernamePlaceholder")}
             value={props.username}
             disabled={props.busy}
             onChange={props.onUsernameChange}
@@ -158,7 +158,7 @@ function ServerForm(props: ServerFormProps) {
           <TextField
             type="password"
             label={language.t("dialog.server.add.password")}
-            placeholder="password"
+            placeholder={language.t("dialog.server.add.passwordPlaceholder")}
             value={props.password}
             disabled={props.busy}
             onChange={props.onPasswordChange}
@@ -542,7 +542,7 @@ export function DialogSelectServer() {
               if (x) select(x)
             }}
             divider={true}
-            class="px-5 [&_[data-slot=list-search-wrapper]]:w-full [&_[data-slot=list-scroll]]h-[300px] [&_[data-slot=list-scroll]]:overflow-y-auto [&_[data-slot=list-items]]:bg-surface-raised-base [&_[data-slot=list-items]]:rounded-md [&_[data-slot=list-item]]:min-h-14 [&_[data-slot=list-item]]:p-3 [&_[data-slot=list-item]]:!bg-transparent"
+            class="px-5 [&_[data-slot=list-search-wrapper]]:w-full [&_[data-slot=list-scroll]]h-[300px] [&_[data-slot=list-scroll]]:overflow-y-auto [&_[data-slot=list-items]]:bg-surface-base [&_[data-slot=list-items]]:rounded-md [&_[data-slot=list-item]]:min-h-14 [&_[data-slot=list-item]]:p-3 [&_[data-slot=list-item]]:!bg-transparent"
           >
             {(i) => {
               const key = ServerConnection.key(i)

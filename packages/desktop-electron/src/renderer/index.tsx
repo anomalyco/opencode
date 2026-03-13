@@ -10,14 +10,15 @@ import {
   useCommand,
 } from "@opencode-ai/app"
 import type { AsyncStorage } from "@solid-primitives/storage"
-import { createResource, onCleanup, onMount, Show } from "solid-js"
-import { render } from "solid-js/web"
 import { MemoryRouter } from "@solidjs/router"
+import { createEffect, createResource, onCleanup, onMount, Show } from "solid-js"
+import { render } from "solid-js/web"
 import pkg from "../../package.json"
 import { initI18n, t } from "./i18n"
 import { UPDATER_ENABLED } from "./updater"
 import { webviewZoom } from "./webview-zoom"
 import "./styles.css"
+import { useTheme } from "@opencode-ai/ui/theme"
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
@@ -226,7 +227,9 @@ const createPlatform = (): Platform => {
       const image = await window.api.readClipboardImage().catch(() => null)
       if (!image) return null
       const blob = new Blob([image.buffer], { type: "image/png" })
-      return new File([blob], `pasted-image-${Date.now()}.png`, { type: "image/png" })
+      return new File([blob], `pasted-image-${Date.now()}.png`, {
+        type: "image/png",
+      })
     },
   }
 }
@@ -239,6 +242,8 @@ listenForDeepLinks()
 
 render(() => {
   const platform = createPlatform()
+
+  const [windowCount] = createResource(() => window.api.getWindowCount())
 
   // Fetch sidecar credentials (available immediately, before health check)
   const [sidecar] = createResource(() => window.api.awaitInitialization(() => undefined))
@@ -276,6 +281,18 @@ render(() => {
   function Inner() {
     const cmd = useCommand()
     menuTrigger = (id) => cmd.trigger(id)
+
+    const theme = useTheme()
+
+    createEffect(() => {
+      theme.themeId()
+      theme.mode()
+      const bg = getComputedStyle(document.documentElement).getPropertyValue("--background-base").trim()
+      if (bg) {
+        void window.api.setBackgroundColor(bg)
+      }
+    })
+
     return null
   }
 
@@ -289,13 +306,14 @@ render(() => {
   return (
     <PlatformProvider value={platform}>
       <AppBaseProviders>
-        <Show when={!defaultServer.loading && !sidecar.loading}>
+        <Show when={!defaultServer.loading && !sidecar.loading && !windowCount.loading}>
           {(_) => {
             return (
               <AppInterface
                 defaultServer={defaultServer.latest ?? ServerConnection.Key.make("sidecar")}
                 servers={servers()}
                 router={MemoryRouter}
+                disableHealthCheck={(windowCount() ?? 0) > 1}
               >
                 <Inner />
               </AppInterface>

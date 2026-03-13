@@ -8,9 +8,11 @@ import { getSessionHandoff, setSessionHandoff } from "@/pages/session/handoff"
 import { useSessionKey } from "@/pages/session/session-layout"
 import { SessionPermissionDock } from "@/pages/session/composer/session-permission-dock"
 import { SessionQuestionDock } from "@/pages/session/composer/session-question-dock"
+import { SessionFollowupDock } from "@/pages/session/composer/session-followup-dock"
 import { SessionRevertDock } from "@/pages/session/composer/session-revert-dock"
 import type { SessionComposerState } from "@/pages/session/composer/session-composer-state"
 import { SessionTodoDock } from "@/pages/session/composer/session-todo-dock"
+import type { FollowupDraft } from "@/components/prompt-input/submit"
 
 export function SessionComposerRegion(props: {
   state: SessionComposerState
@@ -21,18 +23,30 @@ export function SessionComposerRegion(props: {
   onNewSessionWorktreeReset: () => void
   onSubmit: () => void
   onResponseSubmit: () => void
+  followup?: {
+    queue: () => boolean
+    items: { id: string; text: string }[]
+    sending?: string
+    edit?: { id: string; prompt: FollowupDraft["prompt"]; context: FollowupDraft["context"] }
+    onQueue: (draft: FollowupDraft) => void
+    onAbort: () => void
+    onSend: (id: string) => void
+    onEdit: (id: string) => void
+    onEditLoaded: () => void
+  }
   revert?: {
     items: { id: string; text: string }[]
     restoring?: string
+    disabled?: boolean
     onRestore: (id: string) => void
   }
   setPromptDockRef: (el: HTMLDivElement) => void
 }) {
   const prompt = usePrompt()
   const language = useLanguage()
-  const { sessionKey } = useSessionKey()
+  const route = useSessionKey()
 
-  const handoffPrompt = createMemo(() => getSessionHandoff(sessionKey())?.prompt)
+  const handoffPrompt = createMemo(() => getSessionHandoff(route.sessionKey())?.prompt)
 
   const previewPrompt = () =>
     prompt
@@ -48,7 +62,7 @@ export function SessionComposerRegion(props: {
 
   createEffect(() => {
     if (!prompt.ready()) return
-    setSessionHandoff(sessionKey(), { prompt: previewPrompt() })
+    setSessionHandoff(route.sessionKey(), { prompt: previewPrompt() })
   })
 
   const [store, setStore] = createStore({
@@ -71,7 +85,7 @@ export function SessionComposerRegion(props: {
   }
 
   createEffect(() => {
-    sessionKey()
+    route.sessionKey()
     const ready = props.ready
     const delay = 140
 
@@ -156,6 +170,7 @@ export function SessionComposerRegion(props: {
                       <SessionRevertDock
                         items={revert.items}
                         restoring={revert.restoring}
+                        disabled={revert.disabled}
                         onRestore={revert.onRestore}
                       />
                     </div>
@@ -179,8 +194,8 @@ export function SessionComposerRegion(props: {
               >
                 <div ref={(el) => setStore("body", el)}>
                   <SessionTodoDock
+                    sessionID={route.params.id}
                     todos={props.state.todos()}
-                    title={language.t("session.todo.title")}
                     collapseLabel={language.t("session.todo.collapse")}
                     expandLabel={language.t("session.todo.expand")}
                     dockProgress={value()}
@@ -195,7 +210,12 @@ export function SessionComposerRegion(props: {
                     "margin-top": `${-36 * value()}px`,
                   }}
                 >
-                  <SessionRevertDock items={revert.items} restoring={revert.restoring} onRestore={revert.onRestore} />
+                  <SessionRevertDock
+                    items={revert.items}
+                    restoring={revert.restoring}
+                    disabled={revert.disabled}
+                    onRestore={revert.onRestore}
+                  />
                 </div>
               )}
             </Show>
@@ -207,10 +227,23 @@ export function SessionComposerRegion(props: {
                 "margin-top": `${-lift()}px`,
               }}
             >
+              <Show when={props.followup?.items.length}>
+                <SessionFollowupDock
+                  items={props.followup!.items}
+                  sending={props.followup!.sending}
+                  onSend={props.followup!.onSend}
+                  onEdit={props.followup!.onEdit}
+                />
+              </Show>
               <PromptInput
                 ref={props.inputRef}
                 newSessionWorktree={props.newSessionWorktree}
                 onNewSessionWorktreeReset={props.onNewSessionWorktreeReset}
+                edit={props.followup?.edit}
+                onEditLoaded={props.followup?.onEditLoaded}
+                shouldQueue={props.followup?.queue}
+                onQueue={props.followup?.onQueue}
+                onAbort={props.followup?.onAbort}
                 onSubmit={props.onSubmit}
               />
             </div>
