@@ -180,7 +180,7 @@ export namespace ProviderTransform {
         cacheControl: { type: "ephemeral" },
       },
       openrouter: {
-        cacheControl: { type: "ephemeral" },
+        cacheControl: { type: "ephemeral", ttl: "1h" },
       },
       bedrock: {
         cachePoint: { type: "default" },
