@@ -195,24 +195,24 @@ export const OrgsCommand = cmd({
 
 export const ConsoleCommand = cmd({
   command: "console",
-  describe: "manage opencode console account",
+  describe: "manage console account",
   builder: (yargs) =>
     yargs
       .command({
         ...LoginCommand,
-        describe: "log in to opencode console",
+        describe: "log in to console",
       })
       .command({
         ...LogoutCommand,
-        describe: "log out from opencode console",
+        describe: "log out from console",
       })
       .command({
         ...SwitchCommand,
-        describe: "switch active console org",
+        describe: "switch active org",
       })
       .command({
         ...OrgsCommand,
-        describe: "list console orgs",
+        describe: "list orgs",
       })
       .demandCommand(),
   async handler() {},
