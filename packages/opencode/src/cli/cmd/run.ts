@@ -49,6 +49,32 @@ type Inline = {
   description?: string
 }
 
+function object(input: unknown) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw new Error("Schema must be a JSON object")
+  }
+  return input as Record<string, unknown>
+}
+
+export async function parseSchema(input: string) {
+  try {
+    return object(JSON.parse(input))
+  } catch {
+    const file = path.resolve(process.cwd(), input)
+    if (!(await Filesystem.exists(file))) {
+      throw new Error("Invalid schema. Pass a JSON object or a path to a JSON file.")
+    }
+    const text = await Filesystem.readText(file).catch(() => {
+      throw new Error(`Failed to read schema file: ${input}`)
+    })
+    try {
+      return object(JSON.parse(text))
+    } catch {
+      throw new Error(`Invalid JSON schema in file: ${input}`)
+    }
+  }
+}
+
 function inline(info: Inline) {
   const suffix = info.description ? UI.Style.TEXT_DIM + ` ${info.description}` + UI.Style.TEXT_NORMAL : ""
   UI.println(UI.Style.TEXT_NORMAL + info.icon, UI.Style.TEXT_NORMAL + info.title + suffix)
@@ -266,6 +292,14 @@ export const RunCommand = cmd({
         default: "default",
         describe: "format: default (formatted) or json (raw JSON events)",
       })
+      .option("json", {
+        type: "boolean",
+        describe: "output final structured JSON only (requires --json-schema)",
+      })
+      .option("json-schema", {
+        type: "string",
+        describe: "JSON schema as inline JSON or path to JSON file (used with --json)",
+      })
       .option("file", {
         alias: ["f"],
         type: "string",
@@ -353,6 +387,31 @@ export const RunCommand = cmd({
       UI.error("--fork requires --continue or --session")
       process.exit(1)
     }
+
+    if (args.json && args.format === "json") {
+      UI.error("--json cannot be used with --format json")
+      process.exit(1)
+    }
+
+    if (args.json && args.command) {
+      UI.error("--json is not supported with --command")
+      process.exit(1)
+    }
+
+    if (args.json && !args.jsonSchema) {
+      UI.error("--json requires --json-schema")
+      process.exit(1)
+    }
+
+    const schema = await (async () => {
+      if (!args.json) return undefined
+      try {
+        return await parseSchema(args.jsonSchema as string)
+      } catch (error) {
+        UI.error(error instanceof Error ? error.message : String(error))
+        process.exit(1)
+      }
+    })()
 
     const rules: PermissionNext.Ruleset = [
       {
@@ -625,6 +684,38 @@ export const RunCommand = cmd({
         process.exit(1)
       }
       await share(sdk, sessionID)
+
+      if (args.json) {
+        const model = args.model ? Provider.parseModel(args.model) : undefined
+        const result = await sdk.session.prompt({
+          sessionID,
+          agent,
+          model,
+          variant: args.variant,
+          format: {
+            type: "json_schema",
+            schema: schema!,
+          },
+          parts: [...files, { type: "text", text: message }],
+        })
+        const info = result.data?.info
+        if (!info || info.role !== "assistant") {
+          UI.error("Prompt failed")
+          process.exit(1)
+        }
+        if (info.error) {
+          const output = "data" in info.error && info.error.data && "message" in info.error.data
+          const text = output ? String(info.error.data.message) : String(info.error.name)
+          UI.error(text)
+          process.exit(1)
+        }
+        if (info.structured === undefined) {
+          UI.error("Model did not produce structured output")
+          process.exit(1)
+        }
+        process.stdout.write(JSON.stringify(info.structured) + EOL)
+        return
+      }
 
       loop().catch((e) => {
         console.error(e)
