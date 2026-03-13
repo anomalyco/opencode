@@ -1,7 +1,6 @@
 use std::time::{Duration, Instant};
 
 use tauri::AppHandle;
-use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
 use tauri_plugin_store::StoreExt;
 use tokio::task::JoinHandle;
 
@@ -85,22 +84,6 @@ pub fn set_wsl_config(app: AppHandle, config: WslConfig) -> Result<(), String> {
     Ok(())
 }
 
-pub async fn get_saved_server_url(app: &tauri::AppHandle) -> Option<String> {
-    if let Some(url) = get_default_server_url(app.clone()).ok().flatten() {
-        tracing::info!(%url, "Using desktop-specific custom URL");
-        return Some(url);
-    }
-
-    if let Some(cli_config) = cli::get_config(app).await
-        && let Some(url) = get_server_url_from_config(&cli_config)
-    {
-        tracing::info!(%url, "Using custom server URL from config");
-        return Some(url);
-    }
-
-    None
-}
-
 pub fn spawn_local_server(
     app: AppHandle,
     hostname: String,
@@ -145,19 +128,27 @@ pub fn spawn_local_server(
 
 pub struct HealthCheck(pub JoinHandle<Result<(), String>>);
 
-pub async fn check_health(url: &str, password: Option<&str>) -> bool {
+async fn check_health(url: &str, password: Option<&str>) -> bool {
     let Ok(url) = reqwest::Url::parse(url) else {
         return false;
     };
 
     let mut builder = reqwest::Client::builder().timeout(Duration::from_secs(7));
 
-    if url_is_localhost(&url) {
+    if url
+        .host_str()
+        .is_some_and(|host| {
+            host.eq_ignore_ascii_case("localhost")
+                || host
+                    .parse::<std::net::IpAddr>()
+                    .is_ok_and(|ip| ip.is_loopback())
+        })
+    {
         // Some environments set proxy variables (HTTP_PROXY/HTTPS_PROXY/ALL_PROXY) without
         // excluding loopback. reqwest respects these by default, which can prevent the desktop
         // app from reaching its own local sidecar server.
         builder = builder.no_proxy();
-    };
+    }
 
     let Ok(client) = builder.build() else {
         return false;
@@ -176,78 +167,4 @@ pub async fn check_health(url: &str, password: Option<&str>) -> bool {
         .await
         .map(|r| r.status().is_success())
         .unwrap_or(false)
-}
-
-pub fn is_localhost_url(url: &str) -> bool {
-    reqwest::Url::parse(url).is_ok_and(|u| url_is_localhost(&u))
-}
-
-fn url_is_localhost(url: &reqwest::Url) -> bool {
-    url.host_str().is_some_and(|host| {
-        host.eq_ignore_ascii_case("localhost")
-            || host
-                .parse::<std::net::IpAddr>()
-                .is_ok_and(|ip| ip.is_loopback())
-    })
-}
-
-/// Converts a bind address hostname to a valid URL hostname for connection.
-/// - `0.0.0.0` and `::` are wildcard bind addresses, not valid connect targets
-/// - IPv6 addresses need brackets in URLs (e.g., `::1` -> `[::1]`)
-fn normalize_hostname_for_url(hostname: &str) -> String {
-    // Wildcard bind addresses -> localhost equivalents
-    if hostname == "0.0.0.0" {
-        return "127.0.0.1".to_string();
-    }
-    if hostname == "::" {
-        return "[::1]".to_string();
-    }
-
-    // IPv6 addresses need brackets in URLs
-    if hostname.contains(':') && !hostname.starts_with('[') {
-        return format!("[{}]", hostname);
-    }
-
-    hostname.to_string()
-}
-
-fn get_server_url_from_config(config: &cli::Config) -> Option<String> {
-    let server = config.server.as_ref()?;
-    let port = server.port?;
-    tracing::debug!(port, "server.port found in OC config");
-    let hostname = server
-        .hostname
-        .as_ref()
-        .map(|v| normalize_hostname_for_url(v))
-        .unwrap_or_else(|| "127.0.0.1".to_string());
-
-    Some(format!("http://{}:{}", hostname, port))
-}
-
-pub async fn check_health_or_ask_retry(app: &AppHandle, url: &str) -> bool {
-    tracing::debug!(%url, "Checking health");
-    loop {
-        if check_health(url, None).await {
-            return true;
-        }
-
-        const RETRY: &str = "Retry";
-
-        let res = app.dialog()
-    		  .message(format!("Could not connect to configured server:\n{}\n\nWould you like to retry or start a local server instead?", url))
-    		  .title("Connection Failed")
-    		  .buttons(MessageDialogButtons::OkCancelCustom(RETRY.to_string(), "Start Local".to_string()))
-    		  .blocking_show_with_result();
-
-        match res {
-            MessageDialogResult::Custom(name) if name == RETRY => {
-                continue;
-            }
-            _ => {
-                break;
-            }
-        }
-    }
-
-    false
 }
