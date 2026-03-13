@@ -15,12 +15,14 @@ declare global {
 
 export namespace Installation {
   const log = Log.create({ service: "installation" })
+  const win = process.platform === "win32" ? process.env.COMSPEC || "cmd.exe" : false as const
 
   async function text(cmd: string[], opts: { cwd?: string; env?: NodeJS.ProcessEnv } = {}) {
     return Process.text(cmd, {
       cwd: opts.cwd,
       env: opts.env,
       nothrow: true,
+      shell: win,
     }).then((x) => x.text)
   }
 
@@ -101,10 +103,6 @@ export namespace Installation {
         command: () => text(["npm", "list", "-g", "--depth=0"]),
       },
       {
-        name: "yarn" as const,
-        command: () => text(["yarn", "global", "list"]),
-      },
-      {
         name: "pnpm" as const,
         command: () => text(["pnpm", "list", "-g", "--depth=0"]),
       },
@@ -162,19 +160,19 @@ export namespace Installation {
   }
 
   export async function upgrade(method: Method, target: string) {
-    let result: Awaited<ReturnType<typeof upgradeCurl>> | undefined
+    let result: Process.Result | undefined
     switch (method) {
       case "curl":
         result = await upgradeCurl(target)
         break
       case "npm":
-        result = await Process.run(["npm", "install", "-g", `opencode-ai@${target}`], { nothrow: true })
+        result = await Process.run(["npm", "install", "-g", `opencode-ai@${target}`], { nothrow: true, shell: win })
         break
       case "pnpm":
-        result = await Process.run(["pnpm", "install", "-g", `opencode-ai@${target}`], { nothrow: true })
+        result = await Process.run(["pnpm", "install", "-g", `opencode-ai@${target}`], { nothrow: true, shell: win })
         break
       case "bun":
-        result = await Process.run(["bun", "install", "-g", `opencode-ai@${target}`], { nothrow: true })
+        result = await Process.run(["bun", "install", "-g", `opencode-ai@${target}`], { nothrow: true, shell: win })
         break
       case "brew": {
         const formula = await getBrewFormula()
@@ -207,10 +205,10 @@ export namespace Installation {
       }
 
       case "choco":
-        result = await Process.run(["choco", "upgrade", "opencode", `--version=${target}`, "-y"], { nothrow: true })
+        result = await Process.run(["choco", "upgrade", "opencode", `--version=${target}`, "-y"], { nothrow: true, shell: win })
         break
       case "scoop":
-        result = await Process.run(["scoop", "install", `opencode@${target}`], { nothrow: true })
+        result = await Process.run(["scoop", "install", `opencode@${target}`], { nothrow: true, shell: win })
         break
       default:
         throw new Error(`Unknown method: ${method}`)

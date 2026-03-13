@@ -13,6 +13,7 @@ export namespace Process {
     abort?: AbortSignal
     kill?: NodeJS.Signals | number
     timeout?: number
+    shell?: boolean | string
   }
 
   export interface RunOptions extends Omit<Options, "stdout" | "stderr"> {
@@ -61,6 +62,7 @@ export namespace Process {
       env: opts.env === null ? {} : opts.env ? { ...process.env, ...opts.env } : undefined,
       stdio: [opts.stdin ?? "ignore", opts.stdout ?? "ignore", opts.stderr ?? "ignore"],
       windowsHide: process.platform === "win32",
+      shell: opts.shell,
     })
 
     let closed = false
@@ -113,6 +115,7 @@ export namespace Process {
       abort: opts.abort,
       kill: opts.kill,
       timeout: opts.timeout,
+      shell: opts.shell,
       stdout: "pipe",
       stderr: "pipe",
     })
