@@ -78,7 +78,7 @@ export class ProviderAuthService extends ServiceMap.Service<ProviderAuthService,
               map((x) => [x.auth!.provider, x.auth!] as const),
               fromEntries(),
             )
-            return { methods, pending: new Map<string, AuthOuathResult>() }
+            return { methods, pending: new Map<ProviderID, AuthOuathResult>() }
           }),
       })
 
