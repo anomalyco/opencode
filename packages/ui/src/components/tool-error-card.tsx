@@ -30,7 +30,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
       list: "ui.tool.list",
       glob: "ui.tool.glob",
       grep: "ui.tool.grep",
-      task: "Task",
+      task: "ui.tool.task",
       webfetch: "ui.tool.webfetch",
       websearch: "ui.tool.websearch",
       codesearch: "ui.tool.codesearch",
@@ -54,10 +54,10 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
   const subtitle = createMemo(() => {
     if (split.subtitle) return split.subtitle
     const parts = tail().split(": ")
-    if (parts.length <= 1) return "Failed"
+    if (parts.length <= 1) return i18n.t("ui.toolErrorCard.failed")
     const head = (parts[0] ?? "").trim()
-    if (!head) return "Failed"
-    return head[0] ? head[0].toUpperCase() + head.slice(1) : "Failed"
+    if (!head) return i18n.t("ui.toolErrorCard.failed")
+    return head[0] ? head[0].toUpperCase() + head.slice(1) : i18n.t("ui.toolErrorCard.failed")
   })
 
   const body = createMemo(() => {
@@ -116,7 +116,11 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
           <div data-slot="tool-error-card-content">
             <Show when={open()}>
               <div data-slot="tool-error-card-copy">
-                <Tooltip value={copied() ? i18n.t("ui.message.copied") : "Copy error"} placement="top" gutter={4}>
+                <Tooltip
+                  value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.toolErrorCard.copyError")}
+                  placement="top"
+                  gutter={4}
+                >
                   <IconButton
                     icon={copied() ? "check" : "copy"}
                     size="normal"
@@ -126,7 +130,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
                       e.stopPropagation()
                       copy()
                     }}
-                    aria-label={copied() ? i18n.t("ui.message.copied") : "Copy error"}
+                    aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.toolErrorCard.copyError")}
                   />
                 </Tooltip>
               </div>
