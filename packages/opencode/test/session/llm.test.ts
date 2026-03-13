@@ -797,7 +797,7 @@ describe("session.llm.stream", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const resolved = await Provider.getModel(ProviderID.make("xai"), ModelID.make(model.id))
+        const resolved = await Provider.getModel("xai", model.id)
         const sessionID = SessionID.make("session-test-xai-cap")
         const agent = {
           name: "test",
@@ -812,7 +812,7 @@ describe("session.llm.stream", () => {
           role: "user",
           time: { created: Date.now() },
           agent: agent.name,
-          model: { providerID: ProviderID.make("xai"), modelID: resolved.id },
+          model: { providerID: "xai", modelID: resolved.id },
         } satisfies MessageV2.User
 
         const tools: Record<string, unknown> = {}
@@ -892,7 +892,7 @@ describe("session.llm.stream", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const resolved = await Provider.getModel(ProviderID.make("xai"), ModelID.make(model.id))
+        const resolved = await Provider.getModel("xai", model.id)
         const sessionID = SessionID.make("session-test-xai-single")
         const agent = {
           name: "test",
@@ -907,7 +907,7 @@ describe("session.llm.stream", () => {
           role: "user",
           time: { created: Date.now() },
           agent: agent.name,
-          model: { providerID: ProviderID.make("xai"), modelID: resolved.id },
+          model: { providerID: "xai", modelID: resolved.id },
         } satisfies MessageV2.User
 
         const props: Record<string, { type: "string"; description: string }> = {}

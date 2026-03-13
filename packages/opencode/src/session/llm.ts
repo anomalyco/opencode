@@ -201,7 +201,11 @@ export namespace LLM {
     }
 
     const all = Object.keys(tools).filter((x) => x !== "invalid")
-    const cap = input.model.limit.tools
+    const cap = (() => {
+      const value = (input.model.limit as Record<string, unknown>)["tools"]
+      if (typeof value === "number") return value
+      return undefined
+    })()
     let active = all
     if (cap && all.length > cap) {
       l.warn("capping tools", {
