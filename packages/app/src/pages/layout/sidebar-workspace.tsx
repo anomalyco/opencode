@@ -249,7 +249,7 @@ const WorkspaceSessionList = (props: {
   loadMore: () => Promise<void>
   language: ReturnType<typeof useLanguage>
 }): JSX.Element => (
-  <nav class="flex flex-col gap-1 px-3">
+  <nav class="flex flex-col gap-1">
     <Show when={props.showNew()}>
       <NewSessionItem
         slug={props.slug()}

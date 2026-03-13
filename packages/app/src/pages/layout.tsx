@@ -1961,7 +1961,7 @@ export default function Layout(props: ParentProps) {
     return (
       <div
         classList={{
-          "flex flex-col min-h-0 min-w-0 box-border rounded-tl-[12px] px-2": true,
+          "flex flex-col min-h-0 min-w-0 box-border rounded-tl-[12px] px-3": true,
           "border border-b-0 border-border-weak-base": !merged(),
           "border-l border-t border-border-weaker-base": merged(),
           "bg-background-base": merged() || hover(),
@@ -2063,7 +2063,7 @@ export default function Layout(props: ParentProps) {
                   when={workspacesEnabled()}
                   fallback={
                     <>
-                      <div class="shrink-0 py-4 px-3">
+                      <div class="shrink-0 py-4">
                         <Button
                           size="large"
                           icon="plus-small"
@@ -2086,7 +2086,7 @@ export default function Layout(props: ParentProps) {
                   }
                 >
                   <>
-                    <div class="shrink-0 py-4 px-3">
+                    <div class="shrink-0 py-4">
                       <Button size="large" icon="plus-small" class="w-full" onClick={() => createWorkspace(p())}>
                         {language.t("workspace.new")}
                       </Button>
