@@ -108,6 +108,12 @@ export namespace PermissionNext {
     ),
   }
 
+  interface PendingEntry {
+    info: Request
+    resolve: () => void
+    reject: (e: any) => void
+  }
+
   const state = Instance.state(() => {
     const projectID = Instance.project.id
     const row = Database.use((db) =>
@@ -115,17 +121,8 @@ export namespace PermissionNext {
     )
     const stored = row?.data ?? ([] as Ruleset)
 
-    const pending: Record<
-      string,
-      {
-        info: Request
-        resolve: () => void
-        reject: (e: any) => void
-      }
-    > = {}
-
     return {
-      pending,
+      pending: new Map<PermissionID, PendingEntry>(),
       approved: stored,
     }
   })
@@ -149,11 +146,11 @@ export namespace PermissionNext {
               id,
               ...request,
             }
-            s.pending[id] = {
+            s.pending.set(id, {
               info,
               resolve,
               reject,
-            }
+            })
             Bus.publish(Event.Asked, info)
           })
         }
@@ -170,9 +167,9 @@ export namespace PermissionNext {
     }),
     async (input) => {
       const s = await state()
-      const existing = s.pending[input.requestID]
+      const existing = s.pending.get(input.requestID)
       if (!existing) return
-      delete s.pending[input.requestID]
+      s.pending.delete(input.requestID)
       Bus.publish(Event.Replied, {
         sessionID: existing.info.sessionID,
         requestID: existing.info.id,
@@ -182,9 +179,9 @@ export namespace PermissionNext {
         existing.reject(input.message ? new CorrectedError(input.message) : new RejectedError())
         // Reject all other pending permissions for this session
         const sessionID = existing.info.sessionID
-        for (const [id, pending] of Object.entries(s.pending)) {
+        for (const [id, pending] of s.pending) {
           if (pending.info.sessionID === sessionID) {
-            delete s.pending[id]
+            s.pending.delete(id)
             Bus.publish(Event.Replied, {
               sessionID: pending.info.sessionID,
               requestID: pending.info.id,
@@ -211,13 +208,13 @@ export namespace PermissionNext {
         existing.resolve()
 
         const sessionID = existing.info.sessionID
-        for (const [id, pending] of Object.entries(s.pending)) {
+        for (const [id, pending] of s.pending) {
           if (pending.info.sessionID !== sessionID) continue
           const ok = pending.info.patterns.every(
             (pattern) => evaluate(pending.info.permission, pattern, s.approved).action === "allow",
           )
           if (!ok) continue
-          delete s.pending[id]
+          s.pending.delete(id)
           Bus.publish(Event.Replied, {
             sessionID: pending.info.sessionID,
             requestID: pending.info.id,
@@ -283,6 +280,6 @@ export namespace PermissionNext {
 
   export async function list() {
     const s = await state()
-    return Object.values(s.pending).map((x) => x.info)
+    return Array.from(s.pending.values(), (x) => x.info)
   }
 }
