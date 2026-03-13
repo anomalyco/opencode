@@ -121,7 +121,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   let slashPopoverRef!: HTMLDivElement
 
   const mirror = { input: false }
-  const inset = 44
+  const inset = 52
+  const space = `${inset}px`
 
   const scrollCursorIntoView = () => {
     const container = scrollRef
@@ -156,8 +157,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
   }
 
-  const queueScroll = () => {
-    requestAnimationFrame(scrollCursorIntoView)
+  const queueScroll = (count = 2) => {
+    requestAnimationFrame(() => {
+      scrollCursorIntoView()
+      if (count > 1) queueScroll(count - 1)
+    })
   }
 
   const activeFileTab = createSessionTabs({
@@ -1266,7 +1270,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             editorRef?.focus()
           }}
         >
-          <div class="relative max-h-[240px] overflow-y-auto no-scrollbar" ref={(el) => (scrollRef = el)}>
+          <div
+            class="relative max-h-[240px] overflow-y-auto no-scrollbar"
+            ref={(el) => (scrollRef = el)}
+            style={{ "scroll-padding-bottom": space }}
+          >
             <div
               data-component="prompt-input"
               ref={(el) => {
@@ -1288,21 +1296,33 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               onKeyDown={handleKeyDown}
               classList={{
                 "select-text": true,
-                "w-full pl-3 pr-2 pt-2 pb-11 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
+                "w-full pl-3 pr-2 pt-2 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
                 "[&_[data-type=file]]:text-syntax-property": true,
                 "[&_[data-type=agent]]:text-syntax-type": true,
                 "font-mono!": store.mode === "shell",
               }}
+              style={{ "padding-bottom": space }}
             />
             <Show when={!prompt.dirty()}>
               <div
-                class="absolute top-0 inset-x-0 pl-3 pr-2 pt-2 pb-11 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate"
+                class="absolute top-0 inset-x-0 pl-3 pr-2 pt-2 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate"
                 classList={{ "font-mono!": store.mode === "shell" }}
+                style={{ "padding-bottom": space }}
               >
                 {placeholder()}
               </div>
             </Show>
           </div>
+
+          <div
+            aria-hidden="true"
+            class="pointer-events-none absolute inset-x-0 bottom-0"
+            style={{
+              height: space,
+              background:
+                "linear-gradient(to top, var(--surface-raised-stronger-non-alpha) calc(100% - 20px), transparent)",
+            }}
+          />
 
           <div class="pointer-events-none absolute bottom-2 right-2 flex items-center gap-2">
             <input
