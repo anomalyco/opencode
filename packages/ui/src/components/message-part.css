@@ -23,10 +23,6 @@
   max-width: 100%;
   gap: 0;
 
-  &[data-interrupted] {
-    color: var(--text-weak);
-  }
-
   [data-slot="user-message-attachments"] {
     display: flex;
     flex-wrap: wrap;
@@ -163,10 +159,6 @@
     flex: 0 0 auto;
     white-space: nowrap;
     text-align: right;
-  }
-
-  [data-slot="user-message-copy-wrapper"][data-interrupted] {
-    gap: 12px;
   }
 
   &:hover [data-slot="user-message-copy-wrapper"],
