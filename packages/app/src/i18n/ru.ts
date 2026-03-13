@@ -263,7 +263,7 @@ export const dict = {
 
   "prompt.popover.emptyResults": "Нет совпадений",
   "prompt.popover.emptyCommands": "Нет совпадающих команд",
-  "prompt.dropzone.label": "Перетащите изображения или PDF сюда",
+  "prompt.dropzone.label": "Перетащите сюда изображения, PDF или текстовые файлы",
   "prompt.dropzone.file.label": "Отпустите для @упоминания файла",
   "prompt.slash.badge.custom": "своё",
   "prompt.slash.badge.skill": "навык",
@@ -277,8 +277,8 @@ export const dict = {
   "prompt.action.send": "Отправить",
   "prompt.action.stop": "Остановить",
 
-  "prompt.toast.pasteUnsupported.title": "Неподдерживаемая вставка",
-  "prompt.toast.pasteUnsupported.description": "Сюда можно вставлять только изображения или PDF.",
+  "prompt.toast.pasteUnsupported.title": "Неподдерживаемое вложение",
+  "prompt.toast.pasteUnsupported.description": "Здесь можно прикрепить только изображения, PDF или текстовые файлы.",
   "prompt.toast.modelAgentRequired.title": "Выберите агента и модель",
   "prompt.toast.modelAgentRequired.description": "Выберите агента и модель перед отправкой запроса.",
   "prompt.toast.worktreeCreateFailed.title": "Не удалось создать worktree",

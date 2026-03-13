@@ -38,10 +38,12 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
+    min-width: 0;
     border-radius: 6px;
     overflow: hidden;
     background: var(--surface-weak);
     border: 1px solid var(--border-weak-base);
+    cursor: default;
     transition:
       border-color 0.15s ease,
       opacity 0.3s ease;
@@ -50,14 +52,19 @@
       border-color: var(--border-strong-base);
     }
 
+    &[data-clickable] {
+      cursor: pointer;
+    }
+
     &[data-type="image"] {
       width: 48px;
       height: 48px;
     }
 
     &[data-type="file"] {
-      width: 48px;
+      width: min(220px, 100%);
       height: 48px;
+      padding: 0 10px;
     }
   }
 
@@ -79,6 +86,30 @@
       width: 20px;
       height: 20px;
     }
+  }
+
+  [data-slot="user-message-attachment-file"] {
+    width: 100%;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    [data-component="file-icon"] {
+      width: 20px;
+      height: 20px;
+      flex: none;
+    }
+  }
+
+  [data-slot="user-message-attachment-name"] {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-base);
+    font-size: var(--font-size-small);
+    line-height: var(--line-height-large);
   }
 
   [data-slot="user-message-body"] {

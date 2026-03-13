@@ -263,7 +263,7 @@ export const dict = {
 
   "prompt.popover.emptyResults": "沒有符合的結果",
   "prompt.popover.emptyCommands": "沒有符合的命令",
-  "prompt.dropzone.label": "將圖片或 PDF 拖到這裡",
+  "prompt.dropzone.label": "將圖片、PDF 或文字檔案拖放到此處",
   "prompt.dropzone.file.label": "拖放以 @提及檔案",
   "prompt.slash.badge.custom": "自訂",
   "prompt.slash.badge.skill": "技能",
@@ -277,8 +277,8 @@ export const dict = {
   "prompt.action.send": "傳送",
   "prompt.action.stop": "停止",
 
-  "prompt.toast.pasteUnsupported.title": "不支援的貼上",
-  "prompt.toast.pasteUnsupported.description": "這裡只能貼上圖片或 PDF 檔案。",
+  "prompt.toast.pasteUnsupported.title": "不支援的附件",
+  "prompt.toast.pasteUnsupported.description": "此處僅能附加圖片、PDF 或文字檔案。",
   "prompt.toast.modelAgentRequired.title": "請選擇代理程式和模型",
   "prompt.toast.modelAgentRequired.description": "傳送提示前請先選擇代理程式和模型。",
   "prompt.toast.worktreeCreateFailed.title": "建立工作樹失敗",

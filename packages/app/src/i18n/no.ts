@@ -266,7 +266,7 @@ export const dict = {
 
   "prompt.popover.emptyResults": "Ingen matchende resultater",
   "prompt.popover.emptyCommands": "Ingen matchende kommandoer",
-  "prompt.dropzone.label": "Slipp bilder eller PDF-er her",
+  "prompt.dropzone.label": "Slipp bilder, PDF-er eller tekstfiler her",
   "prompt.dropzone.file.label": "Slipp for å @nevne fil",
   "prompt.slash.badge.custom": "egendefinert",
   "prompt.slash.badge.skill": "skill",
@@ -280,8 +280,8 @@ export const dict = {
   "prompt.action.send": "Send",
   "prompt.action.stop": "Stopp",
 
-  "prompt.toast.pasteUnsupported.title": "Liming ikke støttet",
-  "prompt.toast.pasteUnsupported.description": "Kun bilder eller PDF-er kan limes inn her.",
+  "prompt.toast.pasteUnsupported.title": "Ikke støttet vedlegg",
+  "prompt.toast.pasteUnsupported.description": "Kun bilder, PDF-er eller tekstfiler kan legges ved her.",
   "prompt.toast.modelAgentRequired.title": "Velg en agent og modell",
   "prompt.toast.modelAgentRequired.description": "Velg en agent og modell før du sender en forespørsel.",
   "prompt.toast.worktreeCreateFailed.title": "Kunne ikke opprette worktree",
