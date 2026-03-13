@@ -765,8 +765,7 @@ describe("session.llm.stream", () => {
 
     const providerID = "xai" as Parameters<typeof Provider.getModel>[0]
     const modelID = "grok-4"
-    const fixture = await loadFixture(providerID, modelID)
-    const model = fixture.model
+    await loadFixture(providerID, modelID)
 
     const request = waitRequest(
       "/chat/completions",
@@ -799,7 +798,7 @@ describe("session.llm.stream", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const resolved = await Provider.getModel(providerID, model.id)
+        const resolved = await Provider.getModel(providerID, modelID)
         const sessionID = SessionID.make("session-test-xai-cap")
         const agent = {
           name: "test",
@@ -862,8 +861,7 @@ describe("session.llm.stream", () => {
 
     const providerID = "xai" as Parameters<typeof Provider.getModel>[0]
     const modelID = "grok-4"
-    const fixture = await loadFixture(providerID, modelID)
-    const model = fixture.model
+    await loadFixture(providerID, modelID)
 
     const request = waitRequest(
       "/chat/completions",
@@ -896,7 +894,7 @@ describe("session.llm.stream", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const resolved = await Provider.getModel(providerID, model.id)
+        const resolved = await Provider.getModel(providerID, modelID)
         const sessionID = SessionID.make("session-test-xai-single")
         const agent = {
           name: "test",
