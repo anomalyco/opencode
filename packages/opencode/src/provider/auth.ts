@@ -1,147 +1,56 @@
-import { Instance } from "@/project/instance"
-import { Plugin } from "../plugin"
-import { map, filter, pipe, fromEntries, mapValues } from "remeda"
+import { Effect, ManagedRuntime } from "effect"
 import z from "zod"
+
 import { fn } from "@/util/fn"
-import type { AuthOuathResult, Hooks } from "@opencode-ai/plugin"
-import { NamedError } from "@opencode-ai/util/error"
-import { Auth } from "@/auth"
+import * as S from "./auth-service"
+import { ProviderID } from "./schema"
+
+// Separate runtime: ProviderAuthService can't join the shared runtime because
+// runtime.ts → auth-service.ts → provider/auth.ts creates a circular import.
+// AuthService is stateless file I/O so the duplicate instance is harmless.
+const rt = ManagedRuntime.make(S.ProviderAuthService.defaultLayer)
+
+function runPromise<A>(f: (service: S.ProviderAuthService.Service) => Effect.Effect<A, S.ProviderAuthError>) {
+  return rt.runPromise(S.ProviderAuthService.use(f))
+}
 
 export namespace ProviderAuth {
-  const state = Instance.state(async () => {
-    const methods = pipe(
-      await Plugin.list(),
-      filter((x) => x.auth?.provider !== undefined),
-      map((x) => [x.auth!.provider, x.auth!] as const),
-      fromEntries(),
-    )
-    return { methods, pending: {} as Record<string, AuthOuathResult> }
-  })
-
-  export const Method = z
-    .object({
-      type: z.union([z.literal("oauth"), z.literal("api")]),
-      label: z.string(),
-    })
-    .meta({
-      ref: "ProviderAuthMethod",
-    })
-  export type Method = z.infer<typeof Method>
+  export const Method = S.Method
+  export type Method = S.Method
 
   export async function methods() {
-    const s = await state().then((x) => x.methods)
-    return mapValues(s, (x) =>
-      x.methods.map(
-        (y): Method => ({
-          type: y.type,
-          label: y.label,
-        }),
-      ),
-    )
+    return runPromise((service) => service.methods())
   }
 
-  export const Authorization = z
-    .object({
-      url: z.string(),
-      method: z.union([z.literal("auto"), z.literal("code")]),
-      instructions: z.string(),
-    })
-    .meta({
-      ref: "ProviderAuthAuthorization",
-    })
-  export type Authorization = z.infer<typeof Authorization>
+  export const Authorization = S.Authorization
+  export type Authorization = S.Authorization
 
   export const authorize = fn(
     z.object({
-      providerID: z.string(),
+      providerID: ProviderID.zod,
       method: z.number(),
     }),
-    async (input): Promise<Authorization | undefined> => {
-      const auth = await state().then((s) => s.methods[input.providerID])
-      const method = auth.methods[input.method]
-      if (method.type === "oauth") {
-        const result = await method.authorize()
-        await state().then((s) => (s.pending[input.providerID] = result))
-        return {
-          url: result.url,
-          method: result.method,
-          instructions: result.instructions,
-        }
-      }
-    },
+    async (input): Promise<Authorization | undefined> => runPromise((service) => service.authorize(input)),
   )
 
   export const callback = fn(
     z.object({
-      providerID: z.string(),
+      providerID: ProviderID.zod,
       method: z.number(),
       code: z.string().optional(),
     }),
-    async (input) => {
-      const match = await state().then((s) => s.pending[input.providerID])
-      if (!match) throw new OauthMissing({ providerID: input.providerID })
-      let result
-
-      if (match.method === "code") {
-        if (!input.code) throw new OauthCodeMissing({ providerID: input.providerID })
-        result = await match.callback(input.code)
-      }
-
-      if (match.method === "auto") {
-        result = await match.callback()
-      }
-
-      if (result?.type === "success") {
-        if ("key" in result) {
-          await Auth.set(input.providerID, {
-            type: "api",
-            key: result.key,
-          })
-        }
-        if ("refresh" in result) {
-          const info: Auth.Info = {
-            type: "oauth",
-            access: result.access,
-            refresh: result.refresh,
-            expires: result.expires,
-          }
-          if (result.accountId) {
-            info.accountId = result.accountId
-          }
-          await Auth.set(input.providerID, info)
-        }
-        return
-      }
-
-      throw new OauthCallbackFailed({})
-    },
+    async (input) => runPromise((service) => service.callback(input)),
   )
 
   export const api = fn(
     z.object({
-      providerID: z.string(),
+      providerID: ProviderID.zod,
       key: z.string(),
     }),
-    async (input) => {
-      await Auth.set(input.providerID, {
-        type: "api",
-        key: input.key,
-      })
-    },
+    async (input) => runPromise((service) => service.api(input)),
   )
 
-  export const OauthMissing = NamedError.create(
-    "ProviderAuthOauthMissing",
-    z.object({
-      providerID: z.string(),
-    }),
-  )
-  export const OauthCodeMissing = NamedError.create(
-    "ProviderAuthOauthCodeMissing",
-    z.object({
-      providerID: z.string(),
-    }),
-  )
-
-  export const OauthCallbackFailed = NamedError.create("ProviderAuthOauthCallbackFailed", z.object({}))
+  export import OauthMissing = S.OauthMissing
+  export import OauthCodeMissing = S.OauthCodeMissing
+  export import OauthCallbackFailed = S.OauthCallbackFailed
 }
