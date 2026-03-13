@@ -1,5 +1,5 @@
 import path from "path"
-import { exec } from "child_process"
+import { execFile } from "child_process"
 import { Filesystem } from "../../util/filesystem"
 import * as prompts from "@clack/prompts"
 import { map, pipe, sortBy, values } from "remeda"
@@ -327,14 +327,14 @@ export const GithubInstallCommand = cmd({
 
             // Open browser
             const url = "https://github.com/apps/opencode-agent"
-            const command =
+            const openArgs: [string, string[]] =
               process.platform === "darwin"
-                ? `open "${url}"`
+                ? ["open", [url]]
                 : process.platform === "win32"
-                  ? `start "" "${url}"`
-                  : `xdg-open "${url}"`
+                  ? ["cmd", ["/c", "start", "", url]]
+                  : ["xdg-open", [url]]
 
-            exec(command, (error) => {
+            execFile(openArgs[0], openArgs[1], (error) => {
               if (error) {
                 prompts.log.warn(`Could not open browser. Please visit: ${url}`)
               }
