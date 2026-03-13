@@ -1499,8 +1499,57 @@
       color: var(--text-weak);
     }
 
+    [data-slot="answer-content"] {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
     [data-slot="answer-text"] {
       color: var(--text-strong);
+    }
+
+    [data-slot="answer-images"] {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    [data-slot="answer-image-button"] {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 4px;
+      padding: 0;
+      border: none;
+      background: none;
+      cursor: pointer;
+      transition: opacity 0.2s;
+
+      &:hover {
+        opacity: 0.8;
+      }
+
+      &:active {
+        opacity: 0.6;
+      }
+    }
+
+    [data-slot="answer-image-thumbnail"] {
+      max-width: 200px;
+      max-height: 200px;
+      border-radius: 6px;
+      border: 1px solid var(--border-weak-base);
+      object-fit: contain;
+    }
+
+    [data-slot="answer-image-filename"] {
+      font-size: 12px;
+      color: var(--text-weak);
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
   }
 }

@@ -2098,6 +2098,7 @@ ToolRegistry.register({
   name: "question",
   render(props) {
     const i18n = useI18n()
+    const dialog = useDialog()
     const questions = createMemo(() => (props.input.questions ?? []) as QuestionInfo[])
     const answers = createMemo(() => (props.metadata.answers ?? []) as QuestionAnswer[])
     const completed = createMemo(() => answers().length > 0)
@@ -2125,11 +2126,52 @@ ToolRegistry.register({
             <For each={questions()}>
               {(q, i) => {
                 const answer = () => answers()[i()] ?? []
+                const textParts = () => answer().filter((part) => typeof part === "string")
+                const imageParts = () =>
+                  answer().filter(
+                    (part): part is { type: "image"; url: string; mime: string; filename?: string } =>
+                      typeof part !== "string" && part.type === "image",
+                  )
+
                 return (
                   <div data-slot="question-answer-item">
                     <div data-slot="question-text">{q.question}</div>
-                    <div data-slot="answer-text">
-                      {answer().map(formatQuestionPart).join(", ") || i18n.t("ui.question.answer.none")}
+                    <div data-slot="answer-content">
+                      <Show when={textParts().length > 0}>
+                        <div data-slot="answer-text">{textParts().join(", ")}</div>
+                      </Show>
+                      <Show when={imageParts().length > 0}>
+                        <div data-slot="answer-images">
+                          <For each={imageParts()}>
+                            {(image) => (
+                              <button
+                                type="button"
+                                data-slot="answer-image-button"
+                                onClick={() =>
+                                  dialog.show(() => (
+                                    <ImagePreview
+                                      src={image.url}
+                                      alt={image.filename ?? i18n.t("ui.message.attachment.alt")}
+                                    />
+                                  ))
+                                }
+                              >
+                                <img
+                                  src={image.url}
+                                  alt={image.filename ?? i18n.t("ui.message.attachment.alt")}
+                                  data-slot="answer-image-thumbnail"
+                                />
+                                <Show when={image.filename}>
+                                  <span data-slot="answer-image-filename">{image.filename}</span>
+                                </Show>
+                              </button>
+                            )}
+                          </For>
+                        </div>
+                      </Show>
+                      <Show when={answer().length === 0}>
+                        <div data-slot="answer-text">{i18n.t("ui.question.answer.none")}</div>
+                      </Show>
                     </div>
                   </div>
                 )
