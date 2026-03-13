@@ -1780,6 +1780,7 @@ export default function Layout(props: ParentProps) {
 
   const createWorkspace = async (project: LocalProject) => {
     clearSidebarHoverState()
+    debugger
     const created = await globalSDK.client.worktree
       .create({ directory: project.worktree })
       .then((x) => x.data)
@@ -1792,6 +1793,10 @@ export default function Layout(props: ParentProps) {
       })
 
     if (!created?.directory) return
+    debugger
+
+    WorktreeState.pending(created.directory)
+    setBusy(created.directory, true)
 
     setWorkspaceName(created.directory, created.branch, project.id, created.branch)
 
@@ -1799,12 +1804,6 @@ export default function Layout(props: ParentProps) {
     const key = workspaceKey(created.directory)
     const root = workspaceKey(local)
 
-    setBusy(created.directory, true)
-    WorktreeState.pending(created.directory)
-    setStore("workspaceExpanded", key, true)
-    if (key !== created.directory) {
-      setStore("workspaceExpanded", created.directory, true)
-    }
     setStore("workspaceOrder", project.worktree, (prev) => {
       const existing = prev ?? []
       const next = existing.filter((item) => {
@@ -1813,6 +1812,20 @@ export default function Layout(props: ParentProps) {
       })
       return [created.directory, ...next]
     })
+
+    const state = await WorktreeState.wait(created.directory)
+    if (state.status === "failed") {
+      showToast({
+        title: language.t("workspace.create.failed.title"),
+        description: state.message,
+      })
+      return
+    }
+
+    setStore("workspaceExpanded", key, true)
+    if (key !== created.directory) {
+      setStore("workspaceExpanded", created.directory, true)
+    }
 
     globalSync.child(created.directory)
     navigateWithSidebarReset(`/${base64Encode(created.directory)}/session`)

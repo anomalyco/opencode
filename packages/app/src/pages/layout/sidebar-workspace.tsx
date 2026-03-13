@@ -16,6 +16,7 @@ import { type Session } from "@opencode-ai/sdk/v2/client"
 import { type LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
+import { Worktree as WorktreeState } from "@/utils/worktree"
 import { NewSessionItem, SessionItem, SessionSkeleton } from "./sidebar-items"
 import { childMapByParent, sortedRootSessions } from "./helpers"
 
@@ -349,6 +350,7 @@ export const SortableWorkspace = (props: {
 
   createEffect(() => {
     if (!boot()) return
+    if (WorktreeState.get(props.directory)?.status === "pending") return
     globalSync.child(props.directory, { bootstrap: true })
   })
 
