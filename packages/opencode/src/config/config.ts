@@ -321,6 +321,18 @@ export namespace Config {
     })
   }
 
+  async function inherited(dir: string) {
+    if (!Installation.isLocal()) return false
+
+    try {
+      const req = createRequire(path.join(dir, "package.json"))
+      const pkg = req.resolve("@opencode-ai/plugin/package.json")
+      return (await Filesystem.readJson<{ version?: string }>(pkg).catch(() => null))?.version === Installation.VERSION
+    } catch {
+      return false
+    }
+  }
+
   async function isWritable(dir: string) {
     try {
       await fs.access(dir, constants.W_OK)
@@ -339,11 +351,13 @@ export namespace Config {
       return false
     }
 
+    const pkg = path.join(dir, "package.json")
+    const pkgExists = await Filesystem.exists(pkg)
+    if (!pkgExists && (await inherited(dir))) return false
+
     const nodeModules = path.join(dir, "node_modules")
     if (!existsSync(nodeModules)) return true
 
-    const pkg = path.join(dir, "package.json")
-    const pkgExists = await Filesystem.exists(pkg)
     if (!pkgExists) return true
 
     const parsed = await Filesystem.readJson<{ dependencies?: Record<string, string> }>(pkg).catch(() => null)

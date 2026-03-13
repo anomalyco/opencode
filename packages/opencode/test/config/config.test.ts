@@ -8,6 +8,7 @@ import path from "path"
 import fs from "fs/promises"
 import { pathToFileURL } from "url"
 import { Global } from "../../src/global"
+import { Installation } from "../../src/installation"
 import { ProjectID } from "../../src/project/schema"
 import { Filesystem } from "../../src/util/filesystem"
 
@@ -761,6 +762,24 @@ test("installs dependencies in writable OPENCODE_CONFIG_DIR", async () => {
     if (prev === undefined) delete process.env.OPENCODE_CONFIG_DIR
     else process.env.OPENCODE_CONFIG_DIR = prev
   }
+})
+
+test("skips dependency install when plugin is already available from a parent install", async () => {
+  await using tmp = await tmpdir<string>({
+    init: async (dir) => {
+      const cfg = path.join(dir, "project", ".opencode")
+      const mod = path.join(dir, "project", "node_modules", "@opencode-ai", "plugin")
+      await fs.mkdir(cfg, { recursive: true })
+      await fs.mkdir(mod, { recursive: true })
+      await Filesystem.write(
+        path.join(mod, "package.json"),
+        JSON.stringify({ name: "@opencode-ai/plugin", version: Installation.VERSION }),
+      )
+      return cfg
+    },
+  })
+
+  expect(await Config.needsInstall(tmp.extra)).toBe(false)
 })
 
 test("resolves scoped npm plugins in config", async () => {
