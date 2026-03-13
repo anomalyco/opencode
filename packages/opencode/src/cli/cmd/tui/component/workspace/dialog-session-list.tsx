@@ -12,6 +12,7 @@ import { useKV } from "../../context/kv"
 import { createDebouncedSignal } from "../../util/signal"
 import { Spinner } from "../spinner"
 import { useToast } from "../../ui/toast"
+import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 
 export function DialogSessionList(props: { workspaceID?: string; localOnly?: boolean } = {}) {
   const dialog = useDialog()
@@ -25,18 +26,27 @@ export function DialogSessionList(props: { workspaceID?: string; localOnly?: boo
   const [toDelete, setToDelete] = createSignal<string>()
   const [search, setSearch] = createDebouncedSignal("", 150)
 
+  const client = props.workspaceID
+    ? createOpencodeClient({
+        baseUrl: sdk.url,
+        fetch: sdk.fetch,
+        directory: sync.data.path.directory || sdk.directory,
+        experimental_workspaceID: props.workspaceID,
+      })
+    : sdk.client
+
   const [listed, listedActions] = createResource(
     () => props.workspaceID,
     async (workspaceID) => {
       if (!workspaceID) return undefined
-      const result = await sdk.client.session.list({ roots: true })
+      const result = await client.session.list({ roots: true })
       return result.data ?? []
     },
   )
 
   const [searchResults] = createResource(search, async (query) => {
     if (!query || props.localOnly) return undefined
-    const result = await sdk.client.session.list({
+    const result = await client.session.list({
       search: query,
       limit: 30,
       ...(props.workspaceID ? { roots: true } : {}),
@@ -111,7 +121,7 @@ export function DialogSessionList(props: { workspaceID?: string; localOnly?: boo
           title: "delete",
           onTrigger: async (option) => {
             if (toDelete() === option.value) {
-              const deleted = await sdk.client.session
+              const deleted = await client.session
                 .delete({
                   sessionID: option.value,
                 })
