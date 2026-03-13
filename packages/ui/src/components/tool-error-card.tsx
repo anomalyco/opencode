@@ -10,19 +10,22 @@ export interface ToolErrorCardProps extends Omit<ComponentProps<typeof Card>, "c
   tool: string
   error: string
   defaultOpen?: boolean
+  subtitle?: string
+  href?: string
 }
 
 export function ToolErrorCard(props: ToolErrorCardProps) {
   const i18n = useI18n()
   const [open, setOpen] = createSignal(props.defaultOpen ?? false)
   const [copied, setCopied] = createSignal(false)
-  const [split, rest] = splitProps(props, ["tool", "error", "defaultOpen"])
+  const [split, rest] = splitProps(props, ["tool", "error", "defaultOpen", "subtitle", "href"])
   const name = createMemo(() => {
     const map: Record<string, string> = {
       read: "ui.tool.read",
       list: "ui.tool.list",
       glob: "ui.tool.glob",
       grep: "ui.tool.grep",
+      task: "Task",
       webfetch: "ui.tool.webfetch",
       websearch: "ui.tool.websearch",
       codesearch: "ui.tool.codesearch",
@@ -32,6 +35,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
     }
     const key = map[split.tool]
     if (!key) return split.tool
+    if (!key.includes(".")) return key
     return i18n.t(key)
   })
   const cleaned = createMemo(() => split.error.replace(/^Error:\s*/, "").trim())
@@ -43,6 +47,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
   })
 
   const subtitle = createMemo(() => {
+    if (split.subtitle) return split.subtitle
     const parts = tail().split(": ")
     if (parts.length <= 1) return "Failed"
     const head = (parts[0] ?? "").trim()
@@ -77,7 +82,19 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
                 <div data-slot="basic-tool-tool-info-structured">
                   <div data-slot="basic-tool-tool-info-main">
                     <span data-slot="basic-tool-tool-title">{name()}</span>
-                    <span data-slot="basic-tool-tool-subtitle">{subtitle()}</span>
+                    <Show
+                      when={split.href && split.subtitle}
+                      fallback={<span data-slot="basic-tool-tool-subtitle">{subtitle()}</span>}
+                    >
+                      <a
+                        data-slot="basic-tool-tool-subtitle"
+                        class="clickable subagent-link"
+                        href={split.href!}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {subtitle()}
+                      </a>
+                    </Show>
                   </div>
                 </div>
               </div>

@@ -233,8 +233,15 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           })
         })
         .finally(() => {
-          if (!tracked(input.directory, input.sessionID)) return
-          setMeta("loading", key, false)
+          setMeta(
+            produce((draft) => {
+              if (!tracked(input.directory, input.sessionID)) {
+                delete draft.loading[key]
+                return
+              }
+              draft.loading[key] = false
+            }),
+          )
         })
     }
 

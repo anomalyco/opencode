@@ -8,6 +8,7 @@ import { TextReveal } from "@opencode-ai/ui/text-reveal"
 import { TextStrikethrough } from "@opencode-ai/ui/text-strikethrough"
 import { Index, createEffect, createMemo, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
+import { composerEnabled, composerProbe } from "@/testing/session-composer"
 
 function dot(status: Todo["status"]) {
   if (status !== "in_progress") return undefined
@@ -35,6 +36,7 @@ function dot(status: Todo["status"]) {
 }
 
 export function SessionTodoDock(props: {
+  sessionID?: string
   todos: Todo[]
   title: string
   collapseLabel: string
@@ -69,6 +71,8 @@ export function SessionTodoDock(props: {
   const off = createMemo(() => hide() > 0.98)
   const turn = createMemo(() => Math.max(0, Math.min(1, value())))
   const full = createMemo(() => Math.max(78, store.height))
+  const e2e = composerEnabled()
+  const probe = composerProbe(props.sessionID)
   let contentRef: HTMLDivElement | undefined
 
   createEffect(() => {
@@ -81,6 +85,23 @@ export function SessionTodoDock(props: {
     const observer = new ResizeObserver(update)
     observer.observe(el)
     onCleanup(() => observer.disconnect())
+  })
+
+  createEffect(() => {
+    if (!e2e) return
+
+    probe.set({
+      mounted: true,
+      collapsed: store.collapsed,
+      hidden: store.collapsed || off(),
+      count: props.todos.length,
+      states: props.todos.map((todo) => todo.status),
+    })
+  })
+
+  onCleanup(() => {
+    if (!e2e) return
+    probe.drop()
   })
 
   return (

@@ -2203,8 +2203,8 @@ export default function Layout(props: ParentProps) {
         mobile ? (
           <SidebarPanel project={currentProject()} mobile />
         ) : (
-          <Show when={currentProject()} keyed>
-            {(project) => <SidebarPanel project={project} merged />}
+          <Show when={currentProject()}>
+            <SidebarPanel project={currentProject()} merged />
           </Show>
         )
       }
@@ -2332,8 +2332,8 @@ export default function Layout(props: ParentProps) {
                 arm()
               }}
             >
-              <Show when={peek()} keyed>
-                {(project) => <SidebarPanel project={project} merged={false} />}
+              <Show when={peek()}>
+                <SidebarPanel project={peek()} merged={false} />
               </Show>
             </div>
 
