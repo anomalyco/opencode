@@ -149,4 +149,16 @@ export const dict = {
   "ui.question.multiHint": "可多選",
   "ui.question.singleHint": "選擇一個答案",
   "ui.question.custom.placeholder": "輸入你的答案...",
+
+  "ui.fileSearch.placeholder": "搜尋",
+  "ui.fileSearch.previousMatch": "上一個",
+  "ui.fileSearch.nextMatch": "下一個",
+  "ui.fileSearch.close": "關閉搜尋",
+  "ui.tool.task": "任務",
+  "ui.tool.skill": "技能",
+  "ui.basicTool.called": "呼叫了 `{{tool}}`",
+  "ui.toolErrorCard.failed": "失敗",
+  "ui.toolErrorCard.copyError": "複製錯誤",
+  "ui.message.duration.seconds": "{{count}}秒",
+  "ui.message.duration.minutesSeconds": "{{minutes}}分 {{seconds}}秒",
 } satisfies Partial<Record<Keys, string>>
