@@ -11,9 +11,10 @@ import { createWrapper } from "@parcel/watcher/wrapper"
 import { lazy } from "@/util/lazy"
 import { withTimeout } from "@/util/timeout"
 import type ParcelWatcher from "@parcel/watcher"
-import { $ } from "bun"
 import { Flag } from "@/flag/flag"
 import { readdir } from "fs/promises"
+import { git } from "@/util/git"
+import { Protected } from "./protected"
 
 const SUBSCRIBE_TIMEOUT_MS = 10_000
 
@@ -76,7 +77,7 @@ export namespace FileWatcher {
 
       if (Flag.OPENCODE_EXPERIMENTAL_FILEWATCHER) {
         const pending = w.subscribe(Instance.directory, subscribe, {
-          ignore: [...FileIgnore.PATTERNS, ...cfgIgnores],
+          ignore: [...FileIgnore.PATTERNS, ...cfgIgnores, ...Protected.paths()],
           backend,
         })
         const sub = await withTimeout(pending, SUBSCRIBE_TIMEOUT_MS).catch((err) => {
@@ -88,13 +89,10 @@ export namespace FileWatcher {
       }
 
       if (Instance.project.vcs === "git") {
-        const vcsDir = await $`git rev-parse --git-dir`
-          .quiet()
-          .nothrow()
-          .cwd(Instance.worktree)
-          .text()
-          .then((x) => path.resolve(Instance.worktree, x.trim()))
-          .catch(() => undefined)
+        const result = await git(["rev-parse", "--git-dir"], {
+          cwd: Instance.worktree,
+        })
+        const vcsDir = result.exitCode === 0 ? path.resolve(Instance.worktree, result.text().trim()) : undefined
         if (vcsDir && !cfgIgnores.includes(".git") && !cfgIgnores.includes(vcsDir)) {
           const gitDirContents = await readdir(vcsDir).catch(() => [])
           const ignoreList = gitDirContents.filter((entry) => entry !== "HEAD")

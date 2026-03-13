@@ -51,11 +51,7 @@
   align-self: stretch;
   width: 100%;
   max-width: 100%;
-  gap: 8px;
-
-  &[data-interrupted] {
-    color: var(--text-weak);
-  }
+  gap: 0;
 
   [data-slot="user-message-attachments"] {
     display: flex;
@@ -120,6 +116,10 @@
     display: flex;
     flex-direction: column;
     align-items: flex-end;
+  }
+
+  [data-slot="user-message-attachments"] + [data-slot="user-message-body"] {
+    margin-top: 8px;
   }
 
   [data-slot="user-message-text"] {
@@ -191,7 +191,8 @@
     }
   }
 
-  [data-slot="user-message-meta-bar"] {
+  [data-slot="user-message-copy-wrapper"] {
+    min-height: 24px;
     margin-top: 4px;
     display: flex;
     align-items: center;
@@ -222,40 +223,14 @@
     align-items: center;
     justify-content: flex-end;
     overflow: hidden;
-    flex-wrap: nowrap;
-  }
-
-  [data-slot="user-message-meta-agent"] {
-    user-select: none;
-    white-space: nowrap;
-    color: var(--syntax-type);
-  }
-
-  [data-slot="user-message-meta-provider"] {
-    user-select: none;
-    white-space: nowrap;
-    color: var(--syntax-info);
-  }
-
-  [data-slot="user-message-meta-model"] {
-    user-select: none;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    color: var(--syntax-constant);
-  }
-
-  [data-slot="user-message-meta-sep"] {
-    user-select: none;
-    flex: 0 0 auto;
-    color: var(--text-weaker);
+    gap: 0;
   }
 
   [data-slot="user-message-meta-tail"] {
     user-select: none;
     flex: 0 0 auto;
     white-space: nowrap;
-    color: var(--text-weaker);
+    text-align: right;
   }
 
   &:hover [data-slot="user-message-copy-wrapper"],
@@ -413,41 +388,6 @@
 @media (prefers-color-scheme: dark) {
   [data-component="reasoning-part"] [data-component="markdown"] :not(pre) > code {
     opacity: 0.6;
-  }
-}
-
-[data-component="tool-error"] {
-  display: flex;
-  align-items: start;
-  gap: 8px;
-
-  [data-slot="icon-svg"] {
-    color: var(--icon-critical-base);
-    margin-top: 4px;
-  }
-
-  [data-slot="message-part-tool-error-content"] {
-    display: flex;
-    align-items: start;
-    gap: 8px;
-  }
-
-  [data-slot="message-part-tool-error-title"] {
-    font-family: var(--font-family-sans);
-    font-size: var(--font-size-base);
-    font-style: normal;
-    font-weight: var(--font-weight-medium);
-    line-height: var(--line-height-large);
-    letter-spacing: var(--letter-spacing-normal);
-    color: var(--text-on-critical-base);
-    white-space: nowrap;
-  }
-
-  [data-slot="message-part-tool-error-message"] {
-    color: var(--text-on-critical-weak);
-    max-height: 240px;
-    overflow-y: auto;
-    word-break: break-word;
   }
 }
 
@@ -759,8 +699,8 @@
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 8px;
-  cursor: pointer;
+  gap: 0px;
+  cursor: default;
 
   [data-slot="context-tool-group-indicator"] {
     width: 16px;
@@ -802,6 +742,7 @@
 
   [data-slot="collapsible-arrow"] {
     color: var(--icon-weaker);
+    cursor: pointer;
   }
 }
 
@@ -866,7 +807,6 @@
 [data-component="user-message"] [data-slot="user-message-text"],
 [data-component="text-part"],
 [data-component="reasoning-part"],
-[data-component="tool-error"],
 [data-component="tool-output"],
 [data-component="bash-output"],
 [data-component="edit-content"],

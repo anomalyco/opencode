@@ -107,6 +107,7 @@ export const dict = {
   "ui.tool.todos.read": "Aufgaben lesen",
   "ui.tool.questions": "Fragen",
   "ui.tool.agent": "{{type}} Agent",
+  "ui.tool.agent.default": "Agent",
 
   "ui.common.file.one": "Datei",
   "ui.common.file.other": "Dateien",
@@ -128,6 +129,8 @@ export const dict = {
 
   "ui.message.copy": "Kopieren",
   "ui.message.copyMessage": "Nachricht kopieren",
+  "ui.message.forkMessage": "In neue Sitzung abzweigen",
+  "ui.message.revertMessage": "Auf diesen Punkt zurücksetzen",
   "ui.message.copyResponse": "Antwort kopieren",
   "ui.message.copied": "Kopiert!",
   "ui.message.interrupted": "Unterbrochen",
@@ -145,4 +148,16 @@ export const dict = {
   "ui.question.multiHint": "Alle zutreffenden auswählen",
   "ui.question.singleHint": "Eine Antwort auswählen",
   "ui.question.custom.placeholder": "Geben Sie Ihre Antwort ein...",
+
+  "ui.fileSearch.placeholder": "Suchen",
+  "ui.fileSearch.previousMatch": "Vorheriges Ergebnis",
+  "ui.fileSearch.nextMatch": "Nächstes Ergebnis",
+  "ui.fileSearch.close": "Suche schließen",
+  "ui.tool.task": "Aufgabe",
+  "ui.tool.skill": "Fähigkeit",
+  "ui.basicTool.called": "`{{tool}}` aufgerufen",
+  "ui.toolErrorCard.failed": "Fehlgeschlagen",
+  "ui.toolErrorCard.copyError": "Fehler kopieren",
+  "ui.message.duration.seconds": "{{count}}s",
+  "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
 } satisfies Partial<Record<Keys, string>>

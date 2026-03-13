@@ -6,9 +6,15 @@ import {
   parseDeepLink,
   parseNewSessionDeepLink,
 } from "./deep-links"
-import { displayName, errorMessage, getDraggableId, syncWorkspaceOrder, workspaceKey } from "./helpers"
 import { type PermissionRequest, type Session } from "@opencode-ai/sdk/v2/client"
-import { hasProjectPermissions, latestRootSession } from "./helpers"
+import {
+  displayName,
+  effectiveWorkspaceOrder,
+  errorMessage,
+  hasProjectPermissions,
+  latestRootSession,
+  workspaceKey,
+} from "./helpers"
 
 const session = (input: Partial<Session> & Pick<Session, "id" | "directory">) =>
   ({
@@ -20,8 +26,6 @@ const session = (input: Partial<Session> & Pick<Session, "id" | "directory">) =>
     time: { created: 0, updated: 0, archived: undefined },
     ...input,
   }) as Session
-
-const perm = (id: string) => ({ id }) as PermissionRequest
 
 describe("layout deep links", () => {
   test("parses open-project deep links", () => {
@@ -112,7 +116,7 @@ describe("layout workspace helpers", () => {
   })
 
   test("keeps local first while preserving known order", () => {
-    const result = syncWorkspaceOrder("/root", ["/root", "/b", "/c"], ["/root", "/c", "/a", "/b"])
+    const result = effectiveWorkspaceOrder("/root", ["/root", "/b", "/c"], ["/root", "/c", "/a", "/b"])
     expect(result).toEqual(["/root", "/c", "/b"])
   })
 
@@ -142,15 +146,12 @@ describe("layout workspace helpers", () => {
 
   test("detects project permissions with a filter", () => {
     const result = hasProjectPermissions(
-      [
-        session({ id: "root", directory: "/workspace" }),
-        session({ id: "child", directory: "/workspace", parentID: "root" }),
-      ],
+      [session({ id: "root", directory: "/root" }), session({ id: "child", directory: "/root", parentID: "root" })],
       {
-        root: [perm("perm-root"), perm("perm-hidden")],
-        child: [perm("perm-child")],
+        root: [{ id: "perm-root" } as PermissionRequest, { id: "perm-hidden" } as PermissionRequest],
+        child: [{ id: "perm-child" } as PermissionRequest],
       },
-      "/workspace",
+      "/root",
       (item: PermissionRequest) => item.id === "perm-child",
     )
 
@@ -159,11 +160,11 @@ describe("layout workspace helpers", () => {
 
   test("ignores project permissions filtered out", () => {
     const result = hasProjectPermissions(
-      [session({ id: "root", directory: "/workspace" })],
+      [session({ id: "root", directory: "/root" })],
       {
-        root: [perm("perm-root")],
+        root: [{ id: "perm-root" } as PermissionRequest],
       },
-      "/workspace",
+      "/root",
       () => false,
     )
 
@@ -199,12 +200,6 @@ describe("layout workspace helpers", () => {
     )
 
     expect(result?.id).toBe("root")
-  })
-
-  test("extracts draggable id safely", () => {
-    expect(getDraggableId({ draggable: { id: "x" } })).toBe("x")
-    expect(getDraggableId({ draggable: { id: 42 } })).toBeUndefined()
-    expect(getDraggableId(null)).toBeUndefined()
   })
 
   test("formats fallback project display name", () => {

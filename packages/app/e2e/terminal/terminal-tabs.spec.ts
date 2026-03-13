@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test"
+import { runTerminal, waitTerminalReady } from "../actions"
 import { test, expect } from "../fixtures"
 import { terminalSelector } from "../selectors"
 import { terminalToggleKey, workspacePersistKey } from "../utils"
@@ -17,16 +18,7 @@ async function open(page: Page) {
   const terminal = page.locator(terminalSelector)
   const visible = await terminal.isVisible().catch(() => false)
   if (!visible) await page.keyboard.press(terminalToggleKey)
-  await expect(terminal).toBeVisible()
-  await expect(terminal.locator("textarea")).toHaveCount(1)
-}
-
-async function run(page: Page, cmd: string) {
-  const terminal = page.locator(terminalSelector)
-  await expect(terminal).toBeVisible()
-  await terminal.click()
-  await page.keyboard.type(cmd)
-  await page.keyboard.press("Enter")
+  await waitTerminalReady(page, { term: terminal })
 }
 
 async function store(page: Page, key: string) {
@@ -44,27 +36,27 @@ async function store(page: Page, key: string) {
   }, key)
 }
 
-test("terminal tab buffers persist across tab switches", async ({ page, withProject }) => {
+test("inactive terminal tab buffers persist across tab switches", async ({ page, withProject }) => {
   await withProject(async ({ directory, gotoSession }) => {
     const key = workspacePersistKey(directory, "terminal")
     const one = `E2E_TERM_ONE_${Date.now()}`
     const two = `E2E_TERM_TWO_${Date.now()}`
     const tabs = page.locator('#terminal-panel [data-slot="tabs-trigger"]')
+    const first = tabs.filter({ hasText: /Terminal 1/ }).first()
+    const second = tabs.filter({ hasText: /Terminal 2/ }).first()
 
     await gotoSession()
     await open(page)
 
-    await run(page, `echo ${one}`)
+    await runTerminal(page, { cmd: `echo ${one}`, token: one })
 
     await page.getByRole("button", { name: /new terminal/i }).click()
     await expect(tabs).toHaveCount(2)
 
-    await run(page, `echo ${two}`)
+    await runTerminal(page, { cmd: `echo ${two}`, token: two })
 
-    await tabs
-      .filter({ hasText: /Terminal 1/ })
-      .first()
-      .click()
+    await first.click()
+    await expect(first).toHaveAttribute("aria-selected", "true")
 
     await expect
       .poll(
@@ -72,11 +64,31 @@ test("terminal tab buffers persist across tab switches", async ({ page, withProj
           const state = await store(page, key)
           const first = state?.all.find((item) => item.titleNumber === 1)?.buffer ?? ""
           const second = state?.all.find((item) => item.titleNumber === 2)?.buffer ?? ""
-          return first.includes(one) && second.includes(two)
+          return {
+            first: first.includes(one),
+            second: second.includes(two),
+          }
         },
-        { timeout: 30_000 },
+        { timeout: 5_000 },
       )
-      .toBe(true)
+      .toEqual({ first: false, second: true })
+
+    await second.click()
+    await expect(second).toHaveAttribute("aria-selected", "true")
+    await expect
+      .poll(
+        async () => {
+          const state = await store(page, key)
+          const first = state?.all.find((item) => item.titleNumber === 1)?.buffer ?? ""
+          const second = state?.all.find((item) => item.titleNumber === 2)?.buffer ?? ""
+          return {
+            first: first.includes(one),
+            second: second.includes(two),
+          }
+        },
+        { timeout: 5_000 },
+      )
+      .toEqual({ first: true, second: false })
   })
 })
 

@@ -103,6 +103,7 @@ export const dict = {
   "ui.tool.todos.read": "อ่านรายการงาน",
   "ui.tool.questions": "คำถาม",
   "ui.tool.agent": "เอเจนต์ {{type}}",
+  "ui.tool.agent.default": "เอเจนต์",
 
   "ui.common.file.one": "ไฟล์",
   "ui.common.file.other": "ไฟล์",
@@ -124,6 +125,8 @@ export const dict = {
 
   "ui.message.copy": "คัดลอก",
   "ui.message.copyMessage": "คัดลอกข้อความ",
+  "ui.message.forkMessage": "แตกแขนงไปยังเซสชันใหม่",
+  "ui.message.revertMessage": "รีเซ็ตไปยังจุดนี้",
   "ui.message.copyResponse": "คัดลอกคำตอบ",
   "ui.message.copied": "คัดลอกแล้ว!",
   "ui.message.interrupted": "ถูกขัดจังหวะ",
@@ -141,4 +144,16 @@ export const dict = {
   "ui.question.multiHint": "เลือกทั้งหมดที่ใช้",
   "ui.question.singleHint": "เลือกหนึ่งคำตอบ",
   "ui.question.custom.placeholder": "พิมพ์คำตอบของคุณ...",
+
+  "ui.fileSearch.placeholder": "ค้นหา",
+  "ui.fileSearch.previousMatch": "ก่อนหน้า",
+  "ui.fileSearch.nextMatch": "ถัดไป",
+  "ui.fileSearch.close": "ปิดการค้นหา",
+  "ui.tool.task": "งาน",
+  "ui.tool.skill": "ทักษะ",
+  "ui.basicTool.called": "เรียกใช้ `{{tool}}`",
+  "ui.toolErrorCard.failed": "ล้มเหลว",
+  "ui.toolErrorCard.copyError": "คัดลอกข้อผิดพลาด",
+  "ui.message.duration.seconds": "{{count}}วิ",
+  "ui.message.duration.minutesSeconds": "{{minutes}}นาที {{seconds}}วิ",
 }

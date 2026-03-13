@@ -102,6 +102,7 @@ export const dict = {
   "ui.tool.todos.read": "قراءة المهام",
   "ui.tool.questions": "أسئلة",
   "ui.tool.agent": "وكيل {{type}}",
+  "ui.tool.agent.default": "وكيل",
 
   "ui.common.file.one": "ملف",
   "ui.common.file.other": "ملفات",
@@ -123,6 +124,8 @@ export const dict = {
 
   "ui.message.copy": "نسخ",
   "ui.message.copyMessage": "نسخ الرسالة",
+  "ui.message.forkMessage": "تشعب إلى جلسة جديدة",
+  "ui.message.revertMessage": "إعادة التعيين إلى هذه النقطة",
   "ui.message.copyResponse": "نسخ الرد",
   "ui.message.copied": "تم النسخ!",
   "ui.message.interrupted": "تمت المقاطعة",
@@ -140,4 +143,16 @@ export const dict = {
   "ui.question.multiHint": "حدد كل ما ينطبق",
   "ui.question.singleHint": "حدد إجابة واحدة",
   "ui.question.custom.placeholder": "اكتب إجابتك...",
+
+  "ui.fileSearch.placeholder": "بحث",
+  "ui.fileSearch.previousMatch": "المطابقة السابقة",
+  "ui.fileSearch.nextMatch": "المطابقة التالية",
+  "ui.fileSearch.close": "إغلاق البحث",
+  "ui.tool.task": "مهمة",
+  "ui.tool.skill": "مهارة",
+  "ui.basicTool.called": "تم استدعاء `{{tool}}`",
+  "ui.toolErrorCard.failed": "فشل",
+  "ui.toolErrorCard.copyError": "نسخ الخطأ",
+  "ui.message.duration.seconds": "{{count}}ث",
+  "ui.message.duration.minutesSeconds": "{{minutes}}د {{seconds}}ث",
 }

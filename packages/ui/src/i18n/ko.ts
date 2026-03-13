@@ -102,6 +102,7 @@ export const dict = {
   "ui.tool.todos.read": "할 일 읽기",
   "ui.tool.questions": "질문",
   "ui.tool.agent": "{{type}} 에이전트",
+  "ui.tool.agent.default": "에이전트",
 
   "ui.common.file.one": "파일",
   "ui.common.file.other": "파일",
@@ -123,6 +124,8 @@ export const dict = {
 
   "ui.message.copy": "복사",
   "ui.message.copyMessage": "메시지 복사",
+  "ui.message.forkMessage": "새 세션으로 분기",
+  "ui.message.revertMessage": "이 시점으로 초기화",
   "ui.message.copyResponse": "응답 복사",
   "ui.message.copied": "복사됨!",
   "ui.message.interrupted": "중단됨",
@@ -140,4 +143,16 @@ export const dict = {
   "ui.question.multiHint": "해당하는 항목 모두 선택",
   "ui.question.singleHint": "하나의 답변을 선택",
   "ui.question.custom.placeholder": "답변 입력...",
+
+  "ui.fileSearch.placeholder": "찾기",
+  "ui.fileSearch.previousMatch": "이전 항목",
+  "ui.fileSearch.nextMatch": "다음 항목",
+  "ui.fileSearch.close": "검색 닫기",
+  "ui.tool.task": "작업",
+  "ui.tool.skill": "스킬",
+  "ui.basicTool.called": "`{{tool}}` 호출됨",
+  "ui.toolErrorCard.failed": "실패",
+  "ui.toolErrorCard.copyError": "오류 복사",
+  "ui.message.duration.seconds": "{{count}}초",
+  "ui.message.duration.minutesSeconds": "{{minutes}}분 {{seconds}}초",
 }

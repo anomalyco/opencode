@@ -112,8 +112,10 @@
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+    font-family: var(--font-family-sans);
+    font-variant-numeric: tabular-nums;
+    font-size: 14px;
     white-space: nowrap;
-    font-family: var(--font-family-mono);
     font-style: normal;
     font-weight: var(--font-weight-regular);
     line-height: var(--line-height-large);
@@ -161,8 +163,10 @@
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+    font-family: var(--font-family-sans);
+    font-variant-numeric: tabular-nums;
+    font-size: 14px;
     white-space: nowrap;
-    font-family: var(--font-family-mono);
     font-style: normal;
     font-weight: var(--font-weight-regular);
     line-height: var(--line-height-large);

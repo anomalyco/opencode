@@ -102,6 +102,7 @@ export const dict = {
   "ui.tool.todos.read": "Leer tareas",
   "ui.tool.questions": "Preguntas",
   "ui.tool.agent": "Agente {{type}}",
+  "ui.tool.agent.default": "Agente",
 
   "ui.common.file.one": "archivo",
   "ui.common.file.other": "archivos",
@@ -123,6 +124,8 @@ export const dict = {
 
   "ui.message.copy": "Copiar",
   "ui.message.copyMessage": "Copiar mensaje",
+  "ui.message.forkMessage": "Bifurcar a nueva sesión",
+  "ui.message.revertMessage": "Restablecer a este punto",
   "ui.message.copyResponse": "Copiar respuesta",
   "ui.message.copied": "¡Copiado!",
   "ui.message.interrupted": "Interrumpido",
@@ -140,4 +143,16 @@ export const dict = {
   "ui.question.multiHint": "Selecciona todas las que correspondan",
   "ui.question.singleHint": "Selecciona una respuesta",
   "ui.question.custom.placeholder": "Escribe tu respuesta...",
+
+  "ui.fileSearch.placeholder": "Buscar",
+  "ui.fileSearch.previousMatch": "Anterior",
+  "ui.fileSearch.nextMatch": "Siguiente",
+  "ui.fileSearch.close": "Cerrar búsqueda",
+  "ui.tool.task": "Tarea",
+  "ui.tool.skill": "Habilidad",
+  "ui.basicTool.called": "Llamado `{{tool}}`",
+  "ui.toolErrorCard.failed": "Falló",
+  "ui.toolErrorCard.copyError": "Copiar error",
+  "ui.message.duration.seconds": "{{count}}s",
+  "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
 }
