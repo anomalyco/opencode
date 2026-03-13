@@ -711,8 +711,8 @@ describe("session.llm.stream", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const resolved = await Provider.getModel("dax", model.id)
-        const sessionID = "session-test-5"
+        const resolved = await Provider.getModel(ProviderID.make("dax"), ModelID.make(model.id))
+        const sessionID = SessionID.make("session-test-5")
         const agent = {
           name: "test",
           mode: "primary",
@@ -722,12 +722,12 @@ describe("session.llm.stream", () => {
         } satisfies Agent.Info
 
         const user = {
-          id: "user-5",
+          id: MessageID.make("user-5"),
           sessionID,
           role: "user",
           time: { created: Date.now() },
           agent: agent.name,
-          model: { providerID: "dax", modelID: resolved.id },
+          model: { providerID: ProviderID.make("dax"), modelID: resolved.id },
         } satisfies MessageV2.User
 
         const messages = [

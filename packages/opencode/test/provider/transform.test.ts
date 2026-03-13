@@ -725,8 +725,8 @@ describe("ProviderTransform.schema - gemini non-object properties removal", () =
 
 describe("ProviderTransform.message - DeepSeek reasoning content", () => {
   const deepseek = {
-    id: "deepseek/deepseek-chat",
-    providerID: "deepseek",
+    id: ModelID.make("deepseek/deepseek-chat"),
+    providerID: ProviderID.make("deepseek"),
     api: {
       id: "deepseek-chat",
       url: "https://api.deepseek.com",
@@ -760,8 +760,8 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
   } satisfies Provider.Model
 
   const openai = {
-    id: "openai/gpt-4",
-    providerID: "openai",
+    id: ModelID.make("openai/gpt-4"),
+    providerID: ProviderID.make("openai"),
     api: {
       id: "gpt-4",
       url: "https://api.openai.com",
@@ -793,8 +793,8 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
   } satisfies Provider.Model
 
   const dax = {
-    id: "dax/mistral-medium-latest",
-    providerID: "dax",
+    id: ModelID.make("dax/mistral-medium-latest"),
+    providerID: ProviderID.make("dax"),
     api: {
       id: "mistral-medium-latest",
       url: "https://dax.example/v1",
@@ -826,8 +826,8 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
   } satisfies Provider.Model
 
   const anthropic = {
-    id: "anthropic/claude-opus-4-5",
-    providerID: "anthropic",
+    id: ModelID.make("anthropic/claude-opus-4-5"),
+    providerID: ProviderID.make("anthropic"),
     api: {
       id: "claude-opus-4-5",
       url: "https://api.anthropic.com",
@@ -1048,8 +1048,8 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
 describe("ProviderTransform.options - capability filtering", () => {
   test("removes reasoning defaults for models without reasoning support", () => {
     const model = {
-      id: "openai/gpt-5-proxy",
-      providerID: "openai",
+      id: ModelID.make("openai/gpt-5-proxy"),
+      providerID: ProviderID.make("openai"),
       api: {
         id: "gpt-5.2",
         url: "https://api.openai.com/v1",
@@ -1358,7 +1358,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
       },
     ] as any[]
 
-    const result = ProviderTransform.message(msgs, bedrockModel, {})
+    const result = ProviderTransform.message(msgs, bedrockModel)
 
     expect(result).toHaveLength(2)
     expect(result[0].content).toBe("Hello")
