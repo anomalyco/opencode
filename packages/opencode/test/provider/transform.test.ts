@@ -2707,13 +2707,13 @@ describe("ProviderTransform.message - custom provider with @ai-sdk/anthropic (re
 
     const result = ProviderTransform.message(msgs, customAnthropicModel, {})
 
-    const toolMsg = result.find((m: any) => m.role === "tool")
+    const toolMsg = result.find((m: any) => m.role === "tool") as any
     expect(toolMsg).toBeDefined()
-    const toolResult = toolMsg!.content.find((p: any) => p.type === "tool-result")
+    const toolResult = (toolMsg.content as any[]).find((p: any) => p.type === "tool-result")
     expect(toolResult).toBeDefined()
     // must not be empty - relay/Anthropic API would reject ""
-    expect(toolResult!.content).not.toBe("")
-    expect(toolResult!.content).toBeTruthy()
+    expect(toolResult.content).not.toBe("")
+    expect(toolResult.content).toBeTruthy()
   })
 
   test("replaces empty array tool-result content with placeholder", () => {
@@ -2738,9 +2738,10 @@ describe("ProviderTransform.message - custom provider with @ai-sdk/anthropic (re
 
     const result = ProviderTransform.message(msgs, customAnthropicModel, {})
 
-    const toolMsg = result.find((m: any) => m.role === "tool")
-    const toolResult = toolMsg!.content.find((p: any) => p.type === "tool-result")
-    expect(Array.isArray(toolResult!.content) ? toolResult!.content.length : 0).toBeGreaterThan(0)
+    const toolMsg = result.find((m: any) => m.role === "tool") as any
+    const toolResult = (toolMsg.content as any[]).find((p: any) => p.type === "tool-result")
+    const len = Array.isArray(toolResult.content) ? toolResult.content.length : 0
+    expect(len).toBeGreaterThan(0)
   })
 
   test("keeps non-empty tool-result content unchanged", () => {
@@ -2765,9 +2766,9 @@ describe("ProviderTransform.message - custom provider with @ai-sdk/anthropic (re
 
     const result = ProviderTransform.message(msgs, customAnthropicModel, {})
 
-    const toolMsg = result.find((m: any) => m.role === "tool")
-    const toolResult = toolMsg!.content.find((p: any) => p.type === "tool-result")
-    expect(toolResult!.content).toBe("hello world")
+    const toolMsg = result.find((m: any) => m.role === "tool") as any
+    const toolResult = (toolMsg.content as any[]).find((p: any) => p.type === "tool-result")
+    expect(toolResult.content).toBe("hello world")
   })
 
   // Bug B: applyCaching must use message-level cacheControl for @ai-sdk/anthropic,
