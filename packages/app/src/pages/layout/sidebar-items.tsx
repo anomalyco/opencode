@@ -36,12 +36,9 @@ export const ProjectIcon = (props: {
   const hasPermissions = createMemo(() =>
     dirs().some((directory) => {
       const [store] = globalSync.child(directory, { bootstrap: false })
-      return hasProjectPermissions(
-        store.session,
-        store.permission,
-        directory,
-        (item) => !permission.autoResponds(item, directory),
-      )
+      return hasProjectPermissions(store.session, store.permission, directory, (item) => {
+        return !permission.autoResponds(item, directory)
+      })
     }),
   )
   const notify = createMemo(() => props.notify && (hasPermissions() || unseenCount() > 0))

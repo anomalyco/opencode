@@ -1393,12 +1393,15 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
 
   const hideQuestion = createMemo(() => tool === "question" && part.state.status === "pending")
 
-  const emptyInput: Record<string, any> = {}
   const emptyMetadata: Record<string, any> = {}
 
-  const input = () => part().state?.input ?? emptyInput
-  // @ts-expect-error
-  const partMetadata = () => part().state?.metadata ?? emptyMetadata
+  const input = () => part().state.input
+  const partMetadata = () => {
+    const state = part().state
+    if (state.status === "pending") return emptyMetadata
+    if ("metadata" in state && state.metadata) return state.metadata
+    return emptyMetadata
+  }
   const taskId = createMemo(() => {
     if (part().tool !== "task") return
     const value = partMetadata().sessionId
@@ -1421,9 +1424,11 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
     <Show when={!hideQuestion()}>
       <div data-component="tool-part-wrapper" data-timeline-part-id={part().id}>
         <Switch>
-          <Match when={part().state.status === "error" && (part().state as any).error}>
-            {(error) => {
-              const cleaned = error().replace("Error: ", "")
+          <Match when={part().state.status === "error"}>
+            {(() => {
+              const state = part().state
+              if (state.status !== "error") return null
+              const cleaned = state.error.replace("Error: ", "")
               if (tool === "question" && cleaned.includes("dismissed this question")) {
                 return (
                   <div style="width: 100%; display: flex; justify-content: flex-end;">
@@ -1436,14 +1441,13 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
               return (
                 <ToolErrorCard
                   tool={part().tool}
-                  error={error()}
-                  title={part().tool === "websearch" ? webSearchProviderLabel(partMetadata().provider) : undefined}
+                  error={state.error}
                   defaultOpen={props.defaultOpen}
                   subtitle={taskSubtitle()}
                   href={taskHref()}
                 />
               )
-            }}
+            })()}
           </Match>
           <Match when={true}>
             <Dynamic
