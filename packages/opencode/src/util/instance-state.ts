@@ -22,7 +22,9 @@ export namespace InstanceState {
       const cache = yield* ScopedCache.make<string, A, E, R>({
         capacity: Number.POSITIVE_INFINITY,
         lookup: (key) =>
-          Effect.acquireRelease(input.lookup(key), (value) => (input.release ? input.release(value, key) : Effect.void)),
+          Effect.acquireRelease(input.lookup(key), (value) =>
+            input.release ? input.release(value, key) : Effect.void,
+          ),
       })
 
       const task: Task = (key) => ScopedCache.invalidate(cache, key)
@@ -39,8 +41,7 @@ export namespace InstanceState {
 
   export const has = <A, E, R>(self: State<A, E, R>) => ScopedCache.has(self.cache, Instance.directory)
 
-  export const invalidate = <A, E, R>(self: State<A, E, R>) =>
-    ScopedCache.invalidate(self.cache, Instance.directory)
+  export const invalidate = <A, E, R>(self: State<A, E, R>) => ScopedCache.invalidate(self.cache, Instance.directory)
 
   export const dispose = (key: string) =>
     Effect.all(

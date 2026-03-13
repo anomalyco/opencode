@@ -195,7 +195,7 @@ export const OrgsCommand = cmd({
 
 export const ConsoleCommand = cmd({
   command: "console",
-  describe: "manage console account",
+  describe: false,
   builder: (yargs) =>
     yargs
       .command({
