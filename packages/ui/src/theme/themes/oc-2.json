@@ -4,7 +4,8 @@
   "id": "oc-2",
   "light": {
     "palette": {
-      "neutral": "#8f8f8f",
+      "neutral": "#f7f7f7",
+      "ink": "#171311",
       "primary": "#dcde8d",
       "success": "#12c905",
       "warning": "#ffdc17",
@@ -30,7 +31,8 @@
   },
   "dark": {
     "palette": {
-      "neutral": "#707070",
+      "neutral": "#1f1f1f",
+      "ink": "#f1ece8",
       "primary": "#fab283",
       "success": "#12c905",
       "warning": "#fcd53a",

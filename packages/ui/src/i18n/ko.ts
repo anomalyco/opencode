@@ -145,4 +145,16 @@ export const dict = {
   "ui.question.multiHint": "해당하는 항목 모두 선택",
   "ui.question.singleHint": "하나의 답변을 선택",
   "ui.question.custom.placeholder": "답변 입력...",
+
+  "ui.fileSearch.placeholder": "찾기",
+  "ui.fileSearch.previousMatch": "이전 항목",
+  "ui.fileSearch.nextMatch": "다음 항목",
+  "ui.fileSearch.close": "검색 닫기",
+  "ui.tool.task": "작업",
+  "ui.tool.skill": "스킬",
+  "ui.basicTool.called": "`{{tool}}` 호출됨",
+  "ui.toolErrorCard.failed": "실패",
+  "ui.toolErrorCard.copyError": "오류 복사",
+  "ui.message.duration.seconds": "{{count}}초",
+  "ui.message.duration.minutesSeconds": "{{minutes}}분 {{seconds}}초",
 }

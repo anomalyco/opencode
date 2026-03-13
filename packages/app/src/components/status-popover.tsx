@@ -86,15 +86,17 @@ const useServerHealth = (servers: Accessor<ServerConnection.Any[]>) => {
 const useDefaultServerKey = (
   get: (() => string | Promise<string | null | undefined> | null | undefined) | undefined,
 ) => {
-  const [url, setUrl] = createSignal<string | undefined>()
-  const [tick, setTick] = createSignal(0)
+  const [state, setState] = createStore({
+    url: undefined as string | undefined,
+    tick: 0,
+  })
 
   createEffect(() => {
-    tick()
+    state.tick
     let dead = false
     const result = get?.()
     if (!result) {
-      setUrl(undefined)
+      setState("url", undefined)
       onCleanup(() => {
         dead = true
       })
@@ -104,7 +106,7 @@ const useDefaultServerKey = (
     if (result instanceof Promise) {
       void result.then((next) => {
         if (dead) return
-        setUrl(next ? normalizeServerUrl(next) : undefined)
+        setState("url", next ? normalizeServerUrl(next) : undefined)
       })
       onCleanup(() => {
         dead = true
@@ -112,7 +114,7 @@ const useDefaultServerKey = (
       return
     }
 
-    setUrl(normalizeServerUrl(result))
+    setState("url", normalizeServerUrl(result))
     onCleanup(() => {
       dead = true
     })
@@ -120,11 +122,11 @@ const useDefaultServerKey = (
 
   return {
     key: () => {
-      const u = url()
+      const u = state.url
       if (!u) return
       return ServerConnection.key({ type: "http", http: { url: u } })
     },
-    refresh: () => setTick((value) => value + 1),
+    refresh: () => setState("tick", (value) => value + 1),
   }
 }
 
