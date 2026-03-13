@@ -145,4 +145,16 @@ export const dict = {
   "ui.question.multiHint": "Selecione todas que se aplicam",
   "ui.question.singleHint": "Selecione uma resposta",
   "ui.question.custom.placeholder": "Digite sua resposta...",
+
+  "ui.fileSearch.placeholder": "Localizar",
+  "ui.fileSearch.previousMatch": "Ocorrência anterior",
+  "ui.fileSearch.nextMatch": "Próxima ocorrência",
+  "ui.fileSearch.close": "Fechar busca",
+  "ui.tool.task": "Tarefa",
+  "ui.tool.skill": "Habilidade",
+  "ui.basicTool.called": "Chamou `{{tool}}`",
+  "ui.toolErrorCard.failed": "Falhou",
+  "ui.toolErrorCard.copyError": "Copiar erro",
+  "ui.message.duration.seconds": "{{count}}s",
+  "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
 }

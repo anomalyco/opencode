@@ -9,6 +9,10 @@ import { TextStrikethrough } from "@opencode-ai/ui/text-strikethrough"
 import { Index, createEffect, createMemo, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { composerEnabled, composerProbe } from "@/testing/session-composer"
+import { useLanguage } from "@/context/language"
+
+const doneToken = "\u0000done\u0000"
+const totalToken = "\u0000total\u0000"
 
 function dot(status: Todo["status"]) {
   if (status !== "in_progress") return undefined
@@ -38,11 +42,11 @@ function dot(status: Todo["status"]) {
 export function SessionTodoDock(props: {
   sessionID?: string
   todos: Todo[]
-  title: string
   collapseLabel: string
   expandLabel: string
   dockProgress: number
 }) {
+  const language = useLanguage()
   const [store, setStore] = createStore({
     collapsed: false,
     height: 320,
@@ -52,7 +56,12 @@ export function SessionTodoDock(props: {
 
   const total = createMemo(() => props.todos.length)
   const done = createMemo(() => props.todos.filter((todo) => todo.status === "completed").length)
-  const label = createMemo(() => `${done()} of ${total()} ${props.title.toLowerCase()} completed`)
+  const label = createMemo(() => language.t("session.todo.progress", { done: done(), total: total() }))
+  const progress = createMemo(() =>
+    language
+      .t("session.todo.progress", { done: doneToken, total: totalToken })
+      .split(/(\u0000done\u0000|\u0000total\u0000)/),
+  )
 
   const active = createMemo(
     () =>
@@ -137,10 +146,17 @@ export function SessionTodoDock(props: {
               opacity: `${Math.max(0, Math.min(1, 1 - shut()))}`,
             }}
           >
-            <AnimatedNumber value={done()} />
-            <span class="mx-1">of</span>
-            <AnimatedNumber value={total()} />
-            <span>&nbsp;{props.title.toLowerCase()} completed</span>
+            <Index each={progress()}>
+              {(item) =>
+                item() === doneToken ? (
+                  <AnimatedNumber value={done()} />
+                ) : item() === totalToken ? (
+                  <AnimatedNumber value={total()} />
+                ) : (
+                  <span>{item()}</span>
+                )
+              }
+            </Index>
           </span>
           <div
             data-slot="session-todo-preview"

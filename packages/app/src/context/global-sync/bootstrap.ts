@@ -139,7 +139,7 @@ export async function bootstrapDirectory(input: {
     const project = getFilename(input.directory)
     showToast({
       variant: "error",
-      title: `Failed to reload ${project}`,
+      title: input.translate("toast.project.reloadFailed.title", { project }),
       description: formatServerError(err, input.translate),
     })
     input.setStore("status", "partial")

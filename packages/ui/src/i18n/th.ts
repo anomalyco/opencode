@@ -146,4 +146,16 @@ export const dict = {
   "ui.question.multiHint": "เลือกทั้งหมดที่ใช้",
   "ui.question.singleHint": "เลือกหนึ่งคำตอบ",
   "ui.question.custom.placeholder": "พิมพ์คำตอบของคุณ...",
+
+  "ui.fileSearch.placeholder": "ค้นหา",
+  "ui.fileSearch.previousMatch": "ก่อนหน้า",
+  "ui.fileSearch.nextMatch": "ถัดไป",
+  "ui.fileSearch.close": "ปิดการค้นหา",
+  "ui.tool.task": "งาน",
+  "ui.tool.skill": "ทักษะ",
+  "ui.basicTool.called": "เรียกใช้ `{{tool}}`",
+  "ui.toolErrorCard.failed": "ล้มเหลว",
+  "ui.toolErrorCard.copyError": "คัดลอกข้อผิดพลาด",
+  "ui.message.duration.seconds": "{{count}}วิ",
+  "ui.message.duration.minutesSeconds": "{{minutes}}นาที {{seconds}}วิ",
 }
