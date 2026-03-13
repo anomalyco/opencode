@@ -2,12 +2,12 @@ import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { type IPty } from "bun-pty"
 import z from "zod"
-import { Identifier } from "../id/id"
 import { Log } from "../util/log"
 import { Instance } from "../project/instance"
 import { lazy } from "@opencode-ai/util/lazy"
 import { Shell } from "@/shell/shell"
 import { Plugin } from "@/plugin"
+import { PtyID } from "./schema"
 
 export namespace Pty {
   const log = Log.create({ service: "pty" })
@@ -40,7 +40,7 @@ export namespace Pty {
 
   export const Info = z
     .object({
-      id: Identifier.schema("pty"),
+      id: PtyID.zod,
       title: z.string(),
       command: z.string(),
       args: z.array(z.string()),
@@ -77,8 +77,8 @@ export namespace Pty {
   export const Event = {
     Created: BusEvent.define("pty.created", z.object({ info: Info })),
     Updated: BusEvent.define("pty.updated", z.object({ info: Info })),
-    Exited: BusEvent.define("pty.exited", z.object({ id: Identifier.schema("pty"), exitCode: z.number() })),
-    Deleted: BusEvent.define("pty.deleted", z.object({ id: Identifier.schema("pty") })),
+    Exited: BusEvent.define("pty.exited", z.object({ id: PtyID.zod, exitCode: z.number() })),
+    Deleted: BusEvent.define("pty.deleted", z.object({ id: PtyID.zod })),
   }
 
   interface ActiveSession {
@@ -91,7 +91,7 @@ export namespace Pty {
   }
 
   const state = Instance.state(
-    () => new Map<string, ActiveSession>(),
+    () => new Map<PtyID, ActiveSession>(),
     async (sessions) => {
       for (const session of sessions.values()) {
         try {
@@ -113,12 +113,12 @@ export namespace Pty {
     return Array.from(state().values()).map((s) => s.info)
   }
 
-  export function get(id: string) {
+  export function get(id: PtyID) {
     return state().get(id)?.info
   }
 
   export async function create(input: CreateInput) {
-    const id = Identifier.create("pty", false)
+    const id = PtyID.ascending()
     const command = input.command || Shell.preferred()
     const args = input.args || []
     if (command.endsWith("sh")) {
@@ -205,7 +205,7 @@ export namespace Pty {
     return info
   }
 
-  export async function update(id: string, input: UpdateInput) {
+  export async function update(id: PtyID, input: UpdateInput) {
     const session = state().get(id)
     if (!session) return
     if (input.title) {
@@ -218,7 +218,7 @@ export namespace Pty {
     return session.info
   }
 
-  export async function remove(id: string) {
+  export async function remove(id: PtyID) {
     const session = state().get(id)
     if (!session) return
     state().delete(id)
@@ -234,24 +234,24 @@ export namespace Pty {
       }
     }
     session.subscribers.clear()
-    Bus.publish(Event.Deleted, { id })
+    Bus.publish(Event.Deleted, { id: session.info.id })
   }
 
-  export function resize(id: string, cols: number, rows: number) {
+  export function resize(id: PtyID, cols: number, rows: number) {
     const session = state().get(id)
     if (session && session.info.status === "running") {
       session.process.resize(cols, rows)
     }
   }
 
-  export function write(id: string, data: string) {
+  export function write(id: PtyID, data: string) {
     const session = state().get(id)
     if (session && session.info.status === "running") {
       session.process.write(data)
     }
   }
 
-  export function connect(id: string, ws: Socket, cursor?: number) {
+  export function connect(id: PtyID, ws: Socket, cursor?: number) {
     const session = state().get(id)
     if (!session) {
       ws.close()
