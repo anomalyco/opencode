@@ -1,10 +1,7 @@
 import { createEffect, For, Match, on, onCleanup, Show, Switch, type JSX } from "solid-js"
 import { animate, type AnimationPlaybackControls } from "motion"
-<<<<<<< opencode/gentle-knight
 import { useI18n } from "../context/i18n"
-=======
 import { createStore } from "solid-js/store"
->>>>>>> dev
 import { Collapsible } from "./collapsible"
 import type { IconProps } from "./icon"
 import { TextShimmer } from "./text-shimmer"
