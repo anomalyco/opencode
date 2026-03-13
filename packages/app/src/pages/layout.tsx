@@ -1,16 +1,4 @@
-import {
-  batch,
-  createEffect,
-  createMemo,
-  createSignal,
-  For,
-  on,
-  onCleanup,
-  onMount,
-  ParentProps,
-  Show,
-  untrack,
-} from "solid-js"
+import { batch, createEffect, createMemo, For, on, onCleanup, onMount, ParentProps, Show, untrack } from "solid-js"
 import { useNavigate, useParams } from "@solidjs/router"
 import { useLayout, LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
@@ -41,8 +29,8 @@ import {
   getSessionPrefetch,
   isSessionPrefetchCurrent,
   runSessionPrefetch,
-  SESSION_PREFETCH_TTL,
   setSessionPrefetch,
+  shouldSkipSessionPrefetch,
 } from "@/context/global-sync/session-prefetch"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
@@ -145,6 +133,10 @@ export default function Layout(props: ParentProps) {
     hoverProject: undefined as string | undefined,
     scrollSessionKey: undefined as string | undefined,
     nav: undefined as HTMLElement | undefined,
+    sortNow: Date.now(),
+    sizing: false,
+    peek: undefined as LocalProject | undefined,
+    peeked: false,
   })
 
   const editor = createInlineEditorController()
@@ -163,14 +155,13 @@ export default function Layout(props: ParentProps) {
   }
   const isBusy = (directory: string) => !!state.busyWorkspaces[workspaceKey(directory)]
   const navLeave = { current: undefined as number | undefined }
-  const [sortNow, setSortNow] = createSignal(Date.now())
-  const [sizing, setSizing] = createSignal(false)
+  const sortNow = () => state.sortNow
   let sizet: number | undefined
   let sortNowInterval: ReturnType<typeof setInterval> | undefined
   const sortNowTimeout = setTimeout(
     () => {
-      setSortNow(Date.now())
-      sortNowInterval = setInterval(() => setSortNow(Date.now()), 60_000)
+      setState("sortNow", Date.now())
+      sortNowInterval = setInterval(() => setState("sortNow", Date.now()), 60_000)
     },
     60_000 - (Date.now() % 60_000),
   )
@@ -196,7 +187,7 @@ export default function Layout(props: ParentProps) {
   })
 
   onMount(() => {
-    const stop = () => setSizing(false)
+    const stop = () => setState("sizing", false)
     window.addEventListener("pointerup", stop)
     window.addEventListener("pointercancel", stop)
     window.addEventListener("blur", stop)
@@ -234,8 +225,6 @@ export default function Layout(props: ParentProps) {
     }, 300)
   }
 
-  const [peek, setPeek] = createSignal<LocalProject | undefined>(undefined)
-  const [peeked, setPeeked] = createSignal(false)
   let peekt: number | undefined
 
   const hoverProjectData = createMemo(() => {
@@ -251,17 +240,17 @@ export default function Layout(props: ParentProps) {
         clearTimeout(peekt)
         peekt = undefined
       }
-      setPeek(p)
-      setPeeked(true)
+      setState("peek", p)
+      setState("peeked", true)
       return
     }
 
-    setPeeked(false)
-    if (peek() === undefined) return
+    setState("peeked", false)
+    if (state.peek === undefined) return
     if (peekt !== undefined) clearTimeout(peekt)
     peekt = window.setTimeout(() => {
       peekt = undefined
-      setPeek(undefined)
+      setState("peek", undefined)
     }, 180)
   })
 
@@ -770,9 +759,11 @@ export default function Layout(props: ParentProps) {
             const next = items.map((x) => x.info).filter((m): m is Message => !!m?.id)
             const sorted = mergeByID([], next)
             const stale = markPrefetched(directory, sessionID)
+            const cursor = messages.response.headers.get("x-next-cursor") ?? undefined
             const meta = {
-              limit: prefetchChunk,
-              complete: sorted.length < prefetchChunk,
+              limit: sorted.length,
+              cursor,
+              complete: !cursor,
               at: Date.now(),
             }
 
@@ -846,10 +837,12 @@ export default function Layout(props: ParentProps) {
 
     const [store] = globalSync.child(directory, { bootstrap: false })
     const cached = untrack(() => {
-      if (store.message[session.id] === undefined) return false
       const info = getSessionPrefetch(directory, session.id)
-      if (!info) return false
-      return Date.now() - info.at < SESSION_PREFETCH_TTL
+      return shouldSkipSessionPrefetch({
+        message: store.message[session.id] !== undefined,
+        info,
+        chunk: prefetchChunk,
+      })
     })
     if (cached) return
 
@@ -1968,7 +1961,7 @@ export default function Layout(props: ParentProps) {
     return (
       <div
         classList={{
-          "flex flex-col min-h-0 min-w-0 box-border rounded-tl-[12px] px-2": true,
+          "flex flex-col min-h-0 min-w-0 box-border rounded-tl-[12px] px-3": true,
           "border border-b-0 border-border-weak-base": !merged(),
           "border-l border-t border-border-weaker-base": merged(),
           "bg-background-base": merged() || hover(),
@@ -1983,8 +1976,8 @@ export default function Layout(props: ParentProps) {
         <Show when={panelProps.project}>
           {(p) => (
             <>
-              <div class="shrink-0 px-2 py-1">
-                <div class="group/project flex items-start justify-between gap-2 p-2 pr-1">
+              <div class="shrink-0 pl-1 py-1">
+                <div class="group/project flex items-start justify-between gap-2 py-2 pl-2 pr-0">
                   <div class="flex flex-col min-w-0">
                     <InlineEditor
                       id={`project:${projectId()}`}
@@ -2070,7 +2063,7 @@ export default function Layout(props: ParentProps) {
                   when={workspacesEnabled()}
                   fallback={
                     <>
-                      <div class="shrink-0 py-4 px-3">
+                      <div class="shrink-0 py-4">
                         <Button
                           size="large"
                           icon="plus-small"
@@ -2093,7 +2086,7 @@ export default function Layout(props: ParentProps) {
                   }
                 >
                   <>
-                    <div class="shrink-0 py-4 px-3">
+                    <div class="shrink-0 py-4">
                       <Button size="large" icon="plus-small" class="w-full" onClick={() => createWorkspace(p())}>
                         {language.t("workspace.new")}
                       </Button>
@@ -2166,7 +2159,7 @@ export default function Layout(props: ParentProps) {
                   {language.t("command.provider.connect")}
                 </Button>
                 <Button size="large" variant="ghost" onClick={() => setStore("gettingStartedDismissed", true)}>
-                  Not yet
+                  {language.t("toast.update.action.notYet")}
                 </Button>
               </div>
             </div>
@@ -2203,8 +2196,8 @@ export default function Layout(props: ParentProps) {
         mobile ? (
           <SidebarPanel project={currentProject()} mobile />
         ) : (
-          <Show when={currentProject()} keyed>
-            {(project) => <SidebarPanel project={project} merged />}
+          <Show when={currentProject()}>
+            <SidebarPanel project={currentProject()} merged />
           </Show>
         )
       }
@@ -2241,7 +2234,7 @@ export default function Layout(props: ParentProps) {
             >
               <div class="@container w-full h-full contain-strict">{sidebarContent()}</div>
               <Show when={layout.sidebar.opened()}>
-                <div onPointerDown={() => setSizing(true)}>
+                <div onPointerDown={() => setState("sizing", true)}>
                   <ResizeHandle
                     direction="horizontal"
                     size={layout.sidebar.width()}
@@ -2249,9 +2242,9 @@ export default function Layout(props: ParentProps) {
                     max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.3 + 64}
                     collapseThreshold={244}
                     onResize={(w) => {
-                      setSizing(true)
+                      setState("sizing", true)
                       if (sizet !== undefined) clearTimeout(sizet)
-                      sizet = window.setTimeout(() => setSizing(false), 120)
+                      sizet = window.setTimeout(() => setState("sizing", false), 120)
                       layout.sidebar.resize(w)
                     }}
                     onCollapse={layout.sidebar.close}
@@ -2296,7 +2289,7 @@ export default function Layout(props: ParentProps) {
                 "xl:inset-y-0 xl:right-0 xl:left-[var(--main-left)]": true,
                 "z-20": true,
                 "transition-[left] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[left] motion-reduce:transition-none":
-                  !sizing(),
+                  !state.sizing,
               }}
               style={{
                 "--main-left": layout.sidebar.opened() ? `${Math.max(layout.sidebar.width(), 244)}px` : "4rem",
@@ -2316,11 +2309,11 @@ export default function Layout(props: ParentProps) {
             <div
               classList={{
                 "hidden xl:flex absolute inset-y-0 left-16 z-30": true,
-                "opacity-100 translate-x-0 pointer-events-auto": peeked() && !layout.sidebar.opened(),
-                "opacity-0 -translate-x-2 pointer-events-none": !peeked() || layout.sidebar.opened(),
+                "opacity-100 translate-x-0 pointer-events-auto": state.peeked && !layout.sidebar.opened(),
+                "opacity-0 -translate-x-2 pointer-events-none": !state.peeked || layout.sidebar.opened(),
                 "transition-[opacity,transform] motion-reduce:transition-none": true,
-                "duration-180 ease-out": peeked() && !layout.sidebar.opened(),
-                "duration-120 ease-in": !peeked() || layout.sidebar.opened(),
+                "duration-180 ease-out": state.peeked && !layout.sidebar.opened(),
+                "duration-120 ease-in": !state.peeked || layout.sidebar.opened(),
               }}
               onMouseMove={disarm}
               onMouseEnter={() => {
@@ -2332,19 +2325,19 @@ export default function Layout(props: ParentProps) {
                 arm()
               }}
             >
-              <Show when={peek()} keyed>
-                {(project) => <SidebarPanel project={project} merged={false} />}
+              <Show when={state.peek}>
+                <SidebarPanel project={state.peek} merged={false} />
               </Show>
             </div>
 
             <div
               classList={{
                 "hidden xl:block pointer-events-none absolute inset-y-0 right-0 z-25 overflow-hidden": true,
-                "opacity-100 translate-x-0": peeked() && !layout.sidebar.opened(),
-                "opacity-0 -translate-x-2": !peeked() || layout.sidebar.opened(),
+                "opacity-100 translate-x-0": state.peeked && !layout.sidebar.opened(),
+                "opacity-0 -translate-x-2": !state.peeked || layout.sidebar.opened(),
                 "transition-[opacity,transform] motion-reduce:transition-none": true,
-                "duration-180 ease-out": peeked() && !layout.sidebar.opened(),
-                "duration-120 ease-in": !peeked() || layout.sidebar.opened(),
+                "duration-180 ease-out": state.peeked && !layout.sidebar.opened(),
+                "duration-120 ease-in": !state.peeked || layout.sidebar.opened(),
               }}
               style={{ left: `calc(4rem + ${Math.max(Math.max(layout.sidebar.width(), 244) - 64, 0)}px)` }}
             >

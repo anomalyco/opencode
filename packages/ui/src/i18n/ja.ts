@@ -144,4 +144,16 @@ export const dict = {
   "ui.question.multiHint": "該当するものをすべて選択",
   "ui.question.singleHint": "1 つ選択",
   "ui.question.custom.placeholder": "回答を入力...",
+
+  "ui.fileSearch.placeholder": "検索",
+  "ui.fileSearch.previousMatch": "前の一致",
+  "ui.fileSearch.nextMatch": "次の一致",
+  "ui.fileSearch.close": "検索を閉じる",
+  "ui.tool.task": "タスク",
+  "ui.tool.skill": "スキル",
+  "ui.basicTool.called": "`{{tool}}` を呼び出しました",
+  "ui.toolErrorCard.failed": "失敗",
+  "ui.toolErrorCard.copyError": "エラーをコピー",
+  "ui.message.duration.seconds": "{{count}}秒",
+  "ui.message.duration.minutesSeconds": "{{minutes}}分 {{seconds}}秒",
 }

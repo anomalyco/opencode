@@ -6,8 +6,9 @@ import { useFileComponent } from "../context/file"
 import { Binary } from "@opencode-ai/util/binary"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { createEffect, createMemo, createSignal, For, on, ParentProps, Show } from "solid-js"
+import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
-import { AssistantParts, Message, Part, PART_MAPPING, type UserActions } from "./message-part"
+import { AssistantParts, Message, MessageDivider, PART_MAPPING, type UserActions } from "./message-part"
 import { Card } from "./card"
 import { Accordion } from "./accordion"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
@@ -240,14 +241,18 @@ export function SessionTurn(
       .reverse()
   })
   const edited = createMemo(() => diffs().length)
-  const [open, setOpen] = createSignal(false)
-  const [expanded, setExpanded] = createSignal<string[]>([])
+  const [state, setState] = createStore({
+    open: false,
+    expanded: [] as string[],
+  })
+  const open = () => state.open
+  const expanded = () => state.expanded
 
   createEffect(
     on(
       open,
       (value, prev) => {
-        if (!value && prev) setExpanded([])
+        if (!value && prev) setState("expanded", [])
       },
       { defer: true },
     ),
@@ -276,6 +281,11 @@ export function SessionTurn(
   )
 
   const interrupted = createMemo(() => assistantMessages().some((m) => m.error?.name === "MessageAbortedError"))
+  const divider = createMemo(() => {
+    if (compaction()) return i18n.t("ui.messagePart.compaction")
+    if (interrupted()) return i18n.t("ui.message.interrupted")
+    return ""
+  })
   const error = createMemo(
     () => assistantMessages().find((m) => m.error && m.error.name !== "MessageAbortedError")?.error,
   )
@@ -384,11 +394,11 @@ export function SessionTurn(
               class={props.classes?.container}
             >
               <div data-slot="session-turn-message-content" aria-live="off">
-                <Message message={message()!} parts={parts()} actions={props.actions} interrupted={interrupted()} />
+                <Message message={message()!} parts={parts()} actions={props.actions} />
               </div>
-              <Show when={compaction()}>
+              <Show when={divider()}>
                 <div data-slot="session-turn-compaction">
-                  <Part part={compaction()!} message={message()!} hideDetails />
+                  <MessageDivider label={divider()} />
                 </div>
               </Show>
               <Show when={assistantMessages().length > 0}>
@@ -420,7 +430,7 @@ export function SessionTurn(
               <SessionRetry status={status()} show={active()} />
               <Show when={edited() > 0 && !working()}>
                 <div data-slot="session-turn-diffs">
-                  <Collapsible open={open()} onOpenChange={setOpen} variant="ghost">
+                  <Collapsible open={open()} onOpenChange={(value) => setState("open", value)} variant="ghost">
                     <Collapsible.Trigger>
                       <div data-component="session-turn-diffs-trigger">
                         <div data-slot="session-turn-diffs-title">
@@ -442,7 +452,9 @@ export function SessionTurn(
                             multiple
                             style={{ "--sticky-accordion-offset": "40px" }}
                             value={expanded()}
-                            onChange={(value) => setExpanded(Array.isArray(value) ? value : value ? [value] : [])}
+                            onChange={(value) =>
+                              setState("expanded", Array.isArray(value) ? value : value ? [value] : [])
+                            }
                           >
                             <For each={diffs()}>
                               {(diff) => {

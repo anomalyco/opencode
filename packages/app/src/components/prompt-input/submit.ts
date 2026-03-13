@@ -1,6 +1,7 @@
-import type { Message } from "@opencode-ai/sdk/v2/client"
+import type { Message, Session } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@opencode-ai/ui/toast"
 import { base64Encode } from "@opencode-ai/util/encode"
+import { Binary } from "@opencode-ai/util/binary"
 import { useNavigate, useParams } from "@solidjs/router"
 import type { Accessor } from "solid-js"
 import type { FileSelection } from "@/context/file"
@@ -266,6 +267,20 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     }
   }
 
+  const seed = (dir: string, info: Session) => {
+    const [, setStore] = globalSync.child(dir)
+    setStore("session", (list: Session[]) => {
+      const result = Binary.search(list, info.id, (item) => item.id)
+      const next = [...list]
+      if (result.found) {
+        next[result.index] = info
+        return next
+      }
+      next.splice(result.index, 0, info)
+      return next
+    })
+  }
+
   const handleSubmit = async (event: Event) => {
     event.preventDefault()
 
@@ -341,7 +356,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
 
     let session = input.info()
     if (!session && isNewSession) {
-      session = await client.session
+      const created = await client.session
         .create()
         .then((x) => x.data ?? undefined)
         .catch((err) => {
@@ -351,7 +366,9 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           })
           return undefined
         })
-      if (session) {
+      if (created) {
+        seed(sessionDirectory, created)
+        session = created
         if (shouldAutoAccept) permission.enableAutoAccept(session.id, sessionDirectory)
         layout.handoff.setTabs(base64Encode(sessionDirectory), session.id)
         navigate(`/${base64Encode(sessionDirectory)}/session/${session.id}`)

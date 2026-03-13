@@ -151,4 +151,16 @@ export const dict = {
   "ui.question.multiHint": "Geçerli tüm cevapları seçin",
   "ui.question.singleHint": "Bir cevap seçin",
   "ui.question.custom.placeholder": "Cevabınızı yazın...",
+
+  "ui.fileSearch.placeholder": "Bul",
+  "ui.fileSearch.previousMatch": "Önceki",
+  "ui.fileSearch.nextMatch": "Sonraki",
+  "ui.fileSearch.close": "Aramayı kapat",
+  "ui.tool.task": "Görev",
+  "ui.tool.skill": "Yetenek",
+  "ui.basicTool.called": "`{{tool}}` çağrıldı",
+  "ui.toolErrorCard.failed": "Başarısız",
+  "ui.toolErrorCard.copyError": "Hatayı kopyala",
+  "ui.message.duration.seconds": "{{count}}sn",
+  "ui.message.duration.minutesSeconds": "{{minutes}}dk {{seconds}}sn",
 } satisfies Partial<Record<Keys, string>>

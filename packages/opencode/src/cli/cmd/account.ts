@@ -192,3 +192,28 @@ export const OrgsCommand = cmd({
     await runtime.runPromise(orgsEffect())
   },
 })
+
+export const ConsoleCommand = cmd({
+  command: "console",
+  describe: false,
+  builder: (yargs) =>
+    yargs
+      .command({
+        ...LoginCommand,
+        describe: "log in to console",
+      })
+      .command({
+        ...LogoutCommand,
+        describe: "log out from console",
+      })
+      .command({
+        ...SwitchCommand,
+        describe: "switch active org",
+      })
+      .command({
+        ...OrgsCommand,
+        describe: "list orgs",
+      })
+      .demandCommand(),
+  async handler() {},
+})

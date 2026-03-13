@@ -176,6 +176,25 @@ await page.keyboard.press(`${modKey}+Comma`) // Open settings
 - These helpers use the fixture-enabled test-only terminal driver and wait for output after the terminal writer settles.
 - Avoid `waitForTimeout` and custom DOM or `data-*` readiness checks.
 
+### Wait on state
+
+- Never use wall-clock waits like `page.waitForTimeout(...)` to make a test pass
+- Avoid race-prone flows that assume work is finished after an action
+- Wait or poll on observable state with `expect(...)`, `expect.poll(...)`, or existing helpers
+- Prefer locator assertions like `toBeVisible()`, `toHaveCount(0)`, and `toHaveAttribute(...)` for normal UI state, and reserve `expect.poll(...)` for probe, mock, or backend state
+
+### Add hooks
+
+- If required state is not observable from the UI, add a small test-only driver or probe in app code instead of sleeps or fragile DOM checks
+- Keep these hooks minimal and purpose-built, following the style of `packages/app/src/testing/terminal.ts`
+- Test-only hooks must be inert unless explicitly enabled; do not add normal-runtime listeners, reactive subscriptions, or per-update allocations for e2e ceremony
+- When mocking routes or APIs, expose explicit mock state and wait on that before asserting post-action UI
+
+### Prefer helpers
+
+- Prefer fluent helpers and drivers when they make intent obvious and reduce locator-heavy noise
+- Use direct locators when the interaction is simple and a helper would not add clarity
+
 ## Writing New Tests
 
 1. Choose appropriate folder or create new one
