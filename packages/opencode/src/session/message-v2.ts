@@ -586,13 +586,7 @@ export namespace MessageV2 {
       if (msg.parts.length === 0) continue
 
       if (msg.info.role === "user") {
-        const userMessage: UIMessage = {
-          id: msg.info.id,
-          role: "user",
-          content: undefined as any,
-        }
-        result.push(userMessage)
-        let content: string | ContentPart[] | undefined
+        let content: string | Array<{ type: string; [key: string]: any }> | undefined
         for (const part of msg.parts) {
           if (part.type === "text" && !part.ignored)
             if (content === undefined) {
@@ -658,7 +652,14 @@ export namespace MessageV2 {
             }
           }
         }
-        userMessage.content = content
+        if (content !== undefined) {
+          const userMessage: UIMessage = {
+            id: msg.info.id,
+            role: "user",
+            content,
+          }
+          result.push(userMessage)
+        }
       }
 
       if (msg.info.role === "assistant") {
@@ -751,25 +752,26 @@ export namespace MessageV2 {
             })
           }
         }
-        if (assistantMessage.parts.length > 0) {
+        if (Array.isArray(assistantMessage.content) && assistantMessage.content.length > 0) {
           result.push(assistantMessage)
           // Inject pending media as a user message for providers that don't support
           // media (images, PDFs) in tool results
           if (media.length > 0) {
+            const mediaContent: Array<{ type: "text"; text: string } | { type: "file"; url: string; mediaType: string }> = [
+              {
+                type: "text",
+                text: "Attached image(s) from tool result:",
+              },
+              ...media.map((attachment) => ({
+                type: "file" as const,
+                url: attachment.url,
+                mediaType: attachment.mime,
+              })),
+            ]
             result.push({
               id: MessageID.ascending(),
               role: "user",
-              parts: [
-                {
-                  type: "text" as const,
-                  text: "Attached image(s) from tool result:",
-                },
-                ...media.map((attachment) => ({
-                  type: "file" as const,
-                  url: attachment.url,
-                  mediaType: attachment.mime,
-                })),
-              ],
+              content: mediaContent,
             })
           }
         }
@@ -780,8 +782,11 @@ export namespace MessageV2 {
 
     return convertToModelMessages(
       result.filter((msg) => {
-        if (typeof msg.content === "string") return msg.content.length > 0
-        return msg.content.some((part) => part.type !== "step-start")
+        const content = msg.content
+        if (content === undefined) return false
+        if (typeof content === "string") return content.length > 0
+        if (Array.isArray(content)) return content.length > 0 && content.some((part) => part.type !== "step-start")
+        return false
       }),
       {
         //@ts-expect-error (convertToModelMessages expects a ToolSet but only actually needs tools[name]?.toModelOutput)
