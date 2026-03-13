@@ -513,55 +513,54 @@ export namespace Server {
             },
           },
         }),
-          async (c) => {
-            log.info("event connected")
-            c.header("X-Accel-Buffering", "no")
-            c.header("X-Content-Type-Options", "nosniff")
-            return streamSSE(c, async (stream) => {
-              let done = false
-              let resolveStream: (() => void) | undefined
+        async (c) => {
+          log.info("event connected")
+          c.header("X-Accel-Buffering", "no")
+          c.header("X-Content-Type-Options", "nosniff")
+          return streamSSE(c, async (stream) => {
+            let done = false
+            let resolveStream: (() => void) | undefined
 
-              const cleanup = () => {
-                if (done) return
-                done = true
-                clearInterval(heartbeat)
-                unsub()
-                resolveStream?.()
-                log.info("event disconnected")
+            const cleanup = () => {
+              if (done) return
+              done = true
+              clearInterval(heartbeat)
+              unsub()
+              resolveStream?.()
+              log.info("event disconnected")
+            }
+
+            const writeSSE = async (data: string) => {
+              try {
+                await stream.writeSSE({ data })
+              } catch {
+                cleanup()
               }
+            }
 
-              const writeSSE = async (data: string) => {
-                try {
-                  await stream.writeSSE({ data })
-                } catch {
-                  cleanup()
-                }
+            await writeSSE(JSON.stringify({
+              type: "server.connected",
+              properties: {},
+            }))
+
+            const unsub = Bus.subscribeAll(async (event) => {
+              await writeSSE(JSON.stringify(event))
+              if (event.type === Bus.InstanceDisposed.type) {
+                stream.close()
               }
+            })
 
-              await writeSSE(JSON.stringify({
-                type: "server.connected",
+            // Send heartbeat every 10s to prevent stalled proxy streams.
+            const heartbeat = setInterval(() => {
+              void writeSSE(JSON.stringify({
+                type: "server.heartbeat",
                 properties: {},
               }))
+            }, 10_000)
 
-              const unsub = Bus.subscribeAll(async (event) => {
-                await writeSSE(JSON.stringify(event))
-                if (event.type === Bus.InstanceDisposed.type) {
-                  stream.close()
-                }
-              })
-
-              // Send heartbeat every 10s to prevent stalled proxy streams.
-              const heartbeat = setInterval(() => {
-                void writeSSE(JSON.stringify({
-                  type: "server.heartbeat",
-                  properties: {},
-                }))
-              }, 10_000)
-
-              await new Promise<void>((resolve) => {
-                resolveStream = resolve
-                stream.onAbort(cleanup)
-              })
+            await new Promise<void>((resolve) => {
+              resolveStream = resolve
+              stream.onAbort(cleanup)
             })
           })
         },
