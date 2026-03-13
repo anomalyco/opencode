@@ -589,45 +589,76 @@ export namespace MessageV2 {
         const userMessage: UIMessage = {
           id: msg.info.id,
           role: "user",
-          content: [],
+          content: undefined as any,
         }
         result.push(userMessage)
+        let content: string | ContentPart[] | undefined
         for (const part of msg.parts) {
           if (part.type === "text" && !part.ignored)
-            userMessage.content.push({
-              type: "text",
-              text: part.text,
-            })
+            if (content === undefined) {
+              content = part.text
+            } else if (typeof content === "string") {
+              content += part.text
+            } else {
+              content.push({
+                type: "text",
+                text: part.text,
+              })
+            }
           // text/plain and directory files are converted into text parts, ignore them
           if (part.type === "file" && part.mime !== "text/plain" && part.mime !== "application/x-directory") {
             if (options?.stripMedia && isMedia(part.mime)) {
-              userMessage.content.push({
-                type: "text",
-                text: `[Attached ${part.mime}: ${part.filename ?? "file"}]`,
-              })
+              const text = `[Attached ${part.mime}: ${part.filename ?? "file"}]`
+              if (content === undefined) {
+                content = text
+              } else if (typeof content === "string") {
+                content += text
+              } else {
+                content.push({
+                  type: "text",
+                  text,
+                })
+              }
             } else {
-              userMessage.content.push({
-                type: "file",
-                url: part.url,
-                mediaType: part.mime,
-                filename: part.filename,
-              })
+              const filePart = { type: "file" as const, url: part.url, mediaType: part.mime, filename: part.filename }
+              if (content === undefined) {
+                content = [filePart]
+              } else if (typeof content === "string") {
+                content = [{ type: "text", text: content }, filePart]
+              } else {
+                content.push(filePart)
+              }
             }
           }
 
           if (part.type === "compaction") {
-            userMessage.content.push({
-              type: "text",
-              text: "What did we do so far?",
-            })
+            const text = "What did we do so far?"
+            if (content === undefined) {
+              content = text
+            } else if (typeof content === "string") {
+              content += text
+            } else {
+              content.push({
+                type: "text",
+                text,
+              })
+            }
           }
           if (part.type === "subtask") {
-            userMessage.content.push({
-              type: "text",
-              text: "The following tool was executed by the user",
-            })
+            const text = "The following tool was executed by the user"
+            if (content === undefined) {
+              content = text
+            } else if (typeof content === "string") {
+              content += text
+            } else {
+              content.push({
+                type: "text",
+                text,
+              })
+            }
           }
         }
+        userMessage.content = content
       }
 
       if (msg.info.role === "assistant") {
@@ -748,7 +779,10 @@ export namespace MessageV2 {
     const tools = Object.fromEntries(Array.from(toolNames).map((toolName) => [toolName, { toModelOutput }]))
 
     return convertToModelMessages(
-      result.filter((msg) => msg.content.some((part) => part.type !== "step-start")),
+      result.filter((msg) => {
+        if (typeof msg.content === "string") return msg.content.length > 0
+        return msg.content.some((part) => part.type !== "step-start")
+      }),
       {
         //@ts-expect-error (convertToModelMessages expects a ToolSet but only actually needs tools[name]?.toModelOutput)
         tools,
