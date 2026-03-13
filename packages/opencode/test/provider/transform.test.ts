@@ -995,6 +995,93 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     expect(result[1].content).toBe("World")
   })
 
+  test("filters empty text blocks from tool-result content arrays", () => {
+    const msgs = [
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "test-id",
+            output: {
+              type: "content",
+              value: [
+                { type: "text", text: "" },
+                { type: "text", text: "Valid content" },
+                { type: "text", text: "" },
+              ],
+            },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(1)
+    const toolResult = result[0].content[0] as any
+    expect(toolResult.output.value).toEqual([{ type: "text", text: "Valid content" }])
+  })
+
+  test("replaces all-empty tool-result content with placeholder", () => {
+    const msgs = [
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "test-id",
+            output: {
+              type: "content",
+              value: [
+                { type: "text", text: "" },
+                { type: "text", text: "" },
+              ],
+            },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
+
+    expect(result).toHaveLength(1)
+    const toolResult = result[0].content[0] as any
+    expect(toolResult.output.value).toEqual([{ type: "text", text: "[No output]" }])
+  })
+
+  test("preserves non-text blocks in tool-result content", () => {
+    const msgs = [
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "test-id",
+            output: {
+              type: "content",
+              value: [
+                { type: "text", text: "" },
+                { type: "image", url: "data:image/png;base64,abc" },
+                { type: "text", text: "Output text" },
+              ],
+            },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
+
+    expect(result).toHaveLength(1)
+    const toolResult = result[0].content[0] as any
+    expect(toolResult.output.value).toEqual([
+      { type: "image", url: "data:image/png;base64,abc" },
+      { type: "text", text: "Output text" },
+    ])
+  })
+
   test("filters out empty text parts from array content", () => {
     const msgs = [
       {
@@ -1121,6 +1208,38 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     ] as any[]
 
     const result = ProviderTransform.message(msgs, bedrockModel, {})
+
+    expect(result).toHaveLength(2)
+    expect(result[0].content).toBe("Hello")
+    expect(result[1].content).toHaveLength(1)
+    expect(result[1].content[0]).toEqual({ type: "text", text: "Answer" })
+  })
+
+  test("filters empty content for openai-compatible provider", () => {
+    const compatibleModel = {
+      ...anthropicModel,
+      id: "custom/custom-model",
+      providerID: "custom",
+      api: {
+        id: "custom-model",
+        url: "https://api.custom.com",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    }
+
+    const msgs = [
+      { role: "user", content: "Hello" },
+      { role: "assistant", content: "" },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "" },
+          { type: "text", text: "Answer" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, compatibleModel, {})
 
     expect(result).toHaveLength(2)
     expect(result[0].content).toBe("Hello")

@@ -1221,6 +1221,23 @@ export namespace Provider {
           }
         }
 
+        // Anthropic/Bedrock via openai-compatible rejects assistant messages with content: ""
+        // When an assistant turn has only tool_calls and no text, the AI SDK serializes
+        // content as "". Replace with null so the API accepts the request.
+        if (model.api.npm === "@ai-sdk/openai-compatible" && opts.body && opts.method === "POST") {
+          const body = JSON.parse(opts.body as string)
+          if (Array.isArray(body.messages)) {
+            let changed = false
+            for (const msg of body.messages) {
+              if (msg.role === "assistant" && msg.content === "") {
+                msg.content = null
+                changed = true
+              }
+            }
+            if (changed) opts.body = JSON.stringify(body)
+          }
+        }
+
         const res = await fetchFn(input, {
           ...opts,
           // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682

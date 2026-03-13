@@ -598,19 +598,18 @@ export namespace MessageV2 {
           return attachment.url.startsWith("data:") && attachment.url.includes(",")
         })
 
+        const mediaBlocks = attachments.map((attachment) => ({
+          type: "media",
+          mediaType: attachment.mime,
+          data: iife(() => {
+            const commaIndex = attachment.url.indexOf(",")
+            return commaIndex === -1 ? attachment.url : attachment.url.slice(commaIndex + 1)
+          }),
+        }))
+        const value = [...(outputObject.text ? [{ type: "text", text: outputObject.text }] : []), ...mediaBlocks]
         return {
           type: "content",
-          value: [
-            { type: "text", text: outputObject.text },
-            ...attachments.map((attachment) => ({
-              type: "media",
-              mediaType: attachment.mime,
-              data: iife(() => {
-                const commaIndex = attachment.url.indexOf(",")
-                return commaIndex === -1 ? attachment.url : attachment.url.slice(commaIndex + 1)
-              }),
-            })),
-          ],
+          value: value.length > 0 ? value : [{ type: "text", text: "[No output]" }],
         }
       }
 

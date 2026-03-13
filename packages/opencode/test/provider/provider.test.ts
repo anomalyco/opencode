@@ -2282,3 +2282,232 @@ test("cloudflare-ai-gateway forwards config metadata options", async () => {
     },
   })
 })
+
+test("openai-compatible provider transforms empty assistant content to null", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "test-compat": {
+              name: "Test OpenAI Compatible",
+              npm: "@ai-sdk/openai-compatible",
+              api: "https://api.test.com/v1",
+              env: [],
+              models: {
+                "test-model": {
+                  name: "Test Model",
+                  tool_call: true,
+                  limit: { context: 8000, output: 2000 },
+                },
+              },
+              options: {
+                apiKey: "test-key",
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      let captured: any = null
+      const mock = async (input: any, init?: any) => {
+        if (init?.body && init.method === "POST") {
+          captured = JSON.parse(init.body)
+        }
+        return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "ok" } }] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })
+      }
+
+      const original = globalThis.fetch
+      try {
+        globalThis.fetch = mock as any
+
+        const model = await Provider.getModel(ProviderID.make("test-compat"), ModelID.make("test-model"))
+        await Provider.getLanguage(model)
+
+        const provider = await Provider.getProvider(ProviderID.make("test-compat"))
+        const opts = provider?.options as any
+
+        if (opts?.fetch) {
+          await opts.fetch("https://api.test.com/v1/chat", {
+            method: "POST",
+            body: JSON.stringify({
+              messages: [
+                { role: "user", content: "hi" },
+                { role: "assistant", content: "" },
+                { role: "user", content: "next" },
+              ],
+            }),
+          })
+
+          expect(captured.messages[0].content).toBe("hi")
+          expect(captured.messages[1].content).toBe(null)
+          expect(captured.messages[2].content).toBe("next")
+        }
+      } finally {
+        globalThis.fetch = original
+      }
+    },
+  })
+})
+
+test("openai-compatible provider preserves non-empty assistant content", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "test-compat": {
+              name: "Test OpenAI Compatible",
+              npm: "@ai-sdk/openai-compatible",
+              api: "https://api.test.com/v1",
+              env: [],
+              models: {
+                "test-model": {
+                  name: "Test Model",
+                  tool_call: true,
+                  limit: { context: 8000, output: 2000 },
+                },
+              },
+              options: {
+                apiKey: "test-key",
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      let captured: any = null
+      const mock = async (input: any, init?: any) => {
+        if (init?.body && init.method === "POST") {
+          captured = JSON.parse(init.body)
+        }
+        return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "ok" } }] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })
+      }
+
+      const original = globalThis.fetch
+      try {
+        globalThis.fetch = mock as any
+
+        const model = await Provider.getModel(ProviderID.make("test-compat"), ModelID.make("test-model"))
+        await Provider.getLanguage(model)
+
+        const provider = await Provider.getProvider(ProviderID.make("test-compat"))
+        const opts = provider?.options as any
+
+        if (opts?.fetch) {
+          await opts.fetch("https://api.test.com/v1/chat", {
+            method: "POST",
+            body: JSON.stringify({
+              messages: [
+                { role: "user", content: "hi" },
+                { role: "assistant", content: "response" },
+                { role: "user", content: "next" },
+              ],
+            }),
+          })
+
+          expect(captured.messages[1].content).toBe("response")
+        }
+      } finally {
+        globalThis.fetch = original
+      }
+    },
+  })
+})
+
+test("openai-compatible provider only transforms assistant role empty content", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "test-compat": {
+              name: "Test OpenAI Compatible",
+              npm: "@ai-sdk/openai-compatible",
+              api: "https://api.test.com/v1",
+              env: [],
+              models: {
+                "test-model": {
+                  name: "Test Model",
+                  tool_call: true,
+                  limit: { context: 8000, output: 2000 },
+                },
+              },
+              options: {
+                apiKey: "test-key",
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      let captured: any = null
+      const mock = async (input: any, init?: any) => {
+        if (init?.body && init.method === "POST") {
+          captured = JSON.parse(init.body)
+        }
+        return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "ok" } }] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })
+      }
+
+      const original = globalThis.fetch
+      try {
+        globalThis.fetch = mock as any
+
+        const model = await Provider.getModel(ProviderID.make("test-compat"), ModelID.make("test-model"))
+        await Provider.getLanguage(model)
+
+        const provider = await Provider.getProvider(ProviderID.make("test-compat"))
+        const opts = provider?.options as any
+
+        if (opts?.fetch) {
+          await opts.fetch("https://api.test.com/v1/chat", {
+            method: "POST",
+            body: JSON.stringify({
+              messages: [
+                { role: "user", content: "" },
+                { role: "assistant", content: "" },
+                { role: "system", content: "" },
+              ],
+            }),
+          })
+
+          expect(captured?.messages?.[0]?.content).toBe("")
+          expect(captured?.messages?.[1]?.content).toBe(null)
+          expect(captured?.messages?.[2]?.content).toBe("")
+        }
+      } finally {
+        globalThis.fetch = original
+      }
+    },
+  })
+})
