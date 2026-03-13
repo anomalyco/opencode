@@ -1,6 +1,7 @@
 import type { Project, UserMessage } from "@opencode-ai/sdk/v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import {
+  batch,
   onCleanup,
   Show,
   Match,
@@ -34,8 +35,10 @@ import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
+import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
+import { type FollowupDraft, sendFollowupDraft } from "@/components/prompt-input/submit"
 import { createSessionComposerState, SessionComposerRegion } from "@/pages/session/composer"
 import { createOpenReviewFile, createSessionTabs, createSizing, focusTerminalById } from "@/pages/session/helpers"
 import { MessageTimeline } from "@/pages/session/message-timeline"
@@ -46,15 +49,18 @@ import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
+import { Identifier } from "@/utils/id"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { same } from "@/utils/same"
 import { formatServerError } from "@/utils/server-errors"
 
 const emptyUserMessages: UserMessage[] = []
+const emptyFollowups: (FollowupDraft & { id: string })[] = []
 
 type SessionHistoryWindowInput = {
   sessionID: () => string | undefined
   messagesReady: () => boolean
+  loaded: () => number
   visibleUserMessages: () => UserMessage[]
   historyMore: () => boolean
   historyLoading: () => boolean
@@ -152,23 +158,39 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
 
     const start = turnStart()
     const beforeVisible = input.visibleUserMessages().length
+    let loaded = input.loaded()
 
     if (start > 0) setTurnStart(0)
 
     if (!input.historyMore() || input.historyLoading()) return
 
-    await input.loadMore(id)
-    if (input.sessionID() !== id) return
+    let afterVisible = beforeVisible
+    let added = 0
 
-    const afterVisible = input.visibleUserMessages().length
-    const growth = afterVisible - beforeVisible
+    while (true) {
+      await input.loadMore(id)
+      if (input.sessionID() !== id) return
+
+      afterVisible = input.visibleUserMessages().length
+      const nextLoaded = input.loaded()
+      const raw = nextLoaded - loaded
+      added += raw
+      loaded = nextLoaded
+
+      if (afterVisible > beforeVisible) break
+      if (raw <= 0) break
+      if (!input.historyMore()) break
+    }
+
+    if (added <= 0) return
     if (state.prefetchNoGrowth) setState("prefetchNoGrowth", 0)
+
+    const growth = afterVisible - beforeVisible
     if (growth <= 0) return
     if (turnStart() !== 0) return
 
-    const target = Math.min(afterVisible, Math.max(beforeVisible, renderedUserMessages().length) + turnBatch)
-    const nextStart = Math.max(0, afterVisible - target)
-    preserveScroll(() => setTurnStart(nextStart))
+    const target = Math.min(afterVisible, beforeVisible + turnBatch)
+    setTurnStart(Math.max(0, afterVisible - target))
   }
 
   /** Scroll/prefetch path: fetch older history from server. */
@@ -187,19 +209,35 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
     const start = turnStart()
     const beforeVisible = input.visibleUserMessages().length
     const beforeRendered = start <= 0 ? beforeVisible : renderedUserMessages().length
+    let loaded = input.loaded()
+    let added = 0
+    let growth = 0
 
-    await input.loadMore(id)
-    if (input.sessionID() !== id) return
+    while (true) {
+      await input.loadMore(id)
+      if (input.sessionID() !== id) return
+
+      const nextLoaded = input.loaded()
+      const raw = nextLoaded - loaded
+      added += raw
+      loaded = nextLoaded
+      growth = input.visibleUserMessages().length - beforeVisible
+
+      if (growth > 0) break
+      if (raw <= 0) break
+      if (opts?.prefetch) break
+      if (!input.historyMore()) break
+    }
 
     const afterVisible = input.visibleUserMessages().length
-    const growth = afterVisible - beforeVisible
 
     if (opts?.prefetch) {
-      setState("prefetchNoGrowth", growth > 0 ? 0 : state.prefetchNoGrowth + 1)
-    } else if (growth > 0 && state.prefetchNoGrowth) {
+      setState("prefetchNoGrowth", added > 0 ? 0 : state.prefetchNoGrowth + 1)
+    } else if (added > 0 && state.prefetchNoGrowth) {
       setState("prefetchNoGrowth", 0)
     }
 
+    if (added <= 0) return
     if (growth <= 0) return
     if (turnStart() !== start) return
 
@@ -269,6 +307,7 @@ export default function Page() {
   const language = useLanguage()
   const navigate = useNavigate()
   const sdk = useSDK()
+  const settings = useSettings()
   const prompt = usePrompt()
   const comments = useComments()
   const terminal = useTerminal()
@@ -291,6 +330,7 @@ export default function Page() {
     git: false,
     pendingMessage: undefined as string | undefined,
     restoring: undefined as string | undefined,
+    reverting: false,
     reviewSnap: false,
     scrollGesture: 0,
     scroll: {
@@ -462,6 +502,17 @@ export default function Page() {
     changes: "session" as "session" | "turn",
     newSessionWorktree: "main",
     deferRender: false,
+  })
+
+  const [followup, setFollowup] = createStore({
+    items: {} as Record<string, (FollowupDraft & { id: string })[] | undefined>,
+    sending: {} as Record<string, string | undefined>,
+    failed: {} as Record<string, string | undefined>,
+    paused: {} as Record<string, boolean | undefined>,
+    edit: {} as Record<
+      string,
+      { id: string; prompt: FollowupDraft["prompt"]; context: FollowupDraft["context"] } | undefined
+    >,
   })
 
   createComputed((prev) => {
@@ -905,13 +956,15 @@ export default function Page() {
       return (
         <div class={input.emptyClass}>
           <div class="flex flex-col gap-3">
-            <div class="text-14-medium text-text-strong">Create a Git repository</div>
+            <div class="text-14-medium text-text-strong">{language.t("session.review.noVcs.createGit.title")}</div>
             <div class="text-14-regular text-text-base max-w-md" style={{ "line-height": "var(--line-height-normal)" }}>
-              Track, review, and undo changes in this project
+              {language.t("session.review.noVcs.createGit.description")}
             </div>
           </div>
           <Button size="large" disabled={ui.git} onClick={initGit}>
-            {ui.git ? "Creating Git repository..." : "Create Git repository"}
+            {ui.git
+              ? language.t("session.review.noVcs.createGit.actionLoading")
+              : language.t("session.review.noVcs.createGit.action")}
           </Button>
         </div>
       )
@@ -1143,6 +1196,7 @@ export default function Page() {
 
   let scrollStateFrame: number | undefined
   let scrollStateTarget: HTMLDivElement | undefined
+  let fillFrame: number | undefined
 
   const updateScrollState = (el: HTMLDivElement) => {
     const max = el.scrollHeight - el.clientHeight
@@ -1190,10 +1244,14 @@ export default function Page() {
     ),
   )
 
+  let fill = () => {}
+
   const setScrollRef = (el: HTMLDivElement | undefined) => {
     scroller = el
     autoScroll.scrollRef(el)
-    if (el) scheduleScrollState(el)
+    if (!el) return
+    scheduleScrollState(el)
+    fill()
   }
 
   const markUserScroll = () => {
@@ -1205,12 +1263,14 @@ export default function Page() {
     () => {
       const el = scroller
       if (el) scheduleScrollState(el)
+      fill()
     },
   )
 
   const historyWindow = createSessionHistoryWindow({
     sessionID: () => params.id,
     messagesReady,
+    loaded: () => messages().length,
     visibleUserMessages,
     historyMore,
     historyLoading,
@@ -1218,6 +1278,45 @@ export default function Page() {
     userScrolled: autoScroll.userScrolled,
     scroller: () => scroller,
   })
+
+  fill = () => {
+    if (fillFrame !== undefined) return
+
+    fillFrame = requestAnimationFrame(() => {
+      fillFrame = undefined
+
+      if (!params.id || !messagesReady()) return
+      if (autoScroll.userScrolled() || historyLoading()) return
+
+      const el = scroller
+      if (!el) return
+      if (el.scrollHeight > el.clientHeight + 1) return
+      if (historyWindow.turnStart() <= 0 && !historyMore()) return
+
+      void historyWindow.loadAndReveal()
+    })
+  }
+
+  createEffect(
+    on(
+      () =>
+        [
+          params.id,
+          messagesReady(),
+          historyWindow.turnStart(),
+          historyMore(),
+          historyLoading(),
+          autoScroll.userScrolled(),
+          visibleUserMessages().length,
+        ] as const,
+      ([id, ready, start, more, loading, scrolled]) => {
+        if (!id || !ready || loading || scrolled) return
+        if (start <= 0 && !more) return
+        fill()
+      },
+      { defer: true },
+    ),
+  )
 
   const draft = (id: string) =>
     extractPromptFromParts(sync.data.part[id] ?? [], {
@@ -1243,11 +1342,134 @@ export default function Page() {
     })
   }
 
+  const merge = (next: NonNullable<ReturnType<typeof info>>) =>
+    sync.set("session", (list) => {
+      const idx = list.findIndex((item) => item.id === next.id)
+      if (idx < 0) return list
+      const out = list.slice()
+      out[idx] = next
+      return out
+    })
+
+  const roll = (sessionID: string, next: NonNullable<ReturnType<typeof info>>["revert"]) =>
+    sync.set("session", (list) => {
+      const idx = list.findIndex((item) => item.id === sessionID)
+      if (idx < 0) return list
+      const out = list.slice()
+      out[idx] = { ...out[idx], revert: next }
+      return out
+    })
+
   const busy = (sessionID: string) => {
-    if (sync.data.session_status[sessionID]?.type !== "idle") return true
+    if ((sync.data.session_status[sessionID] ?? { type: "idle" as const }).type !== "idle") return true
     return (sync.data.message[sessionID] ?? []).some(
       (item) => item.role === "assistant" && typeof item.time.completed !== "number",
     )
+  }
+
+  const queuedFollowups = createMemo(() => {
+    const id = params.id
+    if (!id) return emptyFollowups
+    return followup.items[id] ?? emptyFollowups
+  })
+
+  const editingFollowup = createMemo(() => {
+    const id = params.id
+    if (!id) return
+    return followup.edit[id]
+  })
+
+  const sendingFollowup = createMemo(() => {
+    const id = params.id
+    if (!id) return
+    return followup.sending[id]
+  })
+
+  const queueEnabled = createMemo(() => {
+    const id = params.id
+    if (!id) return false
+    return settings.general.followup() === "queue" && busy(id) && !composer.blocked()
+  })
+
+  const followupText = (item: FollowupDraft) => {
+    const text = item.prompt
+      .map((part) => {
+        if (part.type === "image") return `[image:${part.filename}]`
+        if (part.type === "file") return `[file:${part.path}]`
+        if (part.type === "agent") return `@${part.name}`
+        return part.content
+      })
+      .join("")
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find((line) => !!line)
+
+    if (text) return text
+    return `[${language.t("common.attachment")}]`
+  }
+
+  const queueFollowup = (draft: FollowupDraft) => {
+    setFollowup("items", draft.sessionID, (items) => [
+      ...(items ?? []),
+      { id: Identifier.ascending("message"), ...draft },
+    ])
+    setFollowup("failed", draft.sessionID, undefined)
+    setFollowup("paused", draft.sessionID, undefined)
+  }
+
+  const followupDock = createMemo(() => queuedFollowups().map((item) => ({ id: item.id, text: followupText(item) })))
+
+  const sendFollowup = (sessionID: string, id: string, opts?: { manual?: boolean }) => {
+    const item = (followup.items[sessionID] ?? []).find((entry) => entry.id === id)
+    if (!item) return Promise.resolve()
+    if (followup.sending[sessionID]) return Promise.resolve()
+
+    if (opts?.manual) setFollowup("paused", sessionID, undefined)
+    setFollowup("sending", sessionID, id)
+    setFollowup("failed", sessionID, undefined)
+
+    return sendFollowupDraft({
+      client: sdk.client,
+      sync,
+      globalSync,
+      draft: item,
+      optimisticBusy: item.sessionDirectory === sdk.directory,
+    })
+      .then((ok) => {
+        if (ok === false) return
+        setFollowup("items", sessionID, (items) => (items ?? []).filter((entry) => entry.id !== id))
+        if (opts?.manual) resumeScroll()
+      })
+      .catch((err) => {
+        setFollowup("failed", sessionID, id)
+        fail(err)
+      })
+      .finally(() => {
+        setFollowup("sending", sessionID, (value) => (value === id ? undefined : value))
+      })
+  }
+
+  const editFollowup = (id: string) => {
+    const sessionID = params.id
+    if (!sessionID) return
+    if (followup.sending[sessionID]) return
+
+    const item = queuedFollowups().find((entry) => entry.id === id)
+    if (!item) return
+
+    setFollowup("items", sessionID, (items) => (items ?? []).filter((entry) => entry.id !== id))
+    setFollowup("failed", sessionID, (value) => (value === id ? undefined : value))
+    setFollowup("edit", sessionID, {
+      id: item.id,
+      prompt: item.prompt,
+      context: item.context,
+    })
+  }
+
+  const clearFollowupEdit = () => {
+    const id = params.id
+    if (!id) return
+    setFollowup("edit", id, undefined)
   }
 
   const halt = (sessionID: string) =>
@@ -1275,42 +1497,77 @@ export default function Page() {
   }
 
   const revert = (input: { sessionID: string; messageID: string }) => {
+    if (ui.reverting || ui.restoring) return
+    const prev = prompt.current().slice()
+    const last = info()?.revert
     const value = draft(input.messageID)
+    batch(() => {
+      setUi("reverting", true)
+      roll(input.sessionID, { messageID: input.messageID })
+      prompt.set(value)
+    })
     return halt(input.sessionID)
       .then(() => sdk.client.session.revert(input))
-      .then(() => {
-        prompt.set(value)
+      .then((result) => {
+        if (result.data) merge(result.data)
       })
-      .catch(fail)
+      .catch((err) => {
+        batch(() => {
+          roll(input.sessionID, last)
+          prompt.set(prev)
+        })
+        fail(err)
+      })
+      .finally(() => {
+        setUi("reverting", false)
+      })
   }
 
   const restore = (id: string) => {
     const sessionID = params.id
-    if (!sessionID || ui.restoring) return
+    if (!sessionID || ui.restoring || ui.reverting) return
 
     const next = userMessages().find((item) => item.id > id)
-    setUi("restoring", id)
+    const prev = prompt.current().slice()
+    const last = info()?.revert
+
+    batch(() => {
+      setUi("restoring", id)
+      setUi("reverting", true)
+      roll(sessionID, next ? { messageID: next.id } : undefined)
+      if (next) {
+        prompt.set(draft(next.id))
+        return
+      }
+      prompt.reset()
+    })
 
     const task = !next
-      ? halt(sessionID)
-          .then(() => sdk.client.session.unrevert({ sessionID }))
-          .then(() => {
-            prompt.reset()
-          })
-      : halt(sessionID)
-          .then(() =>
-            sdk.client.session.revert({
-              sessionID,
-              messageID: next.id,
-            }),
-          )
-          .then(() => {
-            prompt.set(draft(next.id))
-          })
+      ? halt(sessionID).then(() => sdk.client.session.unrevert({ sessionID }))
+      : halt(sessionID).then(() =>
+          sdk.client.session.revert({
+            sessionID,
+            messageID: next.id,
+          }),
+        )
 
-    return task.catch(fail).finally(() => {
-      setUi("restoring", (value) => (value === id ? undefined : value))
-    })
+    return task
+      .then((result) => {
+        if (result.data) merge(result.data)
+      })
+      .catch((err) => {
+        batch(() => {
+          roll(sessionID, last)
+          prompt.set(prev)
+        })
+        fail(err)
+      })
+      .finally(() => {
+        batch(() => {
+          setUi("restoring", (value) => (value === id ? undefined : value))
+          setUi("reverting", false)
+        })
+      })
   }
 
   const rolled = createMemo(() => {
@@ -1322,6 +1579,21 @@ export default function Page() {
   })
 
   const actions = { fork, revert }
+
+  createEffect(() => {
+    const sessionID = params.id
+    if (!sessionID) return
+
+    const item = queuedFollowups()[0]
+    if (!item) return
+    if (followup.sending[sessionID]) return
+    if (followup.failed[sessionID] === item.id) return
+    if (followup.paused[sessionID]) return
+    if (composer.blocked()) return
+    if (busy(sessionID)) return
+
+    void sendFollowup(sessionID, item.id)
+  })
 
   createResizeObserver(
     () => promptDock,
@@ -1341,6 +1613,7 @@ export default function Page() {
       if (stick) autoScroll.forceScrollToBottom()
 
       if (el) scheduleScrollState(el)
+      fill()
     },
   )
 
@@ -1374,6 +1647,7 @@ export default function Page() {
     if (diffFrame !== undefined) cancelAnimationFrame(diffFrame)
     if (diffTimer !== undefined) window.clearTimeout(diffTimer)
     if (scrollStateFrame !== undefined) cancelAnimationFrame(scrollStateFrame)
+    if (fillFrame !== undefined) cancelAnimationFrame(fillFrame)
   })
 
   return (
@@ -1482,11 +1756,33 @@ export default function Page() {
               resumeScroll()
             }}
             onResponseSubmit={resumeScroll}
+            followup={
+              params.id
+                ? {
+                    queue: queueEnabled,
+                    items: followupDock(),
+                    sending: sendingFollowup(),
+                    edit: editingFollowup(),
+                    onQueue: queueFollowup,
+                    onAbort: () => {
+                      const id = params.id
+                      if (!id) return
+                      setFollowup("paused", id, true)
+                    },
+                    onSend: (id) => {
+                      void sendFollowup(params.id!, id, { manual: true })
+                    },
+                    onEdit: editFollowup,
+                    onEditLoaded: clearFollowupEdit,
+                  }
+                : undefined
+            }
             revert={
               rolled().length > 0
                 ? {
                     items: rolled(),
                     restoring: ui.restoring,
+                    disabled: ui.reverting,
                     onRestore: restore,
                   }
                 : undefined

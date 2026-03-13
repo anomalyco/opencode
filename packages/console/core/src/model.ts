@@ -47,6 +47,7 @@ export namespace ZenData {
     format: FormatSchema.optional(),
     headerMappings: z.record(z.string(), z.string()).optional(),
     payloadModifier: z.record(z.string(), z.any()).optional(),
+    payloadMappings: z.record(z.string(), z.string()).optional(),
   })
 
   const ModelsSchema = z.object({

@@ -20,17 +20,28 @@ export namespace BunProc {
   }
 
   export async function run(cmd: string[], options?: Process.RunOptions) {
-    const bin = which()
-    log.info("running", { cmd: [bin, ...cmd], ...options })
-    const result = await Process.run([bin, ...cmd], {
-      cwd: options?.cwd,
-      env: { ...process.env, ...options?.env, BUN_BE_BUN: "1" },
-      nothrow: true,
+    const full = [which(), ...cmd]
+    log.info("running", {
+      cmd: full,
+      ...options,
     })
-    log.info("done", { code: result.code, stdout: result.stdout.toString(), stderr: result.stderr.toString() })
-    if (result.code !== 0) {
-      throw new Error(`Command failed with exit code ${result.code}`)
-    }
+    const result = await Process.run(full, {
+      cwd: options?.cwd,
+      abort: options?.abort,
+      kill: options?.kill,
+      timeout: options?.timeout,
+      nothrow: options?.nothrow,
+      env: {
+        ...process.env,
+        ...options?.env,
+        BUN_BE_BUN: "1",
+      },
+    })
+    log.info("done", {
+      code: result.code,
+      stdout: result.stdout.toString(),
+      stderr: result.stderr.toString(),
+    })
     return result
   }
 

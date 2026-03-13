@@ -46,63 +46,63 @@ type OS = "macos" | "windows" | "linux" | "unknown"
 const MAC_APPS = [
   {
     id: "vscode",
-    label: "VS Code",
+    label: "session.header.open.app.vscode",
     icon: "vscode",
     openWith: "Visual Studio Code",
   },
-  { id: "cursor", label: "Cursor", icon: "cursor", openWith: "Cursor" },
-  { id: "zed", label: "Zed", icon: "zed", openWith: "Zed" },
-  { id: "textmate", label: "TextMate", icon: "textmate", openWith: "TextMate" },
+  { id: "cursor", label: "session.header.open.app.cursor", icon: "cursor", openWith: "Cursor" },
+  { id: "zed", label: "session.header.open.app.zed", icon: "zed", openWith: "Zed" },
+  { id: "textmate", label: "session.header.open.app.textmate", icon: "textmate", openWith: "TextMate" },
   {
     id: "antigravity",
-    label: "Antigravity",
+    label: "session.header.open.app.antigravity",
     icon: "antigravity",
     openWith: "Antigravity",
   },
-  { id: "terminal", label: "Terminal", icon: "terminal", openWith: "Terminal" },
-  { id: "iterm2", label: "iTerm2", icon: "iterm2", openWith: "iTerm" },
-  { id: "ghostty", label: "Ghostty", icon: "ghostty", openWith: "Ghostty" },
-  { id: "warp", label: "Warp", icon: "warp", openWith: "Warp" },
-  { id: "xcode", label: "Xcode", icon: "xcode", openWith: "Xcode" },
+  { id: "terminal", label: "session.header.open.app.terminal", icon: "terminal", openWith: "Terminal" },
+  { id: "iterm2", label: "session.header.open.app.iterm2", icon: "iterm2", openWith: "iTerm" },
+  { id: "ghostty", label: "session.header.open.app.ghostty", icon: "ghostty", openWith: "Ghostty" },
+  { id: "warp", label: "session.header.open.app.warp", icon: "warp", openWith: "Warp" },
+  { id: "xcode", label: "session.header.open.app.xcode", icon: "xcode", openWith: "Xcode" },
   {
     id: "android-studio",
-    label: "Android Studio",
+    label: "session.header.open.app.androidStudio",
     icon: "android-studio",
     openWith: "Android Studio",
   },
   {
     id: "sublime-text",
-    label: "Sublime Text",
+    label: "session.header.open.app.sublimeText",
     icon: "sublime-text",
     openWith: "Sublime Text",
   },
 ] as const
 
 const WINDOWS_APPS = [
-  { id: "vscode", label: "VS Code", icon: "vscode", openWith: "code" },
-  { id: "cursor", label: "Cursor", icon: "cursor", openWith: "cursor" },
-  { id: "zed", label: "Zed", icon: "zed", openWith: "zed" },
+  { id: "vscode", label: "session.header.open.app.vscode", icon: "vscode", openWith: "code" },
+  { id: "cursor", label: "session.header.open.app.cursor", icon: "cursor", openWith: "cursor" },
+  { id: "zed", label: "session.header.open.app.zed", icon: "zed", openWith: "zed" },
   {
     id: "powershell",
-    label: "PowerShell",
+    label: "session.header.open.app.powershell",
     icon: "powershell",
     openWith: "powershell",
   },
   {
     id: "sublime-text",
-    label: "Sublime Text",
+    label: "session.header.open.app.sublimeText",
     icon: "sublime-text",
     openWith: "Sublime Text",
   },
 ] as const
 
 const LINUX_APPS = [
-  { id: "vscode", label: "VS Code", icon: "vscode", openWith: "code" },
-  { id: "cursor", label: "Cursor", icon: "cursor", openWith: "cursor" },
-  { id: "zed", label: "Zed", icon: "zed", openWith: "zed" },
+  { id: "vscode", label: "session.header.open.app.vscode", icon: "vscode", openWith: "code" },
+  { id: "cursor", label: "session.header.open.app.cursor", icon: "cursor", openWith: "cursor" },
+  { id: "zed", label: "session.header.open.app.zed", icon: "zed", openWith: "zed" },
   {
     id: "sublime-text",
-    label: "Sublime Text",
+    label: "session.header.open.app.sublimeText",
     icon: "sublime-text",
     openWith: "Sublime Text",
   },
@@ -160,9 +160,9 @@ export function SessionHeader() {
   })
 
   const fileManager = createMemo(() => {
-    if (os() === "macos") return { label: "Finder", icon: "finder" as const }
-    if (os() === "windows") return { label: "File Explorer", icon: "file-explorer" as const }
-    return { label: "File Manager", icon: "finder" as const }
+    if (os() === "macos") return { label: "session.header.open.finder", icon: "finder" as const }
+    if (os() === "windows") return { label: "session.header.open.fileExplorer", icon: "file-explorer" as const }
+    return { label: "session.header.open.fileManager", icon: "finder" as const }
   })
 
   createEffect(() => {
@@ -187,8 +187,10 @@ export function SessionHeader() {
 
   const options = createMemo(() => {
     return [
-      { id: "finder", label: fileManager().label, icon: fileManager().icon },
-      ...apps().filter((app) => exists[app.id]),
+      { id: "finder", label: language.t(fileManager().label), icon: fileManager().icon },
+      ...apps()
+        .filter((app) => exists[app.id])
+        .map((app) => ({ ...app, label: language.t(app.label) })),
     ] as const
   })
 
