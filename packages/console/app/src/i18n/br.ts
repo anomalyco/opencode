@@ -253,7 +253,7 @@ export const dict = {
 
   "go.title": "OpenCode Go | Modelos de codificação de baixo custo para todos",
   "go.meta.description":
-    "O Go é uma assinatura de $10/mês com limites generosos de 5 horas de requisição para GLM-5, Kimi K2.5 e MiniMax M2.5.",
+    "O Go começa em $5 no primeiro mês, depois $10/mês, com limites generosos de solicitação de 5 horas para GLM-5, Kimi K2.5 e MiniMax M2.5.",
   "go.hero.title": "Modelos de codificação de baixo custo para todos",
   "go.hero.body":
     "O Go traz a codificação com agentes para programadores em todo o mundo. Oferecendo limites generosos e acesso confiável aos modelos de código aberto mais capazes, para que você possa construir com agentes poderosos sem se preocupar com custos ou disponibilidade.",
@@ -262,7 +262,9 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Assinar o Go",
   "go.cta.price": "$10/mês",
-  "go.pricing.body": "Use com qualquer agente. Recarregue crédito se necessário. Cancele a qualquer momento.",
+  "go.cta.promo": "$5 no primeiro mês",
+  "go.pricing.body":
+    "Use com qualquer agente. $5 no primeiro mês, depois $10/mês. Recarregue o crédito se necessário. Cancele a qualquer momento.",
   "go.graph.free": "Grátis",
   "go.graph.freePill": "Big Pickle e modelos gratuitos",
   "go.graph.go": "Go",
@@ -295,20 +297,21 @@ export const dict = {
   "go.testimonials.frank.quote": "Eu queria ainda estar na Nvidia.",
   "go.problem.title": "Que problema o Go resolve?",
   "go.problem.body":
-    "Estamos focados em levar a experiência OpenCode para o maior número possível de pessoas. OpenCode Go é uma assinatura de baixo custo ($10/mês) projetada para levar a codificação com agentes para programadores em todo o mundo. Fornece limites generosos e acesso confiável aos modelos de código aberto mais capazes.",
+    "Estamos focados em levar a experiência do OpenCode para o maior número de pessoas possível. OpenCode Go é uma assinatura de baixo custo: $5 no primeiro mês, depois $10/mês. Oferece limites generosos e acesso confiável aos modelos open source mais capazes.",
   "go.problem.subtitle": " ",
   "go.problem.item1": "Preço de assinatura de baixo custo",
   "go.problem.item2": "Limites generosos e acesso confiável",
   "go.problem.item3": "Feito para o maior número possível de programadores",
   "go.problem.item4": "Inclui GLM-5, Kimi K2.5 e MiniMax M2.5",
   "go.how.title": "Como o Go funciona",
-  "go.how.body": "Go é uma assinatura de $10/mês que você pode usar com OpenCode ou qualquer agente.",
+  "go.how.body":
+    "O Go começa em $5 no primeiro mês, depois $10/mês. Você pode usá-lo com o OpenCode ou qualquer agente.",
   "go.how.step1.title": "Crie uma conta",
   "go.how.step1.beforeLink": "siga as",
   "go.how.step1.link": "instruções de configuração",
   "go.how.step2.title": "Assinar o Go",
-  "go.how.step2.link": "$10/mês",
-  "go.how.step2.afterLink": "com limites generosos",
+  "go.how.step2.link": "$5 no primeiro mês",
+  "go.how.step2.afterLink": "depois $10/mês com limites generosos",
   "go.how.step3.title": "Comece a codificar",
   "go.how.step3.body": "com acesso confiável a modelos de código aberto",
   "go.privacy.title": "Sua privacidade é importante para nós",
@@ -325,11 +328,11 @@ export const dict = {
   "go.faq.a2": "Go inclui GLM-5, Kimi K2.5 e MiniMax M2.5, com limites generosos e acesso confiável.",
   "go.faq.q3": "O Go é o mesmo que o Zen?",
   "go.faq.a3":
-    "Não. O Zen é pago por uso (pay-as-you-go), enquanto o Go é uma assinatura de $10/mês com limites generosos e acesso confiável aos modelos de código aberto GLM-5, Kimi K2.5 e MiniMax M2.5.",
+    "Não. Zen é pay-as-you-go, enquanto o Go começa em $5 no primeiro mês, depois $10/mês, com limites generosos e acesso confiável aos modelos open source GLM-5, Kimi K2.5 e MiniMax M2.5.",
   "go.faq.q4": "Quanto custa o Go?",
   "go.faq.a4.p1.beforePricing": "O Go custa",
-  "go.faq.a4.p1.pricingLink": "$10/mês",
-  "go.faq.a4.p1.afterPricing": "com limites generosos.",
+  "go.faq.a4.p1.pricingLink": "$5 no primeiro mês",
+  "go.faq.a4.p1.afterPricing": "depois $10/mês com limites generosos.",
   "go.faq.a4.p2.beforeAccount": "Você pode gerenciar sua assinatura em sua",
   "go.faq.a4.p2.accountLink": "conta",
   "go.faq.a4.p3": "Cancele a qualquer momento.",
@@ -418,12 +421,15 @@ export const dict = {
   "black.subscribe.success.chargeNotice": "Seu cartão será cobrado quando sua assinatura for ativada",
 
   "workspace.nav.zen": "Zen",
+  "workspace.nav.go": "Go",
+  "workspace.nav.usage": "Uso",
   "workspace.nav.apiKeys": "Chaves de API",
   "workspace.nav.members": "Membros",
   "workspace.nav.billing": "Faturamento",
   "workspace.nav.settings": "Configurações",
 
   "workspace.home.banner.beforeLink": "Modelos otimizados e confiáveis para agentes de codificação.",
+  "workspace.lite.banner.beforeLink": "Modelos de codificação de baixo custo para todos.",
   "workspace.home.billing.loading": "Carregando...",
   "workspace.home.billing.enable": "Ativar faturamento",
   "workspace.home.billing.currentBalance": "Saldo atual",
@@ -543,6 +549,8 @@ export const dict = {
   "workspace.billing.loading": "Carregando...",
   "workspace.billing.addAction": "Adicionar",
   "workspace.billing.addBalance": "Adicionar Saldo",
+  "workspace.billing.alipay": "Alipay",
+  "workspace.billing.wechat": "WeChat Pay",
   "workspace.billing.linkedToStripe": "Vinculado ao Stripe",
   "workspace.billing.manage": "Gerenciar",
   "workspace.billing.enable": "Ativar Faturamento",
@@ -625,7 +633,6 @@ export const dict = {
   "workspace.lite.time.minute": "minuto",
   "workspace.lite.time.minutes": "minutos",
   "workspace.lite.time.fewSeconds": "alguns segundos",
-  "workspace.lite.subscription.title": "Assinatura Go",
   "workspace.lite.subscription.message": "Você assina o OpenCode Go.",
   "workspace.lite.subscription.manage": "Gerenciar Assinatura",
   "workspace.lite.subscription.rollingUsage": "Uso Contínuo",
@@ -635,12 +642,13 @@ export const dict = {
   "workspace.lite.subscription.useBalance": "Use seu saldo disponível após atingir os limites de uso",
   "workspace.lite.subscription.selectProvider":
     'Selecione "OpenCode Go" como provedor na sua configuração do opencode para usar os modelos Go.',
-  "workspace.lite.other.title": "Assinatura Go",
+  "workspace.lite.black.message":
+    "Você está atualmente inscrito no OpenCode Black ou na lista de espera. Por favor, cancele a assinatura primeiro se desejar mudar para o Go.",
   "workspace.lite.other.message":
     "Outro membro neste workspace já assina o OpenCode Go. Apenas um membro por workspace pode assinar.",
-  "workspace.lite.promo.title": "OpenCode Go",
   "workspace.lite.promo.description":
-    "O OpenCode Go é uma assinatura de $10 por mês que fornece acesso confiável a modelos abertos de codificação populares com limites de uso generosos.",
+    "O OpenCode Go começa em {{price}}, depois $10/mês, e oferece acesso confiável a modelos de codificação abertos populares com limites de uso generosos.",
+  "workspace.lite.promo.price": "$5 no primeiro mês",
   "workspace.lite.promo.modelsTitle": "O que está incluído",
   "workspace.lite.promo.footer":
     "O plano é projetado principalmente para usuários internacionais, com modelos hospedados nos EUA, UE e Singapura para acesso global estável. Preços e limites de uso podem mudar conforme aprendemos com o uso inicial e feedback.",

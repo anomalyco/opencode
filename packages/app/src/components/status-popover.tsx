@@ -14,7 +14,7 @@ import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
 import { normalizeServerUrl, ServerConnection, useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
-import { checkServerHealth, type ServerHealth } from "@/utils/server-health"
+import { useCheckServerHealth, type ServerHealth } from "@/utils/server-health"
 import { DialogSelectServer } from "./dialog-select-server"
 
 const pollMs = 10_000
@@ -53,7 +53,8 @@ const listServersByHealth = (
   })
 }
 
-const useServerHealth = (servers: Accessor<ServerConnection.Any[]>, fetcher: typeof fetch) => {
+const useServerHealth = (servers: Accessor<ServerConnection.Any[]>) => {
+  const checkServerHealth = useCheckServerHealth()
   const [status, setStatus] = createStore({} as Record<ServerConnection.Key, ServerHealth | undefined>)
 
   createEffect(() => {
@@ -64,7 +65,7 @@ const useServerHealth = (servers: Accessor<ServerConnection.Any[]>, fetcher: typ
       const results: Record<string, ServerHealth> = {}
       await Promise.all(
         list.map(async (conn) => {
-          results[ServerConnection.key(conn)] = await checkServerHealth(conn.http, fetcher)
+          results[ServerConnection.key(conn)] = await checkServerHealth(conn.http)
         }),
       )
       if (dead) return
@@ -85,15 +86,17 @@ const useServerHealth = (servers: Accessor<ServerConnection.Any[]>, fetcher: typ
 const useDefaultServerKey = (
   get: (() => string | Promise<string | null | undefined> | null | undefined) | undefined,
 ) => {
-  const [url, setUrl] = createSignal<string | undefined>()
-  const [tick, setTick] = createSignal(0)
+  const [state, setState] = createStore({
+    url: undefined as string | undefined,
+    tick: 0,
+  })
 
   createEffect(() => {
-    tick()
+    state.tick
     let dead = false
     const result = get?.()
     if (!result) {
-      setUrl(undefined)
+      setState("url", undefined)
       onCleanup(() => {
         dead = true
       })
@@ -103,7 +106,7 @@ const useDefaultServerKey = (
     if (result instanceof Promise) {
       void result.then((next) => {
         if (dead) return
-        setUrl(next ? normalizeServerUrl(next) : undefined)
+        setState("url", next ? normalizeServerUrl(next) : undefined)
       })
       onCleanup(() => {
         dead = true
@@ -111,7 +114,7 @@ const useDefaultServerKey = (
       return
     }
 
-    setUrl(normalizeServerUrl(result))
+    setState("url", normalizeServerUrl(result))
     onCleanup(() => {
       dead = true
     })
@@ -119,11 +122,11 @@ const useDefaultServerKey = (
 
   return {
     key: () => {
-      const u = url()
+      const u = state.url
       if (!u) return
       return ServerConnection.key({ type: "http", http: { url: u } })
     },
-    refresh: () => setTick((value) => value + 1),
+    refresh: () => setState("tick", (value) => value + 1),
   }
 }
 
@@ -168,7 +171,7 @@ export function StatusPopover() {
   const language = useLanguage()
   const navigate = useNavigate()
 
-  const fetcher = platform.fetch ?? globalThis.fetch
+  const [shown, setShown] = createSignal(false)
   const servers = createMemo(() => {
     const current = server.current
     const list = server.list
@@ -176,10 +179,10 @@ export function StatusPopover() {
     if (list.every((item) => ServerConnection.key(item) !== ServerConnection.key(current))) return [current, ...list]
     return [current, ...list.filter((item) => ServerConnection.key(item) !== ServerConnection.key(current))]
   })
-  const health = useServerHealth(servers, fetcher)
+  const health = useServerHealth(servers)
   const sortedServers = createMemo(() => listServersByHealth(servers(), server.key, health))
   const mcp = useMcpToggle({ sync, sdk, language })
-  const defaultServer = useDefaultServerKey(platform.getDefaultServerUrl)
+  const defaultServer = useDefaultServerKey(platform.getDefaultServer)
   const mcpNames = createMemo(() => Object.keys(sync.data.mcp ?? {}).sort((a, b) => a.localeCompare(b)))
   const mcpStatus = (name: string) => sync.data.mcp?.[name]?.status
   const mcpConnected = createMemo(() => mcpNames().filter((name) => mcpStatus(name) === "connected").length)
@@ -199,18 +202,23 @@ export function StatusPopover() {
 
   return (
     <Popover
+      open={shown()}
+      onOpenChange={setShown}
       triggerAs={Button}
       triggerProps={{
         variant: "ghost",
-        class: "titlebar-icon w-6 h-6 p-0 box-border",
+        class: "titlebar-icon w-8 h-6 p-0 box-border",
         "aria-label": language.t("status.popover.trigger"),
         style: { scale: 1 },
       }}
       trigger={
-        <div class="flex size-4 items-center justify-center">
+        <div class="relative size-4">
+          <div class="badge-mask-tight size-4 flex items-center justify-center">
+            <Icon name={shown() ? "status-active" : "status"} size="small" />
+          </div>
           <div
             classList={{
-              "size-1.5 rounded-full": true,
+              "absolute -top-px -right-px size-1.5 rounded-full": true,
               "bg-icon-success-base": overallHealthy(),
               "bg-icon-critical-base": !overallHealthy() && server.healthy() !== undefined,
               "bg-border-weak-base": server.healthy() === undefined,
