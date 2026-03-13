@@ -895,6 +895,13 @@ export namespace LSPServer {
         process: spawn(bin, {
           cwd: root,
         }),
+        initialization: {
+          "rust-analyzer": {
+            cargo: {
+              targetDir: true,
+            },
+          },
+        },
       }
     },
   }
