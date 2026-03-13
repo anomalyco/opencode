@@ -1053,6 +1053,7 @@ export namespace Config {
         .optional(),
       plugin: z.string().array().optional(),
       snapshot: z.boolean().optional(),
+      snapshotPruneDays: z.number().min(1).max(30).optional().describe("Days to keep snapshots before pruning (default: 7)"),
       share: z
         .enum(["manual", "auto", "disabled"])
         .optional()

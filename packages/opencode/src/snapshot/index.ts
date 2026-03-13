@@ -13,7 +13,7 @@ import { Process } from "@/util/process"
 export namespace Snapshot {
   const log = Log.create({ service: "snapshot" })
   const hour = 60 * 60 * 1000
-  const prune = "7.days"
+  const defaultPruneDays = 7
 
   function args(git: string, cmd: string[]) {
     return ["--git-dir", git, "--work-tree", Instance.worktree, ...cmd]
@@ -38,6 +38,8 @@ export namespace Snapshot {
       .then(() => true)
       .catch(() => false)
     if (!exists) return
+    const pruneDays = cfg.snapshotPruneDays ?? defaultPruneDays
+    const prune = `${pruneDays}.days`
     const result = await Process.run(["git", ...args(git, ["gc", `--prune=${prune}`])], {
       cwd: Instance.directory,
       nothrow: true,
