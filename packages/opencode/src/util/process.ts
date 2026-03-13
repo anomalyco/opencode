@@ -60,6 +60,7 @@ export namespace Process {
       cwd: opts.cwd,
       env: opts.env === null ? {} : opts.env ? { ...process.env, ...opts.env } : undefined,
       stdio: [opts.stdin ?? "ignore", opts.stdout ?? "ignore", opts.stderr ?? "ignore"],
+      windowsHide: process.platform === "win32",
     })
 
     let closed = false

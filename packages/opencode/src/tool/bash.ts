@@ -207,6 +207,7 @@ export const BashTool = Tool.define("bash", async () => {
         },
         stdio: ["ignore", "pipe", "pipe"],
         detached: process.platform !== "win32",
+        windowsHide: process.platform === "win32",
       })
 
       if (!proc.pid) {

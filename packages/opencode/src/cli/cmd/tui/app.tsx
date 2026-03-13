@@ -3,7 +3,19 @@ import { Clipboard } from "@tui/util/clipboard"
 import { Selection } from "@tui/util/selection"
 import { MouseButton, TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
-import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, onCleanup, batch, Show, on } from "solid-js"
+import {
+  Switch,
+  Match,
+  createEffect,
+  untrack,
+  ErrorBoundary,
+  createSignal,
+  onMount,
+  onCleanup,
+  batch,
+  Show,
+  on,
+} from "solid-js"
 import { win32DisableProcessedInput, win32FlushInputBuffer, win32InstallCtrlCGuard } from "./win32"
 import { Installation } from "@/installation"
 import { Flag } from "@/flag/flag"

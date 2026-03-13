@@ -9,10 +9,11 @@ import type { PermissionNext } from "../../src/permission/next"
 import { Truncate } from "../../src/tool/truncation"
 import { Shell } from "../../src/shell/shell"
 import { spawn } from "child_process"
+import { SessionID, MessageID } from "../../src/session/schema"
 
 const ctx = {
-  sessionID: "test",
-  messageID: "",
+  sessionID: SessionID.make("ses_test"),
+  messageID: MessageID.make(""),
   callID: "",
   agent: "build",
   abort: AbortSignal.any([]),
@@ -409,10 +410,7 @@ describe("tool.bash defensive patterns", () => {
       directory: projectRoot,
       fn: async () => {
         const bash = await BashTool.init()
-        const result = await bash.execute(
-          { command: "echo 'quick'", description: "Quick echo" },
-          ctx,
-        )
+        const result = await bash.execute({ command: "echo 'quick'", description: "Quick echo" }, ctx)
         expect(result.metadata.exit).toBe(0)
         expect(result.metadata.output).toContain("quick")
       },
@@ -425,10 +423,7 @@ describe("tool.bash defensive patterns", () => {
       fn: async () => {
         const bash = await BashTool.init()
         const start = Date.now()
-        const result = await bash.execute(
-          { command: "echo 'fast'", description: "Fast echo" },
-          ctx,
-        )
+        const result = await bash.execute({ command: "echo 'fast'", description: "Fast echo" }, ctx)
         const elapsed = Date.now() - start
         expect(result.metadata.exit).toBe(0)
         expect(result.metadata.output).toContain("fast")
@@ -442,10 +437,7 @@ describe("tool.bash defensive patterns", () => {
       directory: projectRoot,
       fn: async () => {
         const bash = await BashTool.init()
-        const result = await bash.execute(
-          { command: "sleep 2 && echo done", description: "Sleep then echo" },
-          ctx,
-        )
+        const result = await bash.execute({ command: "sleep 2 && echo done", description: "Sleep then echo" }, ctx)
         expect(result.metadata.exit).toBe(0)
         expect(result.metadata.output).toContain("done")
       },
@@ -457,10 +449,7 @@ describe("tool.bash defensive patterns", () => {
       directory: projectRoot,
       fn: async () => {
         const bash = await BashTool.init()
-        const result = await bash.execute(
-          { command: "echo 'test'", description: "Exit event test" },
-          ctx,
-        )
+        const result = await bash.execute({ command: "echo 'test'", description: "Exit event test" }, ctx)
         expect(result.metadata.exit).toBe(0)
       },
     })
@@ -472,10 +461,7 @@ describe("tool.bash defensive patterns", () => {
       fn: async () => {
         const bash = await BashTool.init()
         let count = 0
-        const result = await bash.execute(
-          { command: "echo 'once'", description: "Single resolve test" },
-          ctx,
-        )
+        const result = await bash.execute({ command: "echo 'once'", description: "Single resolve test" }, ctx)
         count++
         expect(count).toBe(1)
         expect(result.metadata.exit).toBe(0)
@@ -489,10 +475,7 @@ describe("tool.bash defensive patterns", () => {
       directory: projectRoot,
       fn: async () => {
         const bash = await BashTool.init()
-        const result = await bash.execute(
-          { command: "echo 'pid-test'", description: "Pid validation test" },
-          ctx,
-        )
+        const result = await bash.execute({ command: "echo 'pid-test'", description: "Pid validation test" }, ctx)
         expect(result.metadata.exit).toBe(0)
       },
     })
@@ -503,10 +486,7 @@ describe("tool.bash defensive patterns", () => {
       directory: projectRoot,
       fn: async () => {
         const bash = await BashTool.init()
-        const result = await bash.execute(
-          { command: "/nonexistent/binary/xyz", description: "Invalid command" },
-          ctx,
-        )
+        const result = await bash.execute({ command: "/nonexistent/binary/xyz", description: "Invalid command" }, ctx)
         expect(result.metadata.exit).not.toBe(0)
       },
     })
@@ -517,10 +497,7 @@ describe("tool.bash defensive patterns", () => {
       directory: projectRoot,
       fn: async () => {
         const bash = await BashTool.init()
-        const result = await bash.execute(
-          { command: "sleep 60", timeout: 1000, description: "Long sleep" },
-          ctx,
-        )
+        const result = await bash.execute({ command: "sleep 60", timeout: 1000, description: "Long sleep" }, ctx)
         expect(result.output).toContain("timeout")
       },
     })
@@ -547,10 +524,7 @@ describe("tool.bash defensive patterns", () => {
       directory: projectRoot,
       fn: async () => {
         const bash = await BashTool.init()
-        const result = await bash.execute(
-          { command: "echo 'cleanup'", description: "Cleanup test" },
-          ctx,
-        )
+        const result = await bash.execute({ command: "echo 'cleanup'", description: "Cleanup test" }, ctx)
         expect(result.metadata.exit).toBe(0)
         // If cleanup failed, lingering timers would keep the process alive
         // and this test would time out. Completing is the assertion.
@@ -578,10 +552,7 @@ describe.skipIf(process.platform === "win32")("polling watchdog isolation", () =
     await Bun.sleep(500)
 
     const detected = await new Promise<string>((resolve, reject) => {
-      const timer = setTimeout(
-        () => reject(new Error("polling watchdog failed to detect exit within 3s")),
-        3000,
-      )
+      const timer = setTimeout(() => reject(new Error("polling watchdog failed to detect exit within 3s")), 3000)
 
       const poll = setInterval(() => {
         if (proc.exitCode !== null || proc.signalCode !== null) {
@@ -617,10 +588,7 @@ describe.skipIf(process.platform === "win32")("polling watchdog isolation", () =
     await Bun.sleep(500)
 
     const detected = await new Promise<string>((resolve, reject) => {
-      const timer = setTimeout(
-        () => reject(new Error("polling watchdog failed to detect exit within 3s")),
-        3000,
-      )
+      const timer = setTimeout(() => reject(new Error("polling watchdog failed to detect exit within 3s")), 3000)
 
       const poll = setInterval(() => {
         if (proc.exitCode !== null || proc.signalCode !== null) {
@@ -723,10 +691,7 @@ describe("tool.bash diagnostic logging", () => {
       directory: projectRoot,
       fn: async () => {
         const bash = await BashTool.init()
-        const result = await bash.execute(
-          { command: "echo 'log-test'", description: "Logging test" },
-          ctx,
-        )
+        const result = await bash.execute({ command: "echo 'log-test'", description: "Logging test" }, ctx)
         expect(result.metadata.exit).toBe(0)
         expect(result.metadata.output).toContain("log-test")
       },
@@ -774,10 +739,7 @@ describe.skipIf(process.platform === "win32")("stdio end events", () => {
       directory: projectRoot,
       fn: async () => {
         const bash = await BashTool.init()
-        const result = await bash.execute(
-          { command: "seq 1 100", description: "Generate numbered output" },
-          ctx,
-        )
+        const result = await bash.execute({ command: "seq 1 100", description: "Generate numbered output" }, ctx)
         expect(result.metadata.exit).toBe(0)
         expect(result.metadata.output).toContain("1")
         expect(result.metadata.output).toContain("100")
@@ -790,10 +752,7 @@ describe.skipIf(process.platform === "win32")("stdio end events", () => {
       directory: projectRoot,
       fn: async () => {
         const bash = await BashTool.init()
-        const result = await bash.execute(
-          { command: "echo out && echo err >&2", description: "Both streams" },
-          ctx,
-        )
+        const result = await bash.execute({ command: "echo out && echo err >&2", description: "Both streams" }, ctx)
         expect(result.metadata.exit).toBe(0)
         expect(result.metadata.output).toContain("out")
         expect(result.metadata.output).toContain("err")
