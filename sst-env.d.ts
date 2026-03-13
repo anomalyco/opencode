@@ -145,10 +145,6 @@ declare module "sst" {
       "type": "sst.cloudflare.StaticSite"
       "url": string
     }
-    "ZEN_BLACK_LIMITS": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
     "ZEN_BLACK_PRICE": {
       "plan100": string
       "plan20": string
@@ -156,11 +152,12 @@ declare module "sst" {
       "product": string
       "type": "sst.sst.Linkable"
     }
-    "ZEN_LITE_LIMITS": {
+    "ZEN_LIMITS": {
       "type": "sst.sst.Secret"
       "value": string
     }
     "ZEN_LITE_PRICE": {
+      "firstMonth50Coupon": string
       "price": string
       "product": string
       "type": "sst.sst.Linkable"

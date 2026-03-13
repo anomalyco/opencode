@@ -1,6 +1,31 @@
 import { describe, expect, test } from "bun:test"
-import { collectOpenProjectDeepLinks, drainPendingDeepLinks, parseDeepLink } from "./deep-links"
-import { displayName, errorMessage, getDraggableId, syncWorkspaceOrder, workspaceKey } from "./helpers"
+import {
+  collectNewSessionDeepLinks,
+  collectOpenProjectDeepLinks,
+  drainPendingDeepLinks,
+  parseDeepLink,
+  parseNewSessionDeepLink,
+} from "./deep-links"
+import { type Session } from "@opencode-ai/sdk/v2/client"
+import {
+  displayName,
+  effectiveWorkspaceOrder,
+  errorMessage,
+  hasProjectPermissions,
+  latestRootSession,
+  workspaceKey,
+} from "./helpers"
+
+const session = (input: Partial<Session> & Pick<Session, "id" | "directory">) =>
+  ({
+    title: "",
+    version: "v2",
+    parentID: undefined,
+    messageCount: 0,
+    permissions: { session: {}, share: {} },
+    time: { created: 0, updated: 0, archived: undefined },
+    ...input,
+  }) as Session
 
 describe("layout deep links", () => {
   test("parses open-project deep links", () => {
@@ -42,6 +67,28 @@ describe("layout deep links", () => {
     expect(result).toEqual(["/a", "/c"])
   })
 
+  test("parses new-session deep links with optional prompt", () => {
+    expect(parseNewSessionDeepLink("opencode://new-session?directory=/tmp/demo")).toEqual({ directory: "/tmp/demo" })
+    expect(parseNewSessionDeepLink("opencode://new-session?directory=/tmp/demo&prompt=hello%20world")).toEqual({
+      directory: "/tmp/demo",
+      prompt: "hello world",
+    })
+  })
+
+  test("ignores new-session deep links without directory", () => {
+    expect(parseNewSessionDeepLink("opencode://new-session")).toBeUndefined()
+    expect(parseNewSessionDeepLink("opencode://new-session?directory=")).toBeUndefined()
+  })
+
+  test("collects only valid new-session deep links", () => {
+    const result = collectNewSessionDeepLinks([
+      "opencode://new-session?directory=/a",
+      "opencode://open-project?directory=/b",
+      "opencode://new-session?directory=/c&prompt=ship%20it",
+    ])
+    expect(result).toEqual([{ directory: "/a" }, { directory: "/c", prompt: "ship it" }])
+  })
+
   test("drains global deep links once", () => {
     const target = {
       __OPENCODE__: {
@@ -69,14 +116,86 @@ describe("layout workspace helpers", () => {
   })
 
   test("keeps local first while preserving known order", () => {
-    const result = syncWorkspaceOrder("/root", ["/root", "/b", "/c"], ["/root", "/c", "/a", "/b"])
+    const result = effectiveWorkspaceOrder("/root", ["/root", "/b", "/c"], ["/root", "/c", "/a", "/b"])
     expect(result).toEqual(["/root", "/c", "/b"])
   })
 
-  test("extracts draggable id safely", () => {
-    expect(getDraggableId({ draggable: { id: "x" } })).toBe("x")
-    expect(getDraggableId({ draggable: { id: 42 } })).toBeUndefined()
-    expect(getDraggableId(null)).toBeUndefined()
+  test("finds the latest root session across workspaces", () => {
+    const result = latestRootSession(
+      [
+        {
+          path: { directory: "/root" },
+          session: [session({ id: "root", directory: "/root", time: { created: 1, updated: 1, archived: undefined } })],
+        },
+        {
+          path: { directory: "/workspace" },
+          session: [
+            session({
+              id: "workspace",
+              directory: "/workspace",
+              time: { created: 2, updated: 2, archived: undefined },
+            }),
+          ],
+        },
+      ],
+      120_000,
+    )
+
+    expect(result?.id).toBe("workspace")
+  })
+
+  test("detects project permissions with a filter", () => {
+    const result = hasProjectPermissions(
+      {
+        root: [{ id: "perm-root" }, { id: "perm-hidden" }],
+        child: [{ id: "perm-child" }],
+      },
+      (item) => item.id === "perm-child",
+    )
+
+    expect(result).toBe(true)
+  })
+
+  test("ignores project permissions filtered out", () => {
+    const result = hasProjectPermissions(
+      {
+        root: [{ id: "perm-root" }],
+      },
+      () => false,
+    )
+
+    expect(result).toBe(false)
+  })
+
+  test("ignores archived and child sessions when finding latest root session", () => {
+    const result = latestRootSession(
+      [
+        {
+          path: { directory: "/workspace" },
+          session: [
+            session({
+              id: "archived",
+              directory: "/workspace",
+              time: { created: 10, updated: 10, archived: 10 },
+            }),
+            session({
+              id: "child",
+              directory: "/workspace",
+              parentID: "parent",
+              time: { created: 20, updated: 20, archived: undefined },
+            }),
+            session({
+              id: "root",
+              directory: "/workspace",
+              time: { created: 30, updated: 30, archived: undefined },
+            }),
+          ],
+        },
+      ],
+      120_000,
+    )
+
+    expect(result?.id).toBe("root")
   })
 
   test("formats fallback project display name", () => {

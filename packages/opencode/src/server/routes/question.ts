@@ -1,6 +1,7 @@
 import { Hono } from "hono"
 import { describeRoute, validator } from "hono-openapi"
 import { resolver } from "hono-openapi"
+import { QuestionID } from "@/question/schema"
 import { Question } from "../../question"
 import z from "zod"
 import { errors } from "../error"
@@ -51,7 +52,7 @@ export const QuestionRoutes = lazy(() =>
       validator(
         "param",
         z.object({
-          requestID: z.string(),
+          requestID: QuestionID.zod,
         }),
       ),
       validator("json", Question.Reply),
@@ -86,7 +87,7 @@ export const QuestionRoutes = lazy(() =>
       validator(
         "param",
         z.object({
-          requestID: z.string(),
+          requestID: QuestionID.zod,
         }),
       ),
       async (c) => {
