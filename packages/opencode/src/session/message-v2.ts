@@ -507,7 +507,7 @@ export namespace MessageV2 {
     // call if it begins on a new line, so we sanitize the text by inserting a
     // newline whenever a tool call tag appears immediately after non-newline
     // content.
-    function sanitizeToolCalls(messages: UIMessage[]) {
+    function sanitizeToolCalls(messages: WithParts[]) {
       for (const msg of messages) {
         for (const part of msg.parts) {
           if (part.type === "text" && typeof part.text === "string") {
@@ -589,24 +589,24 @@ export namespace MessageV2 {
         const userMessage: UIMessage = {
           id: msg.info.id,
           role: "user",
-          parts: [],
+          content: [],
         }
         result.push(userMessage)
         for (const part of msg.parts) {
           if (part.type === "text" && !part.ignored)
-            userMessage.parts.push({
+            userMessage.content.push({
               type: "text",
               text: part.text,
             })
           // text/plain and directory files are converted into text parts, ignore them
           if (part.type === "file" && part.mime !== "text/plain" && part.mime !== "application/x-directory") {
             if (options?.stripMedia && isMedia(part.mime)) {
-              userMessage.parts.push({
+              userMessage.content.push({
                 type: "text",
                 text: `[Attached ${part.mime}: ${part.filename ?? "file"}]`,
               })
             } else {
-              userMessage.parts.push({
+              userMessage.content.push({
                 type: "file",
                 url: part.url,
                 mediaType: part.mime,
@@ -616,13 +616,13 @@ export namespace MessageV2 {
           }
 
           if (part.type === "compaction") {
-            userMessage.parts.push({
+            userMessage.content.push({
               type: "text",
               text: "What did we do so far?",
             })
           }
           if (part.type === "subtask") {
-            userMessage.parts.push({
+            userMessage.content.push({
               type: "text",
               text: "The following tool was executed by the user",
             })
@@ -646,17 +646,17 @@ export namespace MessageV2 {
         const assistantMessage: UIMessage = {
           id: msg.info.id,
           role: "assistant",
-          parts: [],
+          content: [],
         }
         for (const part of msg.parts) {
           if (part.type === "text")
-            assistantMessage.parts.push({
+            assistantMessage.content.push({
               type: "text",
               text: part.text,
               ...(differentModel ? {} : { providerMetadata: part.metadata }),
             })
           if (part.type === "step-start")
-            assistantMessage.parts.push({
+            assistantMessage.content.push({
               type: "step-start",
             })
           if (part.type === "tool") {
@@ -682,7 +682,7 @@ export namespace MessageV2 {
                     }
                   : outputText
 
-              assistantMessage.parts.push({
+              assistantMessage.content.push({
                 type: ("tool-" + part.tool) as `tool-${string}`,
                 state: "output-available",
                 toolCallId: part.callID,
@@ -692,7 +692,7 @@ export namespace MessageV2 {
               })
             }
             if (part.state.status === "error")
-              assistantMessage.parts.push({
+              assistantMessage.content.push({
                 type: ("tool-" + part.tool) as `tool-${string}`,
                 state: "output-error",
                 toolCallId: part.callID,
@@ -703,7 +703,7 @@ export namespace MessageV2 {
             // Handle pending/running tool calls to prevent dangling tool_use blocks
             // Anthropic/Claude APIs require every tool_use to have a corresponding tool_result
             if (part.state.status === "pending" || part.state.status === "running")
-              assistantMessage.parts.push({
+              assistantMessage.content.push({
                 type: ("tool-" + part.tool) as `tool-${string}`,
                 state: "output-error",
                 toolCallId: part.callID,
@@ -713,7 +713,7 @@ export namespace MessageV2 {
               })
           }
           if (part.type === "reasoning") {
-            assistantMessage.parts.push({
+            assistantMessage.content.push({
               type: "reasoning",
               text: part.text,
               ...(differentModel ? {} : { providerMetadata: part.metadata }),
@@ -748,7 +748,7 @@ export namespace MessageV2 {
     const tools = Object.fromEntries(Array.from(toolNames).map((toolName) => [toolName, { toModelOutput }]))
 
     return convertToModelMessages(
-      result.filter((msg) => msg.parts.some((part) => part.type !== "step-start")),
+      result.filter((msg) => msg.content.some((part) => part.type !== "step-start")),
       {
         //@ts-expect-error (convertToModelMessages expects a ToolSet but only actually needs tools[name]?.toModelOutput)
         tools,
