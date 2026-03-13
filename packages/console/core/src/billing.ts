@@ -213,12 +213,10 @@ export namespace Billing {
           enabled: true,
         },
         payment_method_options: {
-          alipay: {},
           card: {
             setup_future_usage: "on_session",
           },
         },
-        payment_method_types: ["card", "alipay"],
         //payment_method_data: {
         //  allow_redisplay: "always",
         //},
@@ -269,7 +267,6 @@ export namespace Billing {
               customer_email: email!,
             }),
         currency: "usd",
-        payment_method_types: ["card", "alipay"],
         tax_id_collection: {
           enabled: true,
         },

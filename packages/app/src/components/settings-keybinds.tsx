@@ -239,7 +239,7 @@ function useKeyCapture(input: {
         showToast({
           title: input.language.t("settings.shortcuts.conflict.title"),
           description: input.language.t("settings.shortcuts.conflict.description", {
-            keybind: formatKeybind(next),
+            keybind: formatKeybind(next, input.language.t),
             titles: [...conflicts.values()].join(", "),
           }),
         })

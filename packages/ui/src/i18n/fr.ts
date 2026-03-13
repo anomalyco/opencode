@@ -60,7 +60,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "Examen des prochaines étapes",
 
   "ui.messagePart.questions.dismissed": "Questions ignorées",
-  "ui.messagePart.compaction": "Historique compacté",
+  "ui.messagePart.compaction": "Session compactée",
   "ui.messagePart.context.read.one": "{{count}} lecture",
   "ui.messagePart.context.read.other": "{{count}} lectures",
   "ui.messagePart.context.search.one": "{{count}} recherche",
@@ -145,4 +145,16 @@ export const dict = {
   "ui.question.multiHint": "Sélectionnez tout ce qui s'applique",
   "ui.question.singleHint": "Sélectionnez une réponse",
   "ui.question.custom.placeholder": "Tapez votre réponse...",
+
+  "ui.fileSearch.placeholder": "Rechercher",
+  "ui.fileSearch.previousMatch": "Précédent",
+  "ui.fileSearch.nextMatch": "Suivant",
+  "ui.fileSearch.close": "Fermer la recherche",
+  "ui.tool.task": "Tâche",
+  "ui.tool.skill": "Compétence",
+  "ui.basicTool.called": "Appelé `{{tool}}`",
+  "ui.toolErrorCard.failed": "Échoué",
+  "ui.toolErrorCard.copyError": "Copier l'erreur",
+  "ui.message.duration.seconds": "{{count}}s",
+  "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
 }
