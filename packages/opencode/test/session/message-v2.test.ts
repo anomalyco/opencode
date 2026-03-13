@@ -269,6 +269,16 @@ describe("session.message-v2.toModelMessage", () => {
   test("converts assistant tool completion into tool-call + tool-result messages with attachments", () => {
     const userID = "m-user"
     const assistantID = "m-assistant"
+    const vision: Provider.Model = {
+      ...model,
+      capabilities: {
+        ...model.capabilities,
+        input: {
+          ...model.capabilities.input,
+          image: true,
+        },
+      },
+    }
 
     const input: MessageV2.WithParts[] = [
       {
@@ -318,7 +328,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([
+    expect(MessageV2.toModelMessages(input, vision)).toStrictEqual([
       {
         role: "user",
         content: [{ type: "text", text: "run tool" }],
@@ -563,6 +573,191 @@ describe("session.message-v2.toModelMessage", () => {
             toolName: "bash",
             output: { type: "error-text", value: "nope" },
             providerOptions: { openai: { tool: "meta" } },
+          },
+        ],
+      },
+    ])
+  })
+
+  test("does not inject unsupported tool result media for text-only models", () => {
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+    const textOnly: Provider.Model = {
+      ...model,
+      api: {
+        ...model.api,
+        npm: "@ai-sdk/openai-compatible",
+      },
+    }
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "read image",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "tool",
+            callID: "call-1",
+            tool: "read",
+            state: {
+              status: "completed",
+              input: { filePath: "/tmp/image.png" },
+              output: "Image read successfully",
+              title: "Read",
+              metadata: {},
+              attachments: [
+                {
+                  ...basePart(assistantID, "f1"),
+                  type: "file",
+                  mime: "image/png",
+                  url: "data:image/png;base64,AAECAw==",
+                },
+              ],
+              time: { start: 0, end: 1 },
+            },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    expect(MessageV2.toModelMessages(input, textOnly)).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "read image" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call-1",
+            toolName: "read",
+            input: { filePath: "/tmp/image.png" },
+            providerExecuted: undefined,
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-1",
+            toolName: "read",
+            output: {
+              type: "text",
+              value:
+                "Image read successfully\n\nThe previous tool produced an image, but the current model cannot accept image input. The file was not attached.",
+            },
+          },
+        ],
+      },
+    ])
+  })
+
+  test("keeps supported tool result media for vision models on openai-compatible providers", () => {
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+    const vision: Provider.Model = {
+      ...model,
+      api: {
+        ...model.api,
+        npm: "@ai-sdk/openai-compatible",
+      },
+      capabilities: {
+        ...model.capabilities,
+        input: {
+          ...model.capabilities.input,
+          image: true,
+        },
+      },
+    }
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "read image",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "tool",
+            callID: "call-1",
+            tool: "read",
+            state: {
+              status: "completed",
+              input: { filePath: "/tmp/image.png" },
+              output: "Image read successfully",
+              title: "Read",
+              metadata: {},
+              attachments: [
+                {
+                  ...basePart(assistantID, "f1"),
+                  type: "file",
+                  mime: "image/png",
+                  url: "data:image/png;base64,AAECAw==",
+                },
+              ],
+              time: { start: 0, end: 1 },
+            },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    expect(MessageV2.toModelMessages(input, vision)).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "read image" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call-1",
+            toolName: "read",
+            input: { filePath: "/tmp/image.png" },
+            providerExecuted: undefined,
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-1",
+            toolName: "read",
+            output: { type: "text", value: "Image read successfully" },
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Attached image(s) from tool result:" },
+          {
+            type: "file",
+            mediaType: "image/png",
+            filename: undefined,
+            data: "data:image/png;base64,AAECAw==",
           },
         ],
       },

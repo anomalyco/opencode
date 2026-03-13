@@ -22,6 +22,26 @@ export namespace MessageV2 {
     return mime.startsWith("image/") || mime === "application/pdf"
   }
 
+  function modality(mime: string) {
+    if (mime.startsWith("image/")) return "image" as const
+    if (mime === "application/pdf") return "pdf" as const
+  }
+
+  function supported(model: Provider.Model, mime: string) {
+    const kind = modality(mime)
+    if (!kind) return true
+    return model.capabilities.input[kind]
+  }
+
+  function notice(mime: string) {
+    const kind = modality(mime)
+    if (!kind) return "The previous tool produced a file that was not attached."
+    if (kind === "image") {
+      return "The previous tool produced an image, but the current model cannot accept image input. The file was not attached."
+    }
+    return "The previous tool produced a PDF, but the current model cannot accept pdf input. The file was not attached."
+  }
+
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
   export const AbortedError = NamedError.create("MessageAbortedError", z.object({ message: z.string() }))
   export const StructuredOutputError = NamedError.create(
@@ -697,17 +717,22 @@ export namespace MessageV2 {
           if (part.type === "tool") {
             toolNames.add(part.tool)
             if (part.state.status === "completed") {
-              const outputText = part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output
+              let outputText = part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output
               const attachments = part.state.time.compacted || options?.stripMedia ? [] : (part.state.attachments ?? [])
 
               // For providers that don't support media in tool results, extract media files
               // (images, PDFs) to be sent as a separate user message
               const mediaAttachments = attachments.filter((a) => isMedia(a.mime))
               const nonMediaAttachments = attachments.filter((a) => !isMedia(a.mime))
-              if (!supportsMediaInToolResults && mediaAttachments.length > 0) {
-                media.push(...mediaAttachments)
+              const keep = mediaAttachments.filter((item) => supported(model, item.mime))
+              const drop = mediaAttachments.filter((item) => !supported(model, item.mime))
+              if (drop.length > 0) {
+                outputText += `\n\n${drop.map((item) => notice(item.mime)).join("\n")}`
               }
-              const finalAttachments = supportsMediaInToolResults ? attachments : nonMediaAttachments
+              if (!supportsMediaInToolResults && keep.length > 0) {
+                media.push(...keep)
+              }
+              const finalAttachments = supportsMediaInToolResults ? [...nonMediaAttachments, ...keep] : nonMediaAttachments
 
               const output =
                 finalAttachments.length > 0

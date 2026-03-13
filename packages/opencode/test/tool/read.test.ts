@@ -414,6 +414,45 @@ describe("tool.read truncation", () => {
     })
   })
 
+  test("image files are not attached for text-only models", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const png = Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==",
+          "base64",
+        )
+        await Bun.write(path.join(dir, "image.png"), png)
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const result = await read.execute(
+          { filePath: path.join(tmp.path, "image.png") },
+          {
+            ...ctx,
+            extra: {
+              model: {
+                capabilities: {
+                  input: {
+                    image: false,
+                    pdf: false,
+                  },
+                },
+              },
+            },
+          } as typeof ctx,
+        )
+        expect(result.metadata.truncated).toBe(false)
+        expect(result.attachments).toBeUndefined()
+        expect(result.output).toContain("Image read blocked")
+        expect(result.output).toContain("does not support image input")
+        expect(result.output).toContain("not attached to the conversation")
+      },
+    })
+  })
+
   test(".fbs files (FlatBuffers schema) are read as text, not images", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {

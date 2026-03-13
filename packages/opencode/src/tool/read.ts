@@ -11,12 +11,31 @@ import { Instance } from "../project/instance"
 import { assertExternalDirectory } from "./external-directory"
 import { InstructionPrompt } from "../session/instruction"
 import { Filesystem } from "../util/filesystem"
+import type { Provider } from "../provider/provider"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
 const MAX_LINE_SUFFIX = `... (line truncated to ${MAX_LINE_LENGTH} chars)`
 const MAX_BYTES = 50 * 1024
 const MAX_BYTES_LABEL = `${MAX_BYTES / 1024} KB`
+
+function modality(mime: string) {
+  if (mime.startsWith("image/")) return "image" as const
+  if (mime === "application/pdf") return "pdf" as const
+}
+
+function blocked(model: Provider.Model | undefined, mime: string) {
+  const kind = modality(mime)
+  if (!kind) return false
+  if (!model) return false
+  return !model.capabilities.input[kind]
+}
+
+function notice(mime: string) {
+  const kind = modality(mime)
+  if (!kind) return "The file was not attached to the conversation."
+  return `This model does not support ${kind} input. The file was not attached to the conversation. Switch to a model that supports ${kind} input to inspect this file.`
+}
 
 export const ReadTool = Tool.define("read", {
   description: DESCRIPTION,
@@ -122,6 +141,19 @@ export const ReadTool = Tool.define("read", {
     const isImage = mime.startsWith("image/") && mime !== "image/svg+xml" && mime !== "image/vnd.fastbidsheet"
     const isPdf = mime === "application/pdf"
     if (isImage || isPdf) {
+      const model = ctx.extra?.["model"] as Provider.Model | undefined
+      if (blocked(model, mime)) {
+        const msg = `${isImage ? "Image" : "PDF"} read blocked. ${notice(mime)}`
+        return {
+          title,
+          output: msg,
+          metadata: {
+            preview: msg,
+            truncated: false,
+            loaded: instructions.map((i) => i.filepath),
+          },
+        }
+      }
       const msg = `${isImage ? "Image" : "PDF"} read successfully`
       return {
         title,
