@@ -763,7 +763,9 @@ describe("session.llm.stream", () => {
     const server = state.server
     if (!server) throw new Error("Server not initialized")
 
-    const fixture = await loadFixture("xai", "grok-4")
+    const providerID = "xai"
+    const modelID = "grok-4"
+    const fixture = await loadFixture(providerID, modelID)
     const model = fixture.model
 
     const request = waitRequest(
@@ -780,9 +782,9 @@ describe("session.llm.stream", () => {
           path.join(dir, "opencode.json"),
           JSON.stringify({
             $schema: "https://opencode.ai/config.json",
-            enabled_providers: ["xai"],
+            enabled_providers: [providerID],
             provider: {
-              xai: {
+              [providerID]: {
                 options: {
                   apiKey: "test-xai-key",
                   baseURL: `${server.url.origin}/v1`,
@@ -797,7 +799,7 @@ describe("session.llm.stream", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const resolved = await Provider.getModel("xai", model.id)
+        const resolved = await Provider.getModel(providerID, model.id)
         const sessionID = SessionID.make("session-test-xai-cap")
         const agent = {
           name: "test",
@@ -812,7 +814,7 @@ describe("session.llm.stream", () => {
           role: "user",
           time: { created: Date.now() },
           agent: agent.name,
-          model: { providerID: "xai", modelID: resolved.id },
+          model: { providerID, modelID: resolved.id },
         } satisfies MessageV2.User
 
         const tools: Record<string, unknown> = {}
@@ -858,7 +860,9 @@ describe("session.llm.stream", () => {
     const server = state.server
     if (!server) throw new Error("Server not initialized")
 
-    const fixture = await loadFixture("xai", "grok-4")
+    const providerID = "xai"
+    const modelID = "grok-4"
+    const fixture = await loadFixture(providerID, modelID)
     const model = fixture.model
 
     const request = waitRequest(
@@ -875,9 +879,9 @@ describe("session.llm.stream", () => {
           path.join(dir, "opencode.json"),
           JSON.stringify({
             $schema: "https://opencode.ai/config.json",
-            enabled_providers: ["xai"],
+            enabled_providers: [providerID],
             provider: {
-              xai: {
+              [providerID]: {
                 options: {
                   apiKey: "test-xai-key",
                   baseURL: `${server.url.origin}/v1`,
@@ -892,7 +896,7 @@ describe("session.llm.stream", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const resolved = await Provider.getModel("xai", model.id)
+        const resolved = await Provider.getModel(providerID, model.id)
         const sessionID = SessionID.make("session-test-xai-single")
         const agent = {
           name: "test",
@@ -907,7 +911,7 @@ describe("session.llm.stream", () => {
           role: "user",
           time: { created: Date.now() },
           agent: agent.name,
-          model: { providerID: "xai", modelID: resolved.id },
+          model: { providerID, modelID: resolved.id },
         } satisfies MessageV2.User
 
         const props: Record<string, { type: "string"; description: string }> = {}
