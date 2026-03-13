@@ -6,7 +6,13 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
 import { TextReveal } from "@opencode-ai/ui/text-reveal"
 import { TextStrikethrough } from "@opencode-ai/ui/text-strikethrough"
-import { Index, createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
+import { Index, createEffect, createMemo, on, onCleanup } from "solid-js"
+import { createStore } from "solid-js/store"
+import { composerEnabled, composerProbe } from "@/testing/session-composer"
+import { useLanguage } from "@/context/language"
+
+const doneToken = "\u0000done\u0000"
+const totalToken = "\u0000total\u0000"
 
 function dot(status: Todo["status"]) {
   if (status !== "in_progress") return undefined
@@ -34,18 +40,28 @@ function dot(status: Todo["status"]) {
 }
 
 export function SessionTodoDock(props: {
+  sessionID?: string
   todos: Todo[]
-  title: string
   collapseLabel: string
   expandLabel: string
   dockProgress: number
 }) {
-  const [collapsed, setCollapsed] = createSignal(false)
-  const toggle = () => setCollapsed((value) => !value)
+  const language = useLanguage()
+  const [store, setStore] = createStore({
+    collapsed: false,
+    height: 320,
+  })
+
+  const toggle = () => setStore("collapsed", (value) => !value)
 
   const total = createMemo(() => props.todos.length)
   const done = createMemo(() => props.todos.filter((todo) => todo.status === "completed").length)
-  const label = createMemo(() => `${done()} of ${total()} ${props.title.toLowerCase()} completed`)
+  const label = createMemo(() => language.t("session.todo.progress", { done: done(), total: total() }))
+  const progress = createMemo(() =>
+    language
+      .t("session.todo.progress", { done: doneToken, total: totalToken })
+      .split(/(\u0000done\u0000|\u0000total\u0000)/),
+  )
 
   const active = createMemo(
     () =>
@@ -56,27 +72,45 @@ export function SessionTodoDock(props: {
   )
 
   const preview = createMemo(() => active()?.content ?? "")
-  const collapse = useSpring(() => (collapsed() ? 1 : 0), { visualDuration: 0.3, bounce: 0 })
+  const collapse = useSpring(() => (store.collapsed ? 1 : 0), { visualDuration: 0.3, bounce: 0 })
   const dock = createMemo(() => Math.max(0, Math.min(1, props.dockProgress)))
   const shut = createMemo(() => 1 - dock())
   const value = createMemo(() => Math.max(0, Math.min(1, collapse())))
   const hide = createMemo(() => Math.max(value(), shut()))
   const off = createMemo(() => hide() > 0.98)
   const turn = createMemo(() => Math.max(0, Math.min(1, value())))
-  const [height, setHeight] = createSignal(320)
-  const full = createMemo(() => Math.max(78, height()))
+  const full = createMemo(() => Math.max(78, store.height))
+  const e2e = composerEnabled()
+  const probe = composerProbe(props.sessionID)
   let contentRef: HTMLDivElement | undefined
 
   createEffect(() => {
     const el = contentRef
     if (!el) return
     const update = () => {
-      setHeight(el.getBoundingClientRect().height)
+      setStore("height", el.getBoundingClientRect().height)
     }
     update()
     const observer = new ResizeObserver(update)
     observer.observe(el)
     onCleanup(() => observer.disconnect())
+  })
+
+  createEffect(() => {
+    if (!e2e) return
+
+    probe.set({
+      mounted: true,
+      collapsed: store.collapsed,
+      hidden: store.collapsed || off(),
+      count: props.todos.length,
+      states: props.todos.map((todo) => todo.status),
+    })
+  })
+
+  onCleanup(() => {
+    if (!e2e) return
+    probe.drop()
   })
 
   return (
@@ -102,20 +136,28 @@ export function SessionTodoDock(props: {
           }}
         >
           <span
-            class="text-14-regular text-text-strong cursor-default inline-flex items-baseline shrink-0 whitespace-nowrap overflow-visible"
+            class="text-14-regular text-text-strong cursor-default inline-flex items-baseline shrink-0 overflow-visible"
             aria-label={label()}
             style={{
               "--tool-motion-odometer-ms": "600ms",
               "--tool-motion-mask": "18%",
               "--tool-motion-mask-height": "0px",
               "--tool-motion-spring-ms": "560ms",
+              "white-space": "pre",
               opacity: `${Math.max(0, Math.min(1, 1 - shut()))}`,
             }}
           >
-            <AnimatedNumber value={done()} />
-            <span class="mx-1">of</span>
-            <AnimatedNumber value={total()} />
-            <span>&nbsp;{props.title.toLowerCase()} completed</span>
+            <Index each={progress()}>
+              {(item) =>
+                item() === doneToken ? (
+                  <AnimatedNumber value={done()} />
+                ) : item() === totalToken ? (
+                  <AnimatedNumber value={total()} />
+                ) : (
+                  <span>{item()}</span>
+                )
+              }
+            </Index>
           </span>
           <div
             data-slot="session-todo-preview"
@@ -127,7 +169,7 @@ export function SessionTodoDock(props: {
           >
             <TextReveal
               class="text-14-regular text-text-base cursor-default"
-              text={collapsed() ? preview() : undefined}
+              text={store.collapsed ? preview() : undefined}
               duration={600}
               travel={25}
               edge={17}
@@ -140,7 +182,7 @@ export function SessionTodoDock(props: {
           <div class="ml-auto">
             <IconButton
               data-action="session-todo-toggle-button"
-              data-collapsed={collapsed() ? "true" : "false"}
+              data-collapsed={store.collapsed ? "true" : "false"}
               icon="chevron-down"
               size="normal"
               variant="ghost"
@@ -153,14 +195,14 @@ export function SessionTodoDock(props: {
                 event.stopPropagation()
                 toggle()
               }}
-              aria-label={collapsed() ? props.expandLabel : props.collapseLabel}
+              aria-label={store.collapsed ? props.expandLabel : props.collapseLabel}
             />
           </div>
         </div>
 
         <div
           data-slot="session-todo-list"
-          aria-hidden={collapsed() || off()}
+          aria-hidden={store.collapsed || off()}
           classList={{
             "pointer-events-none": hide() > 0.1,
           }}
@@ -169,7 +211,7 @@ export function SessionTodoDock(props: {
             opacity: `${Math.max(0, Math.min(1, 1 - hide()))}`,
           }}
         >
-          <TodoList todos={props.todos} open={!collapsed()} />
+          <TodoList todos={props.todos} open={!store.collapsed} />
         </div>
       </div>
     </DockTray>
@@ -177,8 +219,10 @@ export function SessionTodoDock(props: {
 }
 
 function TodoList(props: { todos: Todo[]; open: boolean }) {
-  const [stuck, setStuck] = createSignal(false)
-  const [scrolling, setScrolling] = createSignal(false)
+  const [store, setStore] = createStore({
+    stuck: false,
+    scrolling: false,
+  })
   let scrollRef!: HTMLDivElement
   let timer: number | undefined
 
@@ -186,7 +230,7 @@ function TodoList(props: { todos: Todo[]; open: boolean }) {
 
   const ensure = () => {
     if (!props.open) return
-    if (scrolling()) return
+    if (store.scrolling) return
     if (!scrollRef || scrollRef.offsetParent === null) return
 
     const el = scrollRef.querySelector("[data-in-progress]")
@@ -207,7 +251,7 @@ function TodoList(props: { todos: Todo[]; open: boolean }) {
       scrollRef.scrollTop = bottom - (scrollRef.clientHeight - bottomFade)
     }
 
-    setStuck(scrollRef.scrollTop > 0)
+    setStore("stuck", scrollRef.scrollTop > 0)
   }
 
   createEffect(
@@ -229,11 +273,11 @@ function TodoList(props: { todos: Todo[]; open: boolean }) {
         ref={scrollRef}
         style={{ "overflow-anchor": "none" }}
         onScroll={(e) => {
-          setStuck(e.currentTarget.scrollTop > 0)
-          setScrolling(true)
+          setStore("stuck", e.currentTarget.scrollTop > 0)
+          setStore("scrolling", true)
           if (timer) window.clearTimeout(timer)
           timer = window.setTimeout(() => {
-            setScrolling(false)
+            setStore("scrolling", false)
             if (inProgress() < 0) return
             requestAnimationFrame(ensure)
           }, 250)
@@ -278,7 +322,7 @@ function TodoList(props: { todos: Todo[]; open: boolean }) {
         class="pointer-events-none absolute top-0 left-0 right-0 h-4 transition-opacity duration-150"
         style={{
           background: "linear-gradient(to bottom, var(--background-base), transparent)",
-          opacity: stuck() ? 1 : 0,
+          opacity: store.stuck ? 1 : 0,
         }}
       />
     </div>

@@ -541,6 +541,7 @@ export const dict = {
   "workspace.billing.addAction": "추가",
   "workspace.billing.addBalance": "잔액 추가",
   "workspace.billing.alipay": "Alipay",
+  "workspace.billing.wechat": "WeChat Pay",
   "workspace.billing.linkedToStripe": "Stripe에 연결됨",
   "workspace.billing.manage": "관리",
   "workspace.billing.enable": "결제 활성화",

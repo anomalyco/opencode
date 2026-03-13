@@ -3,11 +3,13 @@ import { Tooltip, type TooltipProps } from "@opencode-ai/ui/tooltip"
 import { ProgressCircle } from "@opencode-ai/ui/progress-circle"
 import { Button } from "@opencode-ai/ui/button"
 
+import { useFile } from "@/context/file"
 import { useLayout } from "@/context/layout"
 import { useSync } from "@/context/sync"
 import { useLanguage } from "@/context/language"
 import { getSessionContextMetrics } from "@/components/session/session-context-metrics"
 import { useSessionLayout } from "@/pages/session/session-layout"
+import { createSessionTabs } from "@/pages/session/helpers"
 
 interface SessionContextUsageProps {
   variant?: "button" | "indicator"
@@ -27,11 +29,17 @@ function openSessionContext(args: {
 
 export function SessionContextUsage(props: SessionContextUsageProps) {
   const sync = useSync()
+  const file = useFile()
   const layout = useLayout()
   const language = useLanguage()
   const { params, tabs, view } = useSessionLayout()
 
   const variant = createMemo(() => props.variant ?? "button")
+  const tabState = createSessionTabs({
+    tabs,
+    pathFromTab: file.pathFromTab,
+    normalizeTab: (tab) => (tab.startsWith("file://") ? file.tab(tab) : tab),
+  })
   const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
 
   const usd = createMemo(
@@ -51,7 +59,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
   const openContext = () => {
     if (!params.id) return
 
-    if (tabs().active() === "context") {
+    if (tabState.activeTab() === "context") {
       tabs().close("context")
       return
     }

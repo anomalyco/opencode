@@ -524,6 +524,7 @@ export const dict = {
   "workspace.billing.addAction": "充值",
   "workspace.billing.addBalance": "充值余额",
   "workspace.billing.alipay": "支付宝",
+  "workspace.billing.wechat": "微信支付",
   "workspace.billing.linkedToStripe": "已关联 Stripe",
   "workspace.billing.manage": "管理",
   "workspace.billing.enable": "启用计费",

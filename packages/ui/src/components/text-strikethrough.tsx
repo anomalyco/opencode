@@ -1,5 +1,6 @@
 import type { JSX } from "solid-js"
-import { createEffect, createSignal, onCleanup, onMount } from "solid-js"
+import { createEffect, onCleanup, onMount } from "solid-js"
+import { createStore } from "solid-js/store"
 import { useSpring } from "./motion-spring"
 
 export function TextStrikethrough(props: {
@@ -19,12 +20,16 @@ export function TextStrikethrough(props: {
 
   let baseRef: HTMLSpanElement | undefined
   let containerRef: HTMLSpanElement | undefined
-  const [textWidth, setTextWidth] = createSignal(0)
-  const [containerWidth, setContainerWidth] = createSignal(0)
+  const [state, setState] = createStore({
+    textWidth: 0,
+    containerWidth: 0,
+  })
+  const textWidth = () => state.textWidth
+  const containerWidth = () => state.containerWidth
 
   const measure = () => {
-    if (baseRef) setTextWidth(baseRef.scrollWidth)
-    if (containerRef) setContainerWidth(containerRef.offsetWidth)
+    if (baseRef) setState("textWidth", baseRef.scrollWidth)
+    if (containerRef) setState("containerWidth", containerRef.offsetWidth)
   }
 
   onMount(measure)

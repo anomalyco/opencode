@@ -13,8 +13,10 @@ import { DialogSelectProvider } from "./dialog-select-provider"
 import { ModelTooltip } from "./model-tooltip"
 import { useLanguage } from "@/context/language"
 
-export const DialogSelectModelUnpaid: Component = () => {
-  const local = useLocal()
+type ModelState = ReturnType<typeof useLocal>["model"]
+
+export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props) => {
+  const model = props.model ?? useLocal().model
   const dialog = useDialog()
   const providers = useProviders()
   const language = useLanguage()
@@ -35,8 +37,8 @@ export const DialogSelectModelUnpaid: Component = () => {
         <List
           class="[&_[data-slot=list-scroll]]:overflow-visible"
           ref={(ref) => (listRef = ref)}
-          items={local.model.list}
-          current={local.model.current()}
+          items={model.list}
+          current={model.current()}
           key={(x) => `${x.provider.id}:${x.id}`}
           itemWrapper={(item, node) => (
             <Tooltip
@@ -55,7 +57,7 @@ export const DialogSelectModelUnpaid: Component = () => {
             </Tooltip>
           )}
           onSelect={(x) => {
-            local.model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined, {
+            model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined, {
               recent: true,
             })
             dialog.close()

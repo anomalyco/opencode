@@ -32,6 +32,7 @@ type InlineEditorComponent = (props: {
 
 export type WorkspaceSidebarContext = {
   currentDir: Accessor<string>
+  navList: Accessor<Session[]>
   sidebarExpanded: Accessor<boolean>
   sidebarHovering: Accessor<boolean>
   nav: Accessor<HTMLElement | undefined>
@@ -216,7 +217,7 @@ const WorkspaceActions = (props: {
     <Show when={!props.touch()}>
       <Tooltip value={props.language.t("command.session.new")} placement="top">
         <IconButton
-          icon="plus-small"
+          icon="new-session"
           variant="ghost"
           class="size-6 rounded-md opacity-0 pointer-events-none group-hover/workspace:opacity-100 group-hover/workspace:pointer-events-auto group-focus-within/workspace:opacity-100 group-focus-within/workspace:pointer-events-auto"
           data-action="workspace-new-session"
@@ -248,7 +249,7 @@ const WorkspaceSessionList = (props: {
   loadMore: () => Promise<void>
   language: ReturnType<typeof useLanguage>
 }): JSX.Element => (
-  <nav class="flex flex-col gap-1 px-3">
+  <nav class="flex flex-col gap-1">
     <Show when={props.showNew()}>
       <NewSessionItem
         slug={props.slug()}
@@ -265,6 +266,8 @@ const WorkspaceSessionList = (props: {
       {(session) => (
         <SessionItem
           session={session}
+          list={props.sessions()}
+          navList={props.ctx.navList}
           slug={props.slug()}
           mobile={props.mobile}
           popover={props.popover}
@@ -379,7 +382,7 @@ export const SortableWorkspace = (props: {
       }}
     >
       <Collapsible variant="ghost" open={open()} class="shrink-0" onOpenChange={openWrapper}>
-        <div class="px-2 py-1">
+        <div class="py-1">
           <div
             class="group/workspace relative"
             data-component="workspace-item"
