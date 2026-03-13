@@ -1,3 +1,4 @@
+import appManifest from "./app-manifest"
 import { createHash } from "node:crypto"
 import { Log } from "../util/log"
 import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler } from "hono-openapi"
@@ -50,6 +51,11 @@ import { initProjectors } from "./projectors"
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
 
+declare global {
+  // Injected at compile time by build.ts when web UI assets are embedded
+  const OPENCODE_APP_EMBEDDED: boolean | undefined
+}
+
 const csp = (hash = "") =>
   `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'${hash ? ` 'sha256-${hash}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:`
 
@@ -57,6 +63,136 @@ initProjectors()
 
 export namespace Server {
   const log = Log.create({ service: "server" })
+
+  // MIME types for static file serving
+  const MIME: Record<string, string> = {
+    html: "text/html; charset=utf-8",
+    js: "application/javascript",
+    mjs: "application/javascript",
+    css: "text/css",
+    json: "application/json",
+    png: "image/png",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    gif: "image/gif",
+    svg: "image/svg+xml",
+    ico: "image/x-icon",
+    woff: "font/woff",
+    woff2: "font/woff2",
+    ttf: "font/ttf",
+    wasm: "application/wasm",
+    txt: "text/plain",
+    webmanifest: "application/manifest+json",
+  }
+
+  const CSP =
+    "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' data:"
+
+  // Resolve the local app directory to serve from. Returns undefined to fall
+  // through to the CDN proxy. Resolution order:
+  //   1. Embedded $bunfs assets (manifest imported at build time)
+  //   2. OPENCODE_APP_DIR env var (explicit override)
+  //   3. Auto-detect packages/app/dist/ relative to this file (monorepo dev)
+  let _appDir: string | false | undefined // undefined = not yet resolved; false = not found
+  function resolveAppDir(): string | undefined {
+    if (_appDir !== undefined) return _appDir || undefined
+
+    // 1. Embedded via Bun compile — manifest is non-empty when assets were embedded
+    if (typeof OPENCODE_APP_EMBEDDED !== "undefined" && OPENCODE_APP_EMBEDDED) {
+      _appDir = "__embedded__"
+      return _appDir
+    }
+
+    // 2. Explicit env var override
+    if (Flag.OPENCODE_APP_DIR) {
+      _appDir = Flag.OPENCODE_APP_DIR
+      return _appDir
+    }
+
+    // 3. Auto-detect: walk up from this file to find packages/app/dist
+    // import.meta.url is a $bunfs URL in compiled binary, file: URL in dev
+    try {
+      const url = new URL("../../../app/dist", import.meta.url)
+      if (url.protocol === "file:") {
+        const { pathname } = url
+        if (Bun.file(pathname + "/index.html").size > 0) {
+          _appDir = pathname
+          return _appDir
+        }
+      }
+    } catch {}
+
+    _appDir = false
+    return undefined
+  }
+
+  // Serve an exact static file match (no SPA fallback). Used by the
+  // pre-bootstrap middleware so API routes are not intercepted.
+  function serveStaticFile(reqPath: string, appDir: string): Response | undefined {
+    const filePath = reqPath === "/" ? "/index.html" : reqPath
+
+    if (appDir === "__embedded__") {
+      const bunfsPath = appManifest[filePath]
+      if (bunfsPath) {
+        const file = Bun.file(bunfsPath)
+        if (file.size > 0) {
+          const ext = filePath.split(".").pop() ?? ""
+          return new Response(file, {
+            headers: {
+              "Content-Type": MIME[ext] ?? "application/octet-stream",
+              "Content-Security-Policy": CSP,
+            },
+          })
+        }
+      }
+      return undefined
+    }
+
+    const file = Bun.file(appDir + filePath)
+    if (file.size > 0) {
+      const ext = filePath.split(".").pop() ?? ""
+      return new Response(file, {
+        headers: {
+          "Content-Type": MIME[ext] ?? "application/octet-stream",
+          "Content-Security-Policy": CSP,
+        },
+      })
+    }
+    return undefined
+  }
+
+  // Serve a static file or fall back to index.html (SPA routing).
+  // Used by the catch-all route after all API routes have been checked.
+  function serveLocal(reqPath: string, appDir: string): Response | undefined {
+    const exact = serveStaticFile(reqPath, appDir)
+    if (exact) return exact
+
+    // SPA fallback: return index.html for unmatched paths that look like page
+    // routes (no file extension). Paths with extensions (e.g. .woff2, .js) are
+    // asset requests that should fall through to CDN proxy if not found locally.
+    if (/\.[a-zA-Z0-9]+$/.test(reqPath)) return undefined
+
+    if (appDir === "__embedded__") {
+      const indexPath = appManifest["/index.html"]
+      if (indexPath) {
+        const index = Bun.file(indexPath)
+        if (index.size > 0) {
+          return new Response(index, {
+            headers: { "Content-Type": "text/html; charset=utf-8", "Content-Security-Policy": CSP },
+          })
+        }
+      }
+      return undefined
+    }
+
+    const index = Bun.file(appDir + "/index.html")
+    if (index.size > 0) {
+      return new Response(index, {
+        headers: { "Content-Type": "text/html; charset=utf-8", "Content-Security-Policy": CSP },
+      })
+    }
+    return undefined
+  }
 
   export const Default = lazy(() => createApp({}))
 
@@ -135,6 +271,19 @@ export namespace Server {
         }),
       )
       .route("/global", GlobalRoutes())
+      .use(async (c, next) => {
+        // Serve local/embedded web UI assets before any project bootstrap.
+        // This must run before Instance.provide() to avoid the DB migration check.
+        // Only serve *exact* static file matches here (no SPA fallback) — the SPA
+        // fallback lives in the catch-all route at the bottom so it doesn't
+        // intercept API routes like /agent, /health, etc.
+        const appDir = resolveAppDir()
+        if (appDir) {
+          const response = serveStaticFile(c.req.path, appDir)
+          if (response) return response
+        }
+        return next()
+      })
       .put(
         "/auth/:providerID",
         describeRoute({
@@ -533,6 +682,14 @@ export namespace Server {
         },
       )
       .all("/*", async (c) => {
+        // Try local/embedded assets with SPA fallback first
+        const appDir = resolveAppDir()
+        if (appDir) {
+          const response = serveLocal(c.req.path, appDir)
+          if (response) return response
+        }
+
+        // Fall through to CDN proxy when no local assets are available
         const path = c.req.path
 
         const response = await proxy(`https://app.opencode.ai${path}`, {
