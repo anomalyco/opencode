@@ -1,0 +1,77 @@
+name: pr-size
+
+on:
+  pull_request_target:
+    branches: [dev]
+    types: [opened, reopened, synchronize, ready_for_review, converted_to_draft]
+
+permissions:
+  contents: read
+
+jobs:
+  label:
+    name: label pr size
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      contents: read
+      issues: write
+    concurrency:
+      group: pr-size-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    steps:
+      - name: Sync PR size label
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const total = (pr.additions ?? 0) + (pr.deletions ?? 0);
+            const sizes = ["size:XS", "size:S", "size:M", "size:L", "size:XL", "size:XXL"];
+
+            const next = total < 10
+              ? "size:XS"
+              : total < 30
+                ? "size:S"
+                : total < 100
+                  ? "size:M"
+                  : total < 500
+                    ? "size:L"
+                    : total < 1000
+                      ? "size:XL"
+                      : "size:XXL";
+
+            const { data: labels } = await github.rest.issues.listLabelsOnIssue({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              per_page: 100,
+            });
+
+            for (const label of labels) {
+              if (!sizes.includes(label.name) || label.name === next) {
+                continue;
+              }
+
+              try {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr.number,
+                  name: label.name,
+                });
+              } catch (err) {
+                if (err.status !== 404) {
+                  throw err;
+                }
+              }
+            }
+
+            if (!labels.some((label) => label.name === next)) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                labels: [next],
+              });
+            }
+
+            core.info(`PR #${pr.number}: ${total} changed lines -> ${next}`);
