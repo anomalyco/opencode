@@ -887,6 +887,61 @@ export function Prompt(props: PromptProps) {
                     return
                   }
                 }
+                // History search mode (Ctrl+R)
+                if (keybind.match("history_search", e)) {
+                  if (history.searching) {
+                    const item = history.nextMatch()
+                    if (item) {
+                      input.setText(item.input)
+                      setStore("prompt", item)
+                      restoreExtmarksFromParts(item.parts)
+                    }
+                  } else {
+                    history.startSearch()
+                  }
+                  e.preventDefault()
+                  return
+                }
+                if (history.searching) {
+                  if (e.name === "escape") {
+                    history.stopSearch()
+                    e.preventDefault()
+                    return
+                  }
+                  if (e.name === "return") {
+                    history.stopSearch()
+                    e.preventDefault()
+                    return
+                  }
+                  if (e.name === "backspace") {
+                    const q = history.query.slice(0, -1)
+                    if (!q) {
+                      history.stopSearch()
+                      e.preventDefault()
+                      return
+                    }
+                    const item = history.updateQuery(q)
+                    if (item) {
+                      input.setText(item.input)
+                      setStore("prompt", item)
+                      restoreExtmarksFromParts(item.parts)
+                    }
+                    e.preventDefault()
+                    return
+                  }
+                  if (e.name.length === 1 && !e.ctrl && !e.meta) {
+                    const item = history.updateQuery(history.query + e.name)
+                    if (item) {
+                      input.setText(item.input)
+                      setStore("prompt", item)
+                      restoreExtmarksFromParts(item.parts)
+                    }
+                    e.preventDefault()
+                    return
+                  }
+                  e.preventDefault()
+                  return
+                }
                 if (e.name === "!" && input.visualCursor.offset === 0) {
                   setStore("placeholder", Math.floor(Math.random() * SHELL_PLACEHOLDERS.length))
                   setStore("mode", "shell")
@@ -1143,6 +1198,18 @@ export function Prompt(props: PromptProps) {
           <Show when={status().type !== "retry"}>
             <box gap={2} flexDirection="row">
               <Switch>
+                <Match when={history.searching}>
+                  <text fg={theme.primary}>
+                    (search) <span style={{ fg: theme.text }}>{history.query}</span>
+                    <span style={{ fg: theme.textMuted }}>{history.query ? "" : "type to search"}</span>
+                  </text>
+                  <text fg={theme.text}>
+                    {keybind.print("history_search")} <span style={{ fg: theme.textMuted }}>next</span>
+                  </text>
+                  <text fg={theme.text}>
+                    esc <span style={{ fg: theme.textMuted }}>cancel</span>
+                  </text>
+                </Match>
                 <Match when={store.mode === "normal"}>
                   <Show when={local.model.variant.list().length > 0}>
                     <text fg={theme.text}>

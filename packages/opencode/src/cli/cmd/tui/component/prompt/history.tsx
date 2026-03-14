@@ -58,9 +58,54 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
     const [store, setStore] = createStore({
       index: 0,
       history: [] as PromptInfo[],
+      searching: false,
+      query: "",
+      matches: [] as number[],
+      cursor: 0,
     })
 
+    function findMatches(q: string): number[] {
+      if (!q) return []
+      const lower = q.toLowerCase()
+      return store.history
+        .map((entry, i) => (entry.input.toLowerCase().includes(lower) ? i : -1))
+        .filter((i) => i !== -1)
+        .reverse()
+    }
+
     return {
+      get searching() {
+        return store.searching
+      },
+      get query() {
+        return store.query
+      },
+      startSearch() {
+        setStore("searching", true)
+        setStore("query", "")
+        setStore("matches", [])
+        setStore("cursor", 0)
+      },
+      stopSearch() {
+        setStore("searching", false)
+        setStore("query", "")
+        setStore("matches", [])
+        setStore("cursor", 0)
+      },
+      updateQuery(q: string): PromptInfo | undefined {
+        setStore("query", q)
+        const found = findMatches(q)
+        setStore("matches", found)
+        setStore("cursor", 0)
+        if (!found.length) return undefined
+        return store.history[found[0]]
+      },
+      nextMatch(): PromptInfo | undefined {
+        if (!store.matches.length) return undefined
+        const next = (store.cursor + 1) % store.matches.length
+        setStore("cursor", next)
+        return store.history[store.matches[next]]
+      },
       move(direction: 1 | -1, input: string) {
         if (!store.history.length) return undefined
         const current = store.history.at(store.index)
