@@ -15,6 +15,7 @@ import { Installation } from "@/installation"
 import { useKV } from "../context/kv"
 import { useCommandDialog } from "../component/dialog-command"
 import { useLocal } from "../context/local"
+import { DialogVoice } from "../component/dialog-voice"
 
 // TODO: what is the best way to do this?
 let once = false
@@ -52,6 +53,17 @@ export function Home() {
       onSelect: (dialog) => {
         kv.set("tips_hidden", !tipsHidden())
         dialog.clear()
+      },
+    },
+    {
+      title: "Voice settings",
+      value: "voice.settings",
+      category: "Settings",
+      slash: {
+        name: "voice",
+      },
+      onSelect: (dialog) => {
+        dialog.replace(() => <DialogVoice />)
       },
     },
   ])
