@@ -81,6 +81,7 @@ import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { formatTranscript } from "../../util/transcript"
 import { UI } from "@/cli/ui.ts"
 import { useTuiConfig } from "../../context/tui-config"
+import { DialogVoice } from "../../component/dialog-voice"
 
 addDefaultParsers(parsers.parsers)
 
@@ -975,6 +976,17 @@ export function Session() {
         moveChild(-1)
         dialog.clear()
       }),
+    },
+    {
+      title: "Voice settings",
+      value: "voice.settings",
+      category: "Settings",
+      slash: {
+        name: "voice",
+      },
+      onSelect: (dialog) => {
+        dialog.replace(() => <DialogVoice />)
+      },
     },
   ])
 

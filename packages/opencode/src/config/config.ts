@@ -862,6 +862,7 @@ export namespace Config {
       variant_cycle: z.string().optional().default("ctrl+t").describe("Cycle model variants"),
       input_clear: z.string().optional().default("ctrl+c").describe("Clear input field"),
       input_paste: z.string().optional().default("ctrl+v").describe("Paste from clipboard"),
+      input_voice: z.string().optional().default("alt+v").describe("Voice input recording"),
       input_submit: z.string().optional().default("return").describe("Submit input"),
       input_newline: z
         .string()
@@ -1201,6 +1202,13 @@ export namespace Config {
             .describe("Token buffer for compaction. Leaves enough window to avoid overflow during compaction."),
         })
         .optional(),
+      voice: z
+        .object({
+          provider: z.enum(["groq", "openai"]).optional().describe("Voice transcription provider"),
+          model: z.string().optional().describe("Voice transcription model"),
+        })
+        .optional()
+        .describe("Voice input configuration"),
       experimental: z
         .object({
           disable_paste_summary: z.boolean().optional(),

@@ -34,6 +34,8 @@ import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
+import { useVoice } from "../../context/voice"
+import { VoiceIndicator } from "../voice-indicator"
 
 export type PromptProps = {
   sessionID?: string
@@ -78,6 +80,7 @@ export function Prompt(props: PromptProps) {
   const renderer = useRenderer()
   const { theme, syntax } = useTheme()
   const kv = useKV()
+  const voice = useVoice()
 
   function promptModelWarning() {
     toast.show({
@@ -869,6 +872,18 @@ export function Prompt(props: PromptProps) {
                   }
                   // If no image, let the default paste behavior continue
                 }
+                if (keybind.match("input_voice", e)) {
+                  e.preventDefault()
+                  if (voice.isRecording) {
+                    const text = await voice.stopRecording()
+                    if (text) {
+                      input.insertText(text + " ")
+                    }
+                  } else {
+                    await voice.startRecording()
+                  }
+                  return
+                }
                 if (keybind.match("input_clear", e) && store.prompt.input !== "") {
                   input.clear()
                   input.extmarks.clear()
@@ -1155,6 +1170,12 @@ export function Prompt(props: PromptProps) {
                   <text fg={theme.text}>
                     {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
                   </text>
+                  <VoiceIndicator isRecording={voice.isRecording} isProcessing={voice.isProcessing} error={voice.error ?? undefined} />
+                  <Show when={!voice.isRecording && !voice.isProcessing && !voice.error}>
+                    <text fg={theme.text}>
+                      {keybind.print("input_voice")} <span style={{ fg: theme.textMuted }}>voice</span>
+                    </text>
+                  </Show>
                 </Match>
                 <Match when={store.mode === "shell"}>
                   <text fg={theme.text}>

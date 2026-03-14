@@ -22,6 +22,7 @@ import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
 import { DialogWorkspaceList } from "@tui/component/dialog-workspace-list"
 import { KeybindProvider } from "@tui/context/keybind"
+import { VoiceContextProvider } from "@tui/context/voice"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
@@ -152,7 +153,8 @@ export function tui(input: {
                             <ThemeProvider mode={mode}>
                               <LocalProvider>
                                 <KeybindProvider>
-                                  <PromptStashProvider>
+                                  <VoiceContextProvider>
+                                    <PromptStashProvider>
                                     <DialogProvider>
                                       <CommandProvider>
                                         <FrecencyProvider>
@@ -165,6 +167,7 @@ export function tui(input: {
                                       </CommandProvider>
                                     </DialogProvider>
                                   </PromptStashProvider>
+                                  </VoiceContextProvider>
                                 </KeybindProvider>
                               </LocalProvider>
                             </ThemeProvider>
