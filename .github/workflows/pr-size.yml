@@ -27,17 +27,21 @@ jobs:
             const total = (pr.additions ?? 0) + (pr.deletions ?? 0);
             const sizes = ["size:XS", "size:S", "size:M", "size:L", "size:XL", "size:XXL"];
 
-            const next = total < 10
-              ? "size:XS"
-              : total < 30
-                ? "size:S"
-                : total < 100
-                  ? "size:M"
-                  : total < 500
-                    ? "size:L"
-                    : total < 1000
-                      ? "size:XL"
-                      : "size:XXL";
+            const thresholds = [
+              { limit: 10, label: "size:XS" },
+              { limit: 30, label: "size:S" },
+              { limit: 100, label: "size:M" },
+              { limit: 500, label: "size:L" },
+              { limit: 1000, label: "size:XL" },
+            ];
+
+            let next = "size:XXL";
+            for (const { limit, label } of thresholds) {
+              if (total < limit) {
+                next = label;
+                break;
+              }
+            }
 
             const { data: labels } = await github.rest.issues.listLabelsOnIssue({
               owner: context.repo.owner,
