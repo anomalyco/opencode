@@ -190,3 +190,49 @@ describe("session.message-v2.fromError", () => {
     expect(result.data.isRetryable).toBe(true)
   })
 })
+
+describe("session.retry.retryable nested error structures", () => {
+  test("recognizes Anthropic rate limit error with responseBody", () => {
+    const error = new MessageV2.APIError({
+      message: "This request would exceed your account's rate limit. Please try again later.",
+      isRetryable: true,
+      responseBody: JSON.stringify({
+        type: "error",
+        error: {
+          type: "rate_limit_error",
+          message: "This request would exceed your account's rate limit. Please try again later."
+        }
+      })
+    }).toObject()
+
+    const result = SessionRetry.retryable(error)
+    expect(result).toBeDefined()
+    expect(result).toContain("rate limit")
+  })
+
+  test("recognizes rate limit error with type in responseBody", () => {
+    const error = new MessageV2.APIError({
+      message: "Rate limit reached",
+      isRetryable: true,
+      responseBody: JSON.stringify({
+        error: {
+          type: "too_many_requests"
+        }
+      })
+    }).toObject()
+
+    const result = SessionRetry.retryable(error)
+    expect(result).toBeDefined()
+  })
+
+  test("handles isRetryable undefined as retryable", () => {
+    const error = new MessageV2.APIError({
+      message: "Some error",
+      isRetryable: undefined as any,
+    }).toObject()
+
+    const result = SessionRetry.retryable(error)
+    // When isRetryable is undefined, it defaults to true
+    expect(result).toBeDefined()
+  })
+})

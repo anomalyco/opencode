@@ -1222,6 +1222,21 @@ export namespace Config {
             .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
         })
         .optional(),
+      session: z
+        .object({
+          retry: z
+            .object({
+              enabled: z.boolean().optional().describe("Enable native retry logic (default: true)"),
+              delegate_to_plugin: z
+                .boolean()
+                .optional()
+                .describe("Delegate retry logic to active plugins (e.g., oh-my-opencode). When true, native retry is disabled."),
+            })
+            .optional()
+            .describe("Session retry configuration"),
+        })
+        .optional()
+        .describe("Session configuration"),
     })
     .strict()
     .meta({

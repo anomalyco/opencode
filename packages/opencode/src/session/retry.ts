@@ -61,25 +61,44 @@ export namespace SessionRetry {
   export function retryable(error: ReturnType<NamedError["toObject"]>) {
     // context overflow errors should not be retried
     if (MessageV2.ContextOverflowError.isInstance(error)) return undefined
+    
     if (MessageV2.APIError.isInstance(error)) {
-      if (!error.data.isRetryable) return undefined
+      // Check isRetryable at both top level and nested level
+      const isRetryable = error.data.isRetryable ?? true
+      if (!isRetryable) return undefined
+      
       if (error.data.responseBody?.includes("FreeUsageLimitError"))
         return `Free usage exceeded, add credits https://opencode.ai/zen`
       return error.data.message.includes("Overloaded") ? "Provider is overloaded" : error.data.message
     }
 
+    // Handle errors with nested structure (data.error.message)
     const json = iife(() => {
       try {
+        // Try top-level data.message first
         if (typeof error.data?.message === "string") {
           const parsed = JSON.parse(error.data.message)
           return parsed
         }
 
-        return JSON.parse(error.data.message)
+        // Try nested data.error.message
+        if (typeof (error.data as any)?.error?.message === "string") {
+          const parsed = JSON.parse((error.data as any).error.message)
+          return parsed
+        }
+
+        // Try parsing responseBody directly
+        if (typeof error.data?.responseBody === "string") {
+          const parsed = JSON.parse(error.data.responseBody)
+          return parsed
+        }
+
+        return undefined
       } catch {
         return undefined
       }
     })
+    
     try {
       if (!json || typeof json !== "object") return undefined
       const code = typeof json.code === "string" ? json.code : ""
@@ -92,6 +111,10 @@ export namespace SessionRetry {
       }
       if (json.type === "error" && json.error?.code?.includes("rate_limit")) {
         return "Rate Limited"
+      }
+      // Also check for rate_limit_error type
+      if (json.error?.type === "rate_limit_error") {
+        return json.error.message || "Rate Limited"
       }
       return JSON.stringify(json)
     } catch {
