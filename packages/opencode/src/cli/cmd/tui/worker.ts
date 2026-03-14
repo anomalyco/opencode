@@ -16,6 +16,7 @@ await Log.init({
   print: process.argv.includes("--print-logs"),
   dev: Installation.isLocal(),
   level: (() => {
+    if (process.env.OPENCODE_LOG_LEVEL) return process.env.OPENCODE_LOG_LEVEL as Log.Level
     if (Installation.isLocal()) return "DEBUG"
     return "INFO"
   })(),
