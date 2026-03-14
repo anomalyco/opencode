@@ -4,7 +4,7 @@ import * as S from "./service"
 import type { QuestionID } from "./schema"
 import type { SessionID, MessageID } from "@/session/schema"
 
-function runPromise<A>(f: (service: S.QuestionService.Service) => Effect.Effect<A, S.QuestionServiceError>) {
+function runPromise<A, E>(f: (service: S.QuestionService.Service) => Effect.Effect<A, E>) {
   return runtime.runPromise(S.QuestionService.use(f))
 }
 

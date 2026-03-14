@@ -43,14 +43,16 @@ export namespace InstanceState {
     })
 
   /** Get the cached value for the current directory, initializing it if needed. */
-  export const get = <A, E, R>(self: InstanceState<A, E, R>) => ScopedCache.get(self.cache, Instance.directory)
+  export const get = <A, E, R>(self: InstanceState<A, E, R>) =>
+    Effect.suspend(() => ScopedCache.get(self.cache, Instance.directory))
 
   /** Check whether a value exists for the current directory. */
-  export const has = <A, E, R>(self: InstanceState<A, E, R>) => ScopedCache.has(self.cache, Instance.directory)
+  export const has = <A, E, R>(self: InstanceState<A, E, R>) =>
+    Effect.suspend(() => ScopedCache.has(self.cache, Instance.directory))
 
   /** Invalidate the cached value for the current directory. */
   export const invalidate = <A, E, R>(self: InstanceState<A, E, R>) =>
-    ScopedCache.invalidate(self.cache, Instance.directory)
+    Effect.suspend(() => ScopedCache.invalidate(self.cache, Instance.directory))
 
   /** Invalidate the given directory across all InstanceState caches. */
   export const dispose = (directory: string) =>

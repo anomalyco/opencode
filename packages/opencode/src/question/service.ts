@@ -72,22 +72,17 @@ export const Event = {
   ),
 }
 
-export class RejectedError extends Error {
-  constructor() {
-    super("The user dismissed this question")
+export class RejectedError extends Schema.TaggedErrorClass<RejectedError>()("QuestionRejectedError", {}) {
+  override get message() {
+    return "The user dismissed this question"
   }
 }
 
 // --- Effect service ---
 
-export class QuestionServiceError extends Schema.TaggedErrorClass<QuestionServiceError>()("QuestionServiceError", {
-  message: Schema.String,
-  cause: Schema.optional(Schema.Defect),
-}) {}
-
 interface PendingEntry {
   info: Request
-  deferred: Deferred.Deferred<Answer[]>
+  deferred: Deferred.Deferred<Answer[], RejectedError>
 }
 
 export namespace QuestionService {
@@ -96,10 +91,10 @@ export namespace QuestionService {
       sessionID: SessionID
       questions: Info[]
       tool?: { messageID: MessageID; callID: string }
-    }) => Effect.Effect<Answer[], QuestionServiceError>
-    readonly reply: (input: { requestID: QuestionID; answers: Answer[] }) => Effect.Effect<void, QuestionServiceError>
-    readonly reject: (requestID: QuestionID) => Effect.Effect<void, QuestionServiceError>
-    readonly list: () => Effect.Effect<Request[], QuestionServiceError>
+    }) => Effect.Effect<Answer[], RejectedError>
+    readonly reply: (input: { requestID: QuestionID; answers: Answer[] }) => Effect.Effect<void>
+    readonly reject: (requestID: QuestionID) => Effect.Effect<void>
+    readonly list: () => Effect.Effect<Request[]>
   }
 }
 
@@ -109,7 +104,7 @@ export class QuestionService extends ServiceMap.Service<QuestionService, Questio
   static readonly layer = Layer.effect(
     QuestionService,
     Effect.gen(function* () {
-      const instanceState = yield* InstanceState.make<Map<QuestionID, PendingEntry>, QuestionServiceError>(() =>
+      const instanceState = yield* InstanceState.make<Map<QuestionID, PendingEntry>>(() =>
         Effect.succeed(new Map<QuestionID, PendingEntry>()),
       )
 
@@ -124,7 +119,7 @@ export class QuestionService extends ServiceMap.Service<QuestionService, Questio
         const id = QuestionID.ascending()
         log.info("asking", { id, questions: input.questions.length })
 
-        const deferred = yield* Deferred.make<Answer[]>()
+        const deferred = yield* Deferred.make<Answer[], RejectedError>()
         const info: Request = {
           id,
           sessionID: input.sessionID,
@@ -167,7 +162,7 @@ export class QuestionService extends ServiceMap.Service<QuestionService, Questio
           sessionID: existing.info.sessionID,
           requestID: existing.info.id,
         })
-        yield* Deferred.die(existing.deferred, new RejectedError())
+        yield* Deferred.fail(existing.deferred, new RejectedError)
       })
 
       const list = Effect.fn("QuestionService.list")(function* () {
