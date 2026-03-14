@@ -45,16 +45,18 @@ export namespace Format {
         delete formatters[name]
         continue
       }
-      const result: Formatter.Info = mergeDeep(formatters[name] ?? {}, {
-        command: [],
-        extensions: [],
-        ...item,
-      })
+      const base = formatters[name]
+      const merged = mergeDeep(base ?? { command: [], extensions: [] }, item)
+      const result: Formatter.Info = {
+        ...merged,
+        name,
+        command: merged.command ?? [],
+        extensions: merged.extensions ?? [],
+        enabled: base?.enabled ?? (async () => true),
+      }
 
       if (result.command.length === 0) continue
 
-      result.enabled = async () => true
-      result.name = name
       formatters[name] = result
     }
 
@@ -109,12 +111,32 @@ export namespace Format {
       const ext = path.extname(file)
 
       for (const item of await getFormatter(ext)) {
-        log.info("running", { command: item.command })
+        let command = item.command
         try {
+          const cfg = await item.setup?.(file)
+          const placeholders: Record<string, string> = {
+            $FILE: file,
+            ...(cfg?.placeholders ?? {}),
+          }
+          const cwd = cfg?.directory ?? path.dirname(file)
+          command = item.command.map((part) => {
+            let result = part
+            for (const [key, value] of Object.entries(placeholders).toSorted((a, b) => b[0].length - a[0].length)) {
+              result = result.replaceAll(key, value)
+            }
+            return result
+          })
+          if (command.some((part) => /\$[A-Z][A-Z0-9_]*/.test(part))) {
+            continue
+          }
+          command.push(...(item.args ?? []))
+
+          log.info("running", { command: command })
+
           const proc = Process.spawn(
-            item.command.map((x) => x.replace("$FILE", file)),
+            command,
             {
-              cwd: Instance.directory,
+              cwd,
               env: { ...process.env, ...item.environment },
               stdout: "ignore",
               stderr: "ignore",
@@ -123,13 +145,15 @@ export namespace Format {
           const exit = await proc.exited
           if (exit !== 0)
             log.error("failed", {
-              command: item.command,
+              command,
+              cwd,
+              exit,
               ...item.environment,
             })
         } catch (error) {
           log.error("failed to format file", {
             error,
-            command: item.command,
+            command,
             ...item.environment,
             file,
           })
