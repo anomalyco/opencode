@@ -269,6 +269,28 @@ export namespace Snapshot {
     const git = gitdir()
     const result: FileDiff[] = []
     const status = new Map<string, "added" | "deleted" | "modified">()
+    const maxFileSize = 2 * 1024 * 1024
+
+    const read = async (rev: string, file: string) => {
+      const size = await Process.text(["git", ...args(git, ["cat-file", "-s", `${rev}:${file}`])], {
+        nothrow: true,
+      }).then((x) => parseInt(x.text.trim(), 10))
+      // guard against large files being loaded into session
+      if (Number.isFinite(size) && size > maxFileSize) return ""
+      return Process.text(
+        [
+          "git",
+          "-c",
+          "core.autocrlf=false",
+          "-c",
+          "core.longpaths=true",
+          "-c",
+          "core.symlinks=true",
+          ...args(git, ["show", `${rev}:${file}`]),
+        ],
+        { nothrow: true },
+      ).then((x) => x.text)
+    }
 
     const statuses = await Process.text(
       [
@@ -318,36 +340,8 @@ export namespace Snapshot {
       if (!line) continue
       const [additions, deletions, file] = line.split("\t")
       const isBinaryFile = additions === "-" && deletions === "-"
-      const before = isBinaryFile
-        ? ""
-        : await Process.text(
-            [
-              "git",
-              "-c",
-              "core.autocrlf=false",
-              "-c",
-              "core.longpaths=true",
-              "-c",
-              "core.symlinks=true",
-              ...args(git, ["show", `${from}:${file}`]),
-            ],
-            { nothrow: true },
-          ).then((x) => x.text)
-      const after = isBinaryFile
-        ? ""
-        : await Process.text(
-            [
-              "git",
-              "-c",
-              "core.autocrlf=false",
-              "-c",
-              "core.longpaths=true",
-              "-c",
-              "core.symlinks=true",
-              ...args(git, ["show", `${to}:${file}`]),
-            ],
-            { nothrow: true },
-          ).then((x) => x.text)
+      const before = isBinaryFile ? "" : await read(from, file)
+      const after = isBinaryFile ? "" : await read(to, file)
       const added = isBinaryFile ? 0 : parseInt(additions)
       const deleted = isBinaryFile ? 0 : parseInt(deletions)
       result.push({

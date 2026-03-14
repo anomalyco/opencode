@@ -1155,6 +1155,30 @@ test("diffFull with binary file changes", async () => {
   })
 })
 
+test("diffFull with large file changes", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      await Filesystem.write(`${tmp.path}/too_large_txt.txt`, "x".repeat(1 + 2 * 1024 * 1024))
+
+      const after = await Snapshot.track()
+      expect(after).toBeTruthy()
+
+      const diffs = await Snapshot.diffFull(before!, after!)
+      expect(diffs.length).toBe(1)
+
+      const largeFileDiff = diffs[0]
+      expect(largeFileDiff.file).toBe("too_large_txt.txt")
+      expect(largeFileDiff.after).toBe("")
+      expect(largeFileDiff.before).toBe("")
+    },
+  })
+})
+
 test("diffFull with whitespace changes", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
