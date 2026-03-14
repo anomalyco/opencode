@@ -21,7 +21,7 @@ import { useRenderer } from "@opentui/solid"
 import { Editor } from "@tui/util/editor"
 import { useExit } from "../../context/exit"
 import { Clipboard } from "../../util/clipboard"
-import type { FilePart } from "@opencode-ai/sdk/v2"
+import type { FilePart, TextPart } from "@opencode-ai/sdk/v2"
 import { TuiEvent } from "../../event"
 import { iife } from "@/util/iife"
 import { Locale } from "@/util/locale"
@@ -34,6 +34,7 @@ import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
+import { Agent } from "@/agent/agent"
 
 export type PromptProps = {
   sessionID?: string
@@ -63,6 +64,7 @@ export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
   let anchor: BoxRenderable
   let autocomplete: AutocompleteRef
+  let enhanceAbort: AbortController | undefined
 
   const keybind = useKeybind()
   const local = useLocal()
@@ -127,6 +129,9 @@ export function Prompt(props: PromptProps) {
     extmarkToPartIndex: Map<number, number>
     interrupt: number
     placeholder: number
+    enhancing: boolean
+    preEnhance: string | undefined
+    preEnhanceModel: string | undefined
   }>({
     placeholder: Math.floor(Math.random() * PLACEHOLDERS.length),
     prompt: {
@@ -136,6 +141,9 @@ export function Prompt(props: PromptProps) {
     mode: "normal",
     extmarkToPartIndex: new Map(),
     interrupt: 0,
+    enhancing: false,
+    preEnhance: undefined,
+    preEnhanceModel: undefined,
   })
 
   createEffect(
@@ -195,6 +203,73 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
+        title: "Enhance prompt",
+        value: "prompt.enhance",
+        keybind: "prompt_enhance",
+        category: "Prompt",
+        enabled: store.prompt.input.length > 0 && !store.enhancing,
+        onSelect: (dialog) => {
+          if (store.enhancing || !store.prompt.input) return
+
+          const original = store.prompt.input
+          const history = (() => {
+            if (!props.sessionID) return []
+            const msgs = sync.data.message[props.sessionID]
+            if (!msgs) return []
+            return msgs
+              .filter((m) => m.role === "user")
+              .slice(-5)
+              .map((m) => {
+                const parts = sync.data.part[m.id] ?? []
+                return parts
+                  .filter((p): p is TextPart => p.type === "text")
+                  .map((p) => p.text)
+                  .join("")
+              })
+              .filter(Boolean)
+          })()
+
+          setStore("enhancing", true)
+          enhanceAbort = new AbortController()
+          Agent.enhancePrompt({
+            prompt: store.prompt.input,
+            abortSignal: enhanceAbort.signal,
+            history,
+            onModel: (name) => setStore("preEnhanceModel", name),
+          })
+            .then((result) => {
+              if (result?.text) {
+                input.setText(result.text)
+                setStore("prompt", {
+                  input: result.text,
+                  parts: [],
+                })
+                setStore("preEnhance", original)
+                input.gotoBufferEnd()
+                toast.show({
+                  variant: "success",
+                  message: `Enhanced with ${result.model.name} — esc to revert`,
+                  duration: 2000,
+                })
+              }
+            })
+            .catch((err: unknown) => {
+              if ((err as { name?: string })?.name === "AbortError") return
+              const msg = err instanceof Error ? err.message : String(err)
+              toast.show({
+                variant: "error",
+                message: `Failed to enhance prompt: ${msg.slice(0, 50)}`,
+                duration: 5000,
+              })
+            })
+            .finally(() => {
+              enhanceAbort = undefined
+              setStore("enhancing", false)
+              dialog.clear()
+            })
+        },
+      },
+      {
         title: "Paste",
         value: "prompt.paste",
         keybind: "input_paste",
@@ -217,13 +292,34 @@ export function Prompt(props: PromptProps) {
         keybind: "session_interrupt",
         category: "Session",
         hidden: true,
-        enabled: status().type !== "idle",
+        enabled: status().type !== "idle" || store.enhancing || store.preEnhance !== undefined,
         onSelect: (dialog) => {
           if (autocomplete.visible) return
           if (!input.focused) return
           // TODO: this should be its own command
           if (store.mode === "shell") {
             setStore("mode", "normal")
+            return
+          }
+          if (store.enhancing) {
+            enhanceAbort?.abort()
+            enhanceAbort = undefined
+            setStore("enhancing", false)
+            dialog.clear()
+            toast.show({
+              variant: "info",
+              message: "Prompt enhancement interrupted",
+              duration: 2000,
+            })
+            return
+          }
+          if (store.preEnhance !== undefined) {
+            input.setText(store.preEnhance)
+            setStore("prompt", { input: store.preEnhance, parts: [] })
+            input.gotoBufferEnd()
+            setStore("preEnhance", undefined)
+            setStore("preEnhanceModel", undefined)
+            dialog.clear()
             return
           }
           if (!props.sessionID) return
@@ -660,6 +756,8 @@ export function Prompt(props: PromptProps) {
       input: "",
       parts: [],
     })
+    setStore("preEnhance", undefined)
+    setStore("preEnhanceModel", undefined)
     setStore("extmarkToPartIndex", new Map())
     props.onSubmit?.()
 
@@ -1060,7 +1158,10 @@ export function Prompt(props: PromptProps) {
           />
         </box>
         <box flexDirection="row" justifyContent="space-between">
-          <Show when={status().type !== "idle"} fallback={<text />}>
+          <Show
+            when={status().type !== "idle" || store.enhancing || store.preEnhance !== undefined}
+            fallback={<text />}
+          >
             <box
               flexDirection="row"
               gap={1}
@@ -1132,12 +1233,31 @@ export function Prompt(props: PromptProps) {
                   })()}
                 </box>
               </box>
-              <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
-                esc{" "}
-                <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
-                  {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
-                </span>
-              </text>
+              <Switch>
+                <Match when={store.enhancing}>
+                  <text fg={theme.primary}>
+                    enhancing
+                    {store.preEnhanceModel ? (
+                      <span style={{ fg: theme.textMuted }}> ({store.preEnhanceModel})</span>
+                    ) : null}
+                  </text>
+                </Match>
+                <Match when={store.preEnhance !== undefined}>
+                  <text fg={theme.text}>
+                    esc <span style={{ fg: theme.textMuted }}>revert</span>
+                  </text>
+                </Match>
+                <Match when={store.interrupt > 0}>
+                  <text fg={theme.primary}>
+                    esc <span style={{ fg: theme.primary }}>again to interrupt</span>
+                  </text>
+                </Match>
+                <Match when={store.interrupt === 0}>
+                  <text fg={theme.text}>
+                    esc <span style={{ fg: theme.textMuted }}>interrupt</span>
+                  </text>
+                </Match>
+              </Switch>
             </box>
           </Show>
           <Show when={status().type !== "retry"}>
@@ -1155,6 +1275,11 @@ export function Prompt(props: PromptProps) {
                   <text fg={theme.text}>
                     {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
                   </text>
+                  <Show when={store.prompt.input.length > 0}>
+                    <text fg={theme.text}>
+                      {keybind.print("prompt_enhance")} <span style={{ fg: theme.textMuted }}>enhance</span>
+                    </text>
+                  </Show>
                 </Match>
                 <Match when={store.mode === "shell"}>
                   <text fg={theme.text}>

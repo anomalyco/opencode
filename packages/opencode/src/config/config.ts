@@ -943,6 +943,7 @@ export namespace Config {
         .describe("Delete word backward in input"),
       history_previous: z.string().optional().default("up").describe("Previous history item"),
       history_next: z.string().optional().default("down").describe("Next history item"),
+      prompt_enhance: z.string().optional().default("<leader>p").describe("Enhance current prompt"),
       session_child_first: z.string().optional().default("<leader>down").describe("Go to first child session"),
       session_child_cycle: z.string().optional().default("right").describe("Go to next child session"),
       session_child_cycle_reverse: z.string().optional().default("left").describe("Go to previous child session"),

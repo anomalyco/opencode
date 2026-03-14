@@ -374,19 +374,19 @@ function App() {
     },
     ...(Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
       ? [
-          {
-            title: "Manage workspaces",
-            value: "workspace.list",
-            category: "Workspace",
-            suggested: true,
-            slash: {
-              name: "workspaces",
-            },
-            onSelect: () => {
-              dialog.replace(() => <DialogWorkspaceList />)
-            },
+        {
+          title: "Manage workspaces",
+          value: "workspace.list",
+          category: "Workspace",
+          suggested: true,
+          slash: {
+            name: "workspaces",
           },
-        ]
+          onSelect: () => {
+            dialog.replace(() => <DialogWorkspaceList />)
+          },
+        },
+      ]
       : []),
     {
       title: "New session",
@@ -518,6 +518,7 @@ function App() {
         local.agent.move(-1)
       },
     },
+
     {
       title: "Connect provider",
       value: "provider.connect",
@@ -578,7 +579,7 @@ function App() {
       title: "Open docs",
       value: "docs.open",
       onSelect: () => {
-        open("https://opencode.ai/docs").catch(() => {})
+        open("https://opencode.ai/docs").catch(() => { })
         dialog.clear()
       },
       category: "System",

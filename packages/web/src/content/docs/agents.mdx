@@ -108,6 +108,30 @@ Hidden system agent that creates session summaries. It runs automatically and is
 
 ---
 
+### Use enhance
+
+_Mode_: `primary`
+
+Hidden system agent that rewrites prompts for clarity and specificity. Triggered by `ctrl+x p` in the TUI input field. Not selectable in the UI.
+
+You can configure its model and system prompt via `opencode.json`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "enhance": {
+      "model": "anthropic/claude-haiku-4-5",
+      "temperature": 0.3
+    }
+  }
+}
+```
+
+[Learn more about prompt enhancement](/docs/tui#prompt-enhancement).
+
+---
+
 ## Usage
 
 1. For primary agents, use the **Tab** key to cycle through them during a session. You can also use your configured `switch_agent` keybind.

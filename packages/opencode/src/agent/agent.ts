@@ -1,9 +1,11 @@
+import { Log } from "@/util/log"
 import { Config } from "../config/config"
 import z from "zod"
 import { Provider } from "../provider/provider"
 import { ModelID, ProviderID } from "../provider/schema"
-import { generateObject, streamObject, type ModelMessage } from "ai"
+import { generateObject, generateText, streamObject, type ModelMessage } from "ai"
 import { SystemPrompt } from "../session/system"
+import { InstructionPrompt } from "../session/instruction"
 import { Instance } from "../project/instance"
 import { Truncate } from "../tool/truncation"
 import { Auth } from "../auth"
@@ -11,6 +13,7 @@ import { ProviderTransform } from "../provider/transform"
 
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
+import PROMPT_ENHANCE from "./prompt/enhance.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
@@ -161,6 +164,22 @@ export namespace Agent {
         native: true,
         hidden: true,
         prompt: PROMPT_COMPACTION,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            "*": "deny",
+          }),
+          user,
+        ),
+        options: {},
+      },
+      enhance: {
+        name: "enhance",
+        mode: "primary",
+        native: true,
+        hidden: true,
+        prompt: PROMPT_ENHANCE,
+        temperature: 0.3,
         permission: PermissionNext.merge(
           defaults,
           PermissionNext.fromConfig({
@@ -326,7 +345,7 @@ export namespace Agent {
           instructions: SystemPrompt.instructions(),
           store: false,
         }),
-        onError: () => {},
+        onError: () => { },
       })
       for await (const part of result.fullStream) {
         if (part.type === "error") throw part.error
@@ -336,5 +355,55 @@ export namespace Agent {
 
     const result = await generateObject(params)
     return result.object
+  }
+
+  export async function enhancePrompt(input: {
+    prompt: string
+    model?: { providerID: ProviderID; modelID: ModelID }
+    abortSignal?: AbortSignal
+    history?: string[]
+    onModel?: (name: string) => void
+  }) {
+    return Instance.provide({
+      directory: process.cwd(),
+      fn: async () => {
+        const [agent, fallback, instructions] = await Promise.all([
+          Agent.get("enhance"),
+          input.model ?? Provider.defaultModel(),
+          InstructionPrompt.system(),
+        ])
+        const model = await (async () => {
+          if (agent?.model) return await Provider.getModel(agent.model.providerID, agent.model.modelID)
+          return (
+            (await Provider.getSmallModel(fallback.providerID)) ??
+            (await Provider.getModel(fallback.providerID, fallback.modelID))
+          )
+        })()
+        input.onModel?.(model.name)
+        const language = await Provider.getLanguage(model)
+        const systemParts = [agent?.prompt ?? PROMPT_ENHANCE, ...instructions]
+        if (input.history?.length) {
+          systemParts.push(
+            `Recent conversation context (for resolving references like "that bug" or "the function above"):\n${input.history.join("\n---\n")}`,
+          )
+        }
+        const result = await generateText({
+          temperature: agent?.temperature ?? 0.3,
+          messages: [
+            {
+              role: "system",
+              content: systemParts.join("\n\n"),
+            },
+            {
+              role: "user",
+              content: `Enhance this prompt: \"${input.prompt}\"`,
+            },
+          ],
+          model: language,
+          abortSignal: input.abortSignal,
+        })
+        return { text: result.text, model }
+      },
+    })
   }
 }

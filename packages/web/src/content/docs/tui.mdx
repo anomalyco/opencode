@@ -55,6 +55,33 @@ The output of the command is added to the conversation as a tool result.
 
 ---
 
+## Prompt enhancement
+
+Press `ctrl+x p` to have a lightweight model rewrite and expand your current prompt before submitting. The enhanced text replaces what's in the input field.
+
+:::tip
+Press `esc` immediately after enhancing to revert to your original prompt.
+:::
+
+The footer shows `enhancing (model-name)` while the enhancement is running, then switches to `esc revert` once complete.
+
+By default, enhancement uses the provider's small model (e.g., Haiku for Anthropic). You can pin a specific model in `opencode.json`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "enhance": {
+      "model": "anthropic/claude-haiku-4-5"
+    }
+  }
+}
+```
+
+**Keybind:** `ctrl+x p` — configurable via `prompt_enhance` in `tui.json`. [Learn more](/docs/keybinds).
+
+---
+
 ## Commands
 
 When using the OpenCode TUI, you can type `/` followed by a command name to quickly execute actions. For example:
