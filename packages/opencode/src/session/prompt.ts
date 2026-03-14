@@ -47,6 +47,7 @@ import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
 import { Truncate } from "@/tool/truncation"
+import { decodeDataUrl } from "@/util/data-url"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -1079,7 +1080,7 @@ export namespace SessionPrompt {
                     sessionID: input.sessionID,
                     type: "text",
                     synthetic: true,
-                    text: Buffer.from(part.url, "base64url").toString(),
+                    text: decodeDataUrl(part.url),
                   },
                   {
                     ...part,
