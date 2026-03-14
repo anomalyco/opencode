@@ -115,7 +115,12 @@ export const LineCommentAnchor = (props: LineCommentAnchorProps) => {
           on:mousedown={(e) => e.stopPropagation()}
           on:click={props.onClick as any}
           on:mouseenter={props.onMouseEnter as any}
-          on:focusout={props.onPopoverFocusOut as any}
+          on:focusout={(...args) => {
+            // Super ugly setTimeout to work around Safari's event handling
+            // where shadow DOM focusout event are updating UI before the button
+            // click event is called preventing to create click event.
+            return setTimeout(() => (props.onPopoverFocusOut as any)(...args), 0)
+          }}
         >
           {props.children}
         </div>
