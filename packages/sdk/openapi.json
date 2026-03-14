@@ -7062,6 +7062,156 @@
         },
         "required": ["type", "properties"]
       },
+      "QuestionOption": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "description": "Display text (1-5 words, concise)",
+            "type": "string"
+          },
+          "description": {
+            "description": "Explanation of choice",
+            "type": "string"
+          }
+        },
+        "required": ["label", "description"]
+      },
+      "QuestionInfo": {
+        "type": "object",
+        "properties": {
+          "question": {
+            "description": "Complete question",
+            "type": "string"
+          },
+          "header": {
+            "description": "Very short label (max 30 chars)",
+            "type": "string"
+          },
+          "options": {
+            "description": "Available choices",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuestionOption"
+            }
+          },
+          "multiple": {
+            "description": "Allow selecting multiple choices",
+            "type": "boolean"
+          },
+          "custom": {
+            "description": "Allow typing a custom answer (default: true)",
+            "type": "boolean"
+          }
+        },
+        "required": ["question", "header", "options"]
+      },
+      "QuestionRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^que.*"
+          },
+          "sessionID": {
+            "type": "string",
+            "pattern": "^ses.*"
+          },
+          "questions": {
+            "description": "Questions to ask",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuestionInfo"
+            }
+          },
+          "tool": {
+            "type": "object",
+            "properties": {
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg.*"
+              },
+              "callID": {
+                "type": "string"
+              }
+            },
+            "required": ["messageID", "callID"]
+          }
+        },
+        "required": ["id", "sessionID", "questions"]
+      },
+      "Event.question.asked": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "question.asked"
+          },
+          "properties": {
+            "$ref": "#/components/schemas/QuestionRequest"
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "QuestionAnswer": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "Event.question.replied": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "question.replied"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses.*"
+              },
+              "requestID": {
+                "type": "string",
+                "pattern": "^que.*"
+              },
+              "answers": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/QuestionAnswer"
+                }
+              }
+            },
+            "required": ["sessionID", "requestID", "answers"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.question.rejected": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "question.rejected"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses.*"
+              },
+              "requestID": {
+                "type": "string",
+                "pattern": "^que.*"
+              }
+            },
+            "required": ["sessionID", "requestID"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
       "Event.server.connected": {
         "type": "object",
         "properties": {
@@ -8696,156 +8846,6 @@
         },
         "required": ["type", "properties"]
       },
-      "QuestionOption": {
-        "type": "object",
-        "properties": {
-          "label": {
-            "description": "Display text (1-5 words, concise)",
-            "type": "string"
-          },
-          "description": {
-            "description": "Explanation of choice",
-            "type": "string"
-          }
-        },
-        "required": ["label", "description"]
-      },
-      "QuestionInfo": {
-        "type": "object",
-        "properties": {
-          "question": {
-            "description": "Complete question",
-            "type": "string"
-          },
-          "header": {
-            "description": "Very short label (max 30 chars)",
-            "type": "string"
-          },
-          "options": {
-            "description": "Available choices",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/QuestionOption"
-            }
-          },
-          "multiple": {
-            "description": "Allow selecting multiple choices",
-            "type": "boolean"
-          },
-          "custom": {
-            "description": "Allow typing a custom answer (default: true)",
-            "type": "boolean"
-          }
-        },
-        "required": ["question", "header", "options"]
-      },
-      "QuestionRequest": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^que.*"
-          },
-          "sessionID": {
-            "type": "string",
-            "pattern": "^ses.*"
-          },
-          "questions": {
-            "description": "Questions to ask",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/QuestionInfo"
-            }
-          },
-          "tool": {
-            "type": "object",
-            "properties": {
-              "messageID": {
-                "type": "string",
-                "pattern": "^msg.*"
-              },
-              "callID": {
-                "type": "string"
-              }
-            },
-            "required": ["messageID", "callID"]
-          }
-        },
-        "required": ["id", "sessionID", "questions"]
-      },
-      "Event.question.asked": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "question.asked"
-          },
-          "properties": {
-            "$ref": "#/components/schemas/QuestionRequest"
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "QuestionAnswer": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        }
-      },
-      "Event.question.replied": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "question.replied"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "type": "string",
-                "pattern": "^ses.*"
-              },
-              "requestID": {
-                "type": "string",
-                "pattern": "^que.*"
-              },
-              "answers": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/QuestionAnswer"
-                }
-              }
-            },
-            "required": ["sessionID", "requestID", "answers"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.question.rejected": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "question.rejected"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "type": "string",
-                "pattern": "^ses.*"
-              },
-              "requestID": {
-                "type": "string",
-                "pattern": "^que.*"
-              }
-            },
-            "required": ["sessionID", "requestID"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
       "Event.session.compacted": {
         "type": "object",
         "properties": {
@@ -9612,6 +9612,15 @@
             "$ref": "#/components/schemas/Event.server.instance.disposed"
           },
           {
+            "$ref": "#/components/schemas/Event.question.asked"
+          },
+          {
+            "$ref": "#/components/schemas/Event.question.replied"
+          },
+          {
+            "$ref": "#/components/schemas/Event.question.rejected"
+          },
+          {
             "$ref": "#/components/schemas/Event.server.connected"
           },
           {
@@ -9652,15 +9661,6 @@
           },
           {
             "$ref": "#/components/schemas/Event.session.idle"
-          },
-          {
-            "$ref": "#/components/schemas/Event.question.asked"
-          },
-          {
-            "$ref": "#/components/schemas/Event.question.replied"
-          },
-          {
-            "$ref": "#/components/schemas/Event.question.rejected"
           },
           {
             "$ref": "#/components/schemas/Event.session.compacted"
