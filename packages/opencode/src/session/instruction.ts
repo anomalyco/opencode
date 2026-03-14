@@ -14,6 +14,7 @@ const log = Log.create({ service: "instruction" })
 const FILES = [
   "AGENTS.md",
   "CLAUDE.md",
+  path.join(".claude", "CLAUDE.md"),
   "CONTEXT.md", // deprecated
 ]
 
