@@ -46,9 +46,8 @@ export function Newtype<Self>() {
 
     Object.setPrototypeOf(Base, schema)
 
-    return Base as unknown as
-      & (abstract new (_: never) => Branded)
-      & { readonly makeUnsafe: (value: Schema.Schema.Type<S>) => Self }
-      & Omit<Schema.Opaque<Self, S, {}>, "makeUnsafe">
+    return Base as unknown as (abstract new (_: never) => Branded) & {
+      readonly makeUnsafe: (value: Schema.Schema.Type<S>) => Self
+    } & Omit<Schema.Opaque<Self, S, {}>, "makeUnsafe">
   }
 }
