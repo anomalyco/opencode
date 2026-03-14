@@ -5,7 +5,7 @@ import { Instance } from "../../src/project/instance"
 import { InstanceState } from "../../src/util/instance-state"
 import { tmpdir } from "../fixture/fixture"
 
-async function access<A, E>(state: InstanceState.State<A, E>, dir: string) {
+async function access<A, E>(state: InstanceState<A, E>, dir: string) {
   return Instance.provide({
     directory: dir,
     fn: () => Effect.runPromise(InstanceState.get(state)),
@@ -23,9 +23,7 @@ test("InstanceState caches values for the same instance", async () => {
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const state = yield* InstanceState.make({
-          lookup: () => Effect.sync(() => ({ n: ++n })),
-        })
+        const state = yield* InstanceState.make(() => Effect.sync(() => ({ n: ++n })))
 
         const a = yield* Effect.promise(() => access(state, tmp.path))
         const b = yield* Effect.promise(() => access(state, tmp.path))
@@ -45,9 +43,7 @@ test("InstanceState isolates values by directory", async () => {
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const state = yield* InstanceState.make({
-          lookup: (dir) => Effect.sync(() => ({ dir, n: ++n })),
-        })
+        const state = yield* InstanceState.make((dir) => Effect.sync(() => ({ dir, n: ++n })))
 
         const x = yield* Effect.promise(() => access(state, a.path))
         const y = yield* Effect.promise(() => access(state, b.path))
@@ -69,13 +65,12 @@ test("InstanceState is disposed on instance reload", async () => {
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const state = yield* InstanceState.make({
-          lookup: () => Effect.sync(() => ({ n: ++n })),
-          release: (value) =>
-            Effect.sync(() => {
-              seen.push(String(value.n))
-            }),
-        })
+        const state = yield* InstanceState.make(() =>
+          Effect.acquireRelease(
+            Effect.sync(() => ({ n: ++n })),
+            (value) => Effect.sync(() => { seen.push(String(value.n)) }),
+          ),
+        )
 
         const a = yield* Effect.promise(() => access(state, tmp.path))
         yield* Effect.promise(() => Instance.reload({ directory: tmp.path }))
@@ -96,13 +91,12 @@ test("InstanceState is disposed on disposeAll", async () => {
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const state = yield* InstanceState.make({
-          lookup: (dir) => Effect.sync(() => ({ dir })),
-          release: (value) =>
-            Effect.sync(() => {
-              seen.push(value.dir)
-            }),
-        })
+        const state = yield* InstanceState.make((dir) =>
+          Effect.acquireRelease(
+            Effect.sync(() => ({ dir })),
+            (value) => Effect.sync(() => { seen.push(value.dir) }),
+          ),
+        )
 
         yield* Effect.promise(() => access(state, a.path))
         yield* Effect.promise(() => access(state, b.path))
@@ -121,14 +115,13 @@ test("InstanceState dedupes concurrent lookups for the same directory", async ()
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const state = yield* InstanceState.make({
-          lookup: () =>
-            Effect.promise(async () => {
-              n += 1
-              await Bun.sleep(10)
-              return { n }
-            }),
-        })
+        const state = yield* InstanceState.make(() =>
+          Effect.promise(async () => {
+            n += 1
+            await Bun.sleep(10)
+            return { n }
+          }),
+        )
 
         const [a, b] = yield* Effect.promise(() => Promise.all([access(state, tmp.path), access(state, tmp.path)]))
         expect(a).toBe(b)

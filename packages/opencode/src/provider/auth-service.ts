@@ -79,18 +79,17 @@ export class ProviderAuthService extends ServiceMap.Service<ProviderAuthService,
     ProviderAuthService,
     Effect.gen(function* () {
       const auth = yield* Auth.AuthService
-      const state = yield* InstanceState.make({
-        lookup: () =>
-          Effect.promise(async () => {
-            const methods = pipe(
-              await Plugin.list(),
-              filter((x) => x.auth?.provider !== undefined),
-              map((x) => [x.auth!.provider, x.auth!] as const),
-              fromEntries(),
-            )
-            return { methods, pending: new Map<ProviderID, AuthOuathResult>() }
-          }),
-      })
+      const state = yield* InstanceState.make(() =>
+        Effect.promise(async () => {
+          const methods = pipe(
+            await Plugin.list(),
+            filter((x) => x.auth?.provider !== undefined),
+            map((x) => [x.auth!.provider, x.auth!] as const),
+            fromEntries(),
+          )
+          return { methods, pending: new Map<ProviderID, AuthOuathResult>() }
+        }),
+      )
 
       const methods = Effect.fn("ProviderAuthService.methods")(function* () {
         const x = yield* InstanceState.get(state)
