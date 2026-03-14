@@ -13,6 +13,7 @@ import { Instance } from "../../project/instance"
 import type { Hooks } from "@opencode-ai/plugin"
 import { Process } from "../../util/process"
 import { text } from "node:stream/consumers"
+import { driver, aliases } from "../../provider/auth-alias"
 
 type PluginAuth = NonNullable<Hooks["auth"]>
 
@@ -175,25 +176,37 @@ export function resolvePluginProviders(input: {
   disabled: Set<string>
   enabled?: Set<string>
   providerNames: Record<string, string | undefined>
+  config: Config.Info
 }): Array<{ id: string; name: string }> {
   const seen = new Set<string>()
   const result: Array<{ id: string; name: string }> = []
 
-  for (const hook of input.hooks) {
-    if (!hook.auth) continue
-    const id = hook.auth.provider
-    if (seen.has(id)) continue
+  function add(id: string) {
+    if (seen.has(id)) return
     seen.add(id)
-    if (Object.hasOwn(input.existingProviders, id)) continue
-    if (input.disabled.has(id)) continue
-    if (input.enabled && !input.enabled.has(id)) continue
+    if (Object.hasOwn(input.existingProviders, id)) return
+    if (input.disabled.has(id)) return
+    if (input.enabled && !input.enabled.has(id)) return
     result.push({
       id,
       name: input.providerNames[id] ?? id,
     })
   }
 
+  for (const hook of input.hooks) {
+    if (!hook.auth) continue
+    add(hook.auth.provider)
+    for (const id of aliases(input.config, hook.auth.provider)) {
+      add(id)
+    }
+  }
+
   return result
+}
+
+export function resolvePluginAuth(input: { hooks: Hooks[]; provider: string; config: Config.Info }) {
+  const id = driver(input.config, input.provider)
+  return input.hooks.findLast((item) => item.auth?.provider === id)
 }
 
 export const ProvidersCommand = cmd({
@@ -335,6 +348,7 @@ export const ProvidersLoginCommand = cmd({
           disabled,
           enabled,
           providerNames: Object.fromEntries(Object.entries(config.provider ?? {}).map(([id, p]) => [id, p.name])),
+          config,
         })
         const options = [
           ...pipe(
@@ -387,7 +401,8 @@ export const ProvidersLoginCommand = cmd({
           provider = selected as string
         }
 
-        const plugin = await Plugin.list().then((x) => x.findLast((x) => x.auth?.provider === provider))
+        const hooks = await Plugin.list()
+        const plugin = resolvePluginAuth({ hooks, provider, config })
         if (plugin && plugin.auth) {
           const handled = await handlePluginAuth({ auth: plugin.auth }, provider, args.method)
           if (handled) return
@@ -401,7 +416,7 @@ export const ProvidersLoginCommand = cmd({
           if (prompts.isCancel(custom)) throw new UI.CancelledError()
           provider = custom.replace(/^@ai-sdk\//, "")
 
-          const customPlugin = await Plugin.list().then((x) => x.findLast((x) => x.auth?.provider === provider))
+          const customPlugin = resolvePluginAuth({ hooks, provider, config })
           if (customPlugin && customPlugin.auth) {
             const handled = await handlePluginAuth({ auth: customPlugin.auth }, provider, args.method)
             if (handled) return

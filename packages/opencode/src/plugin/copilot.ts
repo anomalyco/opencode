@@ -28,7 +28,9 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
         if (!info || info.type !== "oauth") return {}
 
         const enterpriseUrl = info.enterpriseUrl
-        const baseURL = enterpriseUrl ? `https://copilot-api.${normalizeDomain(enterpriseUrl)}` : undefined
+        const baseURL = enterpriseUrl
+          ? `https://copilot-api.${normalizeDomain(enterpriseUrl)}`
+          : "https://api.githubcopilot.com"
 
         if (provider && provider.models) {
           for (const model of Object.values(provider.models)) {

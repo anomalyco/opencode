@@ -46,6 +46,7 @@ import { GoogleAuth } from "google-auth-library"
 import { ProviderTransform } from "./transform"
 import { Installation } from "../installation"
 import { ModelID, ProviderID } from "./schema"
+import { aliases, driver } from "./auth-alias"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -981,19 +982,49 @@ export namespace Provider {
     }
 
     for (const plugin of await Plugin.list()) {
-      if (!plugin.auth) continue
-      const providerID = ProviderID.make(plugin.auth.provider)
-      if (disabled.has(providerID)) continue
+      const hook = plugin.auth
+      if (!hook?.loader) continue
+      const loader = hook.loader
+      const source = hook.provider
 
-      const auth = await Auth.get(providerID)
-      if (!auth) continue
-      if (!plugin.auth.loader) continue
+      const load = async (id: string) => {
+        const providerID = ProviderID.make(id)
+        if (disabled.has(providerID)) return
 
-      if (auth) {
-        const options = await plugin.auth.loader(() => Auth.get(providerID) as any, database[plugin.auth.provider])
+        const auth = await Auth.get(providerID)
+        if (!auth) return
+
+        const info = database[id]
+        if (!info) return
+
+        const options = await loader(() => Auth.get(providerID) as any, info)
         const opts = options ?? {}
         const patch: Partial<Info> = providers[providerID] ? { options: opts } : { source: "custom", options: opts }
         mergeProvider(providerID, patch)
+      }
+
+      await load(source)
+      for (const id of aliases(config, source)) {
+        await load(id)
+      }
+
+      // If this is github-copilot plugin, also register for github-copilot-enterprise if auth exists
+      if (source === ProviderID.githubCopilot) {
+        const enterpriseProviderID = ProviderID.githubCopilotEnterprise
+        if (!disabled.has(enterpriseProviderID)) {
+          const enterpriseAuth = await Auth.get(enterpriseProviderID)
+          if (enterpriseAuth) {
+            const enterpriseOptions = await loader(
+              () => Auth.get(enterpriseProviderID) as any,
+              database[enterpriseProviderID],
+            )
+            const opts = enterpriseOptions ?? {}
+            const patch: Partial<Info> = providers[enterpriseProviderID]
+              ? { options: opts }
+              : { source: "custom", options: opts }
+            mergeProvider(enterpriseProviderID, patch)
+          }
+        }
       }
     }
 
@@ -1012,6 +1043,24 @@ export namespace Provider {
         const opts = result.options ?? {}
         const patch: Partial<Info> = providers[providerID] ? { options: opts } : { source: "custom", options: opts }
         mergeProvider(providerID, patch)
+      }
+    }
+
+    for (const [id] of configProviders) {
+      const providerID = ProviderID.make(id)
+      if (disabled.has(providerID)) continue
+
+      const sourceID = ProviderID.make(driver(config, id))
+      if (sourceID === providerID) continue
+
+      const modelLoader = modelLoaders[sourceID]
+      if (modelLoader) {
+        modelLoaders[providerID] = modelLoader
+      }
+
+      const varsLoader = varsLoaders[sourceID]
+      if (varsLoader) {
+        varsLoaders[providerID] = varsLoader
       }
     }
 

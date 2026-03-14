@@ -87,6 +87,28 @@ test("loads JSON config file", async () => {
   })
 })
 
+test("parses provider auth_provider alias", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        provider: {
+          "custom-github-copilot": {
+            auth_provider: "github-copilot",
+          },
+        },
+      })
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.provider?.["custom-github-copilot"]?.auth_provider).toBe("github-copilot")
+    },
+  })
+})
+
 test("loads project config from Git Bash and MSYS2 paths on Windows", async () => {
   // Git Bash and MSYS2 both use /<drive>/... paths on Windows.
   await check((dir) => {

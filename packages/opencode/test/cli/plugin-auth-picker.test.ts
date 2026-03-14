@@ -1,5 +1,5 @@
 import { test, expect, describe } from "bun:test"
-import { resolvePluginProviders } from "../../src/cli/cmd/providers"
+import { resolvePluginAuth, resolvePluginProviders } from "../../src/cli/cmd/providers"
 import type { Hooks } from "@opencode-ai/plugin"
 
 function hookWithAuth(provider: string): Hooks {
@@ -22,6 +22,7 @@ describe("resolvePluginProviders", () => {
       existingProviders: {},
       disabled: new Set(),
       providerNames: {},
+      config: {},
     })
     expect(result).toEqual([{ id: "portkey", name: "portkey" }])
   })
@@ -32,6 +33,7 @@ describe("resolvePluginProviders", () => {
       existingProviders: { anthropic: {} },
       disabled: new Set(),
       providerNames: {},
+      config: {},
     })
     expect(result).toEqual([])
   })
@@ -42,6 +44,7 @@ describe("resolvePluginProviders", () => {
       existingProviders: {},
       disabled: new Set(),
       providerNames: {},
+      config: {},
     })
     expect(result).toEqual([{ id: "portkey", name: "portkey" }])
   })
@@ -52,6 +55,7 @@ describe("resolvePluginProviders", () => {
       existingProviders: {},
       disabled: new Set(["portkey"]),
       providerNames: {},
+      config: {},
     })
     expect(result).toEqual([])
   })
@@ -63,6 +67,7 @@ describe("resolvePluginProviders", () => {
       disabled: new Set(),
       enabled: new Set(["anthropic"]),
       providerNames: {},
+      config: {},
     })
     expect(result).toEqual([])
   })
@@ -74,6 +79,7 @@ describe("resolvePluginProviders", () => {
       disabled: new Set(),
       enabled: new Set(["portkey"]),
       providerNames: {},
+      config: {},
     })
     expect(result).toEqual([{ id: "portkey", name: "portkey" }])
   })
@@ -84,6 +90,7 @@ describe("resolvePluginProviders", () => {
       existingProviders: {},
       disabled: new Set(),
       providerNames: { portkey: "Portkey AI" },
+      config: {},
     })
     expect(result).toEqual([{ id: "portkey", name: "Portkey AI" }])
   })
@@ -94,6 +101,7 @@ describe("resolvePluginProviders", () => {
       existingProviders: {},
       disabled: new Set(),
       providerNames: {},
+      config: {},
     })
     expect(result).toEqual([{ id: "portkey", name: "portkey" }])
   })
@@ -104,6 +112,7 @@ describe("resolvePluginProviders", () => {
       existingProviders: {},
       disabled: new Set(),
       providerNames: {},
+      config: {},
     })
     expect(result).toEqual([{ id: "portkey", name: "portkey" }])
   })
@@ -114,7 +123,44 @@ describe("resolvePluginProviders", () => {
       existingProviders: {},
       disabled: new Set(),
       providerNames: {},
+      config: {},
     })
     expect(result).toEqual([])
+  })
+
+  test("includes configured auth aliases", () => {
+    const result = resolvePluginProviders({
+      hooks: [hookWithAuth("github-copilot")],
+      existingProviders: {},
+      disabled: new Set(),
+      providerNames: { "custom-github-copilot": "Custom GitHub Copilot" },
+      config: {
+        provider: {
+          "custom-github-copilot": {
+            auth_provider: "github-copilot",
+          },
+        },
+      } as any,
+    })
+    expect(result).toEqual([
+      { id: "github-copilot", name: "github-copilot" },
+      { id: "custom-github-copilot", name: "Custom GitHub Copilot" },
+    ])
+  })
+
+  test("resolves plugin auth through configured alias", () => {
+    const hook = hookWithAuth("github-copilot")
+    const result = resolvePluginAuth({
+      hooks: [hook],
+      provider: "custom-github-copilot",
+      config: {
+        provider: {
+          "custom-github-copilot": {
+            auth_provider: "github-copilot",
+          },
+        },
+      } as any,
+    })
+    expect(result).toBe(hook)
   })
 })

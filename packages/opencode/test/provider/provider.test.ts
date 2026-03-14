@@ -1,4 +1,4 @@
-import { test, expect } from "bun:test"
+import { afterEach, expect, test } from "bun:test"
 import path from "path"
 
 import { tmpdir } from "../fixture/fixture"
@@ -6,6 +6,11 @@ import { Instance } from "../../src/project/instance"
 import { Provider } from "../../src/provider/provider"
 import { ProviderID, ModelID } from "../../src/provider/schema"
 import { Env } from "../../src/env"
+import { Auth } from "../../src/auth"
+
+afterEach(async () => {
+  await Auth.remove("custom-github-copilot")
+})
 
 test("provider loaded from env variable", async () => {
   await using tmp = await tmpdir({
@@ -246,6 +251,60 @@ test("custom provider with npm package", async () => {
       expect(providers[ProviderID.make("custom-provider")]).toBeDefined()
       expect(providers[ProviderID.make("custom-provider")].name).toBe("Custom Provider")
       expect(providers[ProviderID.make("custom-provider")].models["custom-model"]).toBeDefined()
+    },
+  })
+})
+
+test("custom provider can reuse auth_provider loader", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "custom-github-copilot": {
+              name: "Custom GitHub Copilot",
+              auth_provider: "github-copilot",
+              models: {
+                "gpt-5": {
+                  name: "GPT-5",
+                  provider: {
+                    npm: "@ai-sdk/github-copilot",
+                  },
+                  tool_call: true,
+                  limit: {
+                    context: 128000,
+                    output: 4096,
+                  },
+                },
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+
+  await Auth.set("custom-github-copilot", {
+    type: "oauth",
+    refresh: "gho_test_refresh",
+    access: "gho_test_access",
+    expires: 0,
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["custom-github-copilot"]).toBeDefined()
+      expect(providers["custom-github-copilot"].options.apiKey).toBe("")
+      expect(providers["custom-github-copilot"].options.baseURL).toBe("https://api.githubcopilot.com")
+      expect(typeof providers["custom-github-copilot"].options.fetch).toBe("function")
+
+      const model = await Provider.getModel(ProviderID.make("custom-github-copilot"), ModelID.make("gpt-5"))
+      const language = await Provider.getLanguage(model)
+      expect(language.provider).toContain("custom-github-copilot.responses")
     },
   })
 })

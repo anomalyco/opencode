@@ -979,6 +979,10 @@ export namespace Config {
     .extend({
       whitelist: z.array(z.string()).optional(),
       blacklist: z.array(z.string()).optional(),
+      auth_provider: z
+        .string()
+        .optional()
+        .describe("Reuse auth flow from another provider while storing credentials under this provider ID"),
       models: z
         .record(
           z.string(),
