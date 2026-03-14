@@ -21,10 +21,9 @@ export function serverName(conn?: ServerConnection.Any, ignoreDisplayName = fals
   return conn.http.url.replace(/^https?:\/\//, "").replace(/\/+$/, "")
 }
 
-function projectsKey(key: ServerConnection.Key) {
+function projectsKey(conn: ServerConnection.Any | undefined, key: ServerConnection.Key) {
   if (!key) return ""
-  if (key === "sidecar") return "local"
-  if (isLocalHost(key)) return "local"
+  if (conn?.type === "sidecar" && conn.variant === "base") return "local"
   return key
 }
 
@@ -206,11 +205,11 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       onCleanup(startHealthPolling(current_))
     })
 
-    const origin = createMemo(() => projectsKey(state.active))
-    const projectsList = createMemo(() => store.projects[origin()] ?? [])
     const current: Accessor<ServerConnection.Any | undefined> = createMemo(
       () => allServers().find((s) => ServerConnection.key(s) === state.active) ?? allServers()[0],
     )
+    const origin = createMemo(() => projectsKey(current(), state.active))
+    const projectsList = createMemo(() => store.projects[origin()] ?? [])
     const isLocal = createMemo(() => {
       const c = current()
       return (c?.type === "sidecar" && c.variant === "base") || (c?.type === "http" && isLocalHost(c.http.url))

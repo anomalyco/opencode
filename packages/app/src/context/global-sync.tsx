@@ -23,8 +23,10 @@ import {
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { Persist, persisted } from "@/utils/persist"
+import { scope } from "@/utils/scope"
 import type { InitError } from "../pages/error"
 import { useGlobalSDK } from "./global-sdk"
+import { useServer } from "./server"
 import { bootstrapDirectory, bootstrapGlobal } from "./global-sync/bootstrap"
 import { createChildStoreManager } from "./global-sync/child-store"
 import { applyDirectoryEvent, applyGlobalEvent, cleanupDroppedSessionCaches } from "./global-sync/event-reducer"
@@ -54,6 +56,7 @@ type GlobalStore = {
 function createGlobalSync() {
   const globalSDK = useGlobalSDK()
   const language = useLanguage()
+  const server = useServer()
   const owner = getOwner()
   if (!owner) throw new Error("GlobalSync must be created within owner")
 
@@ -62,8 +65,10 @@ function createGlobalSync() {
   const sessionLoads = new Map<string, Promise<void>>()
   const sessionMeta = new Map<string, { limit: number }>()
 
+  const key = (directory: string) => scope(server.key, directory)
+
   const [projectCache, setProjectCache, projectInit] = persisted(
-    Persist.global("globalSync.project", ["globalSync.project.v1"]),
+    Persist.global(scope(server.key, "globalSync.project"), ["globalSync.project", "globalSync.project.v1"]),
     createStore({ value: [] as Project[] }),
   )
 
@@ -153,38 +158,41 @@ function createGlobalSync() {
 
   const children = createChildStoreManager({
     owner,
-    isBooting: (directory) => booting.has(directory),
-    isLoadingSessions: (directory) => sessionLoads.has(directory),
+    isBooting: (directory) => booting.has(key(directory)),
+    isLoadingSessions: (directory) => sessionLoads.has(key(directory)),
     onBootstrap: (directory) => {
       void bootstrapInstance(directory)
     },
     onDispose: (directory) => {
       queue.clear(directory)
-      sessionMeta.delete(directory)
-      sdkCache.delete(directory)
+      sessionMeta.delete(key(directory))
+      sdkCache.delete(key(directory))
       clearSessionPrefetchDirectory(directory)
     },
+    scope: key,
     translate: language.t,
   })
 
   const sdkFor = (directory: string) => {
-    const cached = sdkCache.get(directory)
+    const id = key(directory)
+    const cached = sdkCache.get(id)
     if (cached) return cached
     const sdk = globalSDK.createClient({
       directory,
       throwOnError: true,
     })
-    sdkCache.set(directory, sdk)
+    sdkCache.set(id, sdk)
     return sdk
   }
 
   async function loadSessions(directory: string) {
-    const pending = sessionLoads.get(directory)
+    const id = key(directory)
+    const pending = sessionLoads.get(id)
     if (pending) return pending
 
     children.pin(directory)
     const [store, setStore] = children.child(directory, { bootstrap: false })
-    const meta = sessionMeta.get(directory)
+    const meta = sessionMeta.get(id)
     if (meta && meta.limit >= store.limit) {
       const next = trimSessions(store.session, {
         limit: store.limit,
@@ -225,7 +233,7 @@ function createGlobalSync() {
         )
         setStore("session", reconcile(sessions, { key: "id" }))
         cleanupDroppedSessionCaches(store, setStore, sessions, setSessionTodo)
-        sessionMeta.set(directory, { limit })
+        sessionMeta.set(id, { limit })
       })
       .catch((err) => {
         console.error("Failed to load sessions", err)
@@ -237,9 +245,9 @@ function createGlobalSync() {
         })
       })
 
-    sessionLoads.set(directory, promise)
+    sessionLoads.set(id, promise)
     promise.finally(() => {
-      sessionLoads.delete(directory)
+      sessionLoads.delete(id)
       children.unpin(directory)
     })
     return promise
@@ -247,7 +255,8 @@ function createGlobalSync() {
 
   async function bootstrapInstance(directory: string) {
     if (!directory) return
-    const pending = booting.get(directory)
+    const id = key(directory)
+    const pending = booting.get(id)
     if (pending) return pending
 
     children.pin(directory)
@@ -267,9 +276,9 @@ function createGlobalSync() {
       })
     })()
 
-    booting.set(directory, promise)
+    booting.set(id, promise)
     promise.finally(() => {
-      booting.delete(directory)
+      booting.delete(id)
       children.unpin(directory)
     })
     return promise
