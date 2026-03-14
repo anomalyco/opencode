@@ -3,10 +3,9 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { usePrompt, type ContentPart, type ImageAttachmentPart } from "@/context/prompt"
 import { useLanguage } from "@/context/language"
 import { uuid } from "@/utils/uuid"
-import { getCursorPosition } from "./editor-dom"
+import { getCursorPosition, setCursorPosition } from "./editor-dom"
 import { attachmentMime } from "./files"
-const LARGE_PASTE_CHARS = 8000
-const LARGE_PASTE_BREAKS = 120
+import { normalizePaste, pasteMode } from "./paste"
 
 function dataUrl(file: File, mime: string) {
   return new Promise<string>((resolve) => {
@@ -25,20 +24,8 @@ function dataUrl(file: File, mime: string) {
   })
 }
 
-function largePaste(text: string) {
-  if (text.length >= LARGE_PASTE_CHARS) return true
-  let breaks = 0
-  for (const char of text) {
-    if (char !== "\n") continue
-    breaks += 1
-    if (breaks >= LARGE_PASTE_BREAKS) return true
-  }
-  return false
-}
-
 type PromptAttachmentsInput = {
   editor: () => HTMLDivElement | undefined
-  isFocused: () => boolean
   isDialogActive: () => boolean
   setDraggingType: (type: "image" | "@mention" | null) => void
   focusEditor: () => void
@@ -91,7 +78,6 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
   }
 
   const handlePaste = async (event: ClipboardEvent) => {
-    if (!input.isFocused()) return
     const clipboardData = event.clipboardData
     if (!clipboardData) return
 
@@ -126,16 +112,38 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
 
     if (!plainText) return
 
-    if (largePaste(plainText)) {
-      if (input.addPart({ type: "text", content: plainText, start: 0, end: 0 })) return
-      input.focusEditor()
-      if (input.addPart({ type: "text", content: plainText, start: 0, end: 0 })) return
+    const text = normalizePaste(plainText)
+    const editor = input.editor()
+    const start = editor ? getCursorPosition(editor) : 0
+    const end = start + text.length
+
+    const place = () => {
+      requestAnimationFrame(() => {
+        const editor = input.editor()
+        if (!editor) return
+        editor.focus()
+        setCursorPosition(editor, end)
+      })
     }
 
-    const inserted = typeof document.execCommand === "function" && document.execCommand("insertText", false, plainText)
-    if (inserted) return
+    const put = () => {
+      if (input.addPart({ type: "text", content: text, start: 0, end: 0 })) return true
+      input.focusEditor()
+      return input.addPart({ type: "text", content: text, start: 0, end: 0 })
+    }
 
-    input.addPart({ type: "text", content: plainText, start: 0, end: 0 })
+    if (pasteMode(text) === "manual") {
+      if (put()) place()
+      return
+    }
+
+    const inserted = typeof document.execCommand === "function" && document.execCommand("insertText", false, text)
+    if (inserted) {
+      place()
+      return
+    }
+
+    if (put()) place()
   }
 
   const handleGlobalDragOver = (event: DragEvent) => {

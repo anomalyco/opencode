@@ -57,6 +57,27 @@ describe("prompt-input editor dom", () => {
     expect(getTextLength(container)).toBe(5)
   })
 
+  test("length helpers count block siblings like parsed prompt text", () => {
+    const container = document.createElement("div")
+    const a = document.createElement("div")
+    const b = document.createElement("div")
+    a.textContent = "foo"
+    b.textContent = "bar"
+    container.appendChild(a)
+    container.appendChild(b)
+
+    expect(getNodeLength(a)).toBe(3)
+    expect(getTextLength(container)).toBe(7)
+  })
+
+  test("length helpers normalize CRLF to single newlines", () => {
+    const container = document.createElement("div")
+    container.appendChild(document.createTextNode("a\r\nb"))
+
+    expect(getNodeLength(container.childNodes[0]!)).toBe(3)
+    expect(getTextLength(container)).toBe(3)
+  })
+
   test("setCursorPosition and getCursorPosition round-trip with pills and breaks", () => {
     const container = document.createElement("div")
     const pill = document.createElement("span")
@@ -93,6 +114,60 @@ describe("prompt-input editor dom", () => {
 
     setCursorPosition(container, 3)
     expect(getCursorPosition(container)).toBe(3)
+
+    container.remove()
+  })
+
+  test("setCursorPosition and getCursorPosition round-trip across pasted block lines", () => {
+    const container = document.createElement("div")
+    const a = document.createElement("div")
+    const b = document.createElement("div")
+    a.textContent = "foo"
+    b.textContent = "bar"
+    container.appendChild(a)
+    container.appendChild(b)
+    document.body.appendChild(container)
+
+    setCursorPosition(container, 3)
+    expect(getCursorPosition(container)).toBe(3)
+
+    setCursorPosition(container, 4)
+    expect(getCursorPosition(container)).toBe(4)
+
+    setCursorPosition(container, 7)
+    expect(getCursorPosition(container)).toBe(7)
+
+    container.remove()
+  })
+
+  test("setCursorPosition keeps the caret inside an empty editor", () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+
+    setCursorPosition(container, 0)
+
+    const selection = window.getSelection()
+    expect(selection?.anchorNode).toBe(container)
+    expect(selection?.anchorOffset).toBe(0)
+
+    container.remove()
+  })
+
+  test("setCursorPosition keeps block-boundary cursors inside empty pasted lines", () => {
+    const container = document.createElement("div")
+    const a = document.createElement("div")
+    const b = document.createElement("div")
+    a.textContent = "foo"
+    container.appendChild(a)
+    container.appendChild(b)
+    document.body.appendChild(container)
+
+    setCursorPosition(container, 4)
+    expect(getCursorPosition(container)).toBe(4)
+
+    const selection = window.getSelection()
+    expect(selection?.anchorNode).toBe(b)
+    expect(selection?.anchorOffset).toBe(0)
 
     container.remove()
   })
