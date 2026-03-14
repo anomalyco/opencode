@@ -309,7 +309,17 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
         output.headers["anthropic-beta"] = "interleaved-thinking-2025-05-14"
       }
 
-      if (incoming.agent === "compaction") {
+      const parts = await sdk.session
+        .message({
+          path: {
+            id: incoming.message.sessionID,
+            messageID: incoming.message.id,
+          },
+          throwOnError: true,
+        })
+        .catch(() => undefined)
+
+      if (parts?.data.parts?.some((part) => part.type === "compaction")) {
         output.headers["x-initiator"] = "agent"
         return
       }
