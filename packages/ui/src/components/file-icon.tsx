@@ -218,6 +218,8 @@ const ICON_MAPS: IconMaps = {
     cs: "Csharp",
     vb: "Visualstudio",
     cpp: "Cpp",
+    cu: "Cuda",
+    cuh: "Cuda",
     cc: "Cpp",
     cxx: "Cpp",
     c: "C",

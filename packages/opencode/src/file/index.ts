@@ -241,6 +241,8 @@ export namespace File {
     "graphql",
     "gql",
     "sql",
+    "cu",
+    "cuh",
     "ini",
     "cfg",
     "conf",

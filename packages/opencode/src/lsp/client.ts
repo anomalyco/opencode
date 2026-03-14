@@ -149,7 +149,10 @@ export namespace LSPClient {
           input.path = path.isAbsolute(input.path) ? input.path : path.resolve(Instance.directory, input.path)
           const text = await Filesystem.readText(input.path)
           const extension = path.extname(input.path)
-          const languageId = LANGUAGE_EXTENSIONS[extension] ?? "plaintext"
+          const languageId =
+            result.serverID === "clangd" && [".cu", ".cuh"].includes(extension)
+              ? "cuda-cpp"
+              : LANGUAGE_EXTENSIONS[extension] ?? "plaintext"
 
           const version = files[input.path]
           if (version !== undefined) {

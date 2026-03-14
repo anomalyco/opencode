@@ -250,5 +250,18 @@ export default {
         ],
       },
     },
+    {
+      filetype: "cuda",
+      wasm: "https://cdn.jsdelivr.net/npm/tree-sitter-cuda@0.21.1/tree-sitter-cuda.wasm",
+      queries: {
+        highlights: [
+          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/cpp/highlights.scm",
+          "https://raw.githubusercontent.com/tree-sitter-grammars/tree-sitter-cuda/master/queries/highlights.scm",
+        ],
+        locals: [
+          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/cpp/locals.scm",
+        ],
+      },
+    },
   ],
 }
