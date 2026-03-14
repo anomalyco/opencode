@@ -109,8 +109,8 @@ export class QuestionService extends ServiceMap.Service<QuestionService, Questio
   static readonly layer = Layer.effect(
     QuestionService,
     Effect.gen(function* () {
-      const instanceState = yield* InstanceState.make<Map<QuestionID, PendingEntry>, QuestionServiceError>(
-        () => Effect.succeed(new Map<QuestionID, PendingEntry>()),
+      const instanceState = yield* InstanceState.make<Map<QuestionID, PendingEntry>, QuestionServiceError>(() =>
+        Effect.succeed(new Map<QuestionID, PendingEntry>()),
       )
 
       const getPending = InstanceState.get(instanceState)
