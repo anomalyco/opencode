@@ -68,7 +68,10 @@ test("InstanceState is disposed on instance reload", async () => {
         const state = yield* InstanceState.make(() =>
           Effect.acquireRelease(
             Effect.sync(() => ({ n: ++n })),
-            (value) => Effect.sync(() => { seen.push(String(value.n)) }),
+            (value) =>
+              Effect.sync(() => {
+                seen.push(String(value.n))
+              }),
           ),
         )
 
@@ -94,7 +97,10 @@ test("InstanceState is disposed on disposeAll", async () => {
         const state = yield* InstanceState.make((dir) =>
           Effect.acquireRelease(
             Effect.sync(() => ({ dir })),
-            (value) => Effect.sync(() => { seen.push(value.dir) }),
+            (value) =>
+              Effect.sync(() => {
+                seen.push(value.dir)
+              }),
           ),
         )
 
