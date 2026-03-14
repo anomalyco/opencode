@@ -808,9 +808,9 @@ function hydrate(rows: (typeof MessageTable.$inferSelect)[]) {
       if (userMessage.parts.length > 0) result.push(userMessage)
     }
 
-    if (msg.info.role === "assistant") {
-      const differentModel = `${model.providerID}/${model.id}` !== `${msg.info.providerID}/${msg.info.modelID}`
-      const media: Array<{ mime: string; url: string; filename?: string }> = []
+      if (msg.info.role === "assistant") {
+        const differentModel = `${model.providerID}/${model.id}` !== `${msg.info.providerID}/${msg.info.modelID}`
+        const pendingMedia: Array<{ mime: string; url: string }> = []
 
       if (
         msg.info.error &&
@@ -904,7 +904,7 @@ function hydrate(rows: (typeof MessageTable.$inferSelect)[]) {
               const mediaAttachments = attachments.filter((a) => isMedia(a.mime))
               const nonMediaAttachments = attachments.filter((a) => !isMedia(a.mime))
               if (!supportsMediaInToolResults && mediaAttachments.length > 0) {
-                media.push(...mediaAttachments)
+                pendingMedia.push(...mediaAttachments)
               }
               const finalAttachments = supportsMediaInToolResults ? attachments : nonMediaAttachments
 
@@ -950,14 +950,26 @@ function hydrate(rows: (typeof MessageTable.$inferSelect)[]) {
               ...(differentModel ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
             })
         }
-        if (part.type === "reasoning") {
-          if (differentModel) {
-            if (part.text.trim().length > 0)
-              assistantMessage.parts.push({
-                type: "text",
-                text: part.text,
-              })
-            continue
+        if (assistantMessage.parts.length > 0) {
+          result.push(assistantMessage)
+          // Inject pending media as a user message for providers that don't support
+          // media (images, PDFs) in tool results
+          if (pendingMedia.length > 0) {
+            result.push({
+              id: MessageID.ascending(),
+              role: "user",
+              parts: [
+                {
+                  type: "text" as const,
+                  text: "Attached image(s) from tool result:",
+                },
+                ...pendingMedia.map((attachment) => ({
+                  type: "file" as const,
+                  url: media(attachment.url),
+                  mediaType: attachment.mime,
+                })),
+              ],
+            })
           }
           assistantMessage.parts.push({
             type: "reasoning",
