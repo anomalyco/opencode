@@ -2,9 +2,9 @@
 
 ## Sources
 
-- PR #TBD: [inserisci qui il link alla tua Pull Request quando la aprirai]
 
 ## Do Not Translate (Locale Additions)
+
 
 - `opencode` (scrivere sempre in minuscolo, sia nel codice che nei testi discorsivi)
 - `opencode CLI`
