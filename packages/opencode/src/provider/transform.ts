@@ -238,10 +238,21 @@ export namespace ProviderTransform {
         if (!modality) return part
         if (model.capabilities.input[modality]) return part
 
-        const name = filename ? `"${filename}"` : modality
+        // Check if filename looks like an absolute path
+        const isAbsolutePath = filename && (filename.startsWith("/") || filename.includes(":\\") || filename.startsWith("~"))
+        const displayPath = filename ?? modality
+
+        // Include path in error message so agent can use tools
+        if (modality === "image" && isAbsolutePath) {
+          return {
+            type: "text" as const,
+            text: `ERROR: Cannot read image "${displayPath}" - this model does not support image input. The image is available at path: ${filename}. You can use the Read tool to view the image file path, or the user may need to switch to a vision-capable model.`,
+          }
+        }
+
         return {
           type: "text" as const,
-          text: `ERROR: Cannot read ${name} (this model does not support ${modality} input). Inform the user.`,
+          text: `ERROR: Cannot read "${displayPath}" (this model does not support ${modality} input). Inform the user.`,
         }
       })
 

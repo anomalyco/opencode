@@ -709,7 +709,7 @@ export function Prompt(props: PromptProps) {
     )
   }
 
-  async function pasteImage(file: { filename?: string; content: string; mime: string }) {
+  async function pasteImage(file: { filepath?: string; filename?: string; content: string; mime: string }) {
     const currentOffset = input.visualCursor.offset
     const extmarkStart = currentOffset
     const count = store.prompt.parts.filter((x) => x.type === "file" && x.mime.startsWith("image/")).length
@@ -727,6 +727,12 @@ export function Prompt(props: PromptProps) {
       typeId: promptPartTypeId,
     })
 
+    const absolutePath = file.filepath
+      ? path.isAbsolute(file.filepath)
+        ? file.filepath
+        : path.resolve(process.cwd(), file.filepath)
+      : file.filename ?? ""
+
     const part: Omit<FilePart, "id" | "messageID" | "sessionID"> = {
       type: "file" as const,
       mime: file.mime,
@@ -734,7 +740,7 @@ export function Prompt(props: PromptProps) {
       url: `data:${file.mime};base64,${file.content}`,
       source: {
         type: "file",
-        path: file.filename ?? "",
+        path: absolutePath,
         text: {
           start: extmarkStart,
           end: extmarkEnd,
@@ -967,6 +973,7 @@ export function Prompt(props: PromptProps) {
                         .catch(() => {})
                       if (content) {
                         await pasteImage({
+                          filepath,
                           filename,
                           mime,
                           content,

@@ -578,11 +578,14 @@ export namespace MessageV2 {
                 text: `[Attached ${part.mime}: ${part.filename ?? "file"}]`,
               })
             } else {
+              // For image files with a source path, include the absolute path in filename
+              // so tools can use it if the model doesn't support images
+              const filePath = part.source?.type === "file" && part.source.path ? part.source.path : part.filename
               userMessage.parts.push({
                 type: "file",
                 url: part.url,
                 mediaType: part.mime,
-                filename: part.filename,
+                filename: filePath,
               })
             }
           }
