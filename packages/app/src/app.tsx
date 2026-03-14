@@ -160,6 +160,15 @@ const effectMinDuration =
   <A, E, R>(e: Effect.Effect<A, E, R>) =>
     Effect.all([e, Effect.sleep(duration)], { concurrency: "unbounded" }).pipe(Effect.map((v) => v[0]))
 
+function ServerKey(props: ParentProps) {
+  const server = useServer()
+  return (
+    <Show when={server.key} keyed>
+      {props.children}
+    </Show>
+  )
+}
+
 function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean }>) {
   const server = useServer()
   const checkServerHealth = useCheckServerHealth()
@@ -205,9 +214,7 @@ function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean }>) {
               if (checkMode() === "background") healthCheckActions.refetch()
             }}
             onServerSelected={(key) => {
-              setCheckMode("blocking")
               server.setActive(key)
-              healthCheckActions.refetch()
             }}
           />
         }
@@ -274,22 +281,24 @@ export function AppInterface(props: {
 }) {
   return (
     <ServerProvider defaultServer={props.defaultServer} servers={props.servers}>
-      <ConnectionGate disableHealthCheck={props.disableHealthCheck}>
-        <GlobalSDKProvider>
-          <GlobalSyncProvider>
-            <Dynamic
-              component={props.router ?? Router}
-              root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
-            >
-              <Route path="/" component={HomeRoute} />
-              <Route path="/:dir" component={DirectoryLayout}>
-                <Route path="/" component={SessionIndexRoute} />
-                <Route path="/session/:id?" component={SessionRoute} />
-              </Route>
-            </Dynamic>
-          </GlobalSyncProvider>
-        </GlobalSDKProvider>
-      </ConnectionGate>
+      <ServerKey>
+        <ConnectionGate disableHealthCheck={props.disableHealthCheck}>
+          <GlobalSDKProvider>
+            <GlobalSyncProvider>
+              <Dynamic
+                component={props.router ?? Router}
+                root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
+              >
+                <Route path="/" component={HomeRoute} />
+                <Route path="/:dir" component={DirectoryLayout}>
+                  <Route path="/" component={SessionIndexRoute} />
+                  <Route path="/session/:id?" component={SessionRoute} />
+                </Route>
+              </Dynamic>
+            </GlobalSyncProvider>
+          </GlobalSDKProvider>
+        </ConnectionGate>
+      </ServerKey>
     </ServerProvider>
   )
 }

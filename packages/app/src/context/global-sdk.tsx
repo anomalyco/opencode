@@ -19,25 +19,24 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     const server = useServer()
     const platform = usePlatform()
     const abort = new AbortController()
+    const current = server.current
+    if (!current) throw new Error(language.t("error.globalSDK.noServerAvailable"))
 
     const eventFetch = (() => {
-      if (!platform.fetch || !server.current) return
+      if (!platform.fetch) return
       try {
-        const url = new URL(server.current.http.url)
-        const loopback = url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "::1"
-        if (url.protocol === "http:" && !loopback) return platform.fetch
+        const url = new URL(current.http.url)
+        const local = url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "::1"
+        if (!local) return platform.fetch
       } catch {
         return
       }
     })()
 
-    const currentServer = server.current
-    if (!currentServer) throw new Error(language.t("error.globalSDK.noServerAvailable"))
-
     const eventSdk = createSdkForServer({
       signal: abort.signal,
       fetch: eventFetch,
-      server: currentServer.http,
+      server: current.http,
     })
     const emitter = createGlobalEmitter<{
       [key: string]: Event
@@ -137,7 +136,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
               if (streamErrorLogged) return
               streamErrorLogged = true
               console.error("[global-sdk] event stream error", {
-                url: currentServer.http.url,
+                url: current.http.url,
                 fetch: eventFetch ? "platform" : "webview",
                 error,
               })
@@ -174,7 +173,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
           if (!aborted(error) && !streamErrorLogged) {
             streamErrorLogged = true
             console.error("[global-sdk] event stream failed", {
-              url: currentServer.http.url,
+              url: current.http.url,
               fetch: eventFetch ? "platform" : "webview",
               error,
             })
@@ -209,13 +208,13 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     })
 
     const sdk = createSdkForServer({
-      server: server.current.http,
+      server: current.http,
       fetch: platform.fetch,
       throwOnError: true,
     })
 
     return {
-      url: currentServer.http.url,
+      url: current.http.url,
       client: sdk,
       event: emitter,
       createClient(opts: Omit<Parameters<typeof createSdkForServer>[0], "server" | "fetch">) {
