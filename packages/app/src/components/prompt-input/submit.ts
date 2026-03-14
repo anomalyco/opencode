@@ -1,7 +1,6 @@
 import type { Message, Session } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@opencode-ai/ui/toast"
 import { base64Encode } from "@opencode-ai/util/encode"
-import { Binary } from "@opencode-ai/util/binary"
 import { useNavigate, useParams } from "@solidjs/router"
 import type { Accessor } from "solid-js"
 import type { FileSelection } from "@/context/file"
@@ -13,6 +12,7 @@ import { usePermission } from "@/context/permission"
 import { type ContextItem, type ImageAttachmentPart, type Prompt, usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
+import { compareSessionRecent } from "@/context/global-sync/session-trim"
 import { Identifier } from "@/utils/id"
 import { Worktree as WorktreeState } from "@/utils/worktree"
 import { buildRequestParts } from "./build-request-parts"
@@ -270,13 +270,14 @@ export function createPromptSubmit(input: PromptSubmitInput) {
   const seed = (dir: string, info: Session) => {
     const [, setStore] = globalSync.child(dir)
     setStore("session", (list: Session[]) => {
-      const result = Binary.search(list, info.id, (item) => item.id)
-      const next = [...list]
-      if (result.found) {
-        next[result.index] = info
+      const next = list.filter((item) => item.id !== info.id)
+      if (info.parentID) {
+        next.push(info)
         return next
       }
-      next.splice(result.index, 0, info)
+
+      const index = next.findIndex((item) => !!item.parentID || compareSessionRecent(info, item) < 0)
+      next.splice(index === -1 ? next.length : index, 0, info)
       return next
     })
   }

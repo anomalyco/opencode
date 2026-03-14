@@ -143,19 +143,16 @@ describe("layout workspace helpers", () => {
   })
 
   test("preserves visible root session order from the store", () => {
-    const result = sortedRootSessions(
-      {
-        path: { directory: "/workspace" },
-        session: [
-          session({ id: "z", directory: "/workspace", time: { created: 1, updated: 1, archived: undefined } }),
-          session({ id: "child", directory: "/workspace", parentID: "z" }),
-          session({ id: "a", directory: "/workspace", time: { created: 2, updated: 2, archived: undefined } }),
-          session({ id: "archived", directory: "/workspace", time: { created: 3, updated: 3, archived: 3 } }),
-          session({ id: "other", directory: "/other", time: { created: 4, updated: 4, archived: undefined } }),
-        ],
-      },
-      Date.now(),
-    )
+    const result = sortedRootSessions({
+      path: { directory: "/workspace" },
+      session: [
+        session({ id: "z", directory: "/workspace", time: { created: 1, updated: 1, archived: undefined } }),
+        session({ id: "child", directory: "/workspace", parentID: "z" }),
+        session({ id: "a", directory: "/workspace", time: { created: 2, updated: 2, archived: undefined } }),
+        session({ id: "archived", directory: "/workspace", time: { created: 3, updated: 3, archived: 3 } }),
+        session({ id: "other", directory: "/other", time: { created: 4, updated: 4, archived: undefined } }),
+      ],
+    })
 
     expect(result.map((item) => item.id)).toEqual(["z", "a"])
   })

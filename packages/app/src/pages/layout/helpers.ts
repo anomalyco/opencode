@@ -20,7 +20,7 @@ function sortSessions() {
 const isRootVisibleSession = (session: Session, directory: string) =>
   workspaceKey(session.directory) === workspaceKey(directory) && !session.parentID && !session.time?.archived
 
-export const sortedRootSessions = (store: { session: Session[]; path: { directory: string } }, _now: number) =>
+export const sortedRootSessions = (store: { session: Session[]; path: { directory: string } }) =>
   store.session.filter((session) => isRootVisibleSession(session, store.path.directory))
 
 export const latestRootSession = (stores: { session: Session[]; path: { directory: string } }[]) =>

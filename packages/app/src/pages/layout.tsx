@@ -145,7 +145,6 @@ export default function Layout(props: ParentProps) {
     hoverProject: undefined as string | undefined,
     scrollSessionKey: undefined as string | undefined,
     nav: undefined as HTMLElement | undefined,
-    sortNow: Date.now(),
     sizing: false,
     peek: undefined as string | undefined,
     peeked: false,
@@ -167,16 +166,7 @@ export default function Layout(props: ParentProps) {
   }
   const isBusy = (directory: string) => !!state.busyWorkspaces[workspaceKey(directory)]
   const navLeave = { current: undefined as number | undefined }
-  const sortNow = () => state.sortNow
   let sizet: number | undefined
-  let sortNowInterval: ReturnType<typeof setInterval> | undefined
-  const sortNowTimeout = setTimeout(
-    () => {
-      setState("sortNow", Date.now())
-      sortNowInterval = setInterval(() => setState("sortNow", Date.now()), 60_000)
-    },
-    60_000 - (Date.now() % 60_000),
-  )
 
   const aim = createAim({
     enabled: () => !layout.sidebar.opened(),
@@ -191,8 +181,6 @@ export default function Layout(props: ParentProps) {
 
   onCleanup(() => {
     if (navLeave.current !== undefined) clearTimeout(navLeave.current)
-    clearTimeout(sortNowTimeout)
-    if (sortNowInterval) clearInterval(sortNowInterval)
     if (sizet !== undefined) clearTimeout(sizet)
     if (peekt !== undefined) clearTimeout(peekt)
     aim.reset()
@@ -657,14 +645,13 @@ export default function Layout(props: ParentProps) {
   })
 
   const currentSessions = createMemo(() => {
-    const now = Date.now()
     const dirs = visibleSessionDirs()
     if (dirs.length === 0) return [] as Session[]
 
     const result: Session[] = []
     for (const dir of dirs) {
       const [dirStore] = globalSync.child(dir, { bootstrap: true })
-      const dirSessions = sortedRootSessions(dirStore, now)
+      const dirSessions = sortedRootSessions(dirStore)
       result.push(...dirSessions)
     }
     return result
@@ -2132,7 +2119,6 @@ export default function Layout(props: ParentProps) {
                       <LocalWorkspace
                         ctx={workspaceSidebarCtx}
                         project={project()!}
-                        sortNow={sortNow}
                         mobile={panelProps.mobile}
                         popover={popover()}
                       />
@@ -2177,7 +2163,6 @@ export default function Layout(props: ParentProps) {
                                 ctx={workspaceSidebarCtx}
                                 directory={directory}
                                 project={project()!}
-                                sortNow={sortNow}
                                 mobile={panelProps.mobile}
                                 popover={popover()}
                               />
@@ -2240,9 +2225,7 @@ export default function Layout(props: ParentProps) {
       opened={() => layout.sidebar.opened()}
       aimMove={aim.move}
       projects={projects}
-      renderProject={(project) => (
-        <SortableProject ctx={projectSidebarCtx} project={project} sortNow={sortNow} mobile={mobile} />
-      )}
+      renderProject={(project) => <SortableProject ctx={projectSidebarCtx} project={project} mobile={mobile} />}
       handleDragStart={handleDragStart}
       handleDragEnd={handleDragEnd}
       handleDragOver={handleDragOver}
