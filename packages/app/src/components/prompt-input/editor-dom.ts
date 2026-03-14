@@ -1,181 +1,4 @@
 const MAX_BREAKS = 200
-const BLOCK = new Set(["DIV", "P"])
-
-type Point =
-  | {
-      node: Node
-      offset: number
-    }
-  | {
-      node: Node
-      side: "before" | "after"
-    }
-
-function isEl(node: Node): node is HTMLElement {
-  return node.nodeType === Node.ELEMENT_NODE
-}
-
-function isBr(node: Node) {
-  return isEl(node) && node.tagName === "BR"
-}
-
-function isPill(node: Node) {
-  return isEl(node) && (node.dataset.type === "file" || node.dataset.type === "agent")
-}
-
-function isBlock(node: Node) {
-  return isEl(node) && BLOCK.has(node.tagName)
-}
-
-function textLen(text: string) {
-  let len = 0
-  for (let i = 0; i < text.length; i += 1) {
-    const char = text[i]
-    if (char === "\u200B") continue
-    if (char === "\r") {
-      len += 1
-      if (text[i + 1] === "\n") i += 1
-      continue
-    }
-    len += 1
-  }
-  return len
-}
-
-function textOff(text: string, pos: number) {
-  if (pos <= 0) return 0
-  let len = 0
-  for (let i = 0; i < text.length; i += 1) {
-    const char = text[i]
-    if (char === "\u200B") continue
-    if (char === "\r") {
-      len += 1
-      if (len >= pos) return text[i + 1] === "\n" ? i + 2 : i + 1
-      if (text[i + 1] === "\n") i += 1
-      continue
-    }
-    len += 1
-    if (len >= pos) return i + 1
-  }
-  return text.length
-}
-
-function span(node: Node, root: boolean): number {
-  if (node.nodeType === Node.TEXT_NODE) return textLen(node.textContent ?? "")
-  if (isBr(node)) return 1
-  const nodes = Array.from(node.childNodes)
-  return nodes.reduce(
-    (sum, child, index) => sum + span(child, false) + (root && isBlock(child) && index < nodes.length - 1 ? 1 : 0),
-    0,
-  )
-}
-
-function tail(node: Node): Point | null {
-  if (node.nodeType === Node.TEXT_NODE) {
-    return {
-      node,
-      offset: (node.textContent ?? "").length,
-    }
-  }
-
-  if (isPill(node) || isBr(node)) {
-    return {
-      node,
-      side: "after",
-    }
-  }
-
-  const last = node.lastChild
-  if (last) return tail(last)
-  return {
-    node,
-    offset: 0,
-  }
-}
-
-function head(node: Node): Point | null {
-  if (node.nodeType === Node.TEXT_NODE) {
-    return {
-      node,
-      offset: 0,
-    }
-  }
-
-  if (isPill(node) || isBr(node)) {
-    return {
-      node,
-      side: "before",
-    }
-  }
-
-  const first = node.firstChild
-  if (first) return head(first)
-  return {
-    node,
-    offset: 0,
-  }
-}
-
-function point(node: Node, pos: number, root: boolean): Point | null {
-  if (node.nodeType === Node.TEXT_NODE) {
-    return {
-      node,
-      offset: textOff(node.textContent ?? "", pos),
-    }
-  }
-
-  if (isPill(node)) {
-    return {
-      node,
-      side: pos === 0 ? "before" : "after",
-    }
-  }
-
-  if (isBr(node)) {
-    if (pos === 0) {
-      return {
-        node,
-        side: "before",
-      }
-    }
-    const next = node.nextSibling
-    return next ? head(next) : { node, side: "after" }
-  }
-
-  const nodes = Array.from(node.childNodes)
-  if (nodes.length === 0) {
-    return {
-      node,
-      offset: 0,
-    }
-  }
-
-  let left = pos
-  for (const [index, child] of nodes.entries()) {
-    const len = span(child, false)
-    if (left <= len) return point(child, left, false)
-    left -= len
-    if (root && isBlock(child) && index < nodes.length - 1) {
-      if (left === 1) return head(nodes[index + 1]!)
-      left -= 1
-    }
-  }
-
-  return tail(node)
-}
-
-function apply(range: Range, edge: "start" | "end", result: Point) {
-  if ("offset" in result) {
-    if (edge === "start") range.setStart(result.node, result.offset)
-    if (edge === "end") range.setEnd(result.node, result.offset)
-    return
-  }
-
-  if (edge === "start" && result.side === "before") range.setStartBefore(result.node)
-  if (edge === "start" && result.side === "after") range.setStartAfter(result.node)
-  if (edge === "end" && result.side === "before") range.setEndBefore(result.node)
-  if (edge === "end" && result.side === "after") range.setEndAfter(result.node)
-}
 
 export function createTextFragment(content: string): DocumentFragment {
   const fragment = document.createDocumentFragment()
@@ -205,11 +28,18 @@ export function createTextFragment(content: string): DocumentFragment {
 }
 
 export function getNodeLength(node: Node): number {
-  return span(node, false)
+  if (node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "BR") return 1
+  return (node.textContent ?? "").replace(/\u200B/g, "").length
 }
 
 export function getTextLength(node: Node): number {
-  return span(node, true)
+  if (node.nodeType === Node.TEXT_NODE) return (node.textContent ?? "").replace(/\u200B/g, "").length
+  if (node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "BR") return 1
+  let length = 0
+  for (const child of Array.from(node.childNodes)) {
+    length += getTextLength(child)
+  }
+  return length
 }
 
 export function getCursorPosition(parent: HTMLElement): number {
@@ -224,24 +54,95 @@ export function getCursorPosition(parent: HTMLElement): number {
 }
 
 export function setCursorPosition(parent: HTMLElement, position: number) {
+  let remaining = position
+  let node = parent.firstChild
+  while (node) {
+    const length = getNodeLength(node)
+    const isText = node.nodeType === Node.TEXT_NODE
+    const isPill =
+      node.nodeType === Node.ELEMENT_NODE &&
+      ((node as HTMLElement).dataset.type === "file" || (node as HTMLElement).dataset.type === "agent")
+    const isBreak = node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "BR"
+
+    if (isText && remaining <= length) {
+      const range = document.createRange()
+      const selection = window.getSelection()
+      range.setStart(node, remaining)
+      range.collapse(true)
+      selection?.removeAllRanges()
+      selection?.addRange(range)
+      return
+    }
+
+    if ((isPill || isBreak) && remaining <= length) {
+      const range = document.createRange()
+      const selection = window.getSelection()
+      if (remaining === 0) {
+        range.setStartBefore(node)
+      }
+      if (remaining > 0 && isPill) {
+        range.setStartAfter(node)
+      }
+      if (remaining > 0 && isBreak) {
+        const next = node.nextSibling
+        if (next && next.nodeType === Node.TEXT_NODE) {
+          range.setStart(next, 0)
+        }
+        if (!next || next.nodeType !== Node.TEXT_NODE) {
+          range.setStartAfter(node)
+        }
+      }
+      range.collapse(true)
+      selection?.removeAllRanges()
+      selection?.addRange(range)
+      return
+    }
+
+    remaining -= length
+    node = node.nextSibling
+  }
+
   const fallbackRange = document.createRange()
   const fallbackSelection = window.getSelection()
-  const result = point(parent, position, true)
-  if (result) {
-    apply(fallbackRange, "start", result)
-    fallbackRange.collapse(true)
-    fallbackSelection?.removeAllRanges()
-    fallbackSelection?.addRange(fallbackRange)
-    return
+  const last = parent.lastChild
+  if (last && last.nodeType === Node.TEXT_NODE) {
+    const len = last.textContent ? last.textContent.length : 0
+    fallbackRange.setStart(last, len)
   }
-  fallbackRange.selectNodeContents(parent)
+  if (!last || last.nodeType !== Node.TEXT_NODE) {
+    fallbackRange.selectNodeContents(parent)
+  }
   fallbackRange.collapse(false)
   fallbackSelection?.removeAllRanges()
   fallbackSelection?.addRange(fallbackRange)
 }
 
 export function setRangeEdge(parent: HTMLElement, range: Range, edge: "start" | "end", offset: number) {
-  const result = point(parent, offset, true)
-  if (!result) return
-  apply(range, edge, result)
+  let remaining = offset
+  const nodes = Array.from(parent.childNodes)
+
+  for (const node of nodes) {
+    const length = getNodeLength(node)
+    const isText = node.nodeType === Node.TEXT_NODE
+    const isPill =
+      node.nodeType === Node.ELEMENT_NODE &&
+      ((node as HTMLElement).dataset.type === "file" || (node as HTMLElement).dataset.type === "agent")
+    const isBreak = node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "BR"
+
+    if (isText && remaining <= length) {
+      if (edge === "start") range.setStart(node, remaining)
+      if (edge === "end") range.setEnd(node, remaining)
+      return
+    }
+
+    if ((isPill || isBreak) && remaining <= length) {
+      if (edge === "start" && remaining === 0) range.setStartBefore(node)
+      if (edge === "start" && remaining > 0) range.setStartAfter(node)
+      if (edge === "end" && remaining === 0) range.setEndBefore(node)
+      if (edge === "end" && remaining > 0) range.setEndAfter(node)
+      return
+    }
+
+    remaining -= length
+  }
 }

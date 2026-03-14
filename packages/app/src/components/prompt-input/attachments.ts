@@ -3,7 +3,7 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { usePrompt, type ContentPart, type ImageAttachmentPart } from "@/context/prompt"
 import { useLanguage } from "@/context/language"
 import { uuid } from "@/utils/uuid"
-import { getCursorPosition, setCursorPosition } from "./editor-dom"
+import { getCursorPosition } from "./editor-dom"
 import { attachmentMime } from "./files"
 import { normalizePaste, pasteMode } from "./paste"
 
@@ -113,18 +113,6 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
     if (!plainText) return
 
     const text = normalizePaste(plainText)
-    const editor = input.editor()
-    const start = editor ? getCursorPosition(editor) : 0
-    const end = start + text.length
-
-    const place = () => {
-      requestAnimationFrame(() => {
-        const editor = input.editor()
-        if (!editor) return
-        editor.focus()
-        setCursorPosition(editor, end)
-      })
-    }
 
     const put = () => {
       if (input.addPart({ type: "text", content: text, start: 0, end: 0 })) return true
@@ -133,17 +121,14 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
     }
 
     if (pasteMode(text) === "manual") {
-      if (put()) place()
+      put()
       return
     }
 
     const inserted = typeof document.execCommand === "function" && document.execCommand("insertText", false, text)
-    if (inserted) {
-      place()
-      return
-    }
+    if (inserted) return
 
-    if (put()) place()
+    put()
   }
 
   const handleGlobalDragOver = (event: DragEvent) => {
