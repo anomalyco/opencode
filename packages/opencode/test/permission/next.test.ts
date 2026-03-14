@@ -17,6 +17,15 @@ async function rejectAll(message?: string) {
   }
 }
 
+async function waitForPending(count: number) {
+  for (let i = 0; i < 20; i++) {
+    const list = await PermissionNext.list()
+    if (list.length === count) return list
+    await Bun.sleep(0)
+  }
+  return PermissionNext.list()
+}
+
 // fromConfig tests
 
 test("fromConfig - string value becomes wildcard rule", () => {
@@ -621,6 +630,8 @@ test("reply - once resolves the pending ask", async () => {
         ruleset: [],
       })
 
+      await waitForPending(1)
+
       await PermissionNext.reply({
         requestID: PermissionID.make("per_test1"),
         reply: "once",
@@ -646,6 +657,8 @@ test("reply - reject throws RejectedError", async () => {
         ruleset: [],
       })
 
+      await waitForPending(1)
+
       await PermissionNext.reply({
         requestID: PermissionID.make("per_test2"),
         reply: "reject",
@@ -670,6 +683,8 @@ test("reply - reject with message throws CorrectedError", async () => {
         always: [],
         ruleset: [],
       })
+
+      await waitForPending(1)
 
       await PermissionNext.reply({
         requestID: PermissionID.make("per_test2b"),
@@ -698,6 +713,8 @@ test("reply - always persists approval and resolves", async () => {
         always: ["ls"],
         ruleset: [],
       })
+
+      await waitForPending(1)
 
       await PermissionNext.reply({
         requestID: PermissionID.make("per_test3"),
@@ -750,6 +767,8 @@ test("reply - reject cancels all pending for same session", async () => {
         ruleset: [],
       })
 
+      await waitForPending(2)
+
       // Catch rejections before they become unhandled
       const result1 = askPromise1.catch((e) => e)
       const result2 = askPromise2.catch((e) => e)
@@ -792,6 +811,8 @@ test("reply - always resolves matching pending requests in same session", async 
         ruleset: [],
       })
 
+      await waitForPending(2)
+
       await PermissionNext.reply({
         requestID: PermissionID.make("per_test5a"),
         reply: "always",
@@ -829,6 +850,8 @@ test("reply - always keeps other session pending", async () => {
         ruleset: [],
       })
 
+      await waitForPending(2)
+
       await PermissionNext.reply({
         requestID: PermissionID.make("per_test6a"),
         reply: "always",
@@ -857,6 +880,8 @@ test("reply - publishes replied event", async () => {
         always: [],
         ruleset: [],
       })
+
+      await waitForPending(1)
 
       let seen:
         | {
