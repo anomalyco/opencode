@@ -286,6 +286,40 @@ describe("filesystem", () => {
     })
   })
 
+  describe("windowsPath()", () => {
+    test("converts Git Bash paths", () => {
+      if (process.platform === "win32") {
+        expect(Filesystem.windowsPath("/c/Users/test")).toBe("C:/Users/test")
+        expect(Filesystem.windowsPath("/d/dev/project")).toBe("D:/dev/project")
+      } else {
+        expect(Filesystem.windowsPath("/c/Users/test")).toBe("/c/Users/test")
+      }
+    })
+
+    test("converts Cygwin paths", () => {
+      if (process.platform === "win32") {
+        expect(Filesystem.windowsPath("/cygdrive/c/Users/test")).toBe("C:/Users/test")
+        expect(Filesystem.windowsPath("/cygdrive/x/dev/project")).toBe("X:/dev/project")
+      } else {
+        expect(Filesystem.windowsPath("/cygdrive/c/Users/test")).toBe("/cygdrive/c/Users/test")
+      }
+    })
+
+    test("converts WSL paths", () => {
+      if (process.platform === "win32") {
+        expect(Filesystem.windowsPath("/mnt/c/Users/test")).toBe("C:/Users/test")
+        expect(Filesystem.windowsPath("/mnt/z/dev/project")).toBe("Z:/dev/project")
+      } else {
+        expect(Filesystem.windowsPath("/mnt/c/Users/test")).toBe("/mnt/c/Users/test")
+      }
+    })
+
+    test("ignores normal Windows paths", () => {
+      expect(Filesystem.windowsPath("C:/Users/test")).toBe("C:/Users/test")
+      expect(Filesystem.windowsPath("D:\\dev\\project")).toBe("D:\\dev\\project")
+    })
+  })
+
   describe("writeStream()", () => {
     test("writes from Web ReadableStream", async () => {
       await using tmp = await tmpdir()
@@ -404,6 +438,121 @@ describe("filesystem", () => {
         expect(stats.mode & 0o777).toBe(0o755)
       }
       expect(await fs.readFile(filepath, "utf-8")).toBe(content)
+    })
+  })
+
+  describe("resolve()", () => {
+    test("resolves slash-prefixed drive paths on Windows", async () => {
+      if (process.platform !== "win32") return
+      await using tmp = await tmpdir()
+      const forward = tmp.path.replaceAll("\\", "/")
+      expect(Filesystem.resolve(`/${forward}`)).toBe(Filesystem.normalizePath(tmp.path))
+    })
+
+    test("resolves slash-prefixed drive roots on Windows", async () => {
+      if (process.platform !== "win32") return
+      await using tmp = await tmpdir()
+      const drive = tmp.path[0].toUpperCase()
+      expect(Filesystem.resolve(`/${drive}:`)).toBe(Filesystem.resolve(`${drive}:/`))
+    })
+
+    test("resolves Git Bash and MSYS2 paths on Windows", async () => {
+      // Git Bash and MSYS2 both use /<drive>/... paths on Windows.
+      if (process.platform !== "win32") return
+      await using tmp = await tmpdir()
+      const drive = tmp.path[0].toLowerCase()
+      const rest = tmp.path.slice(2).replaceAll("\\", "/")
+      expect(Filesystem.resolve(`/${drive}${rest}`)).toBe(Filesystem.normalizePath(tmp.path))
+    })
+
+    test("resolves Git Bash and MSYS2 drive roots on Windows", async () => {
+      // Git Bash and MSYS2 both use /<drive> paths on Windows.
+      if (process.platform !== "win32") return
+      await using tmp = await tmpdir()
+      const drive = tmp.path[0].toLowerCase()
+      expect(Filesystem.resolve(`/${drive}`)).toBe(Filesystem.resolve(`${drive.toUpperCase()}:/`))
+    })
+
+    test("resolves Cygwin paths on Windows", async () => {
+      if (process.platform !== "win32") return
+      await using tmp = await tmpdir()
+      const drive = tmp.path[0].toLowerCase()
+      const rest = tmp.path.slice(2).replaceAll("\\", "/")
+      expect(Filesystem.resolve(`/cygdrive/${drive}${rest}`)).toBe(Filesystem.normalizePath(tmp.path))
+    })
+
+    test("resolves Cygwin drive roots on Windows", async () => {
+      if (process.platform !== "win32") return
+      await using tmp = await tmpdir()
+      const drive = tmp.path[0].toLowerCase()
+      expect(Filesystem.resolve(`/cygdrive/${drive}`)).toBe(Filesystem.resolve(`${drive.toUpperCase()}:/`))
+    })
+
+    test("resolves WSL mount paths on Windows", async () => {
+      if (process.platform !== "win32") return
+      await using tmp = await tmpdir()
+      const drive = tmp.path[0].toLowerCase()
+      const rest = tmp.path.slice(2).replaceAll("\\", "/")
+      expect(Filesystem.resolve(`/mnt/${drive}${rest}`)).toBe(Filesystem.normalizePath(tmp.path))
+    })
+
+    test("resolves WSL mount roots on Windows", async () => {
+      if (process.platform !== "win32") return
+      await using tmp = await tmpdir()
+      const drive = tmp.path[0].toLowerCase()
+      expect(Filesystem.resolve(`/mnt/${drive}`)).toBe(Filesystem.resolve(`${drive.toUpperCase()}:/`))
+    })
+
+    test("resolves symlinked directory to canonical path", async () => {
+      await using tmp = await tmpdir()
+      const target = path.join(tmp.path, "real")
+      await fs.mkdir(target)
+      const link = path.join(tmp.path, "link")
+      await fs.symlink(target, link)
+      expect(Filesystem.resolve(link)).toBe(Filesystem.resolve(target))
+    })
+
+    test("returns unresolved path when target does not exist", async () => {
+      await using tmp = await tmpdir()
+      const missing = path.join(tmp.path, "does-not-exist-" + Date.now())
+      const result = Filesystem.resolve(missing)
+      expect(result).toBe(Filesystem.normalizePath(path.resolve(missing)))
+    })
+
+    test("throws ELOOP on symlink cycle", async () => {
+      await using tmp = await tmpdir()
+      const a = path.join(tmp.path, "a")
+      const b = path.join(tmp.path, "b")
+      await fs.symlink(b, a)
+      await fs.symlink(a, b)
+      expect(() => Filesystem.resolve(a)).toThrow()
+    })
+
+    // Windows: chmod(0o000) is a no-op, so EACCES cannot be triggered
+    test("throws EACCES on permission-denied symlink target", async () => {
+      if (process.platform === "win32") return
+      if (process.getuid?.() === 0) return // skip when running as root
+      await using tmp = await tmpdir()
+      const dir = path.join(tmp.path, "restricted")
+      await fs.mkdir(dir)
+      const link = path.join(tmp.path, "link")
+      await fs.symlink(dir, link)
+      await fs.chmod(dir, 0o000)
+      try {
+        expect(() => Filesystem.resolve(path.join(link, "child"))).toThrow()
+      } finally {
+        await fs.chmod(dir, 0o755)
+      }
+    })
+
+    // Windows: traversing through a file throws ENOENT (not ENOTDIR),
+    // which resolve() catches as a fallback instead of rethrowing
+    test("rethrows non-ENOENT errors", async () => {
+      if (process.platform === "win32") return
+      await using tmp = await tmpdir()
+      const file = path.join(tmp.path, "not-a-directory")
+      await fs.writeFile(file, "x")
+      expect(() => Filesystem.resolve(path.join(file, "child"))).toThrow()
     })
   })
 })

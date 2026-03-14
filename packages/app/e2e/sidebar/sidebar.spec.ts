@@ -5,12 +5,14 @@ test("sidebar can be collapsed and expanded", async ({ page, gotoSession }) => {
   await gotoSession()
 
   await openSidebar(page)
+  const button = page.getByRole("button", { name: /toggle sidebar/i }).first()
+  await expect(button).toHaveAttribute("aria-expanded", "true")
 
   await toggleSidebar(page)
-  await expect(page.locator("main")).toHaveClass(/xl:border-l/)
+  await expect(button).toHaveAttribute("aria-expanded", "false")
 
   await toggleSidebar(page)
-  await expect(page.locator("main")).not.toHaveClass(/xl:border-l/)
+  await expect(button).toHaveAttribute("aria-expanded", "true")
 })
 
 test("sidebar collapsed state persists across navigation and reload", async ({ page, sdk, gotoSession }) => {
@@ -19,14 +21,15 @@ test("sidebar collapsed state persists across navigation and reload", async ({ p
       await gotoSession(session1.id)
 
       await openSidebar(page)
+      const button = page.getByRole("button", { name: /toggle sidebar/i }).first()
       await toggleSidebar(page)
-      await expect(page.locator("main")).toHaveClass(/xl:border-l/)
+      await expect(button).toHaveAttribute("aria-expanded", "false")
 
       await gotoSession(session2.id)
-      await expect(page.locator("main")).toHaveClass(/xl:border-l/)
+      await expect(button).toHaveAttribute("aria-expanded", "false")
 
       await page.reload()
-      await expect(page.locator("main")).toHaveClass(/xl:border-l/)
+      await expect(button).toHaveAttribute("aria-expanded", "false")
 
       const opened = await page.evaluate(
         () => JSON.parse(localStorage.getItem("opencode.global.dat:layout") ?? "{}").sidebar?.opened,

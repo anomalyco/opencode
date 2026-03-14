@@ -61,7 +61,8 @@ export namespace FileTime {
     const time = get(sessionID, filepath)
     if (!time) throw new Error(`You must read file ${filepath} before overwriting it. Use the Read tool first`)
     const mtime = Filesystem.stat(filepath)?.mtime
-    if (mtime && mtime.getTime() > time.getTime()) {
+    // Allow a 50ms tolerance for Windows NTFS timestamp fuzziness / async flushing
+    if (mtime && mtime.getTime() > time.getTime() + 50) {
       throw new Error(
         `File ${filepath} has been modified since it was last read.\nLast modification: ${mtime.toISOString()}\nLast read: ${time.toISOString()}\n\nPlease read the file again before modifying it.`,
       )

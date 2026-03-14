@@ -100,29 +100,54 @@ export const stripeWebhook = new stripe.WebhookEndpoint("StripeWebhookEndpoint",
   ],
 })
 
-const zenProduct = new stripe.Product("ZenBlack", {
+const zenLiteProduct = new stripe.Product("ZenLite", {
+  name: "OpenCode Go",
+})
+const zenLiteCouponFirstMonth50 = new stripe.Coupon("ZenLiteCouponFirstMonth50", {
+  name: "First month 50% off",
+  percentOff: 50,
+  appliesToProducts: [zenLiteProduct.id],
+  duration: "once",
+})
+const zenLitePrice = new stripe.Price("ZenLitePrice", {
+  product: zenLiteProduct.id,
+  currency: "usd",
+  recurring: {
+    interval: "month",
+    intervalCount: 1,
+  },
+  unitAmount: 1000,
+})
+const ZEN_LITE_PRICE = new sst.Linkable("ZEN_LITE_PRICE", {
+  properties: {
+    product: zenLiteProduct.id,
+    price: zenLitePrice.id,
+    firstMonth50Coupon: zenLiteCouponFirstMonth50.id,
+  },
+})
+
+const zenBlackProduct = new stripe.Product("ZenBlack", {
   name: "OpenCode Black",
 })
-const zenPriceProps = {
-  product: zenProduct.id,
+const zenBlackPriceProps = {
+  product: zenBlackProduct.id,
   currency: "usd",
   recurring: {
     interval: "month",
     intervalCount: 1,
   },
 }
-const zenPrice200 = new stripe.Price("ZenBlackPrice", { ...zenPriceProps, unitAmount: 20000 })
-const zenPrice100 = new stripe.Price("ZenBlack100Price", { ...zenPriceProps, unitAmount: 10000 })
-const zenPrice20 = new stripe.Price("ZenBlack20Price", { ...zenPriceProps, unitAmount: 2000 })
+const zenBlackPrice200 = new stripe.Price("ZenBlackPrice", { ...zenBlackPriceProps, unitAmount: 20000 })
+const zenBlackPrice100 = new stripe.Price("ZenBlack100Price", { ...zenBlackPriceProps, unitAmount: 10000 })
+const zenBlackPrice20 = new stripe.Price("ZenBlack20Price", { ...zenBlackPriceProps, unitAmount: 2000 })
 const ZEN_BLACK_PRICE = new sst.Linkable("ZEN_BLACK_PRICE", {
   properties: {
-    product: zenProduct.id,
-    plan200: zenPrice200.id,
-    plan100: zenPrice100.id,
-    plan20: zenPrice20.id,
+    product: zenBlackProduct.id,
+    plan200: zenBlackPrice200.id,
+    plan100: zenBlackPrice100.id,
+    plan20: zenBlackPrice20.id,
   },
 })
-const ZEN_BLACK_LIMITS = new sst.Secret("ZEN_BLACK_LIMITS")
 
 const ZEN_MODELS = [
   new sst.Secret("ZEN_MODELS1"),
@@ -195,7 +220,8 @@ new sst.cloudflare.x.SolidStart("Console", {
     AWS_SES_ACCESS_KEY_ID,
     AWS_SES_SECRET_ACCESS_KEY,
     ZEN_BLACK_PRICE,
-    ZEN_BLACK_LIMITS,
+    ZEN_LITE_PRICE,
+    new sst.Secret("ZEN_LIMITS"),
     new sst.Secret("ZEN_SESSION_SECRET"),
     ...ZEN_MODELS,
     ...($dev

@@ -15,6 +15,7 @@ export const dict = {
   "nav.home": "Hjem",
   "nav.openMenu": "Åpne meny",
   "nav.getStartedFree": "Kom i gang gratis",
+  "nav.logoAlt": "OpenCode",
 
   "nav.context.copyLogo": "Kopier logo som SVG",
   "nav.context.copyWordmark": "Kopier wordmark som SVG",
@@ -42,8 +43,12 @@ export const dict = {
   "notFound.docs": "Dokumentasjon",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
+  "notFound.logoLightAlt": "opencode logo lys",
+  "notFound.logoDarkAlt": "opencode logo mørk",
 
   "user.logout": "Logg ut",
+
+  "auth.callback.error.codeMissing": "Ingen autorisasjonskode funnet.",
 
   "workspace.select": "Velg arbeidsområde",
   "workspace.createNew": "+ Opprett nytt arbeidsområde",
@@ -76,6 +81,8 @@ export const dict = {
   "error.reloadAmountMin": "Påfyllingsbeløp må være minst ${{amount}}",
   "error.reloadTriggerMin": "Saldo-trigger må være minst ${{amount}}",
 
+  "app.meta.description": "OpenCode - Den åpne kildekode kodingsagenten.",
+
   "home.title": "OpenCode | Den åpne kildekode AI-kodingsagenten",
 
   "temp.title": "opencode | AI-kodingsagent bygget for terminalen",
@@ -91,6 +98,8 @@ export const dict = {
   "temp.feature.models.afterLink": ", inkludert lokale modeller",
   "temp.screenshot.caption": "opencode TUI med tokyonight-tema",
   "temp.screenshot.alt": "opencode TUI med tokyonight-tema",
+  "temp.logoLightAlt": "opencode logo lys",
+  "temp.logoDarkAlt": "opencode logo mørk",
 
   "home.banner.badge": "Ny",
   "home.banner.text": "Desktop-app tilgjengelig i beta",
@@ -240,11 +249,133 @@ export const dict = {
     "Alle Zen-modeller hostes i USA. Leverandører følger en policy om null oppbevaring og bruker ikke dataene dine til modelltrening, med",
   "zen.privacy.exceptionsLink": "følgende unntak",
 
+  "go.title": "OpenCode Go | Rimelige kodemodeller for alle",
+  "go.meta.description":
+    "Go starter på $5 for den første måneden, deretter $10/måned, med sjenerøse 5-timers forespørselsgrenser for GLM-5, Kimi K2.5 og MiniMax M2.5.",
+  "go.hero.title": "Rimelige kodemodeller for alle",
+  "go.hero.body":
+    "Go bringer agent-koding til programmerere over hele verden. Med rause grenser og pålitelig tilgang til de mest kapable åpen kildekode-modellene, kan du bygge med kraftige agenter uten å bekymre deg for kostnader eller tilgjengelighet.",
+
+  "go.cta.start": "Abonner på Go",
+  "go.cta.template": "{{text}} {{price}}",
+  "go.cta.text": "Abonner på Go",
+  "go.cta.price": "$10/måned",
+  "go.cta.promo": "$5 første måned",
+  "go.pricing.body":
+    "Bruk med hvilken som helst agent. $5 første måned, deretter $10/måned. Fyll på kreditt ved behov. Avslutt når som helst.",
+  "go.graph.free": "Gratis",
+  "go.graph.freePill": "Big Pickle og gratis modeller",
+  "go.graph.go": "Go",
+  "go.graph.label": "Forespørsler per 5 timer",
+  "go.graph.usageLimits": "Bruksgrenser",
+  "go.graph.tick": "{{n}}x",
+  "go.graph.aria": "Forespørsler per 5t: {{free}} vs {{go}}",
+
+  "go.testimonials.brand.zen": "Zen",
+  "go.testimonials.brand.go": "Go",
+  "go.testimonials.handle": "@OpenCode",
+  "go.testimonials.dax.name": "Dax Raad",
+  "go.testimonials.dax.title": "tidligere CEO, Terminal Products",
+  "go.testimonials.dax.quoteAfter": "har endret livet mitt, det er virkelig en no-brainer.",
+  "go.testimonials.jay.name": "Jay V",
+  "go.testimonials.jay.title": "tidligere grunnlegger, SEED, PM, Melt, Pop, Dapt, Cadmus og ViewPoint",
+  "go.testimonials.jay.quoteBefore": "4 av 5 personer på teamet vårt elsker å bruke",
+  "go.testimonials.jay.quoteAfter": ".",
+  "go.testimonials.adam.name": "Adam Elmore",
+  "go.testimonials.adam.title": "tidligere Hero, AWS",
+  "go.testimonials.adam.quoteBefore": "Jeg kan ikke anbefale",
+  "go.testimonials.adam.quoteAfter": "nok. Seriøst, det er virkelig bra.",
+  "go.testimonials.david.name": "David Hill",
+  "go.testimonials.david.title": "tidligere Head of Design, Laravel",
+  "go.testimonials.david.quoteBefore": "Med",
+  "go.testimonials.david.quoteAfter": "vet jeg at alle modellene er testet og perfekte for kodeagenter.",
+  "go.testimonials.frank.name": "Frank Wang",
+  "go.testimonials.frank.title": "tidligere intern, Nvidia (4 ganger)",
+  "go.testimonials.frank.quote": "Jeg skulle ønske jeg fortsatt var hos Nvidia.",
+  "go.problem.title": "Hvilket problem løser Go?",
+  "go.problem.body":
+    "Vi fokuserer på å bringe OpenCode-opplevelsen til så mange som mulig. OpenCode Go er et rimelig abonnement: $5 for den første måneden, deretter $10/måned. Det gir sjenerøse grenser og pålitelig tilgang til de mest kapable åpen kildekode-modellene.",
+  "go.problem.subtitle": " ",
+  "go.problem.item1": "Rimelig abonnementspris",
+  "go.problem.item2": "Rause grenser og pålitelig tilgang",
+  "go.problem.item3": "Bygget for så mange programmerere som mulig",
+  "go.problem.item4": "Inkluderer GLM-5, Kimi K2.5 og MiniMax M2.5",
+  "go.how.title": "Hvordan Go fungerer",
+  "go.how.body":
+    "Go starter på $5 for den første måneden, deretter $10/måned. Du kan bruke det med OpenCode eller hvilken som helst agent.",
+  "go.how.step1.title": "Opprett en konto",
+  "go.how.step1.beforeLink": "følg",
+  "go.how.step1.link": "oppsettsinstruksjonene",
+  "go.how.step2.title": "Abonner på Go",
+  "go.how.step2.link": "$5 første måned",
+  "go.how.step2.afterLink": "deretter $10/måned med sjenerøse grenser",
+  "go.how.step3.title": "Begynn å kode",
+  "go.how.step3.body": "med pålitelig tilgang til åpen kildekode-modeller",
+  "go.privacy.title": "Personvernet ditt er viktig for oss",
+  "go.privacy.body":
+    "Planen er primært designet for internasjonale brukere, med modeller driftet i USA, EU og Singapore for stabil global tilgang.",
+  "go.privacy.contactAfter": "hvis du har spørsmål.",
+  "go.privacy.beforeExceptions":
+    "Go-modeller hostes i USA. Leverandører følger en policy om null oppbevaring og bruker ikke dataene dine til modelltrening, med",
+  "go.privacy.exceptionsLink": "følgende unntak",
+  "go.faq.q1": "Hva er OpenCode Go?",
+  "go.faq.a1":
+    "Go er et rimelig abonnement som gir deg pålitelig tilgang til kapable åpen kildekode-modeller for agent-koding.",
+  "go.faq.q2": "Hvilke modeller inkluderer Go?",
+  "go.faq.a2": "Go inkluderer GLM-5, Kimi K2.5 og MiniMax M2.5, med rause grenser og pålitelig tilgang.",
+  "go.faq.q3": "Er Go det samme som Zen?",
+  "go.faq.a3":
+    "Nei. Zen er betaling etter bruk, mens Go starter på $5 for den første måneden, deretter $10/måned, med sjenerøse grenser og pålitelig tilgang til åpen kildekode-modellene GLM-5, Kimi K2.5 og MiniMax M2.5.",
+  "go.faq.q4": "Hva koster Go?",
+  "go.faq.a4.p1.beforePricing": "Go koster",
+  "go.faq.a4.p1.pricingLink": "$5 første måned",
+  "go.faq.a4.p1.afterPricing": "deretter $10/måned med sjenerøse grenser.",
+  "go.faq.a4.p2.beforeAccount": "Du kan administrere abonnementet ditt i din",
+  "go.faq.a4.p2.accountLink": "konto",
+  "go.faq.a4.p3": "Avslutt når som helst.",
+  "go.faq.q5": "Hva med data og personvern?",
+  "go.faq.a5.body":
+    "Planen er primært designet for internasjonale brukere, med modeller driftet i USA, EU og Singapore for stabil global tilgang.",
+  "go.faq.a5.contactAfter": "hvis du har spørsmål.",
+  "go.faq.a5.beforeExceptions":
+    "Go-modeller hostes i USA. Leverandører følger en policy om null oppbevaring og bruker ikke dataene dine til modelltrening, med",
+  "go.faq.a5.exceptionsLink": "følgende unntak",
+  "go.faq.q6": "Kan jeg fylle på kreditt?",
+  "go.faq.a6": "Hvis du trenger mer bruk, kan du fylle på kreditt i kontoen din.",
+  "go.faq.q7": "Kan jeg avslutte?",
+  "go.faq.a7": "Ja, du kan avslutte når som helst.",
+  "go.faq.q8": "Kan jeg bruke Go med andre kodeagenter?",
+  "go.faq.a8":
+    "Ja, du kan bruke Go med hvilken som helst agent. Følg oppsettinstruksjonene i din foretrukne kodeagent.",
+
+  "go.faq.q9": "Hva er forskjellen mellom gratis modeller og Go?",
+  "go.faq.a9":
+    "Gratis modeller inkluderer Big Pickle pluss kampanjemodeller tilgjengelig på det tidspunktet, med en kvote på 200 forespørsler/dag. Go inkluderer GLM-5, Kimi K2.5 og MiniMax M2.5 med høyere kvoter håndhevet over rullerende vinduer (5 timer, ukentlig og månedlig), omtrent tilsvarende $12 per 5 timer, $30 per uke og $60 per måned (faktiske forespørselsantall varierer etter modell og bruk).",
+
+  "zen.api.error.rateLimitExceeded": "Rate limit overskredet. Vennligst prøv igjen senere.",
+  "zen.api.error.modelNotSupported": "Modell {{model}} støttes ikke",
+  "zen.api.error.modelFormatNotSupported": "Modell {{model}} støttes ikke for format {{format}}",
+  "zen.api.error.noProviderAvailable": "Ingen leverandør tilgjengelig",
+  "zen.api.error.providerNotSupported": "Leverandør {{provider}} støttes ikke",
+  "zen.api.error.missingApiKey": "Mangler API-nøkkel.",
+  "zen.api.error.invalidApiKey": "Ugyldig API-nøkkel.",
+  "zen.api.error.subscriptionQuotaExceeded": "Abonnementskvote overskredet. Prøv igjen om {{retryIn}}.",
+  "zen.api.error.subscriptionQuotaExceededUseFreeModels":
+    "Abonnementskvote overskredet. Du kan fortsette å bruke gratis modeller.",
+  "zen.api.error.noPaymentMethod": "Ingen betalingsmetode. Legg til en betalingsmetode her: {{billingUrl}}",
+  "zen.api.error.insufficientBalance": "Utilstrekkelig saldo. Administrer faktureringen din her: {{billingUrl}}",
+  "zen.api.error.workspaceMonthlyLimitReached":
+    "Arbeidsområdet ditt har nådd sin månedlige utgiftsgrense på ${{amount}}. Administrer grensene dine her: {{billingUrl}}",
+  "zen.api.error.userMonthlyLimitReached":
+    "Du har nådd din månedlige utgiftsgrense på ${{amount}}. Administrer grensene dine her: {{membersUrl}}",
+  "zen.api.error.modelDisabled": "Modellen er deaktivert",
+
   "black.meta.title": "OpenCode Black | Få tilgang til verdens beste kodemodeller",
   "black.meta.description": "Få tilgang til Claude, GPT, Gemini og mer med OpenCode Black-abonnementer.",
   "black.hero.title": "Få tilgang til verdens beste kodemodeller",
   "black.hero.subtitle": "Inkludert Claude, GPT, Gemini og mer",
   "black.title": "OpenCode Black | Priser",
+  "black.paused": "Black-planregistrering er midlertidig satt på pause.",
   "black.plan.icon20": "Black 20-plan",
   "black.plan.icon100": "Black 100-plan",
   "black.plan.icon200": "Black 200-plan",
@@ -287,12 +418,15 @@ export const dict = {
   "black.subscribe.success.chargeNotice": "Kortet ditt vil bli belastet når abonnementet aktiveres",
 
   "workspace.nav.zen": "Zen",
+  "workspace.nav.go": "Go",
+  "workspace.nav.usage": "Bruk",
   "workspace.nav.apiKeys": "API-nøkler",
   "workspace.nav.members": "Medlemmer",
   "workspace.nav.billing": "Fakturering",
   "workspace.nav.settings": "Innstillinger",
 
   "workspace.home.banner.beforeLink": "Pålitelige optimaliserte modeller for kodeagenter.",
+  "workspace.lite.banner.beforeLink": "Lavkost kodemodeller for alle.",
   "workspace.home.billing.loading": "Laster...",
   "workspace.home.billing.enable": "Aktiver fakturering",
   "workspace.home.billing.currentBalance": "Gjeldende saldo",
@@ -340,12 +474,15 @@ export const dict = {
   "workspace.usage.table.input": "Input",
   "workspace.usage.table.output": "Output",
   "workspace.usage.table.cost": "Kostnad",
+  "workspace.usage.table.session": "Økt",
   "workspace.usage.breakdown.input": "Input",
   "workspace.usage.breakdown.cacheRead": "Cache Lest",
   "workspace.usage.breakdown.cacheWrite": "Cache Skrevet",
   "workspace.usage.breakdown.output": "Output",
   "workspace.usage.breakdown.reasoning": "Resonnering",
-  "workspace.usage.subscription": "abonnement (${{amount}})",
+  "workspace.usage.subscription": "Black (${{amount}})",
+  "workspace.usage.lite": "Go (${{amount}})",
+  "workspace.usage.byok": "BYOK (${{amount}})",
 
   "workspace.cost.title": "Kostnad",
   "workspace.cost.subtitle": "Brukskostnader fordelt på modell.",
@@ -409,6 +546,8 @@ export const dict = {
   "workspace.billing.loading": "Laster...",
   "workspace.billing.addAction": "Legg til",
   "workspace.billing.addBalance": "Legg til saldo",
+  "workspace.billing.alipay": "Alipay",
+  "workspace.billing.wechat": "WeChat Pay",
   "workspace.billing.linkedToStripe": "Koblet til Stripe",
   "workspace.billing.manage": "Administrer",
   "workspace.billing.enable": "Aktiver fakturering",
@@ -444,6 +583,7 @@ export const dict = {
   "workspace.reload.updatePaymentMethod": "Vennligst oppdater betalingsmetoden din og prøv på nytt.",
   "workspace.reload.retrying": "Prøver på nytt...",
   "workspace.reload.retry": "Prøv på nytt",
+  "workspace.reload.error.paymentFailed": "Betaling mislyktes.",
 
   "workspace.payments.title": "Betalingshistorikk",
   "workspace.payments.subtitle": "Nylige betalingstransaksjoner.",
@@ -481,6 +621,36 @@ export const dict = {
   "workspace.black.waitlist.enrolled": "Påmeldt",
   "workspace.black.waitlist.enrollNote":
     "Når du klikker på Meld på, starter abonnementet umiddelbart og kortet ditt belastes.",
+
+  "workspace.lite.loading": "Laster...",
+  "workspace.lite.time.day": "dag",
+  "workspace.lite.time.days": "dager",
+  "workspace.lite.time.hour": "time",
+  "workspace.lite.time.hours": "timer",
+  "workspace.lite.time.minute": "minutt",
+  "workspace.lite.time.minutes": "minutter",
+  "workspace.lite.time.fewSeconds": "noen få sekunder",
+  "workspace.lite.subscription.message": "Du abonnerer på OpenCode Go.",
+  "workspace.lite.subscription.manage": "Administrer abonnement",
+  "workspace.lite.subscription.rollingUsage": "Løpende bruk",
+  "workspace.lite.subscription.weeklyUsage": "Ukentlig bruk",
+  "workspace.lite.subscription.monthlyUsage": "Månedlig bruk",
+  "workspace.lite.subscription.resetsIn": "Nullstilles om",
+  "workspace.lite.subscription.useBalance": "Bruk din tilgjengelige saldo etter å ha nådd bruksgrensene",
+  "workspace.lite.subscription.selectProvider":
+    'Velg "OpenCode Go" som leverandør i opencode-konfigurasjonen din for å bruke Go-modeller.',
+  "workspace.lite.black.message":
+    "Du abonnerer for øyeblikket på OpenCode Black eller står på venteliste. Vennligst avslutt abonnementet først hvis du vil bytte til Go.",
+  "workspace.lite.other.message":
+    "Et annet medlem i dette arbeidsområdet abonnerer allerede på OpenCode Go. Kun ett medlem per arbeidsområde kan abonnere.",
+  "workspace.lite.promo.description":
+    "OpenCode Go starter på {{price}}, deretter $10/måned, og gir pålitelig tilgang til populære åpne kodingsmodeller med sjenerøse bruksgrenser.",
+  "workspace.lite.promo.price": "$5 for den første måneden",
+  "workspace.lite.promo.modelsTitle": "Hva som er inkludert",
+  "workspace.lite.promo.footer":
+    "Planen er primært designet for internasjonale brukere, med modeller driftet i USA, EU og Singapore for stabil global tilgang. Priser og bruksgrenser kan endres etter hvert som vi lærer fra tidlig bruk og tilbakemeldinger.",
+  "workspace.lite.promo.subscribe": "Abonner på Go",
+  "workspace.lite.promo.subscribing": "Omdirigerer...",
 
   "download.title": "OpenCode | Last ned",
   "download.meta.description": "Last ned OpenCode for macOS, Windows og Linux",
@@ -532,6 +702,10 @@ export const dict = {
   "enterprise.form.send": "Send",
   "enterprise.form.sending": "Sender...",
   "enterprise.form.success": "Melding sendt, vi tar kontakt snart.",
+  "enterprise.form.success.submitted": "Skjemaet ble sendt inn.",
+  "enterprise.form.error.allFieldsRequired": "Alle felt er obligatoriske.",
+  "enterprise.form.error.invalidEmailFormat": "Ugyldig e-postformat.",
+  "enterprise.form.error.internalServer": "Intern serverfeil.",
   "enterprise.faq.title": "FAQ",
   "enterprise.faq.q1": "Hva er OpenCode Enterprise?",
   "enterprise.faq.a1":
@@ -564,6 +738,7 @@ export const dict = {
   "bench.list.table.agent": "Agent",
   "bench.list.table.model": "Modell",
   "bench.list.table.score": "Poengsum",
+  "bench.submission.error.allFieldsRequired": "Alle felt er obligatoriske.",
 
   "bench.detail.title": "Benchmark - {{task}}",
   "bench.detail.notFound": "Oppgave ikke funnet",

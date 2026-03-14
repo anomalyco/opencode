@@ -1,7 +1,6 @@
 import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
-import type { IconName } from "@opencode-ai/ui/icons/provider"
 import { List, type ListRef } from "@opencode-ai/ui/list"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Tag } from "@opencode-ai/ui/tag"
@@ -14,8 +13,10 @@ import { DialogSelectProvider } from "./dialog-select-provider"
 import { ModelTooltip } from "./model-tooltip"
 import { useLanguage } from "@/context/language"
 
-export const DialogSelectModelUnpaid: Component = () => {
-  const local = useLocal()
+type ModelState = ReturnType<typeof useLocal>["model"]
+
+export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props) => {
+  const model = props.model ?? useLocal().model
   const dialog = useDialog()
   const providers = useProviders()
   const language = useLanguage()
@@ -36,8 +37,8 @@ export const DialogSelectModelUnpaid: Component = () => {
         <List
           class="[&_[data-slot=list-scroll]]:overflow-visible"
           ref={(ref) => (listRef = ref)}
-          items={local.model.list}
-          current={local.model.current()}
+          items={model.list}
+          current={model.current()}
           key={(x) => `${x.provider.id}:${x.id}`}
           itemWrapper={(item, node) => (
             <Tooltip
@@ -56,7 +57,7 @@ export const DialogSelectModelUnpaid: Component = () => {
             </Tooltip>
           )}
           onSelect={(x) => {
-            local.model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined, {
+            model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined, {
               recent: true,
             })
             dialog.close()
@@ -95,10 +96,21 @@ export const DialogSelectModelUnpaid: Component = () => {
               >
                 {(i) => (
                   <div class="w-full flex items-center gap-x-3">
-                    <ProviderIcon data-slot="list-item-extra-icon" id={i.id as IconName} />
+                    <ProviderIcon data-slot="list-item-extra-icon" id={i.id} />
                     <span>{i.name}</span>
                     <Show when={i.id === "opencode"}>
+                      <div class="text-14-regular text-text-weak">{language.t("dialog.provider.opencode.tagline")}</div>
+                    </Show>
+                    <Show when={i.id === "opencode"}>
                       <Tag>{language.t("dialog.provider.tag.recommended")}</Tag>
+                    </Show>
+                    <Show when={i.id === "opencode-go"}>
+                      <>
+                        <div class="text-14-regular text-text-weak">
+                          {language.t("dialog.provider.opencodeGo.tagline")}
+                        </div>
+                        <Tag>{language.t("dialog.provider.tag.recommended")}</Tag>
+                      </>
                     </Show>
                     <Show when={i.id === "anthropic"}>
                       <div class="text-14-regular text-text-weak">{language.t("dialog.provider.anthropic.note")}</div>

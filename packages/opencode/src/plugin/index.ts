@@ -25,8 +25,12 @@ export namespace Plugin {
     const client = createOpencodeClient({
       baseUrl: "http://localhost:4096",
       directory: Instance.directory,
-      // @ts-ignore - fetch type incompatibility
-      fetch: async (...args) => Server.App().fetch(...args),
+      headers: Flag.OPENCODE_SERVER_PASSWORD
+        ? {
+            Authorization: `Basic ${Buffer.from(`${Flag.OPENCODE_SERVER_USERNAME ?? "opencode"}:${Flag.OPENCODE_SERVER_PASSWORD}`).toString("base64")}`,
+          }
+        : undefined,
+      fetch: async (...args) => Server.Default().fetch(...args),
     })
     const config = await Config.get()
     const hooks: Hooks[] = []
@@ -35,7 +39,9 @@ export namespace Plugin {
       project: Instance.project,
       worktree: Instance.worktree,
       directory: Instance.directory,
-      serverUrl: Server.url(),
+      get serverUrl(): URL {
+        return Server.url ?? new URL("http://localhost:4096")
+      },
       $: Bun.$,
     }
 

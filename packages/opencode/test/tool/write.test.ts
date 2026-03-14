@@ -4,10 +4,11 @@ import fs from "fs/promises"
 import { WriteTool } from "../../src/tool/write"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
+import { SessionID, MessageID } from "../../src/session/schema"
 
 const ctx = {
-  sessionID: "test-write-session",
-  messageID: "",
+  sessionID: SessionID.make("ses_test-write-session"),
+  messageID: MessageID.make(""),
   callID: "",
   agent: "build",
   abort: AbortSignal.any([]),
@@ -293,19 +294,26 @@ describe("tool.write", () => {
   })
 
   describe("error handling", () => {
-    test("throws error for paths outside project", async () => {
+    test("throws error when OS denies write access", async () => {
       await using tmp = await tmpdir()
-      const outsidePath = "/etc/passwd"
+      const readonlyPath = path.join(tmp.path, "readonly.txt")
+
+      // Create a read-only file
+      await fs.writeFile(readonlyPath, "test", "utf-8")
+      await fs.chmod(readonlyPath, 0o444)
 
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
+          const { FileTime } = await import("../../src/file/time")
+          FileTime.read(ctx.sessionID, readonlyPath)
+
           const write = await WriteTool.init()
           await expect(
             write.execute(
               {
-                filePath: outsidePath,
-                content: "test",
+                filePath: readonlyPath,
+                content: "new content",
               },
               ctx,
             ),
