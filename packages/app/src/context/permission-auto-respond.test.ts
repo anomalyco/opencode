@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import type { PermissionRequest, Session } from "@opencode-ai/sdk/v2/client"
 import { base64Encode } from "@opencode-ai/util/encode"
-import { autoRespondsPermission, isDirectoryAutoAccepting } from "./permission-auto-respond"
+import {
+  autoRespondsPermission,
+  globalAcceptKey,
+  isDirectoryAutoAccepting,
+  isGlobalAutoAccepting,
+} from "./permission-auto-respond"
 
 const session = (input: { id: string; parentID?: string }) =>
   ({
@@ -81,6 +86,26 @@ describe("autoRespondsPermission", () => {
 
     expect(autoRespondsPermission(autoAccept, sessions, permission("root"), directory)).toBe(false)
   })
+
+  test("falls back to global auto-accept", () => {
+    const sessions = [session({ id: "root" })]
+    const autoAccept = {
+      [globalAcceptKey()]: true,
+    }
+
+    expect(autoRespondsPermission(autoAccept, sessions, permission("root"), "/tmp/project")).toBe(true)
+  })
+
+  test("directory override takes precedence over global auto-accept", () => {
+    const directory = "/tmp/project"
+    const sessions = [session({ id: "root" })]
+    const autoAccept = {
+      [globalAcceptKey()]: true,
+      [`${base64Encode(directory)}/*`]: false,
+    }
+
+    expect(autoRespondsPermission(autoAccept, sessions, permission("root"), directory)).toBe(false)
+  })
 })
 
 describe("isDirectoryAutoAccepting", () => {
@@ -98,5 +123,19 @@ describe("isDirectoryAutoAccepting", () => {
     const directory = "/tmp/project"
     const autoAccept = { [`${base64Encode(directory)}/*`]: false }
     expect(isDirectoryAutoAccepting(autoAccept, directory)).toBe(false)
+  })
+
+  test("returns true when global key is set", () => {
+    expect(isDirectoryAutoAccepting({ [globalAcceptKey()]: true }, "/tmp/project")).toBe(true)
+  })
+})
+
+describe("isGlobalAutoAccepting", () => {
+  test("returns true when global key is set", () => {
+    expect(isGlobalAutoAccepting({ [globalAcceptKey()]: true })).toBe(true)
+  })
+
+  test("returns false when global key is not set", () => {
+    expect(isGlobalAutoAccepting({})).toBe(false)
   })
 })

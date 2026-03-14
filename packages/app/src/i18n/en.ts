@@ -73,6 +73,10 @@ export const dict = {
   "command.prompt.mode.normal": "Prompt",
   "command.permissions.autoaccept.enable": "Auto-accept permissions",
   "command.permissions.autoaccept.disable": "Stop auto-accepting permissions",
+  "command.permissions.autoaccept.disable.global.session":
+    "Stop auto-accepting permissions for this session (global setting is on)",
+  "command.permissions.autoaccept.disable.global.directory":
+    "Stop auto-accepting permissions for this project (global setting is on)",
   "command.workspace.toggle": "Toggle workspaces",
   "command.workspace.toggle.description": "Enable or disable multiple workspaces in the sidebar",
   "command.session.undo": "Undo",
@@ -705,6 +709,7 @@ export const dict = {
   "settings.section.server": "Server",
   "settings.tab.general": "General",
   "settings.tab.shortcuts": "Shortcuts",
+  "settings.tab.permissions": "Permissions",
   "settings.desktop.section.wsl": "WSL",
   "settings.desktop.wsl.title": "WSL integration",
   "settings.desktop.wsl.description": "Run the OpenCode server inside WSL on Windows.",
@@ -870,8 +875,12 @@ export const dict = {
 
   "settings.permissions.title": "Permissions",
   "settings.permissions.description": "Control what tools the server can use by default.",
+  "settings.permissions.section.autoaccept": "Auto-accept",
   "settings.permissions.section.tools": "Tools",
   "settings.permissions.toast.updateFailed.title": "Failed to update permissions",
+  "settings.permissions.autoaccept.global.title": "Auto-accept across all projects",
+  "settings.permissions.autoaccept.global.description":
+    "Automatically approve permission requests by default in every project. You can still override this per project or session.",
 
   "settings.permissions.action.allow": "Allow",
   "settings.permissions.action.ask": "Ask",

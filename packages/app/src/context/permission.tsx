@@ -9,8 +9,11 @@ import { useParams } from "@solidjs/router"
 import { decode64 } from "@/utils/base64"
 import {
   acceptKey,
+  autoRespondsPermissionSource,
+  globalAcceptKey,
   directoryAcceptKey,
   isDirectoryAutoAccepting,
+  isGlobalAutoAccepting,
   autoRespondsPermission,
 } from "./permission-auto-respond"
 
@@ -147,9 +150,18 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
       return isDirectoryAutoAccepting(store.autoAccept, directory)
     }
 
+    function isAutoAcceptingGlobal() {
+      return isGlobalAutoAccepting(store.autoAccept)
+    }
+
     function shouldAutoRespond(permission: PermissionRequest, directory?: string) {
       const session = directory ? globalSync.child(directory, { bootstrap: false })[0].session : []
       return autoRespondsPermission(store.autoAccept, session, permission, directory)
+    }
+
+    function autoRespondSource(sessionID: string, directory?: string) {
+      const session = directory ? globalSync.child(directory, { bootstrap: false })[0].session : []
+      return autoRespondsPermissionSource(store.autoAccept, session, { sessionID }, directory)
     }
 
     function bumpEnableVersion(sessionID: string, directory?: string) {
@@ -200,6 +212,24 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
       )
     }
 
+    function enableGlobal() {
+      const key = globalAcceptKey()
+      setStore(
+        produce((draft) => {
+          draft.autoAccept[key] = true
+        }),
+      )
+    }
+
+    function disableGlobal() {
+      const key = globalAcceptKey()
+      setStore(
+        produce((draft) => {
+          draft.autoAccept[key] = false
+        }),
+      )
+    }
+
     function enable(sessionID: string, directory: string) {
       const key = acceptKey(sessionID, directory)
       const version = bumpEnableVersion(sessionID, directory)
@@ -242,8 +272,10 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
       autoResponds(permission: PermissionRequest, directory?: string) {
         return shouldAutoRespond(permission, directory)
       },
+      autoRespondSource,
       isAutoAccepting,
       isAutoAcceptingDirectory,
+      isAutoAcceptingGlobal,
       toggleAutoAccept(sessionID: string, directory: string) {
         if (isAutoAccepting(sessionID, directory)) {
           disable(sessionID, directory)
@@ -258,6 +290,13 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
           return
         }
         enableDirectory(directory)
+      },
+      toggleAutoAcceptGlobal() {
+        if (isAutoAcceptingGlobal()) {
+          disableGlobal()
+          return
+        }
+        enableGlobal()
       },
       enableAutoAccept(sessionID: string, directory: string) {
         if (isAutoAccepting(sessionID, directory)) return

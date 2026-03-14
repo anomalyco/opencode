@@ -1031,9 +1031,23 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!id) return permission.isAutoAcceptingDirectory(sdk.directory)
     return permission.isAutoAccepting(id, sdk.directory)
   })
-  const acceptLabel = createMemo(() =>
-    language.t(accepting() ? "command.permissions.autoaccept.disable" : "command.permissions.autoaccept.enable"),
-  )
+  const acceptSource = createMemo(() => {
+    const id = params.id
+    if (!id) {
+      if (permission.isAutoAcceptingGlobal()) return "global"
+      if (permission.isAutoAcceptingDirectory(sdk.directory)) return "directory"
+      return
+    }
+    return permission.autoRespondSource(id, sdk.directory)
+  })
+  const acceptLabel = createMemo(() => {
+    if (!accepting()) return language.t("command.permissions.autoaccept.enable")
+    if (acceptSource() === "global") {
+      if (params.id) return language.t("command.permissions.autoaccept.disable.global.session")
+      return language.t("command.permissions.autoaccept.disable.global.directory")
+    }
+    return language.t("command.permissions.autoaccept.disable")
+  })
   const toggleAccept = () => {
     if (!params.id) {
       permission.toggleAutoAcceptDirectory(sdk.directory)
