@@ -162,7 +162,7 @@ export class QuestionService extends ServiceMap.Service<QuestionService, Questio
           sessionID: existing.info.sessionID,
           requestID: existing.info.id,
         })
-        yield* Deferred.fail(existing.deferred, new RejectedError)
+        yield* Deferred.fail(existing.deferred, new RejectedError())
       })
 
       const list = Effect.fn("QuestionService.list")(function* () {
