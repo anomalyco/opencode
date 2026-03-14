@@ -28,18 +28,18 @@ export namespace Todo {
   export function update(input: { sessionID: SessionID; todos: Info[] }) {
     Database.transaction((db) => {
       db.delete(TodoTable).where(eq(TodoTable.session_id, input.sessionID)).run()
-      if (input.todos.length === 0) return
-      db.insert(TodoTable)
-        .values(
-          input.todos.map((todo, position) => ({
-            session_id: input.sessionID,
-            content: todo.content,
-            status: todo.status,
-            priority: todo.priority,
-            position,
-          })),
-        )
-        .run()
+      if (input.todos.length > 0)
+        db.insert(TodoTable)
+          .values(
+            input.todos.map((todo, position) => ({
+              session_id: input.sessionID,
+              content: todo.content,
+              status: todo.status,
+              priority: todo.priority,
+              position,
+            })),
+          )
+          .run()
     })
     Bus.publish(Event.Updated, input)
   }
