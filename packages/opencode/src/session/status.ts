@@ -1,6 +1,7 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Instance } from "@/project/instance"
+import { SessionID } from "./schema"
 import z from "zod"
 
 export namespace SessionStatus {
@@ -28,7 +29,7 @@ export namespace SessionStatus {
     Status: BusEvent.define(
       "session.status",
       z.object({
-        sessionID: z.string(),
+        sessionID: SessionID.zod,
         status: Info,
       }),
     ),
@@ -36,7 +37,7 @@ export namespace SessionStatus {
     Idle: BusEvent.define(
       "session.idle",
       z.object({
-        sessionID: z.string(),
+        sessionID: SessionID.zod,
       }),
     ),
   }
@@ -46,7 +47,7 @@ export namespace SessionStatus {
     return data
   })
 
-  export function get(sessionID: string) {
+  export function get(sessionID: SessionID) {
     return (
       state()[sessionID] ?? {
         type: "idle",
@@ -58,7 +59,7 @@ export namespace SessionStatus {
     return state()
   }
 
-  export function set(sessionID: string, status: Info) {
+  export function set(sessionID: SessionID, status: Info) {
     Bus.publish(Event.Status, {
       sessionID,
       status,

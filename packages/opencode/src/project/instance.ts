@@ -1,3 +1,4 @@
+import { Effect } from "effect"
 import { Log } from "@/util/log"
 import { Context } from "../util/context"
 import { Project } from "./project"
@@ -5,6 +6,7 @@ import { State } from "./state"
 import { iife } from "@/util/iife"
 import { GlobalBus } from "@/bus/global"
 import { Filesystem } from "@/util/filesystem"
+import { InstanceState } from "@/util/instance-state"
 
 interface Context {
   directory: string
@@ -62,13 +64,14 @@ function track(directory: string, next: Promise<Context>) {
 
 export const Instance = {
   async provide<R>(input: { directory: string; init?: () => Promise<any>; fn: () => R }): Promise<R> {
-    let existing = cache.get(input.directory)
+    const directory = Filesystem.resolve(input.directory)
+    let existing = cache.get(directory)
     if (!existing) {
-      Log.Default.info("creating instance", { directory: input.directory })
+      Log.Default.info("creating instance", { directory })
       existing = track(
-        input.directory,
+        directory,
         boot({
-          directory: input.directory,
+          directory,
           init: input.init,
         }),
       )
@@ -103,16 +106,17 @@ export const Instance = {
     return State.create(() => Instance.directory, init, dispose)
   },
   async reload(input: { directory: string; init?: () => Promise<any>; project?: Project.Info; worktree?: string }) {
-    Log.Default.info("reloading instance", { directory: input.directory })
-    await State.dispose(input.directory)
-    cache.delete(input.directory)
-    const next = track(input.directory, boot(input))
-    emit(input.directory)
+    const directory = Filesystem.resolve(input.directory)
+    Log.Default.info("reloading instance", { directory })
+    await Promise.all([State.dispose(directory), Effect.runPromise(InstanceState.dispose(directory))])
+    cache.delete(directory)
+    const next = track(directory, boot({ ...input, directory }))
+    emit(directory)
     return await next
   },
   async dispose() {
     Log.Default.info("disposing instance", { directory: Instance.directory })
-    await State.dispose(Instance.directory)
+    await Promise.all([State.dispose(Instance.directory), Effect.runPromise(InstanceState.dispose(Instance.directory))])
     cache.delete(Instance.directory)
     emit(Instance.directory)
   },
