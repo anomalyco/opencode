@@ -148,6 +148,7 @@ export class PermissionService extends ServiceMap.Service<PermissionService, Per
       const ask = Effect.fn("PermissionService.ask")(function* (input: z.infer<typeof AskInput>) {
         const state = yield* InstanceState.get(instanceState)
         const { ruleset, ...request } = input
+        let pending = false
 
         for (const pattern of request.patterns) {
           const rule = evaluate(request.permission, pattern, ruleset, state.approved)
@@ -158,19 +159,27 @@ export class PermissionService extends ServiceMap.Service<PermissionService, Per
             })
           }
           if (rule.action === "allow") continue
-
-          const id = request.id ?? PermissionID.ascending()
-          const info: Request = {
-            id,
-            ...request,
-          }
-          log.info("asking", { id, permission: info.permission, patterns: info.patterns })
-
-          const deferred = yield* Deferred.make<void, RejectedError | CorrectedError>()
-          state.pending.set(id, { info, deferred })
-          void Bus.publish(Event.Asked, info)
-          return yield* Deferred.await(deferred)
+          pending = true
         }
+
+        if (!pending) return
+
+        const id = request.id ?? PermissionID.ascending()
+        const info: Request = {
+          id,
+          ...request,
+        }
+        log.info("asking", { id, permission: info.permission, patterns: info.patterns })
+
+        const deferred = yield* Deferred.make<void, RejectedError | CorrectedError>()
+        state.pending.set(id, { info, deferred })
+        void Bus.publish(Event.Asked, info)
+        return yield* Effect.ensuring(
+          Deferred.await(deferred),
+          Effect.sync(() => {
+            state.pending.delete(id)
+          }),
+        )
       })
 
       const reply = Effect.fn("PermissionService.reply")(function* (input: z.infer<typeof ReplyInput>) {
@@ -188,7 +197,7 @@ export class PermissionService extends ServiceMap.Service<PermissionService, Per
         if (input.reply === "reject") {
           yield* Deferred.fail(
             existing.deferred,
-            input.message ? new CorrectedError({ feedback: input.message }) : new RejectedError,
+            input.message ? new CorrectedError({ feedback: input.message }) : new RejectedError(),
           )
 
           for (const [id, item] of state.pending.entries()) {
@@ -199,7 +208,7 @@ export class PermissionService extends ServiceMap.Service<PermissionService, Per
               requestID: item.info.id,
               reply: "reject",
             })
-            yield* Deferred.fail(item.deferred, new RejectedError)
+            yield* Deferred.fail(item.deferred, new RejectedError())
           }
           return
         }
