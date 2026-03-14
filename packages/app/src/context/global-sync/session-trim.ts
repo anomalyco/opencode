@@ -22,10 +22,8 @@ export function takeRecentSessions(sessions: Session[], limit: number, cutoff: n
     if (seen.has(session.id)) continue
     seen.add(session.id)
     if (sessionUpdatedAt(session) <= cutoff) continue
-    const index = selected.findIndex((x) => compareSessionRecent(session, x) < 0)
-    if (index === -1) selected.push(session)
-    if (index !== -1) selected.splice(index, 0, session)
-    if (selected.length > limit) selected.pop()
+    selected.push(session)
+    if (selected.length >= limit) break
   }
   return selected
 }
@@ -36,10 +34,15 @@ export function trimSessions(
 ) {
   const limit = Math.max(0, options.limit)
   const cutoff = (options.now ?? Date.now()) - SESSION_RECENT_WINDOW
+  const seen = new Set<string>()
   const all = input
     .filter((s) => !!s?.id)
     .filter((s) => !s.time?.archived)
-    .sort((a, b) => cmp(a.id, b.id))
+    .filter((s) => {
+      if (seen.has(s.id)) return false
+      seen.add(s.id)
+      return true
+    })
   const roots = all.filter((s) => !s.parentID)
   const children = all.filter((s) => !!s.parentID)
   const base = roots.slice(0, limit)
@@ -52,5 +55,5 @@ export function trimSessions(
     if (perms.length > 0) return true
     return sessionUpdatedAt(s) > cutoff
   })
-  return [...keepRoots, ...keepChildren].sort((a, b) => cmp(a.id, b.id))
+  return [...keepRoots, ...keepChildren]
 }

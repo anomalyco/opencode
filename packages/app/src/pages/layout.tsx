@@ -977,8 +977,8 @@ export default function Layout(props: ParentProps) {
     })
     setStore(
       produce((draft) => {
-        const match = Binary.search(draft.session, session.id, (s) => s.id)
-        if (match.found) draft.session.splice(match.index, 1)
+        const index = draft.session.findIndex((s) => s.id === session.id)
+        if (index !== -1) draft.session.splice(index, 1)
       }),
     )
     if (session.id === params.id) {
@@ -1277,10 +1277,7 @@ export default function Layout(props: ParentProps) {
       clearLastProjectSession(root)
     }
 
-    const latest = latestRootSession(
-      dirs.map((item) => globalSync.child(item, { bootstrap: false })[0]),
-      Date.now(),
-    )
+    const latest = latestRootSession(dirs.map((item) => globalSync.child(item, { bootstrap: false })[0]))
     if (latest && (await openSession(latest))) {
       return
     }
@@ -1295,7 +1292,6 @@ export default function Layout(props: ParentProps) {
             .catch(() => []),
         })),
       ),
-      Date.now(),
     )
     if (fetched && (await openSession(fetched))) {
       return

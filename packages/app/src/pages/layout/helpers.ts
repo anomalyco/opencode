@@ -8,30 +8,25 @@ export const workspaceKey = (directory: string) => {
   return directory.replace(/[\\/]+$/, "")
 }
 
-function sortSessions(now: number) {
-  const oneMinuteAgo = now - 60 * 1000
+function sortSessions() {
   return (a: Session, b: Session) => {
     const aUpdated = a.time.updated ?? a.time.created
     const bUpdated = b.time.updated ?? b.time.created
-    const aRecent = aUpdated > oneMinuteAgo
-    const bRecent = bUpdated > oneMinuteAgo
-    if (aRecent && bRecent) return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
-    if (aRecent && !bRecent) return -1
-    if (!aRecent && bRecent) return 1
-    return bUpdated - aUpdated
+    if (aUpdated !== bUpdated) return bUpdated - aUpdated
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
   }
 }
 
 const isRootVisibleSession = (session: Session, directory: string) =>
   workspaceKey(session.directory) === workspaceKey(directory) && !session.parentID && !session.time?.archived
 
-export const sortedRootSessions = (store: { session: Session[]; path: { directory: string } }, now: number) =>
-  store.session.filter((session) => isRootVisibleSession(session, store.path.directory)).sort(sortSessions(now))
+export const sortedRootSessions = (store: { session: Session[]; path: { directory: string } }, _now: number) =>
+  store.session.filter((session) => isRootVisibleSession(session, store.path.directory))
 
-export const latestRootSession = (stores: { session: Session[]; path: { directory: string } }[], now: number) =>
+export const latestRootSession = (stores: { session: Session[]; path: { directory: string } }[]) =>
   stores
     .flatMap((store) => store.session.filter((session) => isRootVisibleSession(session, store.path.directory)))
-    .sort(sortSessions(now))[0]
+    .sort(sortSessions())[0]
 
 export function hasProjectPermissions<T>(
   request: Record<string, T[] | undefined>,

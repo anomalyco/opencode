@@ -205,10 +205,7 @@ function createGlobalSync() {
       list: (query) => globalSDK.client.session.list(query),
     })
       .then((x) => {
-        const nonArchived = (x.data ?? [])
-          .filter((s) => !!s?.id)
-          .filter((s) => !s.time?.archived)
-          .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+        const nonArchived = (x.data ?? []).filter((s) => !!s?.id).filter((s) => !s.time?.archived)
         const limit = store.limit
         const childSessions = store.session.filter((s) => !!s.parentID)
         const sessions = trimSessions([...nonArchived, ...childSessions], {

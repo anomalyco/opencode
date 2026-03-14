@@ -12,7 +12,7 @@ import type {
   Todo,
 } from "@opencode-ai/sdk/v2/client"
 import type { State, VcsCache } from "./types"
-import { trimSessions } from "./session-trim"
+import { compareSessionRecent, trimSessions } from "./session-trim"
 import { dropSessionCaches } from "./session-cache"
 
 export function applyGlobalEvent(input: {
@@ -93,6 +93,26 @@ export function applyDirectoryEvent(input: {
   vcsCache?: VcsCache
   setSessionTodo?: (sessionID: string, todos: Todo[] | undefined) => void
 }) {
+  const sessionIndex = (sessionID: string) => input.store.session.findIndex((s) => s.id === sessionID)
+  const upsertSession = (info: Session) => {
+    const next = input.store.session.filter((session) => session.id !== info.id)
+    if (!info.parentID) {
+      const index = next.findIndex((session) => !!session.parentID || compareSessionRecent(info, session) < 0)
+      next.splice(index === -1 ? next.length : index, 0, info)
+      return next
+    }
+
+    const start = next.findIndex((session) => !!session.parentID)
+    if (start === -1) {
+      next.push(info)
+      return next
+    }
+
+    const offset = next.slice(start).findIndex((session) => compareSessionRecent(info, session) < 0)
+    next.splice(offset === -1 ? next.length : start + offset, 0, info)
+    return next
+  }
+
   const event = input.event
   switch (event.type) {
     case "server.instance.disposed": {
@@ -101,28 +121,23 @@ export function applyDirectoryEvent(input: {
     }
     case "session.created": {
       const info = (event.properties as { info: Session }).info
-      const result = Binary.search(input.store.session, info.id, (s) => s.id)
-      if (result.found) {
-        input.setStore("session", result.index, reconcile(info))
-        break
-      }
-      const next = input.store.session.slice()
-      next.splice(result.index, 0, info)
+      const found = sessionIndex(info.id) !== -1
+      const next = upsertSession(info)
       const trimmed = trimSessions(next, { limit: input.store.limit, permission: input.store.permission })
       input.setStore("session", reconcile(trimmed, { key: "id" }))
       cleanupDroppedSessionCaches(input.store, input.setStore, trimmed, input.setSessionTodo)
-      if (!info.parentID) input.setStore("sessionTotal", (value) => value + 1)
+      if (!found && !info.parentID) input.setStore("sessionTotal", (value) => value + 1)
       break
     }
     case "session.updated": {
       const info = (event.properties as { info: Session }).info
-      const result = Binary.search(input.store.session, info.id, (s) => s.id)
+      const index = sessionIndex(info.id)
       if (info.time.archived) {
-        if (result.found) {
+        if (index !== -1) {
           input.setStore(
             "session",
             produce((draft) => {
-              draft.splice(result.index, 1)
+              draft.splice(index, 1)
             }),
           )
         }
@@ -131,12 +146,7 @@ export function applyDirectoryEvent(input: {
         input.setStore("sessionTotal", (value) => Math.max(0, value - 1))
         break
       }
-      if (result.found) {
-        input.setStore("session", result.index, reconcile(info))
-        break
-      }
-      const next = input.store.session.slice()
-      next.splice(result.index, 0, info)
+      const next = upsertSession(info)
       const trimmed = trimSessions(next, { limit: input.store.limit, permission: input.store.permission })
       input.setStore("session", reconcile(trimmed, { key: "id" }))
       cleanupDroppedSessionCaches(input.store, input.setStore, trimmed, input.setSessionTodo)
@@ -144,12 +154,12 @@ export function applyDirectoryEvent(input: {
     }
     case "session.deleted": {
       const info = (event.properties as { info: Session }).info
-      const result = Binary.search(input.store.session, info.id, (s) => s.id)
-      if (result.found) {
+      const index = sessionIndex(info.id)
+      if (index !== -1) {
         input.setStore(
           "session",
           produce((draft) => {
-            draft.splice(result.index, 1)
+            draft.splice(index, 1)
           }),
         )
       }

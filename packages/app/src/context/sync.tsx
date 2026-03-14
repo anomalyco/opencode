@@ -9,6 +9,7 @@ import {
   getSessionPrefetchPromise,
   setSessionPrefetch,
 } from "./global-sync/session-prefetch"
+import { compareSessionRecent } from "./global-sync/session-trim"
 import { useGlobalSync } from "./global-sync"
 import { useSDK } from "./sdk"
 import type { Message, Part } from "@opencode-ai/sdk/v2/client"
@@ -194,9 +195,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
     const getSession = (sessionID: string) => {
       const store = current()[0]
-      const match = Binary.search(store.session, sessionID, (s) => s.id)
-      if (match.found) return store.session[match.index]
-      return undefined
+      return store.session.find((session) => session.id === sessionID)
     }
 
     const setOptimistic = (directory: string, sessionID: string, item: OptimisticItem) => {
@@ -456,7 +455,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               }
             }
 
-            const hasSession = Binary.search(store.session, sessionID, (s) => s.id).found
+            const hasSession = store.session.some((session) => session.id === sessionID)
             const cached = store.message[sessionID] !== undefined && meta.limit[key] !== undefined
             if (cached && hasSession && !opts?.force) return
 
@@ -471,12 +470,19 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
                     setStore(
                       "session",
                       produce((draft) => {
-                        const match = Binary.search(draft, sessionID, (s) => s.id)
-                        if (match.found) {
-                          draft[match.index] = data
+                        const index = draft.findIndex((session) => session.id === sessionID)
+                        if (index !== -1) {
+                          draft[index] = data
                           return
                         }
-                        draft.splice(match.index, 0, data)
+                        if (data.parentID) {
+                          draft.push(data)
+                          return
+                        }
+                        const next = draft.findIndex(
+                          (session) => !!session.parentID || compareSessionRecent(data, session) < 0,
+                        )
+                        draft.splice(next === -1 ? draft.length : next, 0, data)
                       }),
                     )
                   })
@@ -585,10 +591,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           const [store, setStore] = globalSync.child(directory)
           setStore("limit", (x) => x + count)
           await client.session.list().then((x) => {
-            const sessions = (x.data ?? [])
-              .filter((s) => !!s?.id)
-              .sort((a, b) => cmp(a.id, b.id))
-              .slice(0, store.limit)
+            const sessions = (x.data ?? []).filter((s) => !!s?.id).slice(0, store.limit)
             setStore("session", reconcile(sessions, { key: "id" }))
           })
         },
@@ -600,8 +603,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           await client.session.update({ sessionID, time: { archived: Date.now() } })
           setStore(
             produce((draft) => {
-              const match = Binary.search(draft.session, sessionID, (s) => s.id)
-              if (match.found) draft.session.splice(match.index, 1)
+              const index = draft.session.findIndex((s) => s.id === sessionID)
+              if (index !== -1) draft.session.splice(index, 1)
             }),
           )
         },

@@ -49,11 +49,23 @@ describe("trimSessions", () => {
     })
 
     expect(result.map((x) => x.id)).toEqual([
-      "child-kept-by-permission",
-      "child-kept-by-recency",
-      "child-kept-by-root",
       "root-1",
       "root-2",
+      "child-kept-by-root",
+      "child-kept-by-permission",
+      "child-kept-by-recency",
     ])
+  })
+
+  test("preserves fetched root order instead of reshaping by id", () => {
+    const now = 20_000_000
+    const list = [
+      session({ id: "z", created: now - 20_000_000, updated: now - 20_000_000 }),
+      session({ id: "a", created: now - 19_000_000, updated: now - 19_000_000 }),
+      session({ id: "m", created: now - 18_000_000, updated: now - 18_000_000 }),
+    ]
+
+    const result = trimSessions(list, { limit: 2, permission: {}, now })
+    expect(result.map((item) => item.id)).toEqual(["z", "a"])
   })
 })
