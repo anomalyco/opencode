@@ -1,5 +1,6 @@
 import { test, expect } from "../fixtures"
 import { openSidebar, toggleSidebar, withSession } from "../actions"
+import { layoutPersistKey } from "../utils"
 
 test("sidebar can be collapsed and expanded", async ({ page, gotoSession }) => {
   await gotoSession()
@@ -32,7 +33,8 @@ test("sidebar collapsed state persists across navigation and reload", async ({ p
       await expect(button).toHaveAttribute("aria-expanded", "false")
 
       const opened = await page.evaluate(
-        () => JSON.parse(localStorage.getItem("opencode.global.dat:layout") ?? "{}").sidebar?.opened,
+        (key) => JSON.parse(localStorage.getItem(key) ?? "{}").sidebar?.opened,
+        layoutPersistKey,
       )
       await expect(opened).toBe(false)
     })

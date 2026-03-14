@@ -6,6 +6,7 @@ export const serverPort = process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"
 
 export const serverUrl = `http://${serverHost}:${serverPort}`
 export const serverName = `${serverHost}:${serverPort}`
+export const layoutPersistKey = `opencode.global.dat:${serverUrl}\nlayout`
 
 const localHosts = ["127.0.0.1", "localhost"]
 
@@ -19,9 +20,9 @@ export const serverNames = [...new Set(serverLabels)]
 
 export const serverUrls = serverNames.map((name) => `http://${name}`)
 
-const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+const esc = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
-export const serverNamePattern = new RegExp(`(?:${serverNames.map(escape).join("|")})`)
+export const serverNamePattern = new RegExp(`(?:${serverNames.map(esc).join("|")})`)
 
 export const modKey = process.platform === "darwin" ? "Meta" : "Control"
 export const terminalToggleKey = "Control+Backquote"

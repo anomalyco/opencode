@@ -3,7 +3,7 @@ import type { Page } from "@playwright/test"
 import { test, expect } from "../fixtures"
 import { openSidebar, sessionIDFromUrl, setWorkspacesEnabled, slugFromUrl, waitSlug } from "../actions"
 import { promptSelector, workspaceItemSelector, workspaceNewSessionSelector } from "../selectors"
-import { createSdk } from "../utils"
+import { createSdk, resolveDirectory } from "../utils"
 
 async function waitWorkspaceReady(page: Page, slug: string) {
   await openSidebar(page)
@@ -30,7 +30,7 @@ async function createWorkspace(page: Page, root: string, seen: string[]) {
   const slug = await waitSlug(page, [root, ...seen])
   const directory = base64Decode(slug)
   if (!directory) throw new Error(`Failed to decode workspace slug: ${slug}`)
-  return { slug, directory }
+  return { slug, directory: await resolveDirectory(directory) }
 }
 
 async function openWorkspaceNewSession(page: Page, slug: string) {

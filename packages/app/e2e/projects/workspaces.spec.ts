@@ -18,7 +18,7 @@ import {
   waitSlug,
 } from "../actions"
 import { dropdownMenuContentSelector, inlineInputSelector, workspaceItemSelector } from "../selectors"
-import { createSdk, dirSlug } from "../utils"
+import { createSdk, dirSlug, resolveDirectory } from "../utils"
 
 async function setupWorkspaceTest(page: Page, project: { slug: string }) {
   const rootSlug = project.slug
@@ -29,6 +29,8 @@ async function setupWorkspaceTest(page: Page, project: { slug: string }) {
   await page.getByRole("button", { name: "New workspace" }).first().click()
   const slug = await waitSlug(page, [rootSlug])
   const dir = base64Decode(slug)
+  const directory = dir ? await resolveDirectory(dir) : undefined
+  if (!directory) throw new Error(`Failed to decode workspace slug: ${slug}`)
 
   await openSidebar(page)
 
@@ -47,7 +49,7 @@ async function setupWorkspaceTest(page: Page, project: { slug: string }) {
     )
     .toBe(true)
 
-  return { rootSlug, slug, directory: dir }
+  return { rootSlug, slug, directory }
 }
 
 test("can enable and disable workspaces from project menu", async ({ page, withProject }) => {
@@ -333,7 +335,9 @@ test("can reorder workspaces by drag and drop", async ({ page, withProject }) =>
         await page.getByRole("button", { name: "New workspace" }).first().click()
         const slug = await waitSlug(page, [rootSlug, prev])
         const dir = base64Decode(slug)
-        workspaces.push({ slug, directory: dir })
+        const directory = dir ? await resolveDirectory(dir) : undefined
+        if (!directory) throw new Error(`Failed to decode workspace slug: ${slug}`)
+        workspaces.push({ slug, directory })
 
         await openSidebar(page)
       }

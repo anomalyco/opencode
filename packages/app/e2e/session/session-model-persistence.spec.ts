@@ -10,7 +10,7 @@ import {
   workspaceItemSelector,
   workspaceNewSessionSelector,
 } from "../selectors"
-import { createSdk, sessionPath } from "../utils"
+import { createSdk, resolveDirectory, sessionPath } from "../utils"
 
 type Footer = {
   agent: string
@@ -24,7 +24,7 @@ type Probe = {
   model?: { providerID: string; modelID: string }
 }
 
-const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+const esc = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
 const text = async (locator: Locator) => ((await locator.textContent()) ?? "").trim()
 
@@ -95,7 +95,7 @@ async function choose(page: Page, root: string, value: string) {
   await select.locator('[data-action], [data-slot="select-select-trigger"]').first().click()
   const item = page
     .locator('[data-slot="select-select-item"]')
-    .filter({ hasText: new RegExp(`^\\s*${escape(value)}\\s*$`) })
+    .filter({ hasText: new RegExp(`^\\s*${esc(value)}\\s*$`) })
     .first()
   await expect(item).toBeVisible()
   await item.click()
@@ -227,7 +227,7 @@ async function createWorkspace(page: Page, root: string, seen: string[]) {
   const slug = await waitSlug(page, [root, ...seen])
   const directory = base64Decode(slug)
   if (!directory) throw new Error(`Failed to decode workspace slug: ${slug}`)
-  return { slug, directory }
+  return { slug, directory: await resolveDirectory(directory) }
 }
 
 async function waitWorkspace(page: Page, slug: string) {
