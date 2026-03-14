@@ -8,7 +8,7 @@ import { Database, eq } from "@/storage/db"
 import { InstanceState } from "@/util/instance-state"
 import { Log } from "@/util/log"
 import { Wildcard } from "@/util/wildcard"
-import { Deferred, Effect, Layer, ServiceMap } from "effect"
+import { Deferred, Effect, Layer, Schema, ServiceMap } from "effect"
 import z from "zod"
 import { PermissionID } from "./schema"
 
@@ -75,27 +75,26 @@ export const Event = {
   ),
 }
 
-export class RejectedError extends Error {
-  constructor() {
-    super("The user rejected permission to use this specific tool call.")
+export class RejectedError extends Schema.TaggedErrorClass<RejectedError>()("PermissionRejectedError", {}) {
+  override get message() {
+    return "The user rejected permission to use this specific tool call."
   }
 }
 
-export class CorrectedError extends Error {
-  constructor(message: string) {
-    super(`The user rejected permission to use this specific tool call with the following feedback: ${message}`)
+export class CorrectedError extends Schema.TaggedErrorClass<CorrectedError>()("PermissionCorrectedError", {
+  feedback: Schema.String,
+}) {
+  override get message() {
+    return `The user rejected permission to use this specific tool call with the following feedback: ${this.feedback}`
   }
 }
 
-export class DeniedError extends Error {
-  constructor(ruleset: Ruleset) {
-    super(
-      `The user has specified a rule which prevents you from using this specific tool call. Here are some of the relevant rules ${JSON.stringify(ruleset)}`,
-    )
-    this.ruleset = ruleset
+export class DeniedError extends Schema.TaggedErrorClass<DeniedError>()("PermissionDeniedError", {
+  ruleset: Schema.Any,
+}) {
+  override get message() {
+    return `The user has specified a rule which prevents you from using this specific tool call. Here are some of the relevant rules ${JSON.stringify(this.ruleset)}`
   }
-
-  readonly ruleset: Ruleset
 }
 
 export type PermissionError = DeniedError | RejectedError | CorrectedError
@@ -154,9 +153,9 @@ export class PermissionService extends ServiceMap.Service<PermissionService, Per
           const rule = evaluate(request.permission, pattern, ruleset, state.approved)
           log.info("evaluated", { permission: request.permission, pattern, action: rule })
           if (rule.action === "deny") {
-            return yield* Effect.fail(
-              new DeniedError(ruleset.filter((rule) => Wildcard.match(request.permission, rule.permission))),
-            )
+            return yield* new DeniedError({
+              ruleset: ruleset.filter((rule) => Wildcard.match(request.permission, rule.permission)),
+            })
           }
           if (rule.action === "allow") continue
 
@@ -189,7 +188,7 @@ export class PermissionService extends ServiceMap.Service<PermissionService, Per
         if (input.reply === "reject") {
           yield* Deferred.fail(
             existing.deferred,
-            input.message ? new CorrectedError(input.message) : new RejectedError(),
+            input.message ? new CorrectedError({ feedback: input.message }) : new RejectedError,
           )
 
           for (const [id, item] of state.pending.entries()) {
@@ -200,7 +199,7 @@ export class PermissionService extends ServiceMap.Service<PermissionService, Per
               requestID: item.info.id,
               reply: "reject",
             })
-            yield* Deferred.fail(item.deferred, new RejectedError())
+            yield* Deferred.fail(item.deferred, new RejectedError)
           }
           return
         }
