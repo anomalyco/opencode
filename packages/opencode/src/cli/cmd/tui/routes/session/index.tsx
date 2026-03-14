@@ -1419,14 +1419,27 @@ const PART_MAPPING = {
   reasoning: ReasoningPart,
 }
 
+const REASONING_PART_MAX_LINES = 5
+
 function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: AssistantMessage }) {
   const { theme, subtleSyntax } = useTheme()
   const ctx = use()
+  const renderer = useRenderer()
+  const [hover, setHover] = createSignal(false)
+  const [expanded, setExpanded] = createSignal(false)
+
   const content = createMemo(() => {
     // Filter out redacted reasoning chunks from OpenRouter
     // OpenRouter sends encrypted reasoning data that appears as [REDACTED]
     return props.part.text.replace("[REDACTED]", "").trim()
   })
+  const lines = createMemo(() => content().split("\n"))
+  const overflow = createMemo(() => lines().length > REASONING_PART_MAX_LINES)
+  const limited = createMemo(() => {
+    if (expanded() || !overflow()) return content()
+    return ["…", ...lines().slice(-REASONING_PART_MAX_LINES)].join("\n")
+  })
+
   return (
     <Show when={content() && ctx.showThinking()}>
       <box
@@ -1436,34 +1449,69 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
         flexDirection="column"
         border={["left"]}
         customBorderChars={SplitBorder.customBorderChars}
-        borderColor={theme.backgroundElement}
+        borderColor={hover() && overflow() ? theme.border : theme.backgroundElement}
+        onMouseOver={() => overflow() && setHover(true)}
+        onMouseOut={() => setHover(false)}
+        onMouseUp={() => {
+          if (renderer.getSelection()?.getSelectedText()) return
+          if (overflow()) setExpanded((prev) => !prev)
+        }}
       >
         <code
           filetype="markdown"
           drawUnstyledText={false}
           streaming={true}
           syntaxStyle={subtleSyntax()}
-          content={"_Thinking:_ " + content()}
+          content={"_Thinking:_ " + limited()}
           conceal={ctx.conceal()}
           fg={theme.textMuted}
         />
+        <Show when={overflow()}>
+          <text fg={theme.textMuted}>{expanded() ? "[↑ show less]" : "[↓ show more]"}</text>
+        </Show>
       </box>
     </Show>
   )
 }
 
+const TEXT_PART_MAX_LINES = 8
+
 function TextPart(props: { last: boolean; part: TextPart; message: AssistantMessage }) {
   const ctx = use()
   const { theme, syntax } = useTheme()
+  const renderer = useRenderer()
+  const [hover, setHover] = createSignal(false)
+  const [expanded, setExpanded] = createSignal(false)
+
+  const text = () => props.part.text.trim()
+  const lines = createMemo(() => text().split("\n"))
+  const overflow = createMemo(() => lines().length > TEXT_PART_MAX_LINES)
+  const limited = createMemo(() => {
+    if (expanded() || !overflow()) return text()
+    return [...lines().slice(0, TEXT_PART_MAX_LINES), "…"].join("\n")
+  })
+
   return (
-    <Show when={props.part.text.trim()}>
-      <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0}>
+    <Show when={text()}>
+      <box
+        id={"text-" + props.part.id}
+        paddingLeft={3}
+        marginTop={1}
+        flexShrink={0}
+        backgroundColor={hover() && overflow() ? theme.backgroundMenu : theme.backgroundPanel}
+        onMouseOver={() => overflow() && setHover(true)}
+        onMouseOut={() => setHover(false)}
+        onMouseUp={() => {
+          if (renderer.getSelection()?.getSelectedText()) return
+          if (overflow()) setExpanded((prev) => !prev)
+        }}
+      >
         <Switch>
           <Match when={Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
             <markdown
               syntaxStyle={syntax()}
               streaming={true}
-              content={props.part.text.trim()}
+              content={limited()}
               conceal={ctx.conceal()}
             />
           </Match>
@@ -1473,12 +1521,15 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
               drawUnstyledText={false}
               streaming={true}
               syntaxStyle={syntax()}
-              content={props.part.text.trim()}
+              content={limited()}
               conceal={ctx.conceal()}
               fg={theme.text}
             />
           </Match>
         </Switch>
+        <Show when={overflow()}>
+          <text fg={theme.textMuted}>{expanded() ? "[↑ show less]" : "[↓ show more]"}</text>
+        </Show>
       </box>
     </Show>
   )
