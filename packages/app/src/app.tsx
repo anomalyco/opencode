@@ -75,17 +75,10 @@ declare global {
   }
 }
 
-function QueryProvider(props: ParentProps) {
-  const client = new QueryClient({
-    defaultOptions: {
-      queries: {
-        refetchOnReconnect: false,
-        refetchOnMount: false,
-        refetchOnWindowFocus: false,
-      },
-    },
-  })
-  return <QueryClientProvider client={client}>{props.children}</QueryClientProvider>
+function MarkedProviderWithNativeParser(props: ParentProps) {
+  // Note: Native parser removed as of commit 692249052 to fix math rendering issues
+  // Now using JS parser with KaTeX for all platforms
+  return <MarkedProvider>{props.children}</MarkedProvider>
 }
 
 function AppShellProviders(props: ParentProps) {
