@@ -16,8 +16,10 @@
       "diffDelete": "#e78284"
     },
     "overrides": {
+      "syntax-comment": "#6c7086",
       "syntax-keyword": "#8839ef",
-      "syntax-primitive": "#fe640b"
+      "syntax-primitive": "#1e66f5",
+      "syntax-constant": "#ca6702"
     }
   },
   "dark": {
@@ -34,8 +36,10 @@
       "diffDelete": "#f38ba8"
     },
     "overrides": {
+      "syntax-comment": "#6c7086",
       "syntax-keyword": "#cba6f7",
-      "syntax-primitive": "#fab387"
+      "syntax-primitive": "#89b4fa",
+      "syntax-constant": "#fab387"
     }
   }
 }
