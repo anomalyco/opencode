@@ -179,6 +179,9 @@ export namespace ProviderTransform {
       anthropic: {
         cacheControl: { type: "ephemeral" },
       },
+      google: {
+        cachePoint: { type: "default" },
+      },
       openrouter: {
         cacheControl: { type: "ephemeral" },
       },
@@ -261,6 +264,8 @@ export namespace ProviderTransform {
         model.api.npm === "@ai-sdk/anthropic") &&
       model.api.npm !== "@ai-sdk/gateway"
     ) {
+      msgs = applyCaching(msgs, model)
+    } else if (model.api.npm === "@ai-sdk/google-vertex" || model.api.npm === "@ai-sdk/google") {
       msgs = applyCaching(msgs, model)
     }
 
