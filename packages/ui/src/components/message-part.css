@@ -23,10 +23,6 @@
   max-width: 100%;
   gap: 0;
 
-  &[data-interrupted] {
-    color: var(--text-weak);
-  }
-
   [data-slot="user-message-attachments"] {
     display: flex;
     flex-wrap: wrap;
@@ -42,10 +38,12 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
+    min-width: 0;
     border-radius: 6px;
     overflow: hidden;
     background: var(--surface-weak);
     border: 1px solid var(--border-weak-base);
+    cursor: default;
     transition:
       border-color 0.15s ease,
       opacity 0.3s ease;
@@ -54,8 +52,8 @@
       border-color: var(--border-strong-base);
     }
 
-    &[data-queued] {
-      opacity: 0.6;
+    &[data-clickable] {
+      cursor: pointer;
     }
 
     &[data-type="image"] {
@@ -64,8 +62,9 @@
     }
 
     &[data-type="file"] {
-      width: 48px;
+      width: min(220px, 100%);
       height: 48px;
+      padding: 0 10px;
     }
   }
 
@@ -87,6 +86,30 @@
       width: 20px;
       height: 20px;
     }
+  }
+
+  [data-slot="user-message-attachment-file"] {
+    width: 100%;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    [data-component="file-icon"] {
+      width: 20px;
+      height: 20px;
+      flex: none;
+    }
+  }
+
+  [data-slot="user-message-attachment-name"] {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-base);
+    font-size: var(--font-size-small);
+    line-height: var(--line-height-large);
   }
 
   [data-slot="user-message-body"] {
@@ -111,11 +134,6 @@
     border: 1px solid var(--border-weak-base);
     padding: 8px 12px;
     border-radius: 6px;
-    transition: opacity 0.3s ease;
-
-    &[data-queued] {
-      opacity: 0.6;
-    }
 
     [data-highlight="file"] {
       color: var(--syntax-property);
@@ -126,14 +144,6 @@
     }
 
     max-width: 100%;
-  }
-
-  [data-slot="user-message-queued-indicator"] {
-    margin-top: 6px;
-    margin-right: 2px;
-    font-size: var(--font-size-small);
-    color: var(--text-weak);
-    user-select: none;
   }
 
   [data-slot="user-message-copy-wrapper"] {
@@ -180,10 +190,6 @@
     flex: 0 0 auto;
     white-space: nowrap;
     text-align: right;
-  }
-
-  [data-slot="user-message-copy-wrapper"][data-interrupted] {
-    gap: 12px;
   }
 
   &:hover [data-slot="user-message-copy-wrapper"],
@@ -614,7 +620,7 @@
   align-items: center;
   justify-content: flex-start;
   gap: 0px;
-  cursor: pointer;
+  cursor: default;
 
   [data-slot="context-tool-group-title"] {
     flex-shrink: 1;
@@ -623,6 +629,7 @@
 
   [data-slot="collapsible-arrow"] {
     color: var(--icon-weaker);
+    cursor: pointer;
   }
 }
 

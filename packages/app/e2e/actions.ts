@@ -3,6 +3,7 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { execSync } from "node:child_process"
+import { terminalAttr, type E2EWindow } from "../src/testing/terminal"
 import { createSdk, modKey, resolveDirectory, serverUrl } from "./utils"
 import {
   dropdownMenuTriggerSelector,
@@ -15,6 +16,7 @@ import {
   listItemSelector,
   listItemKeySelector,
   listItemKeyStartsWithSelector,
+  terminalSelector,
   workspaceItemSelector,
   workspaceMenuTriggerSelector,
 } from "./selectors"
@@ -26,6 +28,69 @@ export async function defocus(page: Page) {
       if (el instanceof HTMLElement) el.blur()
     })
     .catch(() => undefined)
+}
+
+async function terminalID(term: Locator) {
+  const id = await term.getAttribute(terminalAttr)
+  if (id) return id
+  throw new Error(`Active terminal missing ${terminalAttr}`)
+}
+
+export async function terminalConnects(page: Page, input?: { term?: Locator }) {
+  const term = input?.term ?? page.locator(terminalSelector).first()
+  const id = await terminalID(term)
+  return page.evaluate((id) => {
+    return (window as E2EWindow).__opencode_e2e?.terminal?.terminals?.[id]?.connects ?? 0
+  }, id)
+}
+
+export async function disconnectTerminal(page: Page, input?: { term?: Locator }) {
+  const term = input?.term ?? page.locator(terminalSelector).first()
+  const id = await terminalID(term)
+  await page.evaluate((id) => {
+    ;(window as E2EWindow).__opencode_e2e?.terminal?.controls?.[id]?.disconnect?.()
+  }, id)
+}
+
+async function terminalReady(page: Page, term?: Locator) {
+  const next = term ?? page.locator(terminalSelector).first()
+  const id = await terminalID(next)
+  return page.evaluate((id) => {
+    const state = (window as E2EWindow).__opencode_e2e?.terminal?.terminals?.[id]
+    return !!state?.connected && (state.settled ?? 0) > 0
+  }, id)
+}
+
+async function terminalHas(page: Page, input: { term?: Locator; token: string }) {
+  const next = input.term ?? page.locator(terminalSelector).first()
+  const id = await terminalID(next)
+  return page.evaluate(
+    (input) => {
+      const state = (window as E2EWindow).__opencode_e2e?.terminal?.terminals?.[input.id]
+      return state?.rendered.includes(input.token) ?? false
+    },
+    { id, token: input.token },
+  )
+}
+
+export async function waitTerminalReady(page: Page, input?: { term?: Locator; timeout?: number }) {
+  const term = input?.term ?? page.locator(terminalSelector).first()
+  const timeout = input?.timeout ?? 10_000
+  await expect(term).toBeVisible()
+  await expect(term.locator("textarea")).toHaveCount(1)
+  await expect.poll(() => terminalReady(page, term), { timeout }).toBe(true)
+}
+
+export async function runTerminal(page: Page, input: { cmd: string; token: string; term?: Locator; timeout?: number }) {
+  const term = input.term ?? page.locator(terminalSelector).first()
+  const timeout = input.timeout ?? 10_000
+  await waitTerminalReady(page, { term, timeout })
+  const textarea = term.locator("textarea")
+  await term.click()
+  await expect(textarea).toBeFocused()
+  await page.keyboard.type(input.cmd)
+  await page.keyboard.press("Enter")
+  await expect.poll(() => terminalHas(page, { term, token: input.token }), { timeout }).toBe(true)
 }
 
 export async function openPalette(page: Page) {
@@ -539,12 +604,19 @@ export async function seedSessionTask(
         .flatMap((message) => message.parts)
         .find((part) => {
           if (part.type !== "tool" || part.tool !== "task") return false
-          if (part.state.input?.description !== input.description) return false
-          return typeof part.state.metadata?.sessionId === "string" && part.state.metadata.sessionId.length > 0
+          if (!("state" in part) || !part.state || typeof part.state !== "object") return false
+          if (!("input" in part.state) || !part.state.input || typeof part.state.input !== "object") return false
+          if (!("description" in part.state.input) || part.state.input.description !== input.description) return false
+          if (!("metadata" in part.state) || !part.state.metadata || typeof part.state.metadata !== "object")
+            return false
+          if (!("sessionId" in part.state.metadata)) return false
+          return typeof part.state.metadata.sessionId === "string" && part.state.metadata.sessionId.length > 0
         })
 
-      if (!part) return
-      const id = part.state.metadata?.sessionId
+      if (!part || !("state" in part) || !part.state || typeof part.state !== "object") return
+      if (!("metadata" in part.state) || !part.state.metadata || typeof part.state.metadata !== "object") return
+      if (!("sessionId" in part.state.metadata)) return
+      const id = part.state.metadata.sessionId
       if (typeof id !== "string" || !id) return
       const child = await sdk.session
         .get({ sessionID: id })
