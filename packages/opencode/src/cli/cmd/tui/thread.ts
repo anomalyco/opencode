@@ -168,10 +168,6 @@ export const TuiThreadCommand = cmd({
       }
 
       const prompt = await input(args.prompt)
-      const config = await Instance.provide({
-        directory: cwd,
-        fn: () => TuiConfig.get(),
-      })
 
       const network = await resolveNetworkOptions(args)
       const external =
@@ -199,19 +195,25 @@ export const TuiThreadCommand = cmd({
       }, 1000).unref?.()
 
       try {
-        await tui({
-          url: transport.url,
-          config,
+        await Instance.provide({
           directory: cwd,
-          fetch: transport.fetch,
-          events: transport.events,
-          args: {
-            continue: args.continue,
-            sessionID: args.session,
-            agent: args.agent,
-            model: args.model,
-            prompt,
-            fork: args.fork,
+          fn: async () => {
+            const config = await TuiConfig.get()
+            await tui({
+              url: transport.url,
+              config,
+              directory: cwd,
+              fetch: transport.fetch,
+              events: transport.events,
+              args: {
+                continue: args.continue,
+                sessionID: args.session,
+                agent: args.agent,
+                model: args.model,
+                prompt,
+                fork: args.fork,
+              },
+            })
           },
         })
       } finally {

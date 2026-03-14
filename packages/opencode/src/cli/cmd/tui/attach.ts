@@ -66,20 +66,22 @@ export const AttachCommand = cmd({
         const auth = `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`
         return { Authorization: auth }
       })()
-      const config = await Instance.provide({
+      await Instance.provide({
         directory: directory && existsSync(directory) ? directory : process.cwd(),
-        fn: () => TuiConfig.get(),
-      })
-      await tui({
-        url: args.url,
-        config,
-        args: {
-          continue: args.continue,
-          sessionID: args.session,
-          fork: args.fork,
+        fn: async () => {
+          const config = await TuiConfig.get()
+          await tui({
+            url: args.url,
+            config,
+            args: {
+              continue: args.continue,
+              sessionID: args.session,
+              fork: args.fork,
+            },
+            directory,
+            headers,
+          })
         },
-        directory,
-        headers,
       })
     } finally {
       unguard?.()
