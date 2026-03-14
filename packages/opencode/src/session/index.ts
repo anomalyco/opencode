@@ -27,6 +27,7 @@ import { WorkspaceID } from "../control-plane/schema"
 import { SessionID, MessageID, PartID } from "./schema"
 
 import type { Provider } from "@/provider/provider"
+import { ModelID, ProviderID } from "@/provider/schema"
 import { PermissionNext } from "@/permission/next"
 import { Global } from "@/global"
 import type { LanguageModelV2Usage } from "@ai-sdk/provider"
@@ -875,8 +876,8 @@ export namespace Session {
   export const initialize = fn(
     z.object({
       sessionID: SessionID.zod,
-      modelID: z.string(),
-      providerID: z.string(),
+      modelID: ModelID.zod,
+      providerID: ProviderID.zod,
       messageID: MessageID.zod,
     }),
     async (input) => {
