@@ -178,7 +178,7 @@ type PromptSubmitInput = {
   addToHistory: (prompt: Prompt, mode: "normal" | "shell") => void
   resetHistoryNavigation: () => void
   setMode: (mode: "normal" | "shell") => void
-  setPopover: (popover: "at" | "slash" | null) => void
+  setPopover: (popover: "at" | "slash" | "tool" | null) => void
   newSessionWorktree?: Accessor<string | undefined>
   onNewSessionWorktreeReset?: () => void
   shouldQueue?: Accessor<boolean>
@@ -215,6 +215,16 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     }
     if (err instanceof Error) return err.message
     return language.t("common.requestFailed")
+  }
+
+  const summarizeToolParameters = (parameters: unknown) => {
+    if (!parameters || typeof parameters !== "object") return "- none"
+    const props = (parameters as { properties?: Record<string, { description?: string }> }).properties
+    if (!props || Object.keys(props).length === 0) return "- none"
+    return Object.entries(props)
+      .slice(0, 8)
+      .map(([name, config]) => `- ${name}${config?.description ? `: ${config.description}` : ""}`)
+      .join("\n")
   }
 
   const abort = async () => {
@@ -285,7 +295,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     event.preventDefault()
 
     const currentPrompt = prompt.current()
-    const text = currentPrompt.map((part) => ("content" in part ? part.content : "")).join("")
+    let text = currentPrompt.map((part) => ("content" in part ? part.content : "")).join("")
     const images = input.imageAttachments().slice()
     const mode = input.mode()
 
@@ -445,6 +455,70 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           restoreInput()
         })
       return
+    }
+
+    if (text.startsWith("/tool ")) {
+      const [, toolName = "", ...rest] = text.split(" ")
+      const objective = rest.join(" ").trim()
+
+      if (!toolName) {
+        showToast({
+          title: "Tool name is required",
+          description: "Use /tool <tool_name> <objective>.",
+        })
+        return
+      }
+
+      const available: string[] = await client.tool.ids().then((x) => x.data ?? []).catch(() => [])
+      if (!available.includes(toolName)) {
+        const typed = toolName.toLowerCase()
+        const suggestions = available
+          .filter((id) => {
+            const candidate = id.toLowerCase()
+            return candidate.includes(typed) || typed.includes(candidate)
+          })
+          .slice(0, 5)
+        showToast({
+          title: `Unknown tool: ${toolName}`,
+          description:
+            suggestions.length > 0
+              ? `Did you mean: ${suggestions.join(", ")}`
+              : "Type /tools to browse available tools.",
+        })
+        return
+      }
+
+      if (objective === "--help") {
+        const details = await client.tool
+          .list({
+            provider: model.providerID,
+            model: model.modelID,
+          })
+          .then((x) => x.data ?? [])
+          .catch(() => [])
+        const selected = details.find((item) => item.id === toolName)
+        const description = selected?.description || "No dedicated help text is available for this tool."
+        const args = summarizeToolParameters(selected?.parameters)
+        showToast({
+          title: `Tool help: ${toolName}`,
+          description: `Description: ${description}\nArguments:\n${args}`,
+        })
+        return
+      }
+
+      if (!objective) {
+        showToast({
+          title: "Tool objective is required",
+          description: "Use /tool <tool_name> <objective> or /tool <tool_name> --help.",
+        })
+        return
+      }
+
+      text = [
+        `Use the tool \`${toolName}\` to complete this objective:`,
+        objective,
+        "If permission is required, ask for it before execution.",
+      ].join("\n")
     }
 
     if (text.startsWith("/")) {
