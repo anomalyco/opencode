@@ -4,7 +4,7 @@ import { Agent } from "../../../agent/agent"
 import { Provider } from "../../../provider/provider"
 import { Session } from "../../../session"
 import type { MessageV2 } from "../../../session/message-v2"
-import { Identifier } from "../../../id/id"
+import { MessageID, PartID } from "../../../session/schema"
 import { ToolRegistry } from "../../../tool/registry"
 import { Instance } from "../../../project/instance"
 import { PermissionNext } from "../../../permission/next"
@@ -113,7 +113,7 @@ function parseToolParams(input?: string) {
 
 async function createToolContext(agent: Agent.Info) {
   const session = await Session.create({ title: `Debug tool run (${agent.name})` })
-  const messageID = Identifier.ascending("message")
+  const messageID = MessageID.ascending()
   const model = agent.model ?? (await Provider.defaultModel())
   const now = Date.now()
   const message: MessageV2.Assistant = {
@@ -150,7 +150,7 @@ async function createToolContext(agent: Agent.Info) {
   return {
     sessionID: session.id,
     messageID,
-    callID: Identifier.ascending("part"),
+    callID: PartID.ascending(),
     agent: agent.name,
     abort: new AbortController().signal,
     messages: [],

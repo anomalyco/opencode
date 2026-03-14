@@ -28,6 +28,7 @@ export namespace ZenData {
     stickyProvider: z.enum(["strict", "prefer"]).optional(),
     trialProvider: z.string().optional(),
     fallbackProvider: z.string().optional(),
+    rateLimit: z.number().optional(),
     providers: z.array(
       z.object({
         id: z.string(),
@@ -35,6 +36,7 @@ export namespace ZenData {
         weight: z.number().optional(),
         disabled: z.boolean().optional(),
         storeModel: z.string().optional(),
+        payloadModifier: z.record(z.string(), z.any()).optional(),
       }),
     ),
   })
@@ -45,6 +47,7 @@ export namespace ZenData {
     format: FormatSchema.optional(),
     headerMappings: z.record(z.string(), z.string()).optional(),
     payloadModifier: z.record(z.string(), z.any()).optional(),
+    payloadMappings: z.record(z.string(), z.string()).optional(),
   })
 
   const ModelsSchema = z.object({
