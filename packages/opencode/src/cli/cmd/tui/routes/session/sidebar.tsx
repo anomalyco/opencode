@@ -1,6 +1,7 @@
 import { useSync } from "@tui/context/sync"
-import { createMemo, For, Show, Switch, Match } from "solid-js"
+import { createMemo, createResource, For, Show, Switch, Match } from "solid-js"
 import { createStore } from "solid-js/store"
+import { useSDK } from "@tui/context/sdk"
 import { useTheme } from "../../context/theme"
 import { Locale } from "@/util/locale"
 import path from "path"
@@ -27,11 +28,30 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
     lsp: true,
   })
 
+  const sdk = useSDK()
+
   // Sort MCP servers alphabetically for consistent display order
   const mcpEntries = createMemo(() => Object.entries(sync.data.mcp).sort(([a], [b]) => a.localeCompare(b)))
 
   // Count connected and error MCP servers for collapsed header display
   const connectedMcpCount = createMemo(() => mcpEntries().filter(([_, item]) => item.status === "connected").length)
+
+  // Fetch all tool IDs (no scope filter) whenever connected server count changes
+  const [mcpTools] = createResource(
+    () => connectedMcpCount(),
+    () => sdk.client.mcp.tools().then((x) => x.data ?? []).catch(() => []),
+  )
+
+  // Count tools per server by matching the sanitized name prefix
+  const toolCount = createMemo(() => {
+    const tools = mcpTools() ?? []
+    const counts: Record<string, number> = {}
+    for (const [key] of mcpEntries()) {
+      const sanitized = key.replace(/[^a-zA-Z0-9_-]/g, "_")
+      counts[key] = tools.filter((id) => id === sanitized || id.startsWith(sanitized + "_")).length
+    }
+    return counts
+  })
   const errorMcpCount = createMemo(
     () =>
       mcpEntries().filter(
@@ -151,7 +171,9 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                           {key}{" "}
                           <span style={{ fg: theme.textMuted }}>
                             <Switch fallback={item.status}>
-                              <Match when={item.status === "connected"}>Connected</Match>
+                              <Match when={item.status === "connected"}>
+                                Connected{toolCount()[key] ? ` · ${toolCount()[key]} tools` : ""}
+                              </Match>
                               <Match when={item.status === "failed" && item}>{(val) => <i>{val().error}</i>}</Match>
                               <Match when={item.status === "disabled"}>Disabled</Match>
                               <Match when={(item.status as string) === "needs_auth"}>Needs auth</Match>
