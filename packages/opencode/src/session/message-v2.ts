@@ -701,7 +701,7 @@ export namespace MessageV2 {
 
       if (msg.info.role === "assistant") {
         const differentModel = `${model.providerID}/${model.id}` !== `${msg.info.providerID}/${msg.info.modelID}`
-        const media: Array<{ mime: string; url: string }> = []
+        const pendingMedia: Array<{ mime: string; url: string }> = []
 
         if (
           msg.info.error &&
@@ -740,7 +740,7 @@ export namespace MessageV2 {
               const mediaAttachments = attachments.filter((a) => isMedia(a.mime))
               const nonMediaAttachments = attachments.filter((a) => !isMedia(a.mime))
               if (!supportsMediaInToolResults && mediaAttachments.length > 0) {
-                media.push(...mediaAttachments)
+                pendingMedia.push(...mediaAttachments)
               }
               const finalAttachments = supportsMediaInToolResults ? attachments : nonMediaAttachments
 
@@ -794,7 +794,7 @@ export namespace MessageV2 {
           result.push(assistantMessage)
           // Inject pending media as a user message for providers that don't support
           // media (images, PDFs) in tool results
-          if (media.length > 0) {
+          if (pendingMedia.length > 0) {
             result.push({
               id: MessageID.ascending(),
               role: "user",
@@ -803,9 +803,9 @@ export namespace MessageV2 {
                   type: "text" as const,
                   text: "Attached image(s) from tool result:",
                 },
-                ...media.map((attachment) => ({
+                ...pendingMedia.map((attachment) => ({
                   type: "file" as const,
-                  url: attachment.url,
+                  url: media(attachment.url),
                   mediaType: attachment.mime,
                 })),
               ],
