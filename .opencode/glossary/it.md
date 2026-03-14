@@ -6,7 +6,7 @@
 
 ## Do Not Translate (Locale Additions)
 
-- `opencode` (usare sempre la forma minuscola, sia nei testi discorsivi sia nei comandi, nomi di pacchetti, percorsi o codice)
+- `opencode` (scrivere sempre in minuscolo, sia nel codice che nei testi discorsivi)
 - `opencode CLI`
 - `CLI`, `TUI`, `MCP`, `OAuth`, `LSP`, `LLM`
 - Nomi propri e di prodotto: `VS Code`, `GitHub`, `Copilot`, `ChatGPT Plus or Pro`, `OpenAI`
