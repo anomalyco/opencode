@@ -134,7 +134,7 @@ export class PermissionService extends ServiceMap.Service<PermissionService, Per
   static readonly layer = Layer.effect(
     PermissionService,
     Effect.gen(function* () {
-      const st = yield* InstanceState.make<State>(() =>
+      const instanceState = yield* InstanceState.make<State>(() =>
         Effect.sync(() => {
           const row = Database.use((db) =>
             db.select().from(PermissionTable).where(eq(PermissionTable.project_id, Instance.project.id)).get(),
@@ -146,14 +146,12 @@ export class PermissionService extends ServiceMap.Service<PermissionService, Per
         }),
       )
 
-      const get = InstanceState.get(st)
-
       const ask = Effect.fn("PermissionService.ask")(function* (input: z.infer<typeof AskInput>) {
-        const s = yield* get
+        const state = yield* InstanceState.get(instanceState)
         const { ruleset, ...request } = input
 
         for (const pattern of request.patterns) {
-          const rule = evaluate(request.permission, pattern, ruleset, s.approved)
+          const rule = evaluate(request.permission, pattern, ruleset, state.approved)
           log.info("evaluated", { permission: request.permission, pattern, action: rule })
           if (rule.action === "deny") {
             return yield* Effect.fail(
@@ -170,18 +168,18 @@ export class PermissionService extends ServiceMap.Service<PermissionService, Per
           log.info("asking", { id, permission: info.permission, patterns: info.patterns })
 
           const deferred = yield* Deferred.make<void, RejectedError | CorrectedError>()
-          s.pending.set(id, { info, deferred })
+          state.pending.set(id, { info, deferred })
           void Bus.publish(Event.Asked, info)
           return yield* Deferred.await(deferred)
         }
       })
 
       const reply = Effect.fn("PermissionService.reply")(function* (input: z.infer<typeof ReplyInput>) {
-        const s = yield* get
-        const existing = s.pending.get(input.requestID)
+        const state = yield* InstanceState.get(instanceState)
+        const existing = state.pending.get(input.requestID)
         if (!existing) return
 
-        s.pending.delete(input.requestID)
+        state.pending.delete(input.requestID)
         void Bus.publish(Event.Replied, {
           sessionID: existing.info.sessionID,
           requestID: existing.info.id,
@@ -194,9 +192,9 @@ export class PermissionService extends ServiceMap.Service<PermissionService, Per
             input.message ? new CorrectedError(input.message) : new RejectedError(),
           )
 
-          for (const [id, item] of s.pending.entries()) {
+          for (const [id, item] of state.pending.entries()) {
             if (item.info.sessionID !== existing.info.sessionID) continue
-            s.pending.delete(id)
+            state.pending.delete(id)
             void Bus.publish(Event.Replied, {
               sessionID: item.info.sessionID,
               requestID: item.info.id,
@@ -211,20 +209,20 @@ export class PermissionService extends ServiceMap.Service<PermissionService, Per
         if (input.reply === "once") return
 
         for (const pattern of existing.info.always) {
-          s.approved.push({
+          state.approved.push({
             permission: existing.info.permission,
             pattern,
             action: "allow",
           })
         }
 
-        for (const [id, item] of s.pending.entries()) {
+        for (const [id, item] of state.pending.entries()) {
           if (item.info.sessionID !== existing.info.sessionID) continue
           const ok = item.info.patterns.every(
-            (pattern) => evaluate(item.info.permission, pattern, s.approved).action === "allow",
+            (pattern) => evaluate(item.info.permission, pattern, state.approved).action === "allow",
           )
           if (!ok) continue
-          s.pending.delete(id)
+          state.pending.delete(id)
           void Bus.publish(Event.Replied, {
             sessionID: item.info.sessionID,
             requestID: item.info.id,
@@ -240,7 +238,8 @@ export class PermissionService extends ServiceMap.Service<PermissionService, Per
       })
 
       const list = Effect.fn("PermissionService.list")(function* () {
-        return Array.from((yield* get).pending.values(), (item) => item.info)
+        const state = yield* InstanceState.get(instanceState)
+        return Array.from(state.pending.values(), (item) => item.info)
       })
 
       return PermissionService.of({ ask, reply, list })
