@@ -16,6 +16,7 @@ import { Locale } from "@/util/locale"
 import { Global } from "@/global"
 import { useDialog } from "../../ui/dialog"
 import { useTuiConfig } from "../../context/tui-config"
+import { Selection } from "../../util/selection"
 
 type PermissionStage = "permission" | "always" | "reject"
 
@@ -649,6 +650,7 @@ function Prompt<const T extends Record<string, string>>(props: {
                 backgroundColor={option === store.selected ? theme.warning : theme.backgroundMenu}
                 onMouseOver={() => setStore("selected", option)}
                 onMouseUp={() => {
+                  if (Selection.active(renderer)) return
                   setStore("selected", option)
                   props.onSelect(option)
                 }}

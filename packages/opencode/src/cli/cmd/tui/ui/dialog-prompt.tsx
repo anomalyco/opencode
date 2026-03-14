@@ -2,7 +2,8 @@ import { TextareaRenderable, TextAttributes } from "@opentui/core"
 import { useTheme } from "../context/theme"
 import { useDialog, type DialogContext } from "./dialog"
 import { onMount, type JSX } from "solid-js"
-import { useKeyboard } from "@opentui/solid"
+import { useKeyboard, useRenderer } from "@opentui/solid"
+import { Selection } from "../util/selection"
 
 export type DialogPromptProps = {
   title: string
@@ -16,6 +17,7 @@ export type DialogPromptProps = {
 export function DialogPrompt(props: DialogPromptProps) {
   const dialog = useDialog()
   const { theme } = useTheme()
+  const renderer = useRenderer()
   let textarea: TextareaRenderable
 
   useKeyboard((evt) => {
@@ -39,7 +41,13 @@ export function DialogPrompt(props: DialogPromptProps) {
         <text attributes={TextAttributes.BOLD} fg={theme.text}>
           {props.title}
         </text>
-        <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
+        <text
+          fg={theme.textMuted}
+          onMouseUp={() => {
+            if (Selection.active(renderer)) return
+            dialog.clear()
+          }}
+        >
           esc
         </text>
       </box>

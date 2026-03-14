@@ -23,6 +23,7 @@ import { useExit } from "../../context/exit"
 import { Clipboard } from "../../util/clipboard"
 import type { FilePart } from "@opencode-ai/sdk/v2"
 import { TuiEvent } from "../../event"
+import { Selection } from "../../util/selection"
 import { iife } from "@/util/iife"
 import { Locale } from "@/util/locale"
 import { formatDuration } from "@/util/format"
@@ -1105,6 +1106,7 @@ export function Prompt(props: PromptProps) {
                       })
                     })
                     const handleMessageClick = () => {
+                      if (Selection.active(renderer)) return
                       const r = retry()
                       if (!r) return
                       if (isTruncated()) {

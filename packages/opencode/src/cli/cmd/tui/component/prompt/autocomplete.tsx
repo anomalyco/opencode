@@ -9,7 +9,8 @@ import { useSync } from "@tui/context/sync"
 import { useTheme, selectedForeground } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
 import { useCommandDialog } from "@tui/component/dialog-command"
-import { useTerminalDimensions } from "@opentui/solid"
+import { useRenderer, useTerminalDimensions } from "@opentui/solid"
+import { Selection } from "@tui/util/selection"
 import { Locale } from "@/util/locale"
 import type { PromptInfo } from "./history"
 import { useFrecency } from "./frecency"
@@ -80,6 +81,7 @@ export function Autocomplete(props: {
   const command = useCommandDialog()
   const { theme } = useTheme()
   const dimensions = useTerminalDimensions()
+  const renderer = useRenderer()
   const frecency = useFrecency()
 
   const [store, setStore] = createStore({
@@ -648,7 +650,10 @@ export function Autocomplete(props: {
                 setStore("input", "mouse")
                 moveTo(index)
               }}
-              onMouseUp={() => select()}
+              onMouseUp={() => {
+                if (Selection.active(renderer)) return
+                select()
+              }}
             >
               <text fg={index === store.selected ? selectedForeground(theme) : theme.text} flexShrink={0}>
                 {option().display}

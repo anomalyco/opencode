@@ -3,7 +3,8 @@ import { useTheme } from "../context/theme"
 import { useDialog, type DialogContext } from "./dialog"
 import { createStore } from "solid-js/store"
 import { onMount, Show, type JSX } from "solid-js"
-import { useKeyboard } from "@opentui/solid"
+import { useKeyboard, useRenderer } from "@opentui/solid"
+import { Selection } from "../util/selection"
 
 export type DialogExportOptionsProps = {
   defaultFilename: string
@@ -24,6 +25,7 @@ export type DialogExportOptionsProps = {
 export function DialogExportOptions(props: DialogExportOptionsProps) {
   const dialog = useDialog()
   const { theme } = useTheme()
+  const renderer = useRenderer()
   let textarea: TextareaRenderable
   const [store, setStore] = createStore({
     thinking: props.defaultThinking,
@@ -80,7 +82,13 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
         <text attributes={TextAttributes.BOLD} fg={theme.text}>
           Export Options
         </text>
-        <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
+        <text
+          fg={theme.textMuted}
+          onMouseUp={() => {
+            if (Selection.active(renderer)) return
+            dialog.clear()
+          }}
+        >
           esc
         </text>
       </box>
@@ -114,7 +122,10 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
           gap={2}
           paddingLeft={1}
           backgroundColor={store.active === "thinking" ? theme.backgroundElement : undefined}
-          onMouseUp={() => setStore("active", "thinking")}
+          onMouseUp={() => {
+            if (Selection.active(renderer)) return
+            setStore("active", "thinking")
+          }}
         >
           <text fg={store.active === "thinking" ? theme.primary : theme.textMuted}>
             {store.thinking ? "[x]" : "[ ]"}
@@ -126,7 +137,10 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
           gap={2}
           paddingLeft={1}
           backgroundColor={store.active === "toolDetails" ? theme.backgroundElement : undefined}
-          onMouseUp={() => setStore("active", "toolDetails")}
+          onMouseUp={() => {
+            if (Selection.active(renderer)) return
+            setStore("active", "toolDetails")
+          }}
         >
           <text fg={store.active === "toolDetails" ? theme.primary : theme.textMuted}>
             {store.toolDetails ? "[x]" : "[ ]"}
@@ -138,7 +152,10 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
           gap={2}
           paddingLeft={1}
           backgroundColor={store.active === "assistantMetadata" ? theme.backgroundElement : undefined}
-          onMouseUp={() => setStore("active", "assistantMetadata")}
+          onMouseUp={() => {
+            if (Selection.active(renderer)) return
+            setStore("active", "assistantMetadata")
+          }}
         >
           <text fg={store.active === "assistantMetadata" ? theme.primary : theme.textMuted}>
             {store.assistantMetadata ? "[x]" : "[ ]"}
@@ -150,7 +167,10 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
           gap={2}
           paddingLeft={1}
           backgroundColor={store.active === "openWithoutSaving" ? theme.backgroundElement : undefined}
-          onMouseUp={() => setStore("active", "openWithoutSaving")}
+          onMouseUp={() => {
+            if (Selection.active(renderer)) return
+            setStore("active", "openWithoutSaving")
+          }}
         >
           <text fg={store.active === "openWithoutSaving" ? theme.primary : theme.textMuted}>
             {store.openWithoutSaving ? "[x]" : "[ ]"}

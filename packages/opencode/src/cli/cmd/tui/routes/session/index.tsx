@@ -81,6 +81,7 @@ import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { formatTranscript } from "../../util/transcript"
 import { UI } from "@/cli/ui.ts"
 import { useTuiConfig } from "../../context/tui-config"
+import { Selection } from "../../util/selection"
 
 addDefaultParsers(parsers.parsers)
 
@@ -1079,6 +1080,7 @@ export function Session() {
                         const dialog = useDialog()
 
                         const handleUnrevert = async () => {
+                          if (Selection.active(renderer)) return
                           const confirmed = await DialogConfirm.show(
                             dialog,
                             "Confirm Redo",

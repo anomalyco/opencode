@@ -146,12 +146,14 @@ export function DialogProvider(props: ParentProps) {
   const value = init()
   const renderer = useRenderer()
   const toast = useToast()
+  const click = Selection.click()
   return (
     <ctx.Provider value={value}>
       {props.children}
       <box
         position="absolute"
         onMouseDown={(evt) => {
+          if (Selection.press(click, renderer, evt)) return
           if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
           if (evt.button !== MouseButton.RIGHT) return
 
@@ -159,9 +161,11 @@ export function DialogProvider(props: ParentProps) {
           evt.preventDefault()
           evt.stopPropagation()
         }}
-        onMouseUp={
-          !Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT ? () => Selection.copy(renderer, toast) : undefined
-        }
+        onMouseUp={(evt) => {
+          if (Selection.release(click, renderer, toast, evt)) return
+          if (Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
+          Selection.copy(renderer, toast)
+        }}
       >
         <Show when={value.stack.length}>
           <Dialog onClose={() => value.clear()} size={value.size}>

@@ -6,9 +6,10 @@ import { useTheme } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
 import type { AssistantMessage, Session } from "@opencode-ai/sdk/v2"
 import { useCommandDialog } from "@tui/component/dialog-command"
+import { Selection } from "@tui/util/selection"
 import { useKeybind } from "../../context/keybind"
 import { Flag } from "@/flag/flag"
-import { useTerminalDimensions } from "@opentui/solid"
+import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 
 const Title = (props: { session: Accessor<Session> }) => {
   const { theme } = useTheme()
@@ -82,6 +83,7 @@ export function Header() {
   const { theme } = useTheme()
   const keybind = useKeybind()
   const command = useCommandDialog()
+  const renderer = useRenderer()
   const [hover, setHover] = createSignal<"parent" | "prev" | "next" | null>(null)
   const dimensions = useTerminalDimensions()
   const narrow = createMemo(() => dimensions().width < 80)
@@ -122,7 +124,10 @@ export function Header() {
                 <box
                   onMouseOver={() => setHover("parent")}
                   onMouseOut={() => setHover(null)}
-                  onMouseUp={() => command.trigger("session.parent")}
+                  onMouseUp={() => {
+                    if (Selection.active(renderer)) return
+                    command.trigger("session.parent")
+                  }}
                   backgroundColor={hover() === "parent" ? theme.backgroundElement : theme.backgroundPanel}
                 >
                   <text fg={theme.text}>
@@ -132,7 +137,10 @@ export function Header() {
                 <box
                   onMouseOver={() => setHover("prev")}
                   onMouseOut={() => setHover(null)}
-                  onMouseUp={() => command.trigger("session.child.previous")}
+                  onMouseUp={() => {
+                    if (Selection.active(renderer)) return
+                    command.trigger("session.child.previous")
+                  }}
                   backgroundColor={hover() === "prev" ? theme.backgroundElement : theme.backgroundPanel}
                 >
                   <text fg={theme.text}>
@@ -142,7 +150,10 @@ export function Header() {
                 <box
                   onMouseOver={() => setHover("next")}
                   onMouseOut={() => setHover(null)}
-                  onMouseUp={() => command.trigger("session.child.next")}
+                  onMouseUp={() => {
+                    if (Selection.active(renderer)) return
+                    command.trigger("session.child.next")
+                  }}
                   backgroundColor={hover() === "next" ? theme.backgroundElement : theme.backgroundPanel}
                 >
                   <text fg={theme.text}>

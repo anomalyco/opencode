@@ -10,9 +10,10 @@ import { useTheme } from "../context/theme"
 import { TextAttributes } from "@opentui/core"
 import type { ProviderAuthAuthorization } from "@opencode-ai/sdk/v2"
 import { DialogModel } from "./dialog-model"
-import { useKeyboard } from "@opentui/solid"
+import { useKeyboard, useRenderer } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
 import { useToast } from "../ui/toast"
+import { Selection } from "../util/selection"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
   opencode: 0,
@@ -111,6 +112,7 @@ function AutoMethod(props: AutoMethodProps) {
   const dialog = useDialog()
   const sync = useSync()
   const toast = useToast()
+  const renderer = useRenderer()
 
   useKeyboard((evt) => {
     if (evt.name === "c" && !evt.ctrl && !evt.meta) {
@@ -141,7 +143,13 @@ function AutoMethod(props: AutoMethodProps) {
         <text attributes={TextAttributes.BOLD} fg={theme.text}>
           {props.title}
         </text>
-        <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
+        <text
+          fg={theme.textMuted}
+          onMouseUp={() => {
+            if (Selection.active(renderer)) return
+            dialog.clear()
+          }}
+        >
           esc
         </text>
       </box>

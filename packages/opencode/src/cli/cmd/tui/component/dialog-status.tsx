@@ -4,6 +4,8 @@ import { useTheme } from "../context/theme"
 import { useDialog } from "@tui/ui/dialog"
 import { useSync } from "@tui/context/sync"
 import { For, Match, Switch, Show, createMemo } from "solid-js"
+import { useRenderer } from "@opentui/solid"
+import { Selection } from "../util/selection"
 
 export type DialogStatusProps = {}
 
@@ -11,6 +13,7 @@ export function DialogStatus() {
   const sync = useSync()
   const { theme } = useTheme()
   const dialog = useDialog()
+  const renderer = useRenderer()
 
   const enabledFormatters = createMemo(() => sync.data.formatter.filter((f) => f.enabled))
 
@@ -45,7 +48,13 @@ export function DialogStatus() {
         <text fg={theme.text} attributes={TextAttributes.BOLD}>
           Status
         </text>
-        <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
+        <text
+          fg={theme.textMuted}
+          onMouseUp={() => {
+            if (Selection.active(renderer)) return
+            dialog.clear()
+          }}
+        >
           esc
         </text>
       </box>

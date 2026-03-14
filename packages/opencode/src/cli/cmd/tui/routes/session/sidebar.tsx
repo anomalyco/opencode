@@ -11,10 +11,13 @@ import { useKeybind } from "../../context/keybind"
 import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
+import { useRenderer } from "@opentui/solid"
+import { Selection } from "../../util/selection"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const sync = useSync()
   const { theme } = useTheme()
+  const renderer = useRenderer()
   const session = createMemo(() => sync.session.get(props.sessionID)!)
   const diff = createMemo(() => sync.data.session_diff[props.sessionID] ?? [])
   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
@@ -111,7 +114,10 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 <box
                   flexDirection="row"
                   gap={1}
-                  onMouseDown={() => mcpEntries().length > 2 && setExpanded("mcp", !expanded.mcp)}
+                  onMouseUp={() => {
+                    if (Selection.active(renderer)) return
+                    if (mcpEntries().length > 2) setExpanded("mcp", !expanded.mcp)
+                  }}
                 >
                   <Show when={mcpEntries().length > 2}>
                     <text fg={theme.text}>{expanded.mcp ? "▼" : "▶"}</text>
@@ -171,7 +177,10 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
               <box
                 flexDirection="row"
                 gap={1}
-                onMouseDown={() => sync.data.lsp.length > 2 && setExpanded("lsp", !expanded.lsp)}
+                onMouseUp={() => {
+                  if (Selection.active(renderer)) return
+                  if (sync.data.lsp.length > 2) setExpanded("lsp", !expanded.lsp)
+                }}
               >
                 <Show when={sync.data.lsp.length > 2}>
                   <text fg={theme.text}>{expanded.lsp ? "▼" : "▶"}</text>
@@ -215,7 +224,10 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 <box
                   flexDirection="row"
                   gap={1}
-                  onMouseDown={() => todo().length > 2 && setExpanded("todo", !expanded.todo)}
+                  onMouseUp={() => {
+                    if (Selection.active(renderer)) return
+                    if (todo().length > 2) setExpanded("todo", !expanded.todo)
+                  }}
                 >
                   <Show when={todo().length > 2}>
                     <text fg={theme.text}>{expanded.todo ? "▼" : "▶"}</text>
@@ -234,7 +246,10 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 <box
                   flexDirection="row"
                   gap={1}
-                  onMouseDown={() => diff().length > 2 && setExpanded("diff", !expanded.diff)}
+                  onMouseUp={() => {
+                    if (Selection.active(renderer)) return
+                    if (diff().length > 2) setExpanded("diff", !expanded.diff)
+                  }}
                 >
                   <Show when={diff().length > 2}>
                     <text fg={theme.text}>{expanded.diff ? "▼" : "▶"}</text>
@@ -288,7 +303,13 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                   <text fg={theme.text}>
                     <b>Getting started</b>
                   </text>
-                  <text fg={theme.textMuted} onMouseDown={() => kv.set("dismissed_getting_started", true)}>
+                  <text
+                    fg={theme.textMuted}
+                    onMouseUp={() => {
+                      if (Selection.active(renderer)) return
+                      kv.set("dismissed_getting_started", true)
+                    }}
+                  >
                     ✕
                   </text>
                 </box>

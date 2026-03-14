@@ -3,11 +3,12 @@ import { useTheme, selectedForeground } from "@tui/context/theme"
 import { entries, filter, flatMap, groupBy, pipe, take } from "remeda"
 import { batch, createEffect, createMemo, For, Show, type JSX, on } from "solid-js"
 import { createStore } from "solid-js/store"
-import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
+import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import * as fuzzysort from "fuzzysort"
 import { isDeepEqual } from "remeda"
 import { useDialog, type DialogContext } from "@tui/ui/dialog"
 import { useKeybind } from "@tui/context/keybind"
+import { Selection } from "@tui/util/selection"
 import { Keybind } from "@/util/keybind"
 import { Locale } from "@/util/locale"
 
@@ -50,6 +51,7 @@ export type DialogSelectRef<T> = {
 export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const dialog = useDialog()
   const { theme } = useTheme()
+  const renderer = useRenderer()
   const [store, setStore] = createStore({
     selected: 0,
     filter: "",
@@ -236,7 +238,13 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           <text fg={theme.text} attributes={TextAttributes.BOLD}>
             {props.title}
           </text>
-          <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
+          <text
+            fg={theme.textMuted}
+            onMouseUp={() => {
+              if (Selection.active(renderer)) return
+              dialog.clear()
+            }}
+          >
             esc
           </text>
         </box>
@@ -300,6 +308,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                           setStore("input", "mouse")
                         }}
                         onMouseUp={() => {
+                          if (Selection.active(renderer)) return
                           option.onSelect?.(dialog)
                           props.onSelect?.(option)
                         }}
