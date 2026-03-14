@@ -1,4 +1,5 @@
 import { NamedError } from "@opencode-ai/util/error"
+import { $ } from "bun"
 import matter from "gray-matter"
 import { z } from "zod"
 import { Filesystem } from "../util/filesystem"
@@ -13,6 +14,28 @@ export namespace ConfigMarkdown {
 
   export function shell(template: string) {
     return Array.from(template.matchAll(SHELL_REGEX))
+  }
+
+  /**
+   * Expand !`command` directives in text by executing each command and
+   * replacing the directive with its stdout.
+   */
+  export async function expandShell(text: string): Promise<string> {
+    const matches = shell(text)
+    if (matches.length > 0) {
+      const results = await Promise.all(
+        matches.map(async ([, cmd]) => {
+          try {
+            return await $`${{ raw: cmd }}`.quiet().nothrow().text()
+          } catch (error) {
+            return `Error executing command: ${error instanceof Error ? error.message : String(error)}`
+          }
+        }),
+      )
+      let index = 0
+      text = text.replace(SHELL_REGEX, () => results[index++]!.trim())
+    }
+    return text
   }
 
   // other coding agents like claude code allow invalid yaml in their

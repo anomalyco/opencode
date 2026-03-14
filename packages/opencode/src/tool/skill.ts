@@ -3,6 +3,7 @@ import { pathToFileURL } from "url"
 import z from "zod"
 import { Tool } from "./tool"
 import { Skill } from "../skill"
+import { ConfigMarkdown } from "../config/markdown"
 import { Ripgrep } from "../file/ripgrep"
 import { iife } from "@/util/iife"
 
@@ -84,7 +85,7 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
           `<skill_content name="${skill.name}">`,
           `# Skill: ${skill.name}`,
           "",
-          skill.content.trim(),
+          (await ConfigMarkdown.expandShell(skill.content)).trim(),
           "",
           `Base directory for this skill: ${base}`,
           "Relative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.",

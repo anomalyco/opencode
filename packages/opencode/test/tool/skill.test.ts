@@ -110,4 +110,46 @@ Use this skill.
       process.env.OPENCODE_TEST_HOME = home
     }
   })
+
+  test("execute expands shell directives in skill content", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const skillDir = path.join(dir, ".opencode", "skill", "shell-skill")
+        await Bun.write(
+          path.join(skillDir, "SKILL.md"),
+          `---
+name: shell-skill
+description: Skill with shell directives.
+---
+
+# Shell Skill
+
+Output: !\`echo expanded-ok\`
+`,
+        )
+      },
+    })
+
+    const home = process.env.OPENCODE_TEST_HOME
+    process.env.OPENCODE_TEST_HOME = tmp.path
+
+    try {
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const tool = await SkillTool.init()
+          const ctx: Tool.Context = {
+            ...baseCtx,
+            ask: async () => {},
+          }
+
+          const result = await tool.execute({ name: "shell-skill" }, ctx)
+          expect(result.output).toContain("expanded-ok")
+          expect(result.output).not.toContain("!`")
+        },
+      })
+    } finally {
+      process.env.OPENCODE_TEST_HOME = home
+    }
+  })
 })
