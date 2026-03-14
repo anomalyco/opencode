@@ -11,7 +11,7 @@ import { useSync } from "../../context/sync"
 import { useTextareaKeybindings } from "../../component/textarea-keybindings"
 import path from "path"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
-import { Keybind } from "@/util/keybind"
+import { isReturn, Keybind } from "@/util/keybind"
 import { Locale } from "@/util/locale"
 import { Global } from "@/global"
 import { useDialog } from "../../ui/dialog"
@@ -482,7 +482,7 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
       props.onCancel()
       return
     }
-    if (evt.name === "return") {
+    if (isReturn(evt.name)) {
       evt.preventDefault()
       props.onConfirm(input.plainText)
     }
@@ -575,7 +575,7 @@ function Prompt<const T extends Record<string, string>>(props: {
       setStore("selected", next)
     }
 
-    if (evt.name === "return") {
+    if (isReturn(evt.name)) {
       evt.preventDefault()
       props.onSelect(store.selected)
     }

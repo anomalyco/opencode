@@ -4,6 +4,7 @@ import { useDialog, type DialogContext } from "./dialog"
 import { createStore } from "solid-js/store"
 import { For } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
+import { isReturn } from "@/util/keybind"
 import { Locale } from "@/util/locale"
 
 export type DialogConfirmProps = {
@@ -21,7 +22,7 @@ export function DialogConfirm(props: DialogConfirmProps) {
   })
 
   useKeyboard((evt) => {
-    if (evt.name === "return") {
+    if (isReturn(evt.name)) {
       if (store.active === "confirm") props.onConfirm?.()
       if (store.active === "cancel") props.onCancel?.()
       dialog.clear()

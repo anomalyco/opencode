@@ -1,6 +1,10 @@
 import { isDeepEqual } from "remeda"
 import type { ParsedKey } from "@opentui/core"
 
+export function isReturn(name: string) {
+  return name === "return" || name === "kpenter"
+}
+
 export namespace Keybind {
   /**
    * Keybind info derived from OpenTUI's ParsedKey with our custom `leader` field.
@@ -90,6 +94,9 @@ export namespace Keybind {
             break
           case "esc":
             info.name = "escape"
+            break
+          case "kpenter":
+            info.name = "kpenter"
             break
           default:
             info.name = part
