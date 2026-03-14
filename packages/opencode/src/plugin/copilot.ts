@@ -315,6 +315,9 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
             id: incoming.message.sessionID,
             messageID: incoming.message.id,
           },
+          query: {
+            directory: input.directory,
+          },
           throwOnError: true,
         })
         .catch(() => undefined)
