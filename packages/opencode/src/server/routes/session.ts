@@ -17,6 +17,8 @@ import { Log } from "../../util/log"
 import { PermissionNext } from "@/permission/next"
 import { PermissionID } from "@/permission/schema"
 import { ModelID, ProviderID } from "@/provider/schema"
+import { Bus } from "@/bus"
+import { NamedError } from "@opencode-ai/util/error"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 
@@ -814,8 +816,15 @@ export const SessionRoutes = lazy(() =>
         return stream(c, async (stream) => {
           const sessionID = c.req.valid("param").sessionID
           const body = c.req.valid("json")
-          const msg = await SessionPrompt.prompt({ ...body, sessionID })
-          stream.write(JSON.stringify(msg))
+          try {
+            const msg = await SessionPrompt.prompt({ ...body, sessionID })
+            stream.write(JSON.stringify(msg))
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error)
+            stream.write(JSON.stringify({
+              error: { message },
+            }))
+          }
         })
       },
     )
@@ -846,7 +855,14 @@ export const SessionRoutes = lazy(() =>
         return stream(c, async () => {
           const sessionID = c.req.valid("param").sessionID
           const body = c.req.valid("json")
-          SessionPrompt.prompt({ ...body, sessionID })
+          SessionPrompt.prompt({ ...body, sessionID }).catch((error) => {
+            const message = error instanceof Error ? error.message : String(error)
+            console.error(`[session] prompt_async error for ${sessionID}:`, message)
+            Bus.publish(Session.Event.Error, {
+              sessionID,
+              error: new NamedError.Unknown({ message }).toObject(),
+            })
+          })
         })
       },
     )
