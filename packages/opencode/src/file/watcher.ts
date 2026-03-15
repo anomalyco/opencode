@@ -99,17 +99,21 @@ export class FileWatcherService extends ServiceMap.Service<FileWatcherService, F
         }
       })
 
-      const subscribe = (dir: string, ignore: string[]) =>
-        Effect.gen(function* () {
-          const sub = yield* Effect.promise(() => w.subscribe(dir, cb, { ignore, backend }))
+      const subscribe = (dir: string, ignore: string[]) => {
+        const pending = w.subscribe(dir, cb, { ignore, backend })
+        return Effect.gen(function* () {
+          const sub = yield* Effect.promise(() => pending)
           subs.push(sub)
         }).pipe(
           Effect.timeout(SUBSCRIBE_TIMEOUT_MS),
           Effect.catchCause((cause) => {
             log.error("failed to subscribe", { dir, cause: Cause.pretty(cause) })
+            // Clean up a subscription that resolves after timeout
+            pending.then((s) => s.unsubscribe()).catch(() => {})
             return Effect.void
           }),
         )
+      }
 
       const cfg = yield* Effect.promise(() => Config.get())
       const cfgIgnores = cfg.watcher?.ignore ?? []
