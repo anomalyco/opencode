@@ -11,10 +11,10 @@ import path from "path"
 import { createWrapper } from "@parcel/watcher/wrapper"
 import { lazy } from "@/util/lazy"
 import type ParcelWatcher from "@parcel/watcher"
-import { Flag } from "@/flag/flag"
 import { readdir } from "fs/promises"
 import { git } from "@/util/git"
 import { Protected } from "./protected"
+import { Flag } from "@/flag/flag"
 import { Cause, Effect, Layer, ServiceMap } from "effect"
 
 const SUBSCRIBE_TIMEOUT_MS = 10_000
@@ -70,8 +70,7 @@ export class FileWatcherService extends ServiceMap.Service<FileWatcherService, F
     FileWatcherService,
     Effect.gen(function* () {
       const instance = yield* InstanceContext
-
-      if (Flag.OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER) return FileWatcherService.of({ init })
+      if (yield* Flag.OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER) return FileWatcherService.of({ init })
 
       log.info("init", { directory: instance.directory })
 
@@ -113,7 +112,7 @@ export class FileWatcherService extends ServiceMap.Service<FileWatcherService, F
       const cfg = yield* Effect.promise(() => Config.get())
       const cfgIgnores = cfg.watcher?.ignore ?? []
 
-      if (Flag.OPENCODE_EXPERIMENTAL_FILEWATCHER) {
+      if (yield* Flag.OPENCODE_EXPERIMENTAL_FILEWATCHER) {
         yield* subscribe(instance.directory, [...FileIgnore.PATTERNS, ...cfgIgnores, ...Protected.paths()])
       }
 

@@ -1,18 +1,11 @@
 import { $ } from "bun"
-import { afterEach, expect, mock, test } from "bun:test"
+import { afterEach, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { tmpdir } from "../fixture/fixture"
 
-const flags = await import("../../src/flag/flag")
-
-mock.module("@/flag/flag", () => ({
-  Flag: {
-    ...flags.Flag,
-    OPENCODE_EXPERIMENTAL_FILEWATCHER: true,
-    OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: false,
-  },
-}))
+process.env.OPENCODE_EXPERIMENTAL_FILEWATCHER = "true"
+delete process.env.OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER
 
 async function load() {
   const { runPromiseInstance } = await import("../../src/effect/runtime")
