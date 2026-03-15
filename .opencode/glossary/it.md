@@ -7,12 +7,12 @@
 ## Do Not Translate (Locale Additions)
 
 
-- `opencode` (scrivere sempre in minuscolo, sia nel codice che nei testi discorsivi)
+- `OpenCode` (nei testi discorsivi mantenere questa grafia con le maiuscole come nell'originale)
+- `opencode` (usare in minuscolo solo per comandi, nomi di pacchetti, percorsi e codice)
 - `opencode CLI`
 - `CLI`, `TUI`, `MCP`, `OAuth`, `LSP`, `LLM`
 - Nomi propri e di prodotto: `VS Code`, `GitHub`, `Copilot`, `ChatGPT Plus or Pro`, `OpenAI`
 - Comandi, flag, percorsi dei file e letterali di codice (mantenere esattamente come scritti in inglese)
-
 ## Preferred Terms
 
 Non ci sono ancora mappature fisse derivate da PR per l'italiano. Aggiungi qui le voci quando le revisioni introducono correzioni ricorrenti.
