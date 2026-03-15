@@ -149,6 +149,30 @@ The custom directory is loaded after the global config and `.opencode` directori
 
 ---
 
+### Global directories
+
+OpenCode stores different kinds of files in different global directories.
+To see the exact resolved paths on your machine, run:
+
+```bash
+opencode debug paths
+```
+
+On Linux, the defaults typically look like this:
+
+| Directory | Default path | What lives there |
+| --------- | ------------ | ---------------- |
+| Config | `~/.config/opencode/` | User-managed config and assets such as `opencode.json`, `tui.json`, `AGENTS.md`, and global `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, and `themes/` directories. Writable config directories may also contain generated `package.json`, `bun.lock`, and `node_modules/` for plugin/tool dependencies. |
+| Data | `~/.local/share/opencode/` | Persistent data such as `auth.json`, `mcp-auth.json`, the session database (`opencode.db`), `plans/`, `snapshot/`, `worktree/`, `tool-output/`, `log/`, and downloaded binaries in `bin/`. Older installs or imports may also contain `storage/`. |
+| State | `~/.local/state/opencode/` | Local runtime state that OpenCode manages for you, including `model.json`, `kv.json`, `prompt-history.jsonl`, `prompt-stash.jsonl`, and `frecency.jsonl`. |
+| Cache | `~/.cache/opencode/` | Rebuildable caches such as `models.json`, cached skills, and package-manager files like `package.json`, `version`, and cached `node_modules/`. |
+
+If you're backing up or migrating OpenCode, preserve `config` and `data`.
+Preserve `state` too if you want things like recent model choices and prompt
+history to carry over. `cache` can be regenerated.
+
+---
+
 ## Schema
 
 The server/runtime config schema is defined in [**`opencode.ai/config.json`**](https://opencode.ai/config.json).

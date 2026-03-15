@@ -119,7 +119,10 @@ opencode auth [command]
 
 #### login
 
-OpenCode is powered by the provider list at [Models.dev](https://models.dev), so you can use `opencode auth login` to configure API keys for any provider you'd like to use. This is stored in `~/.local/share/opencode/auth.json`.
+OpenCode is powered by the provider list at [Models.dev](https://models.dev), so
+you can use `opencode auth login` to configure API keys for any provider you'd
+like to use. Credentials are stored in the OpenCode data directory, which is
+`~/.local/share/opencode/auth.json` on Linux by default.
 
 ```bash
 opencode auth login
@@ -486,6 +489,28 @@ This command starts an ACP server that communicates via stdin/stdout using nd-JS
 | `--cwd`      | Working directory     |
 | `--port`     | Port to listen on     |
 | `--hostname` | Hostname to listen on |
+
+---
+
+### debug
+
+Debugging and troubleshooting tools.
+
+```bash
+opencode debug [command]
+```
+
+#### paths
+
+Print the resolved global OpenCode directories for the current machine.
+
+```bash
+opencode debug paths
+```
+
+This is useful when you need to locate config files, credentials, session
+storage, caches, or other generated files without guessing platform-specific
+paths.
 
 ---
 
