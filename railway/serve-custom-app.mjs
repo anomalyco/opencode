@@ -8,10 +8,7 @@ const port = Number(process.env.PORT || "3000")
 const apiBase = "http://127.0.0.1:4096"
 const distDir = resolve(process.env.OPENCODE_APP_DIST_DIR || join(process.cwd(), "packages/app/dist"))
 const indexFile = join(distDir, "index.html")
-const backendPassword = process.env.OPENCODE_SERVER_PASSWORD || ""
 const backendUsername = process.env.OPENCODE_SERVER_USERNAME || "opencode"
-const auth =
-  backendPassword.length > 0 ? `Basic ${Buffer.from(`${backendUsername}:${backendPassword}`).toString("base64")}` : ""
 
 const contentTypes = {
   ".html": "text/html; charset=utf-8",
@@ -35,11 +32,13 @@ const proxy = createProxyServer({
 })
 
 proxy.on("proxyReq", (proxyReq) => {
-  if (auth) proxyReq.setHeader("Authorization", auth)
+  const authorization = proxyReq.getHeader("authorization")
+  if (!authorization) proxyReq.removeHeader("authorization")
 })
 
 proxy.on("proxyReqWs", (proxyReq) => {
-  if (auth) proxyReq.setHeader("Authorization", auth)
+  const authorization = proxyReq.getHeader("authorization")
+  if (!authorization) proxyReq.removeHeader("authorization")
 })
 
 proxy.on("error", async (_err, req, res) => {
@@ -49,8 +48,7 @@ proxy.on("error", async (_err, req, res) => {
 })
 
 function isAuthorized(req) {
-  if (!auth) return true
-  return req.headers.authorization === auth
+  return typeof req.headers.authorization === "string" && req.headers.authorization.length > 0
 }
 
 function writeUnauthorized(res) {
