@@ -692,7 +692,7 @@ export namespace Provider {
   async function discoverModelsFromEndpoint(
     providerID: string,
     baseURL: string,
-    auth: Auth.ApiAuth | null,
+    auth: any | null,
   ): Promise<Record<string, Model>> {
     const models: Record<string, Model> = {}
 
@@ -750,8 +750,8 @@ export namespace Provider {
         }
 
         models[modelID] = {
-          id: modelID,
-          providerID,
+          id: ModelID.make(modelID),
+          providerID: ProviderID.make(providerID),
           name: modelData.name ?? modelID,
           family: modelData.family ?? "",
           api: {

@@ -7,11 +7,11 @@ import { Provider } from "../../src/provider/provider"
 
 // Mock fetch for dynamic model discovery tests
 let originalFetch: typeof global.fetch
-let mockFetch: mock.Mock
+let mockFetch: ReturnType<typeof mock>
 
 beforeEach(() => {
   originalFetch = global.fetch
-  mockFetch = mock(() =>
+  mockFetch = mock((url: string | URL | Request) =>
     Promise.resolve({
       ok: true,
       json: () => Promise.resolve({ data: [] }),
@@ -357,7 +357,7 @@ test("dynamic model discovery - local config API key overrides the global one", 
               npm: "@ai-sdk/openai-compatible",
               options: {
                 baseURL: "http://localhost:1234/v1",
-                apiKey: "local-api-key"
+                apiKey: "local-api-key",
               },
               dynamicModelList: true,
             },
