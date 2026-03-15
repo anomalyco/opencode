@@ -89,22 +89,14 @@ export class FileWatcherService extends ServiceMap.Service<FileWatcherService, F
       const subs: ParcelWatcher.AsyncSubscription[] = []
       yield* Effect.addFinalizer(() => Effect.promise(() => Promise.allSettled(subs.map((sub) => sub.unsubscribe()))))
 
-      const directory = instance.directory
-      const cb: ParcelWatcher.SubscribeCallback = (err, evts) => {
+      const cb: ParcelWatcher.SubscribeCallback = Instance.bind((err, evts) => {
         if (err) return
-        // Instance.provide restores ALS context since native watcher callbacks
-        // fire outside the Instance async context
-        Instance.provide({
-          directory,
-          fn: () => {
-            for (const evt of evts) {
-              if (evt.type === "create") Bus.publish(event.Updated, { file: evt.path, event: "add" })
-              if (evt.type === "update") Bus.publish(event.Updated, { file: evt.path, event: "change" })
-              if (evt.type === "delete") Bus.publish(event.Updated, { file: evt.path, event: "unlink" })
-            }
-          },
-        })
-      }
+        for (const evt of evts) {
+          if (evt.type === "create") Bus.publish(event.Updated, { file: evt.path, event: "add" })
+          if (evt.type === "update") Bus.publish(event.Updated, { file: evt.path, event: "change" })
+          if (evt.type === "delete") Bus.publish(event.Updated, { file: evt.path, event: "unlink" })
+        }
+      })
 
       const subscribe = (dir: string, ignore: string[]) =>
         Effect.gen(function* () {

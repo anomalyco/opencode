@@ -101,6 +101,15 @@ export const Instance = {
     if (Instance.worktree === "/") return false
     return Filesystem.contains(Instance.worktree, filepath)
   },
+  /**
+   * Captures the current instance ALS context and returns a wrapper that
+   * restores it when called. Use this for callbacks that fire outside the
+   * instance async context (native addons, event emitters, timers, etc.).
+   */
+  bind<F extends (...args: any[]) => any>(fn: F): F {
+    const ctx = context.use()
+    return ((...args: any[]) => context.provide(ctx, () => fn(...args))) as F
+  },
   state<S>(init: () => S, dispose?: (state: Awaited<S>) => Promise<void>): () => S {
     return State.create(() => Instance.directory, init, dispose)
   },
