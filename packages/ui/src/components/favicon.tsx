@@ -1,12 +1,11 @@
 import { Link, Meta } from "@solidjs/meta"
+import mark from "../assets/brand/v.svg"
 
 export const Favicon = () => {
   return (
     <>
-      <Link rel="icon" type="image/svg+xml" href="/favicon-v3.svg" />
-      <Link rel="icon" type="image/png" href="/favicon-96x96-v3.png" sizes="96x96" />
-      <Link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-v3.png" />
-      <Link rel="manifest" href="/site.webmanifest" />
+      <Link rel="icon" type="image/svg+xml" href={mark} />
+      <Link rel="shortcut icon" href={mark} />
       <Meta name="apple-mobile-web-app-title" content="Veritly" />
     </>
   )
