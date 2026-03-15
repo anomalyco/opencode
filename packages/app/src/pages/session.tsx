@@ -1657,6 +1657,18 @@ export default function Page() {
   let touchStartY = 0
   let touchAxisLocked: "horizontal" | "vertical" | null = null
 
+  const adjacentSessions = createMemo(() => {
+    if (!params.id) return { prev: null, next: null }
+    const [workspaceStore] = globalSync.child(sdk.directory, { bootstrap: false })
+    const sessions = sortedRootSessions(workspaceStore, Date.now())
+    const idx = sessions.findIndex((s) => s.id === params.id)
+    if (idx === -1) return { prev: null, next: null }
+    return {
+      prev: idx > 0 ? sessions[idx - 1] : null,
+      next: idx < sessions.length - 1 ? sessions[idx + 1] : null
+    }
+  })
+
   const onTouchStart = (e: TouchEvent) => {
     if (isDesktop() || !params.id) return
     if (e.touches.length !== 1) return
@@ -1706,7 +1718,10 @@ export default function Page() {
     }
 
     if (touchAxisLocked === "horizontal") {
-      setSwipeOffset(deltaX)
+      let allowedDelta = deltaX
+      if (allowedDelta > 0 && !adjacentSessions().prev) allowedDelta = 0
+      if (allowedDelta < 0 && !adjacentSessions().next) allowedDelta = 0
+      setSwipeOffset(allowedDelta)
     }
   }
 
@@ -1737,18 +1752,6 @@ export default function Page() {
     
     setSwipeOffset(0)
   }
-
-  const adjacentSessions = createMemo(() => {
-    if (!params.id) return { prev: null, next: null }
-    const [workspaceStore] = globalSync.child(sdk.directory, { bootstrap: false })
-    const sessions = sortedRootSessions(workspaceStore, Date.now())
-    const idx = sessions.findIndex((s) => s.id === params.id)
-    if (idx === -1) return { prev: null, next: null }
-    return {
-      prev: idx > 0 ? sessions[idx - 1] : null,
-      next: idx < sessions.length - 1 ? sessions[idx + 1] : null
-    }
-  })
 
   return (
     <div
