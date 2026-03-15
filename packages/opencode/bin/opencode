@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 
-const childProcess = require("child_process")
-const fs = require("fs")
-const path = require("path")
-const os = require("os")
+import childProcess from "child_process"
+import fs from "fs"
+import os from "os"
+import path from "path"
+import { fileURLToPath } from "url"
 
 function run(target) {
   const result = childProcess.spawnSync(target, process.argv.slice(2), {
@@ -22,7 +23,7 @@ if (envPath) {
   run(envPath)
 }
 
-const scriptPath = fs.realpathSync(__filename)
+const scriptPath = fs.realpathSync(fileURLToPath(import.meta.url))
 const scriptDir = path.dirname(scriptPath)
 
 //
