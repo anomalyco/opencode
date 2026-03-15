@@ -12,7 +12,6 @@ import { NamedError } from "@opencode-ai/util/error"
 import { withTimeout } from "../util/timeout"
 import { Instance } from "../project/instance"
 import { Filesystem } from "../util/filesystem"
-import fs from "fs"
 
 const DIAGNOSTICS_DEBOUNCE_MS = 150
 
@@ -54,63 +53,10 @@ export namespace LSPClient {
     const l = log.clone().tag("serverID", input.serverID)
     l.info("starting client")
 
-    const DEBUG_LOG = "/tmp/lsp-debug.log"
-    const debugLog = (direction: string, data: unknown) => {
-      const ts = new Date().toISOString()
-      const line = `[${ts}] [${input.serverID}] ${direction} ${JSON.stringify(data)}\n`
-      fs.appendFileSync(DEBUG_LOG, line)
-    }
-
     const reader = new StreamMessageReader(input.server.process.stdout as any)
     const writer = new StreamMessageWriter(input.server.process.stdin as any)
 
     const connection = createMessageConnection(reader, writer)
-
-    // Intercept outgoing traffic (client -> server)
-    const originalSendRequest = connection.sendRequest.bind(connection)
-    connection.sendRequest = ((...args: any[]) => {
-      debugLog("CLIENT -> SERVER [request]", { method: args[0], params: args[1] })
-      const result = originalSendRequest(...args)
-      if (result && typeof result.then === "function") {
-        result.then(
-          (res: unknown) => debugLog("CLIENT <- SERVER [response]", { method: args[0], result: res }),
-          (err: unknown) => debugLog("CLIENT <- SERVER [error]", { method: args[0], error: String(err) }),
-        )
-      }
-      return result
-    }) as any
-
-    const originalSendNotification = connection.sendNotification.bind(connection)
-    connection.sendNotification = ((...args: any[]) => {
-      debugLog("CLIENT -> SERVER [notification]", { method: args[0], params: args[1] })
-      return originalSendNotification(...args)
-    }) as any
-
-    // Intercept incoming traffic (server -> client) via onNotification/onRequest wrappers
-    const originalOnNotification = connection.onNotification.bind(connection)
-    connection.onNotification = ((method: any, handler: any) => {
-      if (typeof method === "string" && handler) {
-        return originalOnNotification(method, (...args: any[]) => {
-          debugLog("SERVER -> CLIENT [notification]", { method, params: args[0] })
-          return handler(...args)
-        })
-      }
-      // Catch-all / generic notification handler
-      return originalOnNotification(method, handler)
-    }) as any
-
-    const originalOnRequest = connection.onRequest.bind(connection)
-    connection.onRequest = ((method: any, handler: any) => {
-      if (typeof method === "string" && handler) {
-        return originalOnRequest(method, async (...args: any[]) => {
-          debugLog("SERVER -> CLIENT [request]", { method, params: args[0] })
-          const result = await handler(...args)
-          debugLog("CLIENT -> SERVER [response to server request]", { method, result })
-          return result
-        })
-      }
-      return originalOnRequest(method, handler)
-    }) as any
 
     const diagnostics = new Map<string, Diagnostic[]>()
 
@@ -148,12 +94,17 @@ export namespace LSPClient {
     connection.onRequest("workspace/configuration", async () => {
       configurationServed = true
       configurationResolved()
-      return [input.server.settings ?? input.server.initialization ?? {}]
+      const settings = input.server.settings ?? input.server.initialization ?? {}
+      l.debug("workspace/configuration", { settings })
+      return [settings]
     })
-    connection.onRequest("client/registerCapability", async () => {
+    connection.onRequest("client/registerCapability", async (params) => {
+      l.debug("client/registerCapability", params)
       serverReadyResolved()
     })
-    connection.onRequest("client/unregisterCapability", async () => {})
+    connection.onRequest("client/unregisterCapability", async (params) => {
+      l.debug("client/unregisterCapability", params)
+    })
 
     const serverMessages: Array<{ type: number; message: string }> = []
     const seen = new Set<string>()
@@ -169,19 +120,21 @@ export namespace LSPClient {
         Bus.publish(Event.Message, { serverID: input.serverID, type: params.type, message: params.message })
       }
     }
-    connection.onNotification("window/logMessage", (params: { type: number; message: string }) => {
-      handleServerMessage("window/logMessage", params)
-    })
-    connection.onNotification("window/showMessage", (params: { type: number; message: string }) => {
-      handleServerMessage("window/showMessage", params)
-    })
+    for (const msgType of ["window/logMessage", "window/showMessage"]) {
+      connection.onNotification(msgType, (params: { type: number; message: string }) => {
+        handleServerMessage(msgType, params)
+      })
+    }
 
-    connection.onRequest("workspace/workspaceFolders", async () => [
-      {
-        name: "workspace",
-        uri: pathToFileURL(input.root).href,
-      },
-    ])
+    connection.onRequest("workspace/workspaceFolders", async () => {
+      l.debug("workspace/workspaceFolders")
+      return [
+        {
+          name: "workspace",
+          uri: pathToFileURL(input.root).href,
+        },
+      ]
+    })
     connection.listen()
 
     l.info("sending initialize")
