@@ -741,6 +741,32 @@ export namespace SessionPrompt {
   }
 
   /** @internal Exported for testing */
+  export async function resolveCommandModel(input: {
+    sessionID: SessionID
+    command: Pick<Command.Info, "model" | "agent">
+    agent?: string
+    model?: string
+  }) {
+    if (input.command.model) {
+      return Provider.parseModel(input.command.model)
+    }
+    if (input.command.agent) {
+      const cmdAgent = await Agent.get(input.command.agent)
+      if (cmdAgent?.model) {
+        return cmdAgent.model
+      }
+    }
+    if (input.agent) {
+      const inputAgent = await Agent.get(input.agent)
+      if (inputAgent?.mode !== "primary" && inputAgent.model) {
+        return inputAgent.model
+      }
+    }
+    if (input.model) return Provider.parseModel(input.model)
+    return await lastModel(input.sessionID)
+  }
+
+  /** @internal Exported for testing */
   export async function resolveTools(input: {
     agent: Agent.Info
     model: Provider.Model
@@ -1802,19 +1828,12 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     }
     template = template.trim()
 
-    const taskModel = await (async () => {
-      if (command.model) {
-        return Provider.parseModel(command.model)
-      }
-      if (command.agent) {
-        const cmdAgent = await Agent.get(command.agent)
-        if (cmdAgent?.model) {
-          return cmdAgent.model
-        }
-      }
-      if (input.model) return Provider.parseModel(input.model)
-      return await lastModel(input.sessionID)
-    })()
+    const taskModel = await resolveCommandModel({
+      sessionID: input.sessionID,
+      command,
+      agent: input.agent,
+      model: input.model,
+    })
 
     try {
       await Provider.getModel(taskModel.providerID, taskModel.modelID)

@@ -13,6 +13,7 @@ import { SDKProvider, useSDK } from "@tui/context/sdk"
 import { SyncProvider, useSync } from "@tui/context/sync"
 import { LocalProvider, useLocal } from "@tui/context/local"
 import { DialogModel, useConnected } from "@tui/component/dialog-model"
+import { DialogAssignModel } from "@tui/component/dialog-assign-model"
 import { DialogMcp } from "@tui/component/dialog-mcp"
 import { DialogStatus } from "@tui/component/dialog-status"
 import { DialogThemeList } from "@tui/component/dialog-theme-list"
@@ -255,6 +256,7 @@ function App() {
     renderer.clearSelection()
   }
   const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
+  const hasSubagents = () => sync.data.agent.some((agent) => agent.mode !== "primary" && !agent.hidden)
 
   createEffect(() => {
     console.log(JSON.stringify(route.data))
@@ -423,6 +425,19 @@ function App() {
       },
       onSelect: () => {
         dialog.replace(() => <DialogModel />)
+      },
+    },
+    {
+      title: "Assign subagent model",
+      value: "model.assign",
+      keybind: "model_assign",
+      category: "Agent",
+      enabled: hasSubagents(),
+      slash: {
+        name: "assign-model",
+      },
+      onSelect: () => {
+        dialog.replace(() => <DialogAssignModel />)
       },
     },
     {

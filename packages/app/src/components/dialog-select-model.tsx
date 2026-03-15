@@ -18,14 +18,17 @@ import { useLanguage } from "@/context/language"
 const isFree = (provider: string, cost: { input: number } | undefined) =>
   provider === "opencode" && (!cost || cost.input === 0)
 
-type ModelState = ReturnType<typeof useLocal>["model"]
+export type ModelListState = Pick<
+  ReturnType<typeof useLocal>["model"],
+  "current" | "list" | "visible" | "set"
+>
 
-const ModelList: Component<{
+export const ModelList: Component<{
   provider?: string
   class?: string
   onSelect: () => void
   action?: JSX.Element
-  model?: ModelState
+  model?: ModelListState
 }> = (props) => {
   const model = props.model ?? useLocal().model
   const language = useLanguage()
@@ -91,7 +94,7 @@ type ModelSelectorTriggerProps = Omit<ComponentProps<typeof Kobalte.Trigger>, "a
 
 export function ModelSelectorPopover(props: {
   provider?: string
-  model?: ModelState
+  model?: ModelListState
   children?: JSX.Element
   triggerAs?: ValidComponent
   triggerProps?: ModelSelectorTriggerProps
@@ -189,7 +192,7 @@ export function ModelSelectorPopover(props: {
   )
 }
 
-export const DialogSelectModel: Component<{ provider?: string; model?: ModelState }> = (props) => {
+export const DialogSelectModel: Component<{ provider?: string; model?: ModelListState }> = (props) => {
   const dialog = useDialog()
   const language = useLanguage()
 

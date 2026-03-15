@@ -72,6 +72,13 @@ export namespace Config {
     if (target.instructions && source.instructions) {
       merged.instructions = Array.from(new Set([...target.instructions, ...source.instructions]))
     }
+    // Merge subagent_model_assignments at key level (project overrides individual agents)
+    if (target.subagent_model_assignments && source.subagent_model_assignments) {
+      merged.subagent_model_assignments = {
+        ...target.subagent_model_assignments,
+        ...source.subagent_model_assignments,
+      }
+    }
     return merged
   }
 
@@ -851,6 +858,7 @@ export namespace Config {
         .describe("Toggle code block concealment in messages"),
       tool_details: z.string().optional().default("none").describe("Toggle tool details visibility"),
       model_list: z.string().optional().default("<leader>m").describe("List available models"),
+      model_assign: z.string().optional().default("<leader>p").describe("Assign model to subagent"),
       model_cycle_recent: z.string().optional().default("f2").describe("Next recently used model"),
       model_cycle_recent_reverse: z.string().optional().default("shift+f2").describe("Previous recently used model"),
       model_cycle_favorite: z.string().optional().default("none").describe("Next favorite model"),
@@ -1084,6 +1092,10 @@ export namespace Config {
         .describe(
           "Default agent to use when none is specified. Must be a primary agent. Falls back to 'build' if not set or if the specified agent is invalid.",
         ),
+      subagent_model_assignments: z
+        .record(z.string(), ModelId)
+        .optional()
+        .describe("Preferred model assignments for non-primary agents"),
       username: z
         .string()
         .optional()

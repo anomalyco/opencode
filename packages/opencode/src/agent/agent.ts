@@ -232,6 +232,12 @@ export namespace Agent {
       item.permission = PermissionNext.merge(item.permission, PermissionNext.fromConfig(value.permission ?? {}))
     }
 
+    for (const [name, assignedModel] of Object.entries(cfg.subagent_model_assignments ?? {})) {
+      const item = result[name]
+      if (!item || item.mode === "primary") continue
+      item.model = Provider.parseModel(assignedModel)
+    }
+
     // Ensure Truncate.GLOB is allowed unless explicitly configured
     for (const name in result) {
       const agent = result[name]

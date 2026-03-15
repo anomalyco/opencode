@@ -1377,6 +1377,12 @@ export type Config = {
    */
   default_agent?: string
   /**
+   * Preferred model assignments for non-primary agents
+   */
+  subagent_model_assignments?: {
+    [key: string]: string
+  }
+  /**
    * Custom username to display in conversations instead of system username
    */
   username?: string

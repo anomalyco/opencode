@@ -12,6 +12,7 @@ import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
 import { DialogSelectFile } from "@/components/dialog-select-file"
+import { DialogAssignSubagentModel } from "@/components/dialog-assign-subagent-model"
 import { DialogSelectModel } from "@/components/dialog-select-model"
 import { DialogSelectMcp } from "@/components/dialog-select-mcp"
 import { DialogFork } from "@/components/dialog-fork"
@@ -77,6 +78,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
 
   const idle = { type: "idle" as const }
   const status = () => sync.data.session_status[params.id ?? ""] ?? idle
+  const hasSubagents = () => sync.data.agent.some((agent) => agent.mode !== "primary" && !agent.hidden)
   const messages = () => {
     const id = params.id
     if (!id) return []
@@ -353,6 +355,17 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         slash: "model",
         onSelect: () => dialog.show(() => <DialogSelectModel model={local.model} />),
       }),
+      ...(hasSubagents()
+        ? [
+            modelCommand({
+              id: "model.assign",
+              title: language.t("command.model.assign"),
+              description: language.t("command.model.assign.description"),
+              slash: "assign-model",
+              onSelect: () => dialog.show(() => <DialogAssignSubagentModel />),
+            }),
+          ]
+        : []),
       mcpCommand({
         id: "mcp.toggle",
         title: language.t("command.mcp.toggle"),
