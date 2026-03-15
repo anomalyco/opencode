@@ -51,6 +51,21 @@ const emitDeepLinks = (urls: string[]) => {
   window.dispatchEvent(new CustomEvent(deepLinkEvent, { detail: { urls } }))
 }
 
+const isEditableTarget = (target: EventTarget | null) => {
+  if (!(target instanceof HTMLElement)) return false
+  if (target.isContentEditable) return true
+  if (target.closest("[contenteditable='true']")) return true
+  if (target.closest("input, textarea, select")) return true
+  return false
+}
+
+const preventHistoryKeys = (event: KeyboardEvent) => {
+  if (event.defaultPrevented) return
+  if (event.key !== "Backspace" && event.key !== "Delete") return
+  if (isEditableTarget(event.target)) return
+  event.preventDefault()
+}
+
 const listenForDeepLinks = async () => {
   const startUrls = await getCurrent().catch(() => null)
   if (startUrls?.length) emitDeepLinks(startUrls)
@@ -408,6 +423,7 @@ createMenu((id) => {
   menuTrigger?.(id)
 })
 void listenForDeepLinks()
+window.addEventListener("keydown", preventHistoryKeys)
 
 render(() => {
   const platform = createPlatform()
