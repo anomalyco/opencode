@@ -53,6 +53,7 @@ import { Identifier } from "@/utils/id"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { same } from "@/utils/same"
 import { formatServerError } from "@/utils/server-errors"
+import { sortedRootSessions } from "@/pages/layout/helpers"
 
 const emptyUserMessages: UserMessage[] = []
 const emptyFollowups: (FollowupDraft & { id: string })[] = []
@@ -1649,8 +1650,63 @@ export default function Page() {
     if (fillFrame !== undefined) cancelAnimationFrame(fillFrame)
   })
 
+  let touchStartX = 0
+  let touchStartY = 0
+  let touchActive = false
+
+  const onTouchStart = (e: TouchEvent) => {
+    if (isDesktop() || !params.id) return
+    if (e.touches.length !== 1) return
+    touchStartX = e.touches[0].clientX
+    touchStartY = e.touches[0].clientY
+    touchActive = true
+  }
+
+  const onTouchEnd = (e: TouchEvent) => {
+    if (!touchActive || !params.id) return
+    touchActive = false
+    
+    const touchEndX = e.changedTouches[0].clientX
+    const touchEndY = e.changedTouches[0].clientY
+    
+    const deltaX = touchEndX - touchStartX
+    const deltaY = touchEndY - touchStartY
+    
+    if (Math.abs(deltaX) > 60 && Math.abs(deltaY) < 40) {
+      let target = e.target as HTMLElement | null
+      let canScrollHorizontally = false
+      while (target && target !== e.currentTarget) {
+        if (target.scrollWidth > target.clientWidth) {
+           canScrollHorizontally = true
+           break
+        }
+        target = target.parentElement
+      }
+      
+      if (!canScrollHorizontally) {
+         const [workspaceStore] = globalSync.child(sdk.directory, { bootstrap: false })
+         const sessions = sortedRootSessions(workspaceStore, Date.now())
+         const idx = sessions.findIndex((s) => s.id === params.id)
+         
+         if (idx !== -1) {
+           const offset = deltaX > 0 ? -1 : 1
+           const nextIdx = idx + offset
+           if (nextIdx >= 0 && nextIdx < sessions.length) {
+             const nextSession = sessions[nextIdx]
+             const dir = base64Encode(sdk.directory)
+             navigate(`/${dir}/session/${nextSession.id}`)
+           }
+         }
+      }
+    }
+  }
+
   return (
-    <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
+    <div
+      class="relative bg-background-base size-full overflow-hidden flex flex-col"
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
+    >
       <SessionHeader />
       <div class="flex-1 min-h-0 flex flex-col md:flex-row">
         <Show when={!isDesktop() && !!params.id}>
