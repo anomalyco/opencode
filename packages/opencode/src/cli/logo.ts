@@ -1,6 +1,30 @@
-export const logo = {
-  left: ["                   ", "█▀▀█ █▀▀█ █▀▀█ █▀▀▄", "█__█ █__█ █^^^ █__█", "▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀~~▀"],
-  right: ["             ▄     ", "█▀▀▀ █▀▀█ █▀▀█ █▀▀█", "█___ █__█ █__█ █^^^", "▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀"],
+export type LogoTone = "brand" | "brandShadow" | "company" | "wordmark"
+
+export interface LogoSegment {
+  text: string
+  tone: LogoTone
+  bold?: boolean
 }
 
-export const marks = "_^~"
+export type LogoRow = LogoSegment[]
+
+export const logoRows: LogoRow[] = [
+  [
+    { text: " ███████╗ ███████╗  ██████╗ ██╗   ██╗ ██████╗  ███████╗      ██████╗  ██████╗   ██████╗  ███████╗", tone: "wordmark", bold: true },
+  ],
+  [
+    { text: " ██╔════╝ ██╔════╝ ██╔════╝ ██║   ██║ ██╔══██╗ ██╔════╝     ██╔════╝ ██╔═══██╗  ██╔══██╗ ██╔════╝", tone: "wordmark", bold: true },
+  ],
+  [
+    { text: " ███████╗ █████╗   ██║      ██║   ██║ ██████╔╝ █████╗       ██║      ██║   ██║  ██║  ██║ █████╗  ", tone: "wordmark", bold: true },
+  ],
+  [
+    { text: " ╚════██║ ██╔══╝   ██║      ██║   ██║ ██╔══██╗ ██╔══╝       ██║      ██║   ██║  ██║  ██║ ██╔══╝  ", tone: "wordmark", bold: true },
+  ],
+  [
+    { text: " ███████║ ███████╗ ╚██████╗ ╚██████╔╝ ██║  ██║ ███████╗     ╚██████╗ ╚██████╔╝  ██████╔╝ ███████╗", tone: "wordmark", bold: true },
+  ],
+  [
+    { text: " ╚══════╝ ╚══════╝  ╚═════╝  ╚═════╝  ╚═╝  ╚═╝ ╚══════╝      ╚═════╝  ╚═════╝   ╚═════╝  ╚══════╝", tone: "wordmark", bold: true },
+  ],
+]

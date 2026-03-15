@@ -6,6 +6,7 @@ import { type Platform, PlatformProvider } from "@/context/platform"
 import { dict as en } from "@/i18n/en"
 import { dict as zh } from "@/i18n/zh"
 import { handleNotificationClick } from "@/utils/notification-click"
+import ModelPreview from "@/pages/model-preview"
 import pkg from "../package.json"
 import { ServerConnection } from "./context/server"
 
@@ -126,16 +127,18 @@ const platform: Platform = {
 }
 
 if (root instanceof HTMLElement) {
+  const preview = window.location.pathname === "/model"
   const server: ServerConnection.Http = { type: "http", http: { url: getCurrentUrl() } }
+  const defaultUrl = getDefaultUrl()
   render(
     () => (
       <PlatformProvider value={platform}>
         <AppBaseProviders>
-          <AppInterface
-            defaultServer={ServerConnection.Key.make(getDefaultUrl())}
-            servers={[server]}
-            disableHealthCheck
-          />
+          {preview ? (
+            <ModelPreview />
+          ) : (
+            <AppInterface defaultServer={ServerConnection.Key.make(defaultUrl)} servers={[server]} disableHealthCheck />
+          )}
         </AppBaseProviders>
       </PlatformProvider>
     ),

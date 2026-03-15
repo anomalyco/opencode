@@ -1,44 +1,44 @@
 {
   "$schema": "https://opencode.ai/theme.json",
   "defs": {
-    "darkStep1": "#0a0a0a",
-    "darkStep2": "#141414",
-    "darkStep3": "#1e1e1e",
-    "darkStep4": "#282828",
-    "darkStep5": "#323232",
-    "darkStep6": "#3c3c3c",
-    "darkStep7": "#484848",
-    "darkStep8": "#606060",
-    "darkStep9": "#fab283",
-    "darkStep10": "#ffc09f",
-    "darkStep11": "#808080",
-    "darkStep12": "#eeeeee",
-    "darkSecondary": "#5c9cf5",
-    "darkAccent": "#9d7cd8",
-    "darkRed": "#e06c75",
-    "darkOrange": "#f5a742",
-    "darkGreen": "#7fd88f",
-    "darkCyan": "#56b6c2",
-    "darkYellow": "#e5c07b",
-    "lightStep1": "#ffffff",
-    "lightStep2": "#fafafa",
-    "lightStep3": "#f5f5f5",
-    "lightStep4": "#ebebeb",
-    "lightStep5": "#e1e1e1",
-    "lightStep6": "#d4d4d4",
-    "lightStep7": "#b8b8b8",
-    "lightStep8": "#a0a0a0",
-    "lightStep9": "#3b7dd8",
-    "lightStep10": "#2968c3",
-    "lightStep11": "#8a8a8a",
-    "lightStep12": "#1a1a1a",
-    "lightSecondary": "#7b5bb6",
-    "lightAccent": "#d68c27",
-    "lightRed": "#d1383d",
-    "lightOrange": "#d68c27",
-    "lightGreen": "#3d9a57",
-    "lightCyan": "#318795",
-    "lightYellow": "#b0851f"
+    "darkStep1": "#171312",
+    "darkStep2": "#211b19",
+    "darkStep3": "#28201e",
+    "darkStep4": "#302725",
+    "darkStep5": "#3f3432",
+    "darkStep6": "#504543",
+    "darkStep7": "#606060",
+    "darkStep8": "#999999",
+    "darkStep9": "#25aa99",
+    "darkStep10": "#3dc2b2",
+    "darkStep11": "#b7b7b7",
+    "darkStep12": "#f1ece8",
+    "darkSecondary": "#1c4268",
+    "darkAccent": "#a11e3f",
+    "darkRed": "#d4143c",
+    "darkOrange": "#999999",
+    "darkGreen": "#25aa99",
+    "darkCyan": "#4c739c",
+    "darkYellow": "#606060",
+    "lightStep1": "#f5f3f1",
+    "lightStep2": "#ece8e6",
+    "lightStep3": "#e2ddda",
+    "lightStep4": "#d5ceca",
+    "lightStep5": "#c5bdb8",
+    "lightStep6": "#b2aaa6",
+    "lightStep7": "#999999",
+    "lightStep8": "#606060",
+    "lightStep9": "#25aa99",
+    "lightStep10": "#1f9484",
+    "lightStep11": "#7a7370",
+    "lightStep12": "#221b18",
+    "lightSecondary": "#1c4268",
+    "lightAccent": "#a11e3f",
+    "lightRed": "#d4143c",
+    "lightOrange": "#606060",
+    "lightGreen": "#25aa99",
+    "lightCyan": "#1c4268",
+    "lightYellow": "#606060"
   },
   "theme": {
     "primary": {
@@ -102,36 +102,36 @@
       "light": "lightStep6"
     },
     "diffAdded": {
-      "dark": "#4fd6be",
-      "light": "#1e725c"
+      "dark": "#25aa99",
+      "light": "#1f7d71"
     },
     "diffRemoved": {
-      "dark": "#c53b53",
-      "light": "#c53b53"
+      "dark": "#d4143c",
+      "light": "#d4143c"
     },
     "diffContext": {
-      "dark": "#828bb8",
-      "light": "#7086b5"
+      "dark": "#4c739c",
+      "light": "#1c4268"
     },
     "diffHunkHeader": {
-      "dark": "#828bb8",
-      "light": "#7086b5"
+      "dark": "#4c739c",
+      "light": "#1c4268"
     },
     "diffHighlightAdded": {
-      "dark": "#b8db87",
-      "light": "#4db380"
+      "dark": "#5fd1c3",
+      "light": "#25aa99"
     },
     "diffHighlightRemoved": {
-      "dark": "#e26a75",
-      "light": "#f52a65"
+      "dark": "#e65a78",
+      "light": "#d4143c"
     },
     "diffAddedBg": {
-      "dark": "#20303b",
-      "light": "#d5e5d5"
+      "dark": "#16322e",
+      "light": "#d9f3ef"
     },
     "diffRemovedBg": {
-      "dark": "#37222c",
-      "light": "#f7d8db"
+      "dark": "#35101b",
+      "light": "#f8d7df"
     },
     "diffContextBg": {
       "dark": "darkStep2",
@@ -142,12 +142,12 @@
       "light": "lightStep3"
     },
     "diffAddedLineNumberBg": {
-      "dark": "#1b2b34",
-      "light": "#c5d5c5"
+      "dark": "#15302d",
+      "light": "#ccebe6"
     },
     "diffRemovedLineNumberBg": {
-      "dark": "#2d1f26",
-      "light": "#e7c8cb"
+      "dark": "#32131c",
+      "light": "#f0c9d3"
     },
     "markdownText": {
       "dark": "darkStep12",

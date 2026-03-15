@@ -11,10 +11,10 @@ import { useArgs } from "../context/args"
 import { useDirectory } from "../context/directory"
 import { useRouteData } from "@tui/context/route"
 import { usePromptRef } from "../context/prompt"
-import { Installation } from "@/installation"
 import { useKV } from "../context/kv"
 import { useCommandDialog } from "../component/dialog-command"
 import { useLocal } from "../context/local"
+import { RGBA, TextAttributes } from "@opentui/core"
 
 // TODO: what is the best way to do this?
 let once = false
@@ -105,6 +105,9 @@ export function Home() {
 
   const keybind = useKeybind()
 
+  const brandRed = RGBA.fromHex("#D4143C")
+  const brandWhite = RGBA.fromHex("#FFFFFF")
+
   return (
     <>
       <box flexGrow={1} alignItems="center" paddingLeft={2} paddingRight={2}>
@@ -151,8 +154,9 @@ export function Home() {
           </Show>
         </box>
         <box flexGrow={1} />
-        <box flexShrink={0}>
-          <text fg={theme.textMuted}>{Installation.VERSION}</text>
+        <box flexShrink={0} flexDirection="row">
+          <text fg={brandRed} attributes={TextAttributes.BOLD}>A</text>
+          <text fg={brandWhite}>company</text>
         </box>
       </box>
     </>

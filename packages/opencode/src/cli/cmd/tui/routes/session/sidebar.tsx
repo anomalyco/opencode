@@ -6,7 +6,6 @@ import { Locale } from "@/util/locale"
 import path from "path"
 import type { AssistantMessage } from "@opencode-ai/sdk/v2"
 import { Global } from "@/global"
-import { Installation } from "@/installation"
 import { useKeybind } from "../../context/keybind"
 import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
@@ -308,11 +307,12 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
             <span style={{ fg: theme.text }}>{directory().split("/").at(-1)}</span>
           </text>
           <text fg={theme.textMuted}>
-            <span style={{ fg: theme.success }}>•</span> <b>Open</b>
-            <span style={{ fg: theme.text }}>
-              <b>Code</b>
-            </span>{" "}
-            <span>{Installation.VERSION}</span>
+            <span style={{ fg: theme.error }}>•</span>{" "}
+            <span style={{ fg: theme.error }}>
+              <b>A</b>
+            </span>
+            <span style={{ fg: theme.text }}>company</span>{" "}
+            <span>SecureCode</span>
           </text>
         </box>
       </box>
