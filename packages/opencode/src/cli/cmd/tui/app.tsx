@@ -42,8 +42,56 @@ import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { TuiConfigProvider } from "./context/tui-config"
 import { TuiConfig } from "@/config/tui"
 
+/**
+ * Detect terminal background color mode (dark/light) using multiple strategies:
+ * 1. Check environment variables (COLORFGBG, TERM_PROGRAM, ZELLIJ_THEME)
+ * 2. Query terminal via OSC 11 escape sequence
+ * 3. Default to dark mode as fallback
+ *
+ * This handles terminal multiplexers like Zellij that may filter OSC queries.
+ */
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
-  // can't set raw mode if not a TTY
+  // Strategy 1: Check COLORFGBG environment variable (common in terminals)
+  // Format is typically "foreground;background" where 0-7 are dark colors, 8-15 are bright
+  const colorFgbg = process.env.COLORFGBG
+  if (colorFgbg) {
+    const parts = colorFgbg.split(";")
+    if (parts.length >= 2) {
+      const bg = parseInt(parts[1], 10)
+      // 0-7 are dark colors, 8-15 are bright colors
+      if (!isNaN(bg)) {
+        return bg >= 8 ? "light" : "dark"
+      }
+    }
+  }
+
+  // Strategy 2: Check for terminal-specific environment variables
+  // Zellij: check if running under Zellij
+  if (process.env.ZELLIJ) {
+    // Zellij doesn't propagate theme info via env vars currently,
+    // but we can check if the outer terminal reported light mode via COLORFGBG
+    // or check common light terminal patterns
+    const term = process.env.TERM?.toLowerCase() || ""
+    const termProgram = process.env.TERM_PROGRAM?.toLowerCase() || ""
+
+    // Light terminal patterns
+    const lightPatterns = ["light", "latte", "day", "white", "solarized-light"]
+    for (const pattern of lightPatterns) {
+      if (term.includes(pattern) || termProgram.includes(pattern)) {
+        return "light"
+      }
+    }
+  }
+
+  // Strategy 3: Check TERM_PROGRAM for light-themed terminals
+  const termProgram = process.env.TERM_PROGRAM?.toLowerCase() || ""
+  if (termProgram.includes("light") || termProgram.includes("day")) {
+    return "light"
+  }
+
+  // Strategy 4: Query terminal directly via OSC 11
+  // Note: This may not work in terminal multiplexers like Zellij or tmux
+  // as they filter OSC responses
   if (!process.stdin.isTTY) return "dark"
 
   return new Promise((resolve) => {

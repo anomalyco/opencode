@@ -100,7 +100,51 @@ export namespace Terminal {
     })
   }
 
+  /**
+   * Detect terminal background color mode (dark/light) using multiple strategies:
+   * 1. Check environment variables (COLORFGBG, TERM_PROGRAM)
+   * 2. Query terminal via OSC 11 escape sequence
+   * 3. Default to dark mode as fallback
+   *
+   * This handles terminal multiplexers like Zellij that may filter OSC queries.
+   */
   export async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
+    // Strategy 1: Check COLORFGBG environment variable (common in terminals)
+    // Format is typically "foreground;background" where 0-7 are dark colors, 8-15 are bright
+    const colorFgbg = process.env.COLORFGBG
+    if (colorFgbg) {
+      const parts = colorFgbg.split(";")
+      if (parts.length >= 2) {
+        const bg = parseInt(parts[1], 10)
+        // 0-7 are dark colors, 8-15 are bright colors
+        if (!isNaN(bg)) {
+          return bg >= 8 ? "light" : "dark"
+        }
+      }
+    }
+
+    // Strategy 2: Check for Zellij and common light theme patterns
+    if (process.env.ZELLIJ) {
+      const term = process.env.TERM?.toLowerCase() || ""
+      const termProgram = process.env.TERM_PROGRAM?.toLowerCase() || ""
+
+      // Light terminal patterns
+      const lightPatterns = ["light", "latte", "day", "white", "solarized-light"]
+      for (const pattern of lightPatterns) {
+        if (term.includes(pattern) || termProgram.includes(pattern)) {
+          return "light"
+        }
+      }
+    }
+
+    // Strategy 3: Check TERM_PROGRAM for light-themed terminals
+    const termProgram = process.env.TERM_PROGRAM?.toLowerCase() || ""
+    if (termProgram.includes("light") || termProgram.includes("day")) {
+      return "light"
+    }
+
+    // Strategy 4: Query terminal directly via OSC 11
+    // Note: This may not work in terminal multiplexers like Zellij or tmux
     const result = await colors()
     if (!result.background) return "dark"
 
