@@ -62,7 +62,7 @@ export namespace LSPClient {
 
     // Track when the server's initial workspace/configuration request has been served,
     // so we don't send didChangeConfiguration before the server has its initial config.
-    let configurationResolved: () => void
+    let configurationResolved: () => void = () => {}
     const configurationReady = new Promise<void>((resolve) => {
       configurationResolved = resolve
     })
@@ -70,7 +70,7 @@ export namespace LSPClient {
     // Track when the server has finished its post-config reload cycle.
     // Servers like Biome do: workspace/configuration → unregister → register capabilities.
     // Documents opened before this cycle completes get linted with stale/default settings.
-    let serverReadyResolved: () => void
+    let serverReadyResolved: () => void = () => {}
     const serverReady = new Promise<void>((resolve) => {
       serverReadyResolved = resolve
     })
