@@ -21,7 +21,7 @@ Create one Railway service from this repo and use:
 
 Required environment variables:
 
-- `OPENCODE_SERVER_PASSWORD=<strong password>`
+- `OPENCODE_SERVER_PASSWORD=<strong password>` from the Railway service environment
 
 Useful optional environment variables:
 

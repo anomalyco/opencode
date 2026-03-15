@@ -1,4 +1,4 @@
-import { createEffect, createMemo, Match, on, onCleanup, Switch } from "solid-js"
+import { createEffect, createMemo, createSignal, Match, on, onCleanup, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { useParams } from "@solidjs/router"
@@ -12,6 +12,7 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { showToast } from "@opencode-ai/ui/toast"
+import { MarkdownMdx } from "@opencode-ai/ui/markdown-mdx"
 import { useLayout } from "@/context/layout"
 import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/context/file"
 import { useComments } from "@/context/comments"
@@ -79,6 +80,8 @@ export function FileTabContent(props: { tab: string }) {
   }
 
   const path = createMemo(() => file.pathFromTab(props.tab))
+  const markdown = createMemo(() => /\.mdx?$/i.test(path() ?? ""))
+  const [markdownView, setMarkdownView] = createSignal<"source" | "preview">("preview")
   const state = createMemo(() => {
     const p = path()
     if (!p) return
@@ -252,6 +255,7 @@ export function FileTabContent(props: { tab: string }) {
       path,
       () => {
         commentsUi.note.reset()
+        setMarkdownView("preview")
       },
       { defer: true },
     ),
@@ -398,50 +402,80 @@ export function FileTabContent(props: { tab: string }) {
     if (restoreFrame !== undefined) cancelAnimationFrame(restoreFrame)
   })
 
+  const renderSource = (source: string) => (
+    <Dynamic
+      component={fileComponent}
+      mode="text"
+      file={{
+        name: path() ?? "",
+        contents: source,
+        cacheKey: cacheKey(),
+      }}
+      enableLineSelection
+      enableHoverUtility
+      selectedLines={activeSelection()}
+      commentedLines={commentedLines()}
+      onRendered={() => {
+        queueRestore()
+      }}
+      annotations={commentsUi.annotations()}
+      renderAnnotation={commentsUi.renderAnnotation}
+      renderHoverUtility={commentsUi.renderHoverUtility}
+      onLineSelected={(range: SelectedLineRange | null) => {
+        commentsUi.onLineSelected(range)
+      }}
+      onLineNumberSelectionEnd={commentsUi.onLineNumberSelectionEnd}
+      onLineSelectionEnd={(range: SelectedLineRange | null) => {
+        commentsUi.onLineSelectionEnd(range)
+      }}
+      search={search}
+      overflow="scroll"
+      class="select-text"
+      media={{
+        mode: "auto",
+        path: path(),
+        current: state()?.content,
+        onLoad: queueRestore,
+        onError: (args: { kind: "image" | "audio" | "svg" }) => {
+          if (args.kind !== "svg") return
+          showToast({
+            variant: "error",
+            title: language.t("toast.file.loadFailed.title"),
+          })
+        },
+      }}
+    />
+  )
+
   const renderFile = (source: string) => (
     <div class="relative overflow-hidden pb-40">
-      <Dynamic
-        component={fileComponent}
-        mode="text"
-        file={{
-          name: path() ?? "",
-          contents: source,
-          cacheKey: cacheKey(),
-        }}
-        enableLineSelection
-        enableHoverUtility
-        selectedLines={activeSelection()}
-        commentedLines={commentedLines()}
-        onRendered={() => {
-          queueRestore()
-        }}
-        annotations={commentsUi.annotations()}
-        renderAnnotation={commentsUi.renderAnnotation}
-        renderHoverUtility={commentsUi.renderHoverUtility}
-        onLineSelected={(range: SelectedLineRange | null) => {
-          commentsUi.onLineSelected(range)
-        }}
-        onLineNumberSelectionEnd={commentsUi.onLineNumberSelectionEnd}
-        onLineSelectionEnd={(range: SelectedLineRange | null) => {
-          commentsUi.onLineSelectionEnd(range)
-        }}
-        search={search}
-        overflow="scroll"
-        class="select-text"
-        media={{
-          mode: "auto",
-          path: path(),
-          current: state()?.content,
-          onLoad: queueRestore,
-          onError: (args: { kind: "image" | "audio" | "svg" }) => {
-            if (args.kind !== "svg") return
-            showToast({
-              variant: "error",
-              title: language.t("toast.file.loadFailed.title"),
-            })
-          },
-        }}
-      />
+      <Show when={markdown()} fallback={renderSource(source)}>
+        <div class="px-6 pt-2 pb-2 flex items-center gap-2">
+          <button
+            type="button"
+            data-component="button"
+            data-variant={markdownView() === "source" ? "secondary" : "ghost"}
+            data-size="small"
+            onClick={() => setMarkdownView("source")}
+          >
+            Source
+          </button>
+          <button
+            type="button"
+            data-component="button"
+            data-variant={markdownView() === "preview" ? "secondary" : "ghost"}
+            data-size="small"
+            onClick={() => setMarkdownView("preview")}
+          >
+            Preview
+          </button>
+        </div>
+        <Show when={markdownView() === "preview"} fallback={renderSource(source)}>
+          <div class="px-6 select-text">
+            <MarkdownMdx text={source} />
+          </div>
+        </Show>
+      </Show>
     </div>
   )
 

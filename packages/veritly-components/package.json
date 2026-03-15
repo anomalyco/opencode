@@ -1,0 +1,26 @@
+{
+	"name": "@veritly/components",
+	"version": "0.1.0",
+	"type": "module",
+	"main": "./src/index.tsx",
+	"types": "./src/index.tsx",
+	"exports": {
+		".": {
+			"import": "./src/index.tsx",
+			"types": "./src/index.tsx"
+		}
+	},
+	"scripts": {
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@mdx-js/mdx": "catalog:",
+		"remark-gfm": "catalog:",
+		"solid-js": "catalog:",
+		"vfile": "catalog:"
+	},
+	"devDependencies": {
+		"@types/mdx": "catalog:",
+		"typescript": "catalog:"
+	}
+}
