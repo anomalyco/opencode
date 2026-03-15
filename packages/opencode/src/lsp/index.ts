@@ -105,24 +105,47 @@ export namespace LSP {
           delete servers[name]
           continue
         }
-        servers[name] = {
-          ...existing,
-          id: name,
-          root: existing?.root ?? (async () => Instance.directory),
-          extensions: item.extensions ?? existing?.extensions ?? [],
-          spawn: async (root) => {
-            return {
-              process: spawn(item.command[0], item.command.slice(1), {
-                cwd: root,
-                windowsHide: true,
-                env: {
-                  ...process.env,
-                  ...item.env,
+        if ("command" in item) {
+          // Full override: user provides their own command
+          servers[name] = {
+            ...existing,
+            id: name,
+            root: existing?.root ?? (async () => Instance.directory),
+            extensions: item.extensions ?? existing?.extensions ?? [],
+            spawn: async (root) => {
+              return {
+                process: spawn(item.command[0], item.command.slice(1), {
+                  cwd: root,
+                  windowsHide: true,
+                  env: {
+                    ...process.env,
+                    ...item.env,
+                  },
+                }),
+                initialization: item.initialization,
+              }
+            },
+          }
+        } else if (item.initialization && existing) {
+          // Initialization-only override for a built-in server
+          const original = existing.spawn
+          const fallback = item.initialization
+          servers[name] = {
+            ...existing,
+            spawn: async (root) => {
+              const handle = await original(root)
+              if (!handle) return handle
+              // If the built-in server signaled it has its own project config, don't override
+              if (handle.configured) return handle
+              return {
+                ...handle,
+                initialization: {
+                  ...handle.initialization,
+                  ...fallback,
                 },
-              }),
-              initialization: item.initialization,
-            }
-          },
+              }
+            },
+          }
         }
       }
 
