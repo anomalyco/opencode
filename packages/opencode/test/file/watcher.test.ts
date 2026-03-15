@@ -2,197 +2,155 @@ import { $ } from "bun"
 import { afterEach, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
+import { ConfigProvider, Effect, Layer, ManagedRuntime } from "effect"
 import { tmpdir } from "../fixture/fixture"
+import { FileWatcher, FileWatcherService } from "../../src/file/watcher"
+import { InstanceContext } from "../../src/effect/instances"
+import { Instance } from "../../src/project/instance"
+import { GlobalBus } from "../../src/bus/global"
 
-process.env.OPENCODE_EXPERIMENTAL_FILEWATCHER = "true"
-delete process.env.OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
-async function load() {
-  const { runPromiseInstance } = await import("../../src/effect/runtime")
-  const watcher = await import("../../src/file/watcher")
-  const { GlobalBus } = await import("../../src/bus/global")
-  const { Instance } = await import("../../src/project/instance")
+const configLayer = ConfigProvider.layer(
+  ConfigProvider.fromUnknown({
+    OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
+    OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: "false",
+  }),
+)
 
-  return {
-    GlobalBus,
-    FileWatcher: watcher.FileWatcher,
-    FileWatcherService: watcher.FileWatcherService,
-    Instance,
-    runPromiseInstance,
-  }
-}
+type WatcherEvent = { file: string; event: "add" | "change" | "unlink" }
 
-async function start(directory: string) {
-  const { FileWatcherService, Instance, runPromiseInstance } = await load()
-  await Instance.provide({
+/** Run `body` with a live FileWatcherService. Runtime is acquired/released via Effect.scoped. */
+function withWatcher<E>(directory: string, body: Effect.Effect<void, E>) {
+  return Instance.provide({
     directory,
-    fn: () => runPromiseInstance(FileWatcherService.use((service) => service.init())),
+    fn: () =>
+      Effect.gen(function* () {
+        const ctx = Layer.sync(InstanceContext, () =>
+          InstanceContext.of({ directory: Instance.directory, project: Instance.project }),
+        )
+        const layer = Layer.fresh(FileWatcherService.layer).pipe(Layer.provide(ctx), Layer.provide(configLayer))
+        const rt = yield* Effect.acquireRelease(
+          Effect.sync(() => ManagedRuntime.make(layer)),
+          (rt) => Effect.promise(() => rt.dispose()),
+        )
+        yield* Effect.promise(() => rt.runPromise(FileWatcherService.use((s) => s.init())))
+        yield* Effect.sleep("100 millis")
+        yield* body
+      }).pipe(Effect.scoped, Effect.runPromise),
   })
-  await Bun.sleep(100)
 }
 
-async function stop(directory: string) {
-  const { Instance } = await load()
-  await Instance.provide({
-    directory,
-    fn: () => Instance.dispose(),
-  })
-  await Bun.sleep(100)
-}
-
-async function nextUpdate(
-  directory: string,
-  check: (evt: { file: string; event: "add" | "change" | "unlink" }) => boolean,
-  run: () => Promise<void>,
-) {
-  const { FileWatcher, GlobalBus } = await load()
-
-  return await new Promise<{ file: string; event: "add" | "change" | "unlink" }>((resolve, reject) => {
-    const on = (evt: {
-      directory?: string
-      payload: {
-        type: string
-        properties: {
-          file: string
-          event: "add" | "change" | "unlink"
-        }
-      }
-    }) => {
+/** Effect that listens on GlobalBus for a matching watcher event, runs `trigger`, and resolves when it arrives. */
+function nextUpdate(directory: string, check: (evt: WatcherEvent) => boolean, trigger: Effect.Effect<void>) {
+  return Effect.callback<WatcherEvent>((resume) => {
+    function on(evt: { directory?: string; payload: { type: string; properties: WatcherEvent } }) {
       if (evt.directory !== directory) return
       if (evt.payload.type !== FileWatcher.Event.Updated.type) return
       if (!check(evt.payload.properties)) return
-      clearTimeout(timeout)
       GlobalBus.off("event", on)
-      resolve(evt.payload.properties)
+      resume(Effect.succeed(evt.payload.properties))
     }
-
-    const timeout = setTimeout(() => {
-      GlobalBus.off("event", on)
-      reject(new Error("timed out waiting for file watcher event"))
-    }, 5000)
-
     GlobalBus.on("event", on)
-
-    run().catch((err) => {
-      clearTimeout(timeout)
-      GlobalBus.off("event", on)
-      reject(err)
-    })
-  })
+    Effect.runPromise(trigger)
+    return Effect.sync(() => GlobalBus.off("event", on))
+  }).pipe(Effect.timeout("5 seconds"))
 }
 
-afterEach(async () => {
-  const { Instance } = await load()
-  await Instance.disposeAll()
-})
+/** Effect that asserts no matching event arrives within `ms`. */
+function noUpdate(directory: string, check: (evt: WatcherEvent) => boolean, trigger: Effect.Effect<void>, ms = 500) {
+  let seen = false
+  function on(evt: { directory?: string; payload: { type: string; properties: WatcherEvent } }) {
+    if (evt.directory !== directory) return
+    if (evt.payload.type !== FileWatcher.Event.Updated.type) return
+    if (!check(evt.payload.properties)) return
+    seen = true
+  }
+  return Effect.acquireUseRelease(
+    Effect.sync(() => GlobalBus.on("event", on)),
+    () =>
+      Effect.gen(function* () {
+        yield* trigger
+        yield* Effect.sleep(`${ms} millis`)
+        expect(seen).toBe(false)
+      }),
+    () => Effect.sync(() => GlobalBus.off("event", on)),
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+afterEach(() => Instance.disposeAll())
 
 test("FileWatcherService publishes root create, update, and delete events", async () => {
   await using tmp = await tmpdir({ git: true })
   const file = path.join(tmp.path, "watch.txt")
+  const dir = tmp.path
 
-  await start(tmp.path)
+  await withWatcher(
+    dir,
+    Effect.gen(function* () {
+      expect(
+        yield* nextUpdate(dir, (e) => e.file === file && e.event === "add", Effect.promise(() => fs.writeFile(file, "a"))),
+      ).toEqual({ file, event: "add" })
 
-  await expect(
-    nextUpdate(
-      tmp.path,
-      (evt) => evt.file === file && evt.event === "add",
-      () => fs.writeFile(file, "a"),
-    ),
-  ).resolves.toEqual({
-    file,
-    event: "add",
-  })
+      expect(
+        yield* nextUpdate(dir, (e) => e.file === file && e.event === "change", Effect.promise(() => fs.writeFile(file, "b"))),
+      ).toEqual({ file, event: "change" })
 
-  await expect(
-    nextUpdate(
-      tmp.path,
-      (evt) => evt.file === file && evt.event === "change",
-      () => fs.writeFile(file, "b"),
-    ),
-  ).resolves.toEqual({
-    file,
-    event: "change",
-  })
-
-  await expect(
-    nextUpdate(
-      tmp.path,
-      (evt) => evt.file === file && evt.event === "unlink",
-      () => fs.unlink(file),
-    ),
-  ).resolves.toEqual({
-    file,
-    event: "unlink",
-  })
+      expect(
+        yield* nextUpdate(dir, (e) => e.file === file && e.event === "unlink", Effect.promise(() => fs.unlink(file))),
+      ).toEqual({ file, event: "unlink" })
+    }),
+  )
 })
 
 test("FileWatcherService watches non-git roots", async () => {
   await using tmp = await tmpdir()
   const file = path.join(tmp.path, "plain.txt")
+  const dir = tmp.path
 
-  await start(tmp.path)
-
-  await expect(
-    nextUpdate(
-      tmp.path,
-      (evt) => evt.file === file && evt.event === "add",
-      () => fs.writeFile(file, "plain"),
-    ),
-  ).resolves.toEqual({
-    file,
-    event: "add",
-  })
+  await withWatcher(
+    dir,
+    Effect.gen(function* () {
+      expect(
+        yield* nextUpdate(dir, (e) => e.file === file && e.event === "add", Effect.promise(() => fs.writeFile(file, "plain"))),
+      ).toEqual({ file, event: "add" })
+    }),
+  )
 })
 
 test("FileWatcherService cleanup stops publishing events", async () => {
   await using tmp = await tmpdir({ git: true })
   const file = path.join(tmp.path, "after-dispose.txt")
-  const { FileWatcher, GlobalBus } = await load()
-  let seen = false
 
-  await start(tmp.path)
-  await stop(tmp.path)
+  // Start and immediately stop the watcher (withWatcher disposes on exit)
+  await withWatcher(tmp.path, Effect.void)
 
-  const on = (evt: { directory?: string; payload: { type: string; properties: { file: string } } }) => {
-    if (evt.directory !== tmp.path) return
-    if (evt.payload.type !== FileWatcher.Event.Updated.type) return
-    if (evt.payload.properties.file === file) seen = true
-  }
-
-  GlobalBus.on("event", on)
-
-  try {
-    await fs.writeFile(file, "gone")
-    await Bun.sleep(500)
-    expect(seen).toBe(false)
-  } finally {
-    GlobalBus.off("event", on)
-  }
+  // Now write a file — no watcher should be listening
+  await Effect.runPromise(
+    noUpdate(tmp.path, (e) => e.file === file, Effect.promise(() => fs.writeFile(file, "gone"))),
+  )
 })
 
 test("FileWatcherService ignores non-HEAD git metadata changes", async () => {
   await using tmp = await tmpdir({ git: true })
-  const file = path.join(tmp.path, ".git", "index")
+  const gitIndex = path.join(tmp.path, ".git", "index")
   const edit = path.join(tmp.path, "tracked.txt")
-  const { FileWatcher, GlobalBus } = await load()
-  let seen = false
 
-  await start(tmp.path)
-
-  const on = (evt: { directory?: string; payload: { type: string; properties: { file: string } } }) => {
-    if (evt.directory !== tmp.path) return
-    if (evt.payload.type !== FileWatcher.Event.Updated.type) return
-    if (evt.payload.properties.file === file) seen = true
-  }
-
-  GlobalBus.on("event", on)
-
-  try {
-    await fs.writeFile(edit, "a")
-    await $`git add .`.cwd(tmp.path).quiet().nothrow()
-    await Bun.sleep(500)
-    expect(seen).toBe(false)
-  } finally {
-    GlobalBus.off("event", on)
-  }
+  await withWatcher(
+    tmp.path,
+    noUpdate(
+      tmp.path,
+      (e) => e.file === gitIndex,
+      Effect.promise(async () => {
+        await fs.writeFile(edit, "a")
+        await $`git add .`.cwd(tmp.path).quiet().nothrow()
+      }),
+    ),
+  )
 })
