@@ -65,7 +65,7 @@ export const KnowledgeSearchTool = Tool.define("knowledge_search", {
   },
 })
 
-function formatResults(results: any[], query: string): string {
+function formatResults(results: Knowledge.SearchResult[], query: string): string {
   if (results.length === 0) {
     return [
       "## Knowledge Search Results",
@@ -123,7 +123,7 @@ function formatResults(results: any[], query: string): string {
   return sections.join("\n")
 }
 
-function formatEntry(result: any): string {
+function formatEntry(result: Knowledge.SearchResult): string {
   const lines: string[] = []
 
   // Title with scores
@@ -154,7 +154,7 @@ function formatScores(semantic: number, tagRelevance: number, confidence: number
   return `[Match: ${pct(semantic)}% | Relevance: ${tagRelevance.toFixed(1)}x | Confidence: ${pct(confidence)}%]`
 }
 
-function groupByType(results: any[]): Record<string, any[]> {
+function groupByType(results: Knowledge.SearchResult[]): Record<string, Knowledge.SearchResult[]> {
   return {
     pattern: results.filter((r) => r.type === "pattern"),
     knowledge: results.filter((r) => r.type === "knowledge"),

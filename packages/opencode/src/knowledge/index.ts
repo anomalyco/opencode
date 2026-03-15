@@ -49,7 +49,8 @@ export namespace Knowledge {
     tags: string[]
   }
 
-  // Re-export search and health
+  // Re-export search types and functions
+  export type SearchResult = KnowledgeSearch.Result
   export const search = KnowledgeSearch.execute
   export const health = KnowledgeHealth
 
