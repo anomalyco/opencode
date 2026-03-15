@@ -509,12 +509,29 @@ export namespace MessageV2 {
     },
   }
 
+  export function sanitizeInfoForRead<T extends MessageV2.Info>(input: T): T {
+    if (input.role !== "user") return input
+    const diffs = input.summary?.diffs
+    if (!diffs?.length) return input
+
+    const sanitized = Snapshot.sanitizeFileDiffs(diffs)
+    if (!sanitized.changed) return input
+
+    return {
+      ...input,
+      summary: {
+        ...input.summary,
+        diffs: sanitized.diffs,
+      },
+    } as T
+  }
+
   const info = (row: typeof MessageTable.$inferSelect) =>
-    ({
+    sanitizeInfoForRead({
       ...row.data,
       id: row.id,
       sessionID: row.session_id,
-    }) as MessageV2.Info
+    } as MessageV2.Info)
 
   const part = (row: typeof PartTable.$inferSelect) =>
     ({

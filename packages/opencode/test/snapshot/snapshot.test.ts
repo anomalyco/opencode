@@ -1178,3 +1178,32 @@ test("diffFull with whitespace changes", async () => {
     },
   })
 })
+
+test("diffFull trims oversized file contents while keeping metadata", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      const large = "x".repeat(Snapshot.MAX_INLINE_DIFF_BYTES + 1024)
+      await Filesystem.write(`${tmp.path}/large.txt`, large)
+
+      const after = await Snapshot.track()
+      expect(after).toBeTruthy()
+
+      const diffs = await Snapshot.diffFull(before!, after!)
+      expect(diffs.length).toBe(1)
+
+      const diff = diffs[0]
+      expect(diff.file).toBe("large.txt")
+      expect(diff.trimmed).toBe(true)
+      expect(diff.before).toBe("")
+      expect(diff.after).toBe("")
+      expect(diff.before_bytes).toBe(0)
+      expect(diff.after_bytes).toBeGreaterThan(Snapshot.MAX_INLINE_DIFF_BYTES)
+      expect(diff.additions).toBe(1)
+    },
+  })
+})

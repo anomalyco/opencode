@@ -119,7 +119,7 @@ export namespace SessionSummary {
     }),
     async (input) => {
       const diffs = await Storage.read<Snapshot.FileDiff[]>(["session_diff", input.sessionID]).catch(() => [])
-      const next = diffs.map((item) => {
+      const normalized = diffs.map((item) => {
         const file = unquoteGitPath(item.file)
         if (file === item.file) return item
         return {
@@ -127,9 +127,11 @@ export namespace SessionSummary {
           file,
         }
       })
-      const changed = next.some((item, i) => item.file !== diffs[i]?.file)
-      if (changed) Storage.write(["session_diff", input.sessionID], next).catch(() => {})
-      return next
+      const sanitized = Snapshot.sanitizeFileDiffs(normalized)
+      const changed =
+        sanitized.changed || normalized.some((item, i) => item.file !== diffs[i]?.file)
+      if (changed) Storage.write(["session_diff", input.sessionID], sanitized.diffs).catch(() => {})
+      return sanitized.diffs
     },
   )
 

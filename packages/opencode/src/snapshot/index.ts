@@ -260,11 +260,57 @@ export namespace Snapshot {
       additions: z.number(),
       deletions: z.number(),
       status: z.enum(["added", "deleted", "modified"]).optional(),
+      before_bytes: z.number().optional(),
+      after_bytes: z.number().optional(),
+      trimmed: z.boolean().optional(),
     })
     .meta({
       ref: "FileDiff",
     })
   export type FileDiff = z.infer<typeof FileDiff>
+
+  export const MAX_INLINE_DIFF_BYTES = 32 * 1024
+
+  export function sanitizeFileDiff(diff: FileDiff, maxBytes = MAX_INLINE_DIFF_BYTES): FileDiff {
+    if (diff.trimmed) return diff
+
+    const beforeBytes = Buffer.byteLength(diff.before, "utf-8")
+    const afterBytes = Buffer.byteLength(diff.after, "utf-8")
+    const totalBytes = beforeBytes + afterBytes
+    if (beforeBytes <= maxBytes && afterBytes <= maxBytes && totalBytes <= maxBytes) return diff
+
+    return {
+      ...diff,
+      before: beforeBytes === 0 ? "" : "",
+      after: afterBytes === 0 ? "" : "",
+      before_bytes: beforeBytes,
+      after_bytes: afterBytes,
+      trimmed: true,
+    }
+  }
+
+  export function sanitizeFileDiffs(
+    diffs: FileDiff[],
+    maxBytes = MAX_INLINE_DIFF_BYTES,
+  ): { diffs: FileDiff[]; changed: boolean } {
+    let changed = false
+    const next = diffs.map((diff) => {
+      const sanitized = sanitizeFileDiff(diff, maxBytes)
+      if (
+        !changed &&
+        (sanitized.before !== diff.before ||
+          sanitized.after !== diff.after ||
+          sanitized.before_bytes !== diff.before_bytes ||
+          sanitized.after_bytes !== diff.after_bytes ||
+          sanitized.trimmed !== diff.trimmed)
+      ) {
+        changed = true
+      }
+      return sanitized
+    })
+    return { diffs: next, changed }
+  }
+
   export async function diffFull(from: string, to: string): Promise<FileDiff[]> {
     const git = gitdir()
     const result: FileDiff[] = []
@@ -350,14 +396,16 @@ export namespace Snapshot {
           ).then((x) => x.text)
       const added = isBinaryFile ? 0 : parseInt(additions)
       const deleted = isBinaryFile ? 0 : parseInt(deletions)
-      result.push({
-        file,
-        before,
-        after,
-        additions: Number.isFinite(added) ? added : 0,
-        deletions: Number.isFinite(deleted) ? deleted : 0,
-        status: status.get(file) ?? "modified",
-      })
+      result.push(
+        sanitizeFileDiff({
+          file,
+          before,
+          after,
+          additions: Number.isFinite(added) ? added : 0,
+          deletions: Number.isFinite(deleted) ? deleted : 0,
+          status: status.get(file) ?? "modified",
+        }),
+      )
     }
     return result
   }

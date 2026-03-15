@@ -52,13 +52,14 @@ export namespace Session {
   type SessionRow = typeof SessionTable.$inferSelect
 
   export function fromRow(row: SessionRow): Info {
+    const summaryDiffs = row.summary_diffs ? Snapshot.sanitizeFileDiffs(row.summary_diffs).diffs : undefined
     const summary =
       row.summary_additions !== null || row.summary_deletions !== null || row.summary_files !== null
         ? {
             additions: row.summary_additions ?? 0,
             deletions: row.summary_deletions ?? 0,
             files: row.summary_files ?? 0,
-            diffs: row.summary_diffs ?? undefined,
+            diffs: summaryDiffs,
           }
         : undefined
     const share = row.share_url ? { url: row.share_url } : undefined
@@ -684,8 +685,19 @@ export namespace Session {
   })
 
   export const updateMessage = fn(MessageV2.Info, async (msg) => {
-    const time_created = msg.time.created
-    const { id, sessionID, ...data } = msg
+    const sanitized =
+      msg.role === "user" && msg.summary?.diffs?.length
+        ? ({
+            ...msg,
+            summary: {
+              ...msg.summary,
+              diffs: Snapshot.sanitizeFileDiffs(msg.summary.diffs).diffs,
+            },
+          } as MessageV2.Info)
+        : msg
+
+    const time_created = sanitized.time.created
+    const { id, sessionID, ...data } = sanitized
     Database.use((db) => {
       db.insert(MessageTable)
         .values({
@@ -698,11 +710,11 @@ export namespace Session {
         .run()
       Database.effect(() =>
         Bus.publish(MessageV2.Event.Updated, {
-          info: msg,
+          info: sanitized,
         }),
       )
     })
-    return msg
+    return sanitized
   })
 
   export const removeMessage = fn(

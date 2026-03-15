@@ -4,6 +4,7 @@ import { MessageV2 } from "../../src/session/message-v2"
 import type { Provider } from "../../src/provider/provider"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { SessionID, MessageID, PartID } from "../../src/session/schema"
+import { Snapshot } from "../../src/snapshot"
 
 const sessionID = SessionID.make("session")
 const providerID = ProviderID.make("test")
@@ -894,5 +895,46 @@ describe("session.message-v2.fromError", () => {
         message: "123",
       },
     })
+  })
+})
+
+describe("session.message-v2.sanitizeInfoForRead", () => {
+  test("trims oversized summary diffs on legacy user messages", () => {
+    const input = {
+      id: MessageID.make("msg_1"),
+      sessionID: SessionID.make("ses_1"),
+      role: "user" as const,
+      time: { created: 1 },
+      summary: {
+        diffs: [
+          {
+            file: ".agent-history/EVENTS.jsonl",
+            before: "a".repeat(Snapshot.MAX_INLINE_DIFF_BYTES + 1),
+            after: "b".repeat(Snapshot.MAX_INLINE_DIFF_BYTES + 2),
+            additions: 10,
+            deletions: 3,
+            status: "modified" as const,
+          },
+        ],
+      },
+      agent: "agent",
+      model: {
+        providerID: ProviderID.make("openai"),
+        modelID: ModelID.make("gpt-5"),
+      },
+      tools: {},
+      mode: "",
+    } as unknown as MessageV2.User
+
+    const result = MessageV2.sanitizeInfoForRead(input)
+    expect(result.summary && typeof result.summary !== "boolean").toBe(true)
+    if (!result.summary || typeof result.summary === "boolean") throw new Error("summary missing")
+    const diff = result.summary.diffs[0] as Snapshot.FileDiff
+
+    expect(diff.trimmed).toBe(true)
+    expect(diff.before).toBe("")
+    expect(diff.after).toBe("")
+    expect(diff.before_bytes).toBeGreaterThan(Snapshot.MAX_INLINE_DIFF_BYTES)
+    expect(diff.after_bytes).toBeGreaterThan(Snapshot.MAX_INLINE_DIFF_BYTES)
   })
 })
