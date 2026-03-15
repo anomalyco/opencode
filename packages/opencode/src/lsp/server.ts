@@ -32,6 +32,8 @@ export namespace LSPServer {
   export interface Handle {
     process: ChildProcessWithoutNullStreams
     initialization?: Record<string, any>
+    /** When true, the project has its own config file — don't apply fallback initialization */
+    configured?: boolean
   }
 
   type RootFunction = (file: string) => Promise<string | undefined>
@@ -361,8 +363,30 @@ export namespace LSPServer {
         },
       })
 
+      const configured =
+        (await Filesystem.exists(path.join(root, "biome.json"))) ||
+        (await Filesystem.exists(path.join(root, "biome.jsonc")))
+
       return {
         process: proc,
+        configured,
+        initialization: configured
+          ? undefined
+          : {
+              inline_config: {
+                linter: {
+                  rules: {
+                    suspicious: {
+                      useIterableCallbackReturn: {
+                        options: {
+                          checkForEach: false,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
       }
     },
   }
