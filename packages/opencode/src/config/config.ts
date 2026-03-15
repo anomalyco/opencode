@@ -861,7 +861,7 @@ export namespace Config {
       agent_cycle_reverse: z.string().optional().default("shift+tab").describe("Previous agent"),
       variant_cycle: z.string().optional().default("ctrl+t").describe("Cycle model variants"),
       input_clear: z.string().optional().default("ctrl+c").describe("Clear input field"),
-      input_paste: z.string().optional().default("ctrl+v").describe("Paste from clipboard"),
+      input_paste: z.string().optional().default("ctrl+v,alt+v").describe("Paste from clipboard"),
       input_submit: z.string().optional().default("return").describe("Submit input"),
       input_newline: z
         .string()
