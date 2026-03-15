@@ -2,7 +2,8 @@
 
 ## Sources
 
-
+- PR #17527: https://github.com/anomalyco/opencode/pull/17527
+  
 ## Do Not Translate (Locale Additions)
 
 
