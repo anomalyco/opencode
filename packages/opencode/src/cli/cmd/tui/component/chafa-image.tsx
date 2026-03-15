@@ -39,7 +39,7 @@ function parseChafaAnsi(ansi: string): ImageRow[] {
         } else if (seq.startsWith("38;2;")) {
           const parts = seq.slice(5).split(";")
           if (parts.length >= 3) {
-            currentFg = new RGBA(parseInt(parts[0]), parseInt(parts[1]), parseInt(parts[2]), 255)
+            currentFg = RGBA.fromInts(parseInt(parts[0]), parseInt(parts[1]), parseInt(parts[2]))
           }
         }
 
