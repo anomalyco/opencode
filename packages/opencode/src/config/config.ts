@@ -997,6 +997,7 @@ export namespace Config {
           }),
         )
         .optional(),
+      dynamicModelList: z.boolean().optional().describe("Enable automatic model discovery from OpenAI-compatible /models endpoint"),
       options: z
         .object({
           apiKey: z.string().optional(),

@@ -418,9 +418,9 @@ export namespace Provider {
 
       const location = String(
         provider.options?.location ??
-          Env.get("GOOGLE_VERTEX_LOCATION") ??
-          Env.get("GOOGLE_CLOUD_LOCATION") ??
-          Env.get("VERTEX_LOCATION") ??
+        Env.get("GOOGLE_VERTEX_LOCATION") ??
+        Env.get("GOOGLE_CLOUD_LOCATION") ??
+        Env.get("VERTEX_LOCATION") ??
           "us-central1",
       )
 
@@ -658,6 +658,141 @@ export namespace Provider {
         },
       }
     },
+  }
+
+  /**
+   * Populate the provider models dynamically using provider config
+   * Returns models or emty object if fails
+   */
+  async function populateDynamicModels(providerID: string, provider: any): Promise<Record<string, Model>> {
+    // Get base URL from config or thrown an exception
+    const baseURL = provider.options?.baseURL
+    if (!baseURL) {
+      log.error("Missing baseURL for dynamic model discovery", { providerID })
+      throw new InitError({ providerID: providerID })
+    }
+
+    // Get auth credentials
+    const key = provider.options?.apiKey
+    const auth = key ? {"type": "api", "key": key} : await Auth.get(providerID)
+
+    // Discover models
+    const discoveredModels = await discoverModelsFromEndpoint(
+      providerID,
+      baseURL,
+      auth?.type === "api" ? auth : null,
+    )
+    return discoveredModels
+  }
+
+  /**
+   * Discover models from OpenAI-compatible /models endpoint
+   * Returns discovered models or empty object if discovery fails
+   */
+  async function discoverModelsFromEndpoint(
+    providerID: string,
+    baseURL: string,
+    auth: Auth.ApiAuth | null,
+  ): Promise<Record<string, Model>> {
+    const models: Record<string, Model> = {}
+
+    try {
+      const headers: Record<string, string> = {}
+      if (auth?.type === "api" && auth.key) {
+        headers.Authorization = `Bearer ${auth.key}`
+      }
+
+      const response = await fetch(`${baseURL}/models`, {
+        headers,
+        signal: AbortSignal.timeout(10000),
+      })
+
+      if (!response.ok) {
+        log.warn("Failed to discover models", {
+          providerID,
+          baseURL,
+          status: response.status,
+        })
+        return models
+      }
+
+      const json = await response.json()
+
+      // Handle OpenAI format: { data: [{ id, ... }] }
+      const data = json.data
+      if (!Array.isArray(data)) {
+        log.warn("Unexpected /models response format", { providerID, format: typeof data })
+        return models
+      }
+
+      for (const modelData of data) {
+        const modelID = modelData.id
+        if (!modelID || typeof modelID !== "string") continue
+
+        // Extract context length from various possible fields
+        const contextLength =
+          modelData.max_context_length ??
+          modelData.context_length ??
+          modelData.contextWindow ??
+          modelData.max_tokens ??
+          131072
+
+        const context = Math.max(contextLength, 8192) // Floor at 8k for stability
+        const output = Math.min(Math.floor(context / 4), 16384)
+
+        // Check for small context warning
+        if (context < 32768) {
+          log.warn("Model has small context limit", {
+            providerID,
+            modelID,
+            context,
+          })
+        }
+
+        models[modelID] = {
+          id: modelID,
+          providerID,
+          name: modelData.name ?? modelID,
+          family: modelData.family ?? "",
+          api: {
+            id: modelID,
+            url: baseURL,
+            npm: "@ai-sdk/openai-compatible",
+          },
+          capabilities: {
+            temperature: true,
+            reasoning: false,
+            attachment: true,
+            toolcall: true,
+            input: { text: true, audio: false, image: true, video: false, pdf: false },
+            output: { text: true, audio: false, image: false, video: false, pdf: false },
+            interleaved: false,
+          },
+          cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+          limit: { context, output },
+          headers: {},
+          options: {},
+          release_date: modelData.created ?? "",
+          status: modelData.status?.value ?? "active",
+        }
+      }
+
+      if (Object.keys(models).length > 0) {
+        log.info("Discovered models", {
+          providerID,
+          count: Object.keys(models).length,
+          models: Object.keys(models),
+        })
+      }
+    } catch (error) {
+      log.warn("Failed to discover models", {
+        providerID,
+        url: baseURL,
+        error: error,
+      })
+    }
+
+    return models
   }
 
   export const Model = z
@@ -1016,6 +1151,10 @@ export namespace Provider {
       if (provider.env) partial.env = provider.env
       if (provider.name) partial.name = provider.name
       if (provider.options) partial.options = provider.options
+      const hasExplicitModels = Object.keys(provider.models ?? {}).length > 0
+      if (!hasExplicitModels && provider.dynamicModelList) {
+        partial.models = await populateDynamicModels(providerID, provider)
+      }
       mergeProvider(providerID, partial)
     }
 
