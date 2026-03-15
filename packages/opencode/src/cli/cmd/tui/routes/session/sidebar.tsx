@@ -216,10 +216,10 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                             {(msg) => (
                               <box paddingLeft={2}>
                                 <text
-                                  wrapMode="none"
+                                  wrapMode="word"
                                   fg={msg.type === 1 ? theme.error : msg.type === 2 ? theme.warning : theme.textMuted}
                                 >
-                                  {msg.message.length > 80 ? msg.message.slice(0, 77) + "..." : msg.message}
+                                  {msg.message}
                                 </text>
                               </box>
                             )}
