@@ -3,6 +3,7 @@ import { registerDisposer } from "./instance-registry"
 import { ProviderAuthService } from "@/provider/auth-service"
 import { QuestionService } from "@/question/service"
 import { PermissionService } from "@/permission/service"
+import { FileWatcherService } from "@/file/watcher"
 import { Instance } from "@/project/instance"
 import type { Project } from "@/project/project"
 
@@ -17,7 +18,7 @@ export class InstanceContext extends ServiceMap.Service<InstanceContext, Instanc
   "opencode/InstanceContext",
 ) {}
 
-export type InstanceServices = QuestionService | PermissionService | ProviderAuthService
+export type InstanceServices = QuestionService | PermissionService | ProviderAuthService | FileWatcherService
 
 function lookup(directory: string) {
   const project = Instance.project
@@ -26,6 +27,7 @@ function lookup(directory: string) {
     Layer.fresh(QuestionService.layer),
     Layer.fresh(PermissionService.layer),
     Layer.fresh(ProviderAuthService.layer),
+    Layer.fresh(FileWatcherService.layer),
   ).pipe(Layer.provide(ctx))
 }
 
