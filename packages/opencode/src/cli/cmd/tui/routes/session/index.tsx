@@ -949,7 +949,7 @@ export function Session() {
           stdin: "inherit",
           stdout: "inherit",
           stderr: "inherit",
-          cwd: sync.data.path.directory,
+          cwd: sync.data.path.worktree,
         })
         await proc.exited
         renderer.resume()
