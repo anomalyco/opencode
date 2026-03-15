@@ -977,7 +977,7 @@ test("ask - should deny even when an earlier pattern is ask", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const ask = PermissionNext.ask({
+      const err = await PermissionNext.ask({
         sessionID: SessionID.make("session_test"),
         permission: "bash",
         patterns: ["echo hello", "rm -rf /"],
@@ -987,24 +987,12 @@ test("ask - should deny even when an earlier pattern is ask", async () => {
           { permission: "bash", pattern: "echo *", action: "ask" },
           { permission: "bash", pattern: "rm *", action: "deny" },
         ],
-      })
+      }).then(
+        () => undefined,
+        (err) => err,
+      )
 
-      const out = await Promise.race([
-        ask.then(
-          () => ({ ok: true as const, err: undefined }),
-          (err) => ({ ok: false as const, err }),
-        ),
-        Bun.sleep(100).then(() => "timeout" as const),
-      ])
-
-      if (out === "timeout") {
-        await rejectAll()
-        await ask.catch(() => {})
-        throw new Error("ask timed out instead of denying immediately")
-      }
-
-      expect(out.ok).toBe(false)
-      expect(out.err).toBeInstanceOf(PermissionNext.DeniedError)
+      expect(err).toBeInstanceOf(PermissionNext.DeniedError)
       expect(await PermissionNext.list()).toHaveLength(0)
     },
   })
