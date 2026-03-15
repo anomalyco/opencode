@@ -1,5 +1,6 @@
 import { Session } from "../../session"
 import type { SessionID } from "../../session/schema"
+import type { Session as SessionType } from "../../session/index"
 import { Knowledge } from "../index"
 import { Log } from "../../util/log"
 
@@ -47,7 +48,7 @@ export namespace LogExtractor {
     }
   }
 
-  function buildHowDescription(session: any): string {
+  function buildHowDescription(session: SessionType.Info): string {
     // Analyze message history to infer methodology
     // Note: session doesn't have messages property directly
     // This would need to be fetched separately via Session.messages()
@@ -58,20 +59,20 @@ export namespace LogExtractor {
     return "Automated session"
   }
 
-  function buildWhereDescription(session: any): string {
+  function buildWhereDescription(session: SessionType.Info): string {
     // Extract primary directory from changes
     const diffs = session.summary?.diffs ?? []
     if (diffs.length === 0) return "Session workspace"
 
     // Get common directory prefix
-    const paths = diffs.map((d: any) => d.path).filter(Boolean)
+    const paths = diffs.map((d) => d.file).filter(Boolean)
     if (paths.length === 0) return "Session workspace"
 
     const commonDir = getCommonDirectory(paths)
     return commonDir || "Session workspace"
   }
 
-  function buildTags(session: any, filesAdded: number, linesAdded: number): string[] {
+  function buildTags(session: SessionType.Info, filesAdded: number, linesAdded: number): string[] {
     const tags = ["auto-log", "session-end"]
 
     // Tag by scope
@@ -89,7 +90,7 @@ export namespace LogExtractor {
     return tags
   }
 
-  function countToolExecutions(session: any): number {
+  function countToolExecutions(session: SessionType.Info): number {
     // Tool executions are tracked in session summary diffs
     // This is a placeholder - actual implementation would query Session.messages()
     return 0

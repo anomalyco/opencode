@@ -18,13 +18,13 @@ export namespace PatternExtractor {
       // Simple heuristic: if there are error messages followed by success, it's a pattern
       let hasError = false
       let hasRecovery = false
-      let errorContext: Record<string, any> = {}
+      let errorContext: Record<string, string> = {}
 
       for (const msg of messages) {
         // Extract text content from message parts
-        const textParts = msg.parts.filter((p: any) => p.type === "text")
+        const textParts = msg.parts.filter((p) => p.type === "text")
         const content = textParts
-          .map((p: any) => p.text)
+          .map((p) => p.text)
           .join(" ")
           .toLowerCase()
 
