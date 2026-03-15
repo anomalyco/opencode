@@ -324,6 +324,13 @@ export namespace SessionPrompt {
         lastUser.id < lastAssistant.id
       ) {
         log.info("exiting loop", { sessionID })
+        // Check if there are queued messages before exiting
+        const queued = state()[sessionID]?.callbacks ?? []
+        if (queued.length > 0) {
+          log.info("processing queued messages", { sessionID, count: queued.length })
+          // Continue loop to process queued messages instead of breaking
+          continue
+        }
         break
       }
 
