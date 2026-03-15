@@ -394,3 +394,30 @@ export const dfmt: Info = {
     return which("dfmt") !== null
   },
 }
+
+export const stylua: Info = {
+  name: "stylua",
+  command: ["stylua", "$FILE"],
+  extensions: [".lua"],
+  async enabled() {
+    return which("stylua") !== null
+  },
+}
+
+export const nimpretty: Info = {
+  name: "nimpretty",
+  command: ["nimpretty", "-w", "$FILE"],
+  extensions: [".nim"],
+  async enabled() {
+    return which("nimpretty") !== null
+  },
+}
+
+export const elmformat: Info = {
+  name: "elm-format",
+  command: ["elm-format", "--yes", "$FILE"],
+  extensions: [".elm"],
+  async enabled() {
+    return which("elm-format") !== null
+  },
+}
