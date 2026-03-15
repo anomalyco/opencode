@@ -53,10 +53,10 @@ export namespace LSPClient {
     const l = log.clone().tag("serverID", input.serverID)
     l.info("starting client")
 
-    const reader = new StreamMessageReader(input.server.process.stdout as any)
-    const writer = new StreamMessageWriter(input.server.process.stdin as any)
-
-    const connection = createMessageConnection(reader, writer)
+    const connection = createMessageConnection(
+      new StreamMessageReader(input.server.process.stdout as any),
+      new StreamMessageWriter(input.server.process.stdin as any),
+    )
 
     const diagnostics = new Map<string, Diagnostic[]>()
 
