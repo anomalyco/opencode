@@ -1,6 +1,12 @@
 import { $ } from "bun"
+import { generateObject, streamObject, type ModelMessage } from "ai"
 import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
+import { Auth } from "@/auth"
+import { Plugin } from "@/plugin"
+import { Provider } from "@/provider/provider"
+import { ProviderTransform } from "@/provider/transform"
+import { SystemPrompt } from "@/session/system"
 import { Log } from "@/util/log"
 import { withTimeout } from "@/util/timeout"
 import { Instance } from "./instance"
@@ -19,6 +25,7 @@ export namespace PR {
     "DELETE_BRANCH_FAILED",
     "COMMENTS_FETCH_FAILED",
     "READY_FAILED",
+    "DRAFT_FAILED",
   ])
   export type ErrorCode = z.infer<typeof ErrorCode>
 
@@ -53,7 +60,139 @@ export namespace PR {
   export const ReadyInput = z.object({}).meta({ ref: "PrReadyInput" })
   export type ReadyInput = z.infer<typeof ReadyInput>
 
+  export const DraftInput = z
+    .object({
+      base: z.string().optional(),
+    })
+    .meta({ ref: "PrDraftInput" })
+  export type DraftInput = z.infer<typeof DraftInput>
+
+  export const DraftOutput = z
+    .object({
+      title: z.string().min(1),
+      body: z.string().min(1),
+    })
+    .meta({ ref: "PrDraftOutput" })
+  export type DraftOutput = z.infer<typeof DraftOutput>
+
   export const PrErrorResponse = PrError.Schema
+
+  const DraftSchema = z.object({
+    title: z.string(),
+    body: z.string(),
+  })
+
+  function fallbackTitle(branch: string) {
+    return branch
+      .split("/")
+      .at(-1)
+      ?.replace(/[-_]/g, " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase())
+      .trim() || "Update branch"
+  }
+
+  function fallbackBody(title: string) {
+    return `## Summary
+- ${title}
+
+## Testing
+- Not run`
+  }
+
+  function cleanDraftTitle(title: string, branch: string) {
+    const line = title
+      .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
+      .split("\n")
+      .map((line) => line.trim())
+      .find((line) => line.length > 0)
+    const next = line?.replace(/[.]+$/g, "").trim()
+    if (!next) return fallbackTitle(branch)
+    return next.length > 100 ? next.slice(0, 97).trimEnd() + "..." : next
+  }
+
+  function cleanDraftBody(body: string, title: string) {
+    const next = body.replace(/<think>[\s\S]*?<\/think>\s*/g, "").trim()
+    if (!next) return fallbackBody(title)
+    return next
+  }
+
+  async function selectDraftModel() {
+    const defaultModel = await Provider.defaultModel()
+    return (
+      (await Provider.getSmallModel(defaultModel.providerID).catch(() => undefined)) ??
+      (await Provider.getModel(defaultModel.providerID, defaultModel.modelID))
+    )
+  }
+
+  async function generateDraftObject(input: { branch: string; base: string; commits: string; diffStat: string; diffPatch: string }) {
+    const model = await selectDraftModel()
+    const language = await Provider.getLanguage(model)
+    const system = [
+      [
+        "You write GitHub pull request drafts.",
+        "Return a JSON object with keys: title, body.",
+        "Rules:",
+        "- title must be concise, specific, and written for a pull request",
+        "- body must be markdown",
+        "- body must include headings '## Summary' and '## Testing'",
+        "- under Summary, use short bullet points",
+        "- under Testing, use bullet points with concrete checks or 'Not run'",
+        "- do not invent requirements, screenshots, or test results",
+      ].join("\n"),
+    ]
+    await Plugin.trigger("experimental.chat.system.transform", { model }, { system })
+
+    const prompt = [
+      `Head branch: ${input.branch}`,
+      `Base branch: ${input.base}`,
+      "",
+      "Commits:",
+      input.commits || "(none)",
+      "",
+      "Diff stat:",
+      input.diffStat || "(none)",
+      "",
+      "Diff patch:",
+      input.diffPatch || "(none)",
+    ].join("\n")
+
+    const messages: ModelMessage[] = [
+      ...system.map((content) => ({
+        role: "system" as const,
+        content,
+      })),
+      {
+        role: "user",
+        content: prompt,
+      },
+    ]
+
+    const isCodex = model.providerID === "openai" && (await Auth.get(model.providerID))?.type === "oauth"
+    const params = {
+      model: language,
+      schema: DraftSchema,
+      temperature: 0.2,
+      messages,
+    } satisfies Parameters<typeof generateObject>[0]
+
+    if (isCodex) {
+      const result = streamObject({
+        ...params,
+        providerOptions: ProviderTransform.providerOptions(model, {
+          instructions: SystemPrompt.instructions(),
+          store: false,
+        }),
+        onError: () => {},
+      })
+      for await (const part of result.fullStream) {
+        if (part.type === "error") throw part.error
+      }
+      return await result.object
+    }
+
+    const result = await generateObject(params)
+    return result.object
+  }
 
   async function fetchUnresolvedCommentCount(
     owner: string,
@@ -203,16 +342,84 @@ export namespace PR {
     return info.pr
   }
 
+  export async function draft(input: DraftInput): Promise<DraftOutput> {
+    await Vcs.refresh()
+    const info = await Vcs.info()
+    const branch = info.branch
+    if (!branch) {
+      throw new PrError({ code: "DRAFT_FAILED", message: "No current branch found" })
+    }
+
+    const base = input.base ?? info.defaultBranch ?? "main"
+    const cwd = Instance.worktree
+
+    const [commits, diffStat, diffPatch] = await Promise.all([
+      withTimeout(
+        $`git log --oneline ${base}..HEAD`
+          .quiet()
+          .nothrow()
+          .cwd(cwd)
+          .text()
+          .catch(() => ""),
+        30_000,
+      ),
+      withTimeout(
+        $`git diff --stat ${base}...HEAD`
+          .quiet()
+          .nothrow()
+          .cwd(cwd)
+          .text()
+          .catch(() => ""),
+        30_000,
+      ),
+      withTimeout(
+        $`git diff --minimal ${base}...HEAD`
+          .quiet()
+          .nothrow()
+          .cwd(cwd)
+          .text()
+          .catch(() => ""),
+        30_000,
+      ),
+    ])
+
+    try {
+      const generated = await generateDraftObject({
+        branch,
+        base,
+        commits: commits.trim().slice(0, 20_000),
+        diffStat: diffStat.trim().slice(0, 20_000),
+        diffPatch: diffPatch.trim().slice(0, 60_000),
+      })
+      const title = cleanDraftTitle(generated.title, branch)
+      const body = cleanDraftBody(generated.body, title)
+      return { title, body }
+    } catch (e) {
+      log.error("pr draft failed", { error: e })
+      throw new PrError({ code: "DRAFT_FAILED", message: "Failed to generate pull request draft" })
+    }
+  }
+
   export async function create(input: CreateInput): Promise<Vcs.PrInfo> {
     await Vcs.refresh()
     const { info } = await ensureGithub()
     const cwd = Instance.worktree
+    const branch = info.branch
 
     if (info.pr) {
       return info.pr
     }
 
-    const push = await $`git push -u origin HEAD`.quiet().nothrow().cwd(cwd)
+    if (!branch) {
+      throw new PrError({ code: "CREATE_FAILED", message: "No current branch found" })
+    }
+
+    const remote = await Vcs.resolvePushRemote(branch)
+    if (!remote) {
+      throw new PrError({ code: "CREATE_FAILED", message: "No remote configured for current branch" })
+    }
+
+    const push = await $`git push -u ${remote} HEAD`.quiet().nothrow().cwd(cwd)
     if (push.exitCode !== 0) {
       const errorOutput =
         push.stderr?.toString().trim() || push.stdout?.toString().trim() || "Failed to push branch automatically"

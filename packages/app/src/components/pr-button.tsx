@@ -12,7 +12,7 @@ import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
 import { useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
-import { getPrButtonContainerStyle, getPrButtonDividerStyle } from "@/utils/pr-style"
+import { getPrButtonContainerStyle, getPrButtonDividerStyle, prRequiresAttention } from "@/utils/pr-style"
 import { CreatePrDialog } from "./dialog-create-pr"
 import { MergePrDialog } from "./dialog-merge-pr"
 import { DeleteBranchDialog } from "./dialog-delete-branch"
@@ -195,7 +195,7 @@ export function PrButton() {
     <Show when={!hidden()}>
       <div class="flex items-center">
         <div class="relative">
-          <Show when={(pr()?.unresolvedCommentCount ?? 0) > 0}>
+          <Show when={prRequiresAttention(pr())}>
             <div class="absolute -top-px -right-px z-10 size-1.5 rounded-full bg-text-interactive-base" />
           </Show>
           <div

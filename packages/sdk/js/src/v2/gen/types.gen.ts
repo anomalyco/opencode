@@ -882,6 +882,58 @@ export type EventSessionError = {
   }
 }
 
+export type EventVcsBranchUpdated = {
+  type: "vcs.branch.updated"
+  properties: {
+    branch?: string
+  }
+}
+
+export type PrInfo = {
+  number: number
+  url: string
+  title: string
+  state: "OPEN" | "CLOSED" | "MERGED"
+  headRefName: string
+  baseRefName: string
+  isDraft: boolean
+  mergeable: "MERGEABLE" | "CONFLICTING" | "UNKNOWN"
+  reviewDecision?: "APPROVED" | "CHANGES_REQUESTED" | "REVIEW_REQUIRED" | null
+  checksState?: "SUCCESS" | "FAILURE" | "PENDING" | null
+  checksUrl?: string
+  checksSummary?: {
+    total: number
+    passed: number
+    failed: number
+    pending: number
+    skipped: number
+  }
+  unresolvedCommentCount?: number
+  branchDeleteFailed?: boolean
+}
+
+export type GithubCapability = {
+  available: boolean
+  authenticated: boolean
+  repo?: {
+    owner: string
+    name: string
+  }
+  host?: string
+}
+
+export type EventVcsUpdated = {
+  type: "vcs.updated"
+  properties: {
+    branch?: string
+    defaultBranch?: string | null
+    branches?: Array<string> | null
+    dirty?: number | null
+    pr?: PrInfo | null
+    github?: GithubCapability | null
+  }
+}
+
 export type EventWorkspaceReady = {
   type: "workspace.ready"
   properties: {
@@ -950,57 +1002,6 @@ export type EventWorktreeFailed = {
   }
 }
 
-export type EventVcsBranchUpdated = {
-  type: "vcs.branch.updated"
-  properties: {
-    branch?: string
-  }
-}
-
-export type PrInfo = {
-  number: number
-  url: string
-  title: string
-  state: "OPEN" | "CLOSED" | "MERGED"
-  headRefName: string
-  baseRefName: string
-  isDraft: boolean
-  mergeable: "MERGEABLE" | "CONFLICTING" | "UNKNOWN"
-  reviewDecision?: "APPROVED" | "CHANGES_REQUESTED" | "REVIEW_REQUIRED" | null
-  checksState?: "SUCCESS" | "FAILURE" | "PENDING" | null
-  checksUrl?: string
-  checksSummary?: {
-    total: number
-    passed: number
-    failed: number
-    pending: number
-    skipped: number
-  }
-  unresolvedCommentCount?: number
-}
-
-export type GithubCapability = {
-  available: boolean
-  authenticated: boolean
-  repo?: {
-    owner: string
-    name: string
-  }
-  host?: string
-}
-
-export type EventVcsUpdated = {
-  type: "vcs.updated"
-  properties: {
-    branch?: string
-    defaultBranch?: string
-    branches?: Array<string>
-    dirty?: number
-    pr?: PrInfo
-    github?: GithubCapability
-  }
-}
-
 export type Event =
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
@@ -1038,6 +1039,8 @@ export type Event =
   | EventSessionDeleted
   | EventSessionDiff
   | EventSessionError
+  | EventVcsBranchUpdated
+  | EventVcsUpdated
   | EventWorkspaceReady
   | EventWorkspaceFailed
   | EventPtyCreated
@@ -1046,8 +1049,6 @@ export type Event =
   | EventPtyDeleted
   | EventWorktreeReady
   | EventWorktreeFailed
-  | EventVcsBranchUpdated
-  | EventVcsUpdated
 
 export type GlobalEvent = {
   directory: string
@@ -1934,6 +1935,15 @@ export type PrCommentsResponse = {
   threads: Array<ReviewThread>
   promptBlock: string
   unresolvedCount: number
+}
+
+export type PrDraftOutput = {
+  title: string
+  body: string
+}
+
+export type PrDraftInput = {
+  base?: string
 }
 
 export type PrMergeInput = {
@@ -4446,6 +4456,10 @@ export type VcsPrCommentsErrors = {
    * Bad request
    */
   400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
 }
 
 export type VcsPrCommentsError = VcsPrCommentsErrors[keyof VcsPrCommentsErrors]
@@ -4458,6 +4472,34 @@ export type VcsPrCommentsResponses = {
 }
 
 export type VcsPrCommentsResponse = VcsPrCommentsResponses[keyof VcsPrCommentsResponses]
+
+export type VcsPrDraftData = {
+  body?: PrDraftInput
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/vcs/pr/draft"
+}
+
+export type VcsPrDraftErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type VcsPrDraftError = VcsPrDraftErrors[keyof VcsPrDraftErrors]
+
+export type VcsPrDraftResponses = {
+  /**
+   * Draft PR content
+   */
+  200: PrDraftOutput
+}
+
+export type VcsPrDraftResponse = VcsPrDraftResponses[keyof VcsPrDraftResponses]
 
 export type VcsPrMergeData = {
   body?: PrMergeInput
@@ -4474,6 +4516,10 @@ export type VcsPrMergeErrors = {
    * Bad request
    */
   400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
 }
 
 export type VcsPrMergeError = VcsPrMergeErrors[keyof VcsPrMergeErrors]
@@ -4502,6 +4548,10 @@ export type VcsPrReadyErrors = {
    * Bad request
    */
   400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
 }
 
 export type VcsPrReadyError = VcsPrReadyErrors[keyof VcsPrReadyErrors]
@@ -4530,6 +4580,10 @@ export type VcsPrDeleteBranchErrors = {
    * Bad request
    */
   400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
 }
 
 export type VcsPrDeleteBranchError = VcsPrDeleteBranchErrors[keyof VcsPrDeleteBranchErrors]

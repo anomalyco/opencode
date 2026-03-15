@@ -47,6 +47,7 @@ export function CreatePrDialog() {
     body: "",
     base: defaultBranch(),
     draft: false,
+    draftLoading: false,
     submitting: false,
     committing: false,
     commitMessage: branchTitle(),
@@ -55,7 +56,9 @@ export function CreatePrDialog() {
   })
 
   const [titleEdited, setTitleEdited] = createSignal(false)
+  const [bodyEdited, setBodyEdited] = createSignal(false)
   const [baseEdited, setBaseEdited] = createSignal(false)
+  let draftRequest = 0
 
   createEffect(() => {
     if ((dirty() ?? 0) > 0) {
@@ -82,6 +85,35 @@ export function CreatePrDialog() {
     if (b && !baseEdited()) {
       setStore("base", b)
     }
+  })
+
+  createEffect(() => {
+    const currentBranch = branch()
+    const base = store.base || defaultBranch()
+    const dirtyCount = dirty() ?? 0
+    if (!currentBranch || !base) return
+    if (titleEdited() && bodyEdited()) return
+
+    const request = ++draftRequest
+    setStore("draftLoading", true)
+
+    sdk.client.vcs.pr
+      .draft({
+        directory: sdk.directory,
+        prDraftInput: { base },
+      })
+      .then((result) => {
+        if (request !== draftRequest) return
+        const draft = result.data
+        if (!draft) return
+        if (!titleEdited()) setStore("title", draft.title)
+        if (!bodyEdited()) setStore("body", draft.body)
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (request !== draftRequest) return
+        setStore("draftLoading", false)
+      })
   })
 
   const handleCommit = async () => {
@@ -155,6 +187,13 @@ export function CreatePrDialog() {
           <span class="truncate">{store.base || defaultBranch()}</span>
         </div>
 
+        <Show when={store.draftLoading && (!titleEdited() || !bodyEdited())}>
+          <div class="flex items-center gap-2 text-12-regular text-text-weak">
+            <Icon name="loader" size="small" class="animate-spin text-icon-weak shrink-0" />
+            <span>{language.t("pr.create.generating")}</span>
+          </div>
+        </Show>
+
         <Show when={(dirty() ?? 0) > 0}>
           <div class="flex flex-col gap-2.5 rounded-md border border-border-warning-base bg-surface-warning-weak px-3 py-2.5">
             <div class="flex items-center gap-2">
@@ -215,7 +254,10 @@ export function CreatePrDialog() {
           <TextField
             multiline
             value={store.body}
-            onInput={(e) => setStore("body", e.currentTarget.value)}
+            onInput={(e) => {
+              setBodyEdited(true)
+              setStore("body", e.currentTarget.value)
+            }}
             placeholder={language.t("pr.create.field.body.placeholder")}
             style={{ "min-height": "80px" }}
           />

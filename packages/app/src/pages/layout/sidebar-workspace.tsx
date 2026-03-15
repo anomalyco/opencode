@@ -13,7 +13,7 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { type Session, type PrInfo } from "@opencode-ai/sdk/v2/client"
-import { getPrPillStyle } from "@/utils/pr-style"
+import { getPrPillStyle, prRequiresAttention } from "@/utils/pr-style"
 import { type LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
@@ -137,7 +137,7 @@ const WorkspaceHeader = (props: {
     <Show when={props.pr()}>
       {(currentPr) => {
         const pillStyle = () => prPillStyle(currentPr())
-        const hasUnresolvedComments = () => (currentPr().unresolvedCommentCount ?? 0) > 0
+        const requiresAttention = () => prRequiresAttention(currentPr())
         return (
           <div class="relative shrink-0 ml-auto">
             <span
@@ -145,7 +145,7 @@ const WorkspaceHeader = (props: {
             >
               PR #{currentPr().number}
             </span>
-            <Show when={hasUnresolvedComments()}>
+            <Show when={requiresAttention()}>
               <div class="absolute -top-px -right-px z-10 size-1.5 rounded-full bg-text-interactive-base transition-opacity duration-200 group-hover/workspace:opacity-0 group-focus-within/workspace:opacity-0" />
             </Show>
           </div>

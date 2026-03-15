@@ -78,6 +78,7 @@ import type {
   PermissionRuleset,
   PrCreateInput,
   PrDeleteBranchInput,
+  PrDraftInput,
   PrMergeInput,
   ProjectCurrentResponses,
   ProjectInitGitResponses,
@@ -187,6 +188,8 @@ import type {
   VcsPrCreateResponses,
   VcsPrDeleteBranchErrors,
   VcsPrDeleteBranchResponses,
+  VcsPrDraftErrors,
+  VcsPrDraftResponses,
   VcsPrGetResponses,
   VcsPrMergeErrors,
   VcsPrMergeResponses,
@@ -2995,6 +2998,43 @@ export class Pr extends HeyApiClient {
   }
 
   /**
+   * Generate PR draft
+   *
+   * Generate an AI draft for the current branch's pull request title and body.
+   */
+  public draft<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      prDraftInput?: PrDraftInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "prDraftInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<VcsPrDraftResponses, VcsPrDraftErrors, ThrowOnError>({
+      url: "/vcs/pr/draft",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
    * Merge PR
    *
    * Merge the pull request for the current branch.
@@ -3071,7 +3111,7 @@ export class Pr extends HeyApiClient {
   /**
    * Delete branch
    *
-   * Delete a remote (and local) branch after a PR has been merged.
+   * Delete the remote branch after a PR has been merged.
    */
   public deleteBranch<ThrowOnError extends boolean = false>(
     parameters?: {

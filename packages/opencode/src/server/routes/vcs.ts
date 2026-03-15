@@ -132,6 +132,31 @@ export const VcsRoutes = lazy(() =>
       },
     )
     .post(
+      "/pr/draft",
+      describeRoute({
+        summary: "Generate PR draft",
+        description: "Generate an AI draft for the current branch's pull request title and body.",
+        operationId: "vcs.pr.draft",
+        responses: {
+          200: {
+            description: "Draft PR content",
+            content: {
+              "application/json": {
+                schema: resolver(PR.DraftOutput),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator("json", PR.DraftInput),
+      async (c) => {
+        const input = c.req.valid("json")
+        const draft = await PR.draft(input)
+        return c.json(draft)
+      },
+    )
+    .post(
       "/pr/merge",
       describeRoute({
         summary: "Merge PR",

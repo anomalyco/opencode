@@ -92,6 +92,50 @@ export namespace Vcs {
       .catch(() => undefined)
   }
 
+  function splitRemoteRef(ref: string) {
+    const i = ref.indexOf("/")
+    if (i <= 0) return undefined
+    return {
+      remote: ref.slice(0, i),
+      branch: ref.slice(i + 1),
+    }
+  }
+
+  async function gitText(args: string[]) {
+    return $`${args}`
+      .quiet()
+      .nothrow()
+      .cwd(Instance.worktree)
+      .text()
+      .then((x) => x.trim())
+      .catch(() => "")
+  }
+
+  export async function currentUpstream() {
+    const ref = await gitText(["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"])
+    if (!ref || ref.includes("fatal")) return
+    return splitRemoteRef(ref)
+  }
+
+  export async function resolvePushRemote(branch: string) {
+    const upstream = await currentUpstream()
+    if (upstream?.remote) return upstream.remote
+
+    const branchRemote = await gitText(["git", "config", `branch.${branch}.pushRemote`])
+    if (branchRemote) return branchRemote
+
+    const remote = await gitText(["git", "config", `branch.${branch}.remote`])
+    if (remote && remote !== ".") return remote
+
+    const pushDefault = await gitText(["git", "config", "remote.pushDefault"])
+    if (pushDefault) return pushDefault
+
+    const remotes = await gitText(["git", "remote"])
+    const list = remotes.split("\n").map((x) => x.trim()).filter(Boolean)
+    if (list.length === 1) return list[0]
+    if (list.includes("origin")) return "origin"
+  }
+
   export async function detectGithubCapability(): Promise<GithubCapability> {
     const cwd = Instance.worktree
     const authCmd = await withTimeout(
@@ -182,7 +226,7 @@ export namespace Vcs {
       .split("\n")
       .map((b) => b.trim())
       .filter((b) => b && !b.includes("->"))
-      .map((b) => b.replace(/^origin\//, ""))
+      .map((b) => splitRemoteRef(b)?.branch ?? b)
       .filter((b, i, arr) => arr.indexOf(b) === i)
     branches.sort((a, b) => a.localeCompare(b))
     return branches

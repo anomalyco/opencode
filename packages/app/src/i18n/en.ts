@@ -110,6 +110,7 @@ export const dict = {
   "pr.create.field.body.placeholder": "Leave empty to use title as description",
   "pr.create.field.base": "Base Branch",
   "pr.create.field.draft": "Create as Draft",
+  "pr.create.generating": "Generating draft...",
   "pr.create.submit": "Create",
   "pr.create.submitPush": "Push & Create",
   "pr.create.submitting": "Creating...",
