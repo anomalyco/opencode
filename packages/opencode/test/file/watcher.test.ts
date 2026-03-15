@@ -247,4 +247,4 @@ describeWatcher("FileWatcherService", () => {
       ),
     )
   })
-}) // describeWatcher
+})
