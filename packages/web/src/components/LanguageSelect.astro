@@ -1,0 +1,45 @@
+---
+import Default from '@astrojs/starlight/components/LanguageSelect.astro';
+---
+
+<Default {...Astro.props}><slot /></Default>
+
+<script>
+	const LOCALE_MAP: Record<string, string> = {
+		ar: "ar",
+		bs: "bs",
+		da: "da",
+		de: "de",
+		es: "es",
+		fr: "fr",
+		it: "it",
+		ja: "ja",
+		ko: "ko",
+		nb: "no",
+		pl: "pl",
+		"pt-br": "br",
+		ru: "ru",
+		th: "th",
+		tr: "tr",
+		"zh-cn": "zh",
+		"zh-tw": "zht",
+	};
+
+	function cookieValueFromPath(pathname: string): string {
+		const match = pathname.match(/^\/docs\/([^/]+)/);
+		const segment = match?.[1]?.toLowerCase();
+		if (segment && segment in LOCALE_MAP) {
+			return LOCALE_MAP[segment]!;
+		}
+		return "en";
+	}
+
+	document.querySelectorAll('starlight-lang-select select').forEach((select) => {
+		select.addEventListener('change', (e) => {
+			if (e.currentTarget instanceof HTMLSelectElement) {
+				const locale = cookieValueFromPath(e.currentTarget.value);
+				document.cookie = `oc_locale=${encodeURIComponent(locale)}; Path=/; Max-Age=31536000; SameSite=Lax`;
+			}
+		});
+	});
+</script>

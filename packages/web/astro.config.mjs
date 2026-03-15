@@ -298,6 +298,7 @@ export default defineConfig({
         Header: "./src/components/Header.astro",
         Footer: "./src/components/Footer.astro",
         SiteTitle: "./src/components/SiteTitle.astro",
+        LanguageSelect: "./src/components/LanguageSelect.astro",
       },
       plugins: [
         theme({
