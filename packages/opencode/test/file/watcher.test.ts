@@ -153,100 +153,98 @@ function ready(directory: string) {
 // ---------------------------------------------------------------------------
 
 describeWatcher("FileWatcherService", () => {
+  afterEach(() => Instance.disposeAll())
 
-afterEach(() => Instance.disposeAll())
+  test("publishes root create, update, and delete events", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const file = path.join(tmp.path, "watch.txt")
+    const dir = tmp.path
+    const cases = [
+      { event: "add" as const, trigger: Effect.promise(() => fs.writeFile(file, "a")) },
+      { event: "change" as const, trigger: Effect.promise(() => fs.writeFile(file, "b")) },
+      { event: "unlink" as const, trigger: Effect.promise(() => fs.unlink(file)) },
+    ]
 
-test("publishes root create, update, and delete events", async () => {
-  await using tmp = await tmpdir({ git: true })
-  const file = path.join(tmp.path, "watch.txt")
-  const dir = tmp.path
-  const cases = [
-    { event: "add" as const, trigger: Effect.promise(() => fs.writeFile(file, "a")) },
-    { event: "change" as const, trigger: Effect.promise(() => fs.writeFile(file, "b")) },
-    { event: "unlink" as const, trigger: Effect.promise(() => fs.unlink(file)) },
-  ]
-
-  await withWatcher(
-    dir,
-    Effect.forEach(cases, ({ event, trigger }) =>
-      nextUpdate(dir, (evt) => evt.file === file && evt.event === event, trigger).pipe(
-        Effect.tap((evt) => Effect.sync(() => expect(evt).toEqual({ file, event }))),
-      ),
-    ),
-  )
-})
-
-test("watches non-git roots", async () => {
-  await using tmp = await tmpdir()
-  const file = path.join(tmp.path, "plain.txt")
-  const dir = tmp.path
-
-  await withWatcher(
-    dir,
-    nextUpdate(
+    await withWatcher(
       dir,
-      (e) => e.file === file && e.event === "add",
-      Effect.promise(() => fs.writeFile(file, "plain")),
-    ).pipe(Effect.tap((evt) => Effect.sync(() => expect(evt).toEqual({ file, event: "add" })))),
-  )
-})
+      Effect.forEach(cases, ({ event, trigger }) =>
+        nextUpdate(dir, (evt) => evt.file === file && evt.event === event, trigger).pipe(
+          Effect.tap((evt) => Effect.sync(() => expect(evt).toEqual({ file, event }))),
+        ),
+      ),
+    )
+  })
 
-test("cleanup stops publishing events", async () => {
-  await using tmp = await tmpdir({ git: true })
-  const file = path.join(tmp.path, "after-dispose.txt")
+  test("watches non-git roots", async () => {
+    await using tmp = await tmpdir()
+    const file = path.join(tmp.path, "plain.txt")
+    const dir = tmp.path
 
-  // Start and immediately stop the watcher (withWatcher disposes on exit)
-  await withWatcher(tmp.path, Effect.void)
+    await withWatcher(
+      dir,
+      nextUpdate(
+        dir,
+        (e) => e.file === file && e.event === "add",
+        Effect.promise(() => fs.writeFile(file, "plain")),
+      ).pipe(Effect.tap((evt) => Effect.sync(() => expect(evt).toEqual({ file, event: "add" })))),
+    )
+  })
 
-  // Now write a file — no watcher should be listening
-  await Effect.runPromise(
-    noUpdate(
+  test("cleanup stops publishing events", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const file = path.join(tmp.path, "after-dispose.txt")
+
+    // Start and immediately stop the watcher (withWatcher disposes on exit)
+    await withWatcher(tmp.path, Effect.void)
+
+    // Now write a file — no watcher should be listening
+    await Effect.runPromise(
+      noUpdate(
+        tmp.path,
+        (e) => e.file === file,
+        Effect.promise(() => fs.writeFile(file, "gone")),
+      ),
+    )
+  })
+
+  test("ignores .git/index changes", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const gitIndex = path.join(tmp.path, ".git", "index")
+    const edit = path.join(tmp.path, "tracked.txt")
+
+    await withWatcher(
       tmp.path,
-      (e) => e.file === file,
-      Effect.promise(() => fs.writeFile(file, "gone")),
-    ),
-  )
-})
-
-test("ignores .git/index changes", async () => {
-  await using tmp = await tmpdir({ git: true })
-  const gitIndex = path.join(tmp.path, ".git", "index")
-  const edit = path.join(tmp.path, "tracked.txt")
-
-  await withWatcher(
-    tmp.path,
-    noUpdate(
-      tmp.path,
-      (e) => e.file === gitIndex,
-      Effect.promise(async () => {
-        await fs.writeFile(edit, "a")
-        await $`git add .`.cwd(tmp.path).quiet().nothrow()
-      }),
-    ),
-  )
-})
-
-test("publishes .git/HEAD events", async () => {
-  await using tmp = await tmpdir({ git: true })
-  const head = path.join(tmp.path, ".git", "HEAD")
-  const branch = `watch-${Math.random().toString(36).slice(2)}`
-  await $`git branch ${branch}`.cwd(tmp.path).quiet()
-
-  await withWatcher(
-    tmp.path,
-    nextUpdate(
-      tmp.path,
-      (evt) => evt.file === head && evt.event !== "unlink",
-      Effect.promise(() => fs.writeFile(head, `ref: refs/heads/${branch}\n`)),
-    ).pipe(
-      Effect.tap((evt) =>
-        Effect.sync(() => {
-          expect(evt.file).toBe(head)
-          expect(["add", "change"]).toContain(evt.event)
+      noUpdate(
+        tmp.path,
+        (e) => e.file === gitIndex,
+        Effect.promise(async () => {
+          await fs.writeFile(edit, "a")
+          await $`git add .`.cwd(tmp.path).quiet().nothrow()
         }),
       ),
-    ),
-  )
-})
+    )
+  })
 
+  test("publishes .git/HEAD events", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const head = path.join(tmp.path, ".git", "HEAD")
+    const branch = `watch-${Math.random().toString(36).slice(2)}`
+    await $`git branch ${branch}`.cwd(tmp.path).quiet()
+
+    await withWatcher(
+      tmp.path,
+      nextUpdate(
+        tmp.path,
+        (evt) => evt.file === head && evt.event !== "unlink",
+        Effect.promise(() => fs.writeFile(head, `ref: refs/heads/${branch}\n`)),
+      ).pipe(
+        Effect.tap((evt) =>
+          Effect.sync(() => {
+            expect(evt.file).toBe(head)
+            expect(["add", "change"]).toContain(evt.event)
+          }),
+        ),
+      ),
+    )
+  })
 }) // describeWatcher
