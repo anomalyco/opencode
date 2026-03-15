@@ -15,6 +15,7 @@ import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
 import { ProviderTransform } from "@/provider/transform"
 import { ModelID, ProviderID } from "@/provider/schema"
+import { SessionStart } from "./start"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
@@ -290,6 +291,8 @@ When constructing the summary, try to stick to this template:
       }
     }
     if (processor.message.error) return "stop"
+    // Only fires after successful compaction, not on error or "stop" paths
+    await SessionStart.trigger({ sessionID: input.sessionID, trigger: "compact" })
     Bus.publish(Event.Compacted, { sessionID: input.sessionID })
     return "continue"
   }

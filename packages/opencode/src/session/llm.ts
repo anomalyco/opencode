@@ -22,10 +22,16 @@ import { SystemPrompt } from "./system"
 import { Flag } from "@/flag/flag"
 import { PermissionNext } from "@/permission/next"
 import { Auth } from "@/auth"
+import { SessionID } from "./schema"
+import { SessionStart } from "./start"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
   export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
+
+  function wrap(input: string[]) {
+    return ["<session-start-context>", ...input, "</session-start-context>"].join("\n\n")
+  }
 
   export type StreamInput = {
     user: MessageV2.User
@@ -65,6 +71,11 @@ export namespace LLM {
     const isCodex = provider.id === "openai" && auth?.type === "oauth"
 
     const system = []
+    // Consume one-shot session-start context injected by plugins via the
+    // session.start hook. take() reads and clears in a single Database.use()
+    // call. If the stream setup fails after this point, the context is lost —
+    // this is an accepted tradeoff to keep the code simple.
+    const pending = await SessionStart.take(SessionID.make(input.sessionID))
     system.push(
       [
         // use agent prompt otherwise provider prompt
@@ -72,6 +83,7 @@ export namespace LLM {
         ...(input.agent.prompt ? [input.agent.prompt] : isCodex ? [] : SystemPrompt.provider(input.model)),
         // any custom prompt passed into this call
         ...input.system,
+        ...(pending.length > 0 ? [wrap(pending)] : []),
         // any custom prompt from last user message
         ...(input.user.system ? [input.user.system] : []),
       ]

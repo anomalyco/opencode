@@ -32,6 +32,7 @@ import { PermissionNext } from "@/permission/next"
 import { Global } from "@/global"
 import type { LanguageModelV2Usage } from "@ai-sdk/provider"
 import { iife } from "@/util/iife"
+import { SessionStart } from "./start"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -331,6 +332,10 @@ export namespace Session {
       share(result.id).catch(() => {
         // Silently ignore sharing errors during session creation
       })
+    // Fire session.start hook for fresh sessions (including forks). Runs after
+    // the row is persisted but before fork message copying finishes, so plugins
+    // that inspect message history during startup will see an empty fork.
+    await SessionStart.trigger({ sessionID: result.id, trigger: "startup" })
     Bus.publish(Event.Updated, {
       info: result,
     })

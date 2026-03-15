@@ -13,6 +13,8 @@ import { tmpdir } from "../fixture/fixture"
 import type { Agent } from "../../src/agent/agent"
 import type { MessageV2 } from "../../src/session/message-v2"
 import { SessionID, MessageID } from "../../src/session/schema"
+import { Session } from "../../src/session"
+import { SessionStart } from "../../src/session/start"
 
 describe("session.llm.hasToolCalls", () => {
   test("returns false for empty messages array", () => {
@@ -321,6 +323,119 @@ describe("session.llm.stream", () => {
 
         const reasoning = (body.reasoningEffort as string | undefined) ?? (body.reasoning_effort as string | undefined)
         expect(reasoning).toBe("high")
+      },
+    })
+  })
+
+  test("injects pending session start context once", async () => {
+    const server = state.server
+    if (!server) {
+      throw new Error("Server not initialized")
+    }
+
+    const providerID = "alibaba"
+    const modelID = "qwen-plus"
+    const fixture = await loadFixture(providerID, modelID)
+    const model = fixture.model
+
+    const first = waitRequest(
+      "/chat/completions",
+      new Response(createChatStream("Hello"), {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      }),
+    )
+    const second = waitRequest(
+      "/chat/completions",
+      new Response(createChatStream("Hello again"), {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      }),
+    )
+
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            enabled_providers: [providerID],
+            provider: {
+              [providerID]: {
+                options: {
+                  apiKey: "test-key",
+                  baseURL: `${server.url.origin}/v1`,
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const resolved = await Provider.getModel(ProviderID.make(providerID), ModelID.make(model.id))
+        const session = await Session.create({})
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+          temperature: 0.4,
+          topP: 0.8,
+        } satisfies Agent.Info
+
+        const user = {
+          id: MessageID.make("user-start-1"),
+          sessionID: session.id,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: ProviderID.make(providerID), modelID: resolved.id },
+        } satisfies MessageV2.User
+
+        await SessionStart.append(session.id, ["restored from resume"])
+
+        const a = await LLM.stream({
+          user,
+          sessionID: session.id,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          abort: new AbortController().signal,
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {},
+        })
+        for await (const _ of a.fullStream) {
+        }
+
+        const one = await first
+        expect(JSON.stringify(one.body.messages)).toContain("<session-start-context>")
+        expect(JSON.stringify(one.body.messages)).toContain("restored from resume")
+        expect(await SessionStart.pending(session.id)).toEqual([])
+
+        const b = await LLM.stream({
+          user: {
+            ...user,
+            id: MessageID.make("user-start-2"),
+          },
+          sessionID: session.id,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          abort: new AbortController().signal,
+          messages: [{ role: "user", content: "Hello again" }],
+          tools: {},
+        })
+        for await (const _ of b.fullStream) {
+        }
+
+        const two = await second
+        expect(JSON.stringify(two.body.messages)).not.toContain("<session-start-context>")
+
+        await Session.remove(session.id)
       },
     })
   })

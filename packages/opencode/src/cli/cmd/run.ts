@@ -383,14 +383,14 @@ export const RunCommand = cmd({
 
       if (baseID && args.fork) {
         const forked = await sdk.session.fork({ sessionID: baseID })
-        return forked.data?.id
+        return { id: forked.data?.id, resume: false }
       }
 
-      if (baseID) return baseID
+      if (baseID) return { id: baseID, resume: true }
 
       const name = title()
       const result = await sdk.session.create({ title: name, permission: rules })
-      return result.data?.id
+      return { id: result.data?.id, resume: false }
     }
 
     async function share(sdk: OpencodeClient, sessionID: string) {
@@ -619,10 +619,14 @@ export const RunCommand = cmd({
         return args.agent
       })()
 
-      const sessionID = await session(sdk)
+      const result = await session(sdk)
+      const sessionID = result.id
       if (!sessionID) {
         UI.error("Session not found")
         process.exit(1)
+      }
+      if (result.resume) {
+        await sdk.session.resume({ sessionID })
       }
       await share(sdk, sessionID)
 

@@ -120,6 +120,8 @@ export function Session() {
   const tuiConfig = useTuiConfig()
   const kv = useKV()
   const { theme } = useTheme()
+  const sdk = useSDK()
+  const toast = useToast()
   const promptRef = usePromptRef()
   const session = createMemo(() => sync.session.get(route.sessionID))
   const children = createMemo(() => {
@@ -188,24 +190,29 @@ export function Session() {
     }
   })
 
+  let resumed: string | undefined
   createEffect(async () => {
+    const sessionID = route.sessionID
     await sync.session
-      .sync(route.sessionID)
-      .then(() => {
+      .sync(sessionID)
+      .then(async () => {
         if (scroll) scroll.scrollBy(100_000)
+        if (route.resume === false || resumed === sessionID) return
+        resumed = sessionID
+        await sdk.client.session.resume({ sessionID }).catch((err) => {
+          console.error(err)
+          resumed = undefined
+        })
       })
       .catch((e) => {
         console.error(e)
         toast.show({
-          message: `Session not found: ${route.sessionID}`,
+          message: `Session not found: ${sessionID}`,
           variant: "error",
         })
         return navigate({ type: "home" })
       })
   })
-
-  const toast = useToast()
-  const sdk = useSDK()
 
   // Handle initial prompt from fork
   createEffect(() => {

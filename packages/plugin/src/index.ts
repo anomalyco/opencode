@@ -223,6 +223,15 @@ export interface Hooks {
     input: { sessionID: string },
     output: { context: string[]; prompt?: string },
   ) => Promise<void>
+  /**
+   * Called when a session starts, resumes, or continues after compaction.
+   * Plugins can append one-shot context that will be injected into the next
+   * system prompt for this session.
+   */
+  "session.start"?: (
+    input: { trigger: "startup" | "resume" | "compact"; sessionID: string },
+    output: { additionalContext: string[] },
+  ) => Promise<void>
   "experimental.text.complete"?: (
     input: { sessionID: string; messageID: string; partID: string },
     output: { text: string },

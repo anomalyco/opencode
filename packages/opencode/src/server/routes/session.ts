@@ -19,6 +19,7 @@ import { PermissionID } from "@/permission/schema"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
+import { SessionStart } from "@/session/start"
 
 const log = Log.create({ service: "server" })
 
@@ -352,6 +353,37 @@ export const SessionRoutes = lazy(() =>
         const body = c.req.valid("json")
         const result = await Session.fork({ ...body, sessionID })
         return c.json(result)
+      },
+    )
+    .post(
+      "/:sessionID/resume",
+      describeRoute({
+        summary: "Resume session",
+        description: "Mark an existing session as resumed and run session lifecycle hooks.",
+        operationId: "session.resume",
+        responses: {
+          200: {
+            description: "Resumed session",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod,
+        }),
+      ),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        await Session.get(sessionID)
+        await SessionStart.trigger({ sessionID, trigger: "resume" })
+        return c.json(true)
       },
     )
     .post(

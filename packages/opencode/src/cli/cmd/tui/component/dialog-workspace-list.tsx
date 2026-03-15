@@ -72,6 +72,7 @@ async function openWorkspace(input: {
   input.route.navigate({
     type: "session",
     sessionID: created.id,
+    resume: false,
   })
   input.dialog.clear()
 }

@@ -51,6 +51,7 @@ export function DialogForkFromTimeline(props: { sessionID: string; onMove: (mess
             sessionID: forked.data!.id,
             type: "session",
             initialPrompt,
+            resume: false,
           })
           dialog.clear()
         },
