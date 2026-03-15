@@ -125,7 +125,7 @@
     "opentui-spinner": "0.0.6",
     "partial-json": "0.1.7",
     "remeda": "catalog:",
-    "semver": "^7.6.3",
+    "semver": "catalog:",
     "solid-js": "catalog:",
     "strip-ansi": "7.1.2",
     "tree-sitter-bash": "0.25.0",

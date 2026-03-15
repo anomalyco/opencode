@@ -13,6 +13,7 @@
     "allowJs": true,
     "resolveJsonModule": true,
     "strict": true,
+    "types": ["node", "bun"],
     "noEmit": false,
     "emitDeclarationOnly": true,
     "outDir": "node_modules/.ts-dist",
