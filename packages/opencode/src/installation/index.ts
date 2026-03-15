@@ -15,6 +15,11 @@ declare global {
 
 export namespace Installation {
   const log = Log.create({ service: "installation" })
+  type Output = {
+    code: number
+    stdout: { toString: (encoding?: BufferEncoding) => string }
+    stderr: { toString: (encoding?: BufferEncoding) => string }
+  }
 
   async function text(cmd: string[], opts: { cwd?: string; env?: NodeJS.ProcessEnv } = {}) {
     return Process.text(cmd, {
@@ -162,7 +167,7 @@ export namespace Installation {
   }
 
   export async function upgrade(method: Method, target: string) {
-    let result: Awaited<ReturnType<typeof upgradeCurl>> | undefined
+    let result: Output | undefined
     switch (method) {
       case "curl":
         result = await upgradeCurl(target)
