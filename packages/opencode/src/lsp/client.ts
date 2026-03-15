@@ -30,12 +30,22 @@ export namespace LSPClient {
     }),
   )
 
+  const MAX_SERVER_MESSAGES = 50
+
   export const Event = {
     Diagnostics: BusEvent.define(
       "lsp.client.diagnostics",
       z.object({
         serverID: z.string(),
         path: z.string(),
+      }),
+    ),
+    Message: BusEvent.define(
+      "lsp.client.message",
+      z.object({
+        serverID: z.string(),
+        type: z.number(),
+        message: z.string(),
       }),
     ),
   }
@@ -144,6 +154,28 @@ export namespace LSPClient {
       serverReadyResolved()
     })
     connection.onRequest("client/unregisterCapability", async () => {})
+
+    const serverMessages: Array<{ type: number; message: string }> = []
+    const seen = new Set<string>()
+    const logLevels = { 1: "error", 2: "warn", 3: "info", 4: "debug" } as const
+    function handleServerMessage(method: string, params: { type: number; message: string }) {
+      const level = logLevels[params.type as keyof typeof logLevels] ?? "info"
+      l[level](method, { messageType: params.type, message: params.message })
+      // Store errors, warnings, and info (type <= 3) for status exposure
+      if (params.type <= 3 && !seen.has(params.message)) {
+        seen.add(params.message)
+        serverMessages.push({ type: params.type, message: params.message })
+        if (serverMessages.length > MAX_SERVER_MESSAGES) serverMessages.shift()
+        Bus.publish(Event.Message, { serverID: input.serverID, type: params.type, message: params.message })
+      }
+    }
+    connection.onNotification("window/logMessage", (params: { type: number; message: string }) => {
+      handleServerMessage("window/logMessage", params)
+    })
+    connection.onNotification("window/showMessage", (params: { type: number; message: string }) => {
+      handleServerMessage("window/showMessage", params)
+    })
+
     connection.onRequest("workspace/workspaceFolders", async () => [
       {
         name: "workspace",
@@ -240,7 +272,7 @@ export namespace LSPClient {
           // reading workspace/configuration). Without this, documents opened
           // during the reload get linted with default settings.
           await Promise.race([serverReady, new Promise<void>((r) => setTimeout(r, 3000))])
-          
+
           input.path = path.isAbsolute(input.path) ? input.path : path.resolve(Instance.directory, input.path)
           const text = await Filesystem.readText(input.path)
           const extension = path.extname(input.path)
@@ -300,6 +332,9 @@ export namespace LSPClient {
       },
       get diagnostics() {
         return diagnostics
+      },
+      get messages() {
+        return serverMessages
       },
       async waitForDiagnostics(input: { path: string }) {
         const normalizedPath = Filesystem.normalizePath(

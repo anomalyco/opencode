@@ -176,6 +176,15 @@ export type EventLspClientDiagnostics = {
   }
 }
 
+export type EventLspClientMessage = {
+  type: "lsp.client.message"
+  properties: {
+    serverID: string
+    type: number
+    message: string
+  }
+}
+
 export type EventLspUpdated = {
   type: "lsp.updated"
   properties: {
@@ -970,6 +979,7 @@ export type Event =
   | EventServerConnected
   | EventGlobalDisposed
   | EventLspClientDiagnostics
+  | EventLspClientMessage
   | EventLspUpdated
   | EventFileEdited
   | EventMessageUpdated
@@ -1448,6 +1458,12 @@ export type Config = {
                 [key: string]: unknown
               }
             }
+          | {
+              disabled?: false
+              initialization: {
+                [key: string]: unknown
+              }
+            }
       }
   /**
    * Additional instruction files or patterns to include
@@ -1898,7 +1914,11 @@ export type LspStatus = {
   id: string
   name: string
   root: string
-  status: "connected" | "error"
+  status: "connected" | "warning" | "error"
+  messages?: Array<{
+    type: number
+    message: string
+  }>
 }
 
 export type FormatterStatus = {

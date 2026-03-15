@@ -1,5 +1,5 @@
 import { useSync } from "@tui/context/sync"
-import { createMemo, For, Show, Switch, Match } from "solid-js"
+import { createMemo, createSignal, For, Show, Switch, Match } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
 import { Locale } from "@/util/locale"
@@ -189,24 +189,45 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                   </text>
                 </Show>
                 <For each={sync.data.lsp}>
-                  {(item) => (
-                    <box flexDirection="row" gap={1}>
-                      <text
-                        flexShrink={0}
-                        style={{
-                          fg: {
-                            connected: theme.success,
-                            error: theme.error,
-                          }[item.status],
-                        }}
-                      >
-                        •
-                      </text>
-                      <text fg={theme.textMuted}>
-                        {item.id} {item.root}
-                      </text>
-                    </box>
-                  )}
+                  {(item) => {
+                    const [open, setOpen] = createSignal(false)
+                    const msgs = () => item.messages ?? []
+                    const statusColor = () =>
+                      ({
+                        connected: theme.success,
+                        warning: theme.warning,
+                        error: theme.error,
+                      })[item.status]
+                    return (
+                      <box>
+                        <box flexDirection="row" gap={1} onMouseDown={() => msgs().length > 0 && setOpen(!open())}>
+                          <Show when={msgs().length > 0}>
+                            <text fg={theme.text}>{open() ? "▼" : "▶"}</text>
+                          </Show>
+                          <text flexShrink={0} style={{ fg: statusColor() }}>
+                            •
+                          </text>
+                          <text fg={theme.textMuted}>
+                            {item.id} {item.root}
+                          </text>
+                        </box>
+                        <Show when={open() && msgs().length > 0}>
+                          <For each={msgs()}>
+                            {(msg) => (
+                              <box paddingLeft={2}>
+                                <text
+                                  wrapMode="none"
+                                  fg={msg.type === 1 ? theme.error : msg.type === 2 ? theme.warning : theme.textMuted}
+                                >
+                                  {msg.message.length > 80 ? msg.message.slice(0, 77) + "..." : msg.message}
+                                </text>
+                              </box>
+                            )}
+                          </For>
+                        </Show>
+                      </box>
+                    )
+                  }}
                 </For>
               </Show>
             </box>
