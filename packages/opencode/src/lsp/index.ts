@@ -155,6 +155,11 @@ export namespace LSP {
           .join(", "),
       })
 
+      // Re-publish client messages as LSP.Updated so the TUI sidebar refreshes
+      Bus.subscribe(LSPClient.Event.Message, () => {
+        Bus.publish(Event.Updated, {})
+      })
+
       return {
         broken: new Set<string>(),
         servers,
@@ -171,12 +176,19 @@ export namespace LSP {
     return state()
   }
 
+  export const ServerMessage = z.object({
+    type: z.number(),
+    message: z.string(),
+  })
+  export type ServerMessage = z.infer<typeof ServerMessage>
+
   export const Status = z
     .object({
       id: z.string(),
       name: z.string(),
       root: z.string(),
-      status: z.union([z.literal("connected"), z.literal("error")]),
+      status: z.union([z.literal("connected"), z.literal("warning"), z.literal("error")]),
+      messages: z.array(ServerMessage).optional(),
     })
     .meta({
       ref: "LSPStatus",
@@ -187,11 +199,15 @@ export namespace LSP {
     return state().then((x) => {
       const result: Status[] = []
       for (const client of x.clients) {
+        const msgs = client.messages
+        const errors = msgs.some((m) => m.type === 1)
+        const warnings = msgs.some((m) => m.type === 2)
         result.push({
           id: client.serverID,
           name: x.servers[client.serverID].id,
           root: path.relative(Instance.directory, client.root),
-          status: "connected",
+          status: errors ? "error" : warnings ? "warning" : "connected",
+          messages: msgs.length > 0 ? msgs : undefined,
         })
       }
       return result
