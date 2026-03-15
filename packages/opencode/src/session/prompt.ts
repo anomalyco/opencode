@@ -48,6 +48,8 @@ import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
 import { Truncate } from "@/tool/truncation"
 import { decodeDataUrl } from "@/util/data-url"
+import { SkillMapper } from "../knowledge/skill-mapper"
+import { Skill } from "../skill"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -811,6 +813,12 @@ export namespace SessionPrompt {
             },
           )
           const result = await item.execute(args, ctx)
+
+          // Silent skill injection for knowledge_search tool
+          if (item.id === "knowledge_search") {
+            await injectSkillsAndGovernance(result)
+          }
+
           const output = {
             ...result,
             attachments: result.attachments?.map((attachment) => ({
@@ -1965,6 +1973,70 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
       const title = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
       return Session.setTitle({ sessionID: input.session.id, title })
+    }
+  }
+
+  /**
+   * Silent Skill & Governance Injection
+   *
+   * When knowledge_search tool is executed:
+   * 1. Extract semantic tags from results
+   * 2. Map tags to relevant skills (e.g., "recovery" -> systematic-debugging)
+   * 3. Load skill content and inject into context
+   * 4. Load united-governance and inject into context
+   *
+   * This is TRANSPARENT to the agent:
+   * - Agent sees knowledge_search results
+   * - Skills and governance are available in context
+   * - Agent can reference them if helpful
+   * - No explicit requests needed
+   *
+   * This enables agents to automatically discover and apply relevant
+   * development practices based on the knowledge they retrieve.
+   */
+  function extractTagsFromResults(markdown: string): string[] {
+    const tags = new Set<string>()
+
+    // Extract tags from backtick format: `tag`
+    const tagMatches = markdown.match(/`([a-z0-9\-]+)`/gi) || []
+    for (const match of tagMatches) {
+      const tag = match.slice(1, -1).toLowerCase()
+      tags.add(tag)
+    }
+
+    // Extract from **Tags:** lines
+    const lineMatches = markdown.match(/\*\*Tags:\*\*\s*([^\n]+)/gi) || []
+    for (const line of lineMatches) {
+      const tagStr = line.replace(/\*\*Tags:\*\*/i, "").trim()
+      const parts = tagStr.split(/,\s*/)
+      for (const part of parts) {
+        const cleaned = part.replace(/`/g, "").trim().toLowerCase()
+        if (cleaned) tags.add(cleaned)
+      }
+    }
+
+    return Array.from(tags)
+  }
+
+  async function injectSkillsAndGovernance(output: { output?: string; title?: string; metadata?: any }) {
+    if (!output.output) return
+
+    const tags = extractTagsFromResults(output.output)
+    if (tags.length === 0) return
+
+    const skills = await SkillMapper.getSkillsForTags(tags)
+    const skillsContext = SkillMapper.formatSkillsForPrompt(skills)
+
+    const govSkill = await Skill.get("united-governance")
+    const govContext = govSkill
+      ? `## Governance Context\n\n${govSkill.content.split("\n").slice(0, 10).join("\n")}\n\n[Full governance available via skill tool]`
+      : ""
+
+    log.info("injected skills and governance", { skillCount: skills.length, tagCount: tags.length })
+
+    // Append to output for agent context
+    if (skillsContext || govContext) {
+      output.output = [output.output, "", "---", "", skillsContext, govContext].filter(Boolean).join("\n")
     }
   }
 }
