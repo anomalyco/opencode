@@ -357,7 +357,7 @@ export namespace SessionProcessor {
               error: e,
               stack: JSON.stringify(e.stack),
             })
-            const error = MessageV2.fromError(e, { providerID: input.model.providerID })
+            const error = MessageV2.fromError(e, { providerID: input.model.providerID, modelID: input.model.id })
             if (MessageV2.ContextOverflowError.isInstance(error)) {
               needsCompaction = true
               Bus.publish(Session.Event.Error, {
@@ -383,6 +383,27 @@ export namespace SessionProcessor {
               await SessionRetry.sleep(delay, input.abort).catch(() => {})
               continue
             } else {
+              // Extra safeguard: fallback mapping for generic fetch failed without clear code
+              if (error.name === "UnknownError" && /fetch failed|terminated|unable to connect|Is the computer able to access the url/i.test(error.data?.message || "")) {
+                attempt++
+                const delay = SessionRetry.NETWORK_SILENCE_DELAY
+                SessionStatus.set(input.sessionID, {
+                  type: "retry",
+                  attempt,
+                  message: "Token-aware self-remediation — network silence",
+                  next: Date.now() + delay,
+                })
+                Bus.publish(TuiEvent.ToastShow, {
+                  title: "Network Silence",
+                  message: `Retry ${attempt} — token-aware self-remediation due to network silence`,
+                  variant: "warning",
+                  duration: delay + 500,
+                })
+                log.info("network silence retry (generic fetch failure fallback)", { attempt })
+                await SessionRetry.sleep(delay, input.abort).catch(() => {})
+                continue
+              }
+
               const retry = SessionRetry.retryable(error)
               if (retry !== undefined) {
                 attempt++
