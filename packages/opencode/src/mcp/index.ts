@@ -27,6 +27,8 @@ import open from "open"
 export namespace MCP {
   const log = Log.create({ service: "mcp" })
   const DEFAULT_TIMEOUT = 30_000
+  const LIST_ATTEMPTS = 3
+  const LIST_DELAY = 1_000
 
   export const Resource = z
     .object({
@@ -155,9 +157,39 @@ export namespace MCP {
   type PromptInfo = Awaited<ReturnType<MCPClient["listPrompts"]>>["prompts"][number]
 
   type ResourceInfo = Awaited<ReturnType<MCPClient["listResources"]>>["resources"][number]
+  type ToolsInfo = Awaited<ReturnType<MCPClient["listTools"]>>
   type McpEntry = NonNullable<Config.Info["mcp"]>[string]
   function isMcpConfigured(entry: McpEntry): entry is Config.Mcp {
     return typeof entry === "object" && entry !== null && "type" in entry
+  }
+
+  async function close(client: MCPClient, input?: Record<string, unknown>) {
+    await client.close().catch((error) => {
+      log.error("Failed to close MCP client", {
+        ...input,
+        error,
+      })
+    })
+  }
+
+  async function list(key: string, client: MCPClient, timeout: number): Promise<ToolsInfo> {
+    let err: Error | undefined
+    for (let attempt = 1; attempt <= LIST_ATTEMPTS; attempt++) {
+      const result = await withTimeout(client.listTools(), timeout).catch((cause) => {
+        err = cause instanceof Error ? cause : new Error(String(cause))
+        return undefined
+      })
+      if (result) return result
+      if (attempt === LIST_ATTEMPTS) break
+      log.warn("listTools failed, retrying", {
+        key,
+        attempt,
+        total: LIST_ATTEMPTS,
+        error: err?.message,
+      })
+      await Bun.sleep(LIST_DELAY)
+    }
+    throw err ?? new Error("Failed to get tools")
   }
 
   async function descendants(pid: number): Promise<number[]> {
@@ -503,29 +535,23 @@ export namespace MCP {
       return {
         mcpClient: undefined,
         status,
+        toolsResult: undefined,
       }
     }
 
-    const result = await withTimeout(mcpClient.listTools(), mcp.timeout ?? DEFAULT_TIMEOUT).catch((err) => {
+    const result = await list(key, mcpClient, mcp.timeout ?? DEFAULT_TIMEOUT).catch((err) => {
       log.error("failed to get tools from client", { key, error: err })
       return undefined
     })
     if (!result) {
-      await mcpClient.close().catch((error) => {
-        log.error("Failed to close MCP client", {
-          error,
-        })
-      })
       status = {
         status: "failed",
         error: "Failed to get tools",
       }
       return {
-        mcpClient: undefined,
-        status: {
-          status: "failed" as const,
-          error: "Failed to get tools",
-        },
+        mcpClient,
+        toolsResult: undefined,
+        status,
       }
     }
 
@@ -533,6 +559,7 @@ export namespace MCP {
     return {
       mcpClient,
       status,
+      toolsResult: result,
     }
   }
 
@@ -614,28 +641,84 @@ export namespace MCP {
     const clientsSnapshot = await clients()
     const defaultTimeout = cfg.experimental?.mcp_timeout
 
-    const connectedClients = Object.entries(clientsSnapshot).filter(
-      ([clientName]) => s.status[clientName]?.status === "connected",
-    )
+    const connectedClients = Object.entries(config).filter(([clientName, mcp]) => {
+      if (!isMcpConfigured(mcp)) return false
+      if (mcp.enabled === false) return false
+      const status = s.status[clientName]?.status
+      return status !== "needs_auth" && status !== "needs_client_registration"
+    })
 
     const toolsResults = await Promise.all(
-      connectedClients.map(async ([clientName, client]) => {
-        const toolsResult = await client.listTools().catch((e) => {
-          log.error("failed to get tools", { clientName, error: e.message })
-          const failedStatus = {
-            status: "failed" as const,
-            error: e instanceof Error ? e.message : String(e),
+      connectedClients.map(async ([clientName, mcp]) => {
+        if (!isMcpConfigured(mcp)) return { clientName }
+        const timeout = mcp.timeout ?? defaultTimeout ?? DEFAULT_TIMEOUT
+        const current = clientsSnapshot[clientName]
+
+        if (!current) {
+          const next = await create(clientName, mcp).catch(() => undefined)
+          if (!next) {
+            s.status[clientName] = {
+              status: "failed",
+              error: "Unknown error during connection",
+            }
+            delete s.clients[clientName]
+            return { clientName }
           }
-          s.status[clientName] = failedStatus
-          delete s.clients[clientName]
-          return undefined
-        })
-        return { clientName, client, toolsResult }
+          s.status[clientName] = next.status
+          if (!next.mcpClient) {
+            delete s.clients[clientName]
+            return { clientName }
+          }
+          s.clients[clientName] = next.mcpClient
+          return {
+            clientName,
+            client: next.mcpClient,
+            toolsResult: next.toolsResult,
+          }
+        }
+
+        const toolsResult = await list(clientName, current, timeout)
+          .then((toolsResult) => ({ client: current, toolsResult }))
+          .catch(async (e) => {
+            const err = e instanceof Error ? e : new Error(String(e))
+            log.error("failed to get tools", { clientName, error: err.message })
+            s.status[clientName] = {
+              status: "failed",
+              error: err.message,
+            }
+            log.warn("reconnecting MCP client after listTools failed", { clientName })
+            const next = await create(clientName, mcp).catch(() => undefined)
+            if (!next) {
+              await close(current, { clientName })
+              delete s.clients[clientName]
+              return undefined
+            }
+            s.status[clientName] = next.status
+            if (!next.mcpClient) {
+              await close(current, { clientName })
+              delete s.clients[clientName]
+              return undefined
+            }
+            if (next.mcpClient !== current) {
+              await close(current, { clientName })
+            }
+            s.clients[clientName] = next.mcpClient
+            return {
+              client: next.mcpClient,
+              toolsResult: next.toolsResult,
+            }
+          })
+
+        return {
+          clientName,
+          ...(toolsResult ?? {}),
+        }
       }),
     )
 
     for (const { clientName, client, toolsResult } of toolsResults) {
       if (!toolsResult) continue
+      if (!client) continue
       const mcpConfig = config[clientName]
       const entry = isMcpConfigured(mcpConfig) ? mcpConfig : undefined
       const timeout = entry?.timeout ?? defaultTimeout
