@@ -11,6 +11,17 @@ import { iife } from "@/util/iife"
 import { defer } from "@/util/defer"
 import { Config } from "../config/config"
 import { PermissionNext } from "@/permission/next"
+import type { ModelID } from "../provider/schema"
+import type { ProviderID } from "../provider/schema"
+
+export function parseModel(raw: string): { providerID: ProviderID; modelID: ModelID } {
+  const idx = raw.indexOf("/")
+  if (idx === -1) throw new Error(`Invalid model format "${raw}". Expected "provider/model-id"`)
+  return {
+    providerID: raw.slice(0, idx) as ProviderID,
+    modelID: raw.slice(idx + 1) as ModelID,
+  }
+}
 
 const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
@@ -23,6 +34,12 @@ const parameters = z.object({
     )
     .optional(),
   command: z.string().describe("The command that triggered this task").optional(),
+  model: z
+    .string()
+    .describe(
+      'Override the model for this task. Format: "provider/model-id" (e.g. "anthropic/claude-opus-4-0520", "anthropic/claude-haiku-4-20250514", "google/gemini-2.5-pro"). If not specified, the subagent\'s configured model or the parent\'s model is used.',
+    )
+    .optional(),
 })
 
 export const TaskTool = Tool.define("task", async (ctx) => {
@@ -103,10 +120,28 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       })
       const msg = await MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
       if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
+      const info = msg.info
 
-      const model = agent.model ?? {
-        modelID: msg.info.modelID,
-        providerID: msg.info.providerID,
+      const model = iife(() => {
+        if (params.model) return parseModel(params.model)
+        return (
+          agent.model ?? {
+            modelID: info.modelID,
+            providerID: info.providerID,
+          }
+        )
+      })
+
+      if (params.model) {
+        await ctx.ask({
+          permission: "model_override",
+          patterns: [params.model],
+          always: [params.model.slice(0, params.model.indexOf("/") + 1) + "*"],
+          metadata: {
+            model: params.model,
+            subagent_type: params.subagent_type,
+          },
+        })
       }
 
       ctx.metadata({
