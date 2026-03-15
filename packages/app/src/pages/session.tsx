@@ -12,6 +12,7 @@ import {
   on,
   onMount,
   untrack,
+  createSignal,
 } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
@@ -1650,92 +1651,157 @@ export default function Page() {
     if (fillFrame !== undefined) cancelAnimationFrame(fillFrame)
   })
 
+  const [swipeOffset, setSwipeOffset] = createSignal(0)
+  const [swipeActive, setSwipeActive] = createSignal(false)
   let touchStartX = 0
   let touchStartY = 0
-  let touchActive = false
+  let touchAxisLocked: "horizontal" | "vertical" | null = null
 
   const onTouchStart = (e: TouchEvent) => {
     if (isDesktop() || !params.id) return
     if (e.touches.length !== 1) return
+    
+    let target = e.target as HTMLElement | null
+    let canScrollHorizontally = false
+    while (target && target !== e.currentTarget) {
+      if (target.scrollWidth > target.clientWidth) {
+         const overflowX = window.getComputedStyle(target).overflowX
+         if (overflowX === "auto" || overflowX === "scroll") {
+           canScrollHorizontally = true
+           break
+         }
+      }
+      target = target.parentElement
+    }
+    
+    if (canScrollHorizontally) return
+
     touchStartX = e.touches[0].clientX
     touchStartY = e.touches[0].clientY
-    touchActive = true
+    touchAxisLocked = null
+    setSwipeActive(true)
+    setSwipeOffset(0)
+  }
+
+  const onTouchMove = (e: TouchEvent) => {
+    if (!swipeActive()) return
+    
+    const currentX = e.touches[0].clientX
+    const currentY = e.touches[0].clientY
+    const deltaX = currentX - touchStartX
+    const deltaY = currentY - touchStartY
+
+    if (!touchAxisLocked) {
+      if (Math.abs(deltaX) > 10 || Math.abs(deltaY) > 10) {
+        if (Math.abs(deltaY) > Math.abs(deltaX)) {
+          touchAxisLocked = "vertical"
+          setSwipeActive(false)
+          return
+        } else {
+          touchAxisLocked = "horizontal"
+        }
+      } else {
+        return
+      }
+    }
+
+    if (touchAxisLocked === "horizontal") {
+      setSwipeOffset(deltaX)
+    }
   }
 
   const onTouchEnd = (e: TouchEvent) => {
-    if (!touchActive || !params.id) return
-    touchActive = false
+    if (!swipeActive()) return
+    setSwipeActive(false)
     
-    const touchEndX = e.changedTouches[0].clientX
-    const touchEndY = e.changedTouches[0].clientY
-    
-    const deltaX = touchEndX - touchStartX
-    const deltaY = touchEndY - touchStartY
-    
-    if (Math.abs(deltaX) > 40 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
-      let target = e.target as HTMLElement | null
-      let canScrollHorizontally = false
-      while (target && target !== e.currentTarget) {
-        if (target.scrollWidth > target.clientWidth) {
-           const overflowX = window.getComputedStyle(target).overflowX
-           if (overflowX === "auto" || overflowX === "scroll") {
-             canScrollHorizontally = true
-             break
-           }
-        }
-        target = target.parentElement
-      }
-      
-      if (!canScrollHorizontally) {
-         const [workspaceStore] = globalSync.child(sdk.directory, { bootstrap: false })
-         const sessions = sortedRootSessions(workspaceStore, Date.now())
-         const idx = sessions.findIndex((s) => s.id === params.id)
-         
-         if (idx !== -1) {
-           const offset = deltaX > 0 ? -1 : 1
-           const nextIdx = idx + offset
-           if (nextIdx >= 0 && nextIdx < sessions.length) {
-             const nextSession = sessions[nextIdx]
-             const dir = base64Encode(sdk.directory)
-             navigate(`/${dir}/session/${nextSession.id}`)
-           }
+    const deltaX = swipeOffset()
+    const threshold = window.innerWidth * 0.25
+
+    if (Math.abs(deltaX) > threshold) {
+       const [workspaceStore] = globalSync.child(sdk.directory, { bootstrap: false })
+       const sessions = sortedRootSessions(workspaceStore, Date.now())
+       const idx = sessions.findIndex((s) => s.id === params.id)
+       
+       if (idx !== -1) {
+         const offset = deltaX > 0 ? -1 : 1
+         const nextIdx = idx + offset
+         if (nextIdx >= 0 && nextIdx < sessions.length) {
+           const nextSession = sessions[nextIdx]
+           const dir = base64Encode(sdk.directory)
+           navigate(`/${dir}/session/${nextSession.id}`)
+           setSwipeOffset(0)
+           return
          }
-      }
+       }
     }
+    
+    setSwipeOffset(0)
   }
+
+  const adjacentSessions = createMemo(() => {
+    if (!params.id) return { prev: null, next: null }
+    const [workspaceStore] = globalSync.child(sdk.directory, { bootstrap: false })
+    const sessions = sortedRootSessions(workspaceStore, Date.now())
+    const idx = sessions.findIndex((s) => s.id === params.id)
+    if (idx === -1) return { prev: null, next: null }
+    return {
+      prev: idx > 0 ? sessions[idx - 1] : null,
+      next: idx < sessions.length - 1 ? sessions[idx + 1] : null
+    }
+  })
 
   return (
     <div
       class="relative bg-background-base size-full overflow-hidden flex flex-col"
       onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
+      onTouchCancel={onTouchEnd}
     >
-      <SessionHeader />
-      <div class="flex-1 min-h-0 flex flex-col md:flex-row">
-        <Show when={!isDesktop() && !!params.id}>
-          <Tabs value={store.mobileTab} class="h-auto">
-            <Tabs.List>
-              <Tabs.Trigger
-                value="session"
-                class="!w-1/2 !max-w-none"
-                classes={{ button: "w-full" }}
-                onClick={() => setStore("mobileTab", "session")}
-              >
-                {language.t("session.tab.session")}
-              </Tabs.Trigger>
-              <Tabs.Trigger
-                value="changes"
-                class="!w-1/2 !max-w-none !border-r-0"
-                classes={{ button: "w-full" }}
-                onClick={() => setStore("mobileTab", "changes")}
-              >
-                {hasReview()
-                  ? language.t("session.review.filesChanged", { count: reviewCount() })
-                  : language.t("session.review.change.other")}
-              </Tabs.Trigger>
-            </Tabs.List>
-          </Tabs>
-        </Show>
+      <Show when={swipeActive() && swipeOffset() !== 0}>
+        <div class="absolute inset-0 flex items-center justify-between px-8 text-text-weak pointer-events-none z-0">
+          <div class="text-xl font-medium opacity-50 truncate w-1/3">
+            {swipeOffset() > 0 ? adjacentSessions().prev?.title || "Previous Session" : ""}
+          </div>
+          <div class="text-xl font-medium opacity-50 truncate w-1/3 text-right">
+            {swipeOffset() < 0 ? adjacentSessions().next?.title || "Next Session" : ""}
+          </div>
+        </div>
+      </Show>
+      
+      <div 
+        class="relative size-full flex flex-col bg-background-base z-10"
+        style={{
+          transform: `translateX(${swipeOffset()}px)`,
+          transition: swipeActive() ? 'none' : 'transform 0.3s cubic-bezier(0.25, 1, 0.5, 1)'
+        }}
+      >
+        <SessionHeader />
+        <div class="flex-1 min-h-0 flex flex-col md:flex-row">
+          <Show when={!isDesktop() && !!params.id}>
+            <Tabs value={store.mobileTab} class="h-auto">
+              <Tabs.List>
+                <Tabs.Trigger
+                  value="session"
+                  class="!w-1/2 !max-w-none"
+                  classes={{ button: "w-full" }}
+                  onClick={() => setStore("mobileTab", "session")}
+                >
+                  {language.t("session.tab.session")}
+                </Tabs.Trigger>
+                <Tabs.Trigger
+                  value="changes"
+                  class="!w-1/2 !max-w-none !border-r-0"
+                  classes={{ button: "w-full" }}
+                  onClick={() => setStore("mobileTab", "changes")}
+                >
+                  {hasReview()
+                    ? language.t("session.review.filesChanged", { count: reviewCount() })
+                    : language.t("session.review.change.other")}
+                </Tabs.Trigger>
+              </Tabs.List>
+            </Tabs>
+          </Show>
 
         {/* Session panel */}
         <div
@@ -1876,6 +1942,7 @@ export default function Page() {
       </div>
 
       <TerminalPanel />
+      </div>
     </div>
   )
 }
