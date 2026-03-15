@@ -1251,7 +1251,7 @@ describe('ProviderTransform.message - universal empty content filtering (LiteLLM
     expect(result).toHaveLength(5);
     expect(result[0].content).toBe('Step 1');
     expect(result[1].content).toBe('I will run this command.');
-    expect(result[2].content[0].type).toBe('tool-call');
+    expect(Array.isArray(result[2].content) && result[2].content[0].type).toBe('tool-call');
     expect(result[4].content).toBe('Step 2');
   });
 
