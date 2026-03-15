@@ -103,10 +103,6 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
         <Kobalte.Item
           {...itemProps}
           data-slot="select-select-item"
-          classList={{
-            ...(local.classList ?? {}),
-            [local.class ?? ""]: !!local.class,
-          }}
           onPointerEnter={() => move(itemProps.item.rawValue)}
           onPointerMove={() => move(itemProps.item.rawValue)}
           onFocus={() => move(itemProps.item.rawValue)}
@@ -158,14 +154,7 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
         </Kobalte.Icon>
       </Kobalte.Trigger>
       <Kobalte.Portal>
-        <Kobalte.Content
-          classList={{
-            ...(local.classList ?? {}),
-            [local.class ?? ""]: !!local.class,
-          }}
-          data-component="select-content"
-          data-trigger-style={local.triggerVariant}
-        >
+        <Kobalte.Content data-component="select-content" data-trigger-style={local.triggerVariant}>
           <Kobalte.Listbox data-slot="select-select-content-list" />
         </Kobalte.Content>
       </Kobalte.Portal>
