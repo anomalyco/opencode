@@ -2,13 +2,13 @@ import { $ } from "bun"
 import { afterEach, describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { ConfigProvider, Deferred, Effect, Fiber, Layer, ManagedRuntime, Option } from "effect"
+import { Layer, ManagedRuntime } from "effect"
 import { tmpdir } from "../fixture/fixture"
+import { watcherConfigLayer, withServices } from "../fixture/instance"
 import { FileWatcher, FileWatcherService } from "../../src/file/watcher"
-import { InstanceContext } from "../../src/effect/instances"
 import { Instance } from "../../src/project/instance"
 import { GlobalBus } from "../../src/bus/global"
-import { Vcs } from "../../src/project/vcs"
+import { Vcs, VcsService } from "../../src/project/vcs"
 
 // Skip in CI — native @parcel/watcher binding needed
 const describeVcs = FileWatcher.hasNativeBinding() && !process.env.CI ? describe : describe.skip
@@ -17,33 +17,21 @@ const describeVcs = FileWatcher.hasNativeBinding() && !process.env.CI ? describe
 // Helpers
 // ---------------------------------------------------------------------------
 
-const configLayer = ConfigProvider.layer(
-  ConfigProvider.fromUnknown({
-    OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
-    OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: "false",
-  }),
-)
-
-/** Boot watcher + vcs inside an Instance, return a disposable runtime */
-function withInstance(directory: string, body: () => Promise<void>) {
-  return Instance.provide({
+function withVcs(
+  directory: string,
+  body: (rt: ManagedRuntime.ManagedRuntime<FileWatcherService | VcsService, never>) => Promise<void>,
+) {
+  return withServices(
     directory,
-    fn: async () => {
-      const ctx = Layer.sync(InstanceContext, () =>
-        InstanceContext.of({ directory: Instance.directory, project: Instance.project }),
-      )
-      const layer = Layer.fresh(FileWatcherService.layer).pipe(Layer.provide(ctx), Layer.provide(configLayer))
-      const rt = ManagedRuntime.make(layer)
-      try {
-        await rt.runPromise(FileWatcherService.use((s) => s.init()))
-        Vcs.init()
-        await Bun.sleep(200)
-        await body()
-      } finally {
-        await rt.dispose()
-      }
+    Layer.merge(FileWatcherService.layer, VcsService.layer),
+    async (rt) => {
+      await rt.runPromise(FileWatcherService.use((s) => s.init()))
+      await rt.runPromise(VcsService.use((s) => s.init()))
+      await Bun.sleep(200)
+      await body(rt)
     },
-  })
+    { provide: [watcherConfigLayer] },
+  )
 }
 
 type BranchEvent = { directory?: string; payload: { type: string; properties: { branch?: string } } }
@@ -78,28 +66,19 @@ describeVcs("Vcs", () => {
   test("branch() returns current branch name", async () => {
     await using tmp = await tmpdir({ git: true })
 
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        await Vcs.init()
-        const branch = await Vcs.branch()
-        // tmpdir creates a git repo — branch should be "main" or "master"
-        expect(branch).toBeDefined()
-        expect(typeof branch).toBe("string")
-      },
+    await withVcs(tmp.path, async (rt) => {
+      const branch = await rt.runPromise(VcsService.use((s) => s.branch()))
+      expect(branch).toBeDefined()
+      expect(typeof branch).toBe("string")
     })
   })
 
   test("branch() returns undefined for non-git directories", async () => {
     await using tmp = await tmpdir()
 
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        await Vcs.init()
-        const branch = await Vcs.branch()
-        expect(branch).toBeUndefined()
-      },
+    await withVcs(tmp.path, async (rt) => {
+      const branch = await rt.runPromise(VcsService.use((s) => s.branch()))
+      expect(branch).toBeUndefined()
     })
   })
 
@@ -108,10 +87,9 @@ describeVcs("Vcs", () => {
     const branch = `test-${Math.random().toString(36).slice(2)}`
     await $`git branch ${branch}`.cwd(tmp.path).quiet()
 
-    await withInstance(tmp.path, async () => {
+    await withVcs(tmp.path, async () => {
       const pending = nextBranchUpdate(tmp.path)
 
-      // Write .git/HEAD directly to simulate branch switch
       const head = path.join(tmp.path, ".git", "HEAD")
       await fs.writeFile(head, `ref: refs/heads/${branch}\n`)
 
@@ -125,14 +103,14 @@ describeVcs("Vcs", () => {
     const branch = `test-${Math.random().toString(36).slice(2)}`
     await $`git branch ${branch}`.cwd(tmp.path).quiet()
 
-    await withInstance(tmp.path, async () => {
+    await withVcs(tmp.path, async (rt) => {
       const pending = nextBranchUpdate(tmp.path)
 
       const head = path.join(tmp.path, ".git", "HEAD")
       await fs.writeFile(head, `ref: refs/heads/${branch}\n`)
 
       await pending
-      const current = await Vcs.branch()
+      const current = await rt.runPromise(VcsService.use((s) => s.branch()))
       expect(current).toBe(branch)
     })
   })
