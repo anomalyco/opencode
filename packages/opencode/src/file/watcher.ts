@@ -112,7 +112,9 @@ export class FileWatcherService extends ServiceMap.Service<FileWatcherService, F
       const cfg = yield* Effect.promise(() => Config.get())
       const cfgIgnores = cfg.watcher?.ignore ?? []
 
-      if (yield* Flag.OPENCODE_EXPERIMENTAL_FILEWATCHER) {
+      const experimentalWatcher = yield* Flag.OPENCODE_EXPERIMENTAL_FILEWATCHER
+      console.log("[DEBUG] experimental filewatcher flag:", experimentalWatcher, "directory:", instance.directory)
+      if (experimentalWatcher) {
         yield* subscribe(instance.directory, [...FileIgnore.PATTERNS, ...cfgIgnores, ...Protected.paths()])
       }
 

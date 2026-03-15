@@ -37,7 +37,7 @@ function withWatcher<E>(directory: string, body: Effect.Effect<void, E>) {
           (rt) => Effect.promise(() => rt.dispose()),
         )
         yield* Effect.promise(() => rt.runPromise(FileWatcherService.use((s) => s.init())))
-        yield* Effect.sleep("100 millis")
+        yield* Effect.sleep("500 millis")
         yield* body
       }).pipe(Effect.scoped, Effect.runPromise),
   })
