@@ -7,6 +7,7 @@ export namespace SessionRetry {
   export const RETRY_BACKOFF_FACTOR = 2
   export const RETRY_MAX_DELAY_NO_HEADERS = 30_000 // 30 seconds
   export const RETRY_MAX_DELAY = 2_147_483_647 // max 32-bit signed integer for setTimeout
+  export const NETWORK_SILENCE_DELAY = 500 // fixed 500ms between retries for network silence
 
   export async function sleep(ms: number, signal: AbortSignal): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -56,6 +57,10 @@ export namespace SessionRetry {
     }
 
     return Math.min(RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1), RETRY_MAX_DELAY_NO_HEADERS)
+  }
+
+  export function silence(error: ReturnType<NamedError["toObject"]>): boolean {
+    return MessageV2.NetworkSilenceError.isInstance(error)
   }
 
   export function retryable(error: ReturnType<NamedError["toObject"]>) {

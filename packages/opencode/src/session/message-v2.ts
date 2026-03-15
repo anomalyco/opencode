@@ -50,6 +50,13 @@ export namespace MessageV2 {
     }),
   )
   export type APIError = z.infer<typeof APIError.Schema>
+  export const NetworkSilenceError = NamedError.create(
+    "NetworkSilenceError",
+    z.object({
+      message: z.string(),
+      code: z.string().optional(),
+    }),
+  )
   export const ContextOverflowError = NamedError.create(
     "ContextOverflowError",
     z.object({ message: z.string(), responseBody: z.string().optional() }),
@@ -408,6 +415,7 @@ export namespace MessageV2 {
         AbortedError.Schema,
         StructuredOutputError.Schema,
         ContextOverflowError.Schema,
+        NetworkSilenceError.Schema,
         APIError.Schema,
       ])
       .optional(),
@@ -897,6 +905,38 @@ export namespace MessageV2 {
     return result
   }
 
+  const NETWORK_CODES = new Set([
+    "ECONNRESET",
+    "ECONNREFUSED",
+    "ENOTFOUND",
+    "EHOSTUNREACH",
+    "ENETUNREACH",
+    "ETIMEDOUT",
+    "EPIPE",
+    "EAI_AGAIN",
+    "UND_ERR_CONNECT_TIMEOUT",
+    "UND_ERR_SOCKET",
+  ])
+
+  function isNetworkSilence(e: unknown): boolean {
+    if (!e || typeof e !== "object") return false
+    const err = e as Record<string, unknown>
+    if (typeof err.code === "string" && NETWORK_CODES.has(err.code)) return true
+    const cause = (err as Error).cause as Record<string, unknown> | undefined
+    if (cause && typeof cause.code === "string" && NETWORK_CODES.has(cause.code)) return true
+    if (err instanceof TypeError && /fetch failed|terminated/i.test(err.message)) return true
+    // APICallError wrapping a network-level failure (no HTTP status received)
+    if (APICallError.isInstance(e) && !e.statusCode && e.cause) return isNetworkSilence(e.cause)
+    return false
+  }
+
+  function networkMessage(e: Error): string {
+    const cause = e.cause as Record<string, unknown> | undefined
+    const code = (e as unknown as SystemError).code ?? (cause as SystemError | undefined)?.code
+    if (code) return `Network error (${code})`
+    return e.message || "Network error"
+  }
+
   export function fromError(e: unknown, ctx: { providerID: ProviderID }): NonNullable<Assistant["error"]> {
     switch (true) {
       case e instanceof DOMException && e.name === "AbortError":
@@ -916,16 +956,11 @@ export namespace MessageV2 {
           },
           { cause: e },
         ).toObject()
-      case (e as SystemError)?.code === "ECONNRESET":
-        return new MessageV2.APIError(
+      case isNetworkSilence(e):
+        return new MessageV2.NetworkSilenceError(
           {
-            message: "Connection reset by server",
-            isRetryable: true,
-            metadata: {
-              code: (e as SystemError).code ?? "",
-              syscall: (e as SystemError).syscall ?? "",
-              message: (e as SystemError).message ?? "",
-            },
+            message: networkMessage(e as Error),
+            code: (e as SystemError)?.code,
           },
           { cause: e },
         ).toObject()

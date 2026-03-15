@@ -14,6 +14,7 @@ import { Config } from "@/config/config"
 import { SessionCompaction } from "./compaction"
 import { PermissionNext } from "@/permission/next"
 import { Question } from "@/question"
+import { TuiEvent } from "@/cli/cmd/tui/event"
 import { PartID } from "./schema"
 import type { SessionID, MessageID } from "./schema"
 
@@ -363,6 +364,24 @@ export namespace SessionProcessor {
                 sessionID: input.sessionID,
                 error,
               })
+            } else if (SessionRetry.silence(error)) {
+              attempt++
+              const delay = SessionRetry.NETWORK_SILENCE_DELAY
+              SessionStatus.set(input.sessionID, {
+                type: "retry",
+                attempt,
+                message: "Token-aware self-remediation — network silence",
+                next: Date.now() + delay,
+              })
+              Bus.publish(TuiEvent.ToastShow, {
+                title: "Network Silence",
+                message: `Retry ${attempt} — token-aware self-remediation due to network silence`,
+                variant: "warning",
+                duration: delay + 500,
+              })
+              log.info("network silence retry", { attempt })
+              await SessionRetry.sleep(delay, input.abort).catch(() => {})
+              continue
             } else {
               const retry = SessionRetry.retryable(error)
               if (retry !== undefined) {
