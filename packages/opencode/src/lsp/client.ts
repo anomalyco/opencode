@@ -12,6 +12,7 @@ import { NamedError } from "@opencode-ai/util/error"
 import { withTimeout } from "../util/timeout"
 import { Instance } from "../project/instance"
 import { Filesystem } from "../util/filesystem"
+import fs from "fs"
 
 const DIAGNOSTICS_DEBOUNCE_MS = 150
 
@@ -43,12 +44,81 @@ export namespace LSPClient {
     const l = log.clone().tag("serverID", input.serverID)
     l.info("starting client")
 
-    const connection = createMessageConnection(
-      new StreamMessageReader(input.server.process.stdout as any),
-      new StreamMessageWriter(input.server.process.stdin as any),
-    )
+    const DEBUG_LOG = "/tmp/lsp-debug.log"
+    const debugLog = (direction: string, data: unknown) => {
+      const ts = new Date().toISOString()
+      const line = `[${ts}] [${input.serverID}] ${direction} ${JSON.stringify(data)}\n`
+      fs.appendFileSync(DEBUG_LOG, line)
+    }
+
+    const reader = new StreamMessageReader(input.server.process.stdout as any)
+    const writer = new StreamMessageWriter(input.server.process.stdin as any)
+
+    const connection = createMessageConnection(reader, writer)
+
+    // Intercept outgoing traffic (client -> server)
+    const originalSendRequest = connection.sendRequest.bind(connection)
+    connection.sendRequest = ((...args: any[]) => {
+      debugLog("CLIENT -> SERVER [request]", { method: args[0], params: args[1] })
+      const result = originalSendRequest(...args)
+      if (result && typeof result.then === "function") {
+        result.then(
+          (res: unknown) => debugLog("CLIENT <- SERVER [response]", { method: args[0], result: res }),
+          (err: unknown) => debugLog("CLIENT <- SERVER [error]", { method: args[0], error: String(err) }),
+        )
+      }
+      return result
+    }) as any
+
+    const originalSendNotification = connection.sendNotification.bind(connection)
+    connection.sendNotification = ((...args: any[]) => {
+      debugLog("CLIENT -> SERVER [notification]", { method: args[0], params: args[1] })
+      return originalSendNotification(...args)
+    }) as any
+
+    // Intercept incoming traffic (server -> client) via onNotification/onRequest wrappers
+    const originalOnNotification = connection.onNotification.bind(connection)
+    connection.onNotification = ((method: any, handler: any) => {
+      if (typeof method === "string" && handler) {
+        return originalOnNotification(method, (...args: any[]) => {
+          debugLog("SERVER -> CLIENT [notification]", { method, params: args[0] })
+          return handler(...args)
+        })
+      }
+      // Catch-all / generic notification handler
+      return originalOnNotification(method, handler)
+    }) as any
+
+    const originalOnRequest = connection.onRequest.bind(connection)
+    connection.onRequest = ((method: any, handler: any) => {
+      if (typeof method === "string" && handler) {
+        return originalOnRequest(method, async (...args: any[]) => {
+          debugLog("SERVER -> CLIENT [request]", { method, params: args[0] })
+          const result = await handler(...args)
+          debugLog("CLIENT -> SERVER [response to server request]", { method, result })
+          return result
+        })
+      }
+      return originalOnRequest(method, handler)
+    }) as any
 
     const diagnostics = new Map<string, Diagnostic[]>()
+
+    // Track when the server's initial workspace/configuration request has been served,
+    // so we don't send didChangeConfiguration before the server has its initial config.
+    let configurationResolved: () => void
+    const configurationReady = new Promise<void>((resolve) => {
+      configurationResolved = resolve
+    })
+
+    // Track when the server has finished its post-config reload cycle.
+    // Servers like Biome do: workspace/configuration → unregister → register capabilities.
+    // Documents opened before this cycle completes get linted with stale/default settings.
+    let serverReadyResolved: () => void
+    const serverReady = new Promise<void>((resolve) => {
+      serverReadyResolved = resolve
+    })
+
     connection.onNotification("textDocument/publishDiagnostics", (params) => {
       const filePath = Filesystem.normalizePath(fileURLToPath(params.uri))
       l.info("textDocument/publishDiagnostics", {
@@ -64,11 +134,15 @@ export namespace LSPClient {
       l.info("window/workDoneProgress/create", params)
       return null
     })
+    let configurationServed = false
     connection.onRequest("workspace/configuration", async () => {
-      // Return server initialization options
-      return [input.server.initialization ?? {}]
+      configurationServed = true
+      configurationResolved()
+      return [input.server.settings ?? input.server.initialization ?? {}]
     })
-    connection.onRequest("client/registerCapability", async () => {})
+    connection.onRequest("client/registerCapability", async () => {
+      serverReadyResolved()
+    })
     connection.onRequest("client/unregisterCapability", async () => {})
     connection.onRequest("workspace/workspaceFolders", async () => [
       {
@@ -126,10 +200,25 @@ export namespace LSPClient {
 
     await connection.sendNotification("initialized", {})
 
-    if (input.server.initialization) {
-      await connection.sendNotification("workspace/didChangeConfiguration", {
-        settings: input.server.initialization,
-      })
+    if (input.server.initialization || input.server.settings) {
+      // Wait for the server's initial workspace/configuration request to be handled
+      // before sending didChangeConfiguration. Some servers (e.g. Biome) ask for config
+      // right after initialized, and sending didChangeConfiguration before that response
+      // is processed can cause the config to be overwritten or ignored.
+      await Promise.race([configurationReady, new Promise<void>((r) => setTimeout(r, 2000))])
+      // Yield to let the config response flush to the server before sending didChangeConfiguration
+      await new Promise<void>((r) => setTimeout(r, 50))
+      if (!configurationServed) {
+        await connection.sendNotification("workspace/didChangeConfiguration", {
+          settings: input.server.initialization,
+        })
+        // Server got config via didChangeConfiguration, not workspace/configuration —
+        // it won't do a register cycle, so unblock serverReady
+        serverReadyResolved()
+      }
+    } else {
+      // No config to negotiate — server is ready immediately
+      serverReadyResolved()
     }
 
     const files: {
@@ -146,6 +235,12 @@ export namespace LSPClient {
       },
       notify: {
         async open(input: { path: string }) {
+          // Wait for the server to finish its initial config handshake and any
+          // subsequent reload cycle (e.g. Biome's unregister/register after
+          // reading workspace/configuration). Without this, documents opened
+          // during the reload get linted with default settings.
+          await Promise.race([serverReady, new Promise<void>((r) => setTimeout(r, 3000))])
+          
           input.path = path.isAbsolute(input.path) ? input.path : path.resolve(Instance.directory, input.path)
           const text = await Filesystem.readText(input.path)
           const extension = path.extname(input.path)

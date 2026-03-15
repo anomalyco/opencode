@@ -31,7 +31,12 @@ export namespace LSPServer {
 
   export interface Handle {
     process: ChildProcessWithoutNullStreams
+    /** Sent as initializationOptions in the initialize request and via didChangeConfiguration */
     initialization?: Record<string, any>
+    /** Returned in workspace/configuration responses. Kept separate from initialization
+     *  because some servers (e.g. Biome) read config only from workspace/configuration
+     *  and get confused if the same data appears in initializationOptions. */
+    settings?: Record<string, any>
     /** When true, the project has its own config file — don't apply fallback initialization */
     configured?: boolean
   }
@@ -370,14 +375,15 @@ export namespace LSPServer {
       return {
         process: proc,
         configured,
-        initialization: configured
+        settings: configured
           ? undefined
           : {
-              inline_config: {
+              inlineConfig: {
                 linter: {
                   rules: {
                     suspicious: {
                       useIterableCallbackReturn: {
+                        level: "error",
                         options: {
                           checkForEach: false,
                         },
