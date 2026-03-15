@@ -1,7 +1,17 @@
 import { test, expect } from "bun:test"
 import { Question } from "../../src/question"
 import { Instance } from "../../src/project/instance"
+import { QuestionID } from "../../src/question/schema"
 import { tmpdir } from "../fixture/fixture"
+import { SessionID } from "../../src/session/schema"
+
+/** Reject all pending questions so dangling Deferred fibers don't hang the test. */
+async function rejectAll() {
+  const pending = await Question.list()
+  for (const req of pending) {
+    await Question.reject(req.id)
+  }
+}
 
 test("ask - returns pending promise", async () => {
   await using tmp = await tmpdir({ git: true })
@@ -9,7 +19,7 @@ test("ask - returns pending promise", async () => {
     directory: tmp.path,
     fn: async () => {
       const promise = Question.ask({
-        sessionID: "ses_test",
+        sessionID: SessionID.make("ses_test"),
         questions: [
           {
             question: "What would you like to do?",
@@ -22,6 +32,8 @@ test("ask - returns pending promise", async () => {
         ],
       })
       expect(promise).toBeInstanceOf(Promise)
+      await rejectAll()
+      await promise.catch(() => {})
     },
   })
 })
@@ -42,14 +54,16 @@ test("ask - adds to pending list", async () => {
         },
       ]
 
-      Question.ask({
-        sessionID: "ses_test",
+      const askPromise = Question.ask({
+        sessionID: SessionID.make("ses_test"),
         questions,
       })
 
       const pending = await Question.list()
       expect(pending.length).toBe(1)
       expect(pending[0].questions).toEqual(questions)
+      await rejectAll()
+      await askPromise.catch(() => {})
     },
   })
 })
@@ -73,7 +87,7 @@ test("reply - resolves the pending ask with answers", async () => {
       ]
 
       const askPromise = Question.ask({
-        sessionID: "ses_test",
+        sessionID: SessionID.make("ses_test"),
         questions,
       })
 
@@ -96,8 +110,8 @@ test("reply - removes from pending list", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      Question.ask({
-        sessionID: "ses_test",
+      const askPromise = Question.ask({
+        sessionID: SessionID.make("ses_test"),
         questions: [
           {
             question: "What would you like to do?",
@@ -117,6 +131,7 @@ test("reply - removes from pending list", async () => {
         requestID: pending[0].id,
         answers: [["Option 1"]],
       })
+      await askPromise
 
       const pendingAfter = await Question.list()
       expect(pendingAfter.length).toBe(0)
@@ -130,7 +145,7 @@ test("reply - does nothing for unknown requestID", async () => {
     directory: tmp.path,
     fn: async () => {
       await Question.reply({
-        requestID: "que_unknown",
+        requestID: QuestionID.make("que_unknown"),
         answers: [["Option 1"]],
       })
       // Should not throw
@@ -146,7 +161,7 @@ test("reject - throws RejectedError", async () => {
     directory: tmp.path,
     fn: async () => {
       const askPromise = Question.ask({
-        sessionID: "ses_test",
+        sessionID: SessionID.make("ses_test"),
         questions: [
           {
             question: "What would you like to do?",
@@ -173,7 +188,7 @@ test("reject - removes from pending list", async () => {
     directory: tmp.path,
     fn: async () => {
       const askPromise = Question.ask({
-        sessionID: "ses_test",
+        sessionID: SessionID.make("ses_test"),
         questions: [
           {
             question: "What would you like to do?",
@@ -203,7 +218,7 @@ test("reject - does nothing for unknown requestID", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      await Question.reject("que_unknown")
+      await Question.reject(QuestionID.make("que_unknown"))
       // Should not throw
     },
   })
@@ -236,7 +251,7 @@ test("ask - handles multiple questions", async () => {
       ]
 
       const askPromise = Question.ask({
-        sessionID: "ses_test",
+        sessionID: SessionID.make("ses_test"),
         questions,
       })
 
@@ -260,8 +275,8 @@ test("list - returns all pending requests", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      Question.ask({
-        sessionID: "ses_test1",
+      const p1 = Question.ask({
+        sessionID: SessionID.make("ses_test1"),
         questions: [
           {
             question: "Question 1?",
@@ -271,8 +286,8 @@ test("list - returns all pending requests", async () => {
         ],
       })
 
-      Question.ask({
-        sessionID: "ses_test2",
+      const p2 = Question.ask({
+        sessionID: SessionID.make("ses_test2"),
         questions: [
           {
             question: "Question 2?",
@@ -284,6 +299,9 @@ test("list - returns all pending requests", async () => {
 
       const pending = await Question.list()
       expect(pending.length).toBe(2)
+      await rejectAll()
+      p1.catch(() => {})
+      p2.catch(() => {})
     },
   })
 })

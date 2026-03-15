@@ -1,5 +1,5 @@
 import { test, expect } from "../fixtures"
-import { openSettings, closeDialog, withSession } from "../actions"
+import { openSettings, closeDialog, waitTerminalReady, withSession } from "../actions"
 import { keybindButtonSelector, terminalSelector } from "../selectors"
 import { modKey } from "../utils"
 
@@ -302,7 +302,7 @@ test("changing terminal toggle keybind works", async ({ page, gotoSession }) => 
   await expect(terminal).not.toBeVisible()
 
   await page.keyboard.press(`${modKey}+Y`)
-  await expect(terminal).toBeVisible()
+  await waitTerminalReady(page, { term: terminal })
 
   await page.keyboard.press(`${modKey}+Y`)
   await expect(terminal).not.toBeVisible()

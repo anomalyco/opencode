@@ -13,7 +13,7 @@ import { useFileComponent } from "../context/file"
 import { useI18n } from "../context/i18n"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
-import { createEffect, createMemo, createSignal, For, Match, Show, Switch, untrack, type JSX } from "solid-js"
+import { createEffect, createMemo, For, Match, Show, Switch, untrack, type JSX } from "solid-js"
 import { onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { type FileContent, type FileDiff } from "@opencode-ai/sdk/v2"
@@ -138,14 +138,16 @@ export const SessionReview = (props: SessionReviewProps) => {
   const i18n = useI18n()
   const fileComponent = useFileComponent()
   const anchors = new Map<string, HTMLElement>()
-  const [store, setStore] = createStore<{ open: string[]; force: Record<string, boolean> }>({
-    open: [],
-    force: {},
+  const [store, setStore] = createStore({
+    open: [] as string[],
+    force: {} as Record<string, boolean>,
+    selection: null as SessionReviewSelection | null,
+    commenting: null as SessionReviewSelection | null,
+    opened: null as SessionReviewFocus | null,
   })
-
-  const [selection, setSelection] = createSignal<SessionReviewSelection | null>(null)
-  const [commenting, setCommenting] = createSignal<SessionReviewSelection | null>(null)
-  const [opened, setOpened] = createSignal<SessionReviewFocus | null>(null)
+  const selection = () => store.selection
+  const commenting = () => store.commenting
+  const opened = () => store.opened
 
   const open = () => props.open ?? store.open
   const files = createMemo(() => props.diffs.map((diff) => diff.file))
@@ -184,10 +186,10 @@ export const SessionReview = (props: SessionReviewProps) => {
       focusToken++
       const token = focusToken
 
-      setOpened(focus)
+      setStore("opened", focus)
 
       const comment = (props.comments ?? []).find((c) => c.file === focus.file && c.id === focus.id)
-      if (comment) setSelection({ file: comment.file, range: cloneSelectedLineRange(comment.selection) })
+      if (comment) setStore("selection", { file: comment.file, range: cloneSelectedLineRange(comment.selection) })
 
       const current = open()
       if (!current.includes(focus.file)) {
@@ -331,11 +333,11 @@ export const SessionReview = (props: SessionReviewProps) => {
                           if (!current || current.file !== file) return null
                           return current.id
                         },
-                        setOpened: (id) => setOpened(id ? { file, id } : null),
+                        setOpened: (id) => setStore("opened", id ? { file, id } : null),
                         selected: selectedLines,
-                        setSelected: (range) => setSelection(range ? { file, range } : null),
+                        setSelected: (range) => setStore("selection", range ? { file, range } : null),
                         commenting: draftRange,
-                        setCommenting: (range) => setCommenting(range ? { file, range } : null),
+                        setCommenting: (range) => setStore("commenting", range ? { file, range } : null),
                       },
                       getSide: selectionSide,
                       clearSelectionOnSelectionEndNull: false,
