@@ -839,6 +839,8 @@ export const dict = {
   "settings.shortcuts.unassigned": "Unassigned",
   "settings.shortcuts.pressKeys": "Press keys",
   "settings.shortcuts.search.placeholder": "Search shortcuts",
+  "settings.shortcuts.search.record": "Record Keys",
+  "settings.shortcuts.search.exactPlaceholder": "Press keys to search",
   "settings.shortcuts.search.empty": "No shortcuts found",
 
   "settings.shortcuts.group.general": "General",

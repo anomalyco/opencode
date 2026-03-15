@@ -14,6 +14,7 @@ import { SettingsList } from "./settings-list"
 const IS_MAC = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
 const PALETTE_ID = "command.palette"
 const DEFAULT_PALETTE_KEYBIND = "mod+shift+p"
+const RECORD_KEYBIND = "mod+alt+k"
 
 type KeybindGroup = "General" | "Session" | "Navigation" | "Model and agent" | "Terminal" | "Prompt"
 
@@ -24,6 +25,8 @@ type KeybindMeta = {
 
 type KeybindMap = Record<string, string | undefined>
 type CommandContext = ReturnType<typeof useCommand>
+type Live = CommandContext["options"][number]
+type Catalog = CommandContext["catalog"][number]
 
 const GROUPS: KeybindGroup[] = ["General", "Session", "Navigation", "Model and agent", "Terminal", "Prompt"]
 
@@ -111,6 +114,12 @@ function signatures(config: string | undefined) {
   return sigs
 }
 
+function matchRecord(event: KeyboardEvent) {
+  if (event.code !== "KeyK") return false
+  if (IS_MAC) return event.metaKey && event.altKey && !event.ctrlKey && !event.shiftKey
+  return event.ctrlKey && event.altKey && !event.metaKey && !event.shiftKey
+}
+
 function keybinds(value: unknown): KeybindMap {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {}
   return value as KeybindMap
@@ -191,6 +200,22 @@ function filteredFor(
   return out
 }
 
+function exactFor(value: string, grouped: Map<KeybindGroup, string[]>, keybind: (id: string) => string | undefined) {
+  if (!value) return grouped
+
+  const set = new Set(signatures(value))
+  const out = new Map<KeybindGroup, string[]>()
+
+  for (const group of GROUPS) {
+    out.set(
+      group,
+      (grouped.get(group) ?? []).filter((id) => signatures(keybind(id)).some((sig) => set.has(sig))),
+    )
+  }
+
+  return out
+}
+
 function useKeyCapture(input: {
   active: () => string | null
   stop: () => void
@@ -255,6 +280,63 @@ function useKeyCapture(input: {
   })
 }
 
+function useSearchCapture(input: {
+  active: () => boolean
+  editing: () => boolean
+  stop: () => void
+  set: (value: string) => void
+}) {
+  onMount(() => {
+    const handle = (event: KeyboardEvent) => {
+      if (!input.active() || input.editing()) return
+
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+
+      if (event.key === "Escape") {
+        input.stop()
+        return
+      }
+
+      const clear =
+        (event.key === "Backspace" || event.key === "Delete") &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !event.shiftKey
+      if (clear) {
+        input.set("")
+        return
+      }
+
+      const next = recordKeybind(event)
+      if (!next) return
+      input.set(next)
+    }
+
+    document.addEventListener("keydown", handle, true)
+    onCleanup(() => document.removeEventListener("keydown", handle, true))
+  })
+}
+
+function useSearchToggle(input: { editing: () => boolean; toggle: () => void }) {
+  onMount(() => {
+    const handle = (event: KeyboardEvent) => {
+      if (input.editing()) return
+      if (!matchRecord(event)) return
+
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+      input.toggle()
+    }
+
+    document.addEventListener("keydown", handle, true)
+    onCleanup(() => document.removeEventListener("keydown", handle, true))
+  })
+}
+
 export const SettingsKeybinds: Component = () => {
   const command = useCommand()
   const language = useLanguage()
@@ -262,13 +344,15 @@ export const SettingsKeybinds: Component = () => {
 
   const [store, setStore] = createStore({
     active: null as string | null,
+    exact: false,
+    search: "",
     filter: "",
   })
 
   const stop = () => {
     if (!store.active) return
     setStore("active", null)
-    command.keybinds(true)
+    if (!store.exact) command.keybinds(true)
   }
 
   const start = (id: string) => {
@@ -280,6 +364,21 @@ export const SettingsKeybinds: Component = () => {
     if (store.active) stop()
 
     setStore("active", id)
+    if (!store.exact) command.keybinds(false)
+  }
+
+  const setExact = (value: boolean) => {
+    if (store.exact === value) return
+    if (!value) {
+      setStore("exact", false)
+      setStore("search", "")
+      if (!store.active) command.keybinds(true)
+      return
+    }
+
+    if (store.active) stop()
+    setStore("exact", true)
+    setStore("search", "")
     command.keybinds(false)
   }
 
@@ -305,8 +404,28 @@ export const SettingsKeybinds: Component = () => {
 
   const grouped = createMemo(() => groupedFor(list()))
 
+  const configFor = (id: string) => {
+    if (id === PALETTE_ID) return settings.keybinds.get(PALETTE_ID) ?? DEFAULT_PALETTE_KEYBIND
+
+    const custom = settings.keybinds.get(id)
+    if (typeof custom === "string") return custom
+
+    const live = command.options.find((x: Live) => x.id === id)
+    if (live?.keybind) return live.keybind
+
+    const meta = command.catalog.find((x: Catalog) => x.id === id)
+    return meta?.keybind
+  }
+
   const filtered = createMemo(() => {
+    if (store.exact) return exactFor(store.search, grouped(), configFor)
     return filteredFor(store.filter, list(), grouped(), (id) => command.keybind(id) || "")
+  })
+
+  const query = createMemo(() => (store.exact ? store.search : store.filter).trim())
+  const record = createMemo(() => {
+    const label = language.t("settings.shortcuts.search.record")
+    return `${label} (${formatKeybind(RECORD_KEYBIND, language.t)})`
   })
 
   const hasResults = createMemo(() => {
@@ -329,25 +448,14 @@ export const SettingsKeybinds: Component = () => {
       list.push(value)
     }
 
-    const palette = settings.keybinds.get(PALETTE_ID) ?? DEFAULT_PALETTE_KEYBIND
+    const palette = configFor(PALETTE_ID)
     for (const sig of signatures(palette)) {
       add(sig, { id: PALETTE_ID, title: title(PALETTE_ID) })
     }
 
-    const valueFor = (id: string) => {
-      const custom = settings.keybinds.get(id)
-      if (typeof custom === "string") return custom
-
-      const live = command.options.find((x) => x.id === id)
-      if (live?.keybind) return live.keybind
-
-      const meta = command.catalog.find((x) => x.id === id)
-      return meta?.keybind
-    }
-
     for (const id of list().keys()) {
       if (id === PALETTE_ID) continue
-      for (const sig of signatures(valueFor(id))) {
+      for (const sig of signatures(configFor(id))) {
         add(sig, { id, title: title(id) })
       }
     }
@@ -365,8 +473,20 @@ export const SettingsKeybinds: Component = () => {
     language,
   })
 
+  useSearchCapture({
+    active: () => store.exact,
+    editing: () => !!store.active,
+    stop: () => setExact(false),
+    set: (value) => setStore("search", value),
+  })
+
+  useSearchToggle({
+    editing: () => !!store.active,
+    toggle: () => setExact(!store.exact),
+  })
+
   onCleanup(() => {
-    if (store.active) command.keybinds(true)
+    if (store.active || store.exact) command.keybinds(true)
   })
 
   return (
@@ -380,23 +500,71 @@ export const SettingsKeybinds: Component = () => {
             </Button>
           </div>
 
-          <div class="flex items-center gap-2 px-3 h-9 rounded-lg bg-surface-base">
-            <Icon name="magnifying-glass" class="text-icon-weak-base flex-shrink-0" />
-            <TextField
-              variant="ghost"
-              type="text"
-              value={store.filter}
-              onChange={(v) => setStore("filter", v)}
-              placeholder={language.t("settings.shortcuts.search.placeholder")}
-              spellcheck={false}
-              autocorrect="off"
-              autocomplete="off"
-              autocapitalize="off"
-              class="flex-1"
-            />
-            <Show when={store.filter}>
-              <IconButton icon="circle-x" variant="ghost" onClick={() => setStore("filter", "")} />
-            </Show>
+          <div
+            classList={{
+              "flex min-w-0 max-w-[720px] items-center gap-2 px-3 h-9 rounded-lg border transition-colors": true,
+              "bg-surface-base border-border-weak-base": !store.exact,
+              "bg-surface-success-base border-icon-success-base": store.exact,
+            }}
+          >
+            <div class="flex min-w-0 flex-1 items-center gap-2">
+              <Icon
+                name="magnifying-glass"
+                class={store.exact ? "text-icon-base flex-shrink-0" : "text-icon-weak-base flex-shrink-0"}
+              />
+              <Show
+                when={!store.exact}
+                fallback={
+                  <div class="flex min-w-0 flex-1 items-center gap-2 text-left text-14-regular">
+                    <div class="flex items-center gap-1.5 rounded-full bg-surface-critical-weak px-2 py-0.5 text-12-medium text-icon-critical-base">
+                      <div class="size-1.5 rounded-full bg-icon-critical-base" />
+                      <span>REC</span>
+                    </div>
+                    <span
+                      class={store.search ? "min-w-0 truncate text-text-strong" : "min-w-0 truncate text-text-weak"}
+                    >
+                      {store.search
+                        ? formatKeybind(store.search, language.t)
+                        : language.t("settings.shortcuts.search.exactPlaceholder")}
+                    </span>
+                  </div>
+                }
+              >
+                <TextField
+                  variant="ghost"
+                  type="text"
+                  value={store.filter}
+                  onChange={(v) => setStore("filter", v)}
+                  placeholder={language.t("settings.shortcuts.search.placeholder")}
+                  spellcheck={false}
+                  autocorrect="off"
+                  autocomplete="off"
+                  autocapitalize="off"
+                  class="flex-1"
+                />
+              </Show>
+              <Show when={query()}>
+                <IconButton
+                  icon="circle-x"
+                  variant="ghost"
+                  onClick={() => setStore(store.exact ? "search" : "filter", "")}
+                />
+              </Show>
+            </div>
+            <button
+              type="button"
+              title={record()}
+              aria-label={record()}
+              aria-pressed={store.exact}
+              classList={{
+                "flex size-7 items-center justify-center rounded-md transition-colors": true,
+                "text-text-subtle hover:bg-surface-raised-base-hover hover:text-text-strong": !store.exact,
+                "bg-icon-success-base text-text-on-dark": store.exact,
+              }}
+              onClick={() => setExact(!store.exact)}
+            >
+              <Icon name="keyboard" size="small" />
+            </button>
           </div>
         </div>
       </div>
@@ -439,11 +607,13 @@ export const SettingsKeybinds: Component = () => {
           )}
         </For>
 
-        <Show when={store.filter && !hasResults()}>
+        <Show when={query() && !hasResults()}>
           <div class="flex flex-col items-center justify-center py-12 text-center">
             <span class="text-14-regular text-text-weak">{language.t("settings.shortcuts.search.empty")}</span>
-            <Show when={store.filter}>
-              <span class="text-14-regular text-text-strong mt-1">"{store.filter}"</span>
+            <Show when={query()}>
+              <span class="text-14-regular text-text-strong mt-1">
+                {store.exact ? formatKeybind(store.search, language.t) : `"${query()}"`}
+              </span>
             </Show>
           </div>
         </Show>
