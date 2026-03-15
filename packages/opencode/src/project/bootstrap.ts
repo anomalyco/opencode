@@ -7,7 +7,7 @@ import { Project } from "./project"
 import { Bus } from "../bus"
 import { Command } from "../command"
 import { Instance } from "./instance"
-import { Vcs } from "./vcs"
+import { VcsService } from "./vcs"
 import { Log } from "@/util/log"
 import { ShareNext } from "@/share/share-next"
 import { Snapshot } from "../snapshot"
@@ -22,7 +22,7 @@ export async function InstanceBootstrap() {
   await LSP.init()
   await runPromiseInstance(FileWatcherService.use((service) => service.init()))
   File.init()
-  Vcs.init()
+  await runPromiseInstance(VcsService.use((s) => s.init()))
   Snapshot.init()
   Truncate.init()
 

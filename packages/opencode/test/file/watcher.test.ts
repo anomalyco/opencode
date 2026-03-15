@@ -2,10 +2,10 @@ import { $ } from "bun"
 import { afterEach, describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { ConfigProvider, Deferred, Effect, Fiber, Layer, ManagedRuntime, Option } from "effect"
+import { Deferred, Effect, Fiber, Option } from "effect"
 import { tmpdir } from "../fixture/fixture"
+import { watcherConfigLayer, withServices } from "../fixture/instance"
 import { FileWatcher, FileWatcherService } from "../../src/file/watcher"
-import { InstanceContext } from "../../src/effect/instances"
 import { Instance } from "../../src/project/instance"
 import { GlobalBus } from "../../src/bus/global"
 
@@ -16,35 +16,21 @@ const describeWatcher = FileWatcher.hasNativeBinding() && !process.env.CI ? desc
 // Helpers
 // ---------------------------------------------------------------------------
 
-const configLayer = ConfigProvider.layer(
-  ConfigProvider.fromUnknown({
-    OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
-    OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: "false",
-  }),
-)
-
 type BusUpdate = { directory?: string; payload: { type: string; properties: WatcherEvent } }
 type WatcherEvent = { file: string; event: "add" | "change" | "unlink" }
 
-/** Run `body` with a live FileWatcherService. Runtime is acquired/released via Effect.scoped. */
+/** Run `body` with a live FileWatcherService. */
 function withWatcher<E>(directory: string, body: Effect.Effect<void, E>) {
-  return Instance.provide({
+  return withServices(
     directory,
-    fn: () =>
-      Effect.gen(function* () {
-        const ctx = Layer.sync(InstanceContext, () =>
-          InstanceContext.of({ directory: Instance.directory, project: Instance.project }),
-        )
-        const layer = Layer.fresh(FileWatcherService.layer).pipe(Layer.provide(ctx), Layer.provide(configLayer))
-        const rt = yield* Effect.acquireRelease(
-          Effect.sync(() => ManagedRuntime.make(layer)),
-          (rt) => Effect.promise(() => rt.dispose()),
-        )
-        yield* Effect.promise(() => rt.runPromise(FileWatcherService.use((s) => s.init())))
-        yield* ready(directory)
-        yield* body
-      }).pipe(Effect.scoped, Effect.runPromise),
-  })
+    FileWatcherService.layer,
+    async (rt) => {
+      await rt.runPromise(FileWatcherService.use((s) => s.init()))
+      await Effect.runPromise(ready(directory))
+      await Effect.runPromise(body)
+    },
+    { provide: [watcherConfigLayer] },
+  )
 }
 
 function listen(directory: string, check: (evt: WatcherEvent) => boolean, hit: (evt: WatcherEvent) => void) {
