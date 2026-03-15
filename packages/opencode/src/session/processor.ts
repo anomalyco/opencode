@@ -367,6 +367,16 @@ export namespace SessionProcessor {
               const retry = SessionRetry.retryable(error)
               if (retry !== undefined) {
                 attempt++
+                if (attempt > SessionRetry.RETRY_MAX_ATTEMPTS) {
+                  log.error("max retries exceeded", { attempt, sessionID: input.sessionID })
+                  input.assistantMessage.error = error
+                  Bus.publish(Session.Event.Error, {
+                    sessionID: input.sessionID,
+                    error,
+                  })
+                  SessionStatus.set(input.sessionID, { type: "idle" })
+                  break
+                }
                 const delay = SessionRetry.delay(attempt, error.name === "APIError" ? error : undefined)
                 SessionStatus.set(input.sessionID, {
                   type: "retry",
