@@ -502,8 +502,19 @@ You can control context compaction behavior through the `compaction` option.
 ```
 
 - `auto` - Automatically compact the session when context is full (default: `true`).
-- `prune` - Remove old tool outputs to save tokens (default: `true`).
+- `prune` - Remove older completed tool outputs from model context to save tokens (default: `true`).
 - `reserved` - Token buffer for compaction. Leaves enough window to avoid overflow during compaction
+
+:::note
+When pruning is enabled, OpenCode trims older completed tool outputs after a turn
+finishes while keeping recent activity intact. The tool call itself stays in
+session history, but its old output is cleared from model context once pruning
+can recover a meaningful amount of space.
+
+This is why the used-context indicator can sometimes drop between turns. If you
+need agents to keep full historical tool output in context, set
+`compaction.prune` to `false` or export `OPENCODE_DISABLE_PRUNE=true`.
+:::
 
 ---
 
