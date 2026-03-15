@@ -148,6 +148,87 @@ describe("session.prompt special characters", () => {
   })
 })
 
+
+describe("session.prompt agent part", () => {
+  const delegationNudge =
+    "Use the above message and context to generate a prompt and call the task tool with subagent:";
+
+  test("injects synthetic delegation nudge in root sessions", async () => {
+    await using tmp = await tmpdir({ git: true });
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({});
+
+        const msg = await SessionPrompt.prompt({
+          sessionID: session.id,
+          noReply: true,
+          parts: [
+            { type: "text", text: "do something" },
+            { type: "agent", name: "build" },
+          ],
+        });
+
+        if (msg.info.role !== "user") throw new Error("expected user message");
+
+        const stored = await MessageV2.get({
+          sessionID: session.id,
+          messageID: msg.info.id,
+        });
+        const syntheticDelegation = stored.parts.find(
+          (part) =>
+            part.type === "text" && part.synthetic &&
+            part.text.includes(delegationNudge),
+        );
+        expect(syntheticDelegation).toBeDefined();
+
+        await Session.remove(session.id);
+      },
+    });
+  });
+
+  test("skips synthetic delegation nudge in subagent sessions", async () => {
+    await using tmp = await tmpdir({ git: true });
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const root = await Session.create({});
+        const child = await Session.create({ parentID: root.id });
+
+        const msg = await SessionPrompt.prompt({
+          sessionID: child.id,
+          noReply: true,
+          parts: [
+            { type: "text", text: "do something" },
+            { type: "agent", name: "build" },
+          ],
+        });
+
+        if (msg.info.role !== "user") throw new Error("expected user message");
+
+        const stored = await MessageV2.get({
+          sessionID: child.id,
+          messageID: msg.info.id,
+        });
+        const syntheticDelegation = stored.parts.find(
+          (part) =>
+            part.type === "text" && part.synthetic &&
+            part.text.includes(delegationNudge),
+        );
+        expect(syntheticDelegation).toBeUndefined();
+
+        const agentPart = stored.parts.find((part) => part.type === "agent");
+        expect(agentPart).toBeDefined();
+
+        await Session.remove(child.id);
+        await Session.remove(root.id);
+      },
+    });
+  });
+});
+
 describe("session.prompt agent variant", () => {
   test("applies agent variant only when using agent model", async () => {
     const prev = process.env.OPENAI_API_KEY

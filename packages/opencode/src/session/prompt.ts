@@ -1268,15 +1268,24 @@ export namespace SessionPrompt {
         }
 
         if (part.type === "agent") {
+          const agentPart = {
+            ...part,
+            messageID: info.id,
+            sessionID: input.sessionID,
+          }
+          // Only inject the delegation nudge in root sessions. Subagent sessions
+          // already have an explicit task prompt; injecting it there causes
+          // recursive nesting bias when the agent sees @agent mentions in its
+          // own context.
+          const currentSession = await Session.get(input.sessionID)
+          if (currentSession.parentID) {
+            return [agentPart]
+          }
           // Check if this agent would be denied by task permission
           const perm = PermissionNext.evaluate("task", part.name, agent.permission)
           const hint = perm.action === "deny" ? " . Invoked by user; guaranteed to exist." : ""
           return [
-            {
-              ...part,
-              messageID: info.id,
-              sessionID: input.sessionID,
-            },
+            agentPart,
             {
               messageID: info.id,
               sessionID: input.sessionID,
