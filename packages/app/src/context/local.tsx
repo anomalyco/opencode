@@ -7,7 +7,12 @@ import { useModels } from "@/context/models"
 import { useProviders } from "@/hooks/use-providers"
 import { modelEnabled, modelProbe } from "@/testing/model-selection"
 import { Persist, persisted } from "@/utils/persist"
-import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "./model-variant"
+import {
+  cycleModelVariant,
+  getConfiguredAgentVariant,
+  getConfiguredModelVariant,
+  resolveModelVariant,
+} from "./model-variant"
 import { useSDK } from "./sdk"
 import { useSync } from "./sync"
 
@@ -234,11 +239,22 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const configured = () => {
       const item = agent.current()
       const model = current()
-      if (!item || !model) return undefined
-      return getConfiguredAgentVariant({
-        agent: { model: item.model, variant: item.variant },
-        model: { providerID: model.provider.id, modelID: model.id, variants: model.variants },
-      })
+      if (!model) return undefined
+      return (
+        (item &&
+          getConfiguredAgentVariant({
+            agent: { model: item.model, variant: item.variant },
+            model: { providerID: model.provider.id, modelID: model.id, variants: model.variants },
+          })) ??
+        getConfiguredModelVariant({
+          model: {
+            providerID: model.provider.id,
+            modelID: model.id,
+            options: model.options,
+            variants: model.variants,
+          },
+        })
+      )
     }
 
     const selected = () => scope()?.variant

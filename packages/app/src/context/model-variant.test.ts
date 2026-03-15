@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "./model-variant"
+import {
+  cycleModelVariant,
+  getConfiguredAgentVariant,
+  getConfiguredModelVariant,
+  resolveModelVariant,
+} from "./model-variant"
 
 describe("model variant", () => {
   test("resolves configured agent variant when model matches", () => {
@@ -34,6 +39,67 @@ describe("model variant", () => {
     expect(value).toBeUndefined()
   })
 
+  test("infers configured model variant from matching options", () => {
+    const value = getConfiguredModelVariant({
+      model: {
+        providerID: "openai",
+        modelID: "gpt-5.4",
+        options: { reasoningEffort: "high" },
+        variants: { low: { reasoningEffort: "low" }, high: { reasoningEffort: "high" } },
+      },
+    })
+
+    expect(value).toBe("high")
+  })
+
+  test("infers configured model variant when built-in variant adds extra defaults", () => {
+    const value = getConfiguredModelVariant({
+      model: {
+        providerID: "openai",
+        modelID: "gpt-5.4",
+        options: { reasoningEffort: "high" },
+        variants: {
+          low: { reasoningEffort: "low", reasoningSummary: "auto", include: ["reasoning.encrypted_content"] },
+          high: { reasoningEffort: "high", reasoningSummary: "auto", include: ["reasoning.encrypted_content"] },
+        },
+      },
+    })
+
+    expect(value).toBe("high")
+  })
+
+  test("infers configured model variant from nested options", () => {
+    const value = getConfiguredModelVariant({
+      model: {
+        providerID: "google",
+        modelID: "gemini-3",
+        options: { thinkingConfig: { thinkingLevel: "high", includeThoughts: true } },
+        variants: {
+          low: { thinkingConfig: { thinkingLevel: "low", includeThoughts: true } },
+          high: { thinkingConfig: { thinkingLevel: "high", includeThoughts: true } },
+        },
+      },
+    })
+
+    expect(value).toBe("high")
+  })
+
+  test("does not infer a variant from auxiliary defaults alone", () => {
+    const value = getConfiguredModelVariant({
+      model: {
+        providerID: "openai",
+        modelID: "gpt-5.4",
+        options: { reasoningSummary: "auto" },
+        variants: {
+          low: { reasoningEffort: "low", reasoningSummary: "auto" },
+          high: { reasoningEffort: "high", reasoningSummary: "auto" },
+        },
+      },
+    })
+
+    expect(value).toBeUndefined()
+  })
+
   test("prefers selected variant over configured variant", () => {
     const value = resolveModelVariant({
       variants: ["low", "high", "xhigh"],
@@ -49,6 +115,16 @@ describe("model variant", () => {
       variants: ["low", "high", "xhigh"],
       selected: null,
       configured: "xhigh",
+    })
+
+    expect(value).toBeUndefined()
+  })
+
+  test("lets an explicit default override the inferred model variant", () => {
+    const value = resolveModelVariant({
+      variants: ["low", "high", "xhigh"],
+      selected: null,
+      configured: "high",
     })
 
     expect(value).toBeUndefined()

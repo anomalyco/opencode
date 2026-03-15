@@ -9,6 +9,7 @@ type Agent = {
 }
 
 type Model = AgentModel & {
+  options?: Record<string, unknown>
   variants?: Record<string, unknown>
 }
 
@@ -26,6 +27,46 @@ export function getConfiguredAgentVariant(input: { agent: Agent | undefined; mod
   if (input.agent.model.modelID !== input.model.modelID) return undefined
   if (!(input.agent.variant in input.model.variants)) return undefined
   return input.agent.variant
+}
+
+function record(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function pick(value: unknown, path: string[]) {
+  return path.reduce<unknown>((acc, key) => (record(acc) ? acc[key] : undefined), value)
+}
+
+function signal(value: unknown) {
+  const keys = [
+    ["reasoningEffort"],
+    ["reasoning", "effort"],
+    ["effort"],
+    ["thinkingLevel"],
+    ["thinkingBudget"],
+    ["thinking_budget"],
+    ["thinkingConfig", "thinkingLevel"],
+    ["thinkingConfig", "thinkingBudget"],
+    ["thinking", "budgetTokens"],
+    ["reasoningConfig", "budgetTokens"],
+    ["reasoningConfig", "maxReasoningEffort"],
+  ]
+
+  return keys.flatMap((path) => {
+    const item = pick(value, path)
+    return item === undefined ? [] : [[path.join("."), item] as const]
+  })
+}
+
+export function getConfiguredModelVariant(input: { model: Model | undefined }) {
+  if (!input.model?.variants) return undefined
+  if (!input.model.options) return undefined
+  const cfg = signal(input.model.options)
+  if (cfg.length === 0) return undefined
+  return Object.entries(input.model.variants).find(([, value]) => {
+    const variant = new Map(signal(value))
+    return cfg.every(([key, item]) => variant.get(key) === item)
+  })?.[0]
 }
 
 export function resolveModelVariant(input: VariantInput) {
