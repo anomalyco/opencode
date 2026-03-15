@@ -3,6 +3,7 @@ Writes a file to the local filesystem.
 Usage:
 - This tool will overwrite the existing file if there is one at the provided path.
 - If this is an existing file, you MUST use the Read tool first to read the file's contents. This tool will fail if you did not read the file first.
-- ALWAYS prefer editing existing files in the codebase. NEVER write new files unless explicitly required.
+- ALWAYS prefer editing existing files in the codebase. NEVER write new files unless explicitly required. Use the Edit tool instead of Write when only a portion of the file changed.
+- When creating or writing multiple files, avoid writing more than 5 files in rapid succession. Each write triggers formatting, LSP, and snapshot operations that need time to complete.
 - NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
 - Only use emojis if the user explicitly requests it. Avoid writing emojis to files unless asked.
