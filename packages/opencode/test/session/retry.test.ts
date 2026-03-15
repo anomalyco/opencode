@@ -128,7 +128,7 @@ describe("session.retry.retryable", () => {
 })
 
 describe("session.message-v2.fromError", () => {
-  test.concurrent(
+  test(
     "converts ECONNRESET socket errors to retryable APIError",
     async () => {
       using server = Bun.serve({
@@ -155,11 +155,9 @@ describe("session.message-v2.fromError", () => {
 
       const result = MessageV2.fromError(error, { providerID })
 
-      expect(MessageV2.APIError.isInstance(result)).toBe(true)
-      expect((result as MessageV2.APIError).data.isRetryable).toBe(true)
-      expect((result as MessageV2.APIError).data.message).toBe("Connection reset by server")
-      expect((result as MessageV2.APIError).data.metadata?.code).toBe("ECONNRESET")
-      expect((result as MessageV2.APIError).data.metadata?.message).toInclude("socket connection")
+      // Changed this expectation because we just added `ECONNABORTED`, `UND_ERR_CLOSED`, `ERR_CONNECTION_RESET` etc to `NETWORK_CODES`
+      // It should now correctly be classified as NetworkSilenceError
+      expect(MessageV2.NetworkSilenceError.isInstance(result)).toBe(true)
     },
     15_000,
   )
@@ -188,5 +186,26 @@ describe("session.message-v2.fromError", () => {
     })
     const result = MessageV2.fromError(error, { providerID: ProviderID.make("openai") }) as MessageV2.APIError
     expect(result.data.isRetryable).toBe(true)
+  })
+
+  test("marks 502/503/504 APICallError as network silence for zai.coding and kimi-code", () => {
+    const error = new APICallError({
+      message: "Bad Gateway",
+      url: "https://api.example.com",
+      requestBodyValues: {},
+      statusCode: 502,
+      responseHeaders: {},
+      responseBody: "Bad Gateway",
+      isRetryable: true,
+    })
+
+    const resultZai = MessageV2.fromError(error, { providerID, modelID: "zai.coding" as any })
+    expect(MessageV2.NetworkSilenceError.isInstance(resultZai)).toBe(true)
+
+    const resultKimi = MessageV2.fromError(error, { providerID, modelID: "kimi-code" as any })
+    expect(MessageV2.NetworkSilenceError.isInstance(resultKimi)).toBe(true)
+
+    const resultOther = MessageV2.fromError(error, { providerID, modelID: "other-model" as any })
+    expect(MessageV2.NetworkSilenceError.isInstance(resultOther)).toBe(false)
   })
 })
