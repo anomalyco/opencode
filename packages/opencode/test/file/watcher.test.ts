@@ -9,7 +9,8 @@ import { InstanceContext } from "../../src/effect/instances"
 import { Instance } from "../../src/project/instance"
 import { GlobalBus } from "../../src/bus/global"
 
-const describeWatcher = FileWatcher.hasNativeBinding() ? describe : describe.skip
+// Native @parcel/watcher bindings aren't reliably available in CI (missing on Linux, flaky on Windows)
+const describeWatcher = FileWatcher.hasNativeBinding() && !process.env.CI ? describe : describe.skip
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -102,7 +103,7 @@ function noUpdate<E>(
     yield* Effect.acquireUseRelease(
       Effect.sync(() =>
         listen(directory, check, (evt) => {
-          Effect.runFork(Deferred.succeed(deferred, evt))
+          Effect.runSync(Deferred.succeed(deferred, evt))
         }),
       ),
       () =>

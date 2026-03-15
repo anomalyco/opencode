@@ -137,7 +137,7 @@ export class FileWatcherService extends ServiceMap.Service<FileWatcherService, F
     }).pipe(
       Effect.catchCause((cause) => {
         log.error("failed to init watcher service", { cause: Cause.pretty(cause) })
-        return Effect.succeed(FileWatcherService.of({ init: init }))
+        return Effect.succeed(FileWatcherService.of({ init }))
       }),
     ),
   )
