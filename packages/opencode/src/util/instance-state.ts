@@ -2,34 +2,39 @@ import { Effect, ScopedCache, Scope } from "effect"
 
 import { Instance } from "@/project/instance"
 
-const TypeId = Symbol.for("@opencode/InstanceState")
+type Disposer = (directory: string) => Effect.Effect<void>
+const disposers = new Set<Disposer>()
 
-type Task = (key: string) => Effect.Effect<void>
+const TypeId = "~opencode/InstanceState"
 
-const tasks = new Set<Task>()
+/**
+ * Effect version of `Instance.state` — lazily-initialized, per-directory
+ * cached state for Effect services.
+ *
+ * Values are created on first access for a given directory and cached for
+ * subsequent reads. Concurrent access shares a single initialization —
+ * no duplicate work or races. Use `Effect.acquireRelease` in `init` if
+ * the value needs cleanup on disposal.
+ */
+export interface InstanceState<A, E = never, R = never> {
+  readonly [TypeId]: typeof TypeId
+  readonly cache: ScopedCache.ScopedCache<string, A, E, R>
+}
 
 export namespace InstanceState {
-  export interface State<A, E = never, R = never> {
-    readonly [TypeId]: typeof TypeId
-    readonly cache: ScopedCache.ScopedCache<string, A, E, R>
-  }
-
-  export const make = <A, E = never, R = never>(input: {
-    lookup: (key: string) => Effect.Effect<A, E, R>
-    release?: (value: A, key: string) => Effect.Effect<void>
-  }): Effect.Effect<State<A, E, R>, never, R | Scope.Scope> =>
+  /** Create a new InstanceState with the given initializer. */
+  export const make = <A, E = never, R = never>(
+    init: (directory: string) => Effect.Effect<A, E, R | Scope.Scope>,
+  ): Effect.Effect<InstanceState<A, E, Exclude<R, Scope.Scope>>, never, R | Scope.Scope> =>
     Effect.gen(function* () {
       const cache = yield* ScopedCache.make<string, A, E, R>({
         capacity: Number.POSITIVE_INFINITY,
-        lookup: (key) =>
-          Effect.acquireRelease(input.lookup(key), (value) =>
-            input.release ? input.release(value, key) : Effect.void,
-          ),
+        lookup: init,
       })
 
-      const task: Task = (key) => ScopedCache.invalidate(cache, key)
-      tasks.add(task)
-      yield* Effect.addFinalizer(() => Effect.sync(() => void tasks.delete(task)))
+      const disposer: Disposer = (directory) => ScopedCache.invalidate(cache, directory)
+      disposers.add(disposer)
+      yield* Effect.addFinalizer(() => Effect.sync(() => void disposers.delete(disposer)))
 
       return {
         [TypeId]: TypeId,
@@ -37,15 +42,22 @@ export namespace InstanceState {
       }
     })
 
-  export const get = <A, E, R>(self: State<A, E, R>) => ScopedCache.get(self.cache, Instance.directory)
+  /** Get the cached value for the current directory, initializing it if needed. */
+  export const get = <A, E, R>(self: InstanceState<A, E, R>) =>
+    Effect.suspend(() => ScopedCache.get(self.cache, Instance.directory))
 
-  export const has = <A, E, R>(self: State<A, E, R>) => ScopedCache.has(self.cache, Instance.directory)
+  /** Check whether a value exists for the current directory. */
+  export const has = <A, E, R>(self: InstanceState<A, E, R>) =>
+    Effect.suspend(() => ScopedCache.has(self.cache, Instance.directory))
 
-  export const invalidate = <A, E, R>(self: State<A, E, R>) => ScopedCache.invalidate(self.cache, Instance.directory)
+  /** Invalidate the cached value for the current directory. */
+  export const invalidate = <A, E, R>(self: InstanceState<A, E, R>) =>
+    Effect.suspend(() => ScopedCache.invalidate(self.cache, Instance.directory))
 
-  export const dispose = (key: string) =>
+  /** Invalidate the given directory across all InstanceState caches. */
+  export const dispose = (directory: string) =>
     Effect.all(
-      [...tasks].map((task) => task(key)),
+      [...disposers].map((disposer) => disposer(directory)),
       { concurrency: "unbounded" },
     )
 }
