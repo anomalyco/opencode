@@ -1,9 +1,10 @@
 import type { FileContent } from "@opencode-ai/sdk/v2"
 
-export type MediaKind = "image" | "audio" | "svg"
+export type MediaKind = "image" | "audio" | "svg" | "spreadsheet"
 
 const imageExtensions = new Set(["png", "jpg", "jpeg", "gif", "webp", "avif", "bmp", "ico", "tif", "tiff", "heic"])
 const audioExtensions = new Set(["mp3", "wav", "ogg", "m4a", "aac", "flac", "opus"])
+const spreadsheetExtensions = new Set(["xls", "xlsx", "xlsm", "xlsb", "csv", "ods"])
 
 type MediaValue = unknown
 
@@ -38,10 +39,15 @@ export function mediaKindFromPath(path: string | undefined): MediaKind | undefin
   if (ext === "svg") return "svg"
   if (imageExtensions.has(ext)) return "image"
   if (audioExtensions.has(ext)) return "audio"
+  if (spreadsheetExtensions.has(ext)) return "spreadsheet"
 }
 
-export function isBinaryContent(value: MediaValue) {
-  return mediaRecord(value)?.type === "binary"
+export function isBinaryContent(value: MediaValue, path?: string) {
+  const record = mediaRecord(value)
+  if (record?.type !== "binary") return false
+  // Don't treat spreadsheets as generic binary - they have special handling
+  if (path && mediaKindFromPath(path) === "spreadsheet") return false
+  return true
 }
 
 function validDataUrl(value: string, kind: MediaKind) {

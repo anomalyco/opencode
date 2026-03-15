@@ -19,6 +19,7 @@ import { useComments } from "@/context/comments"
 import { useLanguage } from "@/context/language"
 import { usePrompt } from "@/context/prompt"
 import { getSessionHandoff } from "@/pages/session/handoff"
+import { SpreadsheetViewer } from "@/components/spreadsheet-viewer"
 
 function FileCommentMenu(props: {
   moreLabel: string
@@ -81,6 +82,7 @@ export function FileTabContent(props: { tab: string }) {
 
   const path = createMemo(() => file.pathFromTab(props.tab))
   const markdown = createMemo(() => /\.mdx?$/i.test(path() ?? ""))
+  const spreadsheet = createMemo(() => /\.(xlsx?|xlsm|xlsb|csv|ods)$/i.test(path() ?? ""))
   const [markdownView, setMarkdownView] = createSignal<"source" | "preview">("preview")
   const state = createMemo(() => {
     const p = path()
@@ -449,31 +451,33 @@ export function FileTabContent(props: { tab: string }) {
 
   const renderFile = (source: string) => (
     <div class="relative overflow-hidden pb-40">
-      <Show when={markdown()} fallback={renderSource(source)}>
-        <div class="px-6 pt-2 pb-2 flex items-center gap-2">
-          <button
-            type="button"
-            data-component="button"
-            data-variant={markdownView() === "source" ? "secondary" : "ghost"}
-            data-size="small"
-            onClick={() => setMarkdownView("source")}
-          >
-            Source
-          </button>
-          <button
-            type="button"
-            data-component="button"
-            data-variant={markdownView() === "preview" ? "secondary" : "ghost"}
-            data-size="small"
-            onClick={() => setMarkdownView("preview")}
-          >
-            Preview
-          </button>
-        </div>
-        <Show when={markdownView() === "preview"} fallback={renderSource(source)}>
-          <div class="px-6 select-text">
-            <MarkdownMdx text={source} />
+      <Show when={!spreadsheet()}>
+        <Show when={markdown()} fallback={renderSource(source)}>
+          <div class="px-6 pt-2 pb-2 flex items-center gap-2">
+            <button
+              type="button"
+              data-component="button"
+              data-variant={markdownView() === "source" ? "secondary" : "ghost"}
+              data-size="small"
+              onClick={() => setMarkdownView("source")}
+            >
+              Source
+            </button>
+            <button
+              type="button"
+              data-component="button"
+              data-variant={markdownView() === "preview" ? "secondary" : "ghost"}
+              data-size="small"
+              onClick={() => setMarkdownView("preview")}
+            >
+              Preview
+            </button>
           </div>
+          <Show when={markdownView() === "preview"} fallback={renderSource(source)}>
+            <div class="px-6 select-text">
+              <MarkdownMdx text={source} />
+            </div>
+          </Show>
         </Show>
       </Show>
     </div>
@@ -490,6 +494,13 @@ export function FileTabContent(props: { tab: string }) {
         onScroll={handleScroll as any}
       >
         <Switch>
+          <Match when={spreadsheet() && state()?.loaded && path()}>
+            {(p) => (
+              <div class="px-6 py-4">
+                <SpreadsheetViewer filePath={p()} />
+              </div>
+            )}
+          </Match>
           <Match when={state()?.loaded}>{renderFile(contents())}</Match>
           <Match when={state()?.loading}>
             <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>

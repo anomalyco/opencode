@@ -302,6 +302,13 @@ export namespace File {
     return binaryExtensions.has(ext)
   }
 
+  const spreadsheetExtensions = new Set(["xls", "xlsx", "xlsm", "xlsb", "csv", "ods"])
+
+  function isSpreadsheetByExtension(filepath: string): boolean {
+    const ext = path.extname(filepath).toLowerCase().slice(1)
+    return spreadsheetExtensions.has(ext)
+  }
+
   function isImage(mimeType: string): boolean {
     return mimeType.startsWith("image/")
   }
@@ -513,6 +520,16 @@ export namespace File {
         const content = buffer.toString("base64")
         const mimeType = getImageMimeType(file)
         return { type: "text", content, mimeType, encoding: "base64" }
+      }
+      return { type: "text", content: "" }
+    }
+
+    // Handle spreadsheet files
+    if (isSpreadsheetByExtension(file)) {
+      if (await Filesystem.exists(full)) {
+        const buffer = await Filesystem.readBytes(full).catch(() => Buffer.from([]))
+        const content = buffer.toString("base64")
+        return { type: "binary", content, mimeType: Filesystem.mimeType(full), encoding: "base64" }
       }
       return { type: "text", content: "" }
     }

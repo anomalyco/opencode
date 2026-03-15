@@ -40,7 +40,7 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
     const media = cfg()
     if (!media || media.mode === "off") return false
     if (kind()) return false
-    return isBinaryContent(media.current as any)
+    return isBinaryContent(media.current as any, media.path)
   })
 
   const onLoad = () => props.media?.onLoad?.()
@@ -245,6 +245,7 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
           )
         })()}
       </Match>
+      <Match when={kind() === "spreadsheet"}>{props.fallback()}</Match>
       <Match when={isBinary()}>
         <div class="flex min-h-56 flex-col items-center justify-center gap-2 px-6 py-10 text-center">
           <div class="text-14-semibold text-text-strong">
