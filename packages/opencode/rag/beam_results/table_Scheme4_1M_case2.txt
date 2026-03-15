@@ -1,0 +1,61 @@
+
+============================================================================
+📊 RESULTS — RAG Benchmark (2 cases)
+    Scoring: 50% LLM Judge + 30% Token F1 + 20% Keyword
+============================================================================
+
+Metric: Combined Score                 Before          After(RAG)      Delta   
+----------------------------------------------------------------------------
+  Overall                                 0.0%          50.5%   +50.5%
+    abstention                            0.0%          77.6%   +77.6%
+    contradiction_resolution              0.0%          15.2%   +15.2%
+    event_ordering                        0.0%          18.6%   +18.6%
+    information_extraction                0.0%          92.9%   +92.9%
+    instruction_following                 0.0%          53.6%   +53.6%
+    knowledge_update                      0.0%          77.8%   +77.8%
+    multi_session_reasoning               0.0%          62.9%   +62.9%
+    preference_following                  0.0%          38.7%   +38.7%
+    summarization                         0.0%          16.2%   +16.2%
+    temporal_reasoning                    0.0%          51.7%   +51.7%
+
+Metric: Token F1                       Before          After(RAG)      Delta   
+----------------------------------------------------------------------------
+  Overall                                 0.0%          24.7%   +24.7%
+    abstention                            0.0%          12.9%   +12.9%
+    contradiction_resolution              0.0%          20.8%   +20.8%
+    event_ordering                        0.0%          30.8%   +30.8%
+    information_extraction                0.0%          57.4%   +57.4%
+    instruction_following                 0.0%           9.9%    +9.9%
+    knowledge_update                      0.0%          61.3%   +61.3%
+    multi_session_reasoning               0.0%          12.7%   +12.7%
+    preference_following                  0.0%          12.7%   +12.7%
+    summarization                         0.0%          14.9%   +14.9%
+    temporal_reasoning                    0.0%          13.3%   +13.3%
+
+Metric: LLM Judge                      Before          After(RAG)      Delta   
+----------------------------------------------------------------------------
+  Overall                                 0.0%          48.6%   +48.6%
+    abstention                            0.0%          75.0%   +75.0%
+    contradiction_resolution              0.0%          10.0%   +10.0%
+    event_ordering                        0.0%           9.5%    +9.5%
+    information_extraction                0.0%          92.5%   +92.5%
+    instruction_following                 0.0%          52.5%   +52.5%
+    knowledge_update                      0.0%          75.0%   +75.0%
+    multi_session_reasoning               0.0%          67.5%   +67.5%
+    preference_following                  0.0%          38.8%   +38.8%
+    summarization                         0.0%          15.3%   +15.3%
+    temporal_reasoning                    0.0%          50.0%   +50.0%
+
+Metric: Keyword Overlap                Before          After(RAG)      Delta   
+----------------------------------------------------------------------------
+  Overall                                 0.0%          33.4%   +33.4%
+    abstention                            0.0%          23.4%   +23.4%
+    contradiction_resolution              0.0%          26.4%   +26.4%
+    event_ordering                        0.0%          35.2%   +35.2%
+    information_extraction                0.0%          56.0%   +56.0%
+    instruction_following                 0.0%          25.2%   +25.2%
+    knowledge_update                      0.0%          66.6%   +66.6%
+    multi_session_reasoning               0.0%          30.4%   +30.4%
+    preference_following                  0.0%          39.6%   +39.6%
+    summarization                         0.0%          21.7%   +21.7%
+    temporal_reasoning                    0.0%           9.7%    +9.7%

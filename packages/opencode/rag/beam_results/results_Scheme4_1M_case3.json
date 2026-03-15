@@ -1,0 +1,771 @@
+{
+  "test_type": "RAG BEAM Benchmark (1M)",
+  "scoring_method": "50% LLM Judge + 30% Token F1 + 20% Keyword Overlap",
+  "model": "openai/gpt-5.4",
+  "split": "1M",
+  "cases_tested": 3,
+  "results": [
+    {
+      "case_id": 0,
+      "session_id": "rag_case_0",
+      "messages_fed": 0,
+      "before_compaction": {
+        "avg_combined": 0,
+        "results": []
+      },
+      "after_compaction": {
+        "avg_combined": 0.42374999999999996,
+        "results": [
+          {
+            "type": "abstention",
+            "question": "Can you tell me more about my background in psychology, like where I studied or my specialization?",
+            "expected": "Based on the provided chat, there is no information related to your educational background or specialization in psychology.",
+            "model_answer": "Insufficient information",
+            "scores": {
+              "keyword": 0.25,
+              "token_f1": 0.111,
+              "llm_judge": 1.0,
+              "combined": 1.0
+            }
+          },
+          {
+            "type": "abstention",
+            "question": "What was the feedback or user reaction to the multi-language assistant's dynamic language switching feature in the chat UI?",
+            "expected": "Based on the provided chat, there is no information related to user feedback or reactions to the dynamic language switching feature.",
+            "model_answer": "The feedback was that it had achieved a **90% satisfaction rate**, but there was still **room for improvement** to make the UI/UX more intuitive and user-friendly.",
+            "scores": {
+              "keyword": 0.353,
+              "token_f1": 0.205,
+              "llm_judge": 0.0,
+              "combined": 0.104
+            }
+          },
+          {
+            "type": "contradiction_resolution",
+            "question": "Have I implemented the language detection microservice using franc v6.1.0 before?",
+            "expected": "I notice you've mentioned contradictory information about this. You said you have implemented the language detection microservice using franc v6.1.0 with 93% accuracy, but you also mentioned that you have never implemented it. Could you clarify which is correct?",
+            "model_answer": "Yes.",
+            "scores": {
+              "keyword": 0.0,
+              "token_f1": 0.0,
+              "llm_judge": 0.0,
+              "combined": 0.0
+            }
+          },
+          {
+            "type": "contradiction_resolution",
+            "question": "Have I completed the translation microservice that supports 12 languages with 98% accuracy using the DeepL API v2?",
+            "expected": "I notice you've mentioned contradictory information about this. You said you have completed the translation microservice supporting 12 languages with 98% accuracy, but you also mentioned that you have never completed such a microservice. Could you clarify which is correct?",
+            "model_answer": "Insufficient information",
+            "scores": {
+              "keyword": 0.071,
+              "token_f1": 0.067,
+              "llm_judge": 0.0,
+              "combined": 0.027
+            }
+          },
+          {
+            "type": "event_ordering",
+            "question": "How did my discussions about integrating and optimizing language and translation services progress in order? Mention ONLY and ONLY ten items.",
+            "expected": "Your discussions about integrating and optimizing language and translation services progressed as follows: 1) Initial integration and error handling with a translation API and logging setup, 2) Implementation details and authentication for the translation API, 3) Handling rate limiting and request queue issues, 4) Performance optimization including caching and database query improvements, 5) Fine-tuning and debugging of language models, 6) Managing authentication and role-based access control related to language services, 7) Deployment and scaling considerations for microservices supporting these services, 8) Security enhancements including TLS enforcement, 9) Advanced usage of Transformer-Based LLM APIs for streaming and latency improvements, 10) Further performance tuning of streaming implementations and chunk size adjustments.",
+            "model_answer": "1. Created a PostgreSQL index on `messages.user_id` and discussed composite/partial indexes for query performance.\n2. Added a language detection library (`langdetect`) to the translation microservice, including code, `package.json`, and Dockerfile updates.\n3. Integrated the language detection microservice with the translation service so translation could use detected source language automatically.\n4. Raised the question of fallback behavior when a user’s preferred language is unsupported, comparing fallback to English vs re-detection.\n5. Configured Docker Compose networking so `language-detection`, `translation`, and `chatbot` services could communicate by service name.\n6. Integrated a webhook into the translation service to notify the frontend when translation completed instead of relying on polling.\n7. Prepared for the April 1, 2024 sprint review focused on translation and language detection modules, with architecture and data-flow presentation needs.\n8. Built a presentation outline covering the language detection service, translation service, microservices architecture, current status, challenges, and roadmap.\n9. Later shifted to organizing a June 30, 2024 project retrospective about milestones and lessons learned for the chatbot project.\n10. Refined retrospective preparation with best practices, agenda structure, facilitation approach, and follow-up actions.",
+            "scores": {
+              "keyword": 0.312,
+              "token_f1": 0.23,
+              "llm_judge": 0.17,
+              "combined": 0.206
+            }
+          },
+          {
+            "type": "event_ordering",
+            "question": "How did my discussions about system performance and optimization progress in order? Mention ONLY and ONLY nine items.",
+            "expected": "Your discussions about system performance and optimization progressed as follows: 1) Evaluating language detection libraries and their integration challenges, 2) Reviewing and optimizing database schema for reducing API latency, 3) Addressing request queue issues and rate limiting strategies, 4) Debugging translation service latency with caching and database query improvements, 5) Designing and debugging JSONB-based contextual memory storage in PostgreSQL, 6) Exploring fine-tuning processes and dataset handling for model training, 7) Implementing and securing authentication mechanisms with token management, 8) Developing and optimizing a WebSocket microservice including memory usage and scalability, 9) Troubleshooting cryptographic key generation and shared secret derivation errors.",
+            "model_answer": "1. Reviewed and improved the PostgreSQL schema with indexes, foreign keys, and a more optimized query on `user_interactions`.\n2. Explained how to create and verify an index on `messages.user_id`, including composite and partial index options.\n3. Covered performance profiling for the Node.js authentication service using request-timing middleware, database log analysis, profiling tools, and monitoring.\n4. Discussed interpreting encryption microservice stress-test results to assess heavy-load behavior and uptime readiness.\n5. Discussed interpreting encryption microservice profiling results to identify bottlenecks and optimization opportunities.\n6. Explained PostgreSQL query optimization with `EXPLAIN`, index usage, statistics analysis, and avoiding `SELECT *`.\n7. Reiterated and expanded query optimization guidance with more examples of using `EXPLAIN` and adding indexes on `users.email`.\n8. Focused on reducing latency in context retrieval queries on `messages` partitioned by `user_id`, asking for schema and query modifications to improve performance.\n9. Returned again to PostgreSQL optimization guidance, emphasizing `EXPLAIN`, indexing strategies, table statistics, prepared statements, and limiting result sets.",
+            "scores": {
+              "keyword": 0.381,
+              "token_f1": 0.307,
+              "llm_judge": 0.21,
+              "combined": 0.26
+            }
+          },
+          {
+            "type": "information_extraction",
+            "question": "What versions of the frontend framework, backend runtime, and database did I say I was starting the project with?",
+            "expected": "React 18.2 for the frontend, Node.js 18 for the backend, and PostgreSQL 14 for memory storage.",
+            "model_answer": "React 18.2, Node.js 18, and PostgreSQL 14.",
+            "scores": {
+              "keyword": 0.615,
+              "token_f1": 0.762,
+              "llm_judge": 1.0,
+              "combined": 1.0
+            }
+          },
+          {
+            "type": "information_extraction",
+            "question": "Which port did I say my memory store was running on when I mentioned the connection error?",
+            "expected": "You said the memory store was running on port 4000.",
+            "model_answer": "Port 4000.",
+            "scores": {
+              "keyword": 0.25,
+              "token_f1": 0.4,
+              "llm_judge": 1.0,
+              "combined": 1.0
+            }
+          },
+          {
+            "type": "instruction_following",
+            "question": "What are some ways I can manage problems that come up when my API calls fail?",
+            "expected": "Response should include fallback strategies to use when issues occur in API services, not just general error handling methods.",
+            "model_answer": "Based on the chat history, some ways to manage API call failures include:\n\n- Use `try...catch` blocks to catch errors during API calls.\n- Implement retry logic for transient failures.\n- Use exponential backoff when retrying rate-limit errors like `429`.\n- Handle specific error types separately, such as:\n  - HTTP errors\n  - Connection errors\n  - Timeout errors\n  - General request exceptions\n- Add detailed logging to record error messages and retry attempts.\n- Raise or return a clear final error if all retry attempts fail.\n- Perform health checks and monitor network/server behavior for recurring issues.\n- Verify SSL/TLS, proxy, and firewall settings if connection problems occur.",
+            "scores": {
+              "keyword": 0.526,
+              "token_f1": 0.188,
+              "llm_judge": 0.2,
+              "combined": 0.246
+            }
+          },
+          {
+            "type": "instruction_following",
+            "question": "What are the common methods used for verifying user identity in web applications?",
+            "expected": "Response should mention the specific versions of protocols associated with each authentication method discussed.",
+            "model_answer": "Insufficient information",
+            "scores": {
+              "keyword": 0.0,
+              "token_f1": 0.0,
+              "llm_judge": 0.0,
+              "combined": 0.0
+            }
+          },
+          {
+            "type": "knowledge_update",
+            "question": "What is the deadline for completing my language detection module?",
+            "expected": "March 18, 2024",
+            "model_answer": "March 18, 2024",
+            "scores": {
+              "keyword": 1.0,
+              "token_f1": 1.0,
+              "llm_judge": 1.0,
+              "combined": 1.0
+            }
+          },
+          {
+            "type": "knowledge_update",
+            "question": "What is the TTL value set for caching recent translations in my Redis implementation?",
+            "expected": "20 minutes",
+            "model_answer": "The TTL value set for caching recent translations is **15 minutes (900 seconds)**.",
+            "scores": {
+              "keyword": 0.5,
+              "token_f1": 0.154,
+              "llm_judge": 0.0,
+              "combined": 0.113
+            }
+          },
+          {
+            "type": "multi_session_reasoning",
+            "question": "Considering my use of franc v6.1.0 in a Node.js backend with PostgreSQL, Redis caching, and a translation queue to handle rate limits, how can I optimize my system to reduce API latency below current levels while maintaining high cache hit rates and avoiding rate limit errors?",
+            "expected": "To optimize your system, you should leverage franc's lightweight and fast integration with Node.js for real-time detection, enhance your PostgreSQL schema with indexes and foreign keys to speed queries, maximize Redis caching by checking it before database queries to maintain or improve the 85% hit rate, and implement a robust queue with exponential backoff to handle DeepL API rate limits efficiently. Combining these ensures reduced latency below current averages while preventing 429 errors and sustaining high cache efficiency.",
+            "model_answer": "Use these combined optimizations:\n\n- **Cache aggressively**\n  - Keep Redis as the first lookup layer for both **language detection** and **translation** results.\n  - Use strong cache keys like `translation:${text}:${sourceLang}:${targetLang}`.\n  - Cache frequent/common phrases and tune TTLs to preserve a high hit rate.\n\n- **Avoid repeated work**\n  - For the language detection endpoint using `franc v6.1.0`, cache detection results for repeated texts.\n  - Reuse detector/service instances instead of recreating them per request where possible.\n\n- **Queue translation requests**\n  - Continue using a queue such as **Bull** to throttle outbound translation calls and smooth bursts.\n  - This helps prevent provider rate limit errors while keeping throughput stable under concurrency.\n\n- **Add retry with exponential backoff**\n  - For transient 429/rate-limit failures, wrap DeepL calls in retry logic with exponential backoff.\n  - Also configure job retries in the queue.\n\n- **Use parallel/asynchronous processing carefully**\n  - Process independent work asynchronously and use parallelism where safe.\n  - Avoid blocking the Node.js event loop.\n\n- **Optimize database and infrastructure**\n  - Ensure PostgreSQL queries are optimized and indexed correctly.\n  - Use proper connection pooling.\n  - Profile bottlenecks and monitor latency.\n  - Scale horizontally/load balance if concurrency is high.\n\n- **Reduce network overhead**\n  - Keep services geographically close where possible.\n  - Minimize unnecessary API calls via batching if applicable.\n\nIn short: **increase cache effectiveness, cache franc results too, reuse instances, keep Redis front-and-center, use Bull for throttling, add exponential-backoff retries for 429s, and tune DB/query/infrastructure performance.**",
+            "scores": {
+              "keyword": 0.456,
+              "token_f1": 0.253,
+              "llm_judge": 0.79,
+              "combined": 0.606
+            }
+          },
+          {
+            "type": "multi_session_reasoning",
+            "question": "How many different Redis caching use cases have I described across my messages?",
+            "expected": "Four different Redis caching use cases: caching recent conversation context, caching last 10 messages per user session, caching messages to reduce database queries, and caching conversation history.",
+            "model_answer": "4",
+            "scores": {
+              "keyword": 0.0,
+              "token_f1": 0.0,
+              "llm_judge": 1.0,
+              "combined": 1.0
+            }
+          },
+          {
+            "type": "preference_following",
+            "question": "I'm planning to set up a translation feature in my app that needs to respond quickly. Can you help me with the best way to implement the API calls to translate text efficiently?",
+            "expected": "Response should recommend using DeepL API v2 or approaches that align with minimizing latency in translation API calls, reflecting the user's preference for lower latency.",
+            "model_answer": "Based on the chat history, the recommended way to implement translation API calls efficiently is to reduce unnecessary external requests and add resilience around them:\n\n- Cache frequently requested translations, e.g. with Redis, using a key like `translation:${text}:${targetLang}`.\n- Check the cache first before calling the translation API.\n- Cache successful translation results for later reuse.\n- Batch similar requests when possible to reduce duplicate API calls.\n- Implement retries with exponential backoff for transient failures such as rate limits.\n- Add fallback behavior so if the translation API fails, your app can return the original text instead of breaking.\n- Validate inputs before making the API call.\n- Monitor rate limits and overall API usage.\n\nA basic efficient flow described in the context is:\n\n1. Receive `text` and `targetLang`.\n2. Validate required fields.\n3. Look up cached translation.\n4. If found, return cached result immediately.\n5. Otherwise call DeepL API v2.\n6. Store the result in Redis with an expiration.\n7. If the API errors, fall back to the original text when appropriate.\n\nThe context specifically mentioned using:\n- DeepL API v2 for translation\n- Redis for caching\n- Retry with exponential backoff\n- Fallback to original text on translation failure",
+            "scores": {
+              "keyword": 0.522,
+              "token_f1": 0.132,
+              "llm_judge": 0.45,
+              "combined": 0.381
+            }
+          },
+          {
+            "type": "preference_following",
+            "question": "I'm planning to scale up my language detection API to handle more simultaneous requests. What approaches would you suggest to maintain responsiveness as the load increases?",
+            "expected": "Response should focus on solutions compatible with franc v6.1.0 and avoid recommending alternatives that contradict the user's current language detection library choice",
+            "model_answer": "To maintain responsiveness as load increases, the context suggests these approaches:\n\n- Use a more efficient language detection library depending on your needs:\n  - `franc` if speed is the priority\n  - `langdetect` for a balance of speed and accuracy\n  - `langid` if accuracy matters more but slower performance is acceptable\n\n- Add caching, specifically with Redis, so repeated texts do not trigger language detection every time.\n\n- Optimize the API endpoint by:\n  - batching requests when possible\n  - using asynchronous processing to handle multiple requests concurrently\n\nThese were the main recommended strategies for scaling the language detection API under higher load.",
+            "scores": {
+              "keyword": 0.375,
+              "token_f1": 0.152,
+              "llm_judge": 0.1,
+              "combined": 0.154
+            }
+          },
+          {
+            "type": "summarization",
+            "question": "Can you provide a detailed and comprehensive summary of the entire process involved in developing and optimizing the language translation and detection services, covering all key technical decisions, integration challenges, performance improvements, error handling strategies, and deployment considerations?",
+            "expected": "The development and optimization of the language translation and detection services encompassed multiple interconnected technical and strategic aspects. Initially, a thorough comparison between Google Translate API v3 and DeepL API v2 was conducted, evaluating accuracy, cost, language support, and ease of integration, with DeepL favored for European language quality and Google Translate for broader language coverage and cost efficiency. Integration examples for both APIs were provided, tailored for React 18.2 frontend and Node.js 18 backend environments. Troubleshooting guidance addressed common API errors such as authentication failures, rate limiting, invalid inputs, and quota exceedance, supplemented with enhanced error handling and retry mechanisms. For language detection, the franc v6.1.0 library was employed, with challenges like handling undefined returns and improving accuracy through input validation and preprocessing techniques such as HTML tag removal and whitespace normalization. Performance optimization strategies included implementing Redis caching with TTL policies, asynchronous processing, and parallel request handling to reduce latency below target thresholds. The translation microservice was integrated with chatbot backends via RESTful APIs, incorporating robust fallback mechanisms to original text upon API failures, comprehensive error logging, and rate limit management. Further enhancements involved advanced caching strategies using Redis hashes and cache-manager libraries, database query optimization with indexing, and asynchronous external API calls to minimize response times. The system’s production readiness was bolstered by adding structured logging, security middleware, rate limiting, and monitoring tools. Finally, API endpoints for contextual memory storage and GPT-4 chatbot core logic were developed with rigorous input validation, error handling, and performance tuning, ensuring scalability and resilience. This multifaceted approach reflects a sophisticated synthesis of technical, operational, and strategic considerations to deliver a robust, efficient, and user-friendly multilingual translation and detection platform.",
+            "model_answer": "The project evolved around building a scalable multi-language assistant using a microservices approach, with separate language detection and translation services.\n\nKey technical decisions included:\n- Using a dedicated language detection microservice and a separate translation microservice.\n- Initially discussing `langdetect` v1.0.1 for detection, including adding it to the translation service when needed.\n- Later moving toward an implementation example based on `franc` for the language detection microservice, exposing a `/api/detect-language` endpoint returning `langCode` and `langName`.\n- Using Node.js 18 and Dockerized services.\n- Integrating the translation service with DeepL for translation.\n\nDevelopment process highlights:\n1. Early planning broke work into milestones:\n   - infrastructure setup,\n   - NLP/response generation,\n   - multi-language support,\n   - contextual memory,\n   - UI refinement,\n   - testing,\n   - documentation/deployment.\n2. A specific delivery plan was created for the language detection module targeting March 15, 2024, with phases for requirements, design, development, testing, documentation, staging, and production release.\n3. The translation microservice was updated to include language detection library support when needed, with corresponding updates to:\n   - application code,\n   - `package.json`,\n   - Dockerfile,\n   - container build/run workflow.\n\nIntegration challenges and solutions:\n- The translation service needed to consume detection results from the language detection microservice.\n- The proposed integration flow was:\n  1. receive text and target language,\n  2. call the language detection service,\n  3. extract detected source language,\n  4. enqueue translation work,\n  5. translate and return result.\n- The language detection service was shown listening on port 4000, and the translation service on port 4500.\n- Communication between services used HTTP via `axios`.\n\nPerformance improvements and scalability measures:\n- Redis caching was introduced to avoid repeated translation calls for the same text/target language pair.\n- Bull queue-based background processing was added for translation jobs.\n- Rate limiting via `express-rate-limit` was used to protect the API.\n- Security middleware included `helmet` and `cors`.\n- A Docker multi-stage build was suggested to reduce image size.\n- In the sprint review outline, reported performance figures were:\n  - language detection: 93% accuracy, 180ms average response time under 100 concurrent requests,\n  - translation: 220ms average response time, within a 300ms SLA.\n\nError handling strategies:\n- Input validation was added to ensure required fields like `text` and `targetLang` were present.\n- Detection failures returned 400 for missing text or undetectable language, and 500 for internal detection failure.\n- Translation failures were logged and returned as 500 responses.\n- Queue jobs were configured with retries and exponential backoff.\n- Logging used `winston` with console and file transports.\n- Additional challenge handling mentioned in the sprint review included retry logic for API rate-limit errors (HTTP 429).\n\nOperational and deployment considerations:\n- Dockerfiles were defined for services using `node:18-alpine`.\n- Dependencies were installed with `npm ci --production`.\n- Ports were exposed appropriately.\n- Multi-stage builds were recommended for image optimization.\n- Staging deployment and final production release were part of the language detection module timeline.\n- A Confluence documentation structure was later proposed for final architecture and deployment planning, including:\n  - overview,\n  - architecture diagrams,\n  - deployment plan,\n  - technical documentation,\n  - FAQs/troubleshooting.\n- Deployment guidance included:\n  - building Docker images,\n  - pushing to registry,\n  - deploying containers,\n  - validating services post-deployment.\n\nArchitecture and presentation status:\n- For the April 1, 2024 sprint review, the architecture was framed as two microservices:\n  - language detection,\n  - translation.\n- Suggested presentation materials included architecture diagrams and flowcharts for data flow between services, plus discussion of technical challenges such as:\n  - multi-turn conversation state management,\n  - API rate limits,\n  - code quality consistency.\n- Solutions cited included Redis for recent context caching, exponential backoff for retries, and ESLint/Prettier for code quality.\n\nTesting and quality:\n- Testing was repeatedly emphasized:\n  - unit testing during development,\n  - thorough and stress testing before release,\n  - staging validation,\n  - final production checks.\n- Broader integration testing practices later discussed for other services reinforced the importance of positive, negative, edge-case, performance, and security testing.\n\nOverall, the process moved from high-level planning into concrete service implementation, then into service-to-service integration, operational hardening, performance optimization, structured error handling, and deployment/documentation planning. One notable evolution was the shift from discussing `langdetect` integration to providing an implementation example based on `franc` for the language detection service, while the translation workflow remained centered on calling the detection service first and then performing translation with caching, queuing, retries, and logging.",
+            "scores": {
+              "keyword": 0.435,
+              "token_f1": 0.295,
+              "llm_judge": 0.34,
+              "combined": 0.343
+            }
+          },
+          {
+            "type": "summarization",
+            "question": "Can you provide a thorough summary of the entire process involved in developing, deploying, and optimizing my chatbot system, covering all the key challenges, technical solutions, and improvements implemented across different components and stages?",
+            "expected": "The development and deployment of the chatbot system involved multiple interconnected phases addressing diverse technical challenges and optimizations. Initially, connection issues between the chatbot API and the PostgreSQL memory store were diagnosed, revealing misconfigured database ports and necessitating query optimizations such as indexing, prepared statements, and connection pooling to enhance performance, especially for Transformer-based LLM APIs. To handle increased user load, a comprehensive scaling strategy was adopted, incorporating containerization with Docker, orchestration via Kubernetes with autoscaling, database optimizations including read replicas and partitioning, caching with Redis, asynchronous processing using job queues and message brokers, and robust monitoring with Prometheus and Grafana. Kubernetes cluster setup was detailed with deployment manifests, service configurations, and horizontal pod autoscaling to ensure efficient horizontal scaling. Parallelly, fine-tuning the GPT-4 model for clinical psychology dialogues required careful dataset formatting into prompt-completion JSONL files, manual dataset splitting, file uploads to OpenAI, and monitoring fine-tuning jobs. Iterative improvements involved hyperparameter tuning, dataset management strategies to avoid redundant uploads, and debugging validation loss issues. Integration of the fine-tuned model as a separate endpoint was achieved through a Flask service with error handling and fallback mechanisms to the base GPT-4 model, complemented by caching strategies to reduce latency and rate limit errors. The React frontend was enhanced using the Context API to manage user authentication state, with performance optimizations such as memoization to reduce unnecessary re-renders, and coordinated updates to backend authentication microservices deployed via Docker Compose. Throughout, Docker and Docker Compose configurations were refined to optimize image sizes, resource limits, and service health checks. Redis caching strategies for session tokens were improved to handle cache misses atomically and increase hit rates, while debugging and profiling tools were employed to identify and mitigate latency and memory bottlenecks in model inference. This multi-faceted approach reflects a sophisticated integration of backend, frontend, deployment, and machine learning components, ensuring a scalable, performant, and maintainable chatbot system.",
+            "model_answer": "The chat history shows many isolated planning and advisory segments, but it does not contain a complete end-to-end record of the “entire process” of developing, deploying, and optimizing the chatbot system across all stages and components. Because the requested comprehensive summary is not fully supported by the provided context, the correct response is:\n\nInsufficient information",
+            "scores": {
+              "keyword": 0.061,
+              "token_f1": 0.075,
+              "llm_judge": 0.0,
+              "combined": 0.028
+            }
+          },
+          {
+            "type": "temporal_reasoning",
+            "question": "How many days are there between when I need to integrate the translation API and my sprint review to discuss the project status?",
+            "expected": "There are 7 days between the integration deadline for the translation API on March 25, 2024, and the sprint review scheduled for April 1, 2024.",
+            "model_answer": "7 days",
+            "scores": {
+              "keyword": 0.105,
+              "token_f1": 0.19,
+              "llm_judge": 1.0,
+              "combined": 1.0
+            }
+          },
+          {
+            "type": "temporal_reasoning",
+            "question": "How many days do I have between when I planned to finish implementing the contextual memory store and the deadline for completing the GPT-4 fine-tuning?",
+            "expected": "There are 10 days between the planned implementation of the contextual memory store on April 10, 2024, and the GPT-4 fine-tuning deadline on April 20, 2024.",
+            "model_answer": "Insufficient information",
+            "scores": {
+              "keyword": 0.05,
+              "token_f1": 0.0,
+              "llm_judge": 0.0,
+              "combined": 0.007
+            }
+          }
+        ]
+      }
+    },
+    {
+      "case_id": 2,
+      "session_id": "rag_case_2",
+      "messages_fed": 0,
+      "before_compaction": {
+        "avg_combined": 0,
+        "results": []
+      },
+      "after_compaction": {
+        "avg_combined": 0.5868499999999999,
+        "results": [
+          {
+            "type": "abstention",
+            "question": "What feedback or comments were received during the peer review of the initial fetcher.py module scheduled by March 12, 2024?",
+            "expected": "Based on the provided chat, there is no information related to the feedback or comments from the peer review of fetcher.py.",
+            "model_answer": "Insufficient information",
+            "scores": {
+              "keyword": 0.167,
+              "token_f1": 0.1,
+              "llm_judge": 1.0,
+              "combined": 1.0
+            }
+          },
+          {
+            "type": "abstention",
+            "question": "What specific security protocols are enforced for the live trading API beyond IP whitelisting?",
+            "expected": "Based on the provided chat, there is no information related to security protocols for the live trading API beyond IP whitelisting.",
+            "model_answer": "Insufficient information",
+            "scores": {
+              "keyword": 0.167,
+              "token_f1": 0.1,
+              "llm_judge": 1.0,
+              "combined": 1.0
+            }
+          },
+          {
+            "type": "contradiction_resolution",
+            "question": "Have I written any unit tests for the functions in fetcher.py, and if so, what kind of coverage have I achieved?",
+            "expected": "I noticed you've mentioned contradictory information about this. You said you have never written any unit tests for fetcher.py functions, but you also mentioned having pytest tests with 88% coverage on fetcher.py. Could you clarify which is correct?",
+            "model_answer": "Yes. You wrote unit tests for `fetcher.py` functions.\n\nCoverage mentioned over time:\n- Initially, you were aiming for about **85%** coverage in the first sprint.\n- Later, you said you were trying to achieve **88%** coverage on `fetcher.py`.\n- Most recently in the `fetcher.py` discussion, you said you had **achieved 88% coverage** on `fetcher.py` and were trying to cover the remaining 12%.\n\nSo the latest stated coverage for `fetcher.py` is **88%**.",
+            "scores": {
+              "keyword": 0.484,
+              "token_f1": 0.377,
+              "llm_judge": 0.1,
+              "combined": 0.227
+            }
+          },
+          {
+            "type": "contradiction_resolution",
+            "question": "Have I ever set up the OAuth 2.0 sandbox environment with the Alpaca brokerage API using the client ID and secret stored in a .env file?",
+            "expected": "I notice you've mentioned contradictory information about this. In one instance, you said you have never implemented the OAuth 2.0 sandbox setup with Alpaca, but in another, you mentioned beginning the setup with the client ID and secret stored in a .env file. Could you clarify which is correct?",
+            "model_answer": "Yes. In Segment 316, you said:\n\n> \"I'm having trouble understanding how to set up the OAuth 2.0 sandbox with Alpaca brokerage API...\"\n\nand you provided code that used credentials from environment variables:\n\n```python\nclient_id = os.getenv('ALPACA_API_KEY')\nclient_secret = os.getenv('ALPACA_API_SECRET')\n```\n\nSo based on the chat history, you discussed setting it up using client ID and secret stored in a `.env` file, but you also explicitly said you were having trouble understanding how to do it.",
+            "scores": {
+              "keyword": 0.5,
+              "token_f1": 0.387,
+              "llm_judge": 0.3,
+              "combined": 0.352
+            }
+          },
+          {
+            "type": "event_ordering",
+            "question": "Can you reconstruct the timeline of when I first mentioned each aspect of my stock trading system development in order? Mention ONLY and ONLY ten items.",
+            "expected": "You mentioned aspects of your stock trading system development in this sequence: 1) Handling API rate limiting and improving efficiency with Alpha Vantage API calls, 2) Designing a microservices architecture with module integration and message queues, 3) Achieving high data availability and uptime strategies, 4) Creating REST API endpoints for backtesting and exposing trade data, 5) Optimizing Alpaca API integration including order placement and debugging paper trading modules, 6) Implementing OAuth 2.0 token refresh and handling authentication issues, 7) Developing ML prediction endpoints and managing input data shape challenges, 8) Integrating alert notifications via external APIs like Twilio, 9) Enhancing error handling and exception management in trading bot code, 10) Configuring secure API access with SSL termination and load balancers.",
+            "model_answer": "1. Setting up the Flask 2.3.2 backend with PostgreSQL 14 for storing trade data.\n2. Estimating completion of the backtesting and paper trading modules by April 12, 2024.\n3. Implementing the paper trading module for the April 13–26 sprint, including simulated trade logging with timestamps.\n4. Adding a max drawdown limit of 10% per day in the paper trading module.\n5. Submitting `live_trade.py` and monitoring configurations for code review.\n6. Improving live trading error visibility with more detailed logging levels.\n7. Planning sprint 8 for production deployment and final testing.\n8. Approving the trade logging module for production release on July 7, 2024.\n9. Estimating time for final production monitoring and documentation by July 10, 2024.\n10. Reviewing and improving the overall development roadmap and milestone planning.",
+            "scores": {
+              "keyword": 0.302,
+              "token_f1": 0.32,
+              "llm_judge": 0.0,
+              "combined": 0.125
+            }
+          },
+          {
+            "type": "event_ordering",
+            "question": "How did my discussions about microservices communication evolve throughout our conversations in order? Mention ONLY and ONLY ten items.",
+            "expected": "Your discussions about microservices communication evolved in this sequence: 1) You started by addressing REST API calls and error handling between services, 2) Then you moved on to data serialization and deserialization techniques, 3) Next, you explored upgrading communication protocols from HTTP/1.1 to HTTP/2 and related implementation challenges, 4) After that, you introduced message queueing with RabbitMQ for asynchronous communication, 5) You then shifted focus to low-latency communication using gRPC and concerns about thread safety and performance optimization, 6) Following this, you discussed migrating from HTTP/2 to gRPC with TLS encryption and sought feedback on service definitions, 7) Later, you brought up WebSocket multiplexing for handling concurrent connections and scaling issues, 8) Subsequently, you explored pub/sub messaging with AWS SNS including error handling and service communication, 9) You then inquired about implementing a service mesh with Istio for secure and observable communication, including error handling within that context, and finally 10) You addressed Kafka topics for asynchronous communication and API performance optimization for trade logging.",
+            "model_answer": "1. Planned weekly sync meetings to coordinate microservices work across data fetching, ML prediction, and trade execution modules.\n2. Explored designing a live trading microservices architecture using gRPC for inter-service communication.\n3. Broke the gRPC design into separate services such as trade execution, monitoring, risk management, backtesting, and market data.\n4. Defined `.proto` contracts and generated gRPC code to formalize service interfaces.\n5. Implemented gRPC services and client-side integration between services, such as trade execution calling monitoring.\n6. Considered deployment and scaling concerns through containerization and orchestration with Docker and Docker Compose.\n7. Reviewed a migrated setup using gRPC with TLS encryption and looked for drawbacks and optimization opportunities.\n8. Compared gRPC with other communication protocols by weighing pros and cons versus alternatives like HTTP/REST and WebSocket.\n9. Examined asynchronous inter-service messaging using AWS SNS as a decoupled communication pattern for microservices.\n10. Asked how to use RESTful APIs for service-to-service communication with better error and exception handling in a microservices architecture.",
+            "scores": {
+              "keyword": 0.411,
+              "token_f1": 0.374,
+              "llm_judge": 0.0,
+              "combined": 0.155
+            }
+          },
+          {
+            "type": "information_extraction",
+            "question": "What is the URL I set as the API endpoint for fetching stock prices?",
+            "expected": "https://www.alphavantage.co/query",
+            "model_answer": "https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol={symbol}&interval=1min&apikey={api_key}",
+            "scores": {
+              "keyword": 1.0,
+              "token_f1": 0.588,
+              "llm_judge": 0.7,
+              "combined": 0.717
+            }
+          },
+          {
+            "type": "information_extraction",
+            "question": "What data type did I choose for the price column in my trades table?",
+            "expected": "You chose NUMERIC(10,2) for the price column.",
+            "model_answer": "NUMERIC(10, 2)",
+            "scores": {
+              "keyword": 0.375,
+              "token_f1": 0.545,
+              "llm_judge": 1.0,
+              "combined": 1.0
+            }
+          },
+          {
+            "type": "instruction_following",
+            "question": "What information should I look at to understand how well my API calls are performing?",
+            "expected": "Response should include API response metrics details when discussing API integration performance.",
+            "model_answer": "You should look at **API response metrics** to understand how well your API calls are performing.\n\nFrom the context, the key metrics mentioned are:\n- **Time taken for each API call**\n- **Number of API calls made over a period**\n- **Success and failure rates of API calls**\n\nThese help you monitor and optimize API efficiency.",
+            "scores": {
+              "keyword": 0.4,
+              "token_f1": 0.17,
+              "llm_judge": 1.0,
+              "combined": 1.0
+            }
+          },
+          {
+            "type": "instruction_following",
+            "question": "What technologies are used in my current setup?",
+            "expected": "Response should include the names of the technologies along with their specific version numbers.",
+            "model_answer": "The context indicates your current setup uses:\n\n- Flask 2.3.2 backend\n- PostgreSQL 14 database\n- React 18.2 frontend\n- Chart.js 4.3.0\n- WebSockets for real-time messaging\n\nAdditionally mentioned elsewhere in the conversation as being used or considered:\n- React with TypeScript\n- create-react-app",
+            "scores": {
+              "keyword": 0.083,
+              "token_f1": 0.039,
+              "llm_judge": 0.9,
+              "combined": 0.9
+            }
+          },
+          {
+            "type": "knowledge_update",
+            "question": "What is the success rate of the integration tests for the fetcher and database interaction?",
+            "expected": "97% success rate",
+            "model_answer": "97%",
+            "scores": {
+              "keyword": 0.333,
+              "token_f1": 0.5,
+              "llm_judge": 1.0,
+              "combined": 1.0
+            }
+          },
+          {
+            "type": "knowledge_update",
+            "question": "How many epochs does my LSTM model training pipeline complete, and what is the final validation loss?",
+            "expected": "The training pipeline completes 60 epochs with a final validation loss of 0.028.",
+            "model_answer": "The LSTM model training pipeline completes **60 epochs**, and the final validation loss is **0.028**.",
+            "scores": {
+              "keyword": 0.833,
+              "token_f1": 0.8,
+              "llm_judge": 1.0,
+              "combined": 1.0
+            }
+          },
+          {
+            "type": "multi_session_reasoning",
+            "question": "How many different stock symbols have I mentioned wanting to fetch prices for across my sessions?",
+            "expected": "Five symbols: AAPL, GOOG, MSFT, and two additional mentions of AAPL and MSFT.",
+            "model_answer": "3",
+            "scores": {
+              "keyword": 0.0,
+              "token_f1": 0.0,
+              "llm_judge": 0.0,
+              "combined": 0.0
+            }
+          },
+          {
+            "type": "multi_session_reasoning",
+            "question": "Considering my goals for testing coverage, API response time, and debugging the stock price fetcher, how should I prioritize my efforts to improve reliability and performance?",
+            "expected": "You should first focus on writing comprehensive unit tests to ensure reliability and achieve your coverage goal, then address debugging the API response to fix errors, and finally optimize API response time to improve performance.",
+            "model_answer": "Based on the latest context, you should prioritize in this order:\n\n1. **Reliability through testing first**\n   - Focus on increasing `fetcher.py` coverage from **88% toward your goal** by adding tests for:\n     - successful 200 responses\n     - 404/error responses\n     - timeout exceptions\n     - connection errors\n     - different symbols\n     - default vs custom base URL behavior\n   - Use `pytest`, `pytest-cov`, and mocking (`unittest.mock.patch`, `MagicMock`) so tests do not depend on the real API.\n\n2. **Improve debugging clarity**\n   - Add **detailed error messages** and wrap request failures in descriptive exceptions like:\n     - failed fetch for symbol\n     - HTTP error details\n     - connection/timeout details\n   - This makes failures easier to diagnose and supports stronger unit tests that assert on error behavior.\n\n3. **Then optimize performance**\n   - Once behavior is well tested, work on the **API response time target of under 250ms**.\n   - The earlier guidance suggested:\n     - caching\n     - batching if supported\n     - parallel/asynchronous requests\n     - retry logic with exponential backoff for rate limits\n\n4. **Use coverage reports to guide remaining work**\n   - Run:\n     ```bash\n     pytest --cov=fetcher --cov-report=html\n     ```\n   - Use the uncovered lines report to decide exactly which branches need tests next.\n\nIn short: **test coverage and error handling first, performance optimization second**. That order gives you a stable, debuggable fetcher before tuning speed.",
+            "scores": {
+              "keyword": 0.759,
+              "token_f1": 0.254,
+              "llm_judge": 0.91,
+              "combined": 0.91
+            }
+          },
+          {
+            "type": "preference_following",
+            "question": "I'm working on caching price data for a service that needs to handle restarts without losing cached information. How would you suggest setting this up?",
+            "expected": "Response should recommend a caching solution that supports persistence across service restarts and scalability, such as Redis, rather than volatile in-memory options.",
+            "model_answer": "Use Redis rather than an in-memory Python dict, since Redis provides persistence across service restarts and better scalability.\n\nA suggested setup from the conversation:\n\n- Initialize a Redis client:\n```python\nimport redis\nredis_client = redis.Redis(host='localhost', port=6379, db=0)\n```\n\n- Cache price data with a TTL using `setex`, so data stays fresh but survives application restarts:\n```python\nimport json\nfrom datetime import timedelta\n\ndef fetch_price_data(symbol):\n    return {\"symbol\": symbol, \"price\": 100.0}  # replace with real API call\n\ndef get_price_data(symbol):\n    cache_key = f\"price_data:{symbol}\"\n    price_data = redis_client.get(cache_key)\n\n    if price_data is None:\n        price_data = fetch_price_data(symbol)\n        redis_client.setex(\n            cache_key,\n            int(timedelta(minutes=5).total_seconds()),\n            json.dumps(price_data)\n        )\n        return price_data\n    else:\n        return json.loads(price_data)\n```\n\nBest practices mentioned in the chat:\n- Use Redis for persistence across service restarts.\n- Set a TTL, such as 5 minutes for price data.\n- Serialize structured data with JSON.\n- Add error handling for Redis failures and optionally fall back to the API.\n- Monitor cache hit/miss behavior and tune TTL as needed.",
+            "scores": {
+              "keyword": 0.591,
+              "token_f1": 0.224,
+              "llm_judge": 1.0,
+              "combined": 1.0
+            }
+          },
+          {
+            "type": "preference_following",
+            "question": "How would you suggest structuring my workflow to handle both testing and actual deployment of my trading strategies?",
+            "expected": "Response should recommend separating the backtesting environment from the live trading environment, highlighting distinct workflows or systems for each to maintain stability and performance.",
+            "model_answer": "Insufficient information",
+            "scores": {
+              "keyword": 0.095,
+              "token_f1": 0.0,
+              "llm_judge": 0.0,
+              "combined": 0.014
+            }
+          },
+          {
+            "type": "summarization",
+            "question": "Can you give me a comprehensive summary of how my stock trading bot project has progressed, including the key challenges I faced and the solutions we discussed along the way?",
+            "expected": "Your stock trading bot project evolved through several important stages. Initially, you encountered issues with the Alpha Vantage API's rate limiting, which you addressed by implementing asynchronous requests using asyncio and aiohttp to efficiently manage API calls without exceeding limits. Next, you expanded the system architecture by designing a microservices setup with Flask and message queues like RabbitMQ to enable seamless communication between data fetching, ML prediction, and trade execution modules. To ensure high availability and robustness, you incorporated retry logic with exponential backoff to handle HTTP 429 errors gracefully, improving the reliability of your stock price fetcher. You further optimized performance by introducing Redis caching to reduce redundant API calls and dynamically managing delays between requests. Finally, you sought to enhance your testing coverage and model evaluation by adding comprehensive pytest tests and integrating classification metrics such as precision and recall into your LSTM model training pipeline. Throughout these phases, you progressively refined your system to be more efficient, scalable, and resilient.",
+            "model_answer": "Insufficient information",
+            "scores": {
+              "keyword": 0.008,
+              "token_f1": 0.0,
+              "llm_judge": 0.0,
+              "combined": 0.001
+            }
+          },
+          {
+            "type": "summarization",
+            "question": "Can you give me a comprehensive summary of how my development roadmap and related implementation efforts have progressed so far?",
+            "expected": "Your development roadmap outlines a series of milestones aimed at building and deploying various components of your project. Initially, you focused on Agile sprint planning to meet early deadlines, prioritizing API integration, data ingestion, and testing within a two-week sprint. Subsequently, you worked on creating a secure and efficient RESTful API using Flask, enhancing it with error handling, input validation, and security features. Parallel to this, you optimized your Docker setup for the ML model service to reduce image size while maintaining necessary dependencies. Progressing further, you developed and deployed ML model training and prediction APIs, incorporating best practices for model architecture, training monitoring with TensorBoard, and dynamic learning rate adjustments to improve convergence. Most recently, your focus shifted to completing Milestone 3, which involves implementing backtesting and paper trading modules, integrating technical indicators, calculating performance metrics, and preparing for deployment on a dedicated port. Throughout these phases, you have refined your approach, addressed challenges in risk management, and ensured your roadmap remains aligned with upcoming deadlines, demonstrating steady advancement across multiple interconnected development areas.",
+            "model_answer": "From the provided chat history, your roadmap and implementation-related discussions progressed through several distinct phases:\n\n1. Early roadmap review for Milestone 3\n   - You stated that Milestone 3 was focused on completing the backtesting and paper trading modules by April 15, 2024.\n   - In one version, you listed three milestones:\n     - Milestone 1: March 15, 2024\n     - Milestone 2: March 30, 2024\n     - Milestone 3: April 15, 2024\n   - You also mentioned completed tasks:\n     - Task 1\n     - Task 2\n     - Task 3\n   - In a later milestone-review variant, the same Milestone 3 deadline of April 15, 2024 was retained, but the roadmap was simplified into a `Milestone` class structure.\n\n2. API/documentation effort\n   - You later shifted attention to documenting your dashboard API and WebSocket protocol using OpenAPI 3.1.\n   - You were using `@openapi/swagger-ui` and asked how to make the documentation more interactive and user-friendly.\n   - The example included:\n     - OpenAPI version 3.1.0\n     - API title: Dashboard API\n     - Version: 1.0.0\n     - A documented `/api/alerts` endpoint\n     - An `Alert` schema with `id`, `severity`, and `timestamp`\n\n3. Milestone 7 planning\n   - A later assistant response discussed a roadmap for Milestone 7 with a deadline of June 10, 2024.\n   - That roadmap focused on:\n     - Alert escalation logic\n     - Notification system implementation\n     - Monitoring and logging\n     - Testing and validation\n     - Documentation\n   - It laid out a week-by-week schedule from March 25, 2024 through June 10, 2024.\n\n4. Production deployment and load testing planning\n   - You later asked for help planning production deployment and load testing to meet a milestone deadline of June 22, 2024.\n   - You had code to calculate time remaining until that deadline, but wanted help breaking the work into manageable tasks and prioritizing effectively.\n\n5. System architecture and scaling design\n   - You then discussed designing system architecture for your trading bot using an auto-scaling group with:\n     - Minimum 2 EC2 instances\n     - Maximum 5 EC2 instances\n   - The architecture needed to support:\n     - A fetcher service that scales up during peak trading hours\n     - A live trading service that scales down during off-peak hours\n   - You showed a basic `boto3` EC2 instance creation example and asked how to design the system to meet scaling requirements.\n\n6. General roadmap/time-buffer planning\n   - You also asked for help planning a development roadmap around an estimated 20 hours of work, specifically wanting to include enough buffer time in case problems arose.\n\n7. Trade logging module roadmap and production approval\n   - Later, you said you were planning your development roadmap and wanted feedback on your trade logging module implementation.\n   - You stated that the code was approved for production release on July 7, 2024.\n   - The roadmap snippet included one milestone:\n     - Trade logging module, due July 7, 2024\n   - The most up-to-date assistant guidance expanded this into a more detailed roadmap with:\n     - Design trade logging schema\n     - Implement trade logging functionality\n     - Integrate with existing systems\n     - Write unit tests\n     - Perform integration testing\n     - Prepare documentation\n     - Conduct code review\n     - Deploy to staging\n     - Deploy to production\n   - It also explicitly added task priorities, estimated hours, and dependencies.\n\n8. Documentation maturity around trade logging infrastructure\n   - In the latest segment, the assistant stated: “Great job on completing the system architecture diagrams and operational runbooks!”\n   - That indicates you had completed:\n     - System architecture diagrams\n     - Operational runbooks\n   - The documentation focus there was on Kafka and Elasticsearch-based trade logging infrastructure, including:\n     - Kafka cluster setup\n     - Elasticsearch cluster setup\n     - Data flow documentation\n     - Scalability and fault tolerance notes\n     - Monitoring and alerts\n     - Troubleshooting guidance\n     - Backup and recovery procedures\n\nMost current overall picture\n- Your roadmap discussions began with Milestone 3 for backtesting and paper trading due April 15, 2024.\n- They later expanded into broader delivery planning covering alerting/notification work, deployment/load testing, scaling architecture, and time-estimation practices.\n- The most concrete later-stage roadmap centered on the trade logging module, which was approved for production release on July 7, 2024.\n- By the latest point in the conversation, you had also completed supporting documentation artifacts such as architecture diagrams and operational runbooks for the trade logging infrastructure.",
+            "scores": {
+              "keyword": 0.364,
+              "token_f1": 0.228,
+              "llm_judge": 0.27,
+              "combined": 0.274
+            }
+          },
+          {
+            "type": "temporal_reasoning",
+            "question": "How many days do I have between the start of my first sprint and its deadline to complete all my tasks?",
+            "expected": "There are 14 days between the sprint start on March 1, 2024, and the sprint deadline on March 15, 2024, giving you two weeks to complete all your tasks.",
+            "model_answer": "15 days",
+            "scores": {
+              "keyword": 0.136,
+              "token_f1": 0.167,
+              "llm_judge": 0.0,
+              "combined": 0.062
+            }
+          },
+          {
+            "type": "temporal_reasoning",
+            "question": "How many days do I have between submitting my modules for peer review and the deadline to provide feedback?",
+            "expected": "There are 2 days between when I submitted fetcher.py and strategy.py for peer review on March 16, 2024, and the feedback deadline on March 18, 2024.",
+            "model_answer": "2 days",
+            "scores": {
+              "keyword": 0.095,
+              "token_f1": 0.174,
+              "llm_judge": 1.0,
+              "combined": 1.0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "case_id": 3,
+      "session_id": "rag_case_3",
+      "messages_fed": 0,
+      "before_compaction": {
+        "avg_combined": 0,
+        "results": []
+      },
+      "after_compaction": {
+        "avg_combined": 0.5839,
+        "results": [
+          {
+            "type": "abstention",
+            "question": "Can you share the detailed methodology or participant demographics for the human evaluation study rating caption descriptiveness?",
+            "expected": "Based on the provided chat, there is no information related to the detailed methodology or participant demographics of the human evaluation study.",
+            "model_answer": "The context only states that there was a human evaluation study with **20 participants** who rated caption descriptiveness on a **5-point Likert scale**, with an **average score of 4.2**. It does not provide any further methodology or participant demographics.\n\nInsufficient information",
+            "scores": {
+              "keyword": 0.667,
+              "token_f1": 0.407,
+              "llm_judge": 0.0,
+              "combined": 0.202
+            }
+          },
+          {
+            "type": "abstention",
+            "question": "What specific reasons led to the decision to use a ViT-B/16 backbone combined with GPT-2 small for sequence modeling?",
+            "expected": "Based on the provided chat, there is no information related to the specific reasons behind choosing ViT-B/16 and GPT-2 small for the model architecture.",
+            "model_answer": "Insufficient information",
+            "scores": {
+              "keyword": 0.13,
+              "token_f1": 0.08,
+              "llm_judge": 1.0,
+              "combined": 1.0
+            }
+          },
+          {
+            "type": "contradiction_resolution",
+            "question": "Have I planned any milestones or deadlines for my project?",
+            "expected": "I notice you've mentioned contradictory information about this. You said you have never planned any milestones or deadlines for the project, but you also provided specific milestone dates for feature extraction, training, and deployment. Which statement is correct?",
+            "model_answer": "Yes.\n\nMost recently, you planned these milestones/deadlines:\n- Initial feature extraction: April 20\n- Transformer training: June 10\n- Deployment: August 10\n\nOther planned timelines mentioned later also include:\n- Sprint 9 tasks:\n  - Implement multi-language support: July 1–July 15, 2024\n  - Security hardening: July 10–July 20, 2024\n  - Final performance tuning: July 15–July 25, 2024\n- A roadmap targeting project completion by July 27, 2024, with:\n  - Sprint 1: March 1–April 15, 2024\n  - Sprint 2: April 16–May 30, 2024\n  - Sprint 3: June 1–June 30, 2024\n  - Sprint 4: July 1–July 27, 2024",
+            "scores": {
+              "keyword": 0.469,
+              "token_f1": 0.25,
+              "llm_judge": 0.3,
+              "combined": 0.313
+            }
+          },
+          {
+            "type": "contradiction_resolution",
+            "question": "Have I ever encountered CUDA out of memory errors during my model training?",
+            "expected": "I notice you've mentioned contradictory information about this. You said you have never encountered any CUDA out of memory errors during model training, but you also described encountering a CUDA OOM error with a batch size of 32. Could you clarify which is correct?",
+            "model_answer": "No. In the latest relevant user statement, you said: “I've never encountered any CUDA out of memory errors during model training.”",
+            "scores": {
+              "keyword": 0.457,
+              "token_f1": 0.536,
+              "llm_judge": 0.0,
+              "combined": 0.203
+            }
+          },
+          {
+            "type": "event_ordering",
+            "question": "How did my discussions about model development and deployment progress in order? Mention ONLY and ONLY ten items.",
+            "expected": "Your discussions about model development and deployment progressed as follows: 1) Initial attempts to enhance image features using a diffusion-based pipeline, 2) Integration of caption generation with the enhanced features, 3) Debugging memory errors related to the image captioning model, 4) Efforts to deploy the model via a REST API with feature extraction and caption generation, 5) Transition to optimizing transformer models with smaller architectures, 6) Exploration of tokenizer performance improvements, 7) Challenges upgrading core libraries like PyTorch and torchvision, 8) Attempts to implement distributed training with acceleration libraries, 9) Securing API endpoints with authentication mechanisms, and 10) Debugging and version locking issues with PyTorch and Transformers integration.",
+            "model_answer": "1. Initial project context: setting up a custom image captioning model with Python 3.10, PyTorch 1.13, and Transformers v4.29.\n2. A first timeline was proposed with milestones: feature extraction by April 15, transformer training by May 30, and deployment by July 10.\n3. Sprint 1 was then defined for March 1 to April 15, focused on dataset preparation and a diffusion feature extractor prototype, with a Python date-tracking script.\n4. Deployment planning was introduced for AWS using an EC2 g4dn.xlarge instance and a 50GB S3 bucket.\n5. A deployment-tracking Python script was provided to launch EC2, create the S3 bucket, upload the dataset, and monitor instance status.\n6. Deadlines were later adjusted to April 20 for initial feature extraction, June 10 for transformer training, and August 10 for deployment.\n7. A preference was added to always provide detailed version numbers when discussing software dependencies.\n8. A later sprint discussion covered April 16 to May 15, prioritizing inference optimization, scalable deployment, and frontend UX.\n9. Additional guidance preferences were added to always mention deployment strategies for production updates and serverless scaling strategies for backend deployment.\n10. A detailed roadmap was finally laid out through July 27, 2024: Sprint 1 for dataset prep and diffusion feature extraction, Sprint 2 for transformer training, Sprint 3 for API/frontend and deployment preparation, and Sprint 4 for final testing and deployment.",
+            "scores": {
+              "keyword": 0.416,
+              "token_f1": 0.281,
+              "llm_judge": null,
+              "combined": 0.348
+            }
+          },
+          {
+            "type": "event_ordering",
+            "question": "How did my discussions about managing and optimizing database and data handling evolve in order? Mention ONLY and ONLY nine items.",
+            "expected": "Your discussions about managing and optimizing database and data handling evolved in this sequence: 1) Initial setup and retrieval of image-caption data from a PostgreSQL database for model training, 2) Troubleshooting foreign key constraints and JSONB data insertion errors in PostgreSQL tables, 3) Enhancing database schema with confidence scores and optimizing query performance including indexing strategies, 4) Implementing and refreshing materialized views with performance considerations, 5) Creating and managing user-generated caption tables with error handling for table existence and insertion issues, 6) Scheduling ETL jobs and handling connection issues with Redshift and Redis cache update problems, 7) Extending user caption tables with JSONB edit history and updating it programmatically, 8) Addressing AWS Lambda function timeout and chaining issues, and finally 9) Migrating user feedback data to DynamoDB using AWS SAM templates with deployment and optimization suggestions.",
+            "model_answer": "1. Optimizing PostgreSQL caption queries to get the highest-confidence captions.\n2. Asking for help optimizing PostgreSQL queries for retrieving captions and images from the `images` and `captions` tables.\n3. Refining PostgreSQL optimization with indexes, covering indexes, joins, and `EXPLAIN ANALYZE`.\n4. Shifting to optimizing GraphQL queries for captions and annotations in a React app.\n5. Expanding GraphQL work to include caching and broader React performance strategies.\n6. Moving to DynamoDB performance tuning and bottleneck reduction during peak usage.\n7. Asking how to optimize recent feedback queries after adding a DynamoDB GSI on timestamp.\n8. Refining DynamoDB query optimization with GSI usage, key conditions, limits, and pagination.\n9. Moving to dashboard data efficiency, asking about optimizing PostgreSQL dashboard queries, then discussing Redis caching to reduce database load.",
+            "scores": {
+              "keyword": 0.358,
+              "token_f1": 0.356,
+              "llm_judge": 0.23,
+              "combined": 0.281
+            }
+          },
+          {
+            "type": "information_extraction",
+            "question": "How many images and captions per image did I say my dataset contains?",
+            "expected": "Your dataset contains 123,287 images with 5 captions each.",
+            "model_answer": "123,287 images with 5 captions per image.",
+            "scores": {
+              "keyword": 0.6,
+              "token_f1": 0.667,
+              "llm_judge": 1.0,
+              "combined": 1.0
+            }
+          },
+          {
+            "type": "information_extraction",
+            "question": "How did you recommend organizing and accessing the large collection of images and their associated descriptions to ensure efficient training and evaluation of the model?",
+            "expected": "I recommended leveraging the existing structured splits provided by the dataset's annotation files to separate the data into training, validation, and testing sets. This involved loading the annotations from JSON files, mapping image IDs to filenames and captions, and creating dataset classes that load images and captions accordingly. I also suggested using data loaders with appropriate batch sizes and transformations to efficiently handle the data during training and evaluation.",
+            "model_answer": "I recommended storing the images and captions in a PostgreSQL database and accessing them through a custom PyTorch `Dataset`, then feeding that into a `DataLoader` for efficient batching and loading during training/evaluation.\n\nSpecifically:\n- use a `captions` table containing image binary data and caption text\n- create a custom `CaptionDataset` that:\n  - connects to PostgreSQL with `psycopg2`\n  - queries image/caption pairs by index\n  - converts image bytes to `PIL.Image`\n  - applies preprocessing/transforms\n  - tokenizes captions\n- use PyTorch `DataLoader` with options like:\n  - batching\n  - shuffling\n  - multiple workers (`num_workers`)\n  - `pin_memory=True` for faster CPU→GPU transfer\n\nThis was the suggested way to organize and access the large collection efficiently for model training and evaluation.",
+            "scores": {
+              "keyword": 0.451,
+              "token_f1": 0.32,
+              "llm_judge": 0.28,
+              "combined": 0.316
+            }
+          },
+          {
+            "type": "instruction_following",
+            "question": "What are some ways I can improve the speed of my application?",
+            "expected": "Response should include information about cache configuration as part of the performance improvement suggestions.",
+            "model_answer": "Based on the chat history, some ways to improve application speed include:\n\n- Use asynchronous programming to avoid blocking work.\n- Offload long-running operations to background tasks.\n- Implement caching, such as Redis, for frequently accessed data.\n- Optimize database operations and queries.\n- Use monitoring and profiling tools to find bottlenecks.\n- Apply load balancing and horizontal scaling for higher traffic.\n- Reduce over-fetching and improve data fetching efficiency, e.g. with GraphQL.\n- Optimize query behavior and caching strategies in the frontend/backend.\n- For DynamoDB specifically, identify throttling bottlenecks and optimize capacity usage.",
+            "scores": {
+              "keyword": 0.231,
+              "token_f1": 0.049,
+              "llm_judge": 1.0,
+              "combined": 1.0
+            }
+          },
+          {
+            "type": "instruction_following",
+            "question": "What images are used in the current deployment setup?",
+            "expected": "Response should include the exact versions of the images used in the deployment rather than just the image names.",
+            "model_answer": "Insufficient information",
+            "scores": {
+              "keyword": 0.067,
+              "token_f1": 0.0,
+              "llm_judge": 0.0,
+              "combined": 0.01
+            }
+          },
+          {
+            "type": "knowledge_update",
+            "question": "What batch size do I use to balance memory constraints and throughput during my model training?",
+            "expected": "A batch size of 12.",
+            "model_answer": "12",
+            "scores": {
+              "keyword": 0.25,
+              "token_f1": 0.4,
+              "llm_judge": 1.0,
+              "combined": 1.0
+            }
+          },
+          {
+            "type": "knowledge_update",
+            "question": "What is the time-to-live (TTL) setting for caching diffusion features in Redis to optimize API response times?",
+            "expected": "7200 seconds",
+            "model_answer": "3600 seconds (1 hour)",
+            "scores": {
+              "keyword": 0.5,
+              "token_f1": 0.333,
+              "llm_judge": 0.0,
+              "combined": 0.158
+            }
+          },
+          {
+            "type": "multi_session_reasoning",
+            "question": "Between my model optimization, debugging CUDA memory errors, and API latency reduction efforts, how many different GPU-related issues have I mentioned across my sessions?",
+            "expected": "You mentioned three different GPU-related issues: targeting inference latency on RTX 3090, CUDA out of memory errors during training, and API response time optimization on RTX 3090.",
+            "model_answer": "3",
+            "scores": {
+              "keyword": 0.0,
+              "token_f1": 0.0,
+              "llm_judge": 1.0,
+              "combined": 1.0
+            }
+          },
+          {
+            "type": "multi_session_reasoning",
+            "question": "Considering my modular pipeline design, training setup, Docker deployment, and gRPC integration efforts, how do the main components and communication methods I used evolve across these sessions to improve scalability and performance?",
+            "expected": "You started with a modular pipeline combining diffusion-based feature extraction and transformer caption generation, then improved training with better tokenization and optimization, deployed components as separate Docker containers with internal networking, and finally integrated gRPC for efficient inter-service communication, enhancing scalability and reducing overhead.",
+            "model_answer": "Across the sessions, the architecture evolved from a simple modular ML pipeline into a more scalable microservices-oriented deployment with stronger communication choices for performance.\n\n- **Modular pipeline stage**:\n  - You first structured the system into clear components:\n    - `DataLoader`\n    - `FeatureExtractor`\n    - `CaptionGenerator`\n    - `EvaluationModule`\n    - `DeploymentModule`\n  - This improved **testability, maintainability, and separation of concerns**.\n\n- **Deployment evolution**:\n  - Early deployment guidance focused on a **single FastAPI app containerized with Docker** and deployable to **AWS ECS** or **GKE**.\n  - Later, this evolved into **separate Docker containers for microservices**, especially:\n    - `feature_extractor`\n    - `caption_generator`\n  - A `docker-compose` setup added **Redis caching** shared across services, improving **performance** and allowing services to scale more independently.\n\n- **Scalability enhancements**:\n  - Kubernetes guidance then introduced:\n    - **Deployments**\n    - **Services**\n    - **Horizontal Pod Autoscaler (HPA)**\n    - cluster-level scaling concepts\n  - This marked a shift from basic container deployment to **orchestrated, horizontally scalable infrastructure**.\n\n- **Training setup evolution**:\n  - Later sessions added **distributed training**, specifically mentioning:\n    - PyTorch `DistributedDataParallel`\n    - TensorFlow distributed strategies\n  - This improved **training scalability** beyond the original single-model modular setup.\n\n- **Communication methods evolution**:\n  - In the microservices design example:\n    - `annotation_service` used **REST**\n    - `image_service` used **gRPC**\n    - `api_gateway` used **REST**\n  - The gRPC discussion further clarified the strategy:\n    - **gRPC for internal microservices** for efficiency, compact serialization, and strong typing\n    - **REST for external APIs** for compatibility and easier client adoption\n  - This is the clearest communication evolution toward better **performance internally** and better **interoperability externally**.\n\n- **Overall improvement path**:\n  - The system moved from:\n    1. a **modular in-process pipeline**\n    2. to **containerized deployment**\n    3. to **separate microservices with Redis caching**\n    4. to **Kubernetes-based autoscaling**\n    5. to a **hybrid communication model** using **gRPC internally** and **REST externally**\n    6. while also adding **distributed training** for model development scalability\n\nSo, the main components evolved from logical pipeline modules into independently deployable services, and the communication methods evolved from general API-style deployment toward a deliberate **REST + gRPC hybrid**, improving both **scalability** and **runtime performance**.",
+            "scores": {
+              "keyword": 0.6,
+              "token_f1": 0.184,
+              "llm_judge": 0.76,
+              "combined": 0.592
+            }
+          },
+          {
+            "type": "preference_following",
+            "question": "I'm planning to build a text generation pipeline. Which transformer model would you suggest I start with?",
+            "expected": "Response should recommend lightweight transformer models suitable for quick experimentation rather than heavier, more complex models.",
+            "model_answer": "DistilGPT-2.",
+            "scores": {
+              "keyword": 0.0,
+              "token_f1": 0.0,
+              "llm_judge": 1.0,
+              "combined": 1.0
+            }
+          },
+          {
+            "type": "preference_following",
+            "question": "I'm working on a Python app that needs to handle multiple API requests efficiently. How would you suggest structuring the data fetching and storage to manage repeated requests?",
+            "expected": "Response should include or recommend using asynchronous API calls combined with caching mechanisms to handle repeated requests efficiently while maintaining data accuracy.",
+            "model_answer": "Based on the chat history, two approaches were suggested for handling repeated requests efficiently:\n\n1. **Use concurrent fetching with `asyncio`** to structure multiple API requests.\n2. **Use caching** to store results of repeated requests and avoid hitting the backend repeatedly.\n\nA basic structure would be:\n\n```python\nimport asyncio\n\ncache = {}\n\nasync def fetch_data(item_id):\n    if item_id in cache:\n        return cache[item_id]\n\n    result = await expensive_api_call(item_id)\n    cache[item_id] = result\n    return result\n\nasync def expensive_api_call(item_id):\n    await asyncio.sleep(1)\n    return {\"id\": item_id, \"data\": f\"Value for {item_id}\"}\n\nasync def main():\n    item_ids = [1, 2, 3, 1, 2]\n    tasks = [fetch_data(item_id) for item_id in item_ids]\n    results = await asyncio.gather(*tasks)\n    return results\n\nasyncio.run(main())\n```\n\nFor more robust storage of repeated requests, the history also suggested **Redis** as a cache layer. The pattern is:\n\n- Generate a cache key for each request\n- Check Redis first\n- If cached, return stored value\n- Otherwise fetch the data, store it with an expiry, and return it\n\nThis helps reduce repeated backend/API calls and improves performance.",
+            "scores": {
+              "keyword": 0.455,
+              "token_f1": 0.17,
+              "llm_judge": 1.0,
+              "combined": 1.0
+            }
+          },
+          {
+            "type": "summarization",
+            "question": "Can you give me a comprehensive summary of how my image captioning system design and deployment evolved throughout our discussions?",
+            "expected": "Throughout our conversations, you progressively developed a modular image captioning system by first exploring how to integrate a diffusion-based feature extractor with a transformer-based caption generator into a cohesive pipeline. Initial guidance focused on defining and implementing these components separately, emphasizing modularity and independent testing. Later, you expanded the design to deploy these components as decoupled microservices communicating via REST APIs, enhancing scalability and maintainability. You then addressed practical deployment concerns, such as configuring Docker Compose networks to enable inter-service communication. Subsequently, performance optimization strategies were introduced, including caching embeddings, leveraging GPU acceleration, and profiling API response times to meet latency goals. Finally, you explored database optimizations by creating and managing materialized views with appropriate indexing and refresh strategies to support efficient data retrieval. This journey reflects a clear progression from conceptual design to practical deployment and optimization, highlighting iterative improvements and system scalability considerations.",
+            "model_answer": "Throughout the discussion, your image captioning system evolved from a **basic model implementation idea** into a much broader **distributed, scalable system design**.\n\n### 1. Initial focus: core image captioning pipeline\nEarly on, the discussion centered on your original goal: building a custom image captioning model with **PyTorch 1.13**, **Transformers v4.29**, and Python 3.10.  \nAt this stage, you were focused on:\n- combining **diffusion-based techniques** with a **transformer caption generator**\n- implementing functions like **`describe_image`**\n- figuring out how to convert generated or processed image outputs into a form suitable for textual description\n\n### 2. Shift toward modular architecture\nLater, your attention moved from single-function implementation to **system-level modularization**.  \nYou specifically explored a pipeline with:\n- a **diffusion-based feature extractor**\n- a **transformer-based caption generator**\n\nThe design emphasis became:\n- separating responsibilities between components\n- creating a cleaner, more maintainable architecture\n- deciding how these modules should integrate in a reusable pipeline\n\nThis modular pipeline idea was reinforced in multiple later planning questions, showing that the architectural direction had become more important than just the first prototype.\n\n### 3. Move to microservices\nThe design then expanded from modular components inside one application to a **microservices architecture**.  \nYou began considering separate services for:\n- **feature extractor**\n- **caption generator**\n- **API**\n\nThe deployment guidance introduced:\n- running services as **separate Docker containers**\n- isolating responsibilities by service\n- improving scalability and maintainability through service separation\n\n### 4. Introduction of caching\nAs the microservices idea matured, **caching** became part of the design.  \nA concrete proposal was given to use **Redis** as a shared cache for microservices, with:\n- Redis host: `redis`\n- Redis port: `6379`\n- TTL: **7200 seconds (2 hours)**\n\nCaching was discussed for both:\n- extracted features\n- generated captions\n\nThe recommendations also included:\n- centralized vs local caching\n- cache invalidation\n- tuning TTLs based on freshness and performance needs\n\n### 5. Containerized deployment\nYour deployment strategy then became more concrete with:\n- separate **Dockerfiles** for services like `feature_extractor` and `caption_generator`\n- a **Docker Compose** setup that included:\n  - `feature_extractor`\n  - `caption_generator`\n  - `redis`\n\nThis showed a transition from conceptual architecture to a deployable local multi-service environment.\n\n### 6. Kubernetes-based scaling\nAfter that, the system design evolved further toward **Kubernetes orchestration** for scalability.  \nA deployment pattern was discussed involving:\n- a **Deployment** managing multiple pod replicas\n- a **Service** of type **LoadBalancer**\n- horizontal scaling by increasing replica count\n\nThis indicates that the deployment strategy moved from simple container composition toward **production-style orchestration** with:\n- replicated services\n- load balancing\n- scalable pod management\n\n### 7. Event-driven backend direction\nThe architecture later evolved again into an **event-driven system** for asynchronous processing.  \nA proposed design used:\n- **AWS SNS** for publishing events\n- **AWS SQS** for queue-based processing\n\nThe kinds of events considered included:\n- new image uploaded\n- caption processing requested\n\nWorkers would then:\n- consume queue messages\n- process images\n- generate captions\n- optionally publish follow-up events\n\nThis marked a significant shift from synchronous service-to-service interaction toward a more scalable **asynchronous processing model**.\n\n### 8. API scalability and security considerations\nFinally, the discussion expanded to **API platform design** at larger scale.  \nYou considered using:\n- **AWS API Gateway**\n- **AWS Lambda**\n- **usage plans** for request limiting\n\nAt this stage, the focus was no longer just on the captioning internals, but on:\n- handling large request volumes\n- maintaining security\n- preserving scalability at the API boundary\n\n### Overall evolution\nIn summary, your system design progressed through these stages:\n\n1. **Basic captioning implementation**\n   - diffusion + transformer\n   - `describe_image` and representation conversion\n\n2. **Modular pipeline design**\n   - diffusion feature extractor\n   - transformer caption generator\n\n3. **Microservices architecture**\n   - separate extractor, generator, and API services\n\n4. **Performance optimization**\n   - Redis-based caching with 2-hour TTL\n\n5. **Containerized deployment**\n   - Dockerfiles + Docker Compose\n\n6. **Scalable orchestration**\n   - Kubernetes Deployments and LoadBalancer Services\n\n7. **Asynchronous/event-driven processing**\n   - AWS SNS + SQS for caption workflows\n\n8. **Scalable API management**\n   - API Gateway + Lambda + usage plans\n\n### High-level takeaway\nThe discussions show a clear evolution from **model prototyping** to **full production system architecture**. Your project grew from a simple custom image captioning implementation into a design involving:\n- modular ML components\n- containerized microservices\n- caching\n- Kubernetes scaling\n- event-driven backend processing\n- cloud-native API management\n\nSo the overall trajectory was:  \n**prototype ML pipeline → modular architecture → microservices → scalable cloud deployment and event-driven distributed system**.",
+            "scores": {
+              "keyword": 0.513,
+              "token_f1": 0.263,
+              "llm_judge": 0.92,
+              "combined": 0.92
+            }
+          },
+          {
+            "type": "summarization",
+            "question": "Can you provide a detailed summary of the entire process involved in developing and deploying the image captioning API, covering all major technical challenges, design decisions, optimization strategies, error handling approaches, and deployment considerations discussed across the different stages?",
+            "expected": "The development and deployment of the image captioning API involved multiple interconnected stages addressing both technical and operational challenges. Initially, the API was designed using FastAPI with a transformer-based caption generation model, incorporating a Pydantic request model to accept image inputs as base64 strings or URLs. The implementation included loading a pre-trained transformer model and tokenizer, tokenizing inputs, generating captions, and decoding outputs. Subsequent sessions focused on robust error handling, introducing validation for image inputs, handling network timeouts, and managing exceptions to ensure API reliability. Performance optimization was addressed through caching strategies using LRU caches, asynchronous processing, and efficient resource management, including mixed precision training and gradient accumulation to reduce memory footprint. Deployment considerations involved containerizing the application with Docker, deploying on cloud platforms like AWS ECS or Google Cloud GKE, and setting up monitoring and logging using cloud-native tools to maintain production stability. Additional discussions covered debugging CUDA out-of-memory errors by adjusting batch sizes, enabling mixed precision, and implementing gradient accumulation with proper optimizer initialization. Network-level issues such as connection resets were mitigated by increasing Uvicorn workers, implementing retry middleware, and enhancing logging for diagnostics. Finally, concurrency issues in Redis cache updates were resolved using atomic transactions with WATCH/MULTI/EXEC commands and retry mechanisms to prevent stale caption returns under concurrent requests. Throughout the process, best practices in API design, error handling, performance tuning, deployment, and debugging were integrated to build a robust, scalable, and maintainable image captioning service.",
+            "model_answer": "The project evolved into a fairly broad API/platform design discussion around an image captioning service. Based on the conversation history, the overall process included these major areas:\n\n## 1. API documentation setup with FastAPI\n\nA concrete early step was setting up a FastAPI application with auto-generated API docs using OpenAPI, Swagger UI, and ReDoc.\n\n### Key decisions\n- Use **FastAPI** as the API framework.\n- Rely on FastAPI’s built-in OpenAPI generation rather than manually building docs.\n- Expose interactive docs at:\n  - `/docs` for Swagger UI\n  - `/redoc` for ReDoc\n\n### Example implementation discussed\n- Define a `FastAPI()` app.\n- Use **Pydantic** models for request validation.\n- Create a caption generation endpoint like `POST /generate_caption/`.\n- Load captioning-related model components using PyTorch and Transformers.\n- Return JSON responses from the endpoint.\n\n### Documentation best practices later added\nThe documentation process was later expanded with recommendations to:\n- add detailed endpoint descriptions\n- document parameters and request bodies\n- include response schemas and status codes\n- document auth/security requirements\n- include examples\n- support versioned APIs in docs\n- automate doc generation and publication through CI/CD where possible\n\nA later example also showed a custom `/docs` endpoint using `get_swagger_ui_html`.\n\n---\n\n## 2. OpenAPI enhancements for frontend integration and error guidance\n\nLater discussion focused on making docs more useful for frontend developers.\n\n### Main ideas\n- Add richer descriptions in the OpenAPI spec.\n- Include **example error payloads** for error status codes like `400` and `429`.\n- Use custom OpenAPI extensions such as:\n  - `x-error-handling-notes`\n  - `x-api-limit`\n  - `x-retry-policy`\n\n### Error-handling guidance for frontend consumers\nThe documented frontend handling recommendations included:\n- showing user-friendly validation messages\n- resetting invalid inputs to safe defaults\n- implementing retries with exponential backoff for rate limits\n- optionally linking users to rate-limit documentation\n\nThis stage emphasized not just describing the API contract, but also documenting **consumer behavior expectations**.\n\n---\n\n## 3. API design and versioning strategy\n\nA major design concern was API versioning, especially whether endpoints like `/v1/caption` and `/v2/caption` were a good approach.\n\n### Recommendations discussed\n- Adopt **semantic versioning principles** for API evolution.\n- Prefer explicit API versioning, commonly via URL paths such as:\n  - `/api/v1/...`\n  - `/api/v2/...`\n- Alternatively, consider **header-based versioning** using custom `Accept` headers.\n\n### Backward compatibility guidance\n- Keep older versions available while introducing new ones.\n- Avoid removing or changing existing behavior abruptly.\n- Add fields/features in new versions rather than breaking older clients.\n\n### Supporting practices\n- keep version-specific documentation\n- standardize error responses across versions\n- use rate limiting and HTTPS\n- implement authentication/authorization\n\nAn example Flask implementation illustrated separate v1 and v2 endpoints, though it was presented as design guidance rather than a confirmed final stack replacement for FastAPI.\n\n---\n\n## 4. Data layer and query optimization for captions/images\n\nAt one stage the focus shifted to the PostgreSQL layer for efficient retrieval of images and captions.\n\n### Schema concepts discussed\nTwo main tables were used in the example:\n- `images(id, url)`\n- `captions(id, image_id, text, confidence_score)`\n\n### Performance strategies\nSeveral query optimization approaches were covered:\n\n#### Indexing\n- index columns used in `JOIN`, `WHERE`, and `ORDER BY`\n- specifically:\n  - `captions(image_id)`\n  - `images(id)`\n\n#### Covering indexes\n- create a covering index on:\n  - `(image_id, confidence_score DESC, text)`\n\n#### Query design\n- retrieve top captions for a given image via join + filter + sort + limit\n- example target query:\n  - get top 5 captions by `confidence_score` for a given `image_id`\n\n#### Analysis and scaling\n- use `EXPLAIN ANALYZE` to inspect query plans\n- keep statistics updated\n- consider partitioning for very large tables\n\nThis stage addressed the backend challenge of efficiently serving caption data once generated and stored.\n\n---\n\n## 5. Caching and microservice-oriented deployment\n\nThe architecture discussion then expanded into a microservice deployment model using Docker and Redis.\n\n### Main architectural decision\nDeploy functionality as **separate Docker containers** for better:\n- modularity\n- isolation\n- scalability\n- maintainability\n\n### Example microservices\nTwo services were proposed:\n- `feature_extractor`\n- `caption_generator`\n\n### Caching strategy\nUse **Redis** as a centralized cache shared by services.\n\n#### Cache usage patterns\n- check Redis before recomputing features/captions\n- cache generated outputs with TTL\n- use `setex` to store values with expiration\n\n#### Configuration discussed\n- Redis host: `redis`\n- Redis port: `6379`\n- TTL: `7200` seconds (2 hours)\n\n### Docker setup\n- separate Dockerfiles for each service\n- Docker Compose orchestration\n- Redis as an additional service dependency\n\n### Best practices noted\n- adjust TTL based on data freshness needs\n- monitor hit rate and latency\n- implement cache invalidation when source data changes\n- review cache behavior over time\n\nThis was a key optimization stage for reducing repeated expensive computation in an image captioning pipeline.\n\n---\n\n## 6. Documentation for deployment and cache behavior\n\nAlongside the containerization discussion, user-facing deployment instructions were considered important.\n\n### Guidance to document for users\n- service roles and responsibilities\n- Redis host/port\n- TTL values\n- build and startup commands\n- operational recommendations around freshness and invalidation\n\nThis reflected a broader theme in the conversation: infrastructure choices should be mirrored by clear documentation, not just code.\n\n---\n\n## 7. Migration from traditional deployment to serverless\n\nA later stage explored moving from a server-based or container-based backend toward **serverless infrastructure**.\n\n### Benefits identified\n- reduced operational overhead\n- automatic scaling\n- potential cost savings\n- less server management\n\n### Challenges identified\n- cold starts\n- max execution time limits\n- vendor lock-in\n- harder monitoring/debugging\n- billing unpredictability\n- state management complexity\n- security concerns\n- dependency/package size issues\n- eventual consistency patterns\n\n### Serverless scaling/design strategies discussed\n- decompose monoliths into small functions\n- route via API Gateway\n- use serverless databases if needed\n- adopt phased migration\n- run legacy and serverless systems in parallel during transition\n\n### Specific optimizations mentioned\n- **Provisioned Concurrency**\n- **SnapStart** on AWS Lambda\n- warm-up functions\n- API Gateway caching\n- efficient lazy initialization\n- reduced deployment package size\n\nExample infrastructure snippets were given in CloudFormation-style YAML for:\n- Lambda function config\n- API Gateway cache\n- warm-up function\n\n---\n\n## 8. Serverless migration pitfalls and mitigations\n\nA follow-up went deeper into serverless risks.\n\n### Specific pitfalls covered\n1. cold starts  \n2. execution time limits  \n3. vendor lock-in  \n4. monitoring/debugging complexity  \n5. billing surprises  \n6. state management difficulty  \n7. security issues  \n8. cold-path performance problems  \n9. dependency management overhead  \n10. eventual consistency concerns  \n\n### Mitigation approaches\n- keep functions warm\n- use provisioned concurrency\n- design short-lived stateless functions\n- use step functions/background workflows for long tasks\n- monitor with tools like CloudWatch\n- add tracing/logging\n- set budget alerts\n- externalize state into Redis or serverless DBs\n- minimize dependencies and use shared layers\n- design idempotent and retry-safe workflows\n\nThis stage framed serverless as viable but requiring careful engineering tradeoffs.\n\n---\n\n## 9. Monitoring, maintainability, and production-readiness practices\n\nToward the end, the discussion emphasized operational maturity.\n\n### Documentation process improvements\n- annotate routes with OpenAPI metadata\n- document security and auth flows\n- provide request/response examples\n- regularly update docs\n- generate/publish docs automatically in CI/CD\n- gather user feedback on docs\n\n### Monitoring themes\nFor production stability, the conversation recommended:\n- regular review of docs and API changes\n- performance monitoring\n- query analysis\n- cache monitoring\n- serverless observability via provider tooling\n- logging and tracing for incident diagnosis\n\n---\n\n## 10. Overall technical challenges discussed\n\nAcross the stages, the main challenges were:\n\n### A. Making the API easy to consume\n- generating clear Swagger/OpenAPI docs\n- improving frontend integration with examples and error-handling notes\n- documenting versioning and auth expectations\n\n### B. Designing for change\n- choosing a maintainable versioning strategy\n- preserving backward compatibility\n- separating concerns across versions and services\n\n### C. Performance optimization\n- indexing and SQL tuning\n- covering indexes and execution-plan review\n- Redis caching\n- TTL tuning and invalidation\n- microservice isolation for scaling\n- serverless-specific performance tuning like warm starts and caching\n\n### D. Deployment architecture decisions\n- whether to stay with conventional API hosting\n- whether to break into Dockerized microservices\n- whether to move to serverless\n- how to phase migration safely\n\n### E. Reliability and operational clarity\n- standardized error responses\n- frontend-facing handling guidance\n- monitoring/logging/tracing\n- thorough documentation for both API consumers and operators\n\n---\n\n## End-to-end summary of the implied development/deployment process\n\nPutting it all together, the process discussed across the conversation looks like this:\n\n1. **Build the API layer in FastAPI**\n   - define request/response models with Pydantic\n   - expose a caption generation endpoint\n   - integrate model-loading logic in Python/PyTorch/Transformers\n\n2. **Enable auto-generated docs**\n   - use FastAPI’s OpenAPI support\n   - expose Swagger UI and ReDoc\n   - enrich endpoint descriptions, schemas, examples, and status codes\n\n3. **Improve consumer usability**\n   - include frontend-relevant error notes in OpenAPI\n   - document retry behavior, rate limits, and validation handling\n\n4. **Plan versioning early**\n   - use `/v1/...`, `/v2/...` or possibly header-based versioning\n   - keep old versions stable\n   - document differences between versions\n\n5. **Optimize data retrieval**\n   - design image/caption tables\n   - add indexes and covering indexes\n   - analyze with `EXPLAIN ANALYZE`\n   - consider partitioning for scale\n\n6. **Introduce caching**\n   - use Redis to avoid redundant feature extraction/caption generation\n   - define TTLs and invalidation strategy\n   - document cache behavior clearly\n\n7. **Containerize services if scaling needs grow**\n   - split components into separate Docker containers\n   - orchestrate with Docker Compose\n   - share Redis across services\n\n8. **Evaluate serverless if operational simplicity/scaling is a priority**\n   - decompose into functions\n   - front with API Gateway\n   - address cold starts, monitoring, and execution limits\n   - migrate gradually and observe carefully\n\n9. **Strengthen production readiness**\n   - standardize errors\n   - secure endpoints\n   - monitor performance, costs, and failures\n   - keep docs current via automated processes\n\n## Final takeaway\n\nThe conversation did not present one single finalized architecture. Instead, it covered a progression of concerns from:\n- **basic FastAPI endpoint and Swagger setup**  \nto\n- **API design/documentation improvements**  \nto\n- **database and cache optimization**  \nto\n- **Dockerized microservices**  \nand finally\n- **possible serverless migration**.\n\nThe most consistent engineering themes were:\n- prioritize strong API documentation\n- design versioning for long-term maintainability\n- optimize performance with indexes and caching\n- choose deployment architecture based on scale and operational needs\n- document not only the API itself, but also errors, caching, and deployment behavior for both consumers and operators",
+            "scores": {
+              "keyword": 0.551,
+              "token_f1": 0.205,
+              "llm_judge": 0.28,
+              "combined": 0.302
+            }
+          },
+          {
+            "type": "temporal_reasoning",
+            "question": "How many days do I have between finishing the initial feature extraction and completing the transformer training?",
+            "expected": "There are 45 days between finishing the initial feature extraction on April 15 and completing the transformer training by May 30.",
+            "model_answer": "51 days",
+            "scores": {
+              "keyword": 0.056,
+              "token_f1": 0.1,
+              "llm_judge": 0.0,
+              "combined": 0.033
+            }
+          },
+          {
+            "type": "temporal_reasoning",
+            "question": "How many days are there between the start of Sprint 9 and my project's scheduled completion date?",
+            "expected": "There are 26 days between the start of Sprint 9 on July 1 and the project's scheduled completion date on July 27.",
+            "model_answer": "26 days",
+            "scores": {
+              "keyword": 0.167,
+              "token_f1": 0.2,
+              "llm_judge": 1.0,
+              "combined": 1.0
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
