@@ -129,6 +129,7 @@ export function Session() {
       .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   })
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
+  const historyState = createMemo(() => sync.session.history(route.sessionID))
   const permissions = createMemo(() => {
     if (session()?.parentID) return []
     return children().flatMap((x) => sync.data.permission[x.id] ?? [])
@@ -1059,6 +1060,11 @@ export function Session() {
               flexGrow={1}
               scrollAcceleration={scrollAcceleration()}
             >
+              <Show when={messages().length === 0 && !historyState().ready && historyState().previewText}>
+                <box marginBottom={1}>
+                  <text fg={theme.text}>{historyState().previewText}</text>
+                </box>
+              </Show>
               <For each={messages()}>
                 {(message, index) => (
                   <Switch>

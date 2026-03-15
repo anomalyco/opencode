@@ -1,19 +1,15 @@
+import type { Message, Part } from "@opencode-ai/sdk/v2"
+
 type WithParts = {
-  info: { id: string; role: string; sessionID: string }
-  parts: Array<{
-    id: string
-    type: string
-    text?: string
-    sessionID: string
-    messageID: string
-  }>
+  info: Pick<Message, "id" | "role" | "sessionID">
+  parts: Part[]
 }
 
 export function previewText(messages: WithParts[]) {
   const recent = [...messages].reverse()
   for (const message of recent) {
-    const text = message.parts.find((part) => part.type === "text" && part.text?.trim())
-    if (text?.text) return text.text.trim()
+    const text = message.parts.find((part) => part.type === "text" && "text" in part && part.text?.trim())
+    if (text && "text" in text && text.text) return text.text.trim()
   }
   return ""
 }
@@ -36,5 +32,21 @@ export function mergeFullHistoryState(
     ready: true,
     previewText: previewText(allMessages),
     messages: allMessages,
+  }
+}
+
+export function buildStagedHistoryState(input: {
+  sessionID: string
+  allMessages: WithParts[]
+  initialCount: number
+}) {
+  const initialMessages = input.allMessages.slice(-Math.max(1, input.initialCount))
+  const initial = buildInitialHistoryState({
+    sessionID: input.sessionID,
+    messages: initialMessages,
+  })
+  return {
+    initial,
+    full: mergeFullHistoryState(initial, input.allMessages),
   }
 }

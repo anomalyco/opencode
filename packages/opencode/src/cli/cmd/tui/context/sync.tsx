@@ -29,6 +29,7 @@ import { batch, onMount } from "solid-js"
 import { Log } from "@/util/log"
 import type { Path } from "@opencode-ai/sdk"
 import type { Workspace } from "@opencode-ai/sdk/v2"
+import { buildStagedHistoryState } from "./session-history"
 
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
@@ -57,6 +58,12 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       }
       todo: {
         [sessionID: string]: Todo[]
+      }
+      session_history: {
+        [sessionID: string]: {
+          ready: boolean
+          previewText: string
+        }
       }
       message: {
         [sessionID: string]: Message[]
@@ -94,6 +101,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       session_status: {},
       session_diff: {},
       todo: {},
+      session_history: {},
       message: {},
       part: {},
       lsp: [],
@@ -442,6 +450,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     })
 
     const fullSyncedSessions = new Set<string>()
+    const syncingSessions = new Set<string>()
     const result = {
       data: store,
       set: setStore,
@@ -467,28 +476,75 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           if (last.role === "user") return "working"
           return last.time.completed ? "idle" : "working"
         },
+        history(sessionID: string) {
+          return store.session_history[sessionID] ?? { ready: true, previewText: "" }
+        },
         async sync(sessionID: string) {
-          if (fullSyncedSessions.has(sessionID)) return
-          const [session, messages, todo, diff] = await Promise.all([
-            sdk.client.session.get({ sessionID }, { throwOnError: true }),
-            sdk.client.session.messages({ sessionID, limit: 100 }),
-            sdk.client.session.todo({ sessionID }),
-            sdk.client.session.diff({ sessionID }),
-          ])
+          if (fullSyncedSessions.has(sessionID) || syncingSessions.has(sessionID)) return
+          syncingSessions.add(sessionID)
+          const initialCount = 5
+          let session
+          let messages
+          let todo
+          let diff
+          try {
+            ;[session, messages, todo, diff] = await Promise.all([
+              sdk.client.session.get({ sessionID }, { throwOnError: true }),
+              sdk.client.session.messages({ sessionID, limit: initialCount }),
+              sdk.client.session.todo({ sessionID }),
+              sdk.client.session.diff({ sessionID }),
+            ])
+          } catch (error) {
+            syncingSessions.delete(sessionID)
+            throw error
+          }
+          const staged = buildStagedHistoryState({
+            sessionID,
+            allMessages: messages.data!,
+            initialCount,
+          })
           setStore(
             produce((draft) => {
               const match = Binary.search(draft.session, sessionID, (s) => s.id)
               if (match.found) draft.session[match.index] = session.data!
               if (!match.found) draft.session.splice(match.index, 0, session.data!)
               draft.todo[sessionID] = todo.data ?? []
-              draft.message[sessionID] = messages.data!.map((x) => x.info)
-              for (const message of messages.data!) {
+              draft.session_history[sessionID] = {
+                ready: staged.initial.ready,
+                previewText: staged.initial.previewText,
+              }
+              draft.message[sessionID] = staged.initial.messages.map((x) => x.info as Message)
+              for (const message of staged.initial.messages) {
                 draft.part[message.info.id] = message.parts
               }
               draft.session_diff[sessionID] = diff.data ?? []
             }),
           )
-          fullSyncedSessions.add(sessionID)
+          void sdk.client.session
+            .messages({ sessionID })
+            .then((fullMessages) => {
+              const next = buildStagedHistoryState({
+                sessionID,
+                allMessages: fullMessages.data!,
+                initialCount,
+              }).full
+              setStore(
+                produce((draft) => {
+                  draft.session_history[sessionID] = {
+                    ready: next.ready,
+                    previewText: next.previewText,
+                  }
+                  draft.message[sessionID] = next.messages.map((x) => x.info as Message)
+                  for (const message of next.messages) {
+                    draft.part[message.info.id] = message.parts
+                  }
+                }),
+              )
+              fullSyncedSessions.add(sessionID)
+            })
+            .finally(() => {
+              syncingSessions.delete(sessionID)
+            })
         },
       },
       workspace: {
