@@ -53,6 +53,8 @@ function getBackend() {
 
 export namespace FileWatcher {
   export const Event = event
+  /** Whether the native @parcel/watcher binding is available on this platform. */
+  export const hasNativeBinding = () => !!watcher()
 }
 
 const init = Effect.fn("FileWatcherService.init")(function* () {})
@@ -112,9 +114,7 @@ export class FileWatcherService extends ServiceMap.Service<FileWatcherService, F
       const cfg = yield* Effect.promise(() => Config.get())
       const cfgIgnores = cfg.watcher?.ignore ?? []
 
-      const experimentalWatcher = yield* Flag.OPENCODE_EXPERIMENTAL_FILEWATCHER
-      console.log("[DEBUG] experimental filewatcher flag:", experimentalWatcher, "directory:", instance.directory)
-      if (experimentalWatcher) {
+      if (yield* Flag.OPENCODE_EXPERIMENTAL_FILEWATCHER) {
         yield* subscribe(instance.directory, [...FileIgnore.PATTERNS, ...cfgIgnores, ...Protected.paths()])
       }
 
