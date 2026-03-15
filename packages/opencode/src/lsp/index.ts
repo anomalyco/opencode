@@ -275,18 +275,42 @@ export namespace LSP {
     return false
   }
 
+  async function removeClient(s: Awaited<ReturnType<typeof state>>, client: LSPClient.Info) {
+    const idx = s.clients.indexOf(client)
+    if (idx !== -1) s.clients.splice(idx, 1)
+    s.broken.add(client.root + client.serverID)
+    client.shutdown().catch(() => {})
+    log.info("removed dead LSP client", {
+      serverID: client.serverID,
+      root: client.root,
+    })
+  }
+
   export async function touchFile(input: string, waitForDiagnostics?: boolean) {
     log.info("touching file", { file: input })
+    const s = await state()
     const clients = await getClients(input)
     await Promise.all(
       clients.map(async (client) => {
-        const wait = waitForDiagnostics ? client.waitForDiagnostics({ path: input }) : Promise.resolve()
-        await client.notify.open({ path: input })
-        return wait
+        if (!client.alive) {
+          await removeClient(s, client)
+          return
+        }
+        try {
+          const wait = waitForDiagnostics ? client.waitForDiagnostics({ path: input }) : Promise.resolve()
+          await client.notify.open({ path: input })
+          return wait
+        } catch (err: any) {
+          log.error("failed to touch file", { err, file: input })
+          if (
+            err?.message?.includes("Connection is closed") ||
+            err?.message?.includes("connection is disposed")
+          ) {
+            await removeClient(s, client)
+          }
+        }
       }),
-    ).catch((err) => {
-      log.error("failed to touch file", { err, file: input })
-    })
+    )
   }
 
   export async function diagnostics() {
