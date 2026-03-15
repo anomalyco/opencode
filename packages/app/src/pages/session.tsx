@@ -1672,13 +1672,16 @@ export default function Page() {
     const deltaX = touchEndX - touchStartX
     const deltaY = touchEndY - touchStartY
     
-    if (Math.abs(deltaX) > 60 && Math.abs(deltaY) < 40) {
+    if (Math.abs(deltaX) > 40 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
       let target = e.target as HTMLElement | null
       let canScrollHorizontally = false
       while (target && target !== e.currentTarget) {
         if (target.scrollWidth > target.clientWidth) {
-           canScrollHorizontally = true
-           break
+           const overflowX = window.getComputedStyle(target).overflowX
+           if (overflowX === "auto" || overflowX === "scroll") {
+             canScrollHorizontally = true
+             break
+           }
         }
         target = target.parentElement
       }
