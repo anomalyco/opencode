@@ -10,4 +10,4 @@ fi
 
 cd /workspace
 
-exec bun --cwd /app/packages/opencode src/index.ts web --hostname 0.0.0.0 --port "${PORT:-3000}"
+exec bun --cwd /app/packages/opencode src/index.ts serve --hostname 127.0.0.1 --port 4096

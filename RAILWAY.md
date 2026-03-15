@@ -1,12 +1,13 @@
 # Railway runtime
 
-This repo can run as a single Railway service using the upstream `opencode web` command.
+This repo can run as a single Railway service using the custom `packages/app` frontend plus the OpenCode `serve` backend behind one public port.
 
 ## What it does
 
 - installs the full monorepo with `bun install`
-- starts `opencode web`
-- serves the OpenCode web UI and API together on one port
+- builds the custom frontend from `packages/app`
+- starts the OpenCode backend on an internal port
+- serves the custom frontend on the public port and proxies API requests to the backend
 - keeps OpenCode state under `/data`
 - uses `/workspace` as a symlink to `/data/workspace`
 
@@ -16,7 +17,7 @@ Create one Railway service from this repo and use:
 
 - Dockerfile: `Dockerfile`
 - volume mount: `/data`
-- healthcheck path: `/global/health`
+- healthcheck path: `/healthz`
 
 Required environment variables:
 
@@ -34,8 +35,7 @@ Useful optional environment variables:
 ## Local smoke test
 
 ```bash
-docker build -t opencode-railway .
-docker run --rm -p 3000:3000 -e OPENCODE_SERVER_PASSWORD=testpass opencode-railway
+OPENCODE_SERVER_PASSWORD=testpass bun run web:veritly
 ```
 
-Then open `http://localhost:3000`.
+Then open `http://localhost:4097`.

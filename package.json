@@ -7,7 +7,8 @@
   "packageManager": "bun@1.3.10",
   "scripts": {
     "dev": "bun run --cwd packages/opencode --conditions=browser src/index.ts",
-    "web:veritly": "mkdir -p .veritly/workspace .veritly/.config .veritly/.cache .veritly/.local/share .veritly/.local/state && ROOT=$PWD && cd .veritly/workspace && XDG_DATA_HOME=$ROOT/.veritly/.local/share XDG_CONFIG_HOME=$ROOT/.veritly/.config XDG_CACHE_HOME=$ROOT/.veritly/.cache XDG_STATE_HOME=$ROOT/.veritly/.local/state HOME=$ROOT/.veritly OPENCODE_TEST_HOME=$ROOT/.veritly OPENCODE_PROJECTS_ROOT=$ROOT/.veritly/workspace OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD:-testpass} bun --cwd $ROOT/packages/opencode src/index.ts web --hostname 0.0.0.0 --port ${PORT:-4097}",
+    "web:veritly": "bash railway/start-local-hosted-opencode.sh",
+    "build:veritly-hosted": "VITE_OPENCODE_SERVER_URL=/api bun run --cwd packages/app build",
     "dev:desktop": "bun --cwd packages/desktop tauri dev",
     "dev:web": "bun --cwd packages/app dev",
     "dev:storybook": "bun --cwd packages/storybook storybook",
@@ -83,6 +84,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.933.0",
+    "http-proxy": "^1.18.1",
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/script": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
