@@ -172,9 +172,50 @@ export namespace ProviderTransform {
   }
 
   function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
-    const system = msgs.filter((msg) => msg.role === "system").slice(0, 2)
-    const final = msgs.filter((msg) => msg.role !== "system").slice(-2)
+    // Determine cache format from model.caching config or infer from provider
+    const npm = model.api.npm
+    const providerID = model.providerID
 
+    // Get format from explicit config or infer from provider
+    let format: "anthropic" | "openrouter" | "bedrock" | "openaiCompatible" | undefined
+    if (model.caching && typeof model.caching === "object" && model.caching.format) {
+      format = model.caching.format
+    } else if (npm === "@ai-sdk/amazon-bedrock" || providerID.includes("bedrock")) {
+      format = "bedrock"
+    } else if (npm === "@ai-sdk/anthropic" || providerID === "anthropic") {
+      format = "anthropic"
+    } else if (npm === "@openrouter/ai-sdk-provider" || providerID === "openrouter") {
+      format = "openrouter"
+    } else {
+      // Default to openaiCompatible for other providers (kiro-gateway, etc.)
+      format = "openaiCompatible"
+    }
+
+    // Determine positions to cache
+    let positions: ("system" | "first" | "last")[] = ["system", "last"]
+    if (model.caching && typeof model.caching === "object" && model.caching.positions) {
+      positions = model.caching.positions
+    }
+
+    // Select messages to cache based on positions
+    const messagesToCache: ModelMessage[] = []
+    const systemMsgs = msgs.filter((msg) => msg.role === "system")
+    const nonSystemMsgs = msgs.filter((msg) => msg.role !== "system")
+
+    if (positions.includes("system")) {
+      messagesToCache.push(...systemMsgs.slice(0, 2))
+    }
+    if (positions.includes("first") && nonSystemMsgs.length > 0) {
+      messagesToCache.push(nonSystemMsgs[0])
+    }
+    if (positions.includes("last") && nonSystemMsgs.length > 0) {
+      const lastMsg = nonSystemMsgs[nonSystemMsgs.length - 1]
+      if (!messagesToCache.includes(lastMsg)) {
+        messagesToCache.push(lastMsg)
+      }
+    }
+
+    // Build provider options for all formats (SDK will pick the right one)
     const providerOptions = {
       anthropic: {
         cacheControl: { type: "ephemeral" },
@@ -188,13 +229,13 @@ export namespace ProviderTransform {
       openaiCompatible: {
         cache_control: { type: "ephemeral" },
       },
-      copilot: {
-        copilot_cache_control: { type: "ephemeral" },
-      },
     }
 
-    for (const msg of unique([...system, ...final])) {
-      const useMessageLevelOptions = model.providerID === "anthropic" || model.providerID.includes("bedrock")
+    // Determine if we should use message-level or content-level options
+    // Anthropic and Bedrock use message-level, others use content-level
+    const useMessageLevelOptions = format === "anthropic" || format === "bedrock"
+
+    for (const msg of unique(messagesToCache)) {
       const shouldUseContentOptions = !useMessageLevelOptions && Array.isArray(msg.content) && msg.content.length > 0
 
       if (shouldUseContentOptions) {
@@ -252,45 +293,10 @@ export namespace ProviderTransform {
   export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
     msgs = unsupportedParts(msgs, model)
     msgs = normalizeMessages(msgs, model, options)
-    // Apply caching for Anthropic models and Bedrock models that support prompt caching
-    // Bedrock prompt caching is supported by:
-    // - Anthropic Claude models (claude-3-5-sonnet, claude-3-5-haiku, claude-3-opus, etc.)
-    // - Amazon Nova models (nova-pro, nova-lite, nova-micro)
-    // NOT supported by: Llama, Mistral, Cohere, and other third-party models
-    const isBedrockProvider =
-      model.providerID === "amazon-bedrock" || model.api.npm === "@ai-sdk/amazon-bedrock"
 
-    const isAnthropicModel =
-      !isBedrockProvider &&
-      (model.providerID === "anthropic" ||
-        model.api.id.includes("anthropic") ||
-        model.api.id.includes("claude") ||
-        model.id.includes("anthropic") ||
-        model.id.includes("claude") ||
-        model.api.npm === "@ai-sdk/anthropic")
-
-    const isBedrockModelWithCaching = iife(() => {
-      if (!isBedrockProvider) {
-        return false
-      }
-      // Check for explicit caching option in model config
-      // This allows users to enable/disable caching for custom ARNs and inference profiles
-      // Example: { "options": { "caching": true } }
-      if (typeof model.options?.caching === "boolean") {
-        return model.options.caching
-      }
-      const modelId = model.api.id.toLowerCase()
-      // Claude models on Bedrock support caching
-      if (modelId.includes("anthropic") || modelId.includes("claude")) return true
-      // Amazon Nova models support caching
-      if (modelId.includes("amazon.nova") || modelId.includes("nova-")) return true
-      // Custom ARN models might support caching if they're Claude-based
-      // (ARNs like arn:aws:bedrock:...:custom-model/xxx can be Claude fine-tunes)
-      if (modelId.startsWith("arn:") && (modelId.includes("claude") || modelId.includes("anthropic"))) return true
-      return false
-    })
-
-    if ((isAnthropicModel || isBedrockModelWithCaching) && model.api.npm !== "@ai-sdk/gateway") {
+    // Apply caching only when explicitly enabled via model.caching
+    // No auto-detection - user must opt-in via model config
+    if (model.caching === true || (model.caching && typeof model.caching === "object")) {
       msgs = applyCaching(msgs, model)
     }
 

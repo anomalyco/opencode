@@ -11,6 +11,19 @@ import { Filesystem } from "../util/filesystem"
 // Falls back to undefined in dev mode when snapshot doesn't exist
 /* @ts-ignore */
 
+// Cache format types for prompt caching
+export const CacheFormat = z.enum(["anthropic", "openrouter", "bedrock", "openaiCompatible"])
+export type CacheFormat = z.infer<typeof CacheFormat>
+
+export const Caching = z.union([
+  z.boolean(),
+  z.object({
+    format: CacheFormat.optional(),
+    positions: z.array(z.enum(["system", "first", "last"])).optional(),
+  }),
+])
+export type Caching = z.infer<typeof Caching>
+
 export namespace ModelsDev {
   const log = Log.create({ service: "models.dev" })
   const filepath = path.join(Global.Path.cache, "models.json")
@@ -67,6 +80,7 @@ export namespace ModelsDev {
     headers: z.record(z.string(), z.string()).optional(),
     provider: z.object({ npm: z.string().optional(), api: z.string().optional() }).optional(),
     variants: z.record(z.string(), z.record(z.string(), z.any())).optional(),
+    caching: Caching.optional(),
   })
   export type Model = z.infer<typeof Model>
 

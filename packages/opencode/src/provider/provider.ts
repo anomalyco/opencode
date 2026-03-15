@@ -9,7 +9,7 @@ import { BunProc } from "../bun"
 import { Hash } from "../util/hash"
 import { Plugin } from "../plugin"
 import { NamedError } from "@opencode-ai/util/error"
-import { ModelsDev } from "./models"
+import { ModelsDev, Caching } from "./models"
 import { Auth } from "../auth"
 import { Env } from "../env"
 import { Instance } from "../project/instance"
@@ -735,6 +735,7 @@ export namespace Provider {
       headers: z.record(z.string(), z.string()),
       release_date: z.string(),
       variants: z.record(z.string(), z.record(z.string(), z.any())).optional(),
+      caching: Caching.optional(),
     })
     .meta({
       ref: "Model",
@@ -816,6 +817,7 @@ export namespace Provider {
       },
       release_date: model.release_date,
       variants: {},
+      caching: model.caching,
     }
 
     m.variants = mapValues(ProviderTransform.variants(m), (v) => v)
