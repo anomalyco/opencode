@@ -34,6 +34,7 @@ import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
+import { filled } from "@/session/filled"
 
 export type PromptProps = {
   sessionID?: string
@@ -96,6 +97,16 @@ export function Prompt(props: PromptProps) {
   const agentStyleId = syntax().getStyleId("extmark.agent")!
   const pasteStyleId = syntax().getStyleId("extmark.paste")!
   let promptPartTypeId = 0
+
+  function reset() {
+    input.extmarks.clear()
+    input.clear()
+    setStore("prompt", {
+      input: "",
+      parts: [],
+    })
+    setStore("extmarkToPartIndex", new Map())
+  }
 
   sdk.event.on(TuiEvent.PromptAppend.type, (evt) => {
     if (!input || input.isDestroyed) return
@@ -177,8 +188,7 @@ export function Prompt(props: PromptProps) {
         category: "Prompt",
         hidden: true,
         onSelect: (dialog) => {
-          input.extmarks.clear()
-          input.clear()
+          reset()
           dialog.clear()
         },
       },
@@ -535,6 +545,32 @@ export function Prompt(props: PromptProps) {
       exit()
       return
     }
+    let inputText = store.prompt.input
+
+    // Expand pasted text inline before submitting
+    const allExtmarks = input.extmarks.getAllForTypeId(promptPartTypeId)
+    const sortedExtmarks = allExtmarks.sort((a: { start: number }, b: { start: number }) => b.start - a.start)
+
+    for (const extmark of sortedExtmarks) {
+      const partIndex = store.extmarkToPartIndex.get(extmark.id)
+      if (partIndex !== undefined) {
+        const part = store.prompt.parts[partIndex]
+        if (part?.type === "text" && part.text) {
+          const before = inputText.slice(0, extmark.start)
+          const after = inputText.slice(extmark.end)
+          inputText = before + part.text + after
+        }
+      }
+    }
+
+    // Filter out text parts (pasted content) since they're now expanded inline
+    const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text")
+
+    if (!filled([{ type: "text", text: inputText }, ...nonTextParts])) {
+      reset()
+      return
+    }
+
     const selectedModel = local.model.current()
     if (!selectedModel) {
       promptModelWarning()
@@ -562,26 +598,6 @@ export function Prompt(props: PromptProps) {
     }
 
     const messageID = MessageID.ascending()
-    let inputText = store.prompt.input
-
-    // Expand pasted text inline before submitting
-    const allExtmarks = input.extmarks.getAllForTypeId(promptPartTypeId)
-    const sortedExtmarks = allExtmarks.sort((a: { start: number }, b: { start: number }) => b.start - a.start)
-
-    for (const extmark of sortedExtmarks) {
-      const partIndex = store.extmarkToPartIndex.get(extmark.id)
-      if (partIndex !== undefined) {
-        const part = store.prompt.parts[partIndex]
-        if (part?.type === "text" && part.text) {
-          const before = inputText.slice(0, extmark.start)
-          const after = inputText.slice(extmark.end)
-          inputText = before + part.text + after
-        }
-      }
-    }
-
-    // Filter out text parts (pasted content) since they're now expanded inline
-    const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text")
 
     // Capture mode before it gets reset
     const currentMode = store.mode
@@ -655,12 +671,7 @@ export function Prompt(props: PromptProps) {
       ...store.prompt,
       mode: currentMode,
     })
-    input.extmarks.clear()
-    setStore("prompt", {
-      input: "",
-      parts: [],
-    })
-    setStore("extmarkToPartIndex", new Map())
+    reset()
     props.onSubmit?.()
 
     // temporary hack to make sure the message is sent
@@ -671,7 +682,6 @@ export function Prompt(props: PromptProps) {
           sessionID,
         })
       }, 50)
-    input.clear()
   }
   const exit = useExit()
 

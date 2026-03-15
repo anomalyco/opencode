@@ -6,6 +6,7 @@ import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Session } from "../../src/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { SessionPrompt } from "../../src/session/prompt"
+import { SessionID } from "../../src/session/schema"
 import { Log } from "../../src/util/log"
 import { tmpdir } from "../fixture/fixture"
 
@@ -208,5 +209,30 @@ describe("session.prompt agent variant", () => {
       if (prev === undefined) delete process.env.OPENAI_API_KEY
       else process.env.OPENAI_API_KEY = prev
     }
+  })
+})
+
+describe("session.prompt input", () => {
+  test("rejects whitespace-only prompts", () => {
+    const result = SessionPrompt.PromptInput.safeParse({
+      sessionID: SessionID.make("ses_test"),
+      parts: [{ type: "text", text: "   " }],
+    })
+
+    expect(result.success).toBe(false)
+    if (result.success) return
+    expect(result.error.issues[0]?.message).toBe("Prompt cannot be empty")
+  })
+
+  test("allows prompts with non-text parts", () => {
+    const result = SessionPrompt.PromptInput.safeParse({
+      sessionID: SessionID.make("ses_test"),
+      parts: [
+        { type: "text", text: "   " },
+        { type: "agent", name: "build" },
+      ],
+    })
+
+    expect(result.success).toBe(true)
   })
 })
