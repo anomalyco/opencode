@@ -76,6 +76,15 @@ export namespace LSPClient {
         uri: pathToFileURL(input.root).href,
       },
     ])
+    let alive = true
+    connection.onClose(() => {
+      l.info("connection closed")
+      alive = false
+    })
+    connection.onError((err) => {
+      l.error("connection error", { error: err })
+    })
+
     connection.listen()
 
     l.info("sending initialize")
@@ -140,6 +149,9 @@ export namespace LSPClient {
       root: input.root,
       get serverID() {
         return input.serverID
+      },
+      get alive() {
+        return alive
       },
       get connection() {
         return connection

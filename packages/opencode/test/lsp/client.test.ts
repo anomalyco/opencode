@@ -92,4 +92,30 @@ describe("LSPClient interop", () => {
 
     await client.shutdown()
   })
+
+  test("alive becomes false when server process is killed", async () => {
+    const handle = spawnFakeServer() as any
+
+    const client = await Instance.provide({
+      directory: process.cwd(),
+      fn: () =>
+        LSPClient.create({
+          serverID: "fake",
+          server: handle as unknown as LSPServer.Handle,
+          root: process.cwd(),
+        }),
+    })
+
+    expect(client.alive).toBe(true)
+
+    // Kill the server process (simulates unexpected LSP death)
+    handle.process.kill()
+
+    // Wait for onClose to propagate
+    await new Promise((r) => setTimeout(r, 200))
+    expect(client.alive).toBe(false)
+
+    // Cleanup
+    client.shutdown().catch(() => {})
+  })
 })
