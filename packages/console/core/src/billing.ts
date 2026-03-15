@@ -212,13 +212,14 @@ export namespace Billing {
         invoice_creation: {
           enabled: true,
         },
-        payment_intent_data: {
-          setup_future_usage: "on_session",
+        payment_method_options: {
+          card: {
+            setup_future_usage: "on_session",
+          },
         },
-        payment_method_types: ["card"],
-        payment_method_data: {
-          allow_redisplay: "always",
-        },
+        //payment_method_data: {
+        //  allow_redisplay: "always",
+        //},
         tax_id_collection: {
           enabled: true,
         },
@@ -253,6 +254,7 @@ export namespace Billing {
         mode: "subscription",
         billing_address_collection: "required",
         line_items: [{ price: LiteData.priceID(), quantity: 1 }],
+        discounts: [{ coupon: LiteData.firstMonth50Coupon() }],
         ...(billing.customerID
           ? {
               customer: billing.customerID,
@@ -265,7 +267,6 @@ export namespace Billing {
               customer_email: email!,
             }),
         currency: "usd",
-        payment_method_types: ["card"],
         tax_id_collection: {
           enabled: true,
         },

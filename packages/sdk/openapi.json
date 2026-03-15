@@ -637,7 +637,8 @@
             "in": "path",
             "name": "ptyID",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^pty.*"
             },
             "required": true
           }
@@ -694,7 +695,8 @@
             "in": "path",
             "name": "ptyID",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^pty.*"
             },
             "required": true
           }
@@ -777,7 +779,8 @@
             "in": "path",
             "name": "ptyID",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^pty.*"
             },
             "required": true
           }
@@ -836,7 +839,8 @@
             "in": "path",
             "name": "ptyID",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^pty.*"
             },
             "required": true
           }
@@ -2066,7 +2070,8 @@
             "in": "path",
             "name": "sessionID",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^ses.*"
             },
             "required": true
           }
@@ -2231,10 +2236,10 @@
             "in": "path",
             "name": "sessionID",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^ses.*"
             },
-            "required": true,
-            "description": "Session ID"
+            "required": true
           }
         ],
         "summary": "Get session todos",
@@ -2304,10 +2309,10 @@
             "in": "path",
             "name": "sessionID",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^ses.*"
             },
-            "required": true,
-            "description": "Session ID"
+            "required": true
           }
         ],
         "summary": "Initialize session",
@@ -2461,7 +2466,8 @@
             "in": "path",
             "name": "sessionID",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^ses.*"
             },
             "required": true
           }
@@ -2530,7 +2536,8 @@
             "in": "path",
             "name": "sessionID",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^ses.*"
             },
             "required": true
           }
@@ -2728,10 +2735,10 @@
             "in": "path",
             "name": "sessionID",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^ses.*"
             },
-            "required": true,
-            "description": "Session ID"
+            "required": true
           }
         ],
         "summary": "Summarize session",
@@ -2820,16 +2827,26 @@
             "in": "path",
             "name": "sessionID",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^ses.*"
             },
-            "required": true,
-            "description": "Session ID"
+            "required": true
           },
           {
             "in": "query",
             "name": "limit",
             "schema": {
-              "type": "number"
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "description": "Maximum number of messages to return"
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "schema": {
+              "type": "string"
             }
           }
         ],
@@ -2910,10 +2927,10 @@
             "in": "path",
             "name": "sessionID",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^ses.*"
             },
-            "required": true,
-            "description": "Session ID"
+            "required": true
           }
         ],
         "summary": "Send message",
@@ -3064,19 +3081,19 @@
             "in": "path",
             "name": "sessionID",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^ses.*"
             },
-            "required": true,
-            "description": "Session ID"
+            "required": true
           },
           {
             "in": "path",
             "name": "messageID",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^msg.*"
             },
-            "required": true,
-            "description": "Message ID"
+            "required": true
           }
         ],
         "summary": "Get message",
@@ -3153,19 +3170,19 @@
             "in": "path",
             "name": "sessionID",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^ses.*"
             },
-            "required": true,
-            "description": "Session ID"
+            "required": true
           },
           {
             "in": "path",
             "name": "messageID",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^msg.*"
             },
-            "required": true,
-            "description": "Message ID"
+            "required": true
           }
         ],
         "summary": "Delete message",
@@ -3232,28 +3249,28 @@
             "in": "path",
             "name": "sessionID",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^ses.*"
             },
-            "required": true,
-            "description": "Session ID"
+            "required": true
           },
           {
             "in": "path",
             "name": "messageID",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^msg.*"
             },
-            "required": true,
-            "description": "Message ID"
+            "required": true
           },
           {
             "in": "path",
             "name": "partID",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^prt.*"
             },
-            "required": true,
-            "description": "Part ID"
+            "required": true
           }
         ],
         "description": "Delete a part from a message",
@@ -3317,28 +3334,28 @@
             "in": "path",
             "name": "sessionID",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^ses.*"
             },
-            "required": true,
-            "description": "Session ID"
+            "required": true
           },
           {
             "in": "path",
             "name": "messageID",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^msg.*"
             },
-            "required": true,
-            "description": "Message ID"
+            "required": true
           },
           {
             "in": "path",
             "name": "partID",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^prt.*"
             },
-            "required": true,
-            "description": "Part ID"
+            "required": true
           }
         ],
         "description": "Update a part in a message",
@@ -3413,10 +3430,10 @@
             "in": "path",
             "name": "sessionID",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^ses.*"
             },
-            "required": true,
-            "description": "Session ID"
+            "required": true
           }
         ],
         "summary": "Send async message",
@@ -3548,10 +3565,10 @@
             "in": "path",
             "name": "sessionID",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^ses.*"
             },
-            "required": true,
-            "description": "Session ID"
+            "required": true
           }
         ],
         "summary": "Send command",
@@ -3633,7 +3650,8 @@
                           "type": "object",
                           "properties": {
                             "id": {
-                              "type": "string"
+                              "type": "string",
+                              "pattern": "^prt.*"
                             },
                             "type": {
                               "type": "string",
@@ -3693,10 +3711,10 @@
             "in": "path",
             "name": "sessionID",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^ses.*"
             },
-            "required": true,
-            "description": "Session ID"
+            "required": true
           }
         ],
         "summary": "Run shell command",
@@ -3793,7 +3811,8 @@
             "in": "path",
             "name": "sessionID",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^ses.*"
             },
             "required": true
           }
@@ -3882,7 +3901,8 @@
             "in": "path",
             "name": "sessionID",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^ses.*"
             },
             "required": true
           }
@@ -3951,7 +3971,8 @@
             "in": "path",
             "name": "sessionID",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^ses.*"
             },
             "required": true
           },
@@ -3959,7 +3980,8 @@
             "in": "path",
             "name": "permissionID",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^per.*"
             },
             "required": true
           }
@@ -4045,7 +4067,8 @@
             "in": "path",
             "name": "requestID",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^per.*"
             },
             "required": true
           }
@@ -4221,7 +4244,8 @@
             "in": "path",
             "name": "requestID",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^que.*"
             },
             "required": true
           }
@@ -4309,7 +4333,8 @@
             "in": "path",
             "name": "requestID",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^que.*"
             },
             "required": true
           }
@@ -6306,7 +6331,7 @@
                   "sessionID": {
                     "description": "Session ID to navigate to",
                     "type": "string",
-                    "pattern": "^ses"
+                    "pattern": "^ses.*"
                   }
                 },
                 "required": ["sessionID"]
@@ -7037,6 +7062,246 @@
         },
         "required": ["type", "properties"]
       },
+      "PermissionRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^per.*"
+          },
+          "sessionID": {
+            "type": "string",
+            "pattern": "^ses.*"
+          },
+          "permission": {
+            "type": "string"
+          },
+          "patterns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "metadata": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          },
+          "always": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tool": {
+            "type": "object",
+            "properties": {
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg.*"
+              },
+              "callID": {
+                "type": "string"
+              }
+            },
+            "required": ["messageID", "callID"]
+          }
+        },
+        "required": ["id", "sessionID", "permission", "patterns", "metadata", "always"]
+      },
+      "Event.permission.asked": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "permission.asked"
+          },
+          "properties": {
+            "$ref": "#/components/schemas/PermissionRequest"
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.permission.replied": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "permission.replied"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses.*"
+              },
+              "requestID": {
+                "type": "string",
+                "pattern": "^per.*"
+              },
+              "reply": {
+                "type": "string",
+                "enum": ["once", "always", "reject"]
+              }
+            },
+            "required": ["sessionID", "requestID", "reply"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "QuestionOption": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "description": "Display text (1-5 words, concise)",
+            "type": "string"
+          },
+          "description": {
+            "description": "Explanation of choice",
+            "type": "string"
+          }
+        },
+        "required": ["label", "description"]
+      },
+      "QuestionInfo": {
+        "type": "object",
+        "properties": {
+          "question": {
+            "description": "Complete question",
+            "type": "string"
+          },
+          "header": {
+            "description": "Very short label (max 30 chars)",
+            "type": "string"
+          },
+          "options": {
+            "description": "Available choices",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuestionOption"
+            }
+          },
+          "multiple": {
+            "description": "Allow selecting multiple choices",
+            "type": "boolean"
+          },
+          "custom": {
+            "description": "Allow typing a custom answer (default: true)",
+            "type": "boolean"
+          }
+        },
+        "required": ["question", "header", "options"]
+      },
+      "QuestionRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^que.*"
+          },
+          "sessionID": {
+            "type": "string",
+            "pattern": "^ses.*"
+          },
+          "questions": {
+            "description": "Questions to ask",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuestionInfo"
+            }
+          },
+          "tool": {
+            "type": "object",
+            "properties": {
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg.*"
+              },
+              "callID": {
+                "type": "string"
+              }
+            },
+            "required": ["messageID", "callID"]
+          }
+        },
+        "required": ["id", "sessionID", "questions"]
+      },
+      "Event.question.asked": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "question.asked"
+          },
+          "properties": {
+            "$ref": "#/components/schemas/QuestionRequest"
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "QuestionAnswer": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "Event.question.replied": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "question.replied"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses.*"
+              },
+              "requestID": {
+                "type": "string",
+                "pattern": "^que.*"
+              },
+              "answers": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/QuestionAnswer"
+                }
+              }
+            },
+            "required": ["sessionID", "requestID", "answers"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.question.rejected": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "question.rejected"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses.*"
+              },
+              "requestID": {
+                "type": "string",
+                "pattern": "^que.*"
+              }
+            },
+            "required": ["sessionID", "requestID"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
       "Event.server.connected": {
         "type": "object",
         "properties": {
@@ -7195,10 +7460,12 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^msg.*"
           },
           "sessionID": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^ses.*"
           },
           "role": {
             "type": "string",
@@ -7435,10 +7702,12 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^msg.*"
           },
           "sessionID": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^ses.*"
           },
           "role": {
             "type": "string",
@@ -7482,7 +7751,8 @@
             ]
           },
           "parentID": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^msg.*"
           },
           "modelID": {
             "type": "string"
@@ -7607,10 +7877,12 @@
             "type": "object",
             "properties": {
               "sessionID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^ses.*"
               },
               "messageID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^msg.*"
               }
             },
             "required": ["sessionID", "messageID"]
@@ -7622,13 +7894,16 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^prt.*"
           },
           "sessionID": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^ses.*"
           },
           "messageID": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^msg.*"
           },
           "type": {
             "type": "string",
@@ -7669,13 +7944,16 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^prt.*"
           },
           "sessionID": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^ses.*"
           },
           "messageID": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^msg.*"
           },
           "type": {
             "type": "string",
@@ -7712,13 +7990,16 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^prt.*"
           },
           "sessionID": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^ses.*"
           },
           "messageID": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^msg.*"
           },
           "type": {
             "type": "string",
@@ -7877,13 +8158,16 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^prt.*"
           },
           "sessionID": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^ses.*"
           },
           "messageID": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^msg.*"
           },
           "type": {
             "type": "string",
@@ -8070,13 +8354,16 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^prt.*"
           },
           "sessionID": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^ses.*"
           },
           "messageID": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^msg.*"
           },
           "type": {
             "type": "string",
@@ -8105,13 +8392,16 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^prt.*"
           },
           "sessionID": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^ses.*"
           },
           "messageID": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^msg.*"
           },
           "type": {
             "type": "string",
@@ -8127,13 +8417,16 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^prt.*"
           },
           "sessionID": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^ses.*"
           },
           "messageID": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^msg.*"
           },
           "type": {
             "type": "string",
@@ -8185,13 +8478,16 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^prt.*"
           },
           "sessionID": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^ses.*"
           },
           "messageID": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^msg.*"
           },
           "type": {
             "type": "string",
@@ -8207,13 +8503,16 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^prt.*"
           },
           "sessionID": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^ses.*"
           },
           "messageID": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^msg.*"
           },
           "type": {
             "type": "string",
@@ -8235,13 +8534,16 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^prt.*"
           },
           "sessionID": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^ses.*"
           },
           "messageID": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^msg.*"
           },
           "type": {
             "type": "string",
@@ -8276,13 +8578,16 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^prt.*"
           },
           "sessionID": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^ses.*"
           },
           "messageID": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^msg.*"
           },
           "type": {
             "type": "string",
@@ -8310,13 +8615,16 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^prt.*"
           },
           "sessionID": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^ses.*"
           },
           "messageID": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^msg.*"
           },
           "type": {
             "type": "string",
@@ -8401,13 +8709,16 @@
             "type": "object",
             "properties": {
               "sessionID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^ses.*"
               },
               "messageID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^msg.*"
               },
               "partID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^prt.*"
               },
               "field": {
                 "type": "string"
@@ -8432,103 +8743,19 @@
             "type": "object",
             "properties": {
               "sessionID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^ses.*"
               },
               "messageID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^msg.*"
               },
               "partID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^prt.*"
               }
             },
             "required": ["sessionID", "messageID", "partID"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "PermissionRequest": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^per.*"
-          },
-          "sessionID": {
-            "type": "string",
-            "pattern": "^ses.*"
-          },
-          "permission": {
-            "type": "string"
-          },
-          "patterns": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "metadata": {
-            "type": "object",
-            "propertyNames": {
-              "type": "string"
-            },
-            "additionalProperties": {}
-          },
-          "always": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "tool": {
-            "type": "object",
-            "properties": {
-              "messageID": {
-                "type": "string"
-              },
-              "callID": {
-                "type": "string"
-              }
-            },
-            "required": ["messageID", "callID"]
-          }
-        },
-        "required": ["id", "sessionID", "permission", "patterns", "metadata", "always"]
-      },
-      "Event.permission.asked": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "permission.asked"
-          },
-          "properties": {
-            "$ref": "#/components/schemas/PermissionRequest"
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.permission.replied": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "permission.replied"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "type": "string"
-              },
-              "requestID": {
-                "type": "string"
-              },
-              "reply": {
-                "type": "string",
-                "enum": ["once", "always", "reject"]
-              }
-            },
-            "required": ["sessionID", "requestID", "reply"]
           }
         },
         "required": ["type", "properties"]
@@ -8587,7 +8814,8 @@
             "type": "object",
             "properties": {
               "sessionID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^ses.*"
               },
               "status": {
                 "$ref": "#/components/schemas/SessionStatus"
@@ -8609,155 +8837,11 @@
             "type": "object",
             "properties": {
               "sessionID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^ses.*"
               }
             },
             "required": ["sessionID"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "QuestionOption": {
-        "type": "object",
-        "properties": {
-          "label": {
-            "description": "Display text (1-5 words, concise)",
-            "type": "string"
-          },
-          "description": {
-            "description": "Explanation of choice",
-            "type": "string"
-          }
-        },
-        "required": ["label", "description"]
-      },
-      "QuestionInfo": {
-        "type": "object",
-        "properties": {
-          "question": {
-            "description": "Complete question",
-            "type": "string"
-          },
-          "header": {
-            "description": "Very short label (max 30 chars)",
-            "type": "string"
-          },
-          "options": {
-            "description": "Available choices",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/QuestionOption"
-            }
-          },
-          "multiple": {
-            "description": "Allow selecting multiple choices",
-            "type": "boolean"
-          },
-          "custom": {
-            "description": "Allow typing a custom answer (default: true)",
-            "type": "boolean"
-          }
-        },
-        "required": ["question", "header", "options"]
-      },
-      "QuestionRequest": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^que.*"
-          },
-          "sessionID": {
-            "type": "string",
-            "pattern": "^ses.*"
-          },
-          "questions": {
-            "description": "Questions to ask",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/QuestionInfo"
-            }
-          },
-          "tool": {
-            "type": "object",
-            "properties": {
-              "messageID": {
-                "type": "string"
-              },
-              "callID": {
-                "type": "string"
-              }
-            },
-            "required": ["messageID", "callID"]
-          }
-        },
-        "required": ["id", "sessionID", "questions"]
-      },
-      "Event.question.asked": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "question.asked"
-          },
-          "properties": {
-            "$ref": "#/components/schemas/QuestionRequest"
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "QuestionAnswer": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        }
-      },
-      "Event.question.replied": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "question.replied"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "type": "string"
-              },
-              "requestID": {
-                "type": "string"
-              },
-              "answers": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/QuestionAnswer"
-                }
-              }
-            },
-            "required": ["sessionID", "requestID", "answers"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.question.rejected": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "question.rejected"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "type": "string"
-              },
-              "requestID": {
-                "type": "string"
-              }
-            },
-            "required": ["sessionID", "requestID"]
           }
         },
         "required": ["type", "properties"]
@@ -8773,7 +8857,8 @@
             "type": "object",
             "properties": {
               "sessionID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^ses.*"
               }
             },
             "required": ["sessionID"]
@@ -8845,7 +8930,8 @@
             "type": "object",
             "properties": {
               "sessionID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^ses.*"
               },
               "todos": {
                 "type": "array",
@@ -8966,7 +9052,7 @@
               "sessionID": {
                 "description": "Session ID to navigate to",
                 "type": "string",
-                "pattern": "^ses"
+                "pattern": "^ses.*"
               }
             },
             "required": ["sessionID"]
@@ -9084,7 +9170,8 @@
             "type": "string"
           },
           "workspaceID": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^wrk.*"
           },
           "directory": {
             "type": "string"
@@ -9154,10 +9241,12 @@
             "type": "object",
             "properties": {
               "messageID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^msg.*"
               },
               "partID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^prt.*"
               },
               "snapshot": {
                 "type": "string"
@@ -9239,7 +9328,8 @@
             "type": "object",
             "properties": {
               "sessionID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^ses.*"
               },
               "diff": {
                 "type": "array",
@@ -9264,7 +9354,8 @@
             "type": "object",
             "properties": {
               "sessionID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^ses.*"
               },
               "error": {
                 "anyOf": [
@@ -9521,6 +9612,21 @@
             "$ref": "#/components/schemas/Event.server.instance.disposed"
           },
           {
+            "$ref": "#/components/schemas/Event.permission.asked"
+          },
+          {
+            "$ref": "#/components/schemas/Event.permission.replied"
+          },
+          {
+            "$ref": "#/components/schemas/Event.question.asked"
+          },
+          {
+            "$ref": "#/components/schemas/Event.question.replied"
+          },
+          {
+            "$ref": "#/components/schemas/Event.question.rejected"
+          },
+          {
             "$ref": "#/components/schemas/Event.server.connected"
           },
           {
@@ -9551,25 +9657,10 @@
             "$ref": "#/components/schemas/Event.message.part.removed"
           },
           {
-            "$ref": "#/components/schemas/Event.permission.asked"
-          },
-          {
-            "$ref": "#/components/schemas/Event.permission.replied"
-          },
-          {
             "$ref": "#/components/schemas/Event.session.status"
           },
           {
             "$ref": "#/components/schemas/Event.session.idle"
-          },
-          {
-            "$ref": "#/components/schemas/Event.question.asked"
-          },
-          {
-            "$ref": "#/components/schemas/Event.question.replied"
-          },
-          {
-            "$ref": "#/components/schemas/Event.question.rejected"
           },
           {
             "$ref": "#/components/schemas/Event.session.compacted"
@@ -11169,7 +11260,8 @@
             "type": "string"
           },
           "workspaceID": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^wrk.*"
           },
           "directory": {
             "type": "string"
@@ -11239,10 +11331,12 @@
             "type": "object",
             "properties": {
               "messageID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^msg.*"
               },
               "partID": {
-                "type": "string"
+                "type": "string",
+                "pattern": "^prt.*"
               },
               "snapshot": {
                 "type": "string"
@@ -11291,7 +11385,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^prt.*"
           },
           "type": {
             "type": "string",
@@ -11332,7 +11427,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^prt.*"
           },
           "type": {
             "type": "string",
@@ -11357,7 +11453,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^prt.*"
           },
           "type": {
             "type": "string",
@@ -11392,7 +11489,8 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^prt.*"
           },
           "type": {
             "type": "string",

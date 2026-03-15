@@ -1,4 +1,4 @@
-import { Effect, Option, ServiceMap } from "effect"
+import { Effect, Option } from "effect"
 
 import {
   Account as AccountSchema,
@@ -13,13 +13,11 @@ export { AccessToken, AccountID, OrgID } from "./service"
 
 import { runtime } from "@/effect/runtime"
 
-type AccountServiceShape = ServiceMap.Service.Shape<typeof AccountService>
-
-function runSync<A>(f: (service: AccountServiceShape) => Effect.Effect<A, AccountError>) {
+function runSync<A>(f: (service: AccountService.Service) => Effect.Effect<A, AccountError>) {
   return runtime.runSync(AccountService.use(f))
 }
 
-function runPromise<A>(f: (service: AccountServiceShape) => Effect.Effect<A, AccountError>) {
+function runPromise<A>(f: (service: AccountService.Service) => Effect.Effect<A, AccountError>) {
   return runtime.runPromise(AccountService.use(f))
 }
 
