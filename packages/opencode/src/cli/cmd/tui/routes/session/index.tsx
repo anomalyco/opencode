@@ -74,6 +74,7 @@ import { Footer } from "./footer.tsx"
 import { usePromptRef } from "../../context/prompt"
 import { useExit } from "../../context/exit"
 import { Filesystem } from "@/util/filesystem"
+import { Process } from "@/util/process"
 import { Global } from "@/global"
 import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
@@ -921,6 +922,38 @@ export function Session() {
           toast.show({ message: "Failed to export session", variant: "error" })
         }
         dialog.clear()
+      },
+    },
+    {
+      title: "Edit changed files",
+      value: "session.edit",
+      category: "Session",
+      slash: {
+        name: "edit",
+      },
+      onSelect: async (dialog) => {
+        dialog.clear()
+        const diffs = sync.data.session_diff[route.sessionID] ?? []
+        const paths = diffs.filter((d) => d.status !== "deleted").map((d) => d.file)
+        if (paths.length === 0) {
+          toast.show({ message: "No files changed in this session", variant: "warning" })
+          return
+        }
+        const editor = process.env["VISUAL"] || process.env["EDITOR"]
+        if (!editor) {
+          toast.show({ message: "Set $EDITOR to use /edit", variant: "error" })
+          return
+        }
+        renderer.suspend()
+        const proc = Process.spawn([...editor.split(" "), ...paths], {
+          stdin: "inherit",
+          stdout: "inherit",
+          stderr: "inherit",
+          cwd: sync.data.path.directory,
+        })
+        await proc.exited
+        renderer.resume()
+        renderer.requestRender()
       },
     },
     {
