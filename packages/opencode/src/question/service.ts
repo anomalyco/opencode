@@ -129,7 +129,12 @@ export class QuestionService extends ServiceMap.Service<QuestionService, Questio
         pending.set(id, { info, deferred })
         Bus.publish(Event.Asked, info)
 
-        return yield* Deferred.await(deferred)
+        return yield* Effect.ensuring(
+          Deferred.await(deferred),
+          Effect.sync(() => {
+            pending.delete(id)
+          }),
+        )
       })
 
       const reply = Effect.fn("QuestionService.reply")(function* (input: { requestID: QuestionID; answers: Answer[] }) {
