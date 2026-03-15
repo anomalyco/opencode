@@ -59,11 +59,11 @@ export namespace Vcs {
       "vcs.updated",
       z.object({
         branch: z.string().optional(),
-        defaultBranch: z.string().optional(),
-        branches: z.array(z.string()).optional(),
-        dirty: z.number().optional(),
-        pr: PrInfo.optional(),
-        github: GithubCapability.optional(),
+        defaultBranch: z.string().nullable().optional(),
+        branches: z.array(z.string()).nullable().optional(),
+        dirty: z.number().nullable().optional(),
+        pr: PrInfo.nullable().optional(),
+        github: GithubCapability.nullable().optional(),
       }),
     ),
   }
@@ -235,7 +235,7 @@ export namespace Vcs {
 
   export async function commit(message: string) {
     const cwd = Instance.worktree
-    const add = await $`git add -u`.quiet().nothrow().cwd(cwd)
+    const add = await $`git add -A`.quiet().nothrow().cwd(cwd)
     if (add.exitCode !== 0) {
       throw new Error("git add failed: " + add.stderr.toString())
     }
@@ -299,11 +299,11 @@ export namespace Vcs {
       const publish = () => {
         Bus.publish(Event.Updated, {
           branch: current.branch,
-          defaultBranch: current.defaultBranch,
-          branches: current.branches,
-          dirty: current.dirty,
-          pr: current.pr,
-          github: current.github,
+          defaultBranch: current.defaultBranch ?? null,
+          branches: current.branches ?? null,
+          dirty: current.dirty ?? null,
+          pr: current.pr ?? null,
+          github: current.github ?? null,
         })
       }
 

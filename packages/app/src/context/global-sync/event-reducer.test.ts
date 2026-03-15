@@ -515,6 +515,62 @@ describe("applyDirectoryEvent", () => {
     expect(cacheStore.value).toEqual({ branch: "feature/test" })
   })
 
+  test("clears vcs fields when update payload sends null markers", () => {
+    const [store, setStore] = createStore(
+      baseState({
+        vcs: {
+          branch: "feature/test",
+          defaultBranch: "dev",
+          branches: ["dev", "feature/test"],
+          dirty: 2,
+          pr: {
+            number: 12,
+            url: "https://github.com/acme/repo/pull/12",
+            title: "Test",
+            state: "OPEN",
+            headRefName: "feature/test",
+            baseRefName: "dev",
+            isDraft: false,
+            mergeable: "MERGEABLE",
+          },
+          github: {
+            available: true,
+            authenticated: true,
+            repo: { owner: "acme", name: "repo" },
+          },
+        },
+      }),
+    )
+    const [cacheStore, setCacheStore] = createStore({ value: store.vcs })
+
+    applyDirectoryEvent({
+      event: {
+        type: "vcs.updated",
+        properties: {
+          branch: "feature/next",
+          defaultBranch: null,
+          branches: null,
+          dirty: null,
+          pr: null,
+          github: null,
+        },
+      },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+      vcsCache: {
+        store: cacheStore,
+        setStore: setCacheStore,
+        ready: () => true,
+      },
+    })
+
+    expect(store.vcs).toEqual({ branch: "feature/next" })
+    expect(cacheStore.value).toEqual({ branch: "feature/next" })
+  })
+
   test("routes disposal and lsp events to side-effect handlers", () => {
     const [store, setStore] = createStore(baseState())
     const pushes: string[] = []

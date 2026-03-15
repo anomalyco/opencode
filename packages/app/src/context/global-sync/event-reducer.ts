@@ -271,16 +271,21 @@ export function applyDirectoryEvent(input: {
     case "vcs.updated": {
       const props = event.properties as {
         branch?: string
-        defaultBranch?: string
-        branches?: string[]
-        dirty?: number
-        pr?: VcsInfo["pr"]
-        github?: VcsInfo["github"]
+        defaultBranch?: string | null
+        branches?: string[] | null
+        dirty?: number | null
+        pr?: VcsInfo["pr"] | null
+        github?: VcsInfo["github"] | null
       }
       const next: VcsInfo = {
         ...input.store.vcs,
-        ...props,
+        ...Object.fromEntries(Object.entries(props).filter(([key]) => key !== "branch")),
         branch: props.branch ?? input.store.vcs?.branch ?? "",
+        defaultBranch: props.defaultBranch === null ? undefined : props.defaultBranch ?? input.store.vcs?.defaultBranch,
+        branches: props.branches === null ? undefined : props.branches ?? input.store.vcs?.branches,
+        dirty: props.dirty === null ? undefined : props.dirty ?? input.store.vcs?.dirty,
+        pr: props.pr === null ? undefined : props.pr ?? input.store.vcs?.pr,
+        github: props.github === null ? undefined : props.github ?? input.store.vcs?.github,
       }
       input.setStore("vcs", next)
       if (input.vcsCache) input.vcsCache.setStore("value", next)
