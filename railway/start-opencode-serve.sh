@@ -10,4 +10,6 @@ fi
 
 cd /workspace
 
+export OPENCODE_PROJECTS_ROOT=/workspace
+
 exec bun --cwd /app/packages/opencode src/index.ts serve --hostname 127.0.0.1 --port 4096
