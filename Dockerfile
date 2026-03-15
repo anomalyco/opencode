@@ -22,8 +22,10 @@ RUN chmod +x /usr/local/bin/start-opencode-web
 
 ENV XDG_DATA_HOME=/data/.local/share
 ENV XDG_CONFIG_HOME=/data/.config
+ENV XDG_CACHE_HOME=/data/.cache
 ENV XDG_STATE_HOME=/data/.local/state
 ENV HOME=/data
+ENV OPENCODE_TEST_HOME=/data
 ENV PORT=3000
 
 EXPOSE 3000

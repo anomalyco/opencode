@@ -22,6 +22,7 @@ a.out
 target
 .scripts
 .direnv/
+.veritly/
 
 # Local dev files
 opencode-dev

@@ -52,7 +52,7 @@ import { DialogSelectServer } from "@/components/dialog-select-server"
 import { DialogSettings } from "@/components/dialog-settings"
 import { useCommand, type CommandOption } from "@/context/command"
 import { ConstrainDragXAxis } from "@/utils/solid-dnd"
-import { DialogSelectDirectory } from "@/components/dialog-select-directory"
+import { DialogCreateProject } from "@/components/dialog-create-project"
 import { DialogEditProject } from "@/components/dialog-edit-project"
 import { DebugBar } from "@/components/debug-bar"
 import { Titlebar } from "@/components/titlebar"
@@ -1354,30 +1354,16 @@ export default function Layout(props: ParentProps) {
 
   const showEditProjectDialog = (project: LocalProject) => dialog.show(() => <DialogEditProject project={project} />)
 
-  async function chooseProject() {
-    function resolve(result: string | string[] | null) {
-      if (Array.isArray(result)) {
-        for (const directory of result) {
-          openProject(directory, false)
-        }
-        navigateToProject(result[0])
-      } else if (result) {
-        openProject(result)
-      }
-    }
-
-    if (platform.openDirectoryPickerDialog && server.isLocal()) {
-      const result = await platform.openDirectoryPickerDialog?.({
-        title: language.t("command.project.open"),
-        multiple: true,
-      })
-      resolve(result)
-    } else {
-      dialog.show(
-        () => <DialogSelectDirectory multiple={true} onSelect={resolve} />,
-        () => resolve(null),
-      )
-    }
+  function chooseProject() {
+    dialog.show(
+      () => (
+        <DialogCreateProject
+          onCreate={(directory) => {
+            openProject(directory)
+          }}
+        />
+      ),
+    )
   }
 
   const deleteWorkspace = async (root: string, directory: string, leaveDeletedWorkspace = false) => {
@@ -2174,7 +2160,7 @@ export default function Layout(props: ParentProps) {
                   handleDragStart={handleDragStart}
                   handleDragEnd={handleDragEnd}
                   handleDragOver={handleDragOver}
-                  openProjectLabel={language.t("command.project.open")}
+                  openProjectLabel={"New project"}
                   openProjectKeybind={() => command.keybind("project.open")}
                   onOpenProject={chooseProject}
                   renderProjectOverlay={() => (
@@ -2252,7 +2238,7 @@ export default function Layout(props: ParentProps) {
                   handleDragStart={handleDragStart}
                   handleDragEnd={handleDragEnd}
                   handleDragOver={handleDragOver}
-                  openProjectLabel={language.t("command.project.open")}
+                  openProjectLabel={"New project"}
                   openProjectKeybind={() => command.keybind("project.open")}
                   onOpenProject={chooseProject}
                   renderProjectOverlay={() => (

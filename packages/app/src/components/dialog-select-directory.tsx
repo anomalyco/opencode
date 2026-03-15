@@ -1,3 +1,4 @@
+import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
@@ -10,6 +11,7 @@ import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLayout } from "@/context/layout"
 import { useLanguage } from "@/context/language"
+import { DialogCreateProject } from "./dialog-create-project"
 
 interface DialogSelectDirectoryProps {
   title?: string
@@ -321,11 +323,25 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     dialog.close()
   }
 
+  function createProject() {
+    dialog.close()
+    queueMicrotask(() => {
+      dialog.show(() => <DialogCreateProject onCreate={resolve} />)
+    })
+  }
+
   return (
-    <Dialog title={props.title ?? language.t("command.project.open")}>
+    <Dialog
+      title={props.title ?? language.t("command.project.open")}
+      action={
+        <Button variant="ghost" size="small" onClick={createProject}>
+          New project
+        </Button>
+      }
+    >
       <List
         search={{ placeholder: language.t("dialog.directory.search.placeholder"), autofocus: true }}
-        emptyMessage={language.t("dialog.directory.empty")}
+        emptyMessage="No folders found. Create a new project instead."
         loadingMessage={language.t("common.loading")}
         items={items}
         key={(x) => x.absolute}

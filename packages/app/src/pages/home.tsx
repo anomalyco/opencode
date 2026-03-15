@@ -5,10 +5,9 @@ import { useLayout } from "@/context/layout"
 import { useNavigate } from "@solidjs/router"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { Icon } from "@opencode-ai/ui/icon"
-import { usePlatform } from "@/context/platform"
 import { DateTime } from "luxon"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { DialogSelectDirectory } from "@/components/dialog-select-directory"
+import { DialogCreateProject } from "@/components/dialog-create-project"
 import { DialogSelectServer } from "@/components/dialog-select-server"
 import { useServer } from "@/context/server"
 import { useGlobalSync } from "@/context/global-sync"
@@ -17,7 +16,6 @@ import { useLanguage } from "@/context/language"
 export default function Home() {
   const sync = useGlobalSync()
   const layout = useLayout()
-  const platform = usePlatform()
   const dialog = useDialog()
   const navigate = useNavigate()
   const server = useServer()
@@ -43,29 +41,8 @@ export default function Home() {
     navigate(`/${base64Encode(directory)}`)
   }
 
-  async function chooseProject() {
-    function resolve(result: string | string[] | null) {
-      if (Array.isArray(result)) {
-        for (const directory of result) {
-          openProject(directory)
-        }
-      } else if (result) {
-        openProject(result)
-      }
-    }
-
-    if (platform.openDirectoryPickerDialog && server.isLocal()) {
-      const result = await platform.openDirectoryPickerDialog?.({
-        title: language.t("command.project.open"),
-        multiple: true,
-      })
-      resolve(result)
-    } else {
-      dialog.show(
-        () => <DialogSelectDirectory multiple={true} onSelect={resolve} />,
-        () => resolve(null),
-      )
-    }
+  function chooseProject() {
+    dialog.show(() => <DialogCreateProject onCreate={openProject} />)
   }
 
   return (
@@ -91,7 +68,7 @@ export default function Home() {
             <div class="flex gap-2 items-center justify-between pl-3">
               <div class="text-14-medium text-text-strong">{language.t("home.recentProjects")}</div>
               <Button icon="folder-add-left" size="normal" class="pl-2 pr-3" onClick={chooseProject}>
-                {language.t("command.project.open")}
+                New project
               </Button>
             </div>
             <ul class="flex flex-col gap-2">
@@ -117,11 +94,11 @@ export default function Home() {
           <div class="mt-30 mx-auto flex flex-col items-center gap-3">
             <Icon name="folder-add-left" size="large" />
             <div class="flex flex-col gap-1 items-center justify-center">
-              <div class="text-14-medium text-text-strong">{language.t("home.empty.title")}</div>
-              <div class="text-12-regular text-text-weak">{language.t("home.empty.description")}</div>
+              <div class="text-14-medium text-text-strong">No projects yet</div>
+              <div class="text-12-regular text-text-weak">Create your first project to start working.</div>
             </div>
             <Button class="px-3 mt-1" onClick={chooseProject}>
-              {language.t("command.project.open")}
+              Create project
             </Button>
           </div>
         </Match>
