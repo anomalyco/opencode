@@ -1,6 +1,7 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import type { AsyncStorage, SyncStorage } from "@solid-primitives/storage"
 import type { Accessor } from "solid-js"
+import { ServerConnection } from "./server"
 
 type PickerPaths = string | string[] | null
 type OpenDirectoryPickerOptions = { title?: string; multiple?: boolean }
@@ -58,10 +59,10 @@ export type Platform = {
   fetch?: typeof fetch
 
   /** Get the configured default server URL (platform-specific) */
-  getDefaultServerUrl?(): Promise<string | null>
+  getDefaultServer?(): Promise<ServerConnection.Key | null>
 
   /** Set the default server URL to use on app startup (platform-specific) */
-  setDefaultServerUrl?(url: string | null): Promise<void> | void
+  setDefaultServer?(url: ServerConnection.Key | null): Promise<void> | void
 
   /** Get the configured WSL integration (desktop only) */
   getWslEnabled?(): Promise<boolean>

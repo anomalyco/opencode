@@ -12,6 +12,7 @@ import { lazy } from "../util/lazy"
 import { NamedError } from "@opencode-ai/util/error"
 import { Flag } from "../flag/flag"
 import { Auth } from "../auth"
+import { Env } from "../env"
 import {
   type ParseError as JsoncParseError,
   applyEdits,
@@ -32,9 +33,11 @@ import { Glob } from "../util/glob"
 import { PackageRegistry } from "@/bun/registry"
 import { proxied } from "@/util/proxied"
 import { iife } from "@/util/iife"
-import { Control } from "@/control"
+import { Account } from "@/account"
 import { ConfigPaths } from "./paths"
 import { Filesystem } from "@/util/filesystem"
+import { Process } from "@/util/process"
+import { Lock } from "@/util/lock"
 
 export namespace Config {
   const ModelId = z.string().meta({ $ref: "https://models.dev/model-schema.json#/$defs/Model" })
@@ -86,11 +89,12 @@ export namespace Config {
     let result: Info = {}
     for (const [key, value] of Object.entries(auth)) {
       if (value.type === "wellknown") {
+        const url = key.replace(/\/+$/, "")
         process.env[value.key] = value.token
-        log.debug("fetching remote config", { url: `${key}/.well-known/opencode` })
-        const response = await fetch(`${key}/.well-known/opencode`)
+        log.debug("fetching remote config", { url: `${url}/.well-known/opencode` })
+        const response = await fetch(`${url}/.well-known/opencode`)
         if (!response.ok) {
-          throw new Error(`failed to fetch remote config from ${key}: ${response.status}`)
+          throw new Error(`failed to fetch remote config from ${url}: ${response.status}`)
         }
         const wellknown = (await response.json()) as any
         const remoteConfig = wellknown.config ?? {}
@@ -99,16 +103,12 @@ export namespace Config {
         result = mergeConfigConcatArrays(
           result,
           await load(JSON.stringify(remoteConfig), {
-            dir: path.dirname(`${key}/.well-known/opencode`),
-            source: `${key}/.well-known/opencode`,
+            dir: path.dirname(`${url}/.well-known/opencode`),
+            source: `${url}/.well-known/opencode`,
           }),
         )
-        log.debug("loaded remote config from well-known", { url: key })
+        log.debug("loaded remote config from well-known", { url })
       }
-    }
-
-    const token = await Control.token()
-    if (token) {
     }
 
     // Global user config overrides remote config.
@@ -175,6 +175,32 @@ export namespace Config {
         }),
       )
       log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
+    }
+
+    const active = Account.active()
+    if (active?.active_org_id) {
+      try {
+        const [config, token] = await Promise.all([
+          Account.config(active.id, active.active_org_id),
+          Account.token(active.id),
+        ])
+        if (token) {
+          process.env["OPENCODE_CONSOLE_TOKEN"] = token
+          Env.set("OPENCODE_CONSOLE_TOKEN", token)
+        }
+
+        if (config) {
+          result = mergeConfigConcatArrays(
+            result,
+            await load(JSON.stringify(config), {
+              dir: path.dirname(`${active.url}/api/config`),
+              source: `${active.url}/api/config`,
+            }),
+          )
+        }
+      } catch (err: any) {
+        log.debug("failed to fetch remote account config", { error: err?.message ?? err })
+      }
     }
 
     // Load managed config files last (highest priority) - enterprise admin-controlled
@@ -264,6 +290,7 @@ export namespace Config {
 
     // Install any additional dependencies defined in the package.json
     // This allows local plugins and custom tools to use external packages
+    using _ = await Lock.write("bun-install")
     await BunProc.run(
       [
         "install",
@@ -272,6 +299,26 @@ export namespace Config {
       ],
       { cwd: dir },
     ).catch((err) => {
+      if (err instanceof Process.RunFailedError) {
+        const detail = {
+          dir,
+          cmd: err.cmd,
+          code: err.code,
+          stdout: err.stdout.toString(),
+          stderr: err.stderr.toString(),
+        }
+        if (Flag.OPENCODE_STRICT_CONFIG_DEPS) {
+          log.error("failed to install dependencies", detail)
+          throw err
+        }
+        log.warn("failed to install dependencies", detail)
+        return
+      }
+
+      if (Flag.OPENCODE_STRICT_CONFIG_DEPS) {
+        log.error("failed to install dependencies", { dir, error: err })
+        throw err
+      }
       log.warn("failed to install dependencies", { dir, error: err })
     })
   }
@@ -971,6 +1018,14 @@ export namespace Config {
             .describe(
               "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
             ),
+          chunkTimeout: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe(
+              "Timeout in milliseconds between streamed SSE chunks for this provider. If no chunk arrives within this window, the request is aborted.",
+            ),
         })
         .catchall(z.any())
         .optional(),
@@ -1239,7 +1294,7 @@ export namespace Config {
       if (!parsed.data.$schema && isFile) {
         parsed.data.$schema = "https://opencode.ai/config.json"
         const updated = original.replace(/^\s*\{/, '{\n  "$schema": "https://opencode.ai/config.json",')
-        await Bun.write(options.path, updated).catch(() => {})
+        await Filesystem.write(options.path, updated).catch(() => {})
       }
       const data = parsed.data
       if (data.plugin && isFile) {
@@ -1400,3 +1455,5 @@ export namespace Config {
     return state().then((x) => x.directories)
   }
 }
+Filesystem.write
+Filesystem.write

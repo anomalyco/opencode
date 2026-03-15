@@ -1,24 +1,23 @@
-import { A, useNavigate, useParams } from "@solidjs/router"
-import { useGlobalSync } from "@/context/global-sync"
-import { useLanguage } from "@/context/language"
-import { useLayout, type LocalProject, getAvatarColors } from "@/context/layout"
-import { useNotification } from "@/context/notification"
-import { usePermission } from "@/context/permission"
-import { base64Encode } from "@opencode-ai/util/encode"
+import type { Message, Session, TextPart, UserMessage } from "@opencode-ai/sdk/v2/client"
 import { Avatar } from "@opencode-ai/ui/avatar"
-import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { HoverCard } from "@opencode-ai/ui/hover-card"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { MessageNav } from "@opencode-ai/ui/message-nav"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { base64Encode } from "@opencode-ai/util/encode"
 import { getFilename } from "@opencode-ai/util/path"
-import { type Message, type Session, type TextPart, type UserMessage } from "@opencode-ai/sdk/v2/client"
-import { For, Match, Show, Switch, createMemo, onCleanup, type Accessor, type JSX } from "solid-js"
-import { agentColor } from "@/utils/agent"
-import { hasProjectPermissions } from "./helpers"
+import { A, useNavigate, useParams } from "@solidjs/router"
+import { type Accessor, createMemo, For, type JSX, Match, onCleanup, Show, Switch } from "solid-js"
+import { useGlobalSync } from "@/context/global-sync"
+import { useLanguage } from "@/context/language"
+import { getAvatarColors, type LocalProject, useLayout } from "@/context/layout"
+import { useNotification } from "@/context/notification"
+import { usePermission } from "@/context/permission"
+import { messageAgentColor } from "@/utils/agent"
 import { sessionPermissionRequest } from "../session/composer/session-request-tree"
+import { hasProjectPermissions } from "./helpers"
 
 const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
@@ -68,6 +67,8 @@ export const ProjectIcon = (props: { project: LocalProject; class?: string; noti
 
 export type SessionItemProps = {
   session: Session
+  list: Session[]
+  navList?: Accessor<Session[]>
   slug: string
   mobile?: boolean
   dense?: boolean
@@ -96,18 +97,18 @@ const SessionRow = (props: {
   setHoverSession: (id: string | undefined) => void
   clearHoverProjectSoon: () => void
   sidebarOpened: Accessor<boolean>
-  prefetchSession: (session: Session, priority?: "high" | "low") => void
-  scheduleHoverPrefetch: () => void
+  warmHover: () => void
+  warmPress: () => void
+  warmFocus: () => void
   cancelHoverPrefetch: () => void
 }): JSX.Element => (
   <A
     href={`/${props.slug}/session/${props.session.id}`}
     class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none transition-[padding] ${props.mobile ? "pr-7" : ""} group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7 ${props.dense ? "py-0.5" : "py-1"}`}
-    onPointerEnter={props.scheduleHoverPrefetch}
+    onPointerDown={props.warmPress}
+    onPointerEnter={props.warmHover}
     onPointerLeave={props.cancelHoverPrefetch}
-    onMouseEnter={props.scheduleHoverPrefetch}
-    onMouseLeave={props.cancelHoverPrefetch}
-    onFocus={() => props.prefetchSession(props.session, "high")}
+    onFocus={props.warmFocus}
     onClick={() => {
       props.setHoverSession(undefined)
       if (props.sidebarOpened()) return
@@ -137,13 +138,6 @@ const SessionRow = (props: {
       <span class="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate">
         {props.session.title}
       </span>
-      <Show when={props.session.summary}>
-        {(summary) => (
-          <div class="group-hover/session:hidden group-active/session:hidden group-focus-within/session:hidden">
-            <DiffChanges changes={summary()} />
-          </div>
-        )}
-      </Show>
     </div>
   </A>
 )
@@ -171,7 +165,6 @@ const SessionHoverPreview = (props: {
     gutter={16}
     shift={-2}
     trigger={props.trigger}
-    mount={!props.mobile ? props.nav() : undefined}
     open={props.hoverSession() === props.session.id}
     onOpenChange={(open) => props.setHoverSession(open ? props.session.id : undefined)}
   >
@@ -211,46 +204,67 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   })
   const isWorking = createMemo(() => {
     if (hasPermissions()) return false
+    const pending = (sessionStore.message[props.session.id] ?? []).findLast(
+      (message) =>
+        message.role === "assistant" &&
+        typeof (message as { time?: { completed?: unknown } }).time?.completed !== "number",
+    )
     const status = sessionStore.session_status[props.session.id]
-    return status?.type === "busy" || status?.type === "retry"
+    return (
+      pending !== undefined ||
+      status?.type === "busy" ||
+      status?.type === "retry" ||
+      (status !== undefined && status.type !== "idle")
+    )
   })
 
   const tint = createMemo(() => {
-    const messages = sessionStore.message[props.session.id]
-    if (!messages) return undefined
-    let user: Message | undefined
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const message = messages[i]
-      if (message.role !== "user") continue
-      user = message
-      break
-    }
-    if (!user?.agent) return undefined
-
-    const agent = sessionStore.agent.find((a) => a.name === user.agent)
-    return agentColor(user.agent, agent?.color)
+    return messageAgentColor(sessionStore.message[props.session.id], sessionStore.agent)
   })
 
   const hoverMessages = createMemo(() =>
     sessionStore.message[props.session.id]?.filter((message): message is UserMessage => message.role === "user"),
   )
-  const hoverReady = createMemo(() => sessionStore.message[props.session.id] !== undefined)
+  const hoverReady = createMemo(() => hoverMessages() !== undefined)
   const hoverAllowed = createMemo(() => !props.mobile && props.sidebarExpanded())
   const hoverEnabled = createMemo(() => (props.popover ?? true) && hoverAllowed())
   const isActive = createMemo(() => props.session.id === params.id)
 
-  const hoverPrefetch = { current: undefined as ReturnType<typeof setTimeout> | undefined }
+  const warm = (span: number, priority: "high" | "low") => {
+    const nav = props.navList?.()
+    const list = nav?.some((item) => item.id === props.session.id && item.directory === props.session.directory)
+      ? nav
+      : props.list
+
+    props.prefetchSession(props.session, priority)
+
+    const idx = list.findIndex((item) => item.id === props.session.id && item.directory === props.session.directory)
+    if (idx === -1) return
+
+    for (let step = 1; step <= span; step++) {
+      const next = list[idx + step]
+      if (next) props.prefetchSession(next, step === 1 ? "high" : priority)
+
+      const prev = list[idx - step]
+      if (prev) props.prefetchSession(prev, step === 1 ? "high" : priority)
+    }
+  }
+
+  const hoverPrefetch = {
+    current: undefined as ReturnType<typeof setTimeout> | undefined,
+  }
   const cancelHoverPrefetch = () => {
     if (hoverPrefetch.current === undefined) return
     clearTimeout(hoverPrefetch.current)
     hoverPrefetch.current = undefined
   }
   const scheduleHoverPrefetch = () => {
+    warm(1, "high")
     if (hoverPrefetch.current !== undefined) return
     hoverPrefetch.current = setTimeout(() => {
       hoverPrefetch.current = undefined
-      props.prefetchSession(props.session)
-    }, 200)
+      warm(2, "low")
+    }, 80)
   }
 
   onCleanup(cancelHoverPrefetch)
@@ -274,8 +288,9 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
       setHoverSession={props.setHoverSession}
       clearHoverProjectSoon={props.clearHoverProjectSoon}
       sidebarOpened={layout.sidebar.opened}
-      prefetchSession={props.prefetchSession}
-      scheduleHoverPrefetch={scheduleHoverPrefetch}
+      warmHover={scheduleHoverPrefetch}
+      warmPress={() => warm(2, "high")}
+      warmFocus={() => warm(2, "high")}
       cancelHoverPrefetch={cancelHoverPrefetch}
     />
   )
@@ -283,7 +298,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   return (
     <div
       data-session-id={props.session.id}
-      class="group/session relative w-full rounded-md cursor-default transition-colors pl-2 pr-3
+      class="group/session relative w-full rounded-md cursor-default pl-2 pr-3 transition-colors
              hover:bg-surface-raised-base-hover [&:has(:focus-visible)]:bg-surface-raised-base-hover has-[[data-expanded]]:bg-surface-raised-base-hover has-[.active]:bg-surface-base-active"
     >
       <Show
@@ -308,17 +323,15 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
           setHoverSession={props.setHoverSession}
           messageLabel={messageLabel}
           onMessageSelect={(message) => {
-            if (!isActive()) {
+            if (!isActive())
               layout.pendingMessage.set(`${base64Encode(props.session.directory)}/${props.session.id}`, message.id)
-              navigate(`${props.slug}/session/${props.session.id}`)
-              return
-            }
-            window.history.replaceState(null, "", `#message-${message.id}`)
-            window.dispatchEvent(new HashChangeEvent("hashchange"))
+
+            navigate(`${props.slug}/session/${props.session.id}#message-${message.id}`)
           }}
           trigger={item}
         />
       </Show>
+
       <div
         class={`absolute ${props.dense ? "top-0.5 right-0.5" : "top-1 right-1"} flex items-center gap-0.5 transition-opacity`}
         classList={{
@@ -371,7 +384,7 @@ export const NewSessionItem = (props: {
     >
       <div class="flex items-center gap-1 w-full">
         <div class="shrink-0 size-6 flex items-center justify-center">
-          <Icon name="plus-small" size="small" class="text-icon-weak" />
+          <Icon name="new-session" size="small" class="text-icon-weak" />
         </div>
         <span class="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate">
           {label}

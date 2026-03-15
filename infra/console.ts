@@ -103,6 +103,12 @@ export const stripeWebhook = new stripe.WebhookEndpoint("StripeWebhookEndpoint",
 const zenLiteProduct = new stripe.Product("ZenLite", {
   name: "OpenCode Go",
 })
+const zenLiteCouponFirstMonth50 = new stripe.Coupon("ZenLiteCouponFirstMonth50", {
+  name: "First month 50% off",
+  percentOff: 50,
+  appliesToProducts: [zenLiteProduct.id],
+  duration: "once",
+})
 const zenLitePrice = new stripe.Price("ZenLitePrice", {
   product: zenLiteProduct.id,
   currency: "usd",
@@ -116,9 +122,9 @@ const ZEN_LITE_PRICE = new sst.Linkable("ZEN_LITE_PRICE", {
   properties: {
     product: zenLiteProduct.id,
     price: zenLitePrice.id,
+    firstMonth50Coupon: zenLiteCouponFirstMonth50.id,
   },
 })
-const ZEN_LITE_LIMITS = new sst.Secret("ZEN_LITE_LIMITS")
 
 const zenBlackProduct = new stripe.Product("ZenBlack", {
   name: "OpenCode Black",
@@ -142,7 +148,6 @@ const ZEN_BLACK_PRICE = new sst.Linkable("ZEN_BLACK_PRICE", {
     plan20: zenBlackPrice20.id,
   },
 })
-const ZEN_BLACK_LIMITS = new sst.Secret("ZEN_BLACK_LIMITS")
 
 const ZEN_MODELS = [
   new sst.Secret("ZEN_MODELS1"),
@@ -215,9 +220,8 @@ new sst.cloudflare.x.SolidStart("Console", {
     AWS_SES_ACCESS_KEY_ID,
     AWS_SES_SECRET_ACCESS_KEY,
     ZEN_BLACK_PRICE,
-    ZEN_BLACK_LIMITS,
     ZEN_LITE_PRICE,
-    ZEN_LITE_LIMITS,
+    new sst.Secret("ZEN_LIMITS"),
     new sst.Secret("ZEN_SESSION_SECRET"),
     ...ZEN_MODELS,
     ...($dev

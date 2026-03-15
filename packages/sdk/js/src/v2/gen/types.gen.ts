@@ -54,6 +54,106 @@ export type EventServerInstanceDisposed = {
   }
 }
 
+export type PermissionRequest = {
+  id: string
+  sessionID: string
+  permission: string
+  patterns: Array<string>
+  metadata: {
+    [key: string]: unknown
+  }
+  always: Array<string>
+  tool?: {
+    messageID: string
+    callID: string
+  }
+}
+
+export type EventPermissionAsked = {
+  type: "permission.asked"
+  properties: PermissionRequest
+}
+
+export type EventPermissionReplied = {
+  type: "permission.replied"
+  properties: {
+    sessionID: string
+    requestID: string
+    reply: "once" | "always" | "reject"
+  }
+}
+
+export type QuestionOption = {
+  /**
+   * Display text (1-5 words, concise)
+   */
+  label: string
+  /**
+   * Explanation of choice
+   */
+  description: string
+}
+
+export type QuestionInfo = {
+  /**
+   * Complete question
+   */
+  question: string
+  /**
+   * Very short label (max 30 chars)
+   */
+  header: string
+  /**
+   * Available choices
+   */
+  options: Array<QuestionOption>
+  /**
+   * Allow selecting multiple choices
+   */
+  multiple?: boolean
+  /**
+   * Allow typing a custom answer (default: true)
+   */
+  custom?: boolean
+}
+
+export type QuestionRequest = {
+  id: string
+  sessionID: string
+  /**
+   * Questions to ask
+   */
+  questions: Array<QuestionInfo>
+  tool?: {
+    messageID: string
+    callID: string
+  }
+}
+
+export type EventQuestionAsked = {
+  type: "question.asked"
+  properties: QuestionRequest
+}
+
+export type QuestionAnswer = Array<string>
+
+export type EventQuestionReplied = {
+  type: "question.replied"
+  properties: {
+    sessionID: string
+    requestID: string
+    answers: Array<QuestionAnswer>
+  }
+}
+
+export type EventQuestionRejected = {
+  type: "question.rejected"
+  properties: {
+    sessionID: string
+    requestID: string
+  }
+}
+
 export type EventServerConnected = {
   type: "server.connected"
   properties: {
@@ -505,6 +605,7 @@ export type CompactionPart = {
   messageID: string
   type: "compaction"
   auto: boolean
+  overflow?: boolean
 }
 
 export type Part =
@@ -548,35 +649,6 @@ export type EventMessagePartRemoved = {
   }
 }
 
-export type PermissionRequest = {
-  id: string
-  sessionID: string
-  permission: string
-  patterns: Array<string>
-  metadata: {
-    [key: string]: unknown
-  }
-  always: Array<string>
-  tool?: {
-    messageID: string
-    callID: string
-  }
-}
-
-export type EventPermissionAsked = {
-  type: "permission.asked"
-  properties: PermissionRequest
-}
-
-export type EventPermissionReplied = {
-  type: "permission.replied"
-  properties: {
-    sessionID: string
-    requestID: string
-    reply: "once" | "always" | "reject"
-  }
-}
-
 export type SessionStatus =
   | {
       type: "idle"
@@ -603,77 +675,6 @@ export type EventSessionIdle = {
   type: "session.idle"
   properties: {
     sessionID: string
-  }
-}
-
-export type QuestionOption = {
-  /**
-   * Display text (1-5 words, concise)
-   */
-  label: string
-  /**
-   * Explanation of choice
-   */
-  description: string
-}
-
-export type QuestionInfo = {
-  /**
-   * Complete question
-   */
-  question: string
-  /**
-   * Very short label (max 30 chars)
-   */
-  header: string
-  /**
-   * Available choices
-   */
-  options: Array<QuestionOption>
-  /**
-   * Allow selecting multiple choices
-   */
-  multiple?: boolean
-  /**
-   * Allow typing a custom answer (default: true)
-   */
-  custom?: boolean
-}
-
-export type QuestionRequest = {
-  id: string
-  sessionID: string
-  /**
-   * Questions to ask
-   */
-  questions: Array<QuestionInfo>
-  tool?: {
-    messageID: string
-    callID: string
-  }
-}
-
-export type EventQuestionAsked = {
-  type: "question.asked"
-  properties: QuestionRequest
-}
-
-export type QuestionAnswer = Array<string>
-
-export type EventQuestionReplied = {
-  type: "question.replied"
-  properties: {
-    sessionID: string
-    requestID: string
-    answers: Array<QuestionAnswer>
-  }
-}
-
-export type EventQuestionRejected = {
-  type: "question.rejected"
-  properties: {
-    sessionID: string
-    requestID: string
   }
 }
 
@@ -888,21 +889,6 @@ export type EventVcsBranchUpdated = {
   }
 }
 
-export type EventWorktreeReady = {
-  type: "worktree.ready"
-  properties: {
-    name: string
-    branch: string
-  }
-}
-
-export type EventWorktreeFailed = {
-  type: "worktree.failed"
-  properties: {
-    message: string
-  }
-}
-
 export type EventWorkspaceReady = {
   type: "workspace.ready"
   properties: {
@@ -956,11 +942,31 @@ export type EventPtyDeleted = {
   }
 }
 
+export type EventWorktreeReady = {
+  type: "worktree.ready"
+  properties: {
+    name: string
+    branch: string
+  }
+}
+
+export type EventWorktreeFailed = {
+  type: "worktree.failed"
+  properties: {
+    message: string
+  }
+}
+
 export type Event =
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
   | EventProjectUpdated
   | EventServerInstanceDisposed
+  | EventPermissionAsked
+  | EventPermissionReplied
+  | EventQuestionAsked
+  | EventQuestionReplied
+  | EventQuestionRejected
   | EventServerConnected
   | EventGlobalDisposed
   | EventLspClientDiagnostics
@@ -971,13 +977,8 @@ export type Event =
   | EventMessagePartUpdated
   | EventMessagePartDelta
   | EventMessagePartRemoved
-  | EventPermissionAsked
-  | EventPermissionReplied
   | EventSessionStatus
   | EventSessionIdle
-  | EventQuestionAsked
-  | EventQuestionReplied
-  | EventQuestionRejected
   | EventSessionCompacted
   | EventFileWatcherUpdated
   | EventTodoUpdated
@@ -994,14 +995,14 @@ export type Event =
   | EventSessionDiff
   | EventSessionError
   | EventVcsBranchUpdated
-  | EventWorktreeReady
-  | EventWorktreeFailed
   | EventWorkspaceReady
   | EventWorkspaceFailed
   | EventPtyCreated
   | EventPtyUpdated
   | EventPtyExited
   | EventPtyDeleted
+  | EventWorktreeReady
+  | EventWorktreeFailed
 
 export type GlobalEvent = {
   directory: string
@@ -1224,7 +1225,11 @@ export type ProviderConfig = {
      * Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.
      */
     timeout?: number | false
-    [key: string]: unknown | string | boolean | number | false | undefined
+    /**
+     * Timeout in milliseconds between streamed SSE chunks for this provider. If no chunk arrives within this window, the request is aborted.
+     */
+    chunkTimeout?: number
+    [key: string]: unknown | string | boolean | number | false | number | undefined
   }
 }
 
@@ -1630,6 +1635,16 @@ export type ToolListItem = {
 
 export type ToolList = Array<ToolListItem>
 
+export type Workspace = {
+  id: string
+  type: string
+  branch: string | null
+  name: string | null
+  directory: string | null
+  extra: unknown | null
+  projectID: string
+}
+
 export type Worktree = {
   name: string
   branch: string
@@ -1642,16 +1657,6 @@ export type WorktreeCreateInput = {
    * Additional startup script to run after the project's start command
    */
   startCommand?: string
-}
-
-export type Workspace = {
-  id: string
-  branch: string | null
-  projectID: string
-  config: {
-    directory: string
-    type: "worktree"
-  }
 }
 
 export type WorktreeRemoveInput = {
@@ -2086,6 +2091,25 @@ export type ProjectCurrentResponses = {
 
 export type ProjectCurrentResponse = ProjectCurrentResponses[keyof ProjectCurrentResponses]
 
+export type ProjectInitGitData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/project/git/init"
+}
+
+export type ProjectInitGitResponses = {
+  /**
+   * Project information after git initialization
+   */
+  200: Project
+}
+
+export type ProjectInitGitResponse = ProjectInitGitResponses[keyof ProjectInitGitResponses]
+
 export type ProjectUpdateData = {
   body?: {
     name?: string
@@ -2443,6 +2467,93 @@ export type ToolListResponses = {
 
 export type ToolListResponse = ToolListResponses[keyof ToolListResponses]
 
+export type ExperimentalWorkspaceListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/experimental/workspace"
+}
+
+export type ExperimentalWorkspaceListResponses = {
+  /**
+   * Workspaces
+   */
+  200: Array<Workspace>
+}
+
+export type ExperimentalWorkspaceListResponse =
+  ExperimentalWorkspaceListResponses[keyof ExperimentalWorkspaceListResponses]
+
+export type ExperimentalWorkspaceCreateData = {
+  body?: {
+    id?: string
+    type: string
+    branch: string | null
+    extra: unknown | null
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/experimental/workspace"
+}
+
+export type ExperimentalWorkspaceCreateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ExperimentalWorkspaceCreateError =
+  ExperimentalWorkspaceCreateErrors[keyof ExperimentalWorkspaceCreateErrors]
+
+export type ExperimentalWorkspaceCreateResponses = {
+  /**
+   * Workspace created
+   */
+  200: Workspace
+}
+
+export type ExperimentalWorkspaceCreateResponse =
+  ExperimentalWorkspaceCreateResponses[keyof ExperimentalWorkspaceCreateResponses]
+
+export type ExperimentalWorkspaceRemoveData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/experimental/workspace/{id}"
+}
+
+export type ExperimentalWorkspaceRemoveErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ExperimentalWorkspaceRemoveError =
+  ExperimentalWorkspaceRemoveErrors[keyof ExperimentalWorkspaceRemoveErrors]
+
+export type ExperimentalWorkspaceRemoveResponses = {
+  /**
+   * Workspace removed
+   */
+  200: Workspace
+}
+
+export type ExperimentalWorkspaceRemoveResponse =
+  ExperimentalWorkspaceRemoveResponses[keyof ExperimentalWorkspaceRemoveResponses]
+
 export type WorktreeRemoveData = {
   body?: WorktreeRemoveInput
   path?: never
@@ -2517,96 +2628,6 @@ export type WorktreeCreateResponses = {
 }
 
 export type WorktreeCreateResponse = WorktreeCreateResponses[keyof WorktreeCreateResponses]
-
-export type ExperimentalWorkspaceRemoveData = {
-  body?: never
-  path: {
-    id: string
-  }
-  query?: {
-    directory?: string
-    workspace?: string
-  }
-  url: "/experimental/workspace/{id}"
-}
-
-export type ExperimentalWorkspaceRemoveErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type ExperimentalWorkspaceRemoveError =
-  ExperimentalWorkspaceRemoveErrors[keyof ExperimentalWorkspaceRemoveErrors]
-
-export type ExperimentalWorkspaceRemoveResponses = {
-  /**
-   * Workspace removed
-   */
-  200: Workspace
-}
-
-export type ExperimentalWorkspaceRemoveResponse =
-  ExperimentalWorkspaceRemoveResponses[keyof ExperimentalWorkspaceRemoveResponses]
-
-export type ExperimentalWorkspaceCreateData = {
-  body?: {
-    branch: string | null
-    config: {
-      directory: string
-      type: "worktree"
-    }
-  }
-  path: {
-    id: string
-  }
-  query?: {
-    directory?: string
-    workspace?: string
-  }
-  url: "/experimental/workspace/{id}"
-}
-
-export type ExperimentalWorkspaceCreateErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type ExperimentalWorkspaceCreateError =
-  ExperimentalWorkspaceCreateErrors[keyof ExperimentalWorkspaceCreateErrors]
-
-export type ExperimentalWorkspaceCreateResponses = {
-  /**
-   * Workspace created
-   */
-  200: Workspace
-}
-
-export type ExperimentalWorkspaceCreateResponse =
-  ExperimentalWorkspaceCreateResponses[keyof ExperimentalWorkspaceCreateResponses]
-
-export type ExperimentalWorkspaceListData = {
-  body?: never
-  path?: never
-  query?: {
-    directory?: string
-    workspace?: string
-  }
-  url: "/experimental/workspace"
-}
-
-export type ExperimentalWorkspaceListResponses = {
-  /**
-   * Workspaces
-   */
-  200: Array<Workspace>
-}
-
-export type ExperimentalWorkspaceListResponse =
-  ExperimentalWorkspaceListResponses[keyof ExperimentalWorkspaceListResponses]
 
 export type WorktreeResetData = {
   body?: WorktreeResetInput
@@ -2747,6 +2768,7 @@ export type SessionCreateData = {
     parentID?: string
     title?: string
     permission?: PermissionRuleset
+    workspaceID?: string
   }
   path?: never
   query?: {
@@ -2948,9 +2970,6 @@ export type SessionChildrenResponse = SessionChildrenResponses[keyof SessionChil
 export type SessionTodoData = {
   body?: never
   path: {
-    /**
-     * Session ID
-     */
     sessionID: string
   }
   query?: {
@@ -2989,9 +3008,6 @@ export type SessionInitData = {
     messageID: string
   }
   path: {
-    /**
-     * Session ID
-     */
     sessionID: string
   }
   query?: {
@@ -3177,9 +3193,6 @@ export type SessionSummarizeData = {
     auto?: boolean
   }
   path: {
-    /**
-     * Session ID
-     */
     sessionID: string
   }
   query?: {
@@ -3214,15 +3227,16 @@ export type SessionSummarizeResponse = SessionSummarizeResponses[keyof SessionSu
 export type SessionMessagesData = {
   body?: never
   path: {
-    /**
-     * Session ID
-     */
     sessionID: string
   }
   query?: {
     directory?: string
     workspace?: string
+    /**
+     * Maximum number of messages to return
+     */
     limit?: number
+    before?: string
   }
   url: "/session/{sessionID}/message"
 }
@@ -3273,9 +3287,6 @@ export type SessionPromptData = {
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {
-    /**
-     * Session ID
-     */
     sessionID: string
   }
   query?: {
@@ -3313,13 +3324,7 @@ export type SessionPromptResponse = SessionPromptResponses[keyof SessionPromptRe
 export type SessionDeleteMessageData = {
   body?: never
   path: {
-    /**
-     * Session ID
-     */
     sessionID: string
-    /**
-     * Message ID
-     */
     messageID: string
   }
   query?: {
@@ -3354,13 +3359,7 @@ export type SessionDeleteMessageResponse = SessionDeleteMessageResponses[keyof S
 export type SessionMessageData = {
   body?: never
   path: {
-    /**
-     * Session ID
-     */
     sessionID: string
-    /**
-     * Message ID
-     */
     messageID: string
   }
   query?: {
@@ -3398,17 +3397,8 @@ export type SessionMessageResponse = SessionMessageResponses[keyof SessionMessag
 export type PartDeleteData = {
   body?: never
   path: {
-    /**
-     * Session ID
-     */
     sessionID: string
-    /**
-     * Message ID
-     */
     messageID: string
-    /**
-     * Part ID
-     */
     partID: string
   }
   query?: {
@@ -3443,17 +3433,8 @@ export type PartDeleteResponse = PartDeleteResponses[keyof PartDeleteResponses]
 export type PartUpdateData = {
   body?: Part
   path: {
-    /**
-     * Session ID
-     */
     sessionID: string
-    /**
-     * Message ID
-     */
     messageID: string
-    /**
-     * Part ID
-     */
     partID: string
   }
   query?: {
@@ -3506,9 +3487,6 @@ export type SessionPromptAsyncData = {
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {
-    /**
-     * Session ID
-     */
     sessionID: string
   }
   query?: {
@@ -3558,9 +3536,6 @@ export type SessionCommandData = {
     }>
   }
   path: {
-    /**
-     * Session ID
-     */
     sessionID: string
   }
   query?: {
@@ -3605,9 +3580,6 @@ export type SessionShellData = {
     command: string
   }
   path: {
-    /**
-     * Session ID
-     */
     sessionID: string
   }
   query?: {
