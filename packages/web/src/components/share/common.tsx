@@ -1,6 +1,7 @@
 import { createContext, createSignal, onCleanup, splitProps, useContext } from "solid-js"
 import type { JSX } from "solid-js/jsx-runtime"
 import { IconCheckCircle, IconHashtag } from "../icons"
+import { copy } from "./clipboard"
 
 export type ShareMessages = { locale: string } & Record<string, string>
 
@@ -52,16 +53,15 @@ export function AnchorIcon(props: AnchorProps) {
     <div {...rest} data-element-anchor title={messages.link_to_message} data-status={copied() ? "copied" : ""}>
       <a
         href={`#${local.id}`}
-        onClick={(e) => {
+        onClick={async (e) => {
           e.preventDefault()
 
           const anchor = e.currentTarget
           const hash = anchor.getAttribute("href") || ""
           const { origin, pathname, search } = window.location
 
-          navigator.clipboard
-            .writeText(`${origin}${pathname}${search}${hash}`)
-            .catch((err) => console.error("Copy failed", err))
+          const ok = await copy(`${origin}${pathname}${search}${hash}`)
+          if (!ok) return
 
           setCopied(true)
           setTimeout(() => setCopied(false), 3000)

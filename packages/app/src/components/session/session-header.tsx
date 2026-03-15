@@ -1,5 +1,6 @@
 import { AppIcon } from "@opencode-ai/ui/app-icon"
 import { Button } from "@opencode-ai/ui/button"
+import { copy } from "@opencode-ai/ui/clipboard"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -249,17 +250,15 @@ export function SessionHeader() {
   const copyPath = () => {
     const directory = projectDirectory()
     if (!directory) return
-    navigator.clipboard
-      .writeText(directory)
-      .then(() => {
-        showToast({
-          variant: "success",
-          icon: "circle-check",
-          title: language.t("session.share.copy.copied"),
-          description: directory,
-        })
+    copy(directory).then((ok) => {
+      if (!ok) return
+      showToast({
+        variant: "success",
+        icon: "circle-check",
+        title: language.t("session.share.copy.copied"),
+        description: directory,
       })
-      .catch((err: unknown) => showRequestError(language, err))
+    })
   }
 
   const centerMount = createMemo(() => document.getElementById("opencode-titlebar-center"))

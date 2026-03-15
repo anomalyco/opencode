@@ -1,6 +1,7 @@
 import { type ComponentProps, createMemo, Show, splitProps } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Card, CardDescription } from "./card"
+import { copy } from "./clipboard"
 import { Collapsible } from "./collapsible"
 import { Icon } from "./icon"
 import { IconButton } from "./icon-button"
@@ -66,10 +67,10 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
     return parts.slice(1).join(": ").trim() || cleaned()
   })
 
-  const copy = async () => {
+  const handleCopy = async () => {
     const text = cleaned()
     if (!text) return
-    await navigator.clipboard.writeText(text)
+    await copy(text)
     setState("copied", true)
     setTimeout(() => setState("copied", false), 2000)
   }
@@ -128,7 +129,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={(e) => {
                       e.stopPropagation()
-                      copy()
+                      handleCopy()
                     }}
                     aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.toolErrorCard.copyError")}
                   />

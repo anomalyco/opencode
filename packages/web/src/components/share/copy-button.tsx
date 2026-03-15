@@ -1,5 +1,6 @@
 import { createSignal } from "solid-js"
 import { IconClipboard, IconCheckCircle } from "../icons"
+import { copy } from "./clipboard"
 import { useShareMessages } from "./common"
 import styles from "./copy-button.module.css"
 
@@ -11,13 +12,12 @@ export function CopyButton(props: CopyButtonProps) {
   const [copied, setCopied] = createSignal(false)
   const messages = useShareMessages()
 
-  function handleCopyClick() {
-    if (props.text) {
-      navigator.clipboard.writeText(props.text).catch((err) => console.error("Copy failed", err))
-
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    }
+  async function handleCopyClick() {
+    if (!props.text) return
+    const ok = await copy(props.text)
+    if (!ok) return
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
   }
 
   return (

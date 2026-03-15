@@ -55,6 +55,7 @@ import { ToolStatusTitle } from "./tool-status-title"
 import { animate } from "motion"
 import { useLocation } from "@solidjs/router"
 import { attached, inline, kind } from "./message-file"
+import { copy } from "./clipboard"
 
 function ShellSubmessage(props: { text: string; animate?: boolean }) {
   let widthRef: HTMLSpanElement | undefined
@@ -938,7 +939,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
   const handleCopy = async () => {
     const content = text()
     if (!content) return
-    await navigator.clipboard.writeText(content)
+    await copy(content)
     setState("copied", true)
     setTimeout(() => setState("copied", false), 2000)
   }
@@ -1374,7 +1375,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   const handleCopy = async () => {
     const content = displayText()
     if (!content) return
-    await navigator.clipboard.writeText(content)
+    await copy(content)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -1707,7 +1708,7 @@ ToolRegistry.register({
     const handleCopy = async () => {
       const content = text()
       if (!content) return
-      await navigator.clipboard.writeText(content)
+      await copy(content)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     }

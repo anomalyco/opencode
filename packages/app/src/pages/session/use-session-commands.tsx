@@ -1,5 +1,6 @@
 import { useNavigate } from "@solidjs/router"
 import { useCommand, type CommandOption } from "@/context/command"
+import { copy } from "@opencode-ai/ui/clipboard"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
 import { useFile, selectionFromLines, type FileSelection, type SelectedLineRange } from "@/context/file"
@@ -150,32 +151,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
               onSelect: async () => {
                 if (!params.id) return
 
-                const write = (value: string) => {
-                  const body = typeof document === "undefined" ? undefined : document.body
-                  if (body) {
-                    const textarea = document.createElement("textarea")
-                    textarea.value = value
-                    textarea.setAttribute("readonly", "")
-                    textarea.style.position = "fixed"
-                    textarea.style.opacity = "0"
-                    textarea.style.pointerEvents = "none"
-                    body.appendChild(textarea)
-                    textarea.select()
-                    const copied = document.execCommand("copy")
-                    body.removeChild(textarea)
-                    if (copied) return Promise.resolve(true)
-                  }
-
-                  const clipboard = typeof navigator === "undefined" ? undefined : navigator.clipboard
-                  if (!clipboard?.writeText) return Promise.resolve(false)
-                  return clipboard.writeText(value).then(
-                    () => true,
-                    () => false,
-                  )
-                }
-
-                const copy = async (url: string, existing: boolean) => {
-                  const ok = await write(url)
+                const doCopy = async (url: string, existing: boolean) => {
+                  const ok = await copy(url)
                   if (!ok) {
                     showToast({
                       title: language.t("toast.session.share.copyFailed.title"),
@@ -195,7 +172,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
 
                 const existing = info()?.share?.url
                 if (existing) {
-                  await copy(existing, true)
+                  await doCopy(existing, true)
                   return
                 }
 
@@ -212,7 +189,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
                   return
                 }
 
-                await copy(url, false)
+                await doCopy(url, false)
               },
             }),
             sessionCommand({
