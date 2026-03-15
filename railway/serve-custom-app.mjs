@@ -48,6 +48,19 @@ proxy.on("error", async (_err, req, res) => {
   res.end(JSON.stringify({ message: `Proxy failed for ${req.url ?? "unknown request"}` }))
 })
 
+function isAuthorized(req) {
+  if (!auth) return true
+  return req.headers.authorization === auth
+}
+
+function writeUnauthorized(res) {
+  res.writeHead(401, {
+    "content-type": "text/plain; charset=utf-8",
+    "www-authenticate": `Basic realm="${backendUsername}"`,
+  })
+  res.end("Unauthorized")
+}
+
 function staticPath(urlPath) {
   const pathname = (urlPath || "/").split("?")[0]
   const safe = normalize(pathname).replace(/^(\.\.(\/|\\|$))+/, "").replace(/^\/+/, "")
@@ -62,6 +75,11 @@ const server = createServer(async (req, res) => {
   if (url === "/healthz") {
     res.writeHead(200, { "content-type": "text/plain; charset=utf-8" })
     res.end("ok")
+    return
+  }
+
+  if (!isAuthorized(req)) {
+    writeUnauthorized(res)
     return
   }
 
@@ -86,6 +104,13 @@ const server = createServer(async (req, res) => {
 
 server.on("upgrade", (req, socket, head) => {
   if (!req.url?.startsWith("/api/")) {
+    socket.destroy()
+    return
+  }
+  if (!isAuthorized(req)) {
+    socket.write("HTTP/1.1 401 Unauthorized\r\n")
+    socket.write(`WWW-Authenticate: Basic realm="${backendUsername}"\r\n`)
+    socket.write("Connection: close\r\n\r\n")
     socket.destroy()
     return
   }
