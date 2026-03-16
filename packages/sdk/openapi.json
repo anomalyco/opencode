@@ -7337,6 +7337,24 @@
         },
         "required": ["type", "properties"]
       },
+      "Event.vcs.branch.updated": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "vcs.branch.updated"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "branch": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "required": ["type", "properties"]
+      },
       "Event.server.connected": {
         "type": "object",
         "properties": {
@@ -9387,24 +9405,6 @@
         },
         "required": ["type", "properties"]
       },
-      "Event.vcs.branch.updated": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "vcs.branch.updated"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "branch": {
-                "type": "string"
-              }
-            }
-          }
-        },
-        "required": ["type", "properties"]
-      },
       "Event.workspace.ready": {
         "type": "object",
         "properties": {
@@ -9630,6 +9630,9 @@
             "$ref": "#/components/schemas/Event.file.watcher.updated"
           },
           {
+            "$ref": "#/components/schemas/Event.vcs.branch.updated"
+          },
+          {
             "$ref": "#/components/schemas/Event.server.connected"
           },
           {
@@ -9706,9 +9709,6 @@
           },
           {
             "$ref": "#/components/schemas/Event.session.error"
-          },
-          {
-            "$ref": "#/components/schemas/Event.vcs.branch.updated"
           },
           {
             "$ref": "#/components/schemas/Event.workspace.ready"

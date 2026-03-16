@@ -162,6 +162,13 @@ export type EventFileWatcherUpdated = {
   }
 }
 
+export type EventVcsBranchUpdated = {
+  type: "vcs.branch.updated"
+  properties: {
+    branch?: string
+  }
+}
+
 export type EventServerConnected = {
   type: "server.connected"
   properties: {
@@ -882,13 +889,6 @@ export type EventSessionError = {
   }
 }
 
-export type EventVcsBranchUpdated = {
-  type: "vcs.branch.updated"
-  properties: {
-    branch?: string
-  }
-}
-
 export type EventWorkspaceReady = {
   type: "workspace.ready"
   properties: {
@@ -968,6 +968,7 @@ export type Event =
   | EventPermissionAsked
   | EventPermissionReplied
   | EventFileWatcherUpdated
+  | EventVcsBranchUpdated
   | EventServerConnected
   | EventGlobalDisposed
   | EventLspClientDiagnostics
@@ -994,7 +995,6 @@ export type Event =
   | EventSessionDeleted
   | EventSessionDiff
   | EventSessionError
-  | EventVcsBranchUpdated
   | EventWorkspaceReady
   | EventWorkspaceFailed
   | EventPtyCreated

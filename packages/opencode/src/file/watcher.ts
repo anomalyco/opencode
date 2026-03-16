@@ -1,6 +1,6 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
-import { InstanceContext } from "@/effect/instances"
+import { InstanceContext } from "@/effect/instance-context"
 import { Instance } from "@/project/instance"
 import z from "zod"
 import { Log } from "../util/log"
