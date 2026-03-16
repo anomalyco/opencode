@@ -1338,6 +1338,10 @@ export type Config = {
      * URLs to fetch skills from (e.g., https://example.com/.well-known/skills/)
      */
     urls?: Array<string>
+    /**
+     * Show individual skills as slash commands in autocomplete (default: false)
+     */
+    slash?: boolean
   }
   watcher?: {
     ignore?: Array<string>

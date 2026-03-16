@@ -706,6 +706,7 @@ export namespace Config {
       .array(z.string())
       .optional()
       .describe("URLs to fetch skills from (e.g., https://example.com/.well-known/skills/)"),
+    slash: z.boolean().optional().describe("Show individual skills as slash commands in autocomplete (default: false)"),
   })
   export type Skills = z.infer<typeof Skills>
 

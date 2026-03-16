@@ -15,6 +15,7 @@ import { DialogSelectFile } from "@/components/dialog-select-file"
 import { DialogSelectModel } from "@/components/dialog-select-model"
 import { DialogSelectMcp } from "@/components/dialog-select-mcp"
 import { DialogFork } from "@/components/dialog-fork"
+import { DialogSelectSkill } from "@/components/dialog-select-skill"
 import { showToast } from "@opencode-ai/ui/toast"
 import { findLast } from "@opencode-ai/util/array"
 import { createSessionTabs } from "@/pages/session/helpers"
@@ -124,6 +125,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const terminalCommand = withCategory(language.t("command.category.terminal"))
   const modelCommand = withCategory(language.t("command.category.model"))
   const mcpCommand = withCategory(language.t("command.category.mcp"))
+  const skillCommand = withCategory(language.t("command.category.skill"))
   const agentCommand = withCategory(language.t("command.category.agent"))
   const permissionsCommand = withCategory(language.t("command.category.permissions"))
 
@@ -360,6 +362,20 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         keybind: "mod+;",
         slash: "mcp",
         onSelect: () => dialog.show(() => <DialogSelectMcp />),
+      }),
+      skillCommand({
+        id: "skill.choose",
+        title: language.t("command.skill.choose"),
+        description: language.t("command.skill.choose.description"),
+        slash: "skills",
+        onSelect: () =>
+          dialog.show(() => (
+            <DialogSelectSkill
+              onSelect={(skill) => {
+                prompt.set([{ type: "text" as const, content: `/${skill} `, start: 0, end: skill.length + 2 }])
+              }}
+            />
+          )),
       }),
       agentCommand({
         id: "agent.cycle",
