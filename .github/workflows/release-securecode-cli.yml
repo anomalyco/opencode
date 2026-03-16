@@ -1,0 +1,74 @@
+name: release-securecode-cli
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to create or update (default: v<packages/opencode version>)"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  cli:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Resolve release metadata
+        id: vars
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          TAG="${EVENT_TAG:-$INPUT_TAG}"
+          if [ -z "$TAG" ]; then
+            VERSION="$(node -p "require('./packages/opencode/package.json').version")"
+            TAG="v${VERSION}"
+          else
+            VERSION="${TAG#v}"
+          fi
+
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure release exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.vars.outputs.tag }}
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$TAG" \
+              --title "Acompany Secure Code ${TAG}" \
+              --repo "$GITHUB_REPOSITORY"
+            exit 0
+          fi
+
+          gh release create "$TAG" \
+            --title "Acompany Secure Code ${TAG}" \
+            --notes "Acompany Secure Code CLI release." \
+            --repo "$GITHUB_REPOSITORY"
+
+      - name: Build CLI binaries
+        env:
+          OPENCODE_VERSION: ${{ steps.vars.outputs.version }}
+        run: bun ./packages/opencode/script/build.ts
+
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          OPENCODE_VERSION: ${{ steps.vars.outputs.version }}
+          SECURECODE_TAG: ${{ steps.vars.outputs.tag }}
+        run: bun ./script/release-securecode.ts

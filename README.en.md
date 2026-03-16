@@ -37,6 +37,131 @@ The goal is to support code generation, review, refactoring, bug fixing, and tes
 - [Watch on YouTube](https://youtu.be/QCwp4IbuP2I?si=Qx4Za7sfdluWB0Ca)
 - The demo shows the flow from the home screen into actual coding assistance.
 
+## Install
+
+The latest CLI binaries are published on [GitHub Releases](https://github.com/acompany-develop/securecode/releases).
+
+- macOS Apple Silicon: `securecode-darwin-arm64.zip`
+- macOS Intel: `securecode-darwin-x64.zip`
+- Linux x86_64: `securecode-linux-x64.tar.gz`
+- Linux ARM64: `securecode-linux-arm64.tar.gz`
+- Windows x86_64: `securecode-windows-x64.zip`
+- Windows ARM64: `securecode-windows-arm64.zip`
+
+Notes:
+
+- `*-baseline` targets older x86_64 CPUs without AVX2.
+- `*-musl` targets Alpine Linux.
+
+macOS / Linux:
+
+```bash
+# Example: Linux x86_64
+tar -xzf securecode-linux-x64.tar.gz
+chmod +x securecode
+mkdir -p ~/.local/bin
+mv securecode ~/.local/bin/securecode
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+```bash
+# Example: macOS Apple Silicon
+unzip securecode-darwin-arm64.zip
+chmod +x securecode
+mkdir -p ~/.local/bin
+mv securecode ~/.local/bin/securecode
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Windows:
+
+```powershell
+Expand-Archive .\securecode-windows-x64.zip -DestinationPath .
+$env:Path += ";$PWD"
+.\securecode.exe run "hello"
+```
+
+Prerequisites:
+
+- `git` should be available in your PATH.
+- `ripgrep` is strongly recommended for search-heavy workflows.
+
+## Configure Models
+
+The config file remains `opencode.json` for upstream compatibility. You can place it in the project root or in `~/.config/opencode/opencode.json`.
+
+1. Export the provider API key.
+
+```bash
+export OPENAI_API_KEY="your-api-key"
+```
+
+2. Inspect available model IDs.
+
+```bash
+securecode models openai --refresh
+```
+
+3. Pin the default model in `opencode.json`.
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "openai": {
+      "options": {
+        "apiKey": "{env:OPENAI_API_KEY}"
+      }
+    }
+  },
+  "model": "openai/gpt-5.2",
+  "small_model": "openai/gpt-5.2-mini"
+}
+```
+
+If you use an OpenAI-compatible gateway, add `baseURL`.
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "openai": {
+      "options": {
+        "apiKey": "{env:OPENAI_API_KEY}",
+        "baseURL": "https://your-gateway.example.com/v1"
+      }
+    }
+  },
+  "model": "openai/gpt-5.2"
+}
+```
+
+## Usage
+
+Single prompt:
+
+```bash
+securecode run "Summarize the current repository structure"
+```
+
+Override the model for one run:
+
+```bash
+securecode run -m openai/gpt-5.2 "Review auth.ts for security issues"
+```
+
+Attach files:
+
+```bash
+securecode run -f README.md -f src/auth.ts "Explain the auth flow and list risks"
+```
+
+Check configured credentials:
+
+```bash
+securecode providers list
+```
+
 ## Local Development
 
 This repository is a fork that tracks upstream release tags while layering Acompany Secure Code specific changes on top. Some internal package names and command names remain for upstream compatibility, but the public-facing branding is aligned to Secure Code.

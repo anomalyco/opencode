@@ -37,6 +37,131 @@ Acompany Secure Code は、機密ソースコードを Confidential Computing �
 - [YouTube で見る](https://youtu.be/QCwp4IbuP2I?si=Qx4Za7sfdluWB0Ca)
 - クリックで、トップ画面から実際のコーディング支援フローまで確認できます。
 
+## インストール
+
+最新版の CLI バイナリは [GitHub Releases](https://github.com/acompany-develop/securecode/releases) から取得できます。
+
+- macOS Apple Silicon: `securecode-darwin-arm64.zip`
+- macOS Intel: `securecode-darwin-x64.zip`
+- Linux x86_64: `securecode-linux-x64.tar.gz`
+- Linux ARM64: `securecode-linux-arm64.tar.gz`
+- Windows x86_64: `securecode-windows-x64.zip`
+- Windows ARM64: `securecode-windows-arm64.zip`
+
+補足:
+
+- `*-baseline` は AVX2 非対応 CPU 向けです。
+- `*-musl` は Alpine Linux 向けです。
+
+macOS / Linux:
+
+```bash
+# 例: Linux x86_64
+tar -xzf securecode-linux-x64.tar.gz
+chmod +x securecode
+mkdir -p ~/.local/bin
+mv securecode ~/.local/bin/securecode
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+```bash
+# 例: macOS Apple Silicon
+unzip securecode-darwin-arm64.zip
+chmod +x securecode
+mkdir -p ~/.local/bin
+mv securecode ~/.local/bin/securecode
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Windows:
+
+```powershell
+Expand-Archive .\securecode-windows-x64.zip -DestinationPath .
+$env:Path += ";$PWD"
+.\securecode.exe run "hello"
+```
+
+前提:
+
+- `git` を PATH に入れてください。
+- `ripgrep` が入っていると検索系の体験が安定します。
+
+## 接続先モデルの設定
+
+設定ファイル名は upstream 互換性のため `opencode.json` のままです。プロジェクト直下か `~/.config/opencode/opencode.json` に置けます。
+
+1. 接続先 provider の API キーを環境変数に設定します。
+
+```bash
+export OPENAI_API_KEY="your-api-key"
+```
+
+2. 利用可能な model ID を確認します。
+
+```bash
+securecode models openai --refresh
+```
+
+3. `opencode.json` を作成して既定 model を固定します。
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "openai": {
+      "options": {
+        "apiKey": "{env:OPENAI_API_KEY}"
+      }
+    }
+  },
+  "model": "openai/gpt-5.2",
+  "small_model": "openai/gpt-5.2-mini"
+}
+```
+
+OpenAI 互換 endpoint を使う場合は `baseURL` を追加してください。
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "openai": {
+      "options": {
+        "apiKey": "{env:OPENAI_API_KEY}",
+        "baseURL": "https://your-gateway.example.com/v1"
+      }
+    }
+  },
+  "model": "openai/gpt-5.2"
+}
+```
+
+## 利用方法
+
+単発で使う:
+
+```bash
+securecode run "Summarize the current repository structure"
+```
+
+model を都度切り替える:
+
+```bash
+securecode run -m openai/gpt-5.2 "Review auth.ts for security issues"
+```
+
+ファイルを添付する:
+
+```bash
+securecode run -f README.md -f src/auth.ts "Explain the auth flow and list risks"
+```
+
+認証状態を確認する:
+
+```bash
+securecode providers list
+```
+
 ## ローカル開発
 
 このリポジトリは upstream の release tag を取り込みながら Acompany Secure Code 向けの変更を重ねる fork です。内部 package 名や一部コマンド名には upstream 互換性のため旧名が残っていますが、公開面のブランドは Secure Code に揃えています。
