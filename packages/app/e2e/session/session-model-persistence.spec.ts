@@ -349,3 +349,25 @@ test("session model restore across workspaces", async ({ page, withProject }) =>
     await waitFooter(page, firstState)
   })
 })
+
+test("variant preserved when switching agent modes", async ({ page, withProject }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+
+  await withProject(async ({ directory, gotoSession }) => {
+    await gotoSession()
+
+    await ensureVariant(page, directory)
+    const updated = await chooseDifferentVariant(page)
+
+    const available = await agents(page)
+    const other = available.find((name) => name !== updated.agent)
+    test.skip(!other, "only one agent available")
+    if (!other) return
+
+    await choose(page, promptAgentSelector, other)
+    await waitFooter(page, { agent: other, variant: updated.variant })
+
+    await choose(page, promptAgentSelector, updated.agent)
+    await waitFooter(page, { agent: updated.agent, variant: updated.variant })
+  })
+})
