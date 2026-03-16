@@ -72,6 +72,12 @@ export namespace Session {
       parentID: row.parent_id ?? undefined,
       title: row.title,
       version: row.version,
+      providerID: row.provider_id ?? undefined,
+      modelID: row.model_id ?? undefined,
+      gitBranch: row.git_branch ?? undefined,
+      gitWorktree: row.git_worktree ?? undefined,
+      prReference: row.pr_reference ?? undefined,
+      displayName: row.display_name ?? undefined,
       summary,
       share,
       revert,
@@ -96,6 +102,12 @@ export namespace Session {
       title: info.title,
       version: info.version,
       share_url: info.share?.url,
+      provider_id: info.providerID,
+      model_id: info.modelID,
+      git_branch: info.gitBranch,
+      git_worktree: info.gitWorktree,
+      pr_reference: info.prReference,
+      display_name: info.displayName,
       summary_additions: info.summary?.additions,
       summary_deletions: info.summary?.deletions,
       summary_files: info.summary?.files,
@@ -142,6 +154,12 @@ export namespace Session {
         .optional(),
       title: z.string(),
       version: z.string(),
+      providerID: z.string().optional(),
+      modelID: z.string().optional(),
+      gitBranch: z.string().optional(),
+      gitWorktree: z.string().optional(),
+      prReference: z.string().optional(),
+      displayName: z.string().optional(),
       time: z.object({
         created: z.number(),
         updated: z.number(),
@@ -223,6 +241,12 @@ export namespace Session {
         title: z.string().optional(),
         permission: Info.shape.permission,
         workspaceID: WorkspaceID.zod.optional(),
+        providerID: z.string().optional(),
+        modelID: z.string().optional(),
+        gitBranch: z.string().optional(),
+        gitWorktree: z.string().optional(),
+        prReference: z.string().optional(),
+        displayName: z.string().optional(),
       })
       .optional(),
     async (input) => {
@@ -232,6 +256,12 @@ export namespace Session {
         title: input?.title,
         permission: input?.permission,
         workspaceID: input?.workspaceID,
+        providerID: input?.providerID,
+        modelID: input?.modelID,
+        gitBranch: input?.gitBranch,
+        gitWorktree: input?.gitWorktree,
+        prReference: input?.prReference,
+        displayName: input?.displayName,
       })
     },
   )
@@ -301,6 +331,12 @@ export namespace Session {
     workspaceID?: WorkspaceID
     directory: string
     permission?: PermissionNext.Ruleset
+    providerID?: string
+    modelID?: string
+    gitBranch?: string
+    gitWorktree?: string
+    prReference?: string
+    displayName?: string
   }) {
     const result: Info = {
       id: SessionID.descending(input.id),
@@ -312,6 +348,12 @@ export namespace Session {
       parentID: input.parentID,
       title: input.title ?? createDefaultTitle(!!input.parentID),
       permission: input.permission,
+      providerID: input.providerID,
+      modelID: input.modelID,
+      gitBranch: input.gitBranch,
+      gitWorktree: input.gitWorktree,
+      prReference: input.prReference,
+      displayName: input.displayName,
       time: {
         created: Date.now(),
         updated: Date.now(),
