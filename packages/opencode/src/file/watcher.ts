@@ -72,8 +72,7 @@ export class FileWatcherService extends ServiceMap.Service<FileWatcherService, F
     FileWatcherService,
     Effect.gen(function* () {
       const instance = yield* InstanceContext
-      if (yield* Flag.OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER)
-        return FileWatcherService.of({ init })
+      if (yield* Flag.OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER) return FileWatcherService.of({ init })
 
       log.info("init", { directory: instance.directory })
 
