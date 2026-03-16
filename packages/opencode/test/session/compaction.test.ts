@@ -7,6 +7,11 @@ import { Log } from "../../src/util/log"
 import { tmpdir } from "../fixture/fixture"
 import { Session } from "../../src/session"
 import type { Provider } from "../../src/provider/provider"
+import { SessionProcessor } from "../../src/session/processor"
+import { MessageV2 } from "../../src/session/message-v2"
+import { ProviderID, ModelID } from "../../src/provider/schema"
+import { MessageID } from "../../src/session/schema"
+import { LLM } from "../../src/session/llm"
 
 Log.init({ print: false })
 
@@ -420,4 +425,113 @@ describe("session.getUsage", () => {
       expect(result.tokens.total).toBe(2000)
     },
   )
+})
+
+describe("session.compaction provider overflow", () => {
+  async function runProcessor(auto: boolean) {
+    await using tmp = await tmpdir({
+      git: true,
+      config: {
+        compaction: { auto },
+      },
+    })
+
+    return await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const user = (await Session.updateMessage({
+          id: MessageID.ascending(),
+          role: "user",
+          sessionID: session.id,
+          agent: "build",
+          model: { providerID: ProviderID.make("openai"), modelID: ModelID.make("gpt-5.2") },
+          time: { created: Date.now() },
+        })) as MessageV2.User
+        const model = {
+          ...createModel({ context: 200_000, output: 32_000, npm: "@ai-sdk/openai" }),
+          id: ModelID.make("gpt-5.2"),
+          providerID: ProviderID.make("openai"),
+        }
+        const assistant = (await Session.updateMessage({
+          id: MessageID.ascending(),
+          parentID: user.id,
+          role: "assistant",
+          sessionID: session.id,
+          mode: "build",
+          agent: "build",
+          path: {
+            cwd: Instance.directory,
+            root: Instance.worktree,
+          },
+          cost: 0,
+          tokens: {
+            input: 0,
+            output: 0,
+            reasoning: 0,
+            cache: { read: 0, write: 0 },
+          },
+          modelID: model.id,
+          providerID: model.providerID,
+          time: { created: Date.now() },
+        })) as MessageV2.Assistant
+
+        const processor = SessionProcessor.create({
+          assistantMessage: assistant,
+          sessionID: session.id,
+          model,
+          abort: new AbortController().signal,
+        })
+
+        const stream = LLM.stream
+        LLM.stream = (async () => {
+          throw {
+            type: "error",
+            error: {
+              code: "context_length_exceeded",
+              message: "Your input exceeds the context window of this model",
+            },
+          }
+        }) as typeof LLM.stream
+
+        try {
+          const result = await processor.process({
+            user,
+            agent: {
+              name: "build",
+              mode: "primary",
+              options: {},
+              permission: [],
+              temperature: 0,
+            },
+            abort: new AbortController().signal,
+            sessionID: session.id,
+            system: [],
+            messages: [{ role: "user", content: "Hello" }],
+            tools: {},
+            model,
+          })
+          const messages = await Session.messages({ sessionID: session.id })
+          await Session.remove(session.id)
+          return { result, messages, assistant: processor.message }
+        } finally {
+          LLM.stream = stream
+        }
+      },
+    })
+  }
+
+  test("stops on provider ContextOverflowError when compaction.auto is false", async () => {
+    const result = await runProcessor(false)
+    expect(result.result).toBe("stop")
+    expect(result.assistant.error).toBeDefined()
+    expect(MessageV2.ContextOverflowError.isInstance(result.assistant.error)).toBe(true)
+    expect(result.messages.some((m) => m.parts.some((p) => p.type === "compaction"))).toBe(false)
+  })
+
+  test("still compacts on provider ContextOverflowError when compaction.auto is enabled", async () => {
+    const result = await runProcessor(true)
+    expect(result.result).toBe("compact")
+    expect(result.assistant.error).toBeUndefined()
+  })
 })

@@ -358,11 +358,21 @@ export namespace SessionProcessor {
             })
             const error = MessageV2.fromError(e, { providerID: input.model.providerID })
             if (MessageV2.ContextOverflowError.isInstance(error)) {
-              needsCompaction = true
-              Bus.publish(Session.Event.Error, {
-                sessionID: input.sessionID,
-                error,
-              })
+              const config = await Config.get()
+              if (config.compaction?.auto === false) {
+                input.assistantMessage.error = error
+                Bus.publish(Session.Event.Error, {
+                  sessionID: input.assistantMessage.sessionID,
+                  error: input.assistantMessage.error,
+                })
+                SessionStatus.set(input.sessionID, { type: "idle" })
+              } else {
+                needsCompaction = true
+                Bus.publish(Session.Event.Error, {
+                  sessionID: input.sessionID,
+                  error,
+                })
+              }
             } else {
               const retry = SessionRetry.retryable(error)
               if (retry !== undefined) {
