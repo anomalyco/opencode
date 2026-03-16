@@ -253,7 +253,7 @@ export const dict = {
 
   "go.title": "OpenCode Go | Herkes için düşük maliyetli kodlama modelleri",
   "go.meta.description":
-    "Go, GLM-5, Kimi K2.5 ve MiniMax M2.5 için cömert 5 saatlik istek limitleri sunan aylık 10$'lık bir aboneliktir.",
+    "Go ilk ay $5, sonrasında ayda 10$ fiyatıyla başlar; GLM-5, Kimi K2.5 ve MiniMax M2.5 için cömert 5 saatlik istek limitleri sunar.",
   "go.hero.title": "Herkes için düşük maliyetli kodlama modelleri",
   "go.hero.body":
     "Go, dünya çapındaki programcılara ajan tabanlı kodlama getiriyor. En yetenekli açık kaynaklı modellere cömert limitler ve güvenilir erişim sunarak, maliyet veya erişilebilirlik konusunda endişelenmeden güçlü ajanlarla geliştirme yapmanızı sağlar.",
@@ -262,7 +262,9 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Go'ya abone ol",
   "go.cta.price": "Ayda 10$",
-  "go.pricing.body": "Herhangi bir ajanla kullanın. Gerekirse kredi yükleyin. İstediğiniz zaman iptal edin.",
+  "go.cta.promo": "İlk ay $5",
+  "go.pricing.body":
+    "Herhangi bir ajanla kullanın. İlk ay $5, sonrasında ayda 10$. Gerekirse kredi yükleyin. İstediğiniz zaman iptal edin.",
   "go.graph.free": "Ücretsiz",
   "go.graph.freePill": "Big Pickle ve ücretsiz modeller",
   "go.graph.go": "Go",
@@ -295,20 +297,21 @@ export const dict = {
   "go.testimonials.frank.quote": "Keşke hala Nvidia'da olsaydım.",
   "go.problem.title": "Go hangi sorunu çözüyor?",
   "go.problem.body":
-    "OpenCode deneyimini mümkün olduğunca çok kişiye ulaştırmaya odaklanıyoruz. OpenCode Go, ajan tabanlı kodlamayı dünya çapındaki programcılara sunmak için tasarlanmış düşük maliyetli (ayda 10$) bir aboneliktir. En yetenekli açık kaynaklı modellere cömert limitler ve güvenilir erişim sağlar.",
+    "OpenCode deneyimini mümkün olduğunca çok kişiye ulaştırmaya odaklandık. OpenCode Go düşük maliyetli bir aboneliktir: İlk ay $5, sonrasında ayda 10$. Cömert limitler ve en yetenekli açık kaynak modellere güvenilir erişim sağlar.",
   "go.problem.subtitle": " ",
   "go.problem.item1": "Düşük maliyetli abonelik fiyatlandırması",
   "go.problem.item2": "Cömert limitler ve güvenilir erişim",
   "go.problem.item3": "Mümkün olduğunca çok programcı için geliştirildi",
   "go.problem.item4": "GLM-5, Kimi K2.5 ve MiniMax M2.5 içerir",
   "go.how.title": "Go nasıl çalışır?",
-  "go.how.body": "Go, OpenCode veya herhangi bir ajanla kullanabileceğiniz aylık 10$'lık bir aboneliktir.",
+  "go.how.body":
+    "Go ilk ay $5, sonrasında ayda 10$ fiyatıyla başlar. OpenCode veya herhangi bir ajanla kullanabilirsiniz.",
   "go.how.step1.title": "Bir hesap oluşturun",
   "go.how.step1.beforeLink": "takip edin",
   "go.how.step1.link": "kurulum talimatları",
   "go.how.step2.title": "Go'ya abone olun",
-  "go.how.step2.link": "Ayda 10$",
-  "go.how.step2.afterLink": ", cömert limitlerle",
+  "go.how.step2.link": "İlk ay $5",
+  "go.how.step2.afterLink": "sonrasında cömert limitlerle ayda 10$",
   "go.how.step3.title": "Kodlamaya başlayın",
   "go.how.step3.body": "açık kaynaklı modellere güvenilir erişimle",
   "go.privacy.title": "Gizliliğiniz bizim için önemlidir",
@@ -325,11 +328,11 @@ export const dict = {
   "go.faq.a2": "Go, cömert limitler ve güvenilir erişim ile GLM-5, Kimi K2.5 ve MiniMax M2.5 modellerini içerir.",
   "go.faq.q3": "Go, Zen ile aynı mı?",
   "go.faq.a3":
-    "Hayır. Zen kullandıkça öde sistemidir; Go ise GLM-5, Kimi K2.5 ve MiniMax M2.5 açık kaynak modellerine cömert limitler ve güvenilir erişim sağlayan aylık 10$'lık bir aboneliktir.",
+    "Hayır. Zen kullandıkça öde modelidir, Go ise ilk ay $5, sonrasında ayda 10$ fiyatıyla başlar; GLM-5, Kimi K2.5 ve MiniMax M2.5 açık kaynak modellerine cömert limitler ve güvenilir erişim sunar.",
   "go.faq.q4": "Go ne kadar?",
   "go.faq.a4.p1.beforePricing": "Go'nun maliyeti",
-  "go.faq.a4.p1.pricingLink": "ayda 10$",
-  "go.faq.a4.p1.afterPricing": ", cömert limitlerle.",
+  "go.faq.a4.p1.pricingLink": "İlk ay $5",
+  "go.faq.a4.p1.afterPricing": "sonrasında cömert limitlerle ayda 10$.",
   "go.faq.a4.p2.beforeAccount": "Aboneliğinizi",
   "go.faq.a4.p2.accountLink": "hesabınızdan",
   "go.faq.a4.p3": "yönetebilirsiniz. İstediğiniz zaman iptal edin.",
@@ -418,12 +421,15 @@ export const dict = {
   "black.subscribe.success.chargeNotice": "Aboneliğiniz aktive edildiğinde kartınızdan ödeme alınacaktır",
 
   "workspace.nav.zen": "Zen",
+  "workspace.nav.go": "Go",
+  "workspace.nav.usage": "Kullanım",
   "workspace.nav.apiKeys": "API Anahtarları",
   "workspace.nav.members": "Üyeler",
   "workspace.nav.billing": "Faturalandırma",
   "workspace.nav.settings": "Ayarlar",
 
   "workspace.home.banner.beforeLink": "Kodlama ajanları için güvenilir optimize edilmiş modeller.",
+  "workspace.lite.banner.beforeLink": "Herkes için düşük maliyetli kodlama modelleri.",
   "workspace.home.billing.loading": "Yükleniyor...",
   "workspace.home.billing.enable": "Faturalandırmayı etkinleştir",
   "workspace.home.billing.currentBalance": "Mevcut bakiye",
@@ -543,6 +549,8 @@ export const dict = {
   "workspace.billing.loading": "Yükleniyor...",
   "workspace.billing.addAction": "Ekle",
   "workspace.billing.addBalance": "Bakiye Ekle",
+  "workspace.billing.alipay": "Alipay",
+  "workspace.billing.wechat": "WeChat Pay",
   "workspace.billing.linkedToStripe": "Stripe'a bağlı",
   "workspace.billing.manage": "Yönet",
   "workspace.billing.enable": "Faturalandırmayı Etkinleştir",
@@ -625,7 +633,6 @@ export const dict = {
   "workspace.lite.time.minute": "dakika",
   "workspace.lite.time.minutes": "dakika",
   "workspace.lite.time.fewSeconds": "birkaç saniye",
-  "workspace.lite.subscription.title": "Go Aboneliği",
   "workspace.lite.subscription.message": "OpenCode Go abonesisiniz.",
   "workspace.lite.subscription.manage": "Aboneliği Yönet",
   "workspace.lite.subscription.rollingUsage": "Devam Eden Kullanım",
@@ -635,12 +642,13 @@ export const dict = {
   "workspace.lite.subscription.useBalance": "Kullanım limitlerine ulaştıktan sonra mevcut bakiyenizi kullanın",
   "workspace.lite.subscription.selectProvider":
     'Go modellerini kullanmak için opencode yapılandırmanızda "OpenCode Go"\'yu sağlayıcı olarak seçin.',
-  "workspace.lite.other.title": "Go Aboneliği",
+  "workspace.lite.black.message":
+    "Şu anda OpenCode Black abonesisiniz veya bekleme listesindesiniz. Go'ya geçmek istiyorsanız lütfen önce aboneliğinizi iptal edin.",
   "workspace.lite.other.message":
     "Bu çalışma alanındaki başka bir üye zaten OpenCode Go abonesi. Çalışma alanı başına yalnızca bir üye abone olabilir.",
-  "workspace.lite.promo.title": "OpenCode Go",
   "workspace.lite.promo.description":
-    "OpenCode Go, cömert kullanım limitleriyle popüler açık kodlama modellerine güvenilir erişim sağlayan aylık 10$'lık bir aboneliktir.",
+    "OpenCode Go {{price}} fiyatından başlar, sonrasında ayda 10$ olur ve cömert kullanım limitleriyle popüler açık kodlama modellerine güvenilir erişim sağlar.",
+  "workspace.lite.promo.price": "İlk ay $5",
   "workspace.lite.promo.modelsTitle": "Neler Dahil",
   "workspace.lite.promo.footer":
     "Plan öncelikle uluslararası kullanıcılar için tasarlanmıştır; modeller istikrarlı küresel erişim için ABD, AB ve Singapur'da barındırılmaktadır. Erken kullanımdan öğrendikçe ve geri bildirim topladıkça fiyatlandırma ve kullanım limitleri değişebilir.",

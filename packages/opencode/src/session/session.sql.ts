@@ -3,6 +3,9 @@ import { ProjectTable } from "../project/project.sql"
 import type { MessageV2 } from "./message-v2"
 import type { Snapshot } from "../snapshot"
 import type { PermissionNext } from "../permission/next"
+import type { ProjectID } from "../project/schema"
+import type { SessionID, MessageID, PartID } from "./schema"
+import type { WorkspaceID } from "../control-plane/schema"
 import { Timestamps } from "../storage/schema.sql"
 
 type PartData = Omit<MessageV2.Part, "id" | "sessionID" | "messageID">
@@ -11,12 +14,13 @@ type InfoData = Omit<MessageV2.Info, "id" | "sessionID">
 export const SessionTable = sqliteTable(
   "session",
   {
-    id: text().primaryKey(),
+    id: text().$type<SessionID>().primaryKey(),
     project_id: text()
+      .$type<ProjectID>()
       .notNull()
       .references(() => ProjectTable.id, { onDelete: "cascade" }),
-    workspace_id: text(),
-    parent_id: text(),
+    workspace_id: text().$type<WorkspaceID>(),
+    parent_id: text().$type<SessionID>(),
     slug: text().notNull(),
     directory: text().notNull(),
     title: text().notNull(),
@@ -26,7 +30,7 @@ export const SessionTable = sqliteTable(
     summary_deletions: integer(),
     summary_files: integer(),
     summary_diffs: text({ mode: "json" }).$type<Snapshot.FileDiff[]>(),
-    revert: text({ mode: "json" }).$type<{ messageID: string; partID?: string; snapshot?: string; diff?: string }>(),
+    revert: text({ mode: "json" }).$type<{ messageID: MessageID; partID?: PartID; snapshot?: string; diff?: string }>(),
     permission: text({ mode: "json" }).$type<PermissionNext.Ruleset>(),
     ...Timestamps,
     time_compacting: integer(),
@@ -42,34 +46,40 @@ export const SessionTable = sqliteTable(
 export const MessageTable = sqliteTable(
   "message",
   {
-    id: text().primaryKey(),
+    id: text().$type<MessageID>().primaryKey(),
     session_id: text()
+      .$type<SessionID>()
       .notNull()
       .references(() => SessionTable.id, { onDelete: "cascade" }),
     ...Timestamps,
     data: text({ mode: "json" }).notNull().$type<InfoData>(),
   },
-  (table) => [index("message_session_idx").on(table.session_id)],
+  (table) => [index("message_session_time_created_id_idx").on(table.session_id, table.time_created, table.id)],
 )
 
 export const PartTable = sqliteTable(
   "part",
   {
-    id: text().primaryKey(),
+    id: text().$type<PartID>().primaryKey(),
     message_id: text()
+      .$type<MessageID>()
       .notNull()
       .references(() => MessageTable.id, { onDelete: "cascade" }),
-    session_id: text().notNull(),
+    session_id: text().$type<SessionID>().notNull(),
     ...Timestamps,
     data: text({ mode: "json" }).notNull().$type<PartData>(),
   },
-  (table) => [index("part_message_idx").on(table.message_id), index("part_session_idx").on(table.session_id)],
+  (table) => [
+    index("part_message_id_id_idx").on(table.message_id, table.id),
+    index("part_session_idx").on(table.session_id),
+  ],
 )
 
 export const TodoTable = sqliteTable(
   "todo",
   {
     session_id: text()
+      .$type<SessionID>()
       .notNull()
       .references(() => SessionTable.id, { onDelete: "cascade" }),
     content: text().notNull(),
