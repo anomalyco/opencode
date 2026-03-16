@@ -47,7 +47,7 @@ export function createTabState(kv: { get(key: string, defaultValue?: any): any; 
   const [tabs, setTabs] = createStore<Tab[]>([initial])
   const [activeID, setActiveID] = createSignal(initial.id)
   const [previousID, setPreviousID] = createSignal<string | null>(null)
-  const [position, setPositionRaw] = createSignal<"top" | "bottom">(kv.get("tab_position", "top"))
+  const [position, setPositionRaw] = createSignal<"top" | "bottom">(kv.get("tab_position", "bottom"))
 
   let navigator: ((route: Route) => void) | undefined
 
