@@ -1230,6 +1230,42 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     expect(result[0].content[1]).toEqual({ type: "text", text: "Result" })
   })
 
+  test("preserves whitespace text separators in assistant reasoning messages", () => {
+    const adaptiveAnthropicModel = {
+      ...anthropicModel,
+      id: "anthropic/claude-sonnet-4-6",
+      api: {
+        ...anthropicModel.api,
+        id: "claude-sonnet-4-6-20260301",
+      },
+      capabilities: {
+        ...anthropicModel.capabilities,
+        reasoning: true,
+      },
+    }
+
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "Thinking step 1" },
+          { type: "text", text: "   " },
+          { type: "reasoning", text: "Thinking step 2" },
+          { type: "text", text: "Result" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, adaptiveAnthropicModel, {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(4)
+    expect(result[0].content[0]).toEqual({ type: "reasoning", text: "Thinking step 1" })
+    expect(result[0].content[1]).toEqual({ type: "text", text: "   " })
+    expect(result[0].content[2]).toEqual({ type: "reasoning", text: "Thinking step 2" })
+    expect(result[0].content[3]).toEqual({ type: "text", text: "Result" })
+  })
+
   test("filters empty content for bedrock provider", () => {
     const bedrockModel = {
       ...anthropicModel,
@@ -1262,30 +1298,43 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     expect(result[1].content[0]).toEqual({ type: "text", text: "Answer" })
   })
 
-  test("does not filter for non-anthropic providers", () => {
-    const openaiModel = {
+  test("filters empty content for all providers including openai-compatible", () => {
+    const model = {
       ...anthropicModel,
-      providerID: "openai",
+      providerID: "ducc",
       api: {
-        id: "gpt-4",
-        url: "https://api.openai.com",
-        npm: "@ai-sdk/openai",
+        id: "ducc/claude-sonnet-4-6",
+        url: "https://example.com/v1/",
+        npm: "@ai-sdk/openai-compatible",
       },
     }
 
     const msgs = [
       { role: "assistant", content: "" },
+      { role: "assistant", content: "  " },
       {
         role: "assistant",
         content: [{ type: "text", text: "" }],
       },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "  " }],
+      },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "" },
+          { type: "text", text: "hello" },
+        ],
+      },
     ] as any[]
 
-    const result = ProviderTransform.message(msgs, openaiModel, {})
+    const result = ProviderTransform.message(msgs, model, {})
 
-    expect(result).toHaveLength(2)
-    expect(result[0].content).toBe("")
-    expect(result[1].content).toHaveLength(1)
+    expect(result).toHaveLength(1)
+    expect(result[0].role).toBe("user")
+    expect(result[0].content).toHaveLength(1)
+    expect(result[0].content[0]).toMatchObject({ type: "text", text: "hello" })
   })
 
   test("splits anthropic assistant messages when text trails tool calls", () => {

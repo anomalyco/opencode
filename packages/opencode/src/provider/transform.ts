@@ -50,27 +50,46 @@ function normalizeMessages(
   model: Provider.Model,
   _options: Record<string, unknown>,
 ): ModelMessage[] {
-  // Anthropic rejects messages with empty content - filter out empty string messages
-  // and remove empty text/reasoning parts from array content
-  if (model.api.npm === "@ai-sdk/anthropic" || model.api.npm === "@ai-sdk/amazon-bedrock") {
-    msgs = msgs
-      .map((msg) => {
-        if (typeof msg.content === "string") {
-          if (msg.content === "") return undefined
-          return msg
+  const modelID = `${model.id} ${model.api.id}`.toLowerCase()
+  const preserveAdaptiveAnthropicReasoning = ["sonnet-4-6", "sonnet-4.6", "opus-4-6", "opus-4.6"].some(
+    (variant) => modelID.includes(variant),
+  )
+
+  // Many providers (Anthropic, Bedrock, and proxies like openai-compatible
+  // forwarding to Bedrock) reject messages with empty text content blocks.
+  // Filter them out universally - empty text blocks are never useful.
+  msgs = msgs
+    .map((msg) => {
+      // Anthropic adaptive thinking signs assistant reasoning blocks positionally.
+      // Preserve these messages verbatim, including whitespace-only text separators.
+      const preserveAssistantReasoning =
+        preserveAdaptiveAnthropicReasoning &&
+        msg.role === "assistant" &&
+        Array.isArray(msg.content) &&
+        msg.content.some((part) => part.type === "reasoning")
+
+      if (preserveAssistantReasoning) return msg
+
+      if (typeof msg.content === "string") {
+        if (!msg.content.trim()) return undefined
+        return msg
+      }
+      if (!Array.isArray(msg.content)) return msg
+      const filtered = msg.content.filter((part) => {
+        if (part.type === "text" || part.type === "reasoning") {
+          if (typeof part.text !== "string") return false
+          return part.text.trim().length > 0
         }
-        if (!Array.isArray(msg.content)) return msg
-        const filtered = msg.content.filter((part) => {
-          if (part.type === "text" || part.type === "reasoning") {
-            return part.text !== ""
-          }
-          return true
-        })
-        if (filtered.length === 0) return undefined
-        return { ...msg, content: filtered }
+        return true
       })
-      .filter((msg): msg is ModelMessage => msg !== undefined && msg.content !== "")
-  }
+      if (filtered.length === 0) return undefined
+      return { ...msg, content: filtered }
+    })
+    .filter((msg): msg is ModelMessage => {
+      if (!msg) return false
+      if (typeof msg.content !== "string") return true
+      return msg.content.trim().length > 0
+    })
 
   if (model.api.id.includes("claude")) {
     const scrub = (id: string) => id.replace(/[^a-zA-Z0-9_-]/g, "_")

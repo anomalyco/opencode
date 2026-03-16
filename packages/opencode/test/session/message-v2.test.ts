@@ -719,6 +719,67 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
+  test("preserves whitespace text parts between assistant reasoning blocks", async () => {
+    const assistantID = "m-assistant-reasoning"
+    const adaptiveModel: Provider.Model = {
+      ...model,
+      id: ModelID.make("anthropic/claude-sonnet-4-6"),
+      providerID: ProviderID.make("anthropic"),
+      api: {
+        id: "claude-sonnet-4-6-20260301",
+        url: "https://api.anthropic.com",
+        npm: "@ai-sdk/anthropic",
+      },
+      capabilities: {
+        ...model.capabilities,
+        reasoning: true,
+      },
+    }
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: assistantInfo(assistantID, "m-parent", undefined, {
+          providerID: adaptiveModel.providerID,
+          modelID: adaptiveModel.api.id,
+        }),
+        parts: [
+          {
+            ...basePart(assistantID, "r1"),
+            type: "reasoning",
+            text: "thinking step 1",
+            time: { start: 0 },
+          },
+          {
+            ...basePart(assistantID, "t1"),
+            type: "text",
+            text: "   ",
+          },
+          {
+            ...basePart(assistantID, "r2"),
+            type: "reasoning",
+            text: "thinking step 2",
+            time: { start: 1 },
+          },
+          {
+            ...basePart(assistantID, "t2"),
+            type: "text",
+            text: "final answer",
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, adaptiveModel)
+
+    expect(result).toHaveLength(1)
+    expect(result[0].role).toBe("assistant")
+    expect(result[0].content).toHaveLength(4)
+    expect(result[0].content[0]).toMatchObject({ type: "reasoning", text: "thinking step 1" })
+    expect(result[0].content[1]).toMatchObject({ type: "text", text: "   " })
+    expect(result[0].content[2]).toMatchObject({ type: "reasoning", text: "thinking step 2" })
+    expect(result[0].content[3]).toMatchObject({ type: "text", text: "final answer" })
+  })
+
   test("splits assistant messages on step-start boundaries", async () => {
     const assistantID = "m-assistant"
 
