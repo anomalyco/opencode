@@ -27,6 +27,7 @@ import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
+import { messageAgentColor } from "@/utils/agent"
 import { parseCommentNote, readCommentMetadata } from "@/utils/comment-note"
 
 type MessageComment = {
@@ -246,6 +247,7 @@ export function MessageTimeline(props: {
     return sync.data.session_status[id] ?? idle
   })
   const working = createMemo(() => !!pending() || sessionStatus().type !== "idle")
+  const tint = createMemo(() => messageAgentColor(sessionMessages(), sync.data.agent))
 
   const [slot, setSlot] = createStore({
     open: false,
@@ -689,7 +691,7 @@ export function MessageTimeline(props: {
                               "opacity-0": slot.fade,
                             }}
                           >
-                            <Spinner class="size-4" style={{ color: "var(--icon-interactive-base)" }} />
+                            <Spinner class="size-4" style={{ color: tint() ?? "var(--icon-interactive-base)" }} />
                           </div>
                         </Show>
                       </div>

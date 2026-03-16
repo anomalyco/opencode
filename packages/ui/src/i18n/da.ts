@@ -59,7 +59,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "Overvejer næste skridt",
 
   "ui.messagePart.questions.dismissed": "Spørgsmål afvist",
-  "ui.messagePart.compaction": "Historik komprimeret",
+  "ui.messagePart.compaction": "Session komprimeret",
   "ui.messagePart.context.read.one": "{{count}} læsning",
   "ui.messagePart.context.read.other": "{{count}} læsninger",
   "ui.messagePart.context.search.one": "{{count}} søgning",
@@ -144,4 +144,16 @@ export const dict = {
   "ui.question.multiHint": "Vælg alle der gælder",
   "ui.question.singleHint": "Vælg ét svar",
   "ui.question.custom.placeholder": "Skriv dit svar...",
+
+  "ui.fileSearch.placeholder": "Find",
+  "ui.fileSearch.previousMatch": "Forrige match",
+  "ui.fileSearch.nextMatch": "Næste match",
+  "ui.fileSearch.close": "Luk søgning",
+  "ui.tool.task": "Opgave",
+  "ui.tool.skill": "Færdighed",
+  "ui.basicTool.called": "Kaldte `{{tool}}`",
+  "ui.toolErrorCard.failed": "Fejlede",
+  "ui.toolErrorCard.copyError": "Kopier fejl",
+  "ui.message.duration.seconds": "{{count}}s",
+  "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
 }
