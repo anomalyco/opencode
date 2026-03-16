@@ -326,7 +326,7 @@ export function SessionHeader() {
                       <div class="flex h-[24px] box-border items-center rounded-md border border-border-weak-base bg-surface-panel overflow-hidden">
                         <Button
                           variant="ghost"
-                          class="rounded-none h-full py-0 pr-1.5 pl-px gap-1.5 border-none shadow-none disabled:!cursor-default"
+                          class="rounded-none h-full px-0.5 border-none shadow-none disabled:!cursor-default"
                           classList={{
                             "bg-surface-raised-base-active": opening(),
                           }}
@@ -339,7 +339,6 @@ export function SessionHeader() {
                               <Spinner class="size-3.5" style={{ color: tint() ?? "var(--icon-base)" }} />
                             </Show>
                           </div>
-                          <span class="text-12-regular text-text-strong">{language.t("common.open")}</span>
                         </Button>
                         <DropdownMenu
                           gutter={4}
