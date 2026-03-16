@@ -626,7 +626,7 @@ export const RunCommand = cmd({
       }
       await share(sdk, sessionID)
 
-      loop().catch((e) => {
+      const loopDone = loop().catch((e) => {
         console.error(e)
         process.exit(1)
       })
@@ -650,6 +650,8 @@ export const RunCommand = cmd({
           parts: [...files, { type: "text", text: message }],
         })
       }
+
+      await loopDone
     }
 
     if (args.attach) {
