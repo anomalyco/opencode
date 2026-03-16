@@ -1,10 +1,32 @@
 import { test, expect } from "bun:test"
 import os from "os"
+import { Bus } from "../../src/bus"
+import { runtime } from "../../src/effect/runtime"
 import { PermissionNext } from "../../src/permission/next"
+import * as S from "../../src/permission/service"
 import { PermissionID } from "../../src/permission/schema"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
-import { SessionID } from "../../src/session/schema"
+import { MessageID, SessionID } from "../../src/session/schema"
+
+async function rejectAll(message?: string) {
+  for (const req of await PermissionNext.list()) {
+    await PermissionNext.reply({
+      requestID: req.id,
+      reply: "reject",
+      message,
+    })
+  }
+}
+
+async function waitForPending(count: number) {
+  for (let i = 0; i < 20; i++) {
+    const list = await PermissionNext.list()
+    if (list.length === count) return list
+    await Bun.sleep(0)
+  }
+  return PermissionNext.list()
+}
 
 // fromConfig tests
 
@@ -511,6 +533,84 @@ test("ask - returns pending promise when action is ask", async () => {
       // Promise should be pending, not resolved
       expect(promise).toBeInstanceOf(Promise)
       // Don't await - just verify it returns a promise
+      await rejectAll()
+      await promise.catch(() => {})
+    },
+  })
+})
+
+test("ask - adds request to pending list", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const ask = PermissionNext.ask({
+        sessionID: SessionID.make("session_test"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: { cmd: "ls" },
+        always: ["ls"],
+        tool: {
+          messageID: MessageID.make("msg_test"),
+          callID: "call_test",
+        },
+        ruleset: [],
+      })
+
+      const list = await PermissionNext.list()
+      expect(list).toHaveLength(1)
+      expect(list[0]).toMatchObject({
+        sessionID: SessionID.make("session_test"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: { cmd: "ls" },
+        always: ["ls"],
+        tool: {
+          messageID: MessageID.make("msg_test"),
+          callID: "call_test",
+        },
+      })
+
+      await rejectAll()
+      await ask.catch(() => {})
+    },
+  })
+})
+
+test("ask - publishes asked event", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      let seen: PermissionNext.Request | undefined
+      const unsub = Bus.subscribe(PermissionNext.Event.Asked, (event) => {
+        seen = event.properties
+      })
+
+      const ask = PermissionNext.ask({
+        sessionID: SessionID.make("session_test"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: { cmd: "ls" },
+        always: ["ls"],
+        tool: {
+          messageID: MessageID.make("msg_test"),
+          callID: "call_test",
+        },
+        ruleset: [],
+      })
+
+      expect(await PermissionNext.list()).toHaveLength(1)
+      expect(seen).toBeDefined()
+      expect(seen).toMatchObject({
+        sessionID: SessionID.make("session_test"),
+        permission: "bash",
+        patterns: ["ls"],
+      })
+
+      unsub()
+      await rejectAll()
+      await ask.catch(() => {})
     },
   })
 })
@@ -531,6 +631,8 @@ test("reply - once resolves the pending ask", async () => {
         always: [],
         ruleset: [],
       })
+
+      await waitForPending(1)
 
       await PermissionNext.reply({
         requestID: PermissionID.make("per_test1"),
@@ -557,12 +659,44 @@ test("reply - reject throws RejectedError", async () => {
         ruleset: [],
       })
 
+      await waitForPending(1)
+
       await PermissionNext.reply({
         requestID: PermissionID.make("per_test2"),
         reply: "reject",
       })
 
       await expect(askPromise).rejects.toBeInstanceOf(PermissionNext.RejectedError)
+    },
+  })
+})
+
+test("reply - reject with message throws CorrectedError", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const ask = PermissionNext.ask({
+        id: PermissionID.make("per_test2b"),
+        sessionID: SessionID.make("session_test"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: [],
+        ruleset: [],
+      })
+
+      await waitForPending(1)
+
+      await PermissionNext.reply({
+        requestID: PermissionID.make("per_test2b"),
+        reply: "reject",
+        message: "Use a safer command",
+      })
+
+      const err = await ask.catch((err) => err)
+      expect(err).toBeInstanceOf(PermissionNext.CorrectedError)
+      expect(err.message).toContain("Use a safer command")
     },
   })
 })
@@ -581,6 +715,8 @@ test("reply - always persists approval and resolves", async () => {
         always: ["ls"],
         ruleset: [],
       })
+
+      await waitForPending(1)
 
       await PermissionNext.reply({
         requestID: PermissionID.make("per_test3"),
@@ -633,6 +769,8 @@ test("reply - reject cancels all pending for same session", async () => {
         ruleset: [],
       })
 
+      await waitForPending(2)
+
       // Catch rejections before they become unhandled
       const result1 = askPromise1.catch((e) => e)
       const result2 = askPromise2.catch((e) => e)
@@ -646,6 +784,144 @@ test("reply - reject cancels all pending for same session", async () => {
       // Both should be rejected
       expect(await result1).toBeInstanceOf(PermissionNext.RejectedError)
       expect(await result2).toBeInstanceOf(PermissionNext.RejectedError)
+    },
+  })
+})
+
+test("reply - always resolves matching pending requests in same session", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const a = PermissionNext.ask({
+        id: PermissionID.make("per_test5a"),
+        sessionID: SessionID.make("session_same"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: ["ls"],
+        ruleset: [],
+      })
+
+      const b = PermissionNext.ask({
+        id: PermissionID.make("per_test5b"),
+        sessionID: SessionID.make("session_same"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: [],
+        ruleset: [],
+      })
+
+      await waitForPending(2)
+
+      await PermissionNext.reply({
+        requestID: PermissionID.make("per_test5a"),
+        reply: "always",
+      })
+
+      await expect(a).resolves.toBeUndefined()
+      await expect(b).resolves.toBeUndefined()
+      expect(await PermissionNext.list()).toHaveLength(0)
+    },
+  })
+})
+
+test("reply - always keeps other session pending", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const a = PermissionNext.ask({
+        id: PermissionID.make("per_test6a"),
+        sessionID: SessionID.make("session_a"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: ["ls"],
+        ruleset: [],
+      })
+
+      const b = PermissionNext.ask({
+        id: PermissionID.make("per_test6b"),
+        sessionID: SessionID.make("session_b"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: [],
+        ruleset: [],
+      })
+
+      await waitForPending(2)
+
+      await PermissionNext.reply({
+        requestID: PermissionID.make("per_test6a"),
+        reply: "always",
+      })
+
+      await expect(a).resolves.toBeUndefined()
+      expect((await PermissionNext.list()).map((x) => x.id)).toEqual([PermissionID.make("per_test6b")])
+
+      await rejectAll()
+      await b.catch(() => {})
+    },
+  })
+})
+
+test("reply - publishes replied event", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const ask = PermissionNext.ask({
+        id: PermissionID.make("per_test7"),
+        sessionID: SessionID.make("session_test"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: [],
+        ruleset: [],
+      })
+
+      await waitForPending(1)
+
+      let seen:
+        | {
+            sessionID: SessionID
+            requestID: PermissionID
+            reply: PermissionNext.Reply
+          }
+        | undefined
+      const unsub = Bus.subscribe(PermissionNext.Event.Replied, (event) => {
+        seen = event.properties
+      })
+
+      await PermissionNext.reply({
+        requestID: PermissionID.make("per_test7"),
+        reply: "once",
+      })
+
+      await expect(ask).resolves.toBeUndefined()
+      expect(seen).toEqual({
+        sessionID: SessionID.make("session_test"),
+        requestID: PermissionID.make("per_test7"),
+        reply: "once",
+      })
+      unsub()
+    },
+  })
+})
+
+test("reply - does nothing for unknown requestID", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await PermissionNext.reply({
+        requestID: PermissionID.make("per_unknown"),
+        reply: "once",
+      })
+      expect(await PermissionNext.list()).toHaveLength(0)
     },
   })
 })
@@ -686,6 +962,77 @@ test("ask - allows all patterns when all match allow rules", async () => {
         ruleset: [{ permission: "bash", pattern: "*", action: "allow" }],
       })
       expect(result).toBeUndefined()
+    },
+  })
+})
+
+test("ask - should deny even when an earlier pattern is ask", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const ask = PermissionNext.ask({
+        sessionID: SessionID.make("session_test"),
+        permission: "bash",
+        patterns: ["echo hello", "rm -rf /"],
+        metadata: {},
+        always: [],
+        ruleset: [
+          { permission: "bash", pattern: "echo *", action: "ask" },
+          { permission: "bash", pattern: "rm *", action: "deny" },
+        ],
+      })
+
+      const out = await Promise.race([
+        ask.then(
+          () => ({ ok: true as const, err: undefined }),
+          (err) => ({ ok: false as const, err }),
+        ),
+        Bun.sleep(100).then(() => "timeout" as const),
+      ])
+
+      if (out === "timeout") {
+        await rejectAll()
+        await ask.catch(() => {})
+        throw new Error("ask timed out instead of denying immediately")
+      }
+
+      expect(out.ok).toBe(false)
+      expect(out.err).toBeInstanceOf(PermissionNext.DeniedError)
+      expect(await PermissionNext.list()).toHaveLength(0)
+    },
+  })
+})
+
+test("ask - abort should clear pending request", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const ctl = new AbortController()
+      const ask = runtime.runPromise(
+        S.PermissionService.use((svc) =>
+          svc.ask({
+            sessionID: SessionID.make("session_test"),
+            permission: "bash",
+            patterns: ["ls"],
+            metadata: {},
+            always: [],
+            ruleset: [{ permission: "bash", pattern: "*", action: "ask" }],
+          }),
+        ),
+        { signal: ctl.signal },
+      )
+
+      await waitForPending(1)
+      ctl.abort()
+      await ask.catch(() => {})
+
+      try {
+        expect(await PermissionNext.list()).toHaveLength(0)
+      } finally {
+        await rejectAll()
+      }
     },
   })
 })
