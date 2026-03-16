@@ -396,8 +396,14 @@ export namespace MCP {
         } catch (error) {
           lastError = error instanceof Error ? error : new Error(String(error))
 
-          // Handle OAuth-specific errors
-          if (error instanceof UnauthorizedError) {
+          // Handle OAuth-specific errors.
+          // The SDK throws UnauthorizedError when auth() returns 'REDIRECT',
+          // but may also throw plain Errors when auth() fails internally
+          // (e.g. during discovery, registration, or state generation).
+          // When an authProvider is attached, treat both cases as auth-related.
+          const isAuthError =
+            error instanceof UnauthorizedError || (authProvider && lastError.message.includes("OAuth"))
+          if (isAuthError) {
             log.info("mcp server requires authentication", { key, transport: name })
 
             // Check if this is a "needs registration" error

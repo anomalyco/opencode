@@ -9,7 +9,6 @@ import {
   ServerConnection,
   useCommand,
 } from "@opencode-ai/app"
-import { Splash } from "@opencode-ai/ui/logo"
 import type { AsyncStorage } from "@solid-primitives/storage"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { readImage } from "@tauri-apps/plugin-clipboard-manager"
@@ -22,7 +21,7 @@ import { relaunch } from "@tauri-apps/plugin-process"
 import { open as shellOpen } from "@tauri-apps/plugin-shell"
 import { Store } from "@tauri-apps/plugin-store"
 import { check, type Update } from "@tauri-apps/plugin-updater"
-import { createResource, type JSX, onCleanup, onMount, Show } from "solid-js"
+import { createResource, onCleanup, onMount, Show } from "solid-js"
 import { render } from "solid-js/web"
 import pkg from "../package.json"
 import { initI18n, t } from "./i18n"
@@ -30,7 +29,7 @@ import { UPDATER_ENABLED } from "./updater"
 import { webviewZoom } from "./webview-zoom"
 import "./styles.css"
 import { Channel } from "@tauri-apps/api/core"
-import { commands, ServerReadyData, type InitStep } from "./bindings"
+import { commands, type InitStep } from "./bindings"
 import { createMenu } from "./menu"
 
 const root = document.getElementById("root")
@@ -348,12 +347,13 @@ const createPlatform = (): Platform => {
       await commands.setWslConfig({ enabled })
     },
 
-    getDefaultServerUrl: async () => {
-      const result = await commands.getDefaultServerUrl().catch(() => null)
-      return result
+    getDefaultServer: async () => {
+      const url = await commands.getDefaultServerUrl().catch(() => null)
+      if (!url) return null
+      return ServerConnection.Key.make(url)
     },
 
-    setDefaultServerUrl: async (url: string | null) => {
+    setDefaultServer: async (url: string | null) => {
       await commands.setDefaultServerUrl(url)
     },
 
@@ -412,11 +412,32 @@ void listenForDeepLinks()
 render(() => {
   const platform = createPlatform()
 
+  // Fetch sidecar credentials from Rust (available immediately, before health check)
+  const [sidecar] = createResource(() => commands.awaitInitialization(new Channel<InitStep>() as any))
+
   const [defaultServer] = createResource(() =>
-    platform.getDefaultServerUrl?.().then((url) => {
+    platform.getDefaultServer?.().then((url) => {
       if (url) return ServerConnection.key({ type: "http", http: { url } })
     }),
   )
+
+  // Build the sidecar server connection once credentials arrive
+  const servers = () => {
+    const data = sidecar()
+    if (!data) return []
+    const http = {
+      url: data.url,
+      username: data.username ?? undefined,
+      password: data.password ?? undefined,
+    }
+    const server: ServerConnection.Sidecar = {
+      displayName: t("desktop.server.local"),
+      type: "sidecar",
+      variant: "base",
+      http,
+    }
+    return [server] as ServerConnection.Any[]
+  }
 
   function handleClick(e: MouseEvent) {
     const link = (e.target as HTMLElement).closest("a.external-link") as HTMLAnchorElement | null
@@ -424,6 +445,12 @@ render(() => {
       e.preventDefault()
       platform.openLink(link.href)
     }
+  }
+
+  function Inner() {
+    const cmd = useCommand()
+    menuTrigger = (id) => cmd.trigger(id)
+    return null
   }
 
   onMount(() => {
@@ -436,60 +463,19 @@ render(() => {
   return (
     <PlatformProvider value={platform}>
       <AppBaseProviders>
-        <ServerGate>
-          {(data) => {
-            const http = {
-              url: data.url,
-              username: data.username ?? undefined,
-              password: data.password ?? undefined,
-            }
-            const server: ServerConnection.Any = data.is_sidecar
-              ? {
-                  displayName: t("desktop.server.local"),
-                  type: "sidecar",
-                  variant: "base",
-                  http,
-                }
-              : { type: "http", http }
-
-            function Inner() {
-              const cmd = useCommand()
-
-              menuTrigger = (id) => cmd.trigger(id)
-
-              return null
-            }
-
+        <Show when={!defaultServer.loading && !sidecar.loading}>
+          {(_) => {
             return (
-              <Show when={!defaultServer.loading}>
-                <AppInterface defaultServer={defaultServer.latest ?? ServerConnection.key(server)} servers={[server]}>
-                  <Inner />
-                </AppInterface>
-              </Show>
+              <AppInterface
+                defaultServer={defaultServer.latest ?? ServerConnection.Key.make("sidecar")}
+                servers={servers()}
+              >
+                <Inner />
+              </AppInterface>
             )
           }}
-        </ServerGate>
+        </Show>
       </AppBaseProviders>
     </PlatformProvider>
   )
 }, root!)
-
-// Gate component that waits for the server to be ready
-function ServerGate(props: { children: (data: ServerReadyData) => JSX.Element }) {
-  const [serverData] = createResource(() => commands.awaitInitialization(new Channel<InitStep>() as any))
-  if (serverData.state === "errored") throw serverData.error
-
-  return (
-    <Show
-      when={serverData.state !== "pending" && serverData()}
-      fallback={
-        <div class="h-screen w-screen flex flex-col items-center justify-center bg-background-base">
-          <Splash class="w-16 h-20 opacity-50 animate-pulse" />
-          <div data-tauri-decorum-tb class="flex flex-row absolute top-0 right-0 z-10 h-10" />
-        </div>
-      }
-    >
-      {(data) => props.children(data())}
-    </Show>
-  )
-}
