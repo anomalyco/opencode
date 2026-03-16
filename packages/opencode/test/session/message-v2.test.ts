@@ -869,6 +869,26 @@ describe("session.message-v2.fromError", () => {
     })
   })
 
+  test("detects context overflow from context_length_exceeded code in response body", () => {
+    const error = new APICallError({
+      message: "Request failed",
+      url: "https://example.com",
+      requestBodyValues: {},
+      statusCode: 422,
+      responseHeaders: { "content-type": "application/json" },
+      responseBody: JSON.stringify({
+        error: {
+          message: "Some message",
+          type: "invalid_request_error",
+          code: "context_length_exceeded",
+        },
+      }),
+      isRetryable: false,
+    })
+    const result = MessageV2.fromError(error, { providerID })
+    expect(MessageV2.ContextOverflowError.isInstance(result)).toBe(true)
+  })
+
   test("does not classify 429 no body as context overflow", () => {
     const result = MessageV2.fromError(
       new APICallError({
