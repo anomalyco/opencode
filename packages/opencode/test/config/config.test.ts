@@ -1734,6 +1734,19 @@ describe("getPluginName", () => {
     expect(Config.getPluginName("file:///some/path/my-plugin.js")).toBe("my-plugin")
   })
 
+  test("extracts package name from file:// URL inside node_modules", () => {
+    expect(Config.getPluginName("file:///home/user/.config/opencode/node_modules/oh-my-opencode/dist/index.js")).toBe(
+      "oh-my-opencode",
+    )
+    expect(
+      Config.getPluginName("file:///home/user/.config/opencode/node_modules/opencode-openai-codex-auth/index.ts"),
+    ).toBe("opencode-openai-codex-auth")
+    expect(Config.getPluginName("file:///project/node_modules/@scope/plugin/dist/index.js")).toBe("@scope/plugin")
+    expect(Config.getPluginName("file:///project/node_modules/@different-ai/opencode-browser/index.js")).toBe(
+      "@different-ai/opencode-browser",
+    )
+  })
+
   test("extracts name from npm package with version", () => {
     expect(Config.getPluginName("oh-my-opencode@2.4.3")).toBe("oh-my-opencode")
     expect(Config.getPluginName("some-plugin@1.0.0")).toBe("some-plugin")
@@ -1779,6 +1792,18 @@ describe("deduplicatePlugins", () => {
     const result = Config.deduplicatePlugins(plugins)
 
     expect(result).toEqual(["a-plugin@1.0.0", "b-plugin@1.0.0", "c-plugin@1.0.0"])
+  })
+
+  test("does not treat resolved node_modules index.js files as duplicates", () => {
+    const plugins = [
+      "file:///config/node_modules/oh-my-opencode/dist/index.js",
+      "file:///config/node_modules/opencode-openai-codex-auth/index.ts",
+      "file:///config/node_modules/@scope/plugin/dist/index.js",
+    ]
+
+    const result = Config.deduplicatePlugins(plugins)
+
+    expect(result.length).toBe(3)
   })
 
   test("local plugin directory overrides global opencode.json plugin", async () => {

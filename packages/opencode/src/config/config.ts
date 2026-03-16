@@ -510,17 +510,31 @@ export namespace Config {
 
   /**
    * Extracts a canonical plugin name from a plugin specifier.
-   * - For file:// URLs: extracts filename without extension
+   * - For file:// URLs pointing into node_modules: extracts npm package name
+   * - For other file:// URLs: extracts filename without extension
    * - For npm packages: extracts package name without version
    *
    * @example
+   * getPluginName("file:///path/to/node_modules/oh-my-opencode/dist/index.js") // "oh-my-opencode"
+   * getPluginName("file:///path/to/node_modules/@scope/pkg/index.js") // "@scope/pkg"
    * getPluginName("file:///path/to/plugin/foo.js") // "foo"
    * getPluginName("oh-my-opencode@2.4.3") // "oh-my-opencode"
    * getPluginName("@scope/pkg@1.0.0") // "@scope/pkg"
    */
   export function getPluginName(plugin: string): string {
     if (plugin.startsWith("file://")) {
-      return path.parse(new URL(plugin).pathname).name
+      const parsed = new URL(plugin).pathname
+      const nm = parsed.lastIndexOf("/node_modules/")
+      if (nm !== -1) {
+        const after = parsed.substring(nm + "/node_modules/".length)
+        // scoped packages: @scope/pkg/dist/index.js → @scope/pkg
+        if (after.startsWith("@")) {
+          const parts = after.split("/")
+          return parts.slice(0, 2).join("/")
+        }
+        return after.split("/")[0]
+      }
+      return path.parse(parsed).name
     }
     const lastAt = plugin.lastIndexOf("@")
     if (lastAt > 0) {
