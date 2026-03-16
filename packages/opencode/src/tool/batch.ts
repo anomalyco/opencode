@@ -1,5 +1,6 @@
 import z from "zod"
 import { Tool } from "./tool"
+import { ProviderID, ModelID } from "../provider/schema"
 import DESCRIPTION from "./batch.txt"
 
 const DISALLOWED = new Set(["batch"])
@@ -31,18 +32,18 @@ export const BatchTool = Tool.define("batch", async () => {
     },
     async execute(params, ctx) {
       const { Session } = await import("../session")
-      const { Identifier } = await import("../id/id")
+      const { PartID } = await import("../session/schema")
 
       const toolCalls = params.tool_calls.slice(0, 25)
       const discardedCalls = params.tool_calls.slice(25)
 
       const { ToolRegistry } = await import("./registry")
-      const availableTools = await ToolRegistry.tools({ modelID: "", providerID: "" })
+      const availableTools = await ToolRegistry.tools({ modelID: ModelID.make(""), providerID: ProviderID.make("") })
       const toolMap = new Map(availableTools.map((t) => [t.id, t]))
 
       const executeCall = async (call: (typeof toolCalls)[0]) => {
         const callStartTime = Date.now()
-        const partID = Identifier.ascending("part")
+        const partID = PartID.ascending()
 
         try {
           if (DISALLOWED.has(call.tool)) {
@@ -79,7 +80,7 @@ export const BatchTool = Tool.define("batch", async () => {
           const result = await tool.execute(validatedParams, { ...ctx, callID: partID })
           const attachments = result.attachments?.map((attachment) => ({
             ...attachment,
-            id: Identifier.ascending("part"),
+            id: PartID.ascending(),
             sessionID: ctx.sessionID,
             messageID: ctx.messageID,
           }))
@@ -134,7 +135,7 @@ export const BatchTool = Tool.define("batch", async () => {
       // Add discarded calls as errors
       const now = Date.now()
       for (const call of discardedCalls) {
-        const partID = Identifier.ascending("part")
+        const partID = PartID.ascending()
         await Session.updatePart({
           id: partID,
           messageID: ctx.messageID,
