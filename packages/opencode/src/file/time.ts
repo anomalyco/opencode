@@ -15,6 +15,24 @@ export namespace FileTimeService {
   }
 }
 
+type Stamp = {
+  readonly read: Date
+  readonly mtime: number | undefined
+  readonly ctime: number | undefined
+  readonly size: number | undefined
+}
+
+function stamp(file: string): Stamp {
+  const stat = Filesystem.stat(file)
+  const size = typeof stat?.size === "bigint" ? Number(stat.size) : stat?.size
+  return {
+    read: new Date(),
+    mtime: stat?.mtime?.getTime(),
+    ctime: stat?.ctime?.getTime(),
+    size,
+  }
+}
+
 export class FileTimeService extends ServiceMap.Service<FileTimeService, FileTimeService.Service>()(
   "@opencode/FileTime",
 ) {
@@ -22,7 +40,7 @@ export class FileTimeService extends ServiceMap.Service<FileTimeService, FileTim
     FileTimeService,
     Effect.gen(function* () {
       const disableCheck = yield* Flag.OPENCODE_DISABLE_FILETIME_CHECK
-      const reads: { [sessionID: string]: { [path: string]: Date | undefined } } = {}
+      const reads: { [sessionID: string]: { [path: string]: Stamp | undefined } } = {}
       const locks = new Map<string, Semaphore.Semaphore>()
 
       function getLock(filepath: string) {
@@ -38,11 +56,11 @@ export class FileTimeService extends ServiceMap.Service<FileTimeService, FileTim
         read: Effect.fn("FileTimeService.read")(function* (sessionID: string, file: string) {
           log.info("read", { sessionID, file })
           reads[sessionID] = reads[sessionID] || {}
-          reads[sessionID][file] = new Date()
+          reads[sessionID][file] = stamp(file)
         }),
 
         get: Effect.fn("FileTimeService.get")(function* (sessionID: string, file: string) {
-          return reads[sessionID]?.[file]
+          return reads[sessionID]?.[file]?.read
         }),
 
         assert: Effect.fn("FileTimeService.assert")(function* (sessionID: string, filepath: string) {
@@ -50,10 +68,12 @@ export class FileTimeService extends ServiceMap.Service<FileTimeService, FileTim
 
           const time = reads[sessionID]?.[filepath]
           if (!time) throw new Error(`You must read file ${filepath} before overwriting it. Use the Read tool first`)
-          const mtime = Filesystem.stat(filepath)?.mtime
-          if (mtime && mtime.getTime() > time.getTime() + 50) {
+          const next = stamp(filepath)
+          const changed = next.mtime !== time.mtime || next.ctime !== time.ctime || next.size !== time.size
+
+          if (changed) {
             throw new Error(
-              `File ${filepath} has been modified since it was last read.\nLast modification: ${mtime.toISOString()}\nLast read: ${time.toISOString()}\n\nPlease read the file again before modifying it.`,
+              `File ${filepath} has been modified since it was last read.\nLast modification: ${new Date(next.mtime ?? next.read.getTime()).toISOString()}\nLast read: ${time.read.toISOString()}\n\nPlease read the file again before modifying it.`,
             )
           }
         }),
@@ -70,8 +90,7 @@ export class FileTimeService extends ServiceMap.Service<FileTimeService, FileTim
 // Legacy facade — callers don't need to change
 export namespace FileTime {
   export function read(sessionID: string, file: string) {
-    // Fire-and-forget — callers never await this
-    runPromiseInstance(FileTimeService.use((s) => s.read(sessionID, file)))
+    return runPromiseInstance(FileTimeService.use((s) => s.read(sessionID, file)))
   }
 
   export function get(sessionID: string, file: string) {
