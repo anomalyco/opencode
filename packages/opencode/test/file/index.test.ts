@@ -627,8 +627,8 @@ describe("file/index Filesystem patterns", () => {
           const nodes = await File.list("sub")
           expect(nodes.length).toBe(2)
           expect(nodes.map((n) => n.name).sort()).toEqual(["a.txt", "b.txt"])
-          // Paths should be relative to project root
-          expect(nodes[0].path.startsWith("sub/")).toBe(true)
+          // Paths should be relative to project root (normalize for Windows)
+          expect(nodes[0].path.replaceAll("\\", "/").startsWith("sub/")).toBe(true)
         },
       })
     })
