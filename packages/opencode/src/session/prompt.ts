@@ -666,6 +666,7 @@ export namespace SessionPrompt {
       const result = await processor.process({
         user: lastUser,
         agent,
+        permission: session.permission,
         abort,
         sessionID,
         system,
@@ -1244,7 +1245,7 @@ export namespace SessionPrompt {
                 ]
               }
 
-              FileTime.read(input.sessionID, filepath)
+              await FileTime.read(input.sessionID, filepath)
               return [
                 {
                   messageID: info.id,
