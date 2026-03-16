@@ -18,7 +18,7 @@ export async function InstanceBootstrap() {
   Log.Default.info("bootstrapping", { directory: Instance.directory })
   await Plugin.init()
   ShareNext.init()
-  Format.init()
+  await Format.init()
   await LSP.init()
   await runPromiseInstance(FileWatcherService.use((service) => service.init()))
   File.init()
