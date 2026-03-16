@@ -6,10 +6,11 @@ import type { Tool } from "../../src/tool/tool"
 import { Instance } from "../../src/project/instance"
 import { SkillTool } from "../../src/tool/skill"
 import { tmpdir } from "../fixture/fixture"
+import { SessionID, MessageID } from "../../src/session/schema"
 
 const baseCtx: Omit<Tool.Context, "ask"> = {
-  sessionID: "test",
-  messageID: "",
+  sessionID: SessionID.make("ses_test"),
+  messageID: MessageID.make(""),
   callID: "",
   agent: "build",
   abort: AbortSignal.any([]),
@@ -45,7 +46,7 @@ description: Skill for tool tests.
         fn: async () => {
           const tool = await SkillTool.init()
           const skillPath = path.join(tmp.path, ".opencode", "skill", "tool-skill", "SKILL.md")
-          expect(tool.description).toContain(`<location>${pathToFileURL(skillPath).href}</location>`)
+          expect(tool.description).toContain(`**tool-skill**: Skill for tool tests.`)
         },
       })
     } finally {

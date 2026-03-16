@@ -1,69 +1,25 @@
 import { JSX } from "solid-js"
 
-export function IconLogo(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
+export function IconZen(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
   return (
-    <svg width="64" height="32" viewBox="0 0 64 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M0 9.14333V4.5719H4.57143V9.14333H0Z" fill="currentColor" />
-      <path d="M4.57178 9.14333V4.5719H9.14321V9.14333H4.57178Z" fill="currentColor" />
-      <path d="M9.1438 9.14333V4.5719H13.7152V9.14333H9.1438Z" fill="currentColor" />
-      <path d="M13.7124 9.14333V4.5719H18.2838V9.14333H13.7124Z" fill="currentColor" />
-      <path d="M13.7124 13.7136V9.14221H18.2838V13.7136H13.7124Z" fill="currentColor" />
-      <path d="M0 18.2857V13.7142H4.57143V18.2857H0Z" fill="currentColor" fill-opacity="0.2" />
-      <rect width="4.57143" height="4.57143" transform="translate(4.57178 13.7141)" fill="currentColor" />
-      <path d="M4.57178 18.2855V13.7141H9.14321V18.2855H4.57178Z" fill="currentColor" fill-opacity="0.2" />
-      <path d="M9.1438 18.2855V13.7141H13.7152V18.2855H9.1438Z" fill="currentColor" />
-      <path d="M13.7156 18.2855V13.7141H18.287V18.2855H13.7156Z" fill="currentColor" fill-opacity="0.2" />
-      <rect width="4.57143" height="4.57143" transform="translate(0 18.2859)" fill="currentColor" />
-      <path d="M0 22.8572V18.2858H4.57143V22.8572H0Z" fill="currentColor" fill-opacity="0.2" />
-      <rect
-        width="4.57143"
-        height="4.57143"
-        transform="translate(4.57178 18.2859)"
-        fill="currentColor"
-        fill-opacity="0.2"
-      />
-      <path d="M4.57178 22.8573V18.2859H9.14321V22.8573H4.57178Z" fill="currentColor" />
-      <path d="M9.1438 22.8573V18.2859H13.7152V22.8573H9.1438Z" fill="currentColor" fill-opacity="0.2" />
-      <path d="M13.7156 22.8573V18.2859H18.287V22.8573H13.7156Z" fill="currentColor" fill-opacity="0.2" />
-      <path d="M0 27.4292V22.8578H4.57143V27.4292H0Z" fill="currentColor" />
-      <path d="M4.57178 27.4292V22.8578H9.14321V27.4292H4.57178Z" fill="currentColor" />
-      <path d="M9.1438 27.4276V22.8562H13.7152V27.4276H9.1438Z" fill="currentColor" />
-      <path d="M13.7124 27.4292V22.8578H18.2838V27.4292H13.7124Z" fill="currentColor" />
-      <path d="M22.8572 9.14333V4.5719H27.4286V9.14333H22.8572Z" fill="currentColor" />
-      <path d="M27.426 9.14333V4.5719H31.9975V9.14333H27.426Z" fill="currentColor" />
-      <path d="M32.001 9.14333V4.5719H36.5724V9.14333H32.001Z" fill="currentColor" />
-      <path d="M36.5698 9.14333V4.5719H41.1413V9.14333H36.5698Z" fill="currentColor" />
-      <path d="M22.8572 13.7152V9.1438H27.4286V13.7152H22.8572Z" fill="currentColor" />
-      <path d="M36.5698 13.7152V9.1438H41.1413V13.7152H36.5698Z" fill="currentColor" />
-      <path d="M22.8572 18.2855V13.7141H27.4286V18.2855H22.8572Z" fill="currentColor" />
-      <path d="M27.4292 18.2855V13.7141H32.0006V18.2855H27.4292Z" fill="currentColor" />
-      <path d="M32.001 18.2855V13.7141H36.5724V18.2855H32.001Z" fill="currentColor" />
-      <path d="M36.5698 18.2855V13.7141H41.1413V18.2855H36.5698Z" fill="currentColor" />
-      <path d="M22.8572 22.8573V18.2859H27.4286V22.8573H22.8572Z" fill="currentColor" />
-      <path d="M27.4292 22.8573V18.2859H32.0006V22.8573H27.4292Z" fill="currentColor" fill-opacity="0.2" />
-      <path d="M32.001 22.8573V18.2859H36.5724V22.8573H32.001Z" fill="currentColor" fill-opacity="0.2" />
-      <path d="M36.5698 22.8573V18.2859H41.1413V22.8573H36.5698Z" fill="currentColor" fill-opacity="0.2" />
-      <path d="M22.8572 27.4292V22.8578H27.4286V27.4292H22.8572Z" fill="currentColor" />
-      <path d="M27.4292 27.4276V22.8562H32.0006V27.4276H27.4292Z" fill="currentColor" />
-      <path d="M32.001 27.4276V22.8562H36.5724V27.4276H32.001Z" fill="currentColor" />
-      <path d="M36.5698 27.4292V22.8578H41.1413V27.4292H36.5698Z" fill="currentColor" />
-      <path d="M45.7144 9.14333V4.5719H50.2858V9.14333H45.7144Z" fill="currentColor" />
-      <path d="M50.2861 9.14333V4.5719H54.8576V9.14333H50.2861Z" fill="currentColor" />
-      <path d="M54.855 9.14333V4.5719H59.4264V9.14333H54.855Z" fill="currentColor" />
-      <path d="M45.7144 13.7136V9.14221H50.2858V13.7136H45.7144Z" fill="currentColor" />
-      <path d="M59.4299 13.7152V9.1438H64.0014V13.7152H59.4299Z" fill="currentColor" />
-      <path d="M45.7144 18.2855V13.7141H50.2858V18.2855H45.7144Z" fill="currentColor" />
-      <path d="M50.2861 18.2857V13.7142H54.8576V18.2857H50.2861Z" fill="currentColor" fill-opacity="0.2" />
-      <path d="M54.8579 18.2855V13.7141H59.4293V18.2855H54.8579Z" fill="currentColor" fill-opacity="0.2" />
-      <path d="M59.4299 18.2855V13.7141H64.0014V18.2855H59.4299Z" fill="currentColor" />
-      <path d="M45.7144 22.8573V18.2859H50.2858V22.8573H45.7144Z" fill="currentColor" />
-      <path d="M50.2861 22.8572V18.2858H54.8576V22.8572H50.2861Z" fill="currentColor" fill-opacity="0.2" />
-      <path d="M54.8579 22.8573V18.2859H59.4293V22.8573H54.8579Z" fill="currentColor" fill-opacity="0.2" />
-      <path d="M59.4299 22.8573V18.2859H64.0014V22.8573H59.4299Z" fill="currentColor" />
-      <path d="M45.7144 27.4292V22.8578H50.2858V27.4292H45.7144Z" fill="currentColor" />
-      <path d="M50.2861 27.4286V22.8572H54.8576V27.4286H50.2861Z" fill="currentColor" fill-opacity="0.2" />
-      <path d="M54.8579 27.4285V22.8571H59.4293V27.4285H54.8579Z" fill="currentColor" fill-opacity="0.2" />
-      <path d="M59.4299 27.4292V22.8578H64.0014V27.4292H59.4299Z" fill="currentColor" />
+    <svg width="84" height="30" viewBox="0 0 84 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M24 24H6V18H18V12H24V24ZM6 18H0V12H6V18Z" fill="currentColor" fill-opacity="0.2" />
+      <path d="M6 24H24V30H0V18H6V24ZM18 18H6V12H18V18ZM24 12H18V6H0V0H24V12Z" fill="currentColor" />
+      <path d="M54 18V24H36V18H54Z" fill="currentColor" fill-opacity="0.2" />
+      <path d="M54 18H36V24H54V30H30V0H54V18ZM36 12H48V6H36V12Z" fill="currentColor" />
+      <path d="M78 30H66V12H78V30Z" fill="currentColor" fill-opacity="0.2" />
+      <path d="M78 6H66V30H60V0H78V6ZM84 30H78V6H84V30Z" fill="currentColor" />
+    </svg>
+  )
+}
+
+export function IconGo(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
+  return (
+    <svg width="54" height="30" viewBox="0 0 54 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M24 30H0V0H24V6H6V24H18V18H12V12H24V30Z" fill="currentColor" />
+      <path d="M12 18H18V24H6V12H12V18Z" fill="currentColor" fill-opacity="0.2" />
+      <path d="M48 12V24H36V12H48Z" fill="currentColor" fill-opacity="0.2" />
+      <path d="M54 30H30V0H54V30ZM36 24H48V6H36V24Z" fill="currentColor" />
     </svg>
   )
 }
@@ -107,6 +63,23 @@ export function IconStripe(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
         fill="currentColor"
         d="M15.827 12.506c0 .672-.31 1.175-.771 1.175-.293 0-.468-.106-.589-.237l-.007-1.855c.13-.143.31-.247.596-.247.456-.001.771.51.771 1.164zm3.36-1.253c-.312 0-.659.236-.659.798h1.291c0-.562-.325-.798-.632-.798zm4.813-5.253v12c0 1.104-.896 2-2 2h-20c-1.104 0-2-.896-2-2v-12c0-1.104.896-2 2-2h20c1.104 0 2 .896 2 2zm-17.829 7.372c0-1.489-1.909-1.222-1.909-1.784 0-.195.162-.271.424-.271.38 0 .862.116 1.242.321v-1.176c-.414-.165-.827-.228-1.241-.228-1.012.001-1.687.53-1.687 1.414 0 1.382 1.898 1.158 1.898 1.754 0 .231-.201.305-.479.305-.414 0-.947-.171-1.366-.399v1.192c.464.2.935.283 1.365.283 1.038.001 1.753-.512 1.753-1.411zm2.422-3.054h-.949l-.001-1.084-1.219.259-.005 4.006c0 .739.556 1.285 1.297 1.285.408 0 .71-.074.876-.165v-1.016c-.16.064-.948.293-.948-.443v-1.776h.948v-1.066zm2.596 0c-.166-.06-.75-.169-1.042.369l-.078-.369h-1.079v4.377h1.248v-2.967c.295-.388.793-.313.952-.262v-1.148zm1.554 0h-1.253v4.377h1.253v-4.377zm0-1.664l-1.253.266v1.017l1.253-.266v-1.017zm4.314 3.824c0-1.454-.826-2.244-1.703-2.243-.489 0-.805.23-.978.392l-.065-.309h-1.099v5.828l1.249-.265.003-1.413c.179.131.446.316.883.316.893 0 1.71-.719 1.71-2.306zm3.943.045c0-1.279-.619-2.288-1.805-2.288-1.188 0-1.911 1.01-1.911 2.281 0 1.506.852 2.267 2.068 2.267.597 0 1.045-.136 1.384-.324v-1.006c-.34.172-.731.276-1.227.276-.487 0-.915-.172-.971-.758h2.444l.018-.448z"
       />
+    </svg>
+  )
+}
+
+export function IconAlipay(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
+  return (
+    <svg {...props} viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+      <path d="M2.541 0H13.5a2.55 2.55 0 0 1 2.54 2.563v8.297c-.006 0-.531-.046-2.978-.813-.412-.14-.916-.327-1.479-.536q-.456-.17-.957-.353a13 13 0 0 0 1.325-3.373H8.822V4.649h3.831v-.634h-3.83V2.121H7.26c-.274 0-.274.273-.274.273v1.621H3.11v.634h3.875v1.136h-3.2v.634H9.99c-.227.789-.532 1.53-.894 2.202-2.013-.67-4.161-1.212-5.51-.878-.864.214-1.42.597-1.746.998-1.499 1.84-.424 4.633 2.741 4.633 1.872 0 3.675-1.053 5.072-2.787 2.08 1.008 6.37 2.738 6.387 2.745v.105A2.55 2.55 0 0 1 13.5 16H2.541A2.55 2.55 0 0 1 0 13.437V2.563A2.55 2.55 0 0 1 2.541 0" />
+      <path d="M2.309 9.27c-1.22 1.073-.49 3.034 1.978 3.034 1.434 0 2.868-.925 3.994-2.406-1.602-.789-2.959-1.353-4.425-1.207-.397.04-1.14.217-1.547.58Z" />
+    </svg>
+  )
+}
+
+export function IconWechat(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
+  return (
+    <svg {...props} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+      <path d="M9.27099 14.6689C8.9532 14.8312 8.56403 14.7122 8.39132 14.4L8.3477 14.3054L6.53019 10.3069C6.52269 10.2588 6.52269 10.2097 6.53019 10.1615C6.53017 10.0735 6.56564 9.98916 6.62857 9.9276C6.6915 9.86603 6.7766 9.83243 6.86462 9.83438C6.93567 9.83269 7.00508 9.85582 7.06091 9.89981L9.24191 11.4265C9.40329 11.5346 9.59293 11.5928 9.78716 11.5937C9.90424 11.5945 10.0203 11.5723 10.1289 11.5283L20.176 7.02816C18.091 4.72544 15.1103 3.43931 12.0045 3.5022C6.4793 3.5022 2.00098 7.23172 2.00098 11.87C2.06681 14.4052 3.35646 16.7515 5.4615 18.1658C5.6878 18.3326 5.78402 18.6241 5.70141 18.8928L5.25067 20.594C5.22336 20.6714 5.20625 20.7521 5.19978 20.8339C5.19777 20.9232 5.23236 21.0094 5.29552 21.0726C5.35868 21.1358 5.44491 21.1703 5.5342 21.1684C5.60098 21.1645 5.66583 21.1445 5.72322 21.1102L7.90423 19.8452C8.06383 19.7467 8.2474 19.6939 8.43494 19.6925C8.53352 19.6923 8.63157 19.707 8.72574 19.7361C9.78781 20.0363 10.8863 20.188 11.99 20.1869C17.5152 20.1869 22.001 16.4574 22.001 11.8554C22.0108 10.4834 21.6301 9.13687 20.903 7.97326L9.35096 14.6253L9.27099 14.6689Z" />
     </svg>
   )
 }

@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/app",
-  "version": "1.2.24",
+  "version": "1.2.27",
   "description": "",
   "type": "module",
   "exports": {
@@ -45,8 +45,8 @@
     "@shikijs/transformers": "3.9.2",
     "@solid-primitives/active-element": "2.1.3",
     "@solid-primitives/audio": "1.4.2",
-    "@solid-primitives/i18n": "2.2.1",
     "@solid-primitives/event-bus": "1.1.2",
+    "@solid-primitives/i18n": "2.2.1",
     "@solid-primitives/media": "2.3.3",
     "@solid-primitives/resize-observer": "2.1.3",
     "@solid-primitives/scroll": "2.1.3",
@@ -56,6 +56,7 @@
     "@solidjs/router": "catalog:",
     "@thisbeyond/solid-dnd": "0.7.5",
     "diff": "catalog:",
+    "effect": "4.0.0-beta.31",
     "fuzzysort": "catalog:",
     "ghostty-web": "github:anomalyco/ghostty-web#main",
     "luxon": "catalog:",

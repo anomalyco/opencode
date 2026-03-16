@@ -1,5 +1,77 @@
-import { batch, createEffect, on, onCleanup, onMount, type Accessor } from "solid-js"
+import { batch, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
+import { same } from "@/utils/same"
+
+const emptyTabs: string[] = []
+
+type Tabs = {
+  active: Accessor<string | undefined>
+  all: Accessor<string[]>
+}
+
+type TabsInput = {
+  tabs: Accessor<Tabs>
+  pathFromTab: (tab: string) => string | undefined
+  normalizeTab: (tab: string) => string
+  review?: Accessor<boolean>
+  hasReview?: Accessor<boolean>
+}
+
+export const getSessionKey = (dir: string | undefined, id: string | undefined) => `${dir ?? ""}${id ? `/${id}` : ""}`
+
+export const createSessionTabs = (input: TabsInput) => {
+  const review = input.review ?? (() => false)
+  const hasReview = input.hasReview ?? (() => false)
+  const contextOpen = createMemo(() => input.tabs().active() === "context" || input.tabs().all().includes("context"))
+  const openedTabs = createMemo(
+    () => {
+      const seen = new Set<string>()
+      return input
+        .tabs()
+        .all()
+        .flatMap((tab) => {
+          if (tab === "context" || tab === "review") return []
+          const value = input.pathFromTab(tab) ? input.normalizeTab(tab) : tab
+          if (seen.has(value)) return []
+          seen.add(value)
+          return [value]
+        })
+    },
+    emptyTabs,
+    { equals: same },
+  )
+  const activeTab = createMemo(() => {
+    const active = input.tabs().active()
+    if (active === "context") return active
+    if (active === "review" && review()) return active
+    if (active && input.pathFromTab(active)) return input.normalizeTab(active)
+
+    const first = openedTabs()[0]
+    if (first) return first
+    if (contextOpen()) return "context"
+    if (review() && hasReview()) return "review"
+    return "empty"
+  })
+  const activeFileTab = createMemo(() => {
+    const active = activeTab()
+    if (!openedTabs().includes(active)) return
+    return active
+  })
+  const closableTab = createMemo(() => {
+    const active = activeTab()
+    if (active === "context") return active
+    if (!openedTabs().includes(active)) return
+    return active
+  })
+
+  return {
+    contextOpen,
+    openedTabs,
+    activeTab,
+    activeFileTab,
+    closableTab,
+  }
+}
 
 export const focusTerminalById = (id: string) => {
   const wrapper = document.getElementById(`terminal-wrapper-${id}`)
@@ -117,57 +189,3 @@ export const createSizing = () => {
 }
 
 export type Sizing = ReturnType<typeof createSizing>
-
-export const createPresence = (open: Accessor<boolean>, wait = 200) => {
-  const [state, setState] = createStore({
-    show: open(),
-    open: open(),
-  })
-  let frame: number | undefined
-  let t: number | undefined
-
-  const clear = () => {
-    if (frame !== undefined) {
-      cancelAnimationFrame(frame)
-      frame = undefined
-    }
-    if (t !== undefined) {
-      clearTimeout(t)
-      t = undefined
-    }
-  }
-
-  createEffect(
-    on(open, (next) => {
-      clear()
-
-      if (next) {
-        if (state.show) {
-          setState("open", true)
-          return
-        }
-
-        setState({ show: true, open: false })
-        frame = requestAnimationFrame(() => {
-          frame = undefined
-          setState("open", true)
-        })
-        return
-      }
-
-      if (!state.show) return
-      setState("open", false)
-      t = window.setTimeout(() => {
-        t = undefined
-        setState("show", false)
-      }, wait)
-    }),
-  )
-
-  onCleanup(clear)
-
-  return {
-    show: () => state.show,
-    open: () => state.open,
-  }
-}
