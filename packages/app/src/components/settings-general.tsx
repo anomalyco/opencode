@@ -12,6 +12,7 @@ import { usePlatform } from "@/context/platform"
 import { useSettings, monoFontFamily } from "@/context/settings"
 import { playSound, SOUND_OPTIONS } from "@/utils/sound"
 import { Link } from "./link"
+import { SettingsList } from "./settings-list"
 
 let demoSoundState = {
   cleanup: undefined as (() => void) | undefined,
@@ -177,7 +178,7 @@ export const SettingsGeneral: Component = () => {
 
   const GeneralSection = () => (
     <div class="flex flex-col gap-1">
-      <div class="bg-surface-raised-base px-4 rounded-lg">
+      <SettingsList>
         <SettingsRow
           title={language.t("settings.general.row.language.title")}
           description={language.t("settings.general.row.language.description")}
@@ -248,7 +249,7 @@ export const SettingsGeneral: Component = () => {
             triggerStyle={{ "min-width": "180px" }}
           />
         </SettingsRow>
-      </div>
+      </SettingsList>
     </div>
   )
 
@@ -256,7 +257,7 @@ export const SettingsGeneral: Component = () => {
     <div class="flex flex-col gap-1">
       <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.appearance")}</h3>
 
-      <div class="bg-surface-raised-base px-4 rounded-lg">
+      <SettingsList>
         <SettingsRow
           title={language.t("settings.general.row.colorScheme.title")}
           description={language.t("settings.general.row.colorScheme.description")}
@@ -333,7 +334,7 @@ export const SettingsGeneral: Component = () => {
             )}
           </Select>
         </SettingsRow>
-      </div>
+      </SettingsList>
     </div>
   )
 
@@ -341,7 +342,7 @@ export const SettingsGeneral: Component = () => {
     <div class="flex flex-col gap-1">
       <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.notifications")}</h3>
 
-      <div class="bg-surface-raised-base px-4 rounded-lg">
+      <SettingsList>
         <SettingsRow
           title={language.t("settings.general.notifications.agent.title")}
           description={language.t("settings.general.notifications.agent.description")}
@@ -377,7 +378,7 @@ export const SettingsGeneral: Component = () => {
             />
           </div>
         </SettingsRow>
-      </div>
+      </SettingsList>
     </div>
   )
 
@@ -385,7 +386,7 @@ export const SettingsGeneral: Component = () => {
     <div class="flex flex-col gap-1">
       <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.sounds")}</h3>
 
-      <div class="bg-surface-raised-base px-4 rounded-lg">
+      <SettingsList>
         <SettingsRow
           title={language.t("settings.general.sounds.agent.title")}
           description={language.t("settings.general.sounds.agent.description")}
@@ -430,7 +431,7 @@ export const SettingsGeneral: Component = () => {
             )}
           />
         </SettingsRow>
-      </div>
+      </SettingsList>
     </div>
   )
 
@@ -438,7 +439,7 @@ export const SettingsGeneral: Component = () => {
     <div class="flex flex-col gap-1">
       <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.updates")}</h3>
 
-      <div class="bg-surface-raised-base px-4 rounded-lg">
+      <SettingsList>
         <SettingsRow
           title={language.t("settings.updates.row.startup.title")}
           description={language.t("settings.updates.row.startup.description")}
@@ -474,7 +475,7 @@ export const SettingsGeneral: Component = () => {
               : language.t("settings.updates.action.checkNow")}
           </Button>
         </SettingsRow>
-      </div>
+      </SettingsList>
     </div>
   )
 
@@ -504,7 +505,7 @@ export const SettingsGeneral: Component = () => {
               <div class="flex flex-col gap-1">
                 <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.desktop.section.wsl")}</h3>
 
-                <div class="bg-surface-raised-base px-4 rounded-lg">
+                <SettingsList>
                   <SettingsRow
                     title={language.t("settings.desktop.wsl.title")}
                     description={language.t("settings.desktop.wsl.description")}
@@ -517,7 +518,7 @@ export const SettingsGeneral: Component = () => {
                       />
                     </div>
                   </SettingsRow>
-                </div>
+                </SettingsList>
               </div>
             )
           }}
@@ -537,7 +538,7 @@ export const SettingsGeneral: Component = () => {
               <div class="flex flex-col gap-1">
                 <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.display")}</h3>
 
-                <div class="bg-surface-raised-base px-4 rounded-lg">
+                <SettingsList>
                   <SettingsRow
                     title={
                       <div class="flex items-center gap-2">
@@ -555,7 +556,7 @@ export const SettingsGeneral: Component = () => {
                       <Switch checked={value() === "wayland"} onChange={onChange} />
                     </div>
                   </SettingsRow>
-                </div>
+                </SettingsList>
               </div>
             )
           }}

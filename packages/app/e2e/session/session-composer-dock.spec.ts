@@ -1,5 +1,10 @@
 import { test, expect } from "../fixtures"
-import { composerEvent, type ComposerDriverState, type ComposerProbeState, type ComposerWindow } from "../../src/testing/session-composer"
+import {
+  composerEvent,
+  type ComposerDriverState,
+  type ComposerProbeState,
+  type ComposerWindow,
+} from "../../src/testing/session-composer"
 import { cleanupSession, clearSessionDockSeed, seedSessionQuestion } from "../actions"
 import {
   permissionDockSelector,

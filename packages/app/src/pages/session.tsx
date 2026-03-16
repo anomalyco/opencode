@@ -44,7 +44,7 @@ import { createOpenReviewFile, createSessionTabs, createSizing, focusTerminalByI
 import { MessageTimeline } from "@/pages/session/message-timeline"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
 import { useSessionLayout } from "@/pages/session/session-layout"
-import { resetSessionModel, syncSessionModel } from "@/pages/session/session-model-helpers"
+import { syncSessionModel } from "@/pages/session/session-model-helpers"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
@@ -490,7 +490,7 @@ export default function Page() {
       (next, prev) => {
         if (!prev) return
         if (next.dir === prev.dir && next.id === prev.id) return
-        if (!next.id) resetSessionModel(local)
+        if (prev.id && !next.id) local.session.reset()
       },
       { defer: true },
     ),
@@ -956,13 +956,15 @@ export default function Page() {
       return (
         <div class={input.emptyClass}>
           <div class="flex flex-col gap-3">
-            <div class="text-14-medium text-text-strong">Create a Git repository</div>
+            <div class="text-14-medium text-text-strong">{language.t("session.review.noVcs.createGit.title")}</div>
             <div class="text-14-regular text-text-base max-w-md" style={{ "line-height": "var(--line-height-normal)" }}>
-              Track, review, and undo changes in this project
+              {language.t("session.review.noVcs.createGit.description")}
             </div>
           </div>
           <Button size="large" disabled={ui.git} onClick={initGit}>
-            {ui.git ? "Creating Git repository..." : "Create Git repository"}
+            {ui.git
+              ? language.t("session.review.noVcs.createGit.actionLoading")
+              : language.t("session.review.noVcs.createGit.action")}
           </Button>
         </div>
       )
@@ -1475,6 +1477,7 @@ export default function Page() {
 
   const fork = (input: { sessionID: string; messageID: string }) => {
     const value = draft(input.messageID)
+    const dir = base64Encode(sdk.directory)
     return sdk.client.session
       .fork(input)
       .then((result) => {
@@ -1486,10 +1489,8 @@ export default function Page() {
           })
           return
         }
-        navigate(`/${base64Encode(sdk.directory)}/session/${next.id}`)
-        requestAnimationFrame(() => {
-          prompt.set(value)
-        })
+        prompt.set(value, undefined, { dir, id: next.id })
+        navigate(`/${dir}/session/${next.id}`)
       })
       .catch(fail)
   }
