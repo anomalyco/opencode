@@ -316,6 +316,16 @@ export async function aggregateSessionStats(days?: number, projectFilter?: strin
   return stats
 }
 
+/**
+ * Displays session statistics in a formatted table.
+ *
+ * Renders a nicely formatted output showing token usage,
+ * tool statistics, model usage, and cost information.
+ *
+ * @param stats The aggregated session statistics to display
+ * @param toolLimit Maximum number of tools to show in the list
+ * @param modelLimit Maximum number of models to show in the list
+ */
 export function displayStats(stats: SessionStats, toolLimit?: number, modelLimit?: number) {
   const width = 56
 
