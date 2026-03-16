@@ -941,13 +941,18 @@ export namespace MessageV2 {
     }
 
     if (e instanceof Error) {
-      if (/fetch failed|terminated|unable to connect|Is the computer able to access the url/i.test(e.message)) return true
-      if (e.cause instanceof Error && /fetch failed|terminated|unable to connect|Is the computer able to access the url/i.test(e.cause.message)) return true
+      if (/fetch failed|terminated|unable to connect|Is the computer able to access the url/i.test(e.message))
+        return true
+      if (
+        e.cause instanceof Error &&
+        /fetch failed|terminated|unable to connect|Is the computer able to access the url/i.test(e.cause.message)
+      )
+        return true
     }
 
     const err = e as Record<string, unknown>
     if (typeof err.code === "string" && NETWORK_CODES.has(err.code)) return true
-    const cause = (err as Error).cause as Record<string, unknown> | undefined
+    const cause = (err.cause || (e as Error).cause) as Record<string, unknown> | undefined
     if (cause && typeof cause.code === "string" && NETWORK_CODES.has(cause.code)) return true
 
     return false
