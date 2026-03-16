@@ -1,3 +1,4 @@
+import { $ } from "bun"
 import { platform, release } from "os"
 import { lazy } from "../../../../util/lazy.js"
 import { tmpdir } from "os"
