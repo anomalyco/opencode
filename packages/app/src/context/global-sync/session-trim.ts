@@ -10,7 +10,7 @@ export function compareSessionRecent(a: Session, b: Session) {
   const aUpdated = sessionUpdatedAt(a)
   const bUpdated = sessionUpdatedAt(b)
   if (aUpdated !== bUpdated) return bUpdated - aUpdated
-  return cmp(a.id, b.id)
+  return cmp(b.id, a.id)
 }
 
 export function takeRecentSessions(sessions: Session[], limit: number, cutoff: number) {
@@ -39,7 +39,7 @@ export function trimSessions(
   const all = input
     .filter((s) => !!s?.id)
     .filter((s) => !s.time?.archived)
-    .sort((a, b) => cmp(a.id, b.id))
+    .sort((a, b) => compareSessionRecent(a, b))
   const roots = all.filter((s) => !s.parentID)
   const children = all.filter((s) => !!s.parentID)
   const base = roots.slice(0, limit)
