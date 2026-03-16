@@ -47,7 +47,7 @@ export namespace Vcs {
       log.info("initialized", { branch: current })
 
       const unsubscribe = Bus.subscribe(FileWatcher.Event.Updated, async (evt) => {
-        if (evt.properties.file.endsWith("HEAD")) return
+        if (!evt.properties.file.endsWith("HEAD")) return
         const next = await currentBranch()
         if (next !== current) {
           log.info("branch changed", { from: current, to: next })
