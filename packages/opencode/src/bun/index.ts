@@ -4,48 +4,37 @@ import { Log } from "../util/log"
 import path from "path"
 import { Filesystem } from "../util/filesystem"
 import { NamedError } from "@opencode-ai/util/error"
-import { readableStreamToText } from "bun"
 import { Lock } from "../util/lock"
 import { PackageRegistry } from "./registry"
 import { proxied } from "@/util/proxied"
+import { Process } from "../util/process"
 
 export namespace BunProc {
   const log = Log.create({ service: "bun" })
 
-  export async function run(cmd: string[], options?: Bun.SpawnOptions.OptionsObject<any, any, any>) {
+  export async function run(cmd: string[], options?: Process.RunOptions) {
+    const full = [which(), ...cmd]
     log.info("running", {
-      cmd: [which(), ...cmd],
+      cmd: full,
       ...options,
     })
-    const result = Bun.spawn([which(), ...cmd], {
-      ...options,
-      stdout: "pipe",
-      stderr: "pipe",
+    const result = await Process.run(full, {
+      cwd: options?.cwd,
+      abort: options?.abort,
+      kill: options?.kill,
+      timeout: options?.timeout,
+      nothrow: options?.nothrow,
       env: {
         ...process.env,
         ...options?.env,
         BUN_BE_BUN: "1",
       },
     })
-    const code = await result.exited
-    const stdout = result.stdout
-      ? typeof result.stdout === "number"
-        ? result.stdout
-        : await readableStreamToText(result.stdout)
-      : undefined
-    const stderr = result.stderr
-      ? typeof result.stderr === "number"
-        ? result.stderr
-        : await readableStreamToText(result.stderr)
-      : undefined
     log.info("done", {
-      code,
-      stdout,
-      stderr,
+      code: result.code,
+      stdout: result.stdout.toString(),
+      stderr: result.stderr.toString(),
     })
-    if (code !== 0) {
-      throw new Error(`Command failed with exit code ${result.exitCode}`)
-    }
     return result
   }
 
@@ -66,14 +55,14 @@ export namespace BunProc {
     using _ = await Lock.write("bun-install")
 
     const mod = path.join(Global.Path.cache, "node_modules", pkg)
-    const pkgjson = Bun.file(path.join(Global.Path.cache, "package.json"))
-    const parsed = await pkgjson.json().catch(async () => {
-      const result = { dependencies: {} }
-      await Bun.write(pkgjson.name!, JSON.stringify(result, null, 2))
+    const pkgjsonPath = path.join(Global.Path.cache, "package.json")
+    const parsed = await Filesystem.readJson<{ dependencies: Record<string, string> }>(pkgjsonPath).catch(async () => {
+      const result = { dependencies: {} as Record<string, string> }
+      await Filesystem.writeJson(pkgjsonPath, result)
       return result
     })
-    const dependencies = parsed.dependencies ?? {}
-    if (!parsed.dependencies) parsed.dependencies = dependencies
+    if (!parsed.dependencies) parsed.dependencies = {} as Record<string, string>
+    const dependencies = parsed.dependencies
     const modExists = await Filesystem.exists(mod)
     const cachedVersion = dependencies[pkg]
 
@@ -93,7 +82,7 @@ export namespace BunProc {
       "--force",
       "--exact",
       // TODO: get rid of this case (see: https://github.com/oven-sh/bun/issues/19936)
-      ...(proxied() ? ["--no-cache"] : []),
+      ...(proxied() || process.env.CI ? ["--no-cache"] : []),
       "--cwd",
       Global.Path.cache,
       pkg + "@" + version,
@@ -123,15 +112,16 @@ export namespace BunProc {
     // This ensures subsequent starts use the cached version until explicitly updated
     let resolvedVersion = version
     if (version === "latest") {
-      const installedPkgJson = Bun.file(path.join(mod, "package.json"))
-      const installedPkg = await installedPkgJson.json().catch(() => null)
+      const installedPkg = await Filesystem.readJson<{ version?: string }>(path.join(mod, "package.json")).catch(
+        () => null,
+      )
       if (installedPkg?.version) {
         resolvedVersion = installedPkg.version
       }
     }
 
     parsed.dependencies[pkg] = resolvedVersion
-    await Bun.write(pkgjson.name!, JSON.stringify(parsed, null, 2))
+    await Filesystem.writeJson(pkgjsonPath, parsed)
     return mod
   }
 }

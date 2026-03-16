@@ -6,7 +6,7 @@
   border: none;
   transition: background-color 0.15s ease;
   border-radius: var(--radius-md);
-  overflow: clip;
+  overflow: visible;
 
   &.tool-collapsible {
     gap: 8px;
@@ -26,14 +26,16 @@
     [data-slot="collapsible-arrow"] {
       opacity: 0;
       transition: opacity 0.15s ease;
+      will-change: opacity;
+      transform: translateZ(0);
     }
 
     [data-slot="collapsible-arrow-icon"] {
-      display: none;
-    }
-
-    [data-slot="collapsible-arrow-icon"][data-direction="right"] {
       display: inline-flex;
+      color: var(--icon-weaker);
+      transform: translateZ(0) rotate(-90deg);
+      transition: transform 0.15s ease;
+      will-change: transform;
     }
 
     &:hover [data-slot="collapsible-arrow"] {
@@ -74,18 +76,18 @@
       opacity: 1;
     }
 
-    [data-slot="collapsible-arrow-icon"][data-direction="right"] {
-      display: none;
-    }
-
-    [data-slot="collapsible-arrow-icon"][data-direction="down"] {
-      display: inline-flex;
+    [data-slot="collapsible-arrow-icon"] {
+      transform: translateZ(0) rotate(0deg);
     }
   }
 
   [data-slot="collapsible-content"] {
     overflow: hidden;
     /* animation: slideUp 250ms ease-out; */
+
+    &[data-expanded] {
+      overflow: visible;
+    }
 
     /* &[data-expanded] { */
     /*   animation: slideDown 250ms ease-out; */

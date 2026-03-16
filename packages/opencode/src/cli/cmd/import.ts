@@ -1,6 +1,7 @@
 import type { Argv } from "yargs"
 import type { Session as SDKSession, Message, Part } from "@opencode-ai/sdk/v2"
 import { Session } from "../../session"
+import { MessageV2 } from "../../session/message-v2"
 import { cmd } from "./cmd"
 import { bootstrap } from "../bootstrap"
 import { Database } from "../../storage/db"
@@ -8,8 +9,9 @@ import { SessionTable, MessageTable, PartTable } from "../../session/session.sql
 import { Instance } from "../../project/instance"
 import { ShareNext } from "../../share/share-next"
 import { EOL } from "os"
+import { Filesystem } from "../../util/filesystem"
 
-/** Discriminated union returned by the ShareNext API (GET /api/share/:id/data) */
+/** Discriminated union returned by the ShareNext API (GET /api/shares/:id/data) */
 export type ShareData =
   | { type: "session"; data: SDKSession }
   | { type: "message"; data: Message }
@@ -21,6 +23,14 @@ export type ShareData =
 export function parseShareUrl(url: string): string | null {
   const match = url.match(/^https?:\/\/[^/]+\/share\/([a-zA-Z0-9_-]+)$/)
   return match ? match[1] : null
+}
+
+export function shouldAttachShareAuthHeaders(shareUrl: string, accountBaseUrl: string): boolean {
+  try {
+    return new URL(shareUrl).origin === new URL(accountBaseUrl).origin
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -77,7 +87,7 @@ export const ImportCommand = cmd({
     await bootstrap(process.cwd(), async () => {
       let exportData:
         | {
-            info: Session.Info
+            info: SDKSession
             messages: Array<{
               info: Message
               parts: Part[]
@@ -96,8 +106,21 @@ export const ImportCommand = cmd({
           return
         }
 
-        const baseUrl = await ShareNext.url()
-        const response = await fetch(`${baseUrl}/api/share/${slug}/data`)
+        const parsed = new URL(args.file)
+        const baseUrl = parsed.origin
+        const req = await ShareNext.request()
+        const headers = shouldAttachShareAuthHeaders(args.file, req.baseUrl) ? req.headers : {}
+
+        const dataPath = req.api.data(slug)
+        let response = await fetch(`${baseUrl}${dataPath}`, {
+          headers,
+        })
+
+        if (!response.ok && dataPath !== `/api/share/${slug}/data`) {
+          response = await fetch(`${baseUrl}/api/share/${slug}/data`, {
+            headers,
+          })
+        }
 
         if (!response.ok) {
           process.stdout.write(`Failed to fetch share data: ${response.statusText}`)
@@ -116,8 +139,7 @@ export const ImportCommand = cmd({
 
         exportData = transformed
       } else {
-        const file = Bun.file(args.file)
-        exportData = await file.json().catch(() => {})
+        exportData = await Filesystem.readJson<NonNullable<typeof exportData>>(args.file).catch(() => undefined)
         if (!exportData) {
           process.stdout.write(`File not found: ${args.file}`)
           process.stdout.write(EOL)
@@ -131,31 +153,46 @@ export const ImportCommand = cmd({
         return
       }
 
-      Database.use((db) => db.insert(SessionTable).values(Session.toRow(exportData.info)).onConflictDoNothing().run())
+      const info = Session.Info.parse({
+        ...exportData.info,
+        projectID: Instance.project.id,
+      })
+      const row = Session.toRow(info)
+      Database.use((db) =>
+        db
+          .insert(SessionTable)
+          .values(row)
+          .onConflictDoUpdate({ target: SessionTable.id, set: { project_id: row.project_id } })
+          .run(),
+      )
 
       for (const msg of exportData.messages) {
+        const msgInfo = MessageV2.Info.parse(msg.info)
+        const { id, sessionID: _, ...msgData } = msgInfo
         Database.use((db) =>
           db
             .insert(MessageTable)
             .values({
-              id: msg.info.id,
-              session_id: exportData.info.id,
-              time_created: msg.info.time?.created ?? Date.now(),
-              data: msg.info,
+              id,
+              session_id: row.id,
+              time_created: msgInfo.time?.created ?? Date.now(),
+              data: msgData,
             })
             .onConflictDoNothing()
             .run(),
         )
 
         for (const part of msg.parts) {
+          const partInfo = MessageV2.Part.parse(part)
+          const { id: partId, sessionID: _s, messageID, ...partData } = partInfo
           Database.use((db) =>
             db
               .insert(PartTable)
               .values({
-                id: part.id,
-                message_id: msg.info.id,
-                session_id: exportData.info.id,
-                data: part,
+                id: partId,
+                message_id: messageID,
+                session_id: row.id,
+                data: partData,
               })
               .onConflictDoNothing()
               .run(),

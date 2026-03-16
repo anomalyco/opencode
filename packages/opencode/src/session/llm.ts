@@ -11,7 +11,7 @@ import {
   tool,
   jsonSchema,
 } from "ai"
-import { clone, mergeDeep, pipe } from "remeda"
+import { mergeDeep, pipe } from "remeda"
 import { ProviderTransform } from "@/provider/transform"
 import { Config } from "@/config/config"
 import { Instance } from "@/project/instance"
@@ -32,6 +32,7 @@ export namespace LLM {
     sessionID: string
     model: Provider.Model
     agent: Agent.Info
+    permission?: PermissionNext.Ruleset
     system: string[]
     abort: AbortSignal
     messages: ModelMessage[]
@@ -80,15 +81,11 @@ export namespace LLM {
     )
 
     const header = system[0]
-    const original = clone(system)
     await Plugin.trigger(
       "experimental.chat.system.transform",
       { sessionID: input.sessionID, model: input.model },
       { system },
     )
-    if (system.length === 0) {
-      system.push(...original)
-    }
     // rejoin to maintain 2-part structure for caching if header unchanged
     if (system.length > 2 && system[0] === header) {
       const rest = system.slice(1)
@@ -259,8 +256,11 @@ export namespace LLM {
     })
   }
 
-  async function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "user">) {
-    const disabled = PermissionNext.disabled(Object.keys(input.tools), input.agent.permission)
+  async function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "permission" | "user">) {
+    const disabled = PermissionNext.disabled(
+      Object.keys(input.tools),
+      PermissionNext.merge(input.agent.permission, input.permission ?? []),
+    )
     for (const tool of Object.keys(input.tools)) {
       if (input.user.tools?.[tool] === false || disabled.has(tool)) {
         delete input.tools[tool]

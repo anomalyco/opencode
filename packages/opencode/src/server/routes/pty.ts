@@ -3,6 +3,7 @@ import { describeRoute, validator, resolver } from "hono-openapi"
 import { upgradeWebSocket } from "hono/bun"
 import z from "zod"
 import { Pty } from "@/pty"
+import { PtyID } from "@/pty/schema"
 import { NotFoundError } from "../../storage/db"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
@@ -72,7 +73,7 @@ export const PtyRoutes = lazy(() =>
           ...errors(404),
         },
       }),
-      validator("param", z.object({ ptyID: z.string() })),
+      validator("param", z.object({ ptyID: PtyID.zod })),
       async (c) => {
         const info = Pty.get(c.req.valid("param").ptyID)
         if (!info) {
@@ -99,7 +100,7 @@ export const PtyRoutes = lazy(() =>
           ...errors(400),
         },
       }),
-      validator("param", z.object({ ptyID: z.string() })),
+      validator("param", z.object({ ptyID: PtyID.zod })),
       validator("json", Pty.UpdateInput),
       async (c) => {
         const info = await Pty.update(c.req.valid("param").ptyID, c.req.valid("json"))
@@ -124,7 +125,7 @@ export const PtyRoutes = lazy(() =>
           ...errors(404),
         },
       }),
-      validator("param", z.object({ ptyID: z.string() })),
+      validator("param", z.object({ ptyID: PtyID.zod })),
       async (c) => {
         await Pty.remove(c.req.valid("param").ptyID)
         return c.json(true)
@@ -148,9 +149,9 @@ export const PtyRoutes = lazy(() =>
           ...errors(404),
         },
       }),
-      validator("param", z.object({ ptyID: z.string() })),
+      validator("param", z.object({ ptyID: PtyID.zod })),
       upgradeWebSocket((c) => {
-        const id = c.req.param("ptyID")
+        const id = PtyID.zod.parse(c.req.param("ptyID"))
         const cursor = (() => {
           const value = c.req.query("cursor")
           if (!value) return
@@ -163,7 +164,7 @@ export const PtyRoutes = lazy(() =>
 
         type Socket = {
           readyState: number
-          send: (data: string | Uint8Array<ArrayBuffer> | ArrayBuffer) => void
+          send: (data: string | Uint8Array | ArrayBuffer) => void
           close: (code?: number, reason?: string) => void
         }
 
@@ -177,11 +178,16 @@ export const PtyRoutes = lazy(() =>
 
         return {
           onOpen(_event, ws) {
-            const socket = isSocket(ws.raw) ? ws.raw : ws
+            const socket = ws.raw
+            if (!isSocket(socket)) {
+              ws.close()
+              return
+            }
             handler = Pty.connect(id, socket, cursor)
           },
           onMessage(event) {
-            handler?.onMessage(String(event.data))
+            if (typeof event.data !== "string") return
+            handler?.onMessage(event.data)
           },
           onClose() {
             handler?.onClose()

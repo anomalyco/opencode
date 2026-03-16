@@ -1,14 +1,17 @@
 import { describe, expect, test } from "bun:test"
+import os from "os"
 import path from "path"
 import { BashTool } from "../../src/tool/bash"
 import { Instance } from "../../src/project/instance"
+import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
 import type { PermissionNext } from "../../src/permission/next"
 import { Truncate } from "../../src/tool/truncation"
+import { SessionID, MessageID } from "../../src/session/schema"
 
 const ctx = {
-  sessionID: "test",
-  messageID: "",
+  sessionID: SessionID.make("ses_test"),
+  messageID: MessageID.make(""),
   callID: "",
   agent: "build",
   abort: AbortSignal.any([]),
@@ -137,14 +140,14 @@ describe("tool.bash permissions", () => {
         await bash.execute(
           {
             command: "ls",
-            workdir: "/tmp",
-            description: "List /tmp",
+            workdir: os.tmpdir(),
+            description: "List temp dir",
           },
           testCtx,
         )
         const extDirReq = requests.find((r) => r.permission === "external_directory")
         expect(extDirReq).toBeDefined()
-        expect(extDirReq!.patterns).toContain("/tmp/*")
+        expect(extDirReq!.patterns).toContain(path.join(os.tmpdir(), "*"))
       },
     })
   })
@@ -202,8 +205,8 @@ describe("tool.bash permissions", () => {
 
         await bash.execute(
           {
-            command: "rm tmpfile",
-            description: "Remove tmpfile",
+            command: `rm -rf ${path.join(tmp.path, "nested")}`,
+            description: "remove nested dir",
           },
           testCtx,
         )
@@ -365,7 +368,8 @@ describe("tool.bash truncation", () => {
           ctx,
         )
         expect((result.metadata as any).truncated).toBe(false)
-        expect(result.output).toBe("hello\n")
+        const eol = process.platform === "win32" ? "\r\n" : "\n"
+        expect(result.output).toBe(`hello${eol}`)
       },
     })
   })
@@ -388,7 +392,7 @@ describe("tool.bash truncation", () => {
         const filepath = (result.metadata as any).outputPath
         expect(filepath).toBeTruthy()
 
-        const saved = await Bun.file(filepath).text()
+        const saved = await Filesystem.readText(filepath)
         const lines = saved.trim().split("\n")
         expect(lines.length).toBe(lineCount)
         expect(lines[0]).toBe("1")

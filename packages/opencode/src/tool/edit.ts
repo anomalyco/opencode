@@ -24,6 +24,15 @@ function normalizeLineEndings(text: string): string {
   return text.replaceAll("\r\n", "\n")
 }
 
+function detectLineEnding(text: string): "\n" | "\r\n" {
+  return text.includes("\r\n") ? "\r\n" : "\n"
+}
+
+function convertToLineEnding(text: string, ending: "\n" | "\r\n"): string {
+  if (ending === "\n") return text
+  return text.replaceAll("\n", "\r\n")
+}
+
 export const EditTool = Tool.define("edit", {
   description: DESCRIPTION,
   parameters: z.object({
@@ -49,7 +58,7 @@ export const EditTool = Tool.define("edit", {
     let contentNew = ""
     await FileTime.withLock(filePath, async () => {
       if (params.oldString === "") {
-        const existed = await Bun.file(filePath).exists()
+        const existed = await Filesystem.exists(filePath)
         contentNew = params.newString
         diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
         await ctx.ask({
@@ -61,7 +70,7 @@ export const EditTool = Tool.define("edit", {
             diff,
           },
         })
-        await Bun.write(filePath, params.newString)
+        await Filesystem.write(filePath, params.newString)
         await Bus.publish(File.Event.Edited, {
           file: filePath,
         })
@@ -73,13 +82,17 @@ export const EditTool = Tool.define("edit", {
         return
       }
 
-      const file = Bun.file(filePath)
-      const stats = await file.stat().catch(() => {})
+      const stats = Filesystem.stat(filePath)
       if (!stats) throw new Error(`File ${filePath} not found`)
       if (stats.isDirectory()) throw new Error(`Path is a directory, not a file: ${filePath}`)
       await FileTime.assert(ctx.sessionID, filePath)
-      contentOld = await file.text()
-      contentNew = replace(contentOld, params.oldString, params.newString, params.replaceAll)
+      contentOld = await Filesystem.readText(filePath)
+
+      const ending = detectLineEnding(contentOld)
+      const old = convertToLineEnding(normalizeLineEndings(params.oldString), ending)
+      const next = convertToLineEnding(normalizeLineEndings(params.newString), ending)
+
+      contentNew = replace(contentOld, old, next, params.replaceAll)
 
       diff = trimDiff(
         createTwoFilesPatch(filePath, filePath, normalizeLineEndings(contentOld), normalizeLineEndings(contentNew)),
@@ -94,7 +107,7 @@ export const EditTool = Tool.define("edit", {
         },
       })
 
-      await file.write(contentNew)
+      await Filesystem.write(filePath, contentNew)
       await Bus.publish(File.Event.Edited, {
         file: filePath,
       })
@@ -102,7 +115,7 @@ export const EditTool = Tool.define("edit", {
         file: filePath,
         event: "change",
       })
-      contentNew = await file.text()
+      contentNew = await Filesystem.readText(filePath)
       diff = trimDiff(
         createTwoFilesPatch(filePath, filePath, normalizeLineEndings(contentOld), normalizeLineEndings(contentNew)),
       )
