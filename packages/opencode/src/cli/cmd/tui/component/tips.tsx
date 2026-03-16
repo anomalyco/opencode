@@ -149,4 +149,7 @@ const TIPS = [
   "Run {highlight}/help{/highlight} or {highlight}Ctrl+X H{/highlight} to show the help dialog",
   "Use {highlight}/rename{/highlight} to rename the current session",
   "Press {highlight}Ctrl+Z{/highlight} to suspend the terminal and return to your shell",
+  "Use {highlight}Ctrl+X J{/highlight} / {highlight}Ctrl+X K{/highlight} to switch between tabs",
+  "Press {highlight}Ctrl+X `{/highlight} to jump back to your previous tab",
+  "Press {highlight}Ctrl+X Shift+W{/highlight} or {highlight}/worktree{/highlight} to open a new worktree tab",
 ]
