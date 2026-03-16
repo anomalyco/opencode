@@ -1,3 +1,5 @@
+import { Config } from "effect"
+
 function truthy(key: string) {
   const value = process.env[key]?.toLowerCase()
   return value === "true" || value === "1"
@@ -40,8 +42,12 @@ export namespace Flag {
 
   // Experimental
   export const OPENCODE_EXPERIMENTAL = truthy("OPENCODE_EXPERIMENTAL")
-  export const OPENCODE_EXPERIMENTAL_FILEWATCHER = truthy("OPENCODE_EXPERIMENTAL_FILEWATCHER")
-  export const OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER = truthy("OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER")
+  export const OPENCODE_EXPERIMENTAL_FILEWATCHER = Config.boolean("OPENCODE_EXPERIMENTAL_FILEWATCHER").pipe(
+    Config.withDefault(false),
+  )
+  export const OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER = Config.boolean(
+    "OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER",
+  ).pipe(Config.withDefault(false))
   export const OPENCODE_EXPERIMENTAL_ICON_DISCOVERY =
     OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY")
 
