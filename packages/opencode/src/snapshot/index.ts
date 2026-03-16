@@ -14,7 +14,6 @@ import { Process } from "@/util/process"
 export namespace Snapshot {
   const log = Log.create({ service: "snapshot" })
   const hour = 60 * 60 * 1000
-  const prune = "7.days"
 
   function args(git: string, cmd: string[]) {
     return ["--git-dir", git, "--work-tree", Instance.worktree, ...cmd]
@@ -39,7 +38,9 @@ export namespace Snapshot {
       .then(() => true)
       .catch(() => false)
     if (!exists) return
-    const result = await Process.run(["git", ...args(git, ["gc", `--prune=${prune}`])], {
+    const retention = typeof cfg.snapshot === "object" ? (cfg.snapshot?.retention ?? 5) : 5
+    const pruneAge = `${Math.max(1, Math.round(30 / retention))}.days`
+    const result = await Process.run(["git", ...args(git, ["gc", `--prune=${pruneAge}`])], {
       cwd: Instance.directory,
       nothrow: true,
     })
@@ -51,7 +52,11 @@ export namespace Snapshot {
       })
       return
     }
-    log.info("cleanup", { prune })
+    log.info("cleanup", { pruneAge })
+    await Process.run(["git", ...args(git, ["prune", `--expire=${pruneAge}`])], {
+      cwd: Instance.directory,
+      nothrow: true,
+    })
     await pruneOrphanedSnapshots()
   }
 

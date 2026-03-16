@@ -1052,7 +1052,21 @@ export namespace Config {
         })
         .optional(),
       plugin: z.string().array().optional(),
-      snapshot: z.boolean().optional(),
+      snapshot: z
+        .union([
+          z.boolean(),
+          z.object({
+            enabled: z.boolean().optional().describe("Enable or disable snapshots"),
+            retention: z
+              .number()
+              .int()
+              .positive()
+              .optional()
+              .describe("Maximum number of snapshot objects to retain per project (default: 5)"),
+          }),
+        ])
+        .optional()
+        .describe("Snapshot configuration: true/false or object with enabled and retention"),
       share: z
         .enum(["manual", "auto", "disabled"])
         .optional()
