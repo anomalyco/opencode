@@ -113,8 +113,9 @@ GitHub Actions 単体では他 repository の tag push を event として直接
 ### merge policy
 
 - GitHub の branch protection では merge commit を許可する
-- `dev` では rebase merge / squash merge を使わない
-- feature PR も sync PR も通常の merge commit に統一する
+- GitHub では squash merge も許可し、rebase merge は無効にする
+- 通常の feature / fix / chore PR は squash merge を使う
+- `sync/upstream-v*` PR だけ通常の merge commit を使う
 - upstream の完全な tag 実体は `vendor/upstream-release` に残す
 
 ### local commands
@@ -136,7 +137,7 @@ GitHub Actions 単体では他 repository の tag push を event として直接
 4. `bun run plan:upstream`
 5. `bun run sync:upstream`
 6. 必要なら sync branch 上で conflict を解消する
-7. `dev` に merge する
+7. `sync/upstream-v*` PR は merge commit で `dev` に入れる
 
 ### do and do not
 
@@ -144,11 +145,13 @@ GitHub Actions 単体では他 repository の tag push を event として直接
   - `dev` から通常開発 branch を切る
   - `vendor/upstream-release` を tag mirror として force update する
   - `sync/upstream-v*` で conflict を解消し、解消 commit を残す
+  - 通常 PR を squash merge で `dev` に入れる
 - やってはいけないこと
   - `upstream` に PR や push を送る
   - `dev` に対して `upstream/dev` を直接 merge する
   - `vendor/upstream-release` に securecode 独自修正を直接 commit する
   - release tag と関係ない timing で sync PR を乱立させる
+  - 通常 PR を merge commit で `dev` に入れる
 
 ### current examples
 

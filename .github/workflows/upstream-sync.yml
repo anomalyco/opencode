@@ -78,6 +78,7 @@ jobs:
           - Intake branch: `${{ steps.plan.outputs.branch }}`
           - Upstream commit: `${{ steps.plan.outputs.sha }}`
           - Base branch: `${{ steps.plan.outputs.base }}`
+          - Merge method: `Create a merge commit`
 
           This repository keeps fork-specific changes on `dev` and ingests upstream through a merge-based sync branch when a new upstream version tag is published.
           EOF

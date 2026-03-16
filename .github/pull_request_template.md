@@ -27,3 +27,8 @@ _If this is a UI change, please include a screenshot or recording._
 - [ ] I have not included unrelated changes in this PR
 
 _If you do not follow this template your PR will be automatically rejected._
+
+### Merge method
+
+- Default: use `Squash and merge`
+- Exception: if the head branch is `sync/upstream-v*`, use `Create a merge commit`
