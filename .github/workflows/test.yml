@@ -24,9 +24,9 @@ jobs:
       matrix:
         settings:
           - name: linux
-            host: blacksmith-4vcpu-ubuntu-2404
+            host: ubuntu-24.04
           - name: windows
-            host: blacksmith-4vcpu-windows-2025
+            host: windows-2025
     runs-on: ${{ matrix.settings.host }}
     defaults:
       run:
@@ -50,16 +50,17 @@ jobs:
 
   e2e:
     name: e2e (${{ matrix.settings.name }})
+    if: github.event_name == 'workflow_dispatch'
     needs: unit
     strategy:
       fail-fast: false
       matrix:
         settings:
           - name: linux
-            host: blacksmith-4vcpu-ubuntu-2404
+            host: ubuntu-24.04
             playwright: bunx playwright install --with-deps
           - name: windows
-            host: blacksmith-4vcpu-windows-2025
+            host: windows-2025
             playwright: bunx playwright install
     runs-on: ${{ matrix.settings.host }}
     env:
