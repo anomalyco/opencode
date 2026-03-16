@@ -117,6 +117,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       const event = e.details
       switch (event.type) {
         case "server.instance.disposed":
+        case "server.connected":
           bootstrap()
           break
         case "permission.replied": {
