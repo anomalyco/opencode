@@ -14,6 +14,8 @@ export namespace Snapshot {
   const log = Log.create({ service: "snapshot" })
   const hour = 60 * 60 * 1000
   const prune = "7.days"
+  // Warn when snapshot exceeds 1GB
+  const warnThreshold = 1024 * 1024 * 1024
 
   function args(git: string, cmd: string[]) {
     return ["--git-dir", git, "--work-tree", Instance.worktree, ...cmd]
@@ -58,6 +60,17 @@ export namespace Snapshot {
     const cfg = await Config.get()
     if (cfg.snapshot === false) return
     const git = gitdir()
+
+    // Check snapshot directory size and warn if it's too large
+    const size = await getDirSize(git)
+    if (size > warnThreshold) {
+      log.warn("snapshot directory is large", {
+        size: formatBytes(size),
+        threshold: formatBytes(warnThreshold),
+        hint: 'Consider setting `"snapshot": false` in config or running cleanup',
+      })
+    }
+
     if (await fs.mkdir(git, { recursive: true })) {
       await Process.run(["git", "init"], {
         env: {
@@ -360,6 +373,26 @@ export namespace Snapshot {
       })
     }
     return result
+  }
+
+  async function getDirSize(dir: string): Promise<number> {
+    const exists = await fs
+      .stat(dir)
+      .then(() => true)
+      .catch(() => false)
+    if (!exists) return 0
+    // Use du to get directory size in bytes
+    const result = await Process.text(["du", "-s", dir], { nothrow: true })
+    if (result.code !== 0) return 0
+    const kb = parseInt(result.text.split("\t")[0], 10)
+    return Number.isFinite(kb) ? kb * 1024 : 0
+  }
+
+  function formatBytes(bytes: number): string {
+    if (bytes < 1024) return `${bytes}B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)}GB`
   }
 
   function gitdir() {
