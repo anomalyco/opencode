@@ -188,7 +188,7 @@ describe("session.message-v2.fromError", () => {
     expect(result.data.isRetryable).toBe(true)
   })
 
-  test("marks 500/502/503/504 APICallError as network silence generally", () => {
+  test("marks 502/503/504 APICallError as network silence for zai.coding and kimi-code", () => {
     const error = new APICallError({
       message: "Bad Gateway",
       url: "https://api.example.com",
@@ -199,7 +199,13 @@ describe("session.message-v2.fromError", () => {
       isRetryable: true,
     })
 
-    const result = MessageV2.fromError(error, { providerID })
-    expect(MessageV2.NetworkSilenceError.isInstance(result)).toBe(true)
+    const resultZai = MessageV2.fromError(error, { providerID, modelID: "zai.coding" as any })
+    expect(MessageV2.NetworkSilenceError.isInstance(resultZai)).toBe(true)
+
+    const resultKimi = MessageV2.fromError(error, { providerID, modelID: "kimi-code" as any })
+    expect(MessageV2.NetworkSilenceError.isInstance(resultKimi)).toBe(true)
+
+    const resultOther = MessageV2.fromError(error, { providerID, modelID: "other-model" as any })
+    expect(MessageV2.NetworkSilenceError.isInstance(resultOther)).toBe(false)
   })
 })

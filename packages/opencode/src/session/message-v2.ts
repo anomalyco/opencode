@@ -927,9 +927,11 @@ export namespace MessageV2 {
     if (!e || typeof e !== "object") return false
 
     if (APICallError.isInstance(e)) {
-      // Fast-fail gateway errors generically
-      if (e.statusCode === 502 || e.statusCode === 503 || e.statusCode === 504 || e.statusCode === 500) {
-        return true
+      // Fast-fail gateway errors for specific models
+      if (ctx?.modelID && (ctx.modelID.includes("zai.coding") || ctx.modelID.includes("kimi-code"))) {
+        if (e.statusCode === 502 || e.statusCode === 503 || e.statusCode === 504 || e.statusCode === 500) {
+          return true
+        }
       }
 
       // APICallError wrapping a network-level failure (no HTTP status received)
@@ -939,24 +941,29 @@ export namespace MessageV2 {
     }
 
     if (e instanceof Error) {
-      if (/fetch failed|terminated|unable to connect|Is the computer able to access the url/i.test(e.message)) return true
-      if (e.cause instanceof Error && /fetch failed|terminated|unable to connect|Is the computer able to access the url/i.test(e.cause.message)) return true
+      if (/fetch failed|terminated|unable to connect|Is the computer able to access the url/i.test(e.message))
+        return true
+      if (
+        e.cause instanceof Error &&
+        /fetch failed|terminated|unable to connect|Is the computer able to access the url/i.test(e.cause.message)
+      )
+        return true
     }
 
     const err = e as Record<string, unknown>
     if (typeof err.code === "string" && NETWORK_CODES.has(err.code)) return true
-    const cause = (err as unknown as Error).cause as Record<string, unknown> | undefined
+    const cause = (err.cause || (e as Error).cause) as Record<string, unknown> | undefined
     if (cause && typeof cause.code === "string" && NETWORK_CODES.has(cause.code)) return true
 
     return false
   }
 
-  function networkMessage(e: unknown): string {
-    const err = e as any
-    const cause = err?.cause as Record<string, unknown> | undefined
-    const code = err?.code ?? (cause as SystemError | undefined)?.code
+  function networkMessage(e: Error | Record<string, unknown>): string {
+    const err = e as Error
+    const cause = err.cause as Record<string, unknown> | undefined
+    const code = (err as unknown as SystemError).code ?? (cause as SystemError | undefined)?.code
     if (code) return `Network error (${code})`
-    return err?.message || "Network error"
+    return err.message || "Network error"
   }
 
   export function fromError(
@@ -984,7 +991,7 @@ export namespace MessageV2 {
       case isNetworkSilence(e, ctx):
         return new MessageV2.NetworkSilenceError(
           {
-            message: networkMessage(e),
+            message: networkMessage(e as Error | Record<string, unknown>),
             code: (e as SystemError)?.code,
           },
           { cause: e },
