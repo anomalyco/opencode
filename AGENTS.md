@@ -3,6 +3,7 @@
 - The default branch in this repo is `dev`.
 - Local `main` ref may not exist; use `dev` or `origin/dev` for diffs.
 - Prefer automation: execute requested actions without confirmation unless blocked by missing info or safety/irreversibility.
+- Before creating, editing, or reopening a GitHub PR, always use the shared project skill at `.opencode/skills/gh-pr-compliance/SKILL.md`. In Codex-style harnesses that do not expose a `skill` tool, read that file directly and follow it before touching the PR.
 
 ## Style Guide
 
