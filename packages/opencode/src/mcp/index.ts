@@ -570,7 +570,7 @@ export namespace MCP {
     }
 
     // Update config to persist enabled state
-    const mcpConfig: McpConfigured = { ...mcp, enabled: true }
+    const mcpConfig: Config.Mcp = { ...mcp, enabled: true }
     await Config.update({ mcp: { [name]: mcpConfig } })
 
     const result = await create(name, { ...mcp, enabled: true })
@@ -614,7 +614,7 @@ export namespace MCP {
     const config = cfg.mcp ?? {}
     const mcp = config[name]
     if (mcp && isMcpConfigured(mcp)) {
-      const mcpConfig: McpConfigured = { ...mcp, enabled: false }
+      const mcpConfig: Config.Mcp = { ...mcp, enabled: false }
       await Config.update({ mcp: { [name]: mcpConfig } })
     }
   }
