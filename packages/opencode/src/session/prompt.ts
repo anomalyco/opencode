@@ -1318,6 +1318,31 @@ export namespace SessionPrompt {
       },
     )
 
+    const parsedInfo = MessageV2.Info.safeParse(info)
+    if (!parsedInfo.success) {
+      log.error("invalid user message before save", {
+        sessionID: input.sessionID,
+        messageID: info.id,
+        agent: info.agent,
+        model: info.model,
+        issues: parsedInfo.error.issues,
+      })
+    }
+
+    parts.forEach((part, index) => {
+      const parsedPart = MessageV2.Part.safeParse(part)
+      if (parsedPart.success) return
+      log.error("invalid user part before save", {
+        sessionID: input.sessionID,
+        messageID: info.id,
+        partID: part.id,
+        partType: part.type,
+        index,
+        issues: parsedPart.error.issues,
+        part,
+      })
+    })
+
     await Session.updateMessage(info)
     for (const part of parts) {
       await Session.updatePart(part)
