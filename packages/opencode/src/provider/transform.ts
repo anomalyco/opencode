@@ -39,6 +39,8 @@ export namespace ProviderTransform {
       case "@ai-sdk/gateway":
         return "gateway"
       case "@openrouter/ai-sdk-provider":
+      case "@literbike/ai-sdk-provider":
+        return "literbike"
         return "openrouter"
     }
     return undefined
@@ -365,6 +367,7 @@ export namespace ProviderTransform {
 
     switch (model.api.npm) {
       case "@openrouter/ai-sdk-provider":
+      case "@literbike/ai-sdk-provider":
         if (!model.id.includes("gpt") && !model.id.includes("gemini-3") && !model.id.includes("claude")) return {}
         return Object.fromEntries(OPENAI_EFFORTS.map((effort) => [effort, { reasoning: { effort } }]))
 
