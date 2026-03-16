@@ -1,0 +1,251 @@
+{
+  "$schema": "https://opencode.ai/theme.json",
+  "defs": {
+    "darkSyntaxProperty": "#7AA2C8",
+    "darkSyntaxNumber": "#B4A1D8",
+    "darkSyntaxString": "#76B7B2",
+    "darkDiagError": "#FF5C5C",
+    "darkDiagWarning": "#E0C46C",
+    "darkSyntaxFunction": "#8FBF7A",
+    "darkDiagInfo": "#7DCFFF",
+    "darkFg0": "#E7E5E4",
+    "darkSyntaxComment": "#6A6A62",
+    "darkBg0": "#0A0A0A",
+    "darkBg1": "#171717",
+    "darkBg2": "#1C1917",
+    "darkBg3": "#292524",
+    "darkDiffAddedBg": "#1F2A22",
+    "darkDiffRemovedBg": "#2D1F1F",
+    "darkDiffContextBg": "#1C1917",
+    "darkSyntaxLink": "#7AA2C8",
+    "darkSyntaxKeyword": "#E06C75",
+    "darkSyntaxOperator": "#D19A66",
+    "darkSyntaxVariable": "#E6E6E6",
+    "darkSyntaxType": "#D4B86A",
+    "darkSyntaxPunctuation": "#B7B7B7",
+    "lightSyntaxProperty": "#2E5E9B",
+    "lightSyntaxNumber": "#6C4BB8",
+    "lightSyntaxString": "#2D7E7A",
+    "lightDiagError": "#D93C3C",
+    "lightDiagWarning": "#8A6E15",
+    "lightSyntaxFunction": "#3F7E4A",
+    "lightDiagInfo": "#0E6BB8",
+    "lightFg0": "#292524",
+    "lightSyntaxComment": "#A8A29E",
+    "lightBg0": "#FAFAFA",
+    "lightBg1": "#F5F5F5",
+    "lightBg2": "#F5F5F4",
+    "lightBg3": "#E7E5E4",
+    "lightDiffAddedBg": "#E8F1EA",
+    "lightDiffRemovedBg": "#F5E9E9",
+    "lightDiffContextBg": "#F5F5F4",
+    "lightSyntaxLink": "#2E5E9B",
+    "lightSyntaxKeyword": "#B84755",
+    "lightSyntaxOperator": "#8A5A2F",
+    "lightSyntaxVariable": "#111111",
+    "lightSyntaxType": "#8A6A1F",
+    "lightSyntaxPunctuation": "#3A3A3A"
+  },
+  "theme": {
+    "primary": {
+      "dark": "darkSyntaxProperty",
+      "light": "lightSyntaxProperty"
+    },
+    "secondary": {
+      "dark": "darkSyntaxNumber",
+      "light": "lightSyntaxNumber"
+    },
+    "accent": {
+      "dark": "darkSyntaxString",
+      "light": "lightSyntaxString"
+    },
+    "error": {
+      "dark": "darkDiagError",
+      "light": "lightDiagError"
+    },
+    "warning": {
+      "dark": "darkDiagWarning",
+      "light": "lightDiagWarning"
+    },
+    "success": {
+      "dark": "darkSyntaxFunction",
+      "light": "lightSyntaxFunction"
+    },
+    "info": {
+      "dark": "darkDiagInfo",
+      "light": "lightDiagInfo"
+    },
+    "text": {
+      "dark": "darkFg0",
+      "light": "lightFg0"
+    },
+    "textMuted": {
+      "dark": "darkSyntaxComment",
+      "light": "lightSyntaxComment"
+    },
+    "background": {
+      "dark": "darkBg0",
+      "light": "lightBg0"
+    },
+    "backgroundPanel": {
+      "dark": "darkBg1",
+      "light": "lightBg1"
+    },
+    "backgroundElement": {
+      "dark": "darkBg2",
+      "light": "lightBg2"
+    },
+    "border": {
+      "dark": "darkBg3",
+      "light": "lightBg3"
+    },
+    "borderActive": {
+      "dark": "darkSyntaxProperty",
+      "light": "lightSyntaxProperty"
+    },
+    "borderSubtle": {
+      "dark": "darkBg2",
+      "light": "lightBg2"
+    },
+    "diffAdded": {
+      "dark": "darkSyntaxFunction",
+      "light": "lightSyntaxFunction"
+    },
+    "diffRemoved": {
+      "dark": "darkDiagError",
+      "light": "lightDiagError"
+    },
+    "diffContext": {
+      "dark": "darkSyntaxComment",
+      "light": "lightSyntaxComment"
+    },
+    "diffHunkHeader": {
+      "dark": "darkBg3",
+      "light": "lightBg3"
+    },
+    "diffHighlightAdded": {
+      "dark": "darkSyntaxFunction",
+      "light": "lightSyntaxFunction"
+    },
+    "diffHighlightRemoved": {
+      "dark": "darkDiagError",
+      "light": "lightDiagError"
+    },
+    "diffAddedBg": {
+      "dark": "darkDiffAddedBg",
+      "light": "lightDiffAddedBg"
+    },
+    "diffRemovedBg": {
+      "dark": "darkDiffRemovedBg",
+      "light": "lightDiffRemovedBg"
+    },
+    "diffContextBg": {
+      "dark": "darkDiffContextBg",
+      "light": "lightDiffContextBg"
+    },
+    "diffLineNumber": {
+      "dark": "darkSyntaxComment",
+      "light": "lightSyntaxComment"
+    },
+    "diffAddedLineNumberBg": {
+      "dark": "darkDiffAddedBg",
+      "light": "lightDiffAddedBg"
+    },
+    "diffRemovedLineNumberBg": {
+      "dark": "darkDiffRemovedBg",
+      "light": "lightDiffRemovedBg"
+    },
+    "markdownText": {
+      "dark": "darkFg0",
+      "light": "lightFg0"
+    },
+    "markdownHeading": {
+      "dark": "darkSyntaxLink",
+      "light": "lightSyntaxLink"
+    },
+    "markdownLink": {
+      "dark": "darkSyntaxLink",
+      "light": "lightSyntaxLink"
+    },
+    "markdownLinkText": {
+      "dark": "darkSyntaxProperty",
+      "light": "lightSyntaxProperty"
+    },
+    "markdownCode": {
+      "dark": "darkSyntaxString",
+      "light": "lightSyntaxString"
+    },
+    "markdownBlockQuote": {
+      "dark": "darkSyntaxComment",
+      "light": "lightSyntaxComment"
+    },
+    "markdownEmph": {
+      "dark": "darkSyntaxKeyword",
+      "light": "lightSyntaxKeyword"
+    },
+    "markdownStrong": {
+      "dark": "darkSyntaxOperator",
+      "light": "lightSyntaxOperator"
+    },
+    "markdownHorizontalRule": {
+      "dark": "darkBg3",
+      "light": "lightBg3"
+    },
+    "markdownListItem": {
+      "dark": "darkSyntaxProperty",
+      "light": "lightSyntaxProperty"
+    },
+    "markdownListEnumeration": {
+      "dark": "darkSyntaxNumber",
+      "light": "lightSyntaxNumber"
+    },
+    "markdownImage": {
+      "dark": "darkSyntaxLink",
+      "light": "lightSyntaxLink"
+    },
+    "markdownImageText": {
+      "dark": "darkSyntaxProperty",
+      "light": "lightSyntaxProperty"
+    },
+    "markdownCodeBlock": {
+      "dark": "darkFg0",
+      "light": "lightFg0"
+    },
+    "syntaxComment": {
+      "dark": "darkSyntaxComment",
+      "light": "lightSyntaxComment"
+    },
+    "syntaxKeyword": {
+      "dark": "darkSyntaxKeyword",
+      "light": "lightSyntaxKeyword"
+    },
+    "syntaxFunction": {
+      "dark": "darkSyntaxFunction",
+      "light": "lightSyntaxFunction"
+    },
+    "syntaxVariable": {
+      "dark": "darkSyntaxVariable",
+      "light": "lightSyntaxVariable"
+    },
+    "syntaxString": {
+      "dark": "darkSyntaxString",
+      "light": "lightSyntaxString"
+    },
+    "syntaxNumber": {
+      "dark": "darkSyntaxNumber",
+      "light": "lightSyntaxNumber"
+    },
+    "syntaxType": {
+      "dark": "darkSyntaxType",
+      "light": "lightSyntaxType"
+    },
+    "syntaxOperator": {
+      "dark": "darkSyntaxOperator",
+      "light": "lightSyntaxOperator"
+    },
+    "syntaxPunctuation": {
+      "dark": "darkSyntaxPunctuation",
+      "light": "lightSyntaxPunctuation"
+    }
+  }
+}
