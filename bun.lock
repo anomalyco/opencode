@@ -26,7 +26,7 @@
     },
     "packages/app": {
       "name": "@opencode-ai/app",
-      "version": "1.2.26",
+      "version": "1.2.27",
       "dependencies": {
         "@kobalte/core": "catalog:",
         "@opencode-ai/sdk": "workspace:*",
@@ -77,7 +77,7 @@
     },
     "packages/console/app": {
       "name": "@opencode-ai/console-app",
-      "version": "1.2.26",
+      "version": "1.2.27",
       "dependencies": {
         "@cloudflare/vite-plugin": "1.15.2",
         "@ibm/plex": "6.4.1",
@@ -111,7 +111,7 @@
     },
     "packages/console/core": {
       "name": "@opencode-ai/console-core",
-      "version": "1.2.26",
+      "version": "1.2.27",
       "dependencies": {
         "@aws-sdk/client-sts": "3.782.0",
         "@jsx-email/render": "1.1.1",
@@ -138,7 +138,7 @@
     },
     "packages/console/function": {
       "name": "@opencode-ai/console-function",
-      "version": "1.2.26",
+      "version": "1.2.27",
       "dependencies": {
         "@ai-sdk/anthropic": "2.0.0",
         "@ai-sdk/openai": "2.0.2",
@@ -162,7 +162,7 @@
     },
     "packages/console/mail": {
       "name": "@opencode-ai/console-mail",
-      "version": "1.2.26",
+      "version": "1.2.27",
       "dependencies": {
         "@jsx-email/all": "2.2.3",
         "@jsx-email/cli": "1.4.3",
@@ -186,7 +186,7 @@
     },
     "packages/desktop": {
       "name": "@opencode-ai/desktop",
-      "version": "1.2.26",
+      "version": "1.2.27",
       "dependencies": {
         "@opencode-ai/app": "workspace:*",
         "@opencode-ai/ui": "workspace:*",
@@ -219,7 +219,7 @@
     },
     "packages/desktop-electron": {
       "name": "@opencode-ai/desktop-electron",
-      "version": "1.2.26",
+      "version": "1.2.27",
       "dependencies": {
         "@opencode-ai/app": "workspace:*",
         "@opencode-ai/ui": "workspace:*",
@@ -250,7 +250,7 @@
     },
     "packages/enterprise": {
       "name": "@opencode-ai/enterprise",
-      "version": "1.2.26",
+      "version": "1.2.27",
       "dependencies": {
         "@opencode-ai/ui": "workspace:*",
         "@opencode-ai/util": "workspace:*",
@@ -279,7 +279,7 @@
     },
     "packages/function": {
       "name": "@opencode-ai/function",
-      "version": "1.2.26",
+      "version": "1.2.27",
       "dependencies": {
         "@octokit/auth-app": "8.0.1",
         "@octokit/rest": "catalog:",
@@ -295,7 +295,7 @@
     },
     "packages/opencode": {
       "name": "opencode",
-      "version": "1.2.26",
+      "version": "1.2.27",
       "bin": {
         "opencode": "./bin/opencode",
       },
@@ -416,7 +416,7 @@
     },
     "packages/plugin": {
       "name": "@opencode-ai/plugin",
-      "version": "1.2.26",
+      "version": "1.2.27",
       "dependencies": {
         "@opencode-ai/sdk": "workspace:*",
         "zod": "catalog:",
@@ -440,7 +440,7 @@
     },
     "packages/sdk/js": {
       "name": "@opencode-ai/sdk",
-      "version": "1.2.26",
+      "version": "1.2.27",
       "devDependencies": {
         "@hey-api/openapi-ts": "0.90.10",
         "@tsconfig/node22": "catalog:",
@@ -451,7 +451,7 @@
     },
     "packages/slack": {
       "name": "@opencode-ai/slack",
-      "version": "1.2.26",
+      "version": "1.2.27",
       "dependencies": {
         "@opencode-ai/sdk": "workspace:*",
         "@slack/bolt": "^3.17.1",
@@ -486,7 +486,7 @@
     },
     "packages/ui": {
       "name": "@opencode-ai/ui",
-      "version": "1.2.26",
+      "version": "1.2.27",
       "dependencies": {
         "@kobalte/core": "catalog:",
         "@opencode-ai/sdk": "workspace:*",
@@ -532,7 +532,7 @@
     },
     "packages/util": {
       "name": "@opencode-ai/util",
-      "version": "1.2.26",
+      "version": "1.2.27",
       "dependencies": {
         "zod": "catalog:",
       },
@@ -543,7 +543,7 @@
     },
     "packages/web": {
       "name": "@opencode-ai/web",
-      "version": "1.2.26",
+      "version": "1.2.27",
       "dependencies": {
         "@astrojs/cloudflare": "12.6.3",
         "@astrojs/markdown-remark": "6.3.1",
