@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
 
-# Get the latest Git tag
-latest_tag=$(git tag --sort=committerdate | grep -E '^github-v[0-9]+\.[0-9]+\.[0-9]+$' | tail -1)
+latest_tag=$(git tag --sort=version:refname | grep -E '^github-v[0-9]+\.[0-9]+\.[0-9]+$' | tail -1)
 if [ -z "$latest_tag" ]; then
-    echo "No tags found"
-    exit 1
+  echo "No GitHub Action tags found"
+  exit 1
 fi
 echo "Latest tag: $latest_tag"
 
 # Update latest tag
-git tag -d latest
+git tag -d latest >/dev/null 2>&1 || true
 git push origin :refs/tags/latest
-git tag -a latest $latest_tag -m "Update latest to $latest_tag"
+git tag -a latest "$latest_tag" -m "Update latest to $latest_tag"
 git push origin latest
