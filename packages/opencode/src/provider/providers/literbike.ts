@@ -58,5 +58,5 @@ export const literbike = {
   id: "literbike",
   name: "Literbike",
   env: [],
-  models: await fetchModels(),
+  models: fetchModels,
 }

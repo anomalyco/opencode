@@ -6,6 +6,7 @@ import { Installation } from "../installation"
 import { Flag } from "../flag/flag"
 import { lazy } from "@/util/lazy"
 import { Filesystem } from "../util/filesystem"
+import { literbike } from "./providers/literbike"
 
 // Try to import bundled snapshot (generated at build time)
 // Falls back to undefined in dev mode when snapshot doesn't exist
@@ -85,17 +86,31 @@ export namespace ModelsDev {
     return Flag.OPENCODE_MODELS_URL || "https://models.dev"
   }
 
+  async function fetchLiterbikeModels(): Promise<Record<string, Provider>> {
+    const models = await literbike.models()
+    if (Object.keys(models).length === 0) return {}
+    return {
+      [literbike.id]: {
+        id: literbike.id,
+        name: literbike.name,
+        env: literbike.env,
+        models,
+      },
+    }
+  }
+
   export const Data = lazy(async () => {
     const result = await Filesystem.readJson(Flag.OPENCODE_MODELS_PATH ?? filepath).catch(() => {})
-    if (result) return result
+    const literbikeData = await fetchLiterbikeModels()
+    if (result) return { ...result, ...literbikeData }
     // @ts-ignore
     const snapshot = await import("./models-snapshot")
       .then((m) => m.snapshot as Record<string, unknown>)
       .catch(() => undefined)
-    if (snapshot) return snapshot
-    if (Flag.OPENCODE_DISABLE_MODELS_FETCH) return {}
+    if (snapshot) return { ...snapshot, ...literbikeData }
+    if (Flag.OPENCODE_DISABLE_MODELS_FETCH) return literbikeData
     const json = await fetch(`${url()}/api.json`).then((x) => x.text())
-    return JSON.parse(json)
+    return { ...JSON.parse(json), ...literbikeData }
   })
 
   export async function get() {
