@@ -222,12 +222,27 @@ export function Session() {
     if (part.state.status !== "completed") return
     if (part.id === lastSwitch) return
 
+    // Legacy hardcoded tool name support
     if (part.tool === "plan_exit") {
       local.agent.set("build")
       lastSwitch = part.id
     } else if (part.tool === "plan_enter") {
       local.agent.set("plan")
       lastSwitch = part.id
+    }
+  })
+
+  // Generic agent switching: monitor new user messages with different agent
+  let lastMessageAgent: string | undefined = undefined
+  sdk.event.on("message.updated", (evt) => {
+    const info = evt.properties.info
+    if (info.sessionID !== route.sessionID) return
+    if (info.role !== "user") return
+    
+    // Switch UI to match the agent of new user messages
+    if (info.agent && info.agent !== lastMessageAgent) {
+      local.agent.set(info.agent)
+      lastMessageAgent = info.agent
     }
   })
 

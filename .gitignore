@@ -6,6 +6,7 @@ node_modules
 .idea
 .vscode
 .codex
+.bitfun
 *~
 playground
 tmp
