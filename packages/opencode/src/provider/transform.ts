@@ -39,9 +39,9 @@ export namespace ProviderTransform {
       case "@ai-sdk/gateway":
         return "gateway"
       case "@openrouter/ai-sdk-provider":
+        return "openrouter"
       case "@literbike/ai-sdk-provider":
         return "literbike"
-        return "openrouter"
     }
     return undefined
   }
