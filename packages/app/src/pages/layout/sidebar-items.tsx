@@ -16,6 +16,7 @@ import { getAvatarColors, type LocalProject, useLayout } from "@/context/layout"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
 import { messageAgentColor } from "@/utils/agent"
+import { isSessionPinned, toggleSessionPinned } from "@/utils/pinned-sessions"
 import { sessionPermissionRequest } from "../session/composer/session-request-tree"
 import { hasProjectPermissions } from "./helpers"
 
@@ -82,6 +83,7 @@ export type SessionItemProps = {
   clearHoverProjectSoon: () => void
   prefetchSession: (session: Session, priority?: "high" | "low") => void
   archiveSession: (session: Session) => Promise<void>
+  deleteSession: (session: Session) => Promise<void>
 }
 
 const SessionRow = (props: {
@@ -94,6 +96,7 @@ const SessionRow = (props: {
   hasPermissions: Accessor<boolean>
   hasError: Accessor<boolean>
   unseenCount: Accessor<number>
+  isPinned: Accessor<boolean>
   setHoverSession: (id: string | undefined) => void
   clearHoverProjectSoon: () => void
   sidebarOpened: Accessor<boolean>
@@ -104,7 +107,7 @@ const SessionRow = (props: {
 }): JSX.Element => (
   <A
     href={`/${props.slug}/session/${props.session.id}`}
-    class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none transition-[padding] ${props.mobile ? "pr-7" : ""} group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7 ${props.dense ? "py-0.5" : "py-1"}`}
+    class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none ${props.mobile ? "pr-[76px]" : ""} group-hover/session:pr-[76px] group-focus-within/session:pr-[76px] group-active/session:pr-[76px] ${props.dense ? "py-0.5" : "py-1"}`}
     onPointerDown={props.warmPress}
     onPointerEnter={props.warmHover}
     onPointerLeave={props.cancelHoverPrefetch}
@@ -116,25 +119,30 @@ const SessionRow = (props: {
     }}
   >
     <div class="flex items-center gap-1 w-full">
-      <div
-        class="shrink-0 size-6 flex items-center justify-center"
-        style={{ color: props.tint() ?? "var(--icon-interactive-base)" }}
-      >
-        <Switch fallback={<Icon name="dash" size="small" class="text-icon-weak" />}>
-          <Match when={props.isWorking()}>
-            <Spinner class="size-[15px]" />
-          </Match>
-          <Match when={props.hasPermissions()}>
-            <div class="size-1.5 rounded-full bg-surface-warning-strong" />
-          </Match>
-          <Match when={props.hasError()}>
-            <div class="size-1.5 rounded-full bg-text-diff-delete-base" />
-          </Match>
-          <Match when={props.unseenCount() > 0}>
-            <div class="size-1.5 rounded-full bg-text-interactive-base" />
-          </Match>
-        </Switch>
-      </div>
+      <Show when={props.isWorking() || props.hasPermissions() || props.hasError() || props.unseenCount() > 0 || props.isPinned()}>
+        <div
+          class="shrink-0 size-6 flex items-center justify-center"
+          style={{ color: props.tint() ?? "var(--icon-interactive-base)" }}
+        >
+          <Switch fallback={<span />}>
+            <Match when={props.isWorking()}>
+              <Spinner class="size-[15px]" />
+            </Match>
+            <Match when={props.hasPermissions()}>
+              <div class="size-1.5 rounded-full bg-surface-warning-strong" />
+            </Match>
+            <Match when={props.hasError()}>
+              <div class="size-1.5 rounded-full bg-text-diff-delete-base" />
+            </Match>
+            <Match when={props.unseenCount() > 0}>
+              <div class="size-1.5 rounded-full bg-text-interactive-base" />
+            </Match>
+            <Match when={props.isPinned()}>
+              <Icon name="pin-filled" size="small" class="text-icon-weak opacity-80" />
+            </Match>
+          </Switch>
+        </div>
+      </Show>
       <span class="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate">
         {props.session.title}
       </span>
@@ -229,6 +237,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   const hoverAllowed = createMemo(() => !props.mobile && props.sidebarExpanded())
   const hoverEnabled = createMemo(() => (props.popover ?? true) && hoverAllowed())
   const isActive = createMemo(() => props.session.id === params.id)
+  const isPinned = createMemo(() => isSessionPinned(props.session.id))
 
   const warm = (span: number, priority: "high" | "low") => {
     const nav = props.navList?.()
@@ -285,6 +294,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
       hasPermissions={hasPermissions}
       hasError={hasError}
       unseenCount={unseenCount}
+      isPinned={isPinned}
       setHoverSession={props.setHoverSession}
       clearHoverProjectSoon={props.clearHoverProjectSoon}
       sidebarOpened={layout.sidebar.opened}
@@ -298,8 +308,9 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   return (
     <div
       data-session-id={props.session.id}
-      class="group/session relative w-full rounded-md cursor-default pl-2 pr-3 transition-colors
-             hover:bg-surface-raised-base-hover [&:has(:focus-visible)]:bg-surface-raised-base-hover has-[[data-expanded]]:bg-surface-raised-base-hover has-[.active]:bg-surface-base-active"
+      class={`group/session relative w-full rounded-md cursor-default pl-2 pr-3 hover:bg-surface-raised-base-hover [&:has(:focus-visible)]:bg-surface-raised-base-hover has-[[data-expanded]]:bg-surface-raised-base-hover has-[.active]:bg-surface-base-active ${
+        isPinned() ? "outline outline-1 outline-border-weak/50 bg-surface-raised-base/20 shadow-[0_0_2px_rgba(0,0,0,0.05)]" : "transition-colors"
+      }`}
     >
       <Show
         when={hoverEnabled()}
@@ -333,7 +344,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
       </Show>
 
       <div
-        class={`absolute ${props.dense ? "top-0.5 right-0.5" : "top-1 right-1"} flex items-center gap-0.5 transition-opacity`}
+        class={`absolute ${props.dense ? "top-0.5 right-0.5" : "top-1 right-1"} flex items-center gap-0.5`}
         classList={{
           "opacity-100 pointer-events-auto": !!props.mobile,
           "opacity-0 pointer-events-none": !props.mobile,
@@ -341,6 +352,19 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
           "group-focus-within/session:opacity-100 group-focus-within/session:pointer-events-auto": true,
         }}
       >
+        <Tooltip value={isPinned() ? language.t("common.unpin") || "Unpin" : language.t("common.pin") || "Pin"} placement="top">
+          <IconButton
+            icon={isPinned() ? "pin-filled" : "pin"}
+            variant="ghost"
+            class={`size-6 rounded-md ${isPinned() ? "text-icon-brand-base hover:text-icon-brand-strong" : ""}`}
+            aria-label={isPinned() ? language.t("common.unpin") || "Unpin" : language.t("common.pin") || "Pin"}
+            onClick={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              toggleSessionPinned(props.session.id)
+            }}
+          />
+        </Tooltip>
         <Tooltip value={language.t("common.archive")} placement="top">
           <IconButton
             icon="archive"
@@ -351,6 +375,19 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
               event.preventDefault()
               event.stopPropagation()
               void props.archiveSession(props.session)
+            }}
+          />
+        </Tooltip>
+        <Tooltip value={language.t("common.delete")} placement="top">
+          <IconButton
+            icon="trash"
+            variant="ghost"
+            class="size-6 rounded-md text-text-diff-delete-base hover:text-text-diff-delete-strong"
+            aria-label={language.t("common.delete")}
+            onClick={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              void props.deleteSession(props.session)
             }}
           />
         </Tooltip>

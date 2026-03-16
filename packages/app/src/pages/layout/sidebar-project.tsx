@@ -10,6 +10,7 @@ import { useLayout, type LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { useNotification } from "@/context/notification"
+import { getPinnedSessions, isSessionPinned } from "@/utils/pinned-sessions"
 import { ProjectIcon, SessionItem, type SessionItemProps } from "./sidebar-items"
 import { childMapByParent, displayName, sortedRootSessions } from "./helpers"
 
@@ -188,6 +189,8 @@ const ProjectPreviewPanel = (props: {
   workspaces: Accessor<string[]>
   label: (directory: string) => string
   projectSessions: Accessor<ReturnType<typeof sortedRootSessions>>
+  projectPinnedSessions: Accessor<ReturnType<typeof sortedRootSessions>>
+  projectUnpinnedSessions: Accessor<ReturnType<typeof sortedRootSessions>>
   projectChildren: Accessor<Map<string, string[]>>
   workspaceSessions: (directory: string) => ReturnType<typeof sortedRootSessions>
   workspaceChildren: (directory: string) => Map<string, string[]>
@@ -204,7 +207,7 @@ const ProjectPreviewPanel = (props: {
       <Show
         when={props.workspaceEnabled()}
         fallback={
-          <For each={props.projectSessions().slice(0, 2)}>
+          <For each={[...props.projectPinnedSessions(), ...props.projectUnpinnedSessions()].slice(0, 2)}>
             {(session) => (
               <SessionItem
                 {...props.ctx.sessionProps}
@@ -320,6 +323,8 @@ export const SortableProject = (props: {
 
   const projectStore = createMemo(() => globalSync.child(props.project.worktree, { bootstrap: false })[0])
   const projectSessions = createMemo(() => sortedRootSessions(projectStore(), props.sortNow()))
+  const projectPinnedSessions = createMemo(() => projectSessions().filter(s => isSessionPinned(s.id)))
+  const projectUnpinnedSessions = createMemo(() => projectSessions().filter(s => !isSessionPinned(s.id)))
   const projectChildren = createMemo(() => childMapByParent(projectStore().session))
   const workspaceSessions = (directory: string) => {
     const [data] = globalSync.child(directory, { bootstrap: false })
@@ -381,6 +386,8 @@ export const SortableProject = (props: {
             workspaces={workspaces}
             label={label}
             projectSessions={projectSessions}
+            projectPinnedSessions={projectPinnedSessions}
+            projectUnpinnedSessions={projectUnpinnedSessions}
             projectChildren={projectChildren}
             workspaceSessions={workspaceSessions}
             workspaceChildren={workspaceChildren}

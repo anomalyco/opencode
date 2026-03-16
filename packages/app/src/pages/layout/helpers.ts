@@ -1,5 +1,6 @@
 import { getFilename } from "@opencode-ai/util/path"
 import { type Session } from "@opencode-ai/sdk/v2/client"
+import { getPinnedSessions } from "../../utils/pinned-sessions"
 
 export const workspaceKey = (directory: string) => {
   const drive = directory.match(/^([A-Za-z]:)[\\/]+$/)
@@ -8,9 +9,14 @@ export const workspaceKey = (directory: string) => {
   return directory.replace(/[\\/]+$/, "")
 }
 
-function sortSessions(now: number) {
+function sortSessions(now: number, pinned: string[]) {
   const oneMinuteAgo = now - 60 * 1000
   return (a: Session, b: Session) => {
+    const aPinned = pinned.includes(a.id)
+    const bPinned = pinned.includes(b.id)
+    if (aPinned && !bPinned) return -1
+    if (!aPinned && bPinned) return 1
+
     const aUpdated = a.time.updated ?? a.time.created
     const bUpdated = b.time.updated ?? b.time.created
     const aRecent = aUpdated > oneMinuteAgo
@@ -25,13 +31,17 @@ function sortSessions(now: number) {
 const isRootVisibleSession = (session: Session, directory: string) =>
   workspaceKey(session.directory) === workspaceKey(directory) && !session.parentID && !session.time?.archived
 
-export const sortedRootSessions = (store: { session: Session[]; path: { directory: string } }, now: number) =>
-  store.session.filter((session) => isRootVisibleSession(session, store.path.directory)).sort(sortSessions(now))
+export const sortedRootSessions = (store: { session: Session[]; path: { directory: string } }, now: number) => {
+  const pinned = getPinnedSessions()
+  return store.session.filter((session) => isRootVisibleSession(session, store.path.directory)).sort(sortSessions(now, pinned))
+}
 
-export const latestRootSession = (stores: { session: Session[]; path: { directory: string } }[], now: number) =>
-  stores
+export const latestRootSession = (stores: { session: Session[]; path: { directory: string } }[], now: number) => {
+  const pinned = getPinnedSessions()
+  return stores
     .flatMap((store) => store.session.filter((session) => isRootVisibleSession(session, store.path.directory)))
-    .sort(sortSessions(now))[0]
+    .sort(sortSessions(now, pinned))[0]
+}
 
 export function hasProjectPermissions<T>(
   request: Record<string, T[] | undefined>,
