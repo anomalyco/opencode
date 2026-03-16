@@ -24,7 +24,8 @@ export PATH="$HOME/.bun/bin:$PATH"
 export OPENCODE_DISABLE_AUTOUPDATE=1
 export OPENCODE_DISABLE_CLAUDE_CODE=1
 export OPENCODE_DISABLE_EXTERNAL_SKILLS=1
+export OPENCODE_DISABLE_TERMINAL_TITLE=1
 
-printf '\033]0;%s\007' 'Acompany Secure Code'
+printf '\033]0;%s\007' 'securecode'
 cd "${SCRIPT_DIR}"
 exec ~/.bun/bin/bun run dev -- "${TARGET_DIR}"
