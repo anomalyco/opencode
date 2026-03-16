@@ -7,6 +7,7 @@ import { Global } from "../global"
 import z from "zod"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
+import { Project } from "../project/project"
 import { Scheduler } from "../scheduler"
 import { Process } from "@/util/process"
 
@@ -51,6 +52,23 @@ export namespace Snapshot {
       return
     }
     log.info("cleanup", { prune })
+    await pruneOrphanedSnapshots()
+  }
+
+  async function pruneOrphanedSnapshots() {
+    const snapshotBase = path.join(Global.Path.data, "snapshot")
+    const entries = await fs.readdir(snapshotBase).catch(() => [] as string[])
+    if (entries.length === 0) return
+
+    const knownIds = new Set<string>(Project.list().map((p) => p.id))
+    for (const entry of entries) {
+      if (knownIds.has(entry)) continue
+      const orphan = path.join(snapshotBase, entry)
+      log.info("pruning orphaned snapshot", { id: entry, path: orphan })
+      await fs.rm(orphan, { recursive: true, force: true }).catch((err) => {
+        log.warn("failed to prune orphaned snapshot", { id: entry, error: String(err) })
+      })
+    }
   }
 
   export async function track() {
