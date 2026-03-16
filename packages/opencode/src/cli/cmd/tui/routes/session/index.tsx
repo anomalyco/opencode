@@ -78,6 +78,7 @@ import { Global } from "@/global"
 import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
+import { CompactionPrompt } from "./compaction-prompt"
 import { formatTranscript } from "../../util/transcript"
 import { UI } from "@/cli/ui.ts"
 import { useTuiConfig } from "../../context/tui-config"
@@ -159,6 +160,7 @@ export function Session() {
   const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
   const [animationsEnabled, setAnimationsEnabled] = kv.signal("animations_enabled", true)
   const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
+  const [compactionSummary, setCompactionSummary] = createSignal<string | null>(null)
 
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => {
@@ -229,6 +231,23 @@ export function Session() {
       local.agent.set("plan")
       lastSwitch = part.id
     }
+  })
+
+  // Handle session.compacted event - show inline prompt with summary options
+  sdk.event.on("session.compacted", (evt) => {
+    if (evt.properties.sessionID !== route.sessionID) return
+
+    const lastCompaction = messages().findLast((m) => m.role === "assistant" && m.mode === "compaction")
+    if (!lastCompaction) return
+
+    const parts = sync.data.part[lastCompaction.id]
+    if (!parts) return
+
+    const textParts = parts.filter((p) => p.type === "text").map((p) => p.text)
+    if (textParts.length === 0) return
+
+    const summary = textParts.join("\n")
+    setCompactionSummary(summary)
   })
 
   let scroll: ScrollBoxRenderable
@@ -1172,8 +1191,13 @@ export function Session() {
               <Show when={permissions().length === 0 && questions().length > 0}>
                 <QuestionPrompt request={questions()[0]} />
               </Show>
+              <Show when={compactionSummary()}>
+                <CompactionPrompt summary={compactionSummary()!} onDismiss={() => setCompactionSummary(null)} />
+              </Show>
               <Prompt
-                visible={!session()?.parentID && permissions().length === 0 && questions().length === 0}
+                visible={
+                  !session()?.parentID && permissions().length === 0 && questions().length === 0 && !compactionSummary()
+                }
                 ref={(r) => {
                   prompt = r
                   promptRef.set(r)
@@ -1182,7 +1206,7 @@ export function Session() {
                     r.set(route.initialPrompt)
                   }
                 }}
-                disabled={permissions().length > 0 || questions().length > 0}
+                disabled={permissions().length > 0 || questions().length > 0 || !!compactionSummary()}
                 onSubmit={() => {
                   toBottom()
                 }}
