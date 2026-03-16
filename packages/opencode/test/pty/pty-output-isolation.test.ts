@@ -128,10 +128,10 @@ describe("pty", () => {
           // connection lifecycle when the object identity stays stable.
           ctx.connId = 2
 
-          Pty.write(a.id, "AAA\n")
+          Pty.write(a.id, "@@@\n")
           await sleep(100)
 
-          expect(out.join("")).toContain("AAA")
+          expect(out.join("")).toContain("@")
         } finally {
           await Pty.remove(a.id)
         }
