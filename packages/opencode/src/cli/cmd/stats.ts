@@ -92,6 +92,16 @@ async function getAllSessions(): Promise<Session.Info[]> {
   return rows.map((row) => Session.fromRow(row))
 }
 
+/**
+ * Aggregates session statistics for the stats command.
+ *
+ * Collects and analyzes session data including token usage, tool calls,
+ * and model performance across all sessions or filtered by project.
+ *
+ * @param days Number of days to include (undefined for all time, 0 for today only)
+ * @param projectFilter Optional project name to filter sessions
+ * @returns Aggregated statistics for the specified time period
+ */
 export async function aggregateSessionStats(days?: number, projectFilter?: string): Promise<SessionStats> {
   const sessions = await getAllSessions()
   const MS_IN_DAY = 24 * 60 * 60 * 1000
