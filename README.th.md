@@ -7,7 +7,7 @@
     </picture>
   </a>
 </p>
-<p align="center">เอเจนต์การเขียนโค้ดด้วย AI แบบโอเพนซอร์ส</p>
+<p align="center">เอเจนต์สำหรับเขียนโค้ดด้วย AI แบบโอเพนซอร์ส</p>
 <p align="center">
   <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
   <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
@@ -43,22 +43,22 @@
 
 ---
 
-### การติดตั้ง
+### วิธีการติดตั้ง
 
 ```bash
-# YOLO
+# YOLO(ใช้คำสั่งเดียว)
 curl -fsSL https://opencode.ai/install | bash
 
-# ตัวจัดการแพ็กเกจ
-npm i -g opencode-ai@latest        # หรือ bun/pnpm/yarn
-scoop install opencode             # Windows
-choco install opencode             # Windows
-brew install anomalyco/tap/opencode # macOS และ Linux (แนะนำ อัปเดตเสมอ)
-brew install opencode              # macOS และ Linux (brew formula อย่างเป็นทางการ อัปเดตน้อยกว่า)
-sudo pacman -S opencode            # Arch Linux (Stable)
-paru -S opencode-bin               # Arch Linux (Latest from AUR)
+# ใช้ตัวจัดการแพ็กเกจ
+npm i -g opencode-ai@latest        # หรือใช้ bun/pnpm/yarn
+scoop install opencode             # สำหรับ Windows
+choco install opencode             # สำหรับ Windows
+brew install anomalyco/tap/opencode # สำหรับ macOS และ Linux (แบบแนะนำ,อัปเดตสม่ำเสมอ)
+brew install opencode              # สำหรับ macOS และ Linux (brew formula แบบเป็นทางการ,อัปเดตน้อยกว่า)
+sudo pacman -S opencode            # สำหรับ Arch Linux (Stable)
+paru -S opencode-bin               # สำหรับ Arch Linux (Latest from AUR)
 mise use -g opencode               # ระบบปฏิบัติการใดก็ได้
-nix run nixpkgs#opencode           # หรือ github:anomalyco/opencode สำหรับสาขาพัฒนาล่าสุด
+nix run nixpkgs#opencode           # หรือ github:anomalyco/opencode สำหรับเวอชันพัฒนาล่าสุด
 ```
 
 > [!TIP]
@@ -66,7 +66,7 @@ nix run nixpkgs#opencode           # หรือ github:anomalyco/opencode ส�
 
 ### แอปพลิเคชันเดสก์ท็อป (เบต้า)
 
-OpenCode มีให้ใช้งานเป็นแอปพลิเคชันเดสก์ท็อป ดาวน์โหลดโดยตรงจาก [หน้ารุ่น](https://github.com/anomalyco/opencode/releases) หรือ [opencode.ai/download](https://opencode.ai/download)
+OpenCode มีแอปพลิเคชันเดสก์ท็อปให้ใช้งาน สามารถดาวน์โหลดได้โดยตรงจาก [หน้ารายละเอียดเวอร์ชัน](https://github.com/anomalyco/opencode/releases) หรือ [opencode.ai/download](https://opencode.ai/download)
 
 | แพลตฟอร์ม             | ดาวน์โหลด                             |
 | --------------------- | ------------------------------------- |
@@ -76,9 +76,9 @@ OpenCode มีให้ใช้งานเป็นแอปพลิเค�
 | Linux                 | `.deb`, `.rpm`, หรือ AppImage         |
 
 ```bash
-# macOS (Homebrew)
+# macOS (Homebrew)ติดตั้งบน macOS
 brew install --cask opencode-desktop
-# Windows (Scoop)
+# Windows (Scoop)ติดตั้งบน Windows
 scoop bucket add extras; scoop install extras/opencode-desktop
 ```
 
@@ -99,43 +99,44 @@ XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 
 ### เอเจนต์
 
-OpenCode รวมเอเจนต์ในตัวสองตัวที่คุณสามารถสลับได้ด้วยปุ่ม `Tab`
+OpenCode มาพร้อมกับเอเจนต์ภายในสองตัวที่คุณสามารถสลับได้ด้วยปุ่ม `Tab`
 
-- **build** - เอเจนต์เริ่มต้น มีสิทธิ์เข้าถึงแบบเต็มสำหรับงานพัฒนา
-- **plan** - เอเจนต์อ่านอย่างเดียวสำหรับการวิเคราะห์และการสำรวจโค้ด
-  - ปฏิเสธการแก้ไขไฟล์โดยค่าเริ่มต้น
-  - ขอสิทธิ์ก่อนเรียกใช้คำสั่ง bash
-  - เหมาะสำหรับสำรวจโค้ดเบสที่ไม่คุ้นเคยหรือวางแผนการเปลี่ยนแปลง
+- **build** - เอเจนต์เริ่มต้น มีสิทธิ์เข้าถึงแบบเต็มสำหรับงานพัฒนาโปรแกรม
+- **plan** - เอเจนต์แบบอ่านอย่างเดียวสำหรับการวิเคราะห์ และ การสำรวจโค้ด
+  - ปฏิเสธการแก้ไขไฟล์เป็นค่าเริ่มต้น
+  - ขออนุญาตก่อนเรียกใช้คำสั่ง bash
+  - เหมาะสำหรับสำรวจโค้ดเบสที่ไม่คุ้นเคย หรือ วางแผนการเปลี่ยนแปลง
 
-นอกจากนี้ยังมีเอเจนต์ย่อย **general** สำหรับการค้นหาที่ซับซ้อนและงานหลายขั้นตอน
-ใช้ภายในและสามารถเรียกใช้ได้โดยใช้ `@general` ในข้อความ
+นอกจากนี้ยังมีเอเจนต์ย่อย **general** สำหรับการค้นหาที่ซับซ้อน และ การทำงานหลายขั้นตอน
+ให้ใช้ภายในและสามารถเรียกใช้ได้โดยใช้ `@general` ในข้อความ
 
 เรียนรู้เพิ่มเติมเกี่ยวกับ [เอเจนต์](https://opencode.ai/docs/agents)
 
 ### เอกสารประกอบ
 
-สำหรับข้อมูลเพิ่มเติมเกี่ยวกับวิธีกำหนดค่า OpenCode [**ไปที่เอกสารของเรา**](https://opencode.ai/docs)
+สำหรับข้อมูลเพิ่มเติมเกี่ยวกับวิธีการตั้งค่า OpenCode [**ไปที่เอกสารของเรา**](https://opencode.ai/docs)
 
 ### การมีส่วนร่วม
 
 หากคุณสนใจที่จะมีส่วนร่วมใน OpenCode โปรดอ่าน [เอกสารการมีส่วนร่วม](./CONTRIBUTING.md) ก่อนส่ง Pull Request
 
-### การสร้างบน OpenCode
+### การพัฒนาระบบต่อยอดจาก OpenCode
 
-หากคุณทำงานในโปรเจกต์ที่เกี่ยวข้องกับ OpenCode และใช้ "opencode" เป็นส่วนหนึ่งของชื่อ เช่น "opencode-dashboard" หรือ "opencode-mobile" โปรดเพิ่มหมายเหตุใน README ของคุณเพื่อชี้แจงว่าไม่ได้สร้างโดยทีม OpenCode และไม่ได้เกี่ยวข้องกับเราในทางใด
+หากคุณทำงานในโปรเจกต์ที่มีส่วนเกี่ยวข้องกับ OpenCode และใช้ "opencode" เป็นส่วนหนึ่งของชื่อ เช่น "opencode-dashboard" หรือ "opencode-mobile" โปรดเพิ่มหมายเหตุใน README ของคุณเพื่อชี้แจงว่าไม่ได้สร้างโดยทีม OpenCode และไม่ได้มีส่วนเกี่ยวข้องใดๆกับเรา
 
 ### คำถามที่พบบ่อย
 
 #### ต่างจาก Claude Code อย่างไร?
 
-คล้ายกับ Claude Code มากในแง่ความสามารถ นี่คือความแตกต่างหลัก:
+มีความคล้ายกับ Claude Code อย่างมากในแง่ความสามารถ
+ส่วนที่แตกต่างกันหลักๆมีดังนี้:
 
 - โอเพนซอร์ส 100%
-- ไม่ผูกมัดกับผู้ให้บริการใดๆ แม้ว่าเราจะแนะนำโมเดลที่เราจัดหาให้ผ่าน [OpenCode Zen](https://opencode.ai/zen) OpenCode สามารถใช้กับ Claude, OpenAI, Google หรือแม้กระทั่งโมเดลในเครื่องได้ เมื่อโมเดลพัฒนาช่องว่างระหว่างพวกมันจะปิดลงและราคาจะลดลง ดังนั้นการไม่ผูกมัดกับผู้ให้บริการจึงสำคัญ
+- ไม่ผูกมัดกับผู้ให้บริการใดๆ แม้ว่าเราจะแนะนำโมเดลที่เราจัดหาให้ผ่าน [OpenCode Zen](https://opencode.ai/zen) OpenCode สามารถใช้งานได้กับ Claude, OpenAI, Google หรือแม้กระทั่งโมเดลภายในเครื่องได้,เมื่อโมเดลมีการพัฒนามากขึ้นทำให้ช่องว่างระหว่างโมเดลลดลงและส่งผลให้ราคาลดลง ดังนั้นการไม่ต้องผูกมัดกับผู้ให้บริการจึงสำคัญ
 - รองรับ LSP ใช้งานได้ทันทีหลังการติดตั้งโดยไม่ต้องปรับแต่งหรือเปลี่ยนแปลงฟังก์ชันการทำงานใด ๆ
-- เน้นที่ TUI OpenCode สร้างโดยผู้ใช้ neovim และผู้สร้าง [terminal.shop](https://terminal.shop) เราจะผลักดันขีดจำกัดของสิ่งที่เป็นไปได้ในเทอร์มินัล
-- สถาปัตยกรรมไคลเอนต์/เซิร์ฟเวอร์ ตัวอย่างเช่น อาจอนุญาตให้ OpenCode ทำงานบนคอมพิวเตอร์ของคุณ ในขณะที่คุณสามารถขับเคลื่อนจากระยะไกลผ่านแอปมือถือ หมายความว่า TUI frontend เป็นหนึ่งในไคลเอนต์ที่เป็นไปได้เท่านั้น
+- มุ่งเน้นที่การใช้งานผ่าน TUI OpenCode สร้างโดยผู้ใช้ neovim และ ผู้สร้าง [terminal.shop](https://terminal.shop) เราจะผลักดันขีดจำกัดของสิ่งที่เป็นไปได้ในเทอร์มินัล
+- สถาปัตยกรรมไคลเอนต์/เซิร์ฟเวอร์ ตัวอย่าง เช่น อาจอนุญาตให้ OpenCode ทำงานบนคอมพิวเตอร์ของคุณ โดยที่คุณสามารถควบคุมการทำงานของมันจากระยะไกลผ่านแอปมือถือ หมายความว่า TUI frontend เป็นเพียงหนึ่งในไคลเอนต์ที่เป็นไปได้
 
 ---
 
-**ร่วมชุมชนของเรา** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+**เข้าร่วมคอมมูนิตี้ของเรา** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
