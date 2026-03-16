@@ -10,6 +10,7 @@ import { Log } from "../../util/log"
 import { lazy } from "../../util/lazy"
 import { Config } from "../../config/config"
 import { errors } from "../error"
+import { extractSessionID } from "@/bus/session-filter"
 
 const log = Log.create({ service: "server" })
 
@@ -65,7 +66,8 @@ export const GlobalRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        log.info("global event connected")
+        const filterSessionID = c.req.query("sessionID")
+        log.info("global event connected", { filterSessionID })
         c.header("X-Accel-Buffering", "no")
         c.header("X-Content-Type-Options", "nosniff")
         return streamSSE(c, async (stream) => {
@@ -77,7 +79,19 @@ export const GlobalRoutes = lazy(() =>
               },
             }),
           })
-          async function handler(event: any) {
+          async function handler(event: {
+            directory?: string
+            payload: { type: string; properties: Record<string, unknown> }
+          }) {
+            if (filterSessionID && event.payload) {
+              const eventType = event.payload.type
+              // Always pass through server events
+              if (!eventType.startsWith("server.")) {
+                const sid = extractSessionID(event.payload)
+                // If event has a sessionID and it doesn't match, skip it
+                if (sid && sid !== filterSessionID) return
+              }
+            }
             await stream.writeSSE({
               data: JSON.stringify(event),
             })
