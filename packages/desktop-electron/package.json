@@ -1,7 +1,7 @@
 {
   "name": "@opencode-ai/desktop-electron",
   "private": true,
-  "version": "1.2.24",
+  "version": "1.2.27",
   "type": "module",
   "license": "MIT",
   "homepage": "https://opencode.ai",
@@ -30,6 +30,7 @@
     "@solid-primitives/storage": "catalog:",
     "@solidjs/meta": "catalog:",
     "@solidjs/router": "0.15.4",
+    "effect": "4.0.0-beta.31",
     "electron-log": "^5",
     "electron-store": "^10",
     "electron-updater": "^6",
