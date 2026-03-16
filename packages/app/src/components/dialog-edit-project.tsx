@@ -85,7 +85,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
             projectID: props.project.id,
             directory: props.project.worktree,
             name,
-            icon: { color: store.color, override: store.iconUrl },
+            icon: { color: store.color, override: store.iconUrl || undefined },
             commands: { start },
           })
           globalSync.project.icon(props.project.worktree, store.iconUrl || undefined)
