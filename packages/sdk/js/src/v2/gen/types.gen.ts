@@ -169,6 +169,13 @@ export type EventVcsBranchUpdated = {
   }
 }
 
+export type EventFileEdited = {
+  type: "file.edited"
+  properties: {
+    file: string
+  }
+}
+
 export type EventServerConnected = {
   type: "server.connected"
   properties: {
@@ -195,13 +202,6 @@ export type EventLspUpdated = {
   type: "lsp.updated"
   properties: {
     [key: string]: unknown
-  }
-}
-
-export type EventFileEdited = {
-  type: "file.edited"
-  properties: {
-    file: string
   }
 }
 
@@ -969,11 +969,11 @@ export type Event =
   | EventPermissionReplied
   | EventFileWatcherUpdated
   | EventVcsBranchUpdated
+  | EventFileEdited
   | EventServerConnected
   | EventGlobalDisposed
   | EventLspClientDiagnostics
   | EventLspUpdated
-  | EventFileEdited
   | EventMessageUpdated
   | EventMessageRemoved
   | EventMessagePartUpdated
