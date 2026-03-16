@@ -2,6 +2,7 @@ import path from "path"
 import os from "os"
 import fs from "fs/promises"
 import z from "zod"
+import { Config } from "@/config/config"
 import { Filesystem } from "../util/filesystem"
 import { SessionID, MessageID, PartID } from "./schema"
 import { MessageV2 } from "./message-v2"
@@ -1761,7 +1762,12 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     const raw = input.arguments.match(argsRegex) ?? []
     const args = raw.map((arg) => arg.replace(quoteTrimRegex, ""))
 
-    const templateCommand = await command.template
+    const cfg = await Config.get()
+    const inline = cfg.skills?.inline !== false
+    const templateCommand =
+      command.source === "skill" && !inline
+        ? `Use the skill tool to load the "${input.command}" skill and follow its instructions.`
+        : await command.template
 
     const placeholders = templateCommand.match(placeholderRegex) ?? []
     let last = 0
