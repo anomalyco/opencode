@@ -803,7 +803,7 @@ export namespace Config {
       leader: z.string().optional().default("ctrl+x").describe("Leader key for keybind combinations"),
       app_exit: z.string().optional().default("ctrl+c,ctrl+d,<leader>q").describe("Exit the application"),
       editor_open: z.string().optional().default("<leader>e").describe("Open external editor"),
-      theme_list: z.string().optional().default("<leader>t").describe("List available themes"),
+      theme_list: z.string().optional().default("<leader>T").describe("List available themes"),
       sidebar_toggle: z.string().optional().default("<leader>b").describe("Toggle sidebar"),
       scrollbar_toggle: z.string().optional().default("none").describe("Toggle session scrollbar"),
       username_toggle: z.string().optional().default("none").describe("Toggle username visibility"),
@@ -860,6 +860,21 @@ export namespace Config {
       agent_cycle: z.string().optional().default("tab").describe("Next agent"),
       agent_cycle_reverse: z.string().optional().default("shift+tab").describe("Previous agent"),
       variant_cycle: z.string().optional().default("ctrl+t").describe("Cycle model variants"),
+      tab_next: z.string().optional().default("<leader>k,<leader>],alt+]").describe("Next tab"),
+      tab_prev: z.string().optional().default("<leader>j,<leader>[,alt+[").describe("Previous tab"),
+      tab_new: z.string().optional().default("<leader>t").describe("New tab"),
+      tab_close: z.string().optional().default("<leader>w").describe("Close tab"),
+      tab_1: z.string().optional().default("<leader>1,alt+1").describe("Jump to tab 1"),
+      tab_2: z.string().optional().default("<leader>2,alt+2").describe("Jump to tab 2"),
+      tab_3: z.string().optional().default("<leader>3,alt+3").describe("Jump to tab 3"),
+      tab_4: z.string().optional().default("<leader>4,alt+4").describe("Jump to tab 4"),
+      tab_5: z.string().optional().default("<leader>5,alt+5").describe("Jump to tab 5"),
+      tab_6: z.string().optional().default("<leader>6,alt+6").describe("Jump to tab 6"),
+      tab_7: z.string().optional().default("<leader>7,alt+7").describe("Jump to tab 7"),
+      tab_8: z.string().optional().default("<leader>8,alt+8").describe("Jump to tab 8"),
+      tab_9: z.string().optional().default("<leader>9,alt+9").describe("Jump to tab 9"),
+      tab_last: z.string().optional().default("<leader>`").describe("Switch to last active tab"),
+      tab_worktree: z.string().optional().default("<leader>shift+w").describe("New worktree tab"),
       input_clear: z.string().optional().default("ctrl+c").describe("Clear input field"),
       input_paste: z.string().optional().default("ctrl+v").describe("Paste from clipboard"),
       input_submit: z.string().optional().default("return").describe("Submit input"),
@@ -1204,6 +1219,11 @@ export namespace Config {
             .min(0)
             .optional()
             .describe("Token buffer for compaction. Leaves enough window to avoid overflow during compaction."),
+        })
+        .optional(),
+      daemon: z
+        .object({
+          worktree: z.boolean().optional().default(false).describe("Auto-create git worktrees for new daemon tabs"),
         })
         .optional(),
       experimental: z
