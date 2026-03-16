@@ -165,6 +165,15 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string, 
   return false
 }
 
+/**
+ * Resolves and filters plugin authentication providers.
+ *
+ * Processes hooks to extract unique auth providers, filtering out
+ * disabled providers and those that already have credentials configured.
+ *
+ * @param input Object containing hooks, existing providers, disabled/enabled sets
+ * @returns Array of provider objects with id and name for display
+ */
 export function resolvePluginProviders(input: {
   hooks: Hooks[]
   existingProviders: Record<string, unknown>
