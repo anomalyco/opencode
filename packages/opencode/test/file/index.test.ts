@@ -207,6 +207,22 @@ describe("file/index Filesystem patterns", () => {
     })
   })
 
+  describe("File.search()", () => {
+    test("matches Windows-style path separators in queries", async () => {
+      await using tmp = await tmpdir()
+      await fs.mkdir(path.join(tmp.path, "packages", "app"), { recursive: true })
+      await fs.writeFile(path.join(tmp.path, "packages", "app", "package.json"), '{"name":"app"}', "utf-8")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const result = await File.search({ query: "packages\\app\\package.json", dirs: true })
+          expect(result.map((item) => item.replaceAll("\\", "/"))).toContain("packages/app/package.json")
+        },
+      })
+    })
+  })
+
   describe("File.changed() - Filesystem.readText() for untracked files", () => {
     test("reads untracked files via Filesystem.readText()", async () => {
       await using tmp = await tmpdir({ git: true })

@@ -524,7 +524,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const agentList = createMemo(() =>
     sync.data.agent
       .filter((agent) => !agent.hidden && agent.mode !== "primary")
-      .map((agent): AtOption => ({ type: "agent", name: agent.name, display: agent.name })),
+      .map((agent): AtOption => ({ type: "agent", name: agent.name, display: agent.name, match: agent.name })),
   )
   const agentNames = createMemo(() => local.agent.list().map((agent) => agent.name))
 
@@ -553,15 +553,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const agents = agentList()
       const open = recent()
       const seen = new Set(open)
-      const pinned: AtOption[] = open.map((path) => ({ type: "file", path, display: path, recent: true }))
+      const pinned: AtOption[] = open.map((path) => ({
+        type: "file",
+        path,
+        display: path,
+        match: path.replace(/\//g, "\\"),
+        recent: true,
+      }))
       const paths = await files.searchFilesAndDirectories(query)
       const fileOptions: AtOption[] = paths
         .filter((path) => !seen.has(path))
-        .map((path) => ({ type: "file", path, display: path }))
+        .map((path) => ({ type: "file", path, display: path, match: path.replace(/\//g, "\\") }))
       return [...agents, ...pinned, ...fileOptions]
     },
     key: atKey,
-    filterKeys: ["display"],
+    filterKeys: ["display", "match"],
     groupBy: (item) => {
       if (item.type === "agent") return "agent"
       if (item.recent) return "recent"

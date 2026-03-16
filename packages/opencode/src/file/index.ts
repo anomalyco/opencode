@@ -336,6 +336,8 @@ export namespace File {
     type Entry = { files: string[]; dirs: string[] }
     let cache: Entry = { files: [], dirs: [] }
     let fetching = false
+    let loaded = false
+    let inflight: Promise<void> | undefined
 
     const isGlobalHome = Instance.directory === Global.Path.home && Instance.project.id === "global"
 
@@ -372,6 +374,7 @@ export namespace File {
 
         result.dirs = Array.from(dirs).toSorted()
         cache = result
+        loaded = true
         fetching = false
         return
       }
@@ -391,18 +394,23 @@ export namespace File {
         }
       }
       cache = result
+      loaded = true
       fetching = false
     }
-    fn(cache)
+
+    const ensure = () => {
+      if (loaded && !fetching) return Promise.resolve()
+      if (!inflight) {
+        inflight = fn(cache).finally(() => {
+          inflight = undefined
+        })
+      }
+      return inflight
+    }
 
     return {
       async files() {
-        if (!fetching) {
-          fn({
-            files: [],
-            dirs: [],
-          })
-        }
+        await ensure()
         return cache
       },
     }
@@ -614,6 +622,7 @@ export namespace File {
 
   export async function search(input: { query: string; limit?: number; dirs?: boolean; type?: "file" | "directory" }) {
     const query = input.query.trim()
+    const normalizedQuery = query.replaceAll("\\", "/")
     const limit = input.limit ?? 100
     const kind = input.type ?? (input.dirs === false ? "file" : "all")
     log.info("search", { query, kind })
@@ -624,7 +633,7 @@ export namespace File {
       const normalized = item.replaceAll("\\", "/").replace(/\/+$/, "")
       return normalized.split("/").some((p) => p.startsWith(".") && p.length > 1)
     }
-    const preferHidden = query.startsWith(".") || query.includes("/.")
+    const preferHidden = normalizedQuery.startsWith(".") || normalizedQuery.includes("/.")
     const sortHiddenLast = (items: string[]) => {
       if (preferHidden) return items
       const visible: string[] = []
@@ -645,7 +654,13 @@ export namespace File {
       kind === "file" ? result.files : kind === "directory" ? result.dirs : [...result.files, ...result.dirs]
 
     const searchLimit = kind === "directory" && !preferHidden ? limit * 20 : limit
-    const sorted = fuzzysort.go(query, items, { limit: searchLimit }).map((r) => r.target)
+    const sorted = fuzzysort
+      .go(
+        normalizedQuery,
+        items.map((item) => ({ item, match: item.replaceAll("\\", "/") })),
+        { key: "match", limit: searchLimit },
+      )
+      .map((r) => r.obj.item)
     const output = kind === "directory" ? sortHiddenLast(sorted).slice(0, limit) : sorted
 
     log.info("search", { query, kind, results: output.length })

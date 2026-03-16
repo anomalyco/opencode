@@ -4,8 +4,8 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 
 export type AtOption =
-  | { type: "agent"; name: string; display: string }
-  | { type: "file"; path: string; display: string; recent?: boolean }
+  | { type: "agent"; name: string; display: string; match: string }
+  | { type: "file"; path: string; display: string; match: string; recent?: boolean }
 
 export interface SlashCommand {
   id: string
