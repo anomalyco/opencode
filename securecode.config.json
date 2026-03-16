@@ -1,0 +1,13 @@
+{
+  "origin": "origin",
+  "base": "dev",
+  "upstream": {
+    "remote": "upstream",
+    "url": "https://github.com/anomalyco/opencode.git",
+    "branch": "dev",
+    "mirror": "vendor/upstream-release",
+    "sync": "sync/upstream",
+    "seed": "v1.2.26",
+    "pattern": "v[0-9]*.[0-9]*.[0-9]*"
+  }
+}

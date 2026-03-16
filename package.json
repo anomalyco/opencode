@@ -11,7 +11,11 @@
     "dev:web": "bun --cwd packages/app dev",
     "dev:storybook": "bun --cwd packages/storybook storybook",
     "typecheck": "bun turbo typecheck",
-    "prepare": "husky",
+    "prepare": "husky && bun script/upstream.ts guard",
+    "guard:upstream": "bun script/upstream.ts guard",
+    "mirror:upstream": "bun script/upstream.ts mirror",
+    "plan:upstream": "bun script/upstream.ts plan",
+    "sync:upstream": "bun script/upstream.ts sync",
     "random": "echo 'Random script'",
     "hello": "echo 'Hello World!'",
     "test": "echo 'do not run tests from root' && exit 1"

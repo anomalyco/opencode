@@ -1,0 +1,111 @@
+name: upstream-tag-sync
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/15 * * * *"
+  repository_dispatch:
+    types: [upstream_tag]
+
+concurrency:
+  group: upstream-tag-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Setup git committer
+        id: committer
+        uses: ./.github/actions/setup-git-committer
+        with:
+          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
+          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+
+      - name: Guard local git config
+        run: bun script/upstream.ts guard
+
+      - name: Mirror upstream tag
+        id: mirror
+        run: bun script/upstream.ts mirror >> "$GITHUB_OUTPUT"
+
+      - name: Plan sync branch
+        id: plan
+        run: bun script/upstream.ts plan >> "$GITHUB_OUTPUT"
+
+      - name: Check existing sync PR
+        id: gate
+        if: steps.plan.outputs.needed == 'true'
+        env:
+          GH_TOKEN: ${{ steps.committer.outputs.token }}
+        run: |
+          PR="$(gh pr list --state open --base "${{ steps.plan.outputs.base }}" --json number,headRefName --jq '.[] | select(.headRefName | startswith("sync/upstream-v")) | .headRefName' | head -n 1)"
+          if [ -z "$PR" ] || [ "$PR" = "${{ steps.plan.outputs.branch }}" ]; then
+            echo "blocked=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "blocked=true" >> "$GITHUB_OUTPUT"
+          echo "existing=$PR" >> "$GITHUB_OUTPUT"
+
+      - name: Build sync branch
+        id: sync
+        if: steps.plan.outputs.needed == 'true' && steps.gate.outputs.blocked != 'true'
+        run: bun script/upstream.ts sync >> "$GITHUB_OUTPUT"
+
+      - name: Create or update sync PR
+        if: steps.plan.outputs.needed == 'true' && steps.gate.outputs.blocked != 'true'
+        env:
+          GH_TOKEN: ${{ steps.committer.outputs.token }}
+        run: |
+          TITLE="chore(sync): merge upstream ${{ steps.plan.outputs.tag }}"
+          BODY=$(cat <<'EOF'
+          Automated intake PR for the latest upstream release tag.
+
+          - Current dev upstream tag: `${{ steps.plan.outputs.from_tag }}`
+          - Target upstream tag: `${{ steps.plan.outputs.tag }}`
+          - Mirror branch: `vendor/upstream-release`
+          - Intake branch: `${{ steps.plan.outputs.branch }}`
+          - Upstream commit: `${{ steps.plan.outputs.sha }}`
+          - Base branch: `${{ steps.plan.outputs.base }}`
+
+          This repository keeps fork-specific changes on `dev` and ingests upstream through a merge-based sync branch when a new upstream version tag is published.
+          EOF
+          )
+
+          PR="$(gh pr list --state open --base "${{ steps.plan.outputs.base }}" --head "${{ steps.plan.outputs.branch }}" --json number --jq '.[0].number // empty')"
+          if [ -n "$PR" ]; then
+            gh pr edit "$PR" --title "$TITLE" --body "$BODY"
+            exit 0
+          fi
+
+          gh pr create \
+            --base "${{ steps.plan.outputs.base }}" \
+            --head "${{ steps.plan.outputs.branch }}" \
+            --title "$TITLE" \
+            --body "$BODY"
+
+      - name: Summary
+        run: |
+          {
+            echo "## upstream-tag-sync"
+            echo ""
+            echo "- current dev upstream tag: ${{ steps.plan.outputs.from_tag }}"
+            echo "- mirrored upstream tag: ${{ steps.mirror.outputs.tag }}"
+            echo "- mirrored sha: ${{ steps.mirror.outputs.sha_short }}"
+            echo "- sync needed: ${{ steps.plan.outputs.needed }}"
+            echo "- sync branch: ${{ steps.plan.outputs.branch }}"
+            if [ "${{ steps.gate.outputs.blocked }}" = "true" ]; then
+              echo "- blocked by open sync PR: ${{ steps.gate.outputs.existing }}"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

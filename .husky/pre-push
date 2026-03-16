@@ -1,5 +1,6 @@
 #!/bin/sh
 set -e
+bun script/upstream.ts check-push "$1" "$2"
 # Check if bun version matches package.json
 # keep in sync with packages/script/src/index.ts semver qualifier
 bun -e '
