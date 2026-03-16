@@ -244,11 +244,18 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
     // tool calls:
     if (choice.message.tool_calls != null) {
       for (const toolCall of choice.message.tool_calls) {
+        // Strip XML artifacts from providers like SiliconFlow
+        let args = toolCall.function.arguments!
+        args = args.replace(/<\/?tool_call>/g, '').trim()
+        if (!isParsableJson(args)) {
+          console.warn(`Invalid tool call arguments: ${args}`)
+          continue
+        }
         content.push({
           type: "tool-call",
           toolCallId: toolCall.id ?? generateId(),
           toolName: toolCall.function.name,
-          input: toolCall.function.arguments!,
+          input: args,
           providerMetadata: choice.message.reasoning_opaque
             ? { copilot: { reasoningOpaque: choice.message.reasoning_opaque } }
             : undefined,
@@ -644,11 +651,19 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
                 id: toolCall.id,
               })
 
+              // Strip XML artifacts from providers like SiliconFlow
+              let args = toolCall.function.arguments
+              args = args.replace(/<\/?tool_call>/g, '').trim()
+              if (!isParsableJson(args)) {
+                console.warn(`Invalid tool call arguments: ${args}`)
+                continue
+              }
+
               controller.enqueue({
                 type: "tool-call",
                 toolCallId: toolCall.id ?? generateId(),
                 toolName: toolCall.function.name,
-                input: toolCall.function.arguments,
+                input: args,
               })
             }
 
