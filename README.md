@@ -3,7 +3,7 @@
 機密ソースコードを漏洩させずに AI コーディング支援を実現する、Acompany のセキュアなコーディングエージェントです。
 2026年3月13日に、Confidential AI Suite の第二弾製品としてベータ版の提供を開始しました。
 
-[![Acompany Secure Code top screen](github/assets/top-secure-code.png)](./github/assets/securecode-demo.mp4)
+[![Acompany Secure Code top screen](https://img.youtube.com/vi/QCwp4IbuP2I/maxresdefault.jpg)](https://youtu.be/QCwp4IbuP2I?si=Qx4Za7sfdluWB0Ca)
 
 [リリース文](https://prtimes.jp/main/html/rd/p/000000128.000046917.html) | [お問い合わせ](https://www.acompany.tech/contact) | [English README](./README.en.md)
 
@@ -32,7 +32,9 @@ Acompany Secure Code は、機密ソースコードを Confidential Computing �
 
 ## デモ動画
 
-- [securecode-demo.mp4](./github/assets/securecode-demo.mp4)
+[![Acompany Secure Code demo video](https://img.youtube.com/vi/QCwp4IbuP2I/maxresdefault.jpg)](https://youtu.be/QCwp4IbuP2I?si=Qx4Za7sfdluWB0Ca)
+
+- [YouTube で見る](https://youtu.be/QCwp4IbuP2I?si=Qx4Za7sfdluWB0Ca)
 - クリックで、トップ画面から実際のコーディング支援フローまで確認できます。
 
 ## ローカル開発

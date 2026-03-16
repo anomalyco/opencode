@@ -3,7 +3,7 @@
 A secure coding agent from Acompany that enables AI-assisted development without leaking confidential source code.  
 The beta release became available on March 13, 2026 as the second product in the Confidential AI Suite.
 
-[![Acompany Secure Code top screen](github/assets/top-secure-code.png)](./github/assets/securecode-demo.mp4)
+[![Acompany Secure Code top screen](https://img.youtube.com/vi/QCwp4IbuP2I/maxresdefault.jpg)](https://youtu.be/QCwp4IbuP2I?si=Qx4Za7sfdluWB0Ca)
 
 [Press release](https://prtimes.jp/main/html/rd/p/000000128.000046917.html) | [Contact](https://www.acompany.tech/contact) | [Japanese README](./README.md)
 
@@ -32,7 +32,9 @@ The goal is to support code generation, review, refactoring, bug fixing, and tes
 
 ## Demo Video
 
-- [securecode-demo.mp4](./github/assets/securecode-demo.mp4)
+[![Acompany Secure Code demo video](https://img.youtube.com/vi/QCwp4IbuP2I/maxresdefault.jpg)](https://youtu.be/QCwp4IbuP2I?si=Qx4Za7sfdluWB0Ca)
+
+- [Watch on YouTube](https://youtu.be/QCwp4IbuP2I?si=Qx4Za7sfdluWB0Ca)
 - The demo shows the flow from the home screen into actual coding assistance.
 
 ## Local Development
