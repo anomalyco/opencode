@@ -354,6 +354,39 @@ export function Autocomplete(props: {
   })
 
   const commands = createMemo((): AutocompleteOption[] => {
+    const inline = store.visible === "/" && store.index > 0
+
+    // When inline, only show skill-sourced commands
+    if (inline) {
+      const text = props.input().plainText
+      const results: AutocompleteOption[] = []
+      for (const serverCommand of sync.data.command) {
+        if (serverCommand.source !== "skill") continue
+        if (text.includes(`/${serverCommand.name} `)) continue
+        results.push({
+          display: "/" + serverCommand.name,
+          description: serverCommand.description,
+          onSelect: () => {
+            const input = props.input()
+            const newText = "/" + serverCommand.name + " "
+            const cursor = input.logicalCursor
+            input.cursorOffset = store.index
+            const start = input.logicalCursor
+            input.cursorOffset = cursor.col + cursor.row * 1000
+            input.deleteRange(start.row, start.col, cursor.row, cursor.col)
+            input.insertText(newText)
+          },
+        })
+      }
+      results.sort((a, b) => a.display.localeCompare(b.display))
+      const max = firstBy(results, [(x) => x.display.length, "desc"])?.display.length
+      if (!max) return results
+      return results.map((item) => ({
+        ...item,
+        display: item.display.padEnd(max + 2),
+      }))
+    }
+
     const results: AutocompleteOption[] = [...command.slashes()]
 
     for (const serverCommand of sync.data.command) {
@@ -485,7 +518,7 @@ export function Autocomplete(props: {
 
   function hide() {
     const text = props.input().plainText
-    if (store.visible === "/" && !text.endsWith(" ") && text.startsWith("/")) {
+    if (store.visible === "/" && store.index === 0 && !text.endsWith(" ") && text.startsWith("/")) {
       const cursor = props.input().logicalCursor
       props.input().deleteRange(0, 0, cursor.row, cursor.col)
       // Sync the prompt store immediately since onContentChange is async
@@ -509,8 +542,8 @@ export function Autocomplete(props: {
             props.input().cursorOffset <= store.index ||
             // There is a space between the trigger and the cursor
             props.input().getTextRange(store.index, props.input().cursorOffset).match(/\s/) ||
-            // "/<command>" is not the sole content
-            (store.visible === "/" && value.match(/^\S+\s+\S+\s*$/))
+            // "/<command>" is not the sole content (only for position-0 slash)
+            (store.visible === "/" && store.index === 0 && value.match(/^\S+\s+\S+\s*$/))
           ) {
             hide()
           }
@@ -526,6 +559,19 @@ export function Autocomplete(props: {
           show("/")
           setStore("index", 0)
           return
+        }
+
+        // Check for inline "/" trigger - reopen skill autocomplete
+        const slashText = value.slice(0, offset)
+        const slashIdx = slashText.lastIndexOf("/")
+        if (slashIdx > 0) {
+          const beforeSlash = value[slashIdx - 1]
+          const between = slashText.slice(slashIdx)
+          if (/\s/.test(beforeSlash) && !between.match(/\s/)) {
+            show("/")
+            setStore("index", slashIdx)
+            return
+          }
         }
 
         // Check for "@" trigger - find the nearest "@" before cursor with no whitespace between
@@ -590,7 +636,13 @@ export function Autocomplete(props: {
           }
 
           if (e.name === "/") {
-            if (props.input().cursorOffset === 0) show("/")
+            if (props.input().cursorOffset === 0) {
+              show("/")
+            } else {
+              const offset = props.input().cursorOffset
+              const before = props.input().getTextRange(offset - 1, offset)
+              if (/\s/.test(before)) show("/")
+            }
           }
         }
       },
