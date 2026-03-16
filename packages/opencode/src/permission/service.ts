@@ -1,11 +1,10 @@
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
-import { Instance } from "@/project/instance"
+import { InstanceContext } from "@/effect/instances"
 import { ProjectID } from "@/project/schema"
 import { MessageID, SessionID } from "@/session/schema"
 import { PermissionTable } from "@/session/session.sql"
 import { Database, eq } from "@/storage/db"
-import { InstanceState } from "@/util/instance-state"
 import { Log } from "@/util/log"
 import { Wildcard } from "@/util/wildcard"
 import { Deferred, Effect, Layer, Schema, ServiceMap } from "effect"
@@ -104,11 +103,6 @@ interface PendingEntry {
   deferred: Deferred.Deferred<void, RejectedError | CorrectedError>
 }
 
-type State = {
-  pending: Map<PermissionID, PendingEntry>
-  approved: Ruleset
-}
-
 export const AskInput = Request.partial({ id: true }).extend({
   ruleset: Ruleset,
 })
@@ -133,25 +127,19 @@ export class PermissionService extends ServiceMap.Service<PermissionService, Per
   static readonly layer = Layer.effect(
     PermissionService,
     Effect.gen(function* () {
-      const instanceState = yield* InstanceState.make<State>(() =>
-        Effect.sync(() => {
-          const row = Database.use((db) =>
-            db.select().from(PermissionTable).where(eq(PermissionTable.project_id, Instance.project.id)).get(),
-          )
-          return {
-            pending: new Map<PermissionID, PendingEntry>(),
-            approved: row?.data ?? [],
-          }
-        }),
+      const { project } = yield* InstanceContext
+      const row = Database.use((db) =>
+        db.select().from(PermissionTable).where(eq(PermissionTable.project_id, project.id)).get(),
       )
+      const pending = new Map<PermissionID, PendingEntry>()
+      const approved: Ruleset = row?.data ?? []
 
       const ask = Effect.fn("PermissionService.ask")(function* (input: z.infer<typeof AskInput>) {
-        const state = yield* InstanceState.get(instanceState)
         const { ruleset, ...request } = input
-        let pending = false
+        let needsAsk = false
 
         for (const pattern of request.patterns) {
-          const rule = evaluate(request.permission, pattern, ruleset, state.approved)
+          const rule = evaluate(request.permission, pattern, ruleset, approved)
           log.info("evaluated", { permission: request.permission, pattern, action: rule })
           if (rule.action === "deny") {
             return yield* new DeniedError({
@@ -159,10 +147,10 @@ export class PermissionService extends ServiceMap.Service<PermissionService, Per
             })
           }
           if (rule.action === "allow") continue
-          pending = true
+          needsAsk = true
         }
 
-        if (!pending) return
+        if (!needsAsk) return
 
         const id = request.id ?? PermissionID.ascending()
         const info: Request = {
@@ -172,22 +160,21 @@ export class PermissionService extends ServiceMap.Service<PermissionService, Per
         log.info("asking", { id, permission: info.permission, patterns: info.patterns })
 
         const deferred = yield* Deferred.make<void, RejectedError | CorrectedError>()
-        state.pending.set(id, { info, deferred })
+        pending.set(id, { info, deferred })
         void Bus.publish(Event.Asked, info)
         return yield* Effect.ensuring(
           Deferred.await(deferred),
           Effect.sync(() => {
-            state.pending.delete(id)
+            pending.delete(id)
           }),
         )
       })
 
       const reply = Effect.fn("PermissionService.reply")(function* (input: z.infer<typeof ReplyInput>) {
-        const state = yield* InstanceState.get(instanceState)
-        const existing = state.pending.get(input.requestID)
+        const existing = pending.get(input.requestID)
         if (!existing) return
 
-        state.pending.delete(input.requestID)
+        pending.delete(input.requestID)
         void Bus.publish(Event.Replied, {
           sessionID: existing.info.sessionID,
           requestID: existing.info.id,
@@ -200,9 +187,9 @@ export class PermissionService extends ServiceMap.Service<PermissionService, Per
             input.message ? new CorrectedError({ feedback: input.message }) : new RejectedError(),
           )
 
-          for (const [id, item] of state.pending.entries()) {
+          for (const [id, item] of pending.entries()) {
             if (item.info.sessionID !== existing.info.sessionID) continue
-            state.pending.delete(id)
+            pending.delete(id)
             void Bus.publish(Event.Replied, {
               sessionID: item.info.sessionID,
               requestID: item.info.id,
@@ -217,20 +204,20 @@ export class PermissionService extends ServiceMap.Service<PermissionService, Per
         if (input.reply === "once") return
 
         for (const pattern of existing.info.always) {
-          state.approved.push({
+          approved.push({
             permission: existing.info.permission,
             pattern,
             action: "allow",
           })
         }
 
-        for (const [id, item] of state.pending.entries()) {
+        for (const [id, item] of pending.entries()) {
           if (item.info.sessionID !== existing.info.sessionID) continue
           const ok = item.info.patterns.every(
-            (pattern) => evaluate(item.info.permission, pattern, state.approved).action === "allow",
+            (pattern) => evaluate(item.info.permission, pattern, approved).action === "allow",
           )
           if (!ok) continue
-          state.pending.delete(id)
+          pending.delete(id)
           void Bus.publish(Event.Replied, {
             sessionID: item.info.sessionID,
             requestID: item.info.id,
@@ -246,8 +233,7 @@ export class PermissionService extends ServiceMap.Service<PermissionService, Per
       })
 
       const list = Effect.fn("PermissionService.list")(function* () {
-        const state = yield* InstanceState.get(instanceState)
-        return Array.from(state.pending.values(), (item) => item.info)
+        return Array.from(pending.values(), (item) => item.info)
       })
 
       return PermissionService.of({ ask, reply, list })
