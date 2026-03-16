@@ -135,7 +135,7 @@ OpenCode permissions are keyed by tool name, plus a couple of safety guards:
 - `grep` — content search (matches the regex pattern)
 - `list` — listing files in a directory (matches the directory path)
 - `bash` — running shell commands (matches parsed commands like `git status --porcelain`)
-- `task` — launching subagents (matches the subagent type)
+- `task` — launching subagents (matches the subagent type). See [Agents — Recursive subagent nesting](/docs/agents#recursive-subagent-nesting) for important caveats when setting this globally.
 - `skill` — loading a skill (matches the skill name)
 - `lsp` — running LSP queries (currently non-granular)
 - `todoread`, `todowrite` — reading/updating the todo list

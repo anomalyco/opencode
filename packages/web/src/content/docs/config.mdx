@@ -482,6 +482,10 @@ For example, to ensure that the `edit` and `bash` tools require user approval:
 }
 ```
 
+:::caution
+Be cautious with `"task": "allow"` in the global permission block. Unlike other permissions, this enables subagents to spawn further subagents recursively with no depth limit. See [Agents — Recursive subagent nesting](/docs/agents#recursive-subagent-nesting).
+:::
+
 [Learn more about permissions here](/docs/permissions).
 
 ---

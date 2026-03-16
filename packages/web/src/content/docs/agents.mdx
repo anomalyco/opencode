@@ -597,6 +597,45 @@ Rules are evaluated in order, and the **last matching rule wins**. In the exampl
 Users can always invoke any subagent directly via the `@` autocomplete menu, even if the agent's task permissions would deny it.
 :::
 
+:::caution[Recursive subagent nesting]
+Setting `permission.task` rules **globally** (in the top-level `permission` block) or directly on a subagent definition enables that subagent to spawn further subagents. OpenCode has **no depth limit** on this recursion.
+
+Each child session runs independently with its own `steps` counter and context window. If subagents recursively spawn more subagents, token usage grows exponentially — 10 levels of binary branching creates over 2,000 independent sessions, each consuming API tokens.
+
+Neither `steps` nor `doom_loop` protect against this. `steps` limits iterations per session (each child gets its own counter), and `doom_loop` detects repeated calls within a single session, not across parent-child sessions.
+
+**Safe pattern** — set `permission.task` only on primary agents, targeting specific subagents:
+
+```json title="opencode.json"
+{
+  "agent": {
+    "orchestrator": {
+      "mode": "primary",
+      "permission": {
+        "task": {
+          "*": "deny",
+          "explore": "allow",
+          "general": "allow"
+        }
+      }
+    }
+  }
+}
+```
+
+**Unsafe pattern** — global `task` permission enables all agents (including subagents) to spawn recursively:
+
+```json title="opencode.json"
+{
+  "permission": {
+    "task": "allow"
+  }
+}
+```
+
+You do **not** need an explicit `"task"` permission for primary agents to spawn subagents — the default `"*": "allow"` already covers this. Adding an explicit `"task": "allow"` globally is what overrides the built-in nesting guard.
+:::
+
 ---
 
 ### Color
