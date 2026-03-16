@@ -1,141 +1,65 @@
-<p align="center">
-  <a href="https://opencode.ai">
-    <picture>
-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
-    </picture>
-  </a>
-</p>
-<p align="center">The open source AI coding agent.</p>
-<p align="center">
-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
-</p>
+# Acompany Secure Code
 
-<p align="center">
-  <a href="README.md">English</a> |
-  <a href="README.zh.md">简体中文</a> |
-  <a href="README.zht.md">繁體中文</a> |
-  <a href="README.ko.md">한국어</a> |
-  <a href="README.de.md">Deutsch</a> |
-  <a href="README.es.md">Español</a> |
-  <a href="README.fr.md">Français</a> |
-  <a href="README.it.md">Italiano</a> |
-  <a href="README.da.md">Dansk</a> |
-  <a href="README.ja.md">日本語</a> |
-  <a href="README.pl.md">Polski</a> |
-  <a href="README.ru.md">Русский</a> |
-  <a href="README.bs.md">Bosanski</a> |
-  <a href="README.ar.md">العربية</a> |
-  <a href="README.no.md">Norsk</a> |
-  <a href="README.br.md">Português (Brasil)</a> |
-  <a href="README.th.md">ไทย</a> |
-  <a href="README.tr.md">Türkçe</a> |
-  <a href="README.uk.md">Українська</a> |
-  <a href="README.bn.md">বাংলা</a> |
-  <a href="README.gr.md">Ελληνικά</a> |
-  <a href="README.vi.md">Tiếng Việt</a>
-</p>
+機密ソースコードを漏洩させずに AI コーディング支援を実現する、Acompany のセキュアなコーディングエージェントです。
+2026年3月13日に、Confidential AI Suite の第二弾製品としてベータ版の提供を開始しました。
 
-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+[![Acompany Secure Code top screen](github/assets/top-secure-code.png)](./github/assets/securecode-demo.mp4)
 
----
+[リリース文](https://prtimes.jp/main/html/rd/p/000000128.000046917.html) | [お問い合わせ](https://www.acompany.tech/contact) | [English README](./README.en.md)
 
-### Installation
+## 概要
+
+Acompany Secure Code は、機密ソースコードを Confidential Computing 環境に送信し、秘匿化された実行領域で LLM 推論を行うことで、インフラ事業者やモデル提供者を含む第三者から処理中データを見えなくしたまま AI コーディング支援を提供します。
+
+企業の機密コードを扱う開発組織でも、既存のターミナル中心のワークフローを崩さずに、コード生成、レビュー、リファクタリング、バグ修正、テスト生成を進められることを狙っています。
+
+## 主な特長
+
+- 機密コードの保護: Trusted Execution Environment 上で推論を実行し、ソースコードの入出力と LLM 処理を保護します。
+- 開発フローとの親和性: ターミナル中心の操作性を維持しながら、日常的な実装作業にそのまま組み込めます。
+- 監査対応: AI 利用ログを記録、可視化し、誰がいつどのコードベースで AI を使ったかを追跡できます。
+- 利用モデル: GPT-OSS、Qwen3.5、Qwen3-Coder-Next などのオープンウェイト LLM を利用できます。
+
+## 画面イメージ
+
+### トップ画面
+
+![Acompany Secure Code home screen](github/assets/top-secure-code.png)
+
+### モデル選択
+
+![Acompany Secure Code model picker](github/assets/models-secure-code.png)
+
+## デモ動画
+
+- [securecode-demo.mp4](./github/assets/securecode-demo.mp4)
+- クリックで、トップ画面から実際のコーディング支援フローまで確認できます。
+
+## ローカル開発
+
+このリポジトリは upstream の release tag を取り込みながら Acompany Secure Code 向けの変更を重ねる fork です。内部 package 名や一部コマンド名には upstream 互換性のため旧名が残っていますが、公開面のブランドは Secure Code に揃えています。
 
 ```bash
-# YOLO
-curl -fsSL https://opencode.ai/install | bash
-
-# Package managers
-npm i -g opencode-ai@latest        # or bun/pnpm/yarn
-scoop install opencode             # Windows
-choco install opencode             # Windows
-brew install anomalyco/tap/opencode # macOS and Linux (recommended, always up to date)
-brew install opencode              # macOS and Linux (official brew formula, updated less)
-sudo pacman -S opencode            # Arch Linux (Stable)
-paru -S opencode-bin               # Arch Linux (Latest from AUR)
-mise use -g opencode               # Any OS
-nix run nixpkgs#opencode           # or github:anomalyco/opencode for latest dev branch
+bun install
+bun run guard:upstream
+./run-securecode.sh /path/to/your/repository
 ```
 
-> [!TIP]
-> Remove versions older than 0.1.x before installing.
-
-### Desktop App (BETA)
-
-OpenCode is also available as a desktop application. Download directly from the [releases page](https://github.com/anomalyco/opencode/releases) or [opencode.ai/download](https://opencode.ai/download).
-
-| Platform              | Download                              |
-| --------------------- | ------------------------------------- |
-| macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
-| macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
-| Windows               | `opencode-desktop-windows-x64.exe`    |
-| Linux                 | `.deb`, `.rpm`, or AppImage           |
+UI を個別に確認する場合:
 
 ```bash
-# macOS (Homebrew)
-brew install --cask opencode-desktop
-# Windows (Scoop)
-scoop bucket add extras; scoop install extras/opencode-desktop
+bun run dev:web
+bun run dev:desktop
 ```
 
-#### Installation Directory
+upstream 追従方針は [specs/upstream-sync.md](./specs/upstream-sync.md) を参照してください。
 
-The install script respects the following priority order for the installation path:
+## コントリビュート
 
-1. `$OPENCODE_INSTALL_DIR` - Custom installation directory
-2. `$XDG_BIN_DIR` - XDG Base Directory Specification compliant path
-3. `$HOME/bin` - Standard user binary directory (if it exists or can be created)
-4. `$HOME/.opencode/bin` - Default fallback
+開発フローやレビュー前提は [CONTRIBUTING.md](./CONTRIBUTING.md) を参照してください。
 
-```bash
-# Examples
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
-```
+## 関連リンク
 
-### Agents
-
-OpenCode includes two built-in agents you can switch between with the `Tab` key.
-
-- **build** - Default, full-access agent for development work
-- **plan** - Read-only agent for analysis and code exploration
-  - Denies file edits by default
-  - Asks permission before running bash commands
-  - Ideal for exploring unfamiliar codebases or planning changes
-
-Also included is a **general** subagent for complex searches and multistep tasks.
-This is used internally and can be invoked using `@general` in messages.
-
-Learn more about [agents](https://opencode.ai/docs/agents).
-
-### Documentation
-
-For more info on how to configure OpenCode, [**head over to our docs**](https://opencode.ai/docs).
-
-### Contributing
-
-If you're interested in contributing to OpenCode, please read our [contributing docs](./CONTRIBUTING.md) before submitting a pull request.
-
-### Building on OpenCode
-
-If you are working on a project that's related to OpenCode and is using "opencode" as part of its name, for example "opencode-dashboard" or "opencode-mobile", please add a note to your README to clarify that it is not built by the OpenCode team and is not affiliated with us in any way.
-
-### FAQ
-
-#### How is this different from Claude Code?
-
-It's very similar to Claude Code in terms of capability. Here are the key differences:
-
-- 100% open source
-- Not coupled to any provider. Although we recommend the models we provide through [OpenCode Zen](https://opencode.ai/zen), OpenCode can be used with Claude, OpenAI, Google, or even local models. As models evolve, the gaps between them will close and pricing will drop, so being provider-agnostic is important.
-- Out-of-the-box LSP support
-- A focus on TUI. OpenCode is built by neovim users and the creators of [terminal.shop](https://terminal.shop); we are going to push the limits of what's possible in the terminal.
-- A client/server architecture. This, for example, can allow OpenCode to run on your computer while you drive it remotely from a mobile app, meaning that the TUI frontend is just one of the possible clients.
-
----
-
-**Join our community** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+- 製品サイト: https://www.acompany.tech/
+- お問い合わせ: https://www.acompany.tech/contact
+- プレスリリース: https://prtimes.jp/main/html/rd/p/000000128.000046917.html
