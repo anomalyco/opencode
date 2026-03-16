@@ -57,7 +57,7 @@ export namespace ProviderTransform {
     // arrangement and invalidates the cryptographic signatures, causing the API to
     // reject the request. Assistant messages without reasoning blocks are filtered
     // normally since there are no signatures to preserve.
-    if (model.api.npm === "@ai-sdk/anthropic") {
+    if (model.api.npm === "@ai-sdk/anthropic" || model.api.npm === "@ai-sdk/amazon-bedrock") {
       msgs = msgs
         .map((msg) => {
           if (msg.role === "assistant") {

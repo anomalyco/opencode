@@ -8,3 +8,72 @@
 - **Command**: `bun run db generate --name <slug>`.
 - **Output**: creates `migration/<timestamp>_<slug>/migration.sql` and `snapshot.json`.
 - **Tests**: migration tests should read the per-folder layout (no `_journal.json`).
+
+# opencode Effect guide
+
+Instructions to follow when writing Effect.
+
+## Schemas
+
+- Use `Schema.Class` for data types with multiple fields.
+- Use branded schemas (`Schema.brand`) for single-value types.
+
+## Services
+
+- Services use `ServiceMap.Service<ServiceName, ServiceName.Service>()("@console/<Name>")`.
+- In `Layer.effect`, always return service implementations with `ServiceName.of({ ... })`, never a plain object.
+
+## Errors
+
+- Use `Schema.TaggedErrorClass` for typed errors.
+- For defect-like causes, use `Schema.Defect` instead of `unknown`.
+- In `Effect.gen`, prefer `yield* new MyError(...)` over `yield* Effect.fail(new MyError(...))` for direct early-failure branches.
+
+## Effects
+
+- Use `Effect.gen(function* () { ... })` for composition.
+- Use `Effect.fn("ServiceName.method")` for named/traced effects and `Effect.fnUntraced` for internal helpers.
+- `Effect.fn` / `Effect.fnUntraced` accept pipeable operators as extra arguments, so avoid unnecessary `flow` or outer `.pipe()` wrappers.
+- **`Effect.callback`** (not `Effect.async`) for callback-based APIs. The classic `Effect.async` was renamed to `Effect.callback` in effect-smol/v4.
+
+## Time
+
+- Prefer `DateTime.nowAsDate` over `new Date(yield* Clock.currentTimeMillis)` when you need a `Date`.
+
+## Errors
+
+- In `Effect.gen/fn`, prefer `yield* new MyError(...)` over `yield* Effect.fail(new MyError(...))` for direct early-failure branches.
+
+## Instance-scoped Effect services
+
+Services that need per-directory lifecycle (created/destroyed per instance) go through the `Instances` LayerMap:
+
+1. Define a `ServiceMap.Service` with a `static readonly layer` (see `FileWatcherService`, `QuestionService`, `PermissionService`, `ProviderAuthService`).
+2. Add it to `InstanceServices` union and `Layer.mergeAll(...)` in `src/effect/instances.ts`.
+3. Use `InstanceContext` inside the layer to read `directory` and `project` instead of `Instance.*` globals.
+4. Call from legacy code via `runPromiseInstance(MyService.use((s) => s.method()))`.
+
+### Instance.bind — ALS context for native callbacks
+
+`Instance.bind(fn)` captures the current Instance AsyncLocalStorage context and returns a wrapper that restores it synchronously when called.
+
+**Use it** when passing callbacks to native C/C++ addons (`@parcel/watcher`, `node-pty`, native `fs.watch`, etc.) that need to call `Bus.publish`, `Instance.state()`, or anything that reads `Instance.directory`.
+
+**Don't need it** for `setTimeout`, `Promise.then`, `EventEmitter.on`, or Effect fibers — Node.js ALS propagates through those automatically.
+
+```typescript
+// Native addon callback — needs Instance.bind
+const cb = Instance.bind((err, evts) => {
+  Bus.publish(MyEvent, { ... })
+})
+nativeAddon.subscribe(dir, cb)
+```
+
+## Flag → Effect.Config migration
+
+Flags in `src/flag/flag.ts` are being migrated from static `truthy(...)` reads to `Config.boolean(...).pipe(Config.withDefault(false))` as their consumers get effectified.
+
+- Effectful flags return `Config<boolean>` and are read with `yield*` inside `Effect.gen`.
+- The default `ConfigProvider` reads from `process.env`, so env vars keep working.
+- Tests can override via `ConfigProvider.layer(ConfigProvider.fromUnknown({ ... }))`.
+- Keep all flags in `flag.ts` as the single registry — just change the implementation from `truthy()` to `Config.boolean()` when the consumer moves to Effect.
