@@ -46,7 +46,7 @@ When a user describes what they want an agent to do, you will:
       assistant: "Now let me use the code-reviewer agent to review the code"
     </example>
   - <example>
-      Context: User is creating an agent to respond to the word "hello" with a friendly jok.
+      Context: User is creating an agent to respond to the word "hello" with a friendly joke.
       user: "Hello"
       assistant: "I'm going to use the Task tool to launch the greeting-responder agent to respond with a friendly joke"
       <commentary>
