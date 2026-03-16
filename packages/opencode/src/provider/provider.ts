@@ -668,6 +668,49 @@ export namespace Provider {
         },
       }
     },
+    async local(input) {
+      const baseURL = input.options?.baseURL
+      if (!baseURL) return { autoload: false }
+      try {
+        const url = `${String(baseURL).replace(/\/+$/, "")}/models`
+        const headers: Record<string, string> = { Accept: "application/json" }
+        const apiKey = input.options?.apiKey ?? input.key
+        if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`
+        const res = await fetch(url, { headers, signal: AbortSignal.timeout(3000) })
+        if (!res.ok) return { autoload: false }
+        const json = (await res.json()) as { data?: Array<{ id: string }> }
+        if (!json.data?.length) return { autoload: false }
+        for (const model of json.data) {
+          if (!model.id || input.models[model.id]) continue
+          input.models[model.id] = {
+            id: ModelID.make(model.id),
+            providerID: ProviderID.make("local"),
+            name: model.id,
+            api: { id: model.id, url: baseURL, npm: "@ai-sdk/openai-compatible" },
+            status: "active",
+            headers: {},
+            options: {},
+            cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+            limit: { context: 0, output: 0 },
+            capabilities: {
+              temperature: true,
+              reasoning: false,
+              attachment: false,
+              toolcall: true,
+              input: { text: true, audio: false, image: false, video: false, pdf: false },
+              output: { text: true, audio: false, image: false, video: false, pdf: false },
+              interleaved: false,
+            },
+            family: "",
+            release_date: "",
+          }
+        }
+        log.info("auto-discovered local models", { count: json.data.length })
+        return { autoload: true }
+      } catch {
+        return { autoload: false }
+      }
+    },
   }
 
   export const Model = z
