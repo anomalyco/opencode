@@ -83,13 +83,9 @@ export namespace Vcs {
   export type Info = z.infer<typeof Info>
 
   async function currentBranch() {
-    return $`git rev-parse --abbrev-ref HEAD`
-      .quiet()
-      .nothrow()
-      .cwd(Instance.worktree)
-      .text()
-      .then((x) => x.trim())
-      .catch(() => undefined)
+    const text = await gitText(["git", "rev-parse", "--abbrev-ref", "HEAD"])
+    if (!text || text === "HEAD") return
+    return text
   }
 
   function splitRemoteRef(ref: string) {
