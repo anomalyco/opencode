@@ -3,13 +3,14 @@ import path from "path"
 import fs from "fs/promises"
 import { FileTime } from "../../src/file/time"
 import { Instance } from "../../src/project/instance"
+import { SessionID } from "../../src/session/schema"
 import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
 
 afterEach(() => Instance.disposeAll())
 
 describe("file/time", () => {
-  const sessionID = "test-session-123"
+  const sessionID = SessionID.make("ses_00000000000000000000000001")
 
   describe("read() and get()", () => {
     test("stores read timestamp", async () => {
@@ -23,7 +24,7 @@ describe("file/time", () => {
           const before = await FileTime.get(sessionID, filepath)
           expect(before).toBeUndefined()
 
-          FileTime.read(sessionID, filepath)
+          await FileTime.read(sessionID, filepath)
           await Bun.sleep(10)
 
           const after = await FileTime.get(sessionID, filepath)
@@ -41,12 +42,12 @@ describe("file/time", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          FileTime.read("session1", filepath)
-          FileTime.read("session2", filepath)
+          await FileTime.read(SessionID.make("ses_00000000000000000000000002"), filepath)
+          await FileTime.read(SessionID.make("ses_00000000000000000000000003"), filepath)
           await Bun.sleep(10)
 
-          const time1 = await FileTime.get("session1", filepath)
-          const time2 = await FileTime.get("session2", filepath)
+          const time1 = await FileTime.get(SessionID.make("ses_00000000000000000000000002"), filepath)
+          const time2 = await FileTime.get(SessionID.make("ses_00000000000000000000000003"), filepath)
 
           expect(time1).toBeDefined()
           expect(time2).toBeDefined()

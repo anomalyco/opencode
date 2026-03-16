@@ -3,14 +3,15 @@ import { Flag } from "@/flag/flag"
 import { Filesystem } from "../util/filesystem"
 import { Effect, Layer, ServiceMap, Semaphore } from "effect"
 import { runPromiseInstance } from "@/effect/runtime"
+import type { SessionID } from "@/session/schema"
 
 const log = Log.create({ service: "file.time" })
 
 export namespace FileTimeService {
   export interface Service {
-    readonly read: (sessionID: string, file: string) => Effect.Effect<void>
-    readonly get: (sessionID: string, file: string) => Effect.Effect<Date | undefined>
-    readonly assert: (sessionID: string, filepath: string) => Effect.Effect<void>
+    readonly read: (sessionID: SessionID, file: string) => Effect.Effect<void>
+    readonly get: (sessionID: SessionID, file: string) => Effect.Effect<Date | undefined>
+    readonly assert: (sessionID: SessionID, filepath: string) => Effect.Effect<void>
     readonly withLock: <T>(filepath: string, fn: () => Promise<T>) => Effect.Effect<T>
   }
 }
@@ -33,6 +34,15 @@ function stamp(file: string): Stamp {
   }
 }
 
+function session(reads: Map<SessionID, Map<string, Stamp>>, sessionID: SessionID) {
+  let value = reads.get(sessionID)
+  if (!value) {
+    value = new Map<string, Stamp>()
+    reads.set(sessionID, value)
+  }
+  return value
+}
+
 export class FileTimeService extends ServiceMap.Service<FileTimeService, FileTimeService.Service>()(
   "@opencode/FileTime",
 ) {
@@ -40,7 +50,7 @@ export class FileTimeService extends ServiceMap.Service<FileTimeService, FileTim
     FileTimeService,
     Effect.gen(function* () {
       const disableCheck = yield* Flag.OPENCODE_DISABLE_FILETIME_CHECK
-      const reads: { [sessionID: string]: { [path: string]: Stamp | undefined } } = {}
+      const reads = new Map<SessionID, Map<string, Stamp>>()
       const locks = new Map<string, Semaphore.Semaphore>()
 
       function getLock(filepath: string) {
@@ -53,20 +63,19 @@ export class FileTimeService extends ServiceMap.Service<FileTimeService, FileTim
       }
 
       return FileTimeService.of({
-        read: Effect.fn("FileTimeService.read")(function* (sessionID: string, file: string) {
+        read: Effect.fn("FileTimeService.read")(function* (sessionID: SessionID, file: string) {
           log.info("read", { sessionID, file })
-          reads[sessionID] = reads[sessionID] || {}
-          reads[sessionID][file] = stamp(file)
+          session(reads, sessionID).set(file, stamp(file))
         }),
 
-        get: Effect.fn("FileTimeService.get")(function* (sessionID: string, file: string) {
-          return reads[sessionID]?.[file]?.read
+        get: Effect.fn("FileTimeService.get")(function* (sessionID: SessionID, file: string) {
+          return reads.get(sessionID)?.get(file)?.read
         }),
 
-        assert: Effect.fn("FileTimeService.assert")(function* (sessionID: string, filepath: string) {
+        assert: Effect.fn("FileTimeService.assert")(function* (sessionID: SessionID, filepath: string) {
           if (disableCheck) return
 
-          const time = reads[sessionID]?.[filepath]
+          const time = reads.get(sessionID)?.get(filepath)
           if (!time) throw new Error(`You must read file ${filepath} before overwriting it. Use the Read tool first`)
           const next = stamp(filepath)
           const changed = next.mtime !== time.mtime || next.ctime !== time.ctime || next.size !== time.size
@@ -87,17 +96,16 @@ export class FileTimeService extends ServiceMap.Service<FileTimeService, FileTim
   )
 }
 
-// Legacy facade — callers don't need to change
 export namespace FileTime {
-  export function read(sessionID: string, file: string) {
+  export function read(sessionID: SessionID, file: string) {
     return runPromiseInstance(FileTimeService.use((s) => s.read(sessionID, file)))
   }
 
-  export function get(sessionID: string, file: string) {
+  export function get(sessionID: SessionID, file: string) {
     return runPromiseInstance(FileTimeService.use((s) => s.get(sessionID, file)))
   }
 
-  export async function assert(sessionID: string, filepath: string) {
+  export async function assert(sessionID: SessionID, filepath: string) {
     return runPromiseInstance(FileTimeService.use((s) => s.assert(sessionID, filepath)))
   }
 
