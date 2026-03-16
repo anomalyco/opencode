@@ -41,6 +41,11 @@ import { writeHeapSnapshot } from "v8"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { TuiConfigProvider } from "./context/tui-config"
 import { TuiConfig } from "@/config/tui"
+import { TabProvider, useTabs } from "./context/tabs"
+import { TabBar } from "./component/tab-bar"
+import { DialogNewTab } from "./component/dialog-new-tab"
+import { DialogConfirm } from "./ui/dialog-confirm"
+import { DialogPrompt } from "./ui/dialog-prompt"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -138,41 +143,43 @@ export function tui(input: {
             <ArgsProvider {...input.args}>
               <ExitProvider onExit={onExit}>
                 <KVProvider>
-                  <ToastProvider>
-                    <RouteProvider>
-                      <TuiConfigProvider config={input.config}>
-                        <SDKProvider
-                          url={input.url}
-                          directory={input.directory}
-                          fetch={input.fetch}
-                          headers={input.headers}
-                          events={input.events}
-                        >
-                          <SyncProvider>
-                            <ThemeProvider mode={mode}>
-                              <LocalProvider>
-                                <KeybindProvider>
-                                  <PromptStashProvider>
-                                    <DialogProvider>
-                                      <CommandProvider>
-                                        <FrecencyProvider>
-                                          <PromptHistoryProvider>
-                                            <PromptRefProvider>
-                                              <App />
-                                            </PromptRefProvider>
-                                          </PromptHistoryProvider>
-                                        </FrecencyProvider>
-                                      </CommandProvider>
-                                    </DialogProvider>
-                                  </PromptStashProvider>
-                                </KeybindProvider>
-                              </LocalProvider>
-                            </ThemeProvider>
-                          </SyncProvider>
-                        </SDKProvider>
-                      </TuiConfigProvider>
-                    </RouteProvider>
-                  </ToastProvider>
+                  <TabProvider>
+                    <ToastProvider>
+                      <RouteProvider>
+                        <TuiConfigProvider config={input.config}>
+                          <SDKProvider
+                            url={input.url}
+                            directory={input.directory}
+                            fetch={input.fetch}
+                            headers={input.headers}
+                            events={input.events}
+                          >
+                            <SyncProvider>
+                              <ThemeProvider mode={mode}>
+                                <LocalProvider>
+                                  <KeybindProvider>
+                                    <PromptStashProvider>
+                                      <DialogProvider>
+                                        <CommandProvider>
+                                          <FrecencyProvider>
+                                            <PromptHistoryProvider>
+                                              <PromptRefProvider>
+                                                <App />
+                                              </PromptRefProvider>
+                                            </PromptHistoryProvider>
+                                          </FrecencyProvider>
+                                        </CommandProvider>
+                                      </DialogProvider>
+                                    </PromptStashProvider>
+                                  </KeybindProvider>
+                                </LocalProvider>
+                              </ThemeProvider>
+                            </SyncProvider>
+                          </SDKProvider>
+                        </TuiConfigProvider>
+                      </RouteProvider>
+                    </ToastProvider>
+                  </TabProvider>
                 </KVProvider>
               </ExitProvider>
             </ArgsProvider>
@@ -214,6 +221,46 @@ function App() {
   const sync = useSync()
   const exit = useExit()
   const promptRef = usePromptRef()
+  const tabs = useTabs()
+
+  // Wire tab navigation into the global route
+  tabs._setNavigator((r) => route.navigate(r))
+
+  // Switch SDK directory when active tab changes (daemon mode)
+  createEffect(() => {
+    const tab = tabs.active()
+    if (tab.directory && tab.directory !== sdk.directory) {
+      sdk.setDirectory(tab.directory)
+    }
+  })
+
+  // When route changes (e.g. session created, dialog nav), update the active tab's stored route
+  createEffect(() => {
+    // Track only route properties — reading through the store proxy establishes subscriptions
+    const type = route.data.type
+    const sessionID = type === "session" ? route.data.sessionID : undefined
+
+    const tab = untrack(() => tabs.active())
+    if (type === tab.route.type && (tab.route.type !== "session" || sessionID === tab.route.sessionID)) return
+    untrack(() => {
+      tabs.updateRoute(tab.id, route.data)
+      if (type === "session" && sessionID) {
+        const session = sync.data.session.find((s) => s.id === sessionID)
+        if (session) {
+          tabs.rename(tab.id, session.displayName ?? session.slug)
+          tabs.updateSessionID(tab.id, sessionID)
+        }
+      }
+    })
+  })
+
+  // Keep tab label in sync with session display name
+  createEffect(() => {
+    const tab = tabs.active()
+    if (!tab.sessionID) return
+    const session = sync.data.session.find((s) => s.id === tab.sessionID)
+    if (session) untrack(() => tabs.rename(tab.id, session.displayName ?? session.slug))
+  })
 
   useKeyboard((evt) => {
     if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
@@ -255,10 +302,6 @@ function App() {
     renderer.clearSelection()
   }
   const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
-
-  createEffect(() => {
-    console.log(JSON.stringify(route.data))
-  })
 
   // Update terminal window title based on current route and session
   createEffect(() => {
@@ -343,6 +386,42 @@ function App() {
         toast.show({ message: "Failed to fork session", variant: "error" })
       }
     })
+  })
+
+  // Restore tabs from KV when reconnecting to a daemon
+  let tabsRestored = false
+  createEffect(() => {
+    if (tabsRestored || sync.status !== "complete" || !args.daemon) return
+    tabsRestored = true
+
+    const key = `daemon_tabs_${sdk.url}`
+    const savedIDs: string[] = kv.get(key, [])
+    if (savedIDs.length === 0) return
+
+    batch(() => {
+      for (const sessionID of savedIDs) {
+        const session = sync.data.session.find((s) => s.id === sessionID)
+        if (!session) continue
+        tabs.add({
+          sessionID,
+          label: session.displayName ?? session.slug,
+          directory: session.gitWorktree ?? session.directory,
+        })
+      }
+      const firstTab = tabs.tabs().find((t) => t.sessionID === savedIDs[0])
+      if (firstTab) tabs.activate(firstTab.id)
+    })
+  })
+
+  // Persist open tab session IDs to KV whenever tabs change (daemon mode)
+  createEffect(() => {
+    if (!args.daemon || !tabsRestored) return
+    const key = `daemon_tabs_${sdk.url}`
+    const sessionIDs = tabs
+      .tabs()
+      .map((t) => t.sessionID)
+      .filter((id): id is string => id !== null)
+    kv.set(key, sessionIDs)
   })
 
   createEffect(
@@ -675,6 +754,143 @@ function App() {
         dialog.clear()
       },
     },
+    {
+      title: "New tab",
+      value: "tab.new",
+      keybind: "tab_new",
+      category: "Tabs",
+      slash: {
+        name: "newtab",
+      },
+      onSelect: (dialog) => {
+        if (args.daemon && sync.data.config?.daemon?.worktree) {
+          dialog.replace(() => <DialogNewTab />)
+          return
+        }
+        tabs.add()
+        dialog.clear()
+      },
+    },
+    {
+      title: "New worktree tab",
+      value: "tab.new.worktree",
+      keybind: "tab_worktree",
+      category: "Tabs",
+      slash: {
+        name: "worktree",
+      },
+      onSelect: (dialog) => {
+        dialog.replace(() => <DialogNewTab />)
+      },
+    },
+    {
+      title: "Close tab",
+      value: "tab.close",
+      keybind: "tab_close",
+      category: "Tabs",
+      slash: {
+        name: "closetab",
+      },
+      onSelect: async (dialog) => {
+        const tab = tabs.active()
+        const session = tab.sessionID ? sync.data.session.find((s) => s.id === tab.sessionID) : undefined
+
+        if (session?.gitWorktree) {
+          const confirmed = await DialogConfirm.show(
+            dialog,
+            "Close worktree tab",
+            `Delete worktree "${session.gitBranch}" and its branch?\n\nConfirm = delete, Cancel = keep`,
+          )
+          if (confirmed) {
+            await sdk.client.worktree
+              .remove({
+                worktreeRemoveInput: { directory: session.gitWorktree },
+              })
+              .catch(() => undefined)
+          }
+        }
+        tabs.close(tab.id)
+        dialog.clear()
+      },
+    },
+    {
+      title: "Next tab",
+      value: "tab.next",
+      keybind: "tab_next",
+      category: "Tabs",
+      hidden: true,
+      onSelect: () => {
+        const idx = tabs.activeIndex()
+        const all = tabs.tabs()
+        const next = all[(idx + 1) % all.length]
+        tabs.activate(next.id)
+      },
+    },
+    {
+      title: "Previous tab",
+      value: "tab.prev",
+      keybind: "tab_prev",
+      category: "Tabs",
+      hidden: true,
+      onSelect: () => {
+        const idx = tabs.activeIndex()
+        const all = tabs.tabs()
+        const prev = all[(idx - 1 + all.length) % all.length]
+        tabs.activate(prev.id)
+      },
+    },
+    {
+      title: "Last tab",
+      value: "tab.last",
+      keybind: "tab_last",
+      category: "Tabs",
+      hidden: true,
+      onSelect: () => {
+        tabs.last()
+      },
+    },
+    {
+      title: "Rename tab",
+      value: "tab.rename",
+      category: "Tabs",
+      slash: {
+        name: "renametab",
+      },
+      onSelect: async (dialog) => {
+        const tab = tabs.active()
+        const result = await DialogPrompt.show(dialog, "Rename tab", {
+          value: tab.label,
+          placeholder: "Tab name",
+        })
+        if (result !== null) tabs.rename(tab.id, result)
+      },
+    },
+    {
+      title: tabs.position() === "top" ? "Move tabs to bottom" : "Move tabs to top",
+      value: "tab.position",
+      category: "Tabs",
+      slash: {
+        name: "tabsposition",
+        aliases: ["tabs-top", "tabs-bottom"],
+      },
+      onSelect: (dialog) => {
+        tabs.setPosition(tabs.position() === "top" ? "bottom" : "top")
+        dialog.clear()
+      },
+    },
+    ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => ({
+      title: `Jump to tab ${n}`,
+      value: `tab.jump.${n}`,
+      keybind: `tab_${n}` as const,
+      category: "Tabs" as const,
+      hidden: true,
+      onSelect: () => {
+        const all = tabs.tabs()
+        if (n <= all.length) {
+          tabs.activate(all[n - 1].id)
+        }
+      },
+    })),
   ])
 
   sdk.event.on(TuiEvent.CommandExecute.type, (evt) => {
@@ -753,14 +969,22 @@ function App() {
       }}
       onMouseUp={Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT ? undefined : () => Selection.copy(renderer, toast)}
     >
-      <Switch>
-        <Match when={route.data.type === "home"}>
-          <Home />
-        </Match>
-        <Match when={route.data.type === "session"}>
-          <Session />
-        </Match>
-      </Switch>
+      <Show when={tabs.position() === "top"}>
+        <TabBar />
+      </Show>
+      <box flexGrow={1}>
+        <Switch>
+          <Match when={route.data.type === "home"}>
+            <Home />
+          </Match>
+          <Match when={route.data.type === "session"}>
+            <Session />
+          </Match>
+        </Switch>
+      </box>
+      <Show when={tabs.position() === "bottom"}>
+        <TabBar />
+      </Show>
     </box>
   )
 }
