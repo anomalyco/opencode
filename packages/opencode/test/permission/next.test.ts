@@ -1,13 +1,19 @@
-import { test, expect } from "bun:test"
+import { afterEach, test, expect } from "bun:test"
 import os from "os"
+import { Effect } from "effect"
 import { Bus } from "../../src/bus"
 import { runtime } from "../../src/effect/runtime"
+import { Instances } from "../../src/effect/instances"
 import { PermissionNext } from "../../src/permission/next"
 import * as S from "../../src/permission/service"
 import { PermissionID } from "../../src/permission/schema"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import { MessageID, SessionID } from "../../src/session/schema"
+
+afterEach(async () => {
+  await Instance.disposeAll()
+})
 
 async function rejectAll(message?: string) {
   for (const req of await PermissionNext.list()) {
@@ -971,7 +977,7 @@ test("ask - should deny even when an earlier pattern is ask", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const ask = PermissionNext.ask({
+      const err = await PermissionNext.ask({
         sessionID: SessionID.make("session_test"),
         permission: "bash",
         patterns: ["echo hello", "rm -rf /"],
@@ -981,24 +987,12 @@ test("ask - should deny even when an earlier pattern is ask", async () => {
           { permission: "bash", pattern: "echo *", action: "ask" },
           { permission: "bash", pattern: "rm *", action: "deny" },
         ],
-      })
+      }).then(
+        () => undefined,
+        (err) => err,
+      )
 
-      const out = await Promise.race([
-        ask.then(
-          () => ({ ok: true as const, err: undefined }),
-          (err) => ({ ok: false as const, err }),
-        ),
-        Bun.sleep(100).then(() => "timeout" as const),
-      ])
-
-      if (out === "timeout") {
-        await rejectAll()
-        await ask.catch(() => {})
-        throw new Error("ask timed out instead of denying immediately")
-      }
-
-      expect(out.ok).toBe(false)
-      expect(out.err).toBeInstanceOf(PermissionNext.DeniedError)
+      expect(err).toBeInstanceOf(PermissionNext.DeniedError)
       expect(await PermissionNext.list()).toHaveLength(0)
     },
   })
@@ -1020,7 +1014,7 @@ test("ask - abort should clear pending request", async () => {
             always: [],
             ruleset: [{ permission: "bash", pattern: "*", action: "ask" }],
           }),
-        ),
+        ).pipe(Effect.provide(Instances.get(Instance.directory))),
         { signal: ctl.signal },
       )
 
