@@ -1,5 +1,6 @@
 // @ts-nocheck
-import { createSignal, createEffect, on, onMount, onCleanup } from "solid-js"
+import { createEffect, on, onMount, onCleanup } from "solid-js"
+import { createStore } from "solid-js/store"
 import { TextShimmer } from "./text-shimmer"
 import { TextReveal } from "./text-reveal"
 
@@ -375,11 +376,18 @@ input[type="range"].heading-slider::-webkit-slider-thumb {
 // ---------------------------------------------------------------------------
 
 function AnimatedHeading(props) {
-  const [current, setCurrent] = createSignal(props.text)
-  const [leaving, setLeaving] = createSignal(undefined)
-  const [width, setWidth] = createSignal("auto")
-  const [ready, setReady] = createSignal(false)
-  const [swapping, setSwapping] = createSignal(false)
+  const [state, setState] = createStore({
+    current: props.text,
+    leaving: undefined,
+    width: "auto",
+    ready: false,
+    swapping: false,
+  })
+  const current = () => state.current
+  const leaving = () => state.leaving
+  const width = () => state.width
+  const ready = () => state.ready
+  const swapping = () => state.swapping
   let enterRef
   let leaveRef
   let containerRef
@@ -391,16 +399,16 @@ function AnimatedHeading(props) {
     if (px <= 0) return
     const w = Number.parseFloat(width())
     if (Number.isFinite(w) && px <= w) return
-    setWidth(`${px}px`)
+    setState("width", `${px}px`)
   }
 
   const measure = () => {
     if (!current()) {
-      setWidth("0px")
+      setState("width", "0px")
       return
     }
     const px = measureEnter()
-    if (px > 0) setWidth(`${px}px`)
+    if (px > 0) setState("width", `${px}px`)
   }
 
   createEffect(
@@ -408,9 +416,9 @@ function AnimatedHeading(props) {
       () => props.text,
       (next, prev) => {
         if (next === prev) return
-        setSwapping(true)
-        setLeaving(prev)
-        setCurrent(next)
+        setState("swapping", true)
+        setState("leaving", prev)
+        setState("current", next)
 
         if (frame) cancelAnimationFrame(frame)
         frame = requestAnimationFrame(() => {
@@ -420,10 +428,10 @@ function AnimatedHeading(props) {
             const leaveW = measureLeave()
             widen(Math.max(enterW, leaveW))
             containerRef?.offsetHeight // reflow with max width + swap positions
-            setSwapping(false)
+            setState("swapping", false)
           } else {
             containerRef?.offsetHeight
-            setSwapping(false)
+            setState("swapping", false)
             measure()
           }
           frame = undefined
@@ -436,7 +444,7 @@ function AnimatedHeading(props) {
     measure()
     document.fonts?.ready.finally(() => {
       measure()
-      requestAnimationFrame(() => setReady(true))
+      requestAnimationFrame(() => setState("ready", true))
     })
   })
 
@@ -552,47 +560,56 @@ const VARIANTS: { key: string; label: string }[] = []
 
 export const Playground = {
   render: () => {
-    const [heading, setHeading] = createSignal(HEADINGS[0])
-    const [headingIndex, setHeadingIndex] = createSignal(0)
-    const [active, setActive] = createSignal(true)
-    const [cycling, setCycling] = createSignal(false)
+    const [state, setState] = createStore({
+      heading: HEADINGS[0],
+      headingIndex: 0,
+      active: true,
+      cycling: false,
+      duration: 550,
+      blur: 2,
+      travel: 4,
+      bounce: 1.35,
+      maskSize: 12,
+      maskPad: 9,
+      maskHeight: 0,
+      debug: false,
+      odoBlur: false,
+    })
+    const heading = () => state.heading
+    const headingIndex = () => state.headingIndex
+    const active = () => state.active
+    const cycling = () => state.cycling
+    const duration = () => state.duration
+    const blur = () => state.blur
+    const travel = () => state.travel
+    const bounce = () => state.bounce
+    const maskSize = () => state.maskSize
+    const maskPad = () => state.maskPad
+    const maskHeight = () => state.maskHeight
+    const debug = () => state.debug
+    const odoBlur = () => state.odoBlur
     let cycleTimer
 
-    // tunable params
-    const [duration, setDuration] = createSignal(550)
-    const [blur, setBlur] = createSignal(2)
-    const [travel, setTravel] = createSignal(4)
-    const [bounce, setBounce] = createSignal(1.35)
-    const [maskSize, setMaskSize] = createSignal(12)
-    const [maskPad, setMaskPad] = createSignal(9)
-    const [maskHeight, setMaskHeight] = createSignal(0)
-    const [debug, setDebug] = createSignal(false)
-    const [odoBlur, setOdoBlur] = createSignal(false)
-
     const nextHeading = () => {
-      setHeadingIndex((i) => {
-        const next = (i + 1) % HEADINGS.length
-        setHeading(HEADINGS[next])
-        return next
-      })
+      const next = (headingIndex() + 1) % HEADINGS.length
+      setState("headingIndex", next)
+      setState("heading", HEADINGS[next])
     }
 
     const prevHeading = () => {
-      setHeadingIndex((i) => {
-        const prev = (i - 1 + HEADINGS.length) % HEADINGS.length
-        setHeading(HEADINGS[prev])
-        return prev
-      })
+      const prev = (headingIndex() - 1 + HEADINGS.length) % HEADINGS.length
+      setState("headingIndex", prev)
+      setState("heading", HEADINGS[prev])
     }
 
     const toggleCycling = () => {
       if (cycling()) {
         clearTimeout(cycleTimer)
         cycleTimer = undefined
-        setCycling(false)
+        setState("cycling", false)
         return
       }
-      setCycling(true)
+      setState("cycling", true)
       const tick = () => {
         if (!cycling()) return
         nextHeading()
@@ -602,11 +619,11 @@ export const Playground = {
     }
 
     const clearHeading = () => {
-      setHeading(undefined)
+      setState("heading", undefined)
       if (cycling()) {
         clearTimeout(cycleTimer)
         cycleTimer = undefined
-        setCycling(false)
+        setState("cycling", false)
       }
     }
 
@@ -686,7 +703,7 @@ export const Playground = {
               max={1400}
               step={50}
               value={duration()}
-              onInput={(e) => setDuration(Number(e.currentTarget.value))}
+              onInput={(e) => setState("duration", Number(e.currentTarget.value))}
             />
             <span style={sliderValue}>{duration()}ms</span>
           </div>
@@ -700,7 +717,7 @@ export const Playground = {
               max={16}
               step={0.5}
               value={blur()}
-              onInput={(e) => setBlur(Number(e.currentTarget.value))}
+              onInput={(e) => setState("blur", Number(e.currentTarget.value))}
             />
             <span style={sliderValue}>{blur()}px</span>
           </div>
@@ -714,7 +731,7 @@ export const Playground = {
               max={120}
               step={1}
               value={travel()}
-              onInput={(e) => setTravel(Number(e.currentTarget.value))}
+              onInput={(e) => setState("travel", Number(e.currentTarget.value))}
             />
             <span style={sliderValue}>{travel()}px</span>
           </div>
@@ -728,7 +745,7 @@ export const Playground = {
               max={2.2}
               step={0.05}
               value={bounce()}
-              onInput={(e) => setBounce(Number(e.currentTarget.value))}
+              onInput={(e) => setState("bounce", Number(e.currentTarget.value))}
             />
             <span style={sliderValue}>
               {bounce().toFixed(2)} {bounce() <= 1.05 ? "(none)" : bounce() >= 1.9 ? "(heavy)" : ""}
@@ -744,7 +761,7 @@ export const Playground = {
               max={50}
               step={1}
               value={maskSize()}
-              onInput={(e) => setMaskSize(Number(e.currentTarget.value))}
+              onInput={(e) => setState("maskSize", Number(e.currentTarget.value))}
             />
             <span style={sliderValue}>
               {maskSize()}px {maskSize() === 0 ? "(hard)" : ""}
@@ -760,7 +777,7 @@ export const Playground = {
               max={60}
               step={1}
               value={maskPad()}
-              onInput={(e) => setMaskPad(Number(e.currentTarget.value))}
+              onInput={(e) => setState("maskPad", Number(e.currentTarget.value))}
             />
             <span style={sliderValue}>{maskPad()}px</span>
           </div>
@@ -774,7 +791,7 @@ export const Playground = {
               max={80}
               step={1}
               value={maskHeight()}
-              onInput={(e) => setMaskHeight(Number(e.currentTarget.value))}
+              onInput={(e) => setState("maskHeight", Number(e.currentTarget.value))}
             />
             <span style={sliderValue}>{maskHeight()}px</span>
           </div>
@@ -795,13 +812,13 @@ export const Playground = {
             <button onClick={clearHeading} style={btn()}>
               Clear
             </button>
-            <button onClick={() => setActive((v) => !v)} style={smallBtn(active())}>
+            <button onClick={() => setState("active", (value) => !value)} style={smallBtn(active())}>
               {active() ? "Shimmer: on" : "Shimmer: off"}
             </button>
-            <button onClick={() => setDebug((v) => !v)} style={smallBtn(debug())}>
+            <button onClick={() => setState("debug", (value) => !value)} style={smallBtn(debug())}>
               {debug() ? "Debug mask: on" : "Debug mask"}
             </button>
-            <button onClick={() => setOdoBlur((v) => !v)} style={smallBtn(odoBlur())}>
+            <button onClick={() => setState("odoBlur", (value) => !value)} style={smallBtn(odoBlur())}>
               {odoBlur() ? "Odo blur: on" : "Odo blur"}
             </button>
           </div>
@@ -810,8 +827,8 @@ export const Playground = {
             {HEADINGS.map((h, i) => (
               <button
                 onClick={() => {
-                  setHeadingIndex(i)
-                  setHeading(h)
+                  setState("headingIndex", i)
+                  setState("heading", h)
                 }}
                 style={smallBtn(headingIndex() === i)}
               >
