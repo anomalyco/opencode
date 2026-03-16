@@ -1803,17 +1803,29 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     }
     template = template.trim()
 
+    const agent = await Agent.get(agentName)
+    const isSubtask = (agent?.mode === "subagent" && command.subtask !== false) || command.subtask === true
+
     const taskModel = await (async () => {
-      if (command.model) {
-        return Provider.parseModel(command.model)
-      }
-      if (command.agent) {
-        const cmdAgent = await Agent.get(command.agent)
-        if (cmdAgent?.model) {
-          return cmdAgent.model
+      if (isSubtask) {
+        if (command.model) return Provider.parseModel(command.model)
+        if (command.agent) {
+          const m = command.agent === agentName
+            ? agent?.model
+            : (await Agent.get(command.agent))?.model
+          if (m) return m
         }
+        if (input.model) return Provider.parseModel(input.model)
+        return await lastModel(input.sessionID)
       }
       if (input.model) return Provider.parseModel(input.model)
+      if (command.model) return Provider.parseModel(command.model)
+      if (command.agent) {
+        const m = command.agent === agentName
+          ? agent?.model
+          : (await Agent.get(command.agent))?.model
+        if (m) return m
+      }
       return await lastModel(input.sessionID)
     })()
 
@@ -1830,7 +1842,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       }
       throw e
     }
-    const agent = await Agent.get(agentName)
     if (!agent) {
       const available = await Agent.list().then((agents) => agents.filter((a) => !a.hidden).map((a) => a.name))
       const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
@@ -1843,7 +1854,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     }
 
     const templateParts = await resolvePromptParts(template)
-    const isSubtask = (agent.mode === "subagent" && command.subtask !== false) || command.subtask === true
     const parts = isSubtask
       ? [
           {
