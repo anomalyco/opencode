@@ -58,6 +58,30 @@ describe("file watcher invalidation", () => {
     expect(loads).toEqual(["src/open.ts"])
   })
 
+  test("refreshes nearest loaded ancestor for adds in unloaded directories", () => {
+    const refresh: string[] = []
+
+    invalidateFromWatcher(
+      {
+        type: "file.watcher.updated",
+        properties: {
+          file: "src/nested/deeper/new.ts",
+          event: "add",
+        },
+      },
+      {
+        normalize: (input) => input,
+        hasFile: () => false,
+        loadFile: () => {},
+        node: () => undefined,
+        isDirLoaded: (path) => path === "src",
+        refreshDir: (path) => refresh.push(path),
+      },
+    )
+
+    expect(refresh).toEqual(["src"])
+  })
+
   test("refreshes only changed loaded directory nodes", () => {
     const refresh: string[] = []
 

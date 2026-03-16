@@ -47,7 +47,18 @@ export function invalidateFromWatcher(event: WatcherEvent, ops: WatcherOps) {
   if (kind !== "add" && kind !== "unlink") return
 
   const parent = path.split("/").slice(0, -1).join("/")
-  if (!ops.isDirLoaded(parent)) return
+  const refreshTarget = findNearestLoadedDir(parent, ops.isDirLoaded)
+  if (refreshTarget === undefined) return
 
-  ops.refreshDir(parent)
+  ops.refreshDir(refreshTarget)
+}
+
+function findNearestLoadedDir(path: string, isDirLoaded: WatcherOps["isDirLoaded"]) {
+  let current = path
+
+  while (true) {
+    if (isDirLoaded(current)) return current
+    if (current === "") return
+    current = current.split("/").slice(0, -1).join("/")
+  }
 }
