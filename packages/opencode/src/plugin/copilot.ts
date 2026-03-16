@@ -185,12 +185,10 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
             const deploymentType = inputs.deploymentType || "github.com"
 
             let domain = "github.com"
-            let actualProvider = "github-copilot"
 
             if (deploymentType === "enterprise") {
               const enterpriseUrl = inputs.enterpriseUrl
               domain = normalizeDomain(enterpriseUrl!)
-              actualProvider = "github-copilot-enterprise"
             }
 
             const urls = getUrls(domain)
@@ -262,8 +260,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
                       expires: 0,
                     }
 
-                    if (actualProvider === "github-copilot-enterprise") {
-                      result.provider = "github-copilot-enterprise"
+                    if (deploymentType === "enterprise") {
                       result.enterpriseUrl = domain
                     }
 
