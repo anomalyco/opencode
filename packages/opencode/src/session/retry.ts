@@ -50,8 +50,6 @@ export namespace SessionRetry {
             return Math.ceil(parsed)
           }
         }
-
-        return RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1)
       }
     }
 
