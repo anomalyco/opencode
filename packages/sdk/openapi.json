@@ -1840,6 +1840,24 @@
                   "workspaceID": {
                     "type": "string",
                     "pattern": "^wrk.*"
+                  },
+                  "providerID": {
+                    "type": "string"
+                  },
+                  "modelID": {
+                    "type": "string"
+                  },
+                  "gitBranch": {
+                    "type": "string"
+                  },
+                  "gitWorktree": {
+                    "type": "string"
+                  },
+                  "prReference": {
+                    "type": "string"
+                  },
+                  "displayName": {
+                    "type": "string"
                   }
                 }
               }
@@ -9234,6 +9252,24 @@
           "version": {
             "type": "string"
           },
+          "providerID": {
+            "type": "string"
+          },
+          "modelID": {
+            "type": "string"
+          },
+          "gitBranch": {
+            "type": "string"
+          },
+          "gitWorktree": {
+            "type": "string"
+          },
+          "prReference": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
           "time": {
             "type": "object",
             "properties": {
@@ -10703,6 +10739,16 @@
               }
             }
           },
+          "daemon": {
+            "type": "object",
+            "properties": {
+              "worktree": {
+                "description": "Auto-create git worktrees for new daemon tabs",
+                "default": false,
+                "type": "boolean"
+              }
+            }
+          },
           "experimental": {
             "type": "object",
             "properties": {
@@ -11305,6 +11351,24 @@
             "type": "string"
           },
           "version": {
+            "type": "string"
+          },
+          "providerID": {
+            "type": "string"
+          },
+          "modelID": {
+            "type": "string"
+          },
+          "gitBranch": {
+            "type": "string"
+          },
+          "gitWorktree": {
+            "type": "string"
+          },
+          "prReference": {
+            "type": "string"
+          },
+          "displayName": {
             "type": "string"
           },
           "time": {

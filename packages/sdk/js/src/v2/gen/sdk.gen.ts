@@ -1296,6 +1296,12 @@ export class Session2 extends HeyApiClient {
       title?: string
       permission?: PermissionRuleset
       workspaceID?: string
+      providerID?: string
+      modelID?: string
+      gitBranch?: string
+      gitWorktree?: string
+      prReference?: string
+      displayName?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1310,6 +1316,12 @@ export class Session2 extends HeyApiClient {
             { in: "body", key: "title" },
             { in: "body", key: "permission" },
             { in: "body", key: "workspaceID" },
+            { in: "body", key: "providerID" },
+            { in: "body", key: "modelID" },
+            { in: "body", key: "gitBranch" },
+            { in: "body", key: "gitWorktree" },
+            { in: "body", key: "prReference" },
+            { in: "body", key: "displayName" },
           ],
         },
       ],

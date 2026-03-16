@@ -830,6 +830,12 @@ export type Session = {
   }
   title: string
   version: string
+  providerID?: string
+  modelID?: string
+  gitBranch?: string
+  gitWorktree?: string
+  prReference?: string
+  displayName?: string
   time: {
     created: number
     updated: number
@@ -1481,6 +1487,12 @@ export type Config = {
      */
     reserved?: number
   }
+  daemon?: {
+    /**
+     * Auto-create git worktrees for new daemon tabs
+     */
+    worktree?: boolean
+  }
   experimental?: {
     disable_paste_summary?: boolean
     /**
@@ -1694,6 +1706,12 @@ export type GlobalSession = {
   }
   title: string
   version: string
+  providerID?: string
+  modelID?: string
+  gitBranch?: string
+  gitWorktree?: string
+  prReference?: string
+  displayName?: string
   time: {
     created: number
     updated: number
@@ -2772,6 +2790,12 @@ export type SessionCreateData = {
     title?: string
     permission?: PermissionRuleset
     workspaceID?: string
+    providerID?: string
+    modelID?: string
+    gitBranch?: string
+    gitWorktree?: string
+    prReference?: string
+    displayName?: string
   }
   path?: never
   query?: {
