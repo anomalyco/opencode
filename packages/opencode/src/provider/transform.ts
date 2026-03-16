@@ -185,6 +185,8 @@ function normalizeMessages(
         // Filter out reasoning parts from content
         const filteredContent = msg.content.filter((part: any) => part.type !== "reasoning")
 
+        if (filteredContent.length === 0) return undefined
+
         // Include reasoning_content | reasoning_details directly on the message for all assistant messages
         if (reasoningText) {
           return {
@@ -207,7 +209,7 @@ function normalizeMessages(
       }
 
       return msg
-    })
+    }).filter((msg): msg is ModelMessage => msg !== undefined)
   }
 
   return msgs
