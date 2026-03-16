@@ -248,6 +248,14 @@ export type ProviderAuthError = {
   }
 }
 
+export type NetworkSilenceError = {
+  name: "NetworkSilenceError"
+  data: {
+    message: string
+    code?: string
+  }
+}
+
 export type UnknownError = {
   name: "UnknownError"
   data: {
@@ -317,6 +325,7 @@ export type AssistantMessage = {
     | StructuredOutputError
     | ContextOverflowError
     | ApiError
+    | NetworkSilenceError
   parentID: string
   modelID: string
   providerID: string
@@ -879,6 +888,7 @@ export type EventSessionError = {
       | StructuredOutputError
       | ContextOverflowError
       | ApiError
+      | NetworkSilenceError
   }
 }
 

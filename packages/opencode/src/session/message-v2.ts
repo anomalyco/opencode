@@ -916,28 +916,53 @@ export namespace MessageV2 {
     "EAI_AGAIN",
     "UND_ERR_CONNECT_TIMEOUT",
     "UND_ERR_SOCKET",
+    "ECONNABORTED",
+    "UND_ERR_CLOSED",
+    "UND_ERR_HEADERS_TIMEOUT",
+    "ERR_CONNECTION_CLOSED",
+    "ERR_CONNECTION_RESET",
   ])
 
-  function isNetworkSilence(e: unknown): boolean {
+  function isNetworkSilence(e: unknown, ctx?: { providerID: ProviderID; modelID?: ModelID }): boolean {
     if (!e || typeof e !== "object") return false
+
+    if (APICallError.isInstance(e)) {
+      // Fast-fail gateway errors generically
+      if (e.statusCode === 502 || e.statusCode === 503 || e.statusCode === 504 || e.statusCode === 500) {
+        return true
+      }
+
+      // APICallError wrapping a network-level failure (no HTTP status received)
+      if (!e.statusCode && e.cause) return isNetworkSilence(e.cause, ctx)
+
+      return false
+    }
+
+    if (e instanceof Error) {
+      if (/fetch failed|terminated|unable to connect|Is the computer able to access the url/i.test(e.message)) return true
+      if (e.cause instanceof Error && /fetch failed|terminated|unable to connect|Is the computer able to access the url/i.test(e.cause.message)) return true
+    }
+
     const err = e as Record<string, unknown>
     if (typeof err.code === "string" && NETWORK_CODES.has(err.code)) return true
-    const cause = (err as Error).cause as Record<string, unknown> | undefined
+    const cause = (err as unknown as Error).cause as Record<string, unknown> | undefined
     if (cause && typeof cause.code === "string" && NETWORK_CODES.has(cause.code)) return true
-    if (err instanceof TypeError && /fetch failed|terminated/i.test(err.message)) return true
-    // APICallError wrapping a network-level failure (no HTTP status received)
-    if (APICallError.isInstance(e) && !e.statusCode && e.cause) return isNetworkSilence(e.cause)
+
     return false
   }
 
-  function networkMessage(e: Error): string {
-    const cause = e.cause as Record<string, unknown> | undefined
-    const code = (e as unknown as SystemError).code ?? (cause as SystemError | undefined)?.code
+  function networkMessage(e: unknown): string {
+    const err = e as any
+    const cause = err?.cause as Record<string, unknown> | undefined
+    const code = err?.code ?? (cause as SystemError | undefined)?.code
     if (code) return `Network error (${code})`
-    return e.message || "Network error"
+    return err?.message || "Network error"
   }
 
-  export function fromError(e: unknown, ctx: { providerID: ProviderID }): NonNullable<Assistant["error"]> {
+  export function fromError(
+    e: unknown,
+    ctx: { providerID: ProviderID; modelID?: ModelID },
+  ): NonNullable<Assistant["error"]> {
     switch (true) {
       case e instanceof DOMException && e.name === "AbortError":
         return new MessageV2.AbortedError(
@@ -956,10 +981,10 @@ export namespace MessageV2 {
           },
           { cause: e },
         ).toObject()
-      case isNetworkSilence(e):
+      case isNetworkSilence(e, ctx):
         return new MessageV2.NetworkSilenceError(
           {
-            message: networkMessage(e as Error),
+            message: networkMessage(e),
             code: (e as SystemError)?.code,
           },
           { cause: e },
