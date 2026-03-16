@@ -84,6 +84,8 @@ export type SessionItemProps = {
   prefetchSession: (session: Session, priority?: "high" | "low") => void
   archiveSession: (session: Session) => Promise<void>
   deleteSession: (session: Session) => Promise<void>
+  renameSession: (session: Session, next: string) => Promise<void>
+  InlineEditor: typeof import("../layout/inline-editor").createInlineEditorController extends (...args: any[]) => { InlineEditor: infer T } ? T : never
 }
 
 const SessionRow = (props: {
@@ -104,6 +106,8 @@ const SessionRow = (props: {
   warmPress: () => void
   warmFocus: () => void
   cancelHoverPrefetch: () => void
+  renameSession: (session: Session, next: string) => Promise<void>
+  InlineEditor: typeof import("../layout/inline-editor").createInlineEditorController extends (...args: any[]) => { InlineEditor: infer T } ? T : never
 }): JSX.Element => (
   <A
     href={`/${props.slug}/session/${props.session.id}`}
@@ -143,9 +147,15 @@ const SessionRow = (props: {
           </Switch>
         </div>
       </Show>
-      <span class="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate">
-        {props.session.title}
-      </span>
+      <props.InlineEditor
+        id={`session:${props.session.id}`}
+        value={() => props.session.title}
+        onSave={(next) => props.renameSession(props.session, next)}
+        class="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate"
+        displayClass="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate"
+        stopPropagation
+        openOnDblClick
+      />
     </div>
   </A>
 )
@@ -302,6 +312,8 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
       warmPress={() => warm(2, "high")}
       warmFocus={() => warm(2, "high")}
       cancelHoverPrefetch={cancelHoverPrefetch}
+      renameSession={props.renameSession}
+      InlineEditor={props.InlineEditor}
     />
   )
 

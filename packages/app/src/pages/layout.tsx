@@ -944,6 +944,23 @@ export default function Layout(props: ParentProps) {
     }
   }
 
+  async function renameSession(session: Session, next: string) {
+    if (next === session.title) return
+    const [store, setStore] = globalSync.child(session.directory)
+
+    await globalSDK.client.session.update({
+      directory: session.directory,
+      sessionID: session.id,
+      title: next,
+    })
+    setStore(
+      produce((draft) => {
+        const match = Binary.search(draft.session, session.id, (s) => s.id)
+        if (match.found) draft.session[match.index].title = next
+      }),
+    )
+  }
+
   async function archiveSession(session: Session) {
     const [store, setStore] = globalSync.child(session.directory)
     const sessions = store.session ?? []
@@ -1908,6 +1925,7 @@ export default function Layout(props: ParentProps) {
     deleteSession,
     workspaceName,
     renameWorkspace,
+    renameSession,
     editorOpen,
     openEditor,
     closeEditor,
@@ -1953,6 +1971,8 @@ export default function Layout(props: ParentProps) {
       prefetchSession,
       archiveSession,
       deleteSession,
+      renameSession,
+      InlineEditor,
     },
     setHoverSession,
   }

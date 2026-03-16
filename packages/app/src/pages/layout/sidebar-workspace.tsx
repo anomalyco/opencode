@@ -42,6 +42,7 @@ export type WorkspaceSidebarContext = {
   prefetchSession: (session: Session, priority?: "high" | "low") => void
   archiveSession: (session: Session) => Promise<void>
   deleteSession: (session: Session) => Promise<void>
+  renameSession: (session: Session, next: string) => Promise<void>
   workspaceName: (directory: string, projectId?: string, branch?: string) => string | undefined
   renameWorkspace: (directory: string, next: string, projectId?: string, branch?: string) => void
   editorOpen: (id: string) => boolean
@@ -293,6 +294,8 @@ const WorkspaceSessionList = (props: {
               prefetchSession={props.ctx.prefetchSession}
               archiveSession={props.ctx.archiveSession}
               deleteSession={props.ctx.deleteSession}
+              renameSession={props.ctx.renameSession}
+              InlineEditor={props.ctx.InlineEditor}
             />
           )}
         </For>
@@ -320,6 +323,8 @@ const WorkspaceSessionList = (props: {
             prefetchSession={props.ctx.prefetchSession}
             archiveSession={props.ctx.archiveSession}
             deleteSession={props.ctx.deleteSession}
+            renameSession={props.ctx.renameSession}
+            InlineEditor={props.ctx.InlineEditor}
           />
         )}
       </For>
