@@ -368,8 +368,8 @@ describe("session.llm.stream", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const resolved = await Provider.getModel(providerID, model.id)
-        const sessionID = "session-test-tools"
+        const resolved = await Provider.getModel(ProviderID.make(providerID), ModelID.make(model.id))
+        const sessionID = SessionID.make("session-test-tools")
         const agent = {
           name: "test",
           mode: "primary",
@@ -378,12 +378,12 @@ describe("session.llm.stream", () => {
         } satisfies Agent.Info
 
         const user = {
-          id: "user-tools",
+          id: MessageID.make("user-tools"),
           sessionID,
           role: "user",
           time: { created: Date.now() },
           agent: agent.name,
-          model: { providerID, modelID: resolved.id },
+          model: { providerID: ProviderID.make(providerID), modelID: resolved.id },
           tools: { question: true },
         } satisfies MessageV2.User
 
