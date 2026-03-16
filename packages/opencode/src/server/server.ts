@@ -55,7 +55,7 @@ export namespace Server {
 
   export const Default = lazy(() => createApp({}))
 
-  export const createApp = (opts: { cors?: string[] }): Hono => {
+  export const createApp = (opts: { cors?: string[]; daemon?: boolean }): Hono => {
     const app = new Hono()
     return app
       .onError((err, c) => {
@@ -192,9 +192,17 @@ export namespace Server {
         },
       )
       .use(async (c, next) => {
-        if (c.req.path === "/log") return next()
+        const exemptPaths = ["/log", "/doc"]
+        if (exemptPaths.some((p) => c.req.path === p)) return next()
         const rawWorkspaceID = c.req.query("workspace") || c.req.header("x-opencode-workspace")
-        const raw = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
+        const rawDir = c.req.query("directory") || c.req.header("x-opencode-directory")
+        if (opts.daemon && !rawDir) {
+          return c.json(
+            { error: "directory query param or x-opencode-directory header is required in daemon mode" },
+            400,
+          )
+        }
+        const raw = rawDir || process.cwd()
         const directory = Filesystem.resolve(
           (() => {
             try {
@@ -597,6 +605,7 @@ export namespace Server {
     mdns?: boolean
     mdnsDomain?: string
     cors?: string[]
+    daemon?: boolean
   }) {
     url = new URL(`http://${opts.hostname}:${opts.port}`)
     const app = createApp(opts)
