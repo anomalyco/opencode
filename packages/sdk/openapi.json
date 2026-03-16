@@ -7302,6 +7302,41 @@
         },
         "required": ["type", "properties"]
       },
+      "Event.file.watcher.updated": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "file.watcher.updated"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": "string"
+              },
+              "event": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "const": "add"
+                  },
+                  {
+                    "type": "string",
+                    "const": "change"
+                  },
+                  {
+                    "type": "string",
+                    "const": "unlink"
+                  }
+                ]
+              }
+            },
+            "required": ["file", "event"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
       "Event.server.connected": {
         "type": "object",
         "properties": {
@@ -8866,41 +8901,6 @@
         },
         "required": ["type", "properties"]
       },
-      "Event.file.watcher.updated": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "file.watcher.updated"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "file": {
-                "type": "string"
-              },
-              "event": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "const": "add"
-                  },
-                  {
-                    "type": "string",
-                    "const": "change"
-                  },
-                  {
-                    "type": "string",
-                    "const": "unlink"
-                  }
-                ]
-              }
-            },
-            "required": ["file", "event"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
       "Todo": {
         "type": "object",
         "properties": {
@@ -9627,6 +9627,9 @@
             "$ref": "#/components/schemas/Event.permission.replied"
           },
           {
+            "$ref": "#/components/schemas/Event.file.watcher.updated"
+          },
+          {
             "$ref": "#/components/schemas/Event.server.connected"
           },
           {
@@ -9664,9 +9667,6 @@
           },
           {
             "$ref": "#/components/schemas/Event.session.compacted"
-          },
-          {
-            "$ref": "#/components/schemas/Event.file.watcher.updated"
           },
           {
             "$ref": "#/components/schemas/Event.todo.updated"
