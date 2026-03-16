@@ -780,7 +780,7 @@ export namespace Provider {
 
       models[`${id}-1m`] = {
         ...model,
-        id: `${id}-1m`,
+        id: ModelID.make(`${id}-1m`),
         name: `${name} (1M Experimental)`,
         status: "beta",
         limit: { ...model.limit, context: 1_000_000 },
