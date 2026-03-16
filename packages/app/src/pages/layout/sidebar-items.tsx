@@ -109,8 +109,8 @@ const SessionRow = (props: {
     href={`/${props.slug}/session/${props.session.id}`}
     class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none ${props.mobile ? "pr-[76px]" : ""} group-hover/session:pr-[76px] group-focus-within/session:pr-[76px] group-active/session:pr-[76px] ${props.dense ? "py-0.5" : "py-1"}`}
     onPointerDown={props.warmPress}
-    onPointerEnter={props.warmHover}
-    onPointerLeave={props.cancelHoverPrefetch}
+    onMouseEnter={props.warmHover}
+    onMouseLeave={props.cancelHoverPrefetch}
     onFocus={props.warmFocus}
     onClick={() => {
       props.setHoverSession(undefined)
