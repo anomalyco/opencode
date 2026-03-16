@@ -409,9 +409,7 @@ export class FileService extends ServiceMap.Service<FileService, FileService.Ser
                 dirs.add(entry.name + "/")
 
                 const base = path.join(instance.directory, entry.name)
-                const children = await fs.promises
-                  .readdir(base, { withFileTypes: true })
-                  .catch(() => [] as fs.Dirent[])
+                const children = await fs.promises.readdir(base, { withFileTypes: true }).catch(() => [] as fs.Dirent[])
                 for (const child of children) {
                   if (!child.isDirectory()) continue
                   if (shouldIgnoreNested(child.name)) continue
