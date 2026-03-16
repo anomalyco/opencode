@@ -1,3 +1,4 @@
+import { usePlatform } from "@/context/platform"
 import type { ServerConnection } from "@/context/server"
 import { createSdkForServer } from "./server"
 
@@ -80,4 +81,11 @@ export async function checkServerHealth(
       .then((x) => (x.error ? next(count, x.error) : { healthy: x.data?.healthy === true, version: x.data?.version }))
       .catch((error) => next(count, error))
   return attempt(0).finally(() => timeout?.clear?.())
+}
+
+export function useCheckServerHealth() {
+  const platform = usePlatform()
+  const fetcher = platform.fetch ?? globalThis.fetch
+
+  return (http: ServerConnection.HttpBase) => checkServerHealth(http, fetcher)
 }

@@ -12,6 +12,7 @@ import {
   Index,
   type JSX,
 } from "solid-js"
+import { createStore } from "solid-js/store"
 import stripAnsi from "strip-ansi"
 import { Dynamic } from "solid-js/web"
 import {
@@ -53,6 +54,7 @@ import { AnimatedCountList } from "./tool-count-summary"
 import { ToolStatusTitle } from "./tool-status-title"
 import { animate } from "motion"
 import { useLocation } from "@solidjs/router"
+import { attached, inline, kind } from "./message-file"
 
 function ShellSubmessage(props: { text: string; animate?: boolean }) {
   let widthRef: HTMLSpanElement | undefined
@@ -129,10 +131,16 @@ function DiagnosticsDisplay(props: { diagnostics: Diagnostic[] }): JSX.Element {
 export interface MessageProps {
   message: MessageType
   parts: PartType[]
+  actions?: UserActions
   showAssistantCopyPartID?: string | null
-  interrupted?: boolean
-  queued?: boolean
   showReasoningSummaries?: boolean
+}
+
+export type SessionAction = (input: { sessionID: string; messageID: string }) => Promise<void> | void
+
+export type UserActions = {
+  fork?: SessionAction
+  revert?: SessionAction
 }
 
 export interface MessagePartProps {
@@ -315,7 +323,7 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
     case "skill":
       return {
         icon: "brain",
-        title: input.name || "skill",
+        title: input.name || i18n.t("ui.tool.skill"),
       }
     default:
       return {
@@ -335,6 +343,17 @@ function urls(text: string | undefined) {
       seen.add(item)
       return true
     })
+}
+
+function sessionLink(id: string | undefined, path: string, href?: (id: string) => string | undefined) {
+  if (!id) return
+
+  const direct = href?.(id)
+  if (direct) return direct
+
+  const idx = path.indexOf("/session")
+  if (idx === -1) return
+  return `${path.slice(0, idx)}/session/${id}`
 }
 
 const CONTEXT_GROUP_TOOLS = new Set(["read", "glob", "grep", "list"])
@@ -673,12 +692,7 @@ export function Message(props: MessageProps) {
     <Switch>
       <Match when={props.message.role === "user" && props.message}>
         {(userMessage) => (
-          <UserMessageDisplay
-            message={userMessage() as UserMessage}
-            parts={props.parts}
-            interrupted={props.interrupted}
-            queued={props.queued}
-          />
+          <UserMessageDisplay message={userMessage() as UserMessage} parts={props.parts} actions={props.actions} />
         )}
       </Match>
       <Match when={props.message.role === "assistant" && props.message}>
@@ -869,16 +883,16 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
   )
 }
 
-export function UserMessageDisplay(props: {
-  message: UserMessage
-  parts: PartType[]
-  interrupted?: boolean
-  queued?: boolean
-}) {
+export function UserMessageDisplay(props: { message: UserMessage; parts: PartType[]; actions?: UserActions }) {
   const data = useData()
   const dialog = useDialog()
   const i18n = useI18n()
-  const [copied, setCopied] = createSignal(false)
+  const [state, setState] = createStore({
+    copied: false,
+    busy: undefined as "fork" | "revert" | undefined,
+  })
+  const copied = () => state.copied
+  const busy = () => state.busy
 
   const textPart = createMemo(
     () => props.parts?.find((p) => p.type === "text" && !(p as TextPart).synthetic) as TextPart | undefined,
@@ -888,19 +902,9 @@ export function UserMessageDisplay(props: {
 
   const files = createMemo(() => (props.parts?.filter((p) => p.type === "file") as FilePart[]) ?? [])
 
-  const attachments = createMemo(() =>
-    files()?.filter((f) => {
-      const mime = f.mime
-      return mime.startsWith("image/") || mime === "application/pdf"
-    }),
-  )
+  const attachments = createMemo(() => files().filter(attached))
 
-  const inlineFiles = createMemo(() =>
-    files().filter((f) => {
-      const mime = f.mime
-      return !mime.startsWith("image/") && mime !== "application/pdf" && f.source?.text?.start !== undefined
-    }),
-  )
+  const inlineFiles = createMemo(() => files().filter(inline))
 
   const agents = createMemo(() => (props.parts?.filter((p) => p.type === "agent") as AgentPart[]) ?? [])
 
@@ -911,15 +915,12 @@ export function UserMessageDisplay(props: {
     const match = data.store.provider?.all?.find((p) => p.id === providerID)
     return match?.models?.[modelID]?.name ?? modelID
   })
+  const timefmt = createMemo(() => new Intl.DateTimeFormat(i18n.locale(), { timeStyle: "short" }))
 
   const stamp = createMemo(() => {
     const created = props.message.time?.created
     if (typeof created !== "number") return ""
-    const date = new Date(created)
-    const hours = date.getHours()
-    const hour12 = hours % 12 || 12
-    const minute = String(date.getMinutes()).padStart(2, "0")
-    return `${hour12}:${minute} ${hours < 12 ? "AM" : "PM"}`
+    return timefmt().format(created)
   })
 
   const metaHead = createMemo(() => {
@@ -928,10 +929,7 @@ export function UserMessageDisplay(props: {
     return items.filter((x) => !!x).join("\u00A0\u00B7\u00A0")
   })
 
-  const metaTail = createMemo(() => {
-    const items = [stamp(), props.interrupted ? i18n.t("ui.message.interrupted") : ""]
-    return items.filter((x) => !!x).join("\u00A0\u00B7\u00A0")
-  })
+  const metaTail = stamp
 
   const openImagePreview = (url: string, alt?: string) => {
     dialog.show(() => <ImagePreview src={url} alt={alt} />)
@@ -941,58 +939,70 @@ export function UserMessageDisplay(props: {
     const content = text()
     if (!content) return
     await navigator.clipboard.writeText(content)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    setState("copied", true)
+    setTimeout(() => setState("copied", false), 2000)
+  }
+
+  const run = (kind: "fork" | "revert") => {
+    const act = kind === "fork" ? props.actions?.fork : props.actions?.revert
+    if (!act || busy()) return
+    setState("busy", kind)
+    void Promise.resolve()
+      .then(() =>
+        act({
+          sessionID: props.message.sessionID,
+          messageID: props.message.id,
+        }),
+      )
+      .finally(() => {
+        if (busy() === kind) setState("busy", undefined)
+      })
   }
 
   return (
-    <div data-component="user-message" data-interrupted={props.interrupted ? "" : undefined}>
+    <div data-component="user-message">
       <Show when={attachments().length > 0}>
         <div data-slot="user-message-attachments">
           <For each={attachments()}>
-            {(file) => (
-              <div
-                data-slot="user-message-attachment"
-                data-type={file.mime.startsWith("image/") ? "image" : "file"}
-                data-queued={props.queued ? "" : undefined}
-                onClick={() => {
-                  if (file.mime.startsWith("image/") && file.url) {
-                    openImagePreview(file.url, file.filename)
-                  }
-                }}
-              >
-                <Show
-                  when={file.mime.startsWith("image/") && file.url}
-                  fallback={
-                    <div data-slot="user-message-attachment-icon">
-                      <Icon name="folder" />
-                    </div>
-                  }
+            {(file) => {
+              const type = kind(file)
+              const name = file.filename ?? i18n.t("ui.message.attachment.alt")
+
+              return (
+                <div
+                  data-slot="user-message-attachment"
+                  data-type={type}
+                  data-clickable={type === "image" ? "true" : undefined}
+                  title={type === "file" ? name : undefined}
+                  onClick={() => {
+                    if (type === "image") openImagePreview(file.url, name)
+                  }}
                 >
-                  <img
-                    data-slot="user-message-attachment-image"
-                    src={file.url}
-                    alt={file.filename ?? i18n.t("ui.message.attachment.alt")}
-                  />
-                </Show>
-              </div>
-            )}
+                  <Show
+                    when={type === "image"}
+                    fallback={
+                      <div data-slot="user-message-attachment-file">
+                        <FileIcon node={{ path: name, type: "file" }} />
+                        <span data-slot="user-message-attachment-name">{name}</span>
+                      </div>
+                    }
+                  >
+                    <img data-slot="user-message-attachment-image" src={file.url} alt={name} />
+                  </Show>
+                </div>
+              )
+            }}
           </For>
         </div>
       </Show>
       <Show when={text()}>
         <>
           <div data-slot="user-message-body">
-            <div data-slot="user-message-text" data-queued={props.queued ? "" : undefined}>
+            <div data-slot="user-message-text">
               <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
             </div>
-            <Show when={props.queued}>
-              <div data-slot="user-message-queued-indicator">
-                <TextShimmer text={i18n.t("ui.message.queued")} />
-              </div>
-            </Show>
           </div>
-          <div data-slot="user-message-copy-wrapper" data-interrupted={props.interrupted ? "" : undefined}>
+          <div data-slot="user-message-copy-wrapper">
             <Show when={metaHead() || metaTail()}>
               <span data-slot="user-message-meta-wrap">
                 <Show when={metaHead()}>
@@ -1011,6 +1021,38 @@ export function UserMessageDisplay(props: {
                   </span>
                 </Show>
               </span>
+            </Show>
+            <Show when={props.actions?.fork}>
+              <Tooltip value={i18n.t("ui.message.forkMessage")} placement="top" gutter={4}>
+                <IconButton
+                  icon="fork"
+                  size="normal"
+                  variant="ghost"
+                  disabled={!!busy()}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    run("fork")
+                  }}
+                  aria-label={i18n.t("ui.message.forkMessage")}
+                />
+              </Tooltip>
+            </Show>
+            <Show when={props.actions?.revert}>
+              <Tooltip value={i18n.t("ui.message.revertMessage")} placement="top" gutter={4}>
+                <IconButton
+                  icon="reset"
+                  size="normal"
+                  variant="ghost"
+                  disabled={!!busy()}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    run("revert")
+                  }}
+                  aria-label={i18n.t("ui.message.revertMessage")}
+                />
+              </Tooltip>
             </Show>
             <Tooltip
               value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
@@ -1165,6 +1207,7 @@ function ToolFileAccordion(props: { path: string; actions?: JSX.Element; childre
 }
 
 PART_MAPPING["tool"] = function ToolPartDisplay(props) {
+  const data = useData()
   const i18n = useI18n()
   const part = () => props.part as ToolPart
   if (part().tool === "todowrite" || part().tool === "todoread") return null
@@ -1179,6 +1222,21 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const input = () => part().state?.input ?? emptyInput
   // @ts-expect-error
   const partMetadata = () => part().state?.metadata ?? emptyMetadata
+  const taskId = createMemo(() => {
+    if (part().tool !== "task") return
+    const value = partMetadata().sessionId
+    if (typeof value === "string" && value) return value
+  })
+  const taskHref = createMemo(() => {
+    if (part().tool !== "task") return
+    return sessionLink(taskId(), useLocation().pathname, data.sessionHref)
+  })
+  const taskSubtitle = createMemo(() => {
+    if (part().tool !== "task") return undefined
+    const value = input().description
+    if (typeof value === "string" && value) return value
+    return taskId()
+  })
 
   const render = createMemo(() => ToolRegistry.render(part().tool) ?? GenericTool)
 
@@ -1198,7 +1256,15 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
                   </div>
                 )
               }
-              return <ToolErrorCard tool={part().tool} error={error()} defaultOpen={props.defaultOpen} />
+              return (
+                <ToolErrorCard
+                  tool={part().tool}
+                  error={error()}
+                  defaultOpen={props.defaultOpen}
+                  subtitle={taskSubtitle()}
+                  href={taskHref()}
+                />
+              )
             }}
           </Match>
           <Match when={true}>
@@ -1220,14 +1286,13 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   )
 }
 
-PART_MAPPING["compaction"] = function CompactionPartDisplay() {
-  const i18n = useI18n()
+export function MessageDivider(props: { label: string }) {
   return (
     <div data-component="compaction-part">
       <div data-slot="compaction-part-divider">
         <span data-slot="compaction-part-line" />
         <span data-slot="compaction-part-label" class="text-12-regular text-text-weak">
-          {i18n.t("ui.messagePart.compaction")}
+          {props.label}
         </span>
         <span data-slot="compaction-part-line" />
       </div>
@@ -1235,9 +1300,15 @@ PART_MAPPING["compaction"] = function CompactionPartDisplay() {
   )
 }
 
+PART_MAPPING["compaction"] = function CompactionPartDisplay() {
+  const i18n = useI18n()
+  return <MessageDivider label={i18n.t("ui.messagePart.compaction")} />
+}
+
 PART_MAPPING["text"] = function TextPartDisplay(props) {
   const data = useData()
   const i18n = useI18n()
+  const numfmt = createMemo(() => new Intl.NumberFormat(i18n.locale()))
   const part = () => props.part as TextPart
   const interrupted = createMemo(
     () =>
@@ -1263,10 +1334,13 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
           : -1
     if (!(ms >= 0)) return ""
     const total = Math.round(ms / 1000)
-    if (total < 60) return `${total}s`
+    if (total < 60) return i18n.t("ui.message.duration.seconds", { count: numfmt().format(total) })
     const minutes = Math.floor(total / 60)
     const seconds = total % 60
-    return `${minutes}m ${seconds}s`
+    return i18n.t("ui.message.duration.minutesSeconds", {
+      minutes: numfmt().format(minutes),
+      seconds: numfmt().format(seconds),
+    })
   })
 
   const meta = createMemo(() => {
@@ -1575,25 +1649,14 @@ ToolRegistry.register({
       return raw[0]!.toUpperCase() + raw.slice(1)
     })
     const title = createMemo(() => agentTitle(i18n, type()))
-    const description = createMemo(() => {
+    const subtitle = createMemo(() => {
       const value = props.input.description
-      if (typeof value === "string") return value
-      return undefined
+      if (typeof value === "string" && value) return value
+      return childSessionId()
     })
     const running = createMemo(() => props.status === "pending" || props.status === "running")
 
-    const href = createMemo(() => {
-      const sessionId = childSessionId()
-      if (!sessionId) return
-
-      const direct = data.sessionHref?.(sessionId)
-      if (direct) return direct
-
-      const path = location.pathname
-      const idx = path.indexOf("/session")
-      if (idx === -1) return
-      return `${path.slice(0, idx)}/session/${sessionId}`
-    })
+    const href = createMemo(() => sessionLink(childSessionId(), location.pathname, data.sessionHref))
 
     const titleContent = () => <TextShimmer text={title()} active={running()} />
 
@@ -1603,7 +1666,7 @@ ToolRegistry.register({
           <span data-slot="basic-tool-tool-title" class="capitalize agent-title">
             {titleContent()}
           </span>
-          <Show when={description()}>
+          <Show when={subtitle()}>
             <Switch>
               <Match when={href()}>
                 <a
@@ -1612,11 +1675,11 @@ ToolRegistry.register({
                   href={href()!}
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {description()}
+                  {subtitle()}
                 </a>
               </Match>
               <Match when={true}>
-                <span data-slot="basic-tool-tool-subtitle">{description()}</span>
+                <span data-slot="basic-tool-tool-subtitle">{subtitle()}</span>
               </Match>
             </Switch>
           </Show>
@@ -2137,7 +2200,8 @@ ToolRegistry.register({
 ToolRegistry.register({
   name: "skill",
   render(props) {
-    const title = createMemo(() => props.input.name || "skill")
+    const i18n = useI18n()
+    const title = createMemo(() => props.input.name || i18n.t("ui.tool.skill"))
     const running = createMemo(() => props.status === "pending" || props.status === "running")
 
     const titleContent = () => <TextShimmer text={title()} active={running()} />

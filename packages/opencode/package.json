@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.2.24",
+  "version": "1.2.27",
   "name": "opencode",
   "type": "module",
   "license": "MIT",
@@ -36,6 +36,7 @@
     "@parcel/watcher-linux-arm64-musl": "2.5.1",
     "@parcel/watcher-linux-x64-glibc": "2.5.1",
     "@parcel/watcher-linux-x64-musl": "2.5.1",
+    "@parcel/watcher-win32-arm64": "2.5.1",
     "@parcel/watcher-win32-x64": "2.5.1",
     "@standard-schema/spec": "1.0.0",
     "@tsconfig/bun": "catalog:",
