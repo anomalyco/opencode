@@ -552,7 +552,14 @@ export namespace Session {
       conditions.push(eq(SessionTable.workspace_id, WorkspaceContext.workspaceID))
     }
     if (input?.directory) {
-      conditions.push(eq(SessionTable.directory, input.directory))
+      if (input.directory === project.worktree && project.sandboxes.length > 0) {
+        // When listing sessions for the main worktree, also include sessions
+        // from sandbox directories (worktrees) so they are visible even when
+        // the workspace feature is disabled.
+        conditions.push(or(eq(SessionTable.directory, input.directory), inArray(SessionTable.directory, project.sandboxes))!)
+      } else {
+        conditions.push(eq(SessionTable.directory, input.directory))
+      }
     }
     if (input?.roots) {
       conditions.push(isNull(SessionTable.parent_id))

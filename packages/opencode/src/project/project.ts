@@ -1,7 +1,7 @@
 import z from "zod"
 import { Filesystem } from "../util/filesystem"
 import path from "path"
-import { and, Database, eq } from "../storage/db"
+import { and, Database, eq, inArray } from "../storage/db"
 import { ProjectTable } from "./project.sql"
 import { SessionTable } from "../session/session.sql"
 import { Log } from "../util/log"
@@ -276,11 +276,12 @@ export namespace Project {
     // Runs on every startup because sessions created before git init
     // accumulate under "global" and need migrating whenever they appear.
     if (data.id !== ProjectID.global) {
+      const migrationDirs = [data.worktree, ...result.sandboxes.filter((s) => s !== data.worktree)]
       Database.use((db) =>
         db
           .update(SessionTable)
           .set({ project_id: data.id })
-          .where(and(eq(SessionTable.project_id, ProjectID.global), eq(SessionTable.directory, data.worktree)))
+          .where(and(eq(SessionTable.project_id, ProjectID.global), inArray(SessionTable.directory, migrationDirs)))
           .run(),
       )
     }
