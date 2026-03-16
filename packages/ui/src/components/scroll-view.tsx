@@ -63,16 +63,19 @@ export function ScrollView(props: ScrollViewProps) {
   const thumbTop = () => state.thumbTop
   const showThumb = () => state.showThumb
 
+  let rafId: number | null = null
+
   const updateThumb = () => {
     if (!viewportRef) return
     const { scrollTop, scrollHeight, clientHeight } = viewportRef
 
     if (scrollHeight <= clientHeight || scrollHeight === 0) {
-      setState("showThumb", false)
+      if (state.showThumb) {
+        setState("showThumb", false)
+      }
       return
     }
 
-    setState("showThumb", true)
     const trackPadding = 8
     const trackHeight = clientHeight - trackPadding * 2
 
@@ -89,8 +92,28 @@ export function ScrollView(props: ScrollViewProps) {
     // Ensure thumb stays within bounds (shouldn't be necessary due to math above, but good for safety)
     const boundedTop = trackPadding + Math.max(0, Math.min(top, maxThumbTop))
 
-    setState("thumbHeight", height)
-    setState("thumbTop", boundedTop)
+    // Only update if values actually changed (with small threshold to avoid floating point issues)
+    const heightChanged = Math.abs(state.thumbHeight - height) > 0.5
+    const topChanged = Math.abs(state.thumbTop - boundedTop) > 0.5
+    const showChanged = !state.showThumb
+
+    if (heightChanged || topChanged || showChanged) {
+      setState({
+        showThumb: true,
+        thumbHeight: height,
+        thumbTop: boundedTop,
+      })
+    }
+  }
+
+  const scheduleUpdateThumb = () => {
+    if (rafId !== null) {
+      cancelAnimationFrame(rafId)
+    }
+    rafId = requestAnimationFrame(() => {
+      rafId = null
+      updateThumb()
+    })
   }
 
   onMount(() => {
@@ -98,7 +121,23 @@ export function ScrollView(props: ScrollViewProps) {
       local.viewportRef(viewportRef)
     }
 
-    createResizeObserver([viewportRef, viewportRef.firstElementChild], updateThumb)
+    const observer = new ResizeObserver(() => {
+      scheduleUpdateThumb()
+    })
+
+    observer.observe(viewportRef)
+    // Also observe the first child if possible to catch content changes
+    if (viewportRef.firstElementChild) {
+      observer.observe(viewportRef.firstElementChild)
+    }
+
+    onCleanup(() => {
+      observer.disconnect()
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId)
+        rafId = null
+      }
+    })
 
     updateThumb()
   })
@@ -196,7 +235,7 @@ export function ScrollView(props: ScrollViewProps) {
         ref={viewportRef}
         class="scroll-view__viewport"
         onScroll={(e) => {
-          updateThumb()
+          scheduleUpdateThumb()
           if (typeof events.onScroll === "function") events.onScroll(e as any)
         }}
         onWheel={events.onWheel as any}

@@ -1,6 +1,7 @@
 .scroll-view {
   position: relative;
   overflow: hidden;
+  contain: layout style paint;
 }
 
 .scroll-view__viewport {
@@ -24,6 +25,8 @@
   cursor: default;
   user-select: none;
   opacity: 0;
+  will-change: transform;
+  contain: layout style paint;
 }
 
 .scroll-view__thumb::after {
