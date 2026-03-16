@@ -1,4 +1,3 @@
-import { Effect } from "effect"
 import { Log } from "@/util/log"
 import { Context } from "../util/context"
 import { Project } from "./project"
@@ -6,7 +5,7 @@ import { State } from "./state"
 import { iife } from "@/util/iife"
 import { GlobalBus } from "@/bus/global"
 import { Filesystem } from "@/util/filesystem"
-import { InstanceState } from "@/util/instance-state"
+import { disposeInstance } from "@/effect/instance-registry"
 
 interface Context {
   directory: string
@@ -108,17 +107,18 @@ export const Instance = {
   async reload(input: { directory: string; init?: () => Promise<any>; project?: Project.Info; worktree?: string }) {
     const directory = Filesystem.resolve(input.directory)
     Log.Default.info("reloading instance", { directory })
-    await Promise.all([State.dispose(directory), Effect.runPromise(InstanceState.dispose(directory))])
+    await Promise.all([State.dispose(directory), disposeInstance(directory)])
     cache.delete(directory)
     const next = track(directory, boot({ ...input, directory }))
     emit(directory)
     return await next
   },
   async dispose() {
-    Log.Default.info("disposing instance", { directory: Instance.directory })
-    await Promise.all([State.dispose(Instance.directory), Effect.runPromise(InstanceState.dispose(Instance.directory))])
-    cache.delete(Instance.directory)
-    emit(Instance.directory)
+    const directory = Instance.directory
+    Log.Default.info("disposing instance", { directory })
+    await Promise.all([State.dispose(directory), disposeInstance(directory)])
+    cache.delete(directory)
+    emit(directory)
   },
   async disposeAll() {
     if (disposal.all) return disposal.all
