@@ -1,4 +1,5 @@
 import { test, expect } from "../fixtures"
+import { waitTerminalReady } from "../actions"
 import { promptSelector, terminalSelector } from "../selectors"
 
 test("/terminal toggles the terminal panel", async ({ page, gotoSession }) => {
@@ -13,7 +14,7 @@ test("/terminal toggles the terminal panel", async ({ page, gotoSession }) => {
   await prompt.fill("/terminal")
   await expect(slash).toBeVisible()
   await page.keyboard.press("Enter")
-  await expect(terminal).toBeVisible()
+  await waitTerminalReady(page, { term: terminal })
 
   // Terminal panel retries focus (immediate, RAF, 120ms, 240ms) after opening,
   // which can steal focus from the prompt and prevent fill() from triggering

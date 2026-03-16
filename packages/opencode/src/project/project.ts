@@ -1,12 +1,11 @@
 import z from "zod"
 import { Filesystem } from "../util/filesystem"
 import path from "path"
-import { Database, eq } from "../storage/db"
+import { and, Database, eq } from "../storage/db"
 import { ProjectTable } from "./project.sql"
 import { SessionTable } from "../session/session.sql"
 import { Log } from "../util/log"
 import { Flag } from "@/flag/flag"
-import { work } from "../util/queue"
 import { fn } from "@opencode-ai/util/fn"
 import { BusEvent } from "@/bus/bus-event"
 import { iife } from "@/util/iife"
@@ -148,7 +147,7 @@ export namespace Project {
 
         // generate id from root commit
         if (!id) {
-          const roots = await git(["rev-list", "--max-parents=0", "--all"], {
+          const roots = await git(["rev-list", "--max-parents=0", "HEAD"], {
             cwd: sandbox,
           })
             .then(async (result) =>
@@ -171,7 +170,8 @@ export namespace Project {
 
           id = roots[0] ? ProjectID.make(roots[0]) : undefined
           if (id) {
-            await Filesystem.write(path.join(dotgit, "opencode"), id).catch(() => undefined)
+            // Write to common dir so the cache is shared across worktrees.
+            await Filesystem.write(path.join(worktree, ".git", "opencode"), id).catch(() => undefined)
           }
         }
 
@@ -218,23 +218,18 @@ export namespace Project {
     })
 
     const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, data.id)).get())
-    const existing = await iife(async () => {
-      if (row) return fromRow(row)
-      const fresh: Info = {
-        id: data.id,
-        worktree: data.worktree,
-        vcs: data.vcs as Info["vcs"],
-        sandboxes: [],
-        time: {
-          created: Date.now(),
-          updated: Date.now(),
-        },
-      }
-      if (data.id !== ProjectID.global) {
-        await migrateFromGlobal(data.id, data.worktree)
-      }
-      return fresh
-    })
+    const existing = row
+      ? fromRow(row)
+      : {
+          id: data.id,
+          worktree: data.worktree,
+          vcs: data.vcs as Info["vcs"],
+          sandboxes: [] as string[],
+          time: {
+            created: Date.now(),
+            updated: Date.now(),
+          },
+        }
 
     if (Flag.OPENCODE_EXPERIMENTAL_ICON_DISCOVERY) discover(existing)
 
@@ -277,6 +272,18 @@ export namespace Project {
     Database.use((db) =>
       db.insert(ProjectTable).values(insert).onConflictDoUpdate({ target: ProjectTable.id, set: updateSet }).run(),
     )
+    // Runs after upsert so the target project row exists (FK constraint).
+    // Runs on every startup because sessions created before git init
+    // accumulate under "global" and need migrating whenever they appear.
+    if (data.id !== ProjectID.global) {
+      Database.use((db) =>
+        db
+          .update(SessionTable)
+          .set({ project_id: data.id })
+          .where(and(eq(SessionTable.project_id, ProjectID.global), eq(SessionTable.directory, data.worktree)))
+          .run(),
+      )
+    }
     GlobalBus.emit("event", {
       payload: {
         type: Event.Updated.type,
@@ -308,28 +315,6 @@ export namespace Project {
       },
     })
     return
-  }
-
-  async function migrateFromGlobal(id: ProjectID, worktree: string) {
-    const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, ProjectID.global)).get())
-    if (!row) return
-
-    const sessions = Database.use((db) =>
-      db.select().from(SessionTable).where(eq(SessionTable.project_id, ProjectID.global)).all(),
-    )
-    if (sessions.length === 0) return
-
-    log.info("migrating sessions from global", { newProjectID: id, worktree, count: sessions.length })
-
-    await work(10, sessions, async (row) => {
-      // Skip sessions that belong to a different directory
-      if (row.directory && row.directory !== worktree) return
-
-      log.info("migrating session", { sessionID: row.id, from: ProjectID.global, to: id })
-      Database.use((db) => db.update(SessionTable).set({ project_id: id }).where(eq(SessionTable.id, row.id)).run())
-    }).catch((error) => {
-      log.error("failed to migrate sessions from global to project", { error, projectId: id })
-    })
   }
 
   export function setInitialized(id: ProjectID) {
