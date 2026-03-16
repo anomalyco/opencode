@@ -1,3 +1,12 @@
+/**
+ * Formats a duration in seconds to a human-readable string.
+ *
+ * Converts seconds to appropriate units (seconds, minutes, hours, days, weeks)
+ * and returns a formatted string like "5m 30s" or "~2 days".
+ *
+ * @param secs Duration in seconds
+ * @returns Formatted duration string
+ */
 export function formatDuration(secs: number) {
   if (secs <= 0) return ""
   if (secs < 60) return `${secs}s`
