@@ -6,6 +6,7 @@ import { QuestionService } from "@/question/service"
 import { PermissionService } from "@/permission/service"
 import { FileWatcherService } from "@/file/watcher"
 import { VcsService } from "@/project/vcs"
+import { FileTimeService } from "@/file/time"
 import { Instance } from "@/project/instance"
 
 export { InstanceContext } from "./instance-context"
@@ -16,6 +17,7 @@ export type InstanceServices =
   | ProviderAuthService
   | FileWatcherService
   | VcsService
+  | FileTimeService
 
 function lookup(directory: string) {
   const project = Instance.project
@@ -24,8 +26,9 @@ function lookup(directory: string) {
     Layer.fresh(QuestionService.layer),
     Layer.fresh(PermissionService.layer),
     Layer.fresh(ProviderAuthService.layer),
-    Layer.fresh(FileWatcherService.layer),
+    Layer.fresh(FileWatcherService.layer).pipe(Layer.orDie),
     Layer.fresh(VcsService.layer),
+    Layer.fresh(FileTimeService.layer).pipe(Layer.orDie),
   ).pipe(Layer.provide(ctx))
 }
 
