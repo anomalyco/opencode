@@ -29,6 +29,14 @@ describe("Filesystem.contains", () => {
     expect(Filesystem.contains("/project", "/project-other/file")).toBe(false)
     expect(Filesystem.contains("/project", "/projectfile")).toBe(false)
   })
+
+  if (process.platform === "win32") {
+    test("blocks win32 rooted paths outside project", () => {
+      expect(Filesystem.contains("C:/project", "/etc/passwd")).toBe(false)
+      expect(Filesystem.contains("C:/project", "D:/other/file")).toBe(false)
+      expect(Filesystem.contains("C:/project", "C:/project/src/file.ts")).toBe(true)
+    })
+  }
 })
 
 /*
