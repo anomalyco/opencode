@@ -1,4 +1,5 @@
 import { test as base, expect, type Page } from "@playwright/test"
+import type { E2EWindow } from "../src/testing/terminal"
 import { cleanupSession, cleanupTestProject, createTestProject, seedProjects, sessionIDFromUrl } from "./actions"
 import { promptSelector } from "./selectors"
 import { createSdk, dirSlug, getWorktree, sessionPath } from "./utils"
@@ -91,6 +92,17 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
 async function seedStorage(page: Page, input: { directory: string; extra?: string[] }) {
   await seedProjects(page, input)
   await page.addInitScript(() => {
+    const win = window as E2EWindow
+    win.__opencode_e2e = {
+      ...win.__opencode_e2e,
+      model: {
+        enabled: true,
+      },
+      terminal: {
+        enabled: true,
+        terminals: {},
+      },
+    }
     localStorage.setItem(
       "opencode.global.dat:model",
       JSON.stringify({
