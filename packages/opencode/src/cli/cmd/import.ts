@@ -25,6 +25,16 @@ export function parseShareUrl(url: string): string | null {
   return match ? match[1] : null
 }
 
+/**
+ * Determines whether authentication headers should be attached when fetching shared content.
+ *
+ * Compares the origins of the share URL and account base URL to determine
+ * if they belong to the same domain (requiring auth) or different domains.
+ *
+ * @param shareUrl The URL of the shared content
+ * @param accountBaseUrl The base URL of the user's account
+ * @returns true if origins match and auth headers should be attached, false otherwise
+ */
 export function shouldAttachShareAuthHeaders(shareUrl: string, accountBaseUrl: string): boolean {
   try {
     return new URL(shareUrl).origin === new URL(accountBaseUrl).origin
