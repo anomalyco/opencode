@@ -14,6 +14,7 @@ import { Installation } from "./installation"
 import { NamedError } from "@opencode-ai/util/error"
 import { FormatError } from "./cli/error"
 import { ServeCommand } from "./cli/cmd/serve"
+import { DaemonCommand } from "./cli/cmd/daemon"
 import { WorkspaceServeCommand } from "./cli/cmd/workspace-serve"
 import { Filesystem } from "./util/filesystem"
 import { DebugCommand } from "./cli/cmd/debug"
@@ -23,6 +24,7 @@ import { GithubCommand } from "./cli/cmd/github"
 import { ExportCommand } from "./cli/cmd/export"
 import { ImportCommand } from "./cli/cmd/import"
 import { AttachCommand } from "./cli/cmd/tui/attach"
+import { ConnectCommand } from "./cli/cmd/connect"
 import { TuiThreadCommand } from "./cli/cmd/tui/thread"
 import { AcpCommand } from "./cli/cmd/acp"
 import { EOL } from "os"
@@ -127,6 +129,7 @@ let cli = yargs(hideBin(process.argv))
   .command(McpCommand)
   .command(TuiThreadCommand)
   .command(AttachCommand)
+  .command(ConnectCommand)
   .command(RunCommand)
   .command(GenerateCommand)
   .command(DebugCommand)
@@ -136,6 +139,7 @@ let cli = yargs(hideBin(process.argv))
   .command(UpgradeCommand)
   .command(UninstallCommand)
   .command(ServeCommand)
+  .command(DaemonCommand)
   .command(WebCommand)
   .command(ModelsCommand)
   .command(StatsCommand)
