@@ -233,7 +233,7 @@ export function Session() {
     }
   })
 
-  // Handle session.compacted event - show inline prompt with summary options
+  // Handle session.compacted event - show inline prompt with summary options (only for manual compaction)
   sdk.event.on("session.compacted", (evt) => {
     if (evt.properties.sessionID !== route.sessionID) return
 
@@ -242,6 +242,10 @@ export function Session() {
 
     const parts = sync.data.part[lastCompaction.id]
     if (!parts) return
+
+    // Skip prompt for auto compaction - it should continue automatically
+    const compactionPart = parts.find((p) => p.type === "compaction")
+    if (compactionPart?.auto === true) return
 
     const textParts = parts.filter((p) => p.type === "text").map((p) => p.text)
     if (textParts.length === 0) return
