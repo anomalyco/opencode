@@ -318,10 +318,10 @@ export const ProvidersLoginCommand = cmd({
 
         const priority: Record<string, number> = {
           opencode: 0,
-          anthropic: 1,
+          openai: 1,
           "github-copilot": 2,
-          openai: 3,
-          google: 4,
+          google: 3,
+          anthropic: 4,
           openrouter: 5,
           vercel: 6,
         }
