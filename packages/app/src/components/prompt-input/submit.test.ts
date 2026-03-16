@@ -7,12 +7,17 @@ const createdClients: string[] = []
 const createdSessions: string[] = []
 const enabledAutoAccept: Array<{ sessionID: string; directory: string }> = []
 const optimistic: Array<{
+  directory?: string
+  sessionID?: string
   message: {
     agent: string
     model: { providerID: string; modelID: string }
     variant?: string
   }
 }> = []
+const optimisticSeeded: boolean[] = []
+const storedSessions: Record<string, Array<{ id: string; title?: string }>> = {}
+const promoted: Array<{ directory: string; sessionID: string }> = []
 const sentShell: string[] = []
 const syncedDirectories: string[] = []
 
@@ -28,7 +33,12 @@ const clientFor = (directory: string) => {
     session: {
       create: async () => {
         createdSessions.push(directory)
-        return { data: { id: `session-${createdSessions.length}` } }
+        return {
+          data: {
+            id: `session-${createdSessions.length}`,
+            title: `New session ${createdSessions.length}`,
+          },
+        }
       },
       shell: async () => {
         sentShell.push(directory)
@@ -76,6 +86,11 @@ beforeAll(async () => {
       },
       agent: {
         current: () => ({ name: "agent" }),
+      },
+      session: {
+        promote(directory: string, sessionID: string) {
+          promoted.push({ directory, sessionID })
+        },
       },
     }),
   }))
@@ -129,9 +144,16 @@ beforeAll(async () => {
       session: {
         optimistic: {
           add: (value: {
+            directory?: string
+            sessionID?: string
             message: { agent: string; model: { providerID: string; modelID: string }; variant?: string }
           }) => {
             optimistic.push(value)
+            optimisticSeeded.push(
+              !!value.directory &&
+                !!value.sessionID &&
+                !!storedSessions[value.directory]?.find((item) => item.id === value.sessionID)?.title,
+            )
           },
           remove: () => undefined,
         },
@@ -144,7 +166,21 @@ beforeAll(async () => {
     useGlobalSync: () => ({
       child: (directory: string) => {
         syncedDirectories.push(directory)
-        return [{}, () => undefined]
+        storedSessions[directory] ??= []
+        return [
+          { session: storedSessions[directory] },
+          (...args: unknown[]) => {
+            if (args[0] !== "session") return
+            const next = args[1]
+            if (typeof next === "function") {
+              storedSessions[directory] = next(storedSessions[directory]) as Array<{ id: string; title?: string }>
+              return
+            }
+            if (Array.isArray(next)) {
+              storedSessions[directory] = next as Array<{ id: string; title?: string }>
+            }
+          },
+        ]
       },
     }),
   }))
@@ -170,11 +206,14 @@ beforeEach(() => {
   createdSessions.length = 0
   enabledAutoAccept.length = 0
   optimistic.length = 0
+  optimisticSeeded.length = 0
+  promoted.length = 0
   params = {}
   sentShell.length = 0
   syncedDirectories.length = 0
   selected = "/repo/worktree-a"
   variant = undefined
+  for (const key of Object.keys(storedSessions)) delete storedSessions[key]
 })
 
 describe("prompt submit worktree selection", () => {
@@ -207,7 +246,12 @@ describe("prompt submit worktree selection", () => {
     expect(createdClients).toEqual(["/repo/worktree-a", "/repo/worktree-b"])
     expect(createdSessions).toEqual(["/repo/worktree-a", "/repo/worktree-b"])
     expect(sentShell).toEqual(["/repo/worktree-a", "/repo/worktree-b"])
-    expect(syncedDirectories).toEqual(["/repo/worktree-a", "/repo/worktree-b"])
+    expect(syncedDirectories).toEqual(["/repo/worktree-a", "/repo/worktree-a", "/repo/worktree-b", "/repo/worktree-b"])
+    expect(promoted).toEqual([
+      { directory: "/repo/worktree-a", sessionID: "session-1" },
+      { directory: "/repo/worktree-b", sessionID: "session-2" },
+    ])
+    expect(syncedDirectories).toEqual(["/repo/worktree-a", "/repo/worktree-a", "/repo/worktree-b", "/repo/worktree-b"])
   })
 
   test("applies auto-accept to newly created sessions", async () => {
@@ -270,5 +314,33 @@ describe("prompt submit worktree selection", () => {
         variant: "high",
       },
     })
+  })
+
+  test("seeds new sessions before optimistic prompts are added", async () => {
+    const submit = createPromptSubmit({
+      info: () => undefined,
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      newSessionWorktree: () => selected,
+      onNewSessionWorktreeReset: () => undefined,
+      onSubmit: () => undefined,
+    })
+
+    const event = { preventDefault: () => undefined } as unknown as Event
+
+    await submit.handleSubmit(event)
+
+    expect(storedSessions["/repo/worktree-a"]).toEqual([{ id: "session-1", title: "New session 1" }])
+    expect(optimisticSeeded).toEqual([true])
   })
 })
