@@ -1342,6 +1342,10 @@ export type Config = {
      * Show individual skills as slash commands in autocomplete (default: false)
      */
     slash?: boolean
+    /**
+     * Inline full skill content into prompt on slash command invocation (default: true)
+     */
+    inline?: boolean
   }
   watcher?: {
     ignore?: Array<string>

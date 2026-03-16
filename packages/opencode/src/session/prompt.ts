@@ -1764,10 +1764,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
     const cfg = await Config.get()
     const inline = cfg.skills?.inline !== false
-    const templateCommand =
-      command.source === "skill" && !inline
-        ? `Use the skill tool to load the "${input.command}" skill and follow its instructions.`
-        : await command.template
+    const templateCommand = command.source === "skill" && !inline ? `/${input.command}` : await command.template
 
     const placeholders = templateCommand.match(placeholderRegex) ?? []
     let last = 0
