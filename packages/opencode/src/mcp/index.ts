@@ -569,6 +569,10 @@ export namespace MCP {
       return
     }
 
+    // Update config to persist enabled state
+    const mcpConfig: McpConfigured = { ...mcp, enabled: true }
+    await Config.update({ mcp: { [name]: mcpConfig } })
+
     const result = await create(name, { ...mcp, enabled: true })
 
     if (!result) {
@@ -604,6 +608,15 @@ export namespace MCP {
       delete s.clients[name]
     }
     s.status[name] = { status: "disabled" }
+    
+    // Update config to persist disabled state
+    const cfg = await Config.get()
+    const config = cfg.mcp ?? {}
+    const mcp = config[name]
+    if (mcp && isMcpConfigured(mcp)) {
+      const mcpConfig: McpConfigured = { ...mcp, enabled: false }
+      await Config.update({ mcp: { [name]: mcpConfig } })
+    }
   }
 
   export async function tools() {
