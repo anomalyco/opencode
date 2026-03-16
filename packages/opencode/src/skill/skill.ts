@@ -207,7 +207,7 @@ export namespace Skill {
           `  <skill>`,
           `    <name>${skill.name}</name>`,
           `    <description>${skill.description}</description>`,
-          `    <location>${pathToFileURL(skill.location).href}</location>`,
+          `    <location>${skill.location}</location>`,
           `  </skill>`,
         ]),
         "</available_skills>",

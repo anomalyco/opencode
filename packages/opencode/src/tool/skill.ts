@@ -56,7 +56,6 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
       })
 
       const dir = path.dirname(skill.location)
-      const base = pathToFileURL(dir).href
 
       const limit = 10
       const files = await iife(async () => {
@@ -84,10 +83,10 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
           `<skill_content name="${skill.name}">`,
           `# Skill: ${skill.name}`,
           "",
-          skill.content.trim(),
+          skill.content.trim().replace(/\{\{SKILL_DIR\}\}/g, () => dir),
           "",
-          `Base directory for this skill: ${base}`,
-          "Relative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.",
+          `Base directory for this skill: ${dir}`,
+          "IMPORTANT: When reading files requested by this loaded skill's instructions, you MUST resolve relative paths against the skill's base directory above, NOT the project root.",
           "Note: file list is sampled.",
           "",
           "<skill_files>",
