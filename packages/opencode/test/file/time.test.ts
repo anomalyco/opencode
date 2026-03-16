@@ -132,7 +132,7 @@ describe("file/time", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          FileTime.read(sessionID, filepath)
+          await FileTime.read(sessionID, filepath)
           await Bun.sleep(100)
           await fs.writeFile(filepath, "modified", "utf-8")
 
