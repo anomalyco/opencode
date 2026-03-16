@@ -464,7 +464,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             const cached = store.message[sessionID] !== undefined && meta.limit[key] !== undefined
             if (cached && hasSession && !opts?.force) return
 
-            const limit = meta.limit[key] ?? initialMessagePageSize
+            // Force-refreshes fetch the latest page, not the entire browsing
+            // history. meta.limit grows via loadMore() as the user scrolls up
+            // and that inflated value must not carry into a fresh re-fetch.
+            const limit = opts?.force ? initialMessagePageSize : (meta.limit[key] ?? initialMessagePageSize)
             const sessionReq =
               hasSession && !opts?.force
                 ? Promise.resolve()
