@@ -54,12 +54,27 @@ export namespace Keybind {
     return result
   }
 
+  const CTRL_CHAR_TO_LETTER: Record<string, string> = {
+    linefeed: "j", // Ctrl+J (0x0A)
+    escape: "[", // Ctrl+[ (0x1B)
+    return: "m", // Ctrl+M (0x0D)
+    tab: "i", // Ctrl+I (0x09)
+    backspace: "h", // Ctrl+H (0x08)
+  }
+
+  export function normalizeLeaderKey(key: ParsedKey): ParsedKey {
+    const letter = CTRL_CHAR_TO_LETTER[key.name ?? ""]
+    if (letter) return { ...key, name: letter, ctrl: false }
+    if (key.ctrl && key.name && key.name.length === 1) return { ...key, ctrl: false }
+    return key
+  }
+
   export function parse(key: string): Info[] {
     if (key === "none") return []
 
     return key.split(",").map((combo) => {
       // Handle <leader> syntax by replacing with leader+
-      const normalized = combo.replace(/<leader>/g, "leader+")
+      const normalized = combo.trim().replace(/<leader>/g, "leader+")
       const parts = normalized.toLowerCase().split("+")
       const info: Info = {
         ctrl: false,

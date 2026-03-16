@@ -418,4 +418,140 @@ describe("Keybind.parse", () => {
       },
     ])
   })
+
+  test("should parse leader with closing bracket", () => {
+    const result = Keybind.parse("<leader>],alt+]")
+    expect(result).toEqual([
+      {
+        ctrl: false,
+        meta: false,
+        shift: false,
+        leader: true,
+        name: "]",
+      },
+      {
+        ctrl: false,
+        meta: true,
+        shift: false,
+        leader: false,
+        name: "]",
+      },
+    ])
+  })
+
+  test("should parse leader with opening bracket", () => {
+    const result = Keybind.parse("<leader>[,alt+[")
+    expect(result).toEqual([
+      {
+        ctrl: false,
+        meta: false,
+        shift: false,
+        leader: true,
+        name: "[",
+      },
+      {
+        ctrl: false,
+        meta: true,
+        shift: false,
+        leader: false,
+        name: "[",
+      },
+    ])
+  })
+
+  test("should trim whitespace around comma-separated keybinds", () => {
+    const result = Keybind.parse(" <leader>] , alt+] ")
+    expect(result).toEqual([
+      {
+        ctrl: false,
+        meta: false,
+        shift: false,
+        leader: true,
+        name: "]",
+      },
+      {
+        ctrl: false,
+        meta: true,
+        shift: false,
+        leader: false,
+        name: "]",
+      },
+    ])
+  })
+
+  test("should match parsed leader bracket with simulated event", () => {
+    const parsed = Keybind.parse("<leader>]")
+    const event: Keybind.Info = { ctrl: false, meta: false, shift: false, leader: true, name: "]" }
+    expect(Keybind.match(parsed[0], event)).toBe(true)
+  })
+})
+
+describe("Keybind.normalizeLeaderKey", () => {
+  const base = {
+    ctrl: false,
+    meta: false,
+    shift: false,
+    super: false,
+    option: false,
+    number: false,
+    sequence: "",
+    raw: "",
+    eventType: "press",
+    source: "raw",
+  } as const
+
+  test("should map linefeed to j", () => {
+    const result = Keybind.normalizeLeaderKey({ ...base, name: "linefeed" })
+    expect(result.name).toBe("j")
+    expect(result.ctrl).toBe(false)
+  })
+
+  test("should map escape to [", () => {
+    const result = Keybind.normalizeLeaderKey({ ...base, name: "escape" })
+    expect(result.name).toBe("[")
+    expect(result.ctrl).toBe(false)
+  })
+
+  test("should map return to m", () => {
+    const result = Keybind.normalizeLeaderKey({ ...base, name: "return" })
+    expect(result.name).toBe("m")
+    expect(result.ctrl).toBe(false)
+  })
+
+  test("should map tab to i", () => {
+    const result = Keybind.normalizeLeaderKey({ ...base, name: "tab" })
+    expect(result.name).toBe("i")
+    expect(result.ctrl).toBe(false)
+  })
+
+  test("should map backspace to h", () => {
+    const result = Keybind.normalizeLeaderKey({ ...base, name: "backspace" })
+    expect(result.name).toBe("h")
+    expect(result.ctrl).toBe(false)
+  })
+
+  test("should strip ctrl from single-letter key", () => {
+    const result = Keybind.normalizeLeaderKey({ ...base, name: "k", ctrl: true })
+    expect(result.name).toBe("k")
+    expect(result.ctrl).toBe(false)
+  })
+
+  test("should pass through plain letter unchanged", () => {
+    const result = Keybind.normalizeLeaderKey({ ...base, name: "j" })
+    expect(result.name).toBe("j")
+    expect(result.ctrl).toBe(false)
+  })
+
+  test("should not strip ctrl from multi-char names like f2", () => {
+    const result = Keybind.normalizeLeaderKey({ ...base, name: "f2", ctrl: true })
+    expect(result.name).toBe("f2")
+    expect(result.ctrl).toBe(true)
+  })
+
+  test("should preserve other modifiers when mapping control chars", () => {
+    const result = Keybind.normalizeLeaderKey({ ...base, name: "linefeed", shift: true })
+    expect(result.name).toBe("j")
+    expect(result.ctrl).toBe(false)
+    expect(result.shift).toBe(true)
+  })
 })
