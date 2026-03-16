@@ -2,7 +2,6 @@ import { useFilteredList } from "@opencode-ai/ui/hooks"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
 import { createEffect, on, Component, Show, onCleanup, Switch, Match, createMemo, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
-import { createFocusSignal } from "@solid-primitives/active-element"
 import { useLocal } from "@/context/local"
 import { selectionFromLines, type SelectedLineRange, useFile } from "@/context/file"
 import {
@@ -411,7 +410,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
   }
 
-  const isFocused = createFocusSignal(() => editorRef)
   const escBlur = () => platform.platform === "desktop" && platform.os === "macos"
 
   const pick = () => fileInputRef?.click()
@@ -1014,7 +1012,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const { addAttachment, removeAttachment, handlePaste } = createPromptAttachments({
     editor: () => editorRef,
-    isFocused,
     isDialogActive: () => !!dialog.active,
     setDraggingType: (type) => setStore("draggingType", type),
     focusEditor: () => {
