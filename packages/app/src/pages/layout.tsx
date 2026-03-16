@@ -64,6 +64,7 @@ import { ConstrainDragXAxis, getDraggableId } from "@/utils/solid-dnd"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { DialogEditProject } from "@/components/dialog-edit-project"
 import { DebugBar } from "@/components/debug-bar"
+import { hide } from "@/components/debug-bar-state"
 import { Titlebar } from "@/components/titlebar"
 import { useServer } from "@/context/server"
 import { useLanguage, type Locale } from "@/context/language"
@@ -2412,7 +2413,7 @@ export default function Layout(props: ParentProps) {
             </div>
           </div>
         </div>
-        {import.meta.env.DEV && !import.meta.env.VITE_HIDE_DEBUG_BAR && <DebugBar />}
+        {import.meta.env.DEV && !hide(import.meta.env.VITE_HIDE_DEBUG_BAR) && <DebugBar />}
       </div>
       <Toast.Region />
     </div>
