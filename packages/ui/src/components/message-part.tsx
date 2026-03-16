@@ -1658,6 +1658,33 @@ ToolRegistry.register({
 
     const href = createMemo(() => sessionLink(childSessionId(), location.pathname, data.sessionHref))
 
+    createEffect(() => {
+      const id = childSessionId()
+      if (!id) return
+      void Promise.resolve(data.syncSession?.(id)).catch(() => undefined)
+    })
+
+    const open = async (e: MouseEvent) => {
+      e.stopPropagation()
+
+      const id = childSessionId()
+      const url = href()
+      if (!id || !url) return
+      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+
+      const nav = data.navigateToSession
+      if (!nav || typeof window === "undefined") return
+
+      e.preventDefault()
+      const before = window.location.pathname + window.location.search + window.location.hash
+      await Promise.resolve(data.syncSession?.(id)).catch(() => undefined)
+      await Promise.resolve(nav(id))
+      setTimeout(() => {
+        const after = window.location.pathname + window.location.search + window.location.hash
+        if (after === before) window.location.assign(url)
+      }, 50)
+    }
+
     const titleContent = () => <TextShimmer text={title()} active={running()} />
 
     const trigger = () => (
@@ -1673,7 +1700,7 @@ ToolRegistry.register({
                   data-slot="basic-tool-tool-subtitle"
                   class="clickable subagent-link"
                   href={href()!}
-                  onClick={(e) => e.stopPropagation()}
+                  onClick={open}
                 >
                   {subtitle()}
                 </a>

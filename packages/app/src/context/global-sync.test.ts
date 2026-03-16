@@ -1,6 +1,14 @@
 import { describe, expect, test } from "bun:test"
 import { canDisposeDirectory, pickDirectoriesToEvict } from "./global-sync/eviction"
-import { estimateRootSessionTotal, loadRootSessionsWithFallback } from "./global-sync/session-load"
+import { estimateRootSessionTotal, loadChildSessions, loadRootSessionsWithFallback } from "./global-sync/session-load"
+import type { Session } from "@opencode-ai/sdk/v2/client"
+
+const session = (input: { id: string; parentID?: string }) =>
+  ({
+    id: input.id,
+    parentID: input.parentID,
+    time: { created: 0, updated: 0, archived: undefined },
+  }) as Session
 
 describe("pickDirectoriesToEvict", () => {
   test("keeps pinned stores and evicts idle stores", () => {
@@ -74,6 +82,52 @@ describe("estimateRootSessionTotal", () => {
 
   test("keeps exact total when limited fetch is under limit", () => {
     expect(estimateRootSessionTotal({ count: 9, limit: 10, limited: true })).toBe(9)
+  })
+})
+
+describe("loadChildSessions", () => {
+  test("loads descendant sessions breadth-first", async () => {
+    const calls = [] as string[]
+
+    const result = await loadChildSessions({
+      directory: "dir",
+      root: [session({ id: "root" })],
+      children: async (query) => {
+        calls.push(query.sessionID)
+        if (query.sessionID === "root") {
+          return { data: [session({ id: "child", parentID: "root" })] }
+        }
+        if (query.sessionID === "child") {
+          return { data: [session({ id: "grand", parentID: "child" })] }
+        }
+        return { data: [] }
+      },
+    })
+
+    expect(calls).toEqual(["root", "child", "grand"])
+    expect(result.map((item) => item.id)).toEqual(["child", "grand"])
+  })
+
+  test("dedupes repeated descendants and skips archived children", async () => {
+    const result = await loadChildSessions({
+      directory: "dir",
+      root: [session({ id: "root" })],
+      children: async (query) => {
+        if (query.sessionID !== "root") return { data: [] }
+        return {
+          data: [
+            session({ id: "child", parentID: "root" }),
+            session({ id: "child", parentID: "root" }),
+            {
+              ...session({ id: "archived", parentID: "root" }),
+              time: { created: 0, updated: 0, archived: 1 },
+            },
+          ],
+        }
+      },
+    })
+
+    expect(result.map((item) => item.id)).toEqual(["child"])
   })
 })
 

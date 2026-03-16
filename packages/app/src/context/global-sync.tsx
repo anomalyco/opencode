@@ -30,7 +30,7 @@ import { createChildStoreManager } from "./global-sync/child-store"
 import { applyDirectoryEvent, applyGlobalEvent, cleanupDroppedSessionCaches } from "./global-sync/event-reducer"
 import { createRefreshQueue } from "./global-sync/queue"
 import { clearSessionPrefetchDirectory } from "./global-sync/session-prefetch"
-import { estimateRootSessionTotal, loadRootSessionsWithFallback } from "./global-sync/session-load"
+import { estimateRootSessionTotal, loadChildSessions, loadRootSessionsWithFallback } from "./global-sync/session-load"
 import { trimSessions } from "./global-sync/session-trim"
 import type { ProjectMeta } from "./global-sync/types"
 import { SESSION_RECENT_LIMIT } from "./global-sync/types"
@@ -204,14 +204,19 @@ function createGlobalSync() {
       limit,
       list: (query) => globalSDK.client.session.list(query),
     })
-      .then((x) => {
+      .then(async (x) => {
         const nonArchived = (x.data ?? [])
           .filter((s) => !!s?.id)
           .filter((s) => !s.time?.archived)
           .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+        const fetched = await loadChildSessions({
+          directory,
+          root: nonArchived,
+          children: (query) => sdkFor(directory).session.children(query),
+        })
         const limit = store.limit
-        const childSessions = store.session.filter((s) => !!s.parentID)
-        const sessions = trimSessions([...nonArchived, ...childSessions], {
+        const child = store.session.filter((s) => !!s.parentID)
+        const sessions = trimSessions([...nonArchived, ...fetched, ...child], {
           limit,
           permission: store.permission,
         })

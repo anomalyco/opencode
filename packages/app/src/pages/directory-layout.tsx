@@ -20,8 +20,12 @@ function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
     <DataProvider
       data={sync.data}
       directory={props.directory}
-      onNavigateToSession={(sessionID: string) => navigate(`/${slug()}/session/${sessionID}`)}
+      onNavigateToSession={async (sessionID: string) => {
+        await Promise.resolve(sync.session.sync(sessionID)).catch(() => undefined)
+        navigate(`/${slug()}/session/${sessionID}`)
+      }}
       onSessionHref={(sessionID: string) => `/${slug()}/session/${sessionID}`}
+      onSyncSession={(sessionID: string) => sync.session.sync(sessionID)}
     >
       <LocalProvider>{props.children}</LocalProvider>
     </DataProvider>

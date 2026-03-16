@@ -40,17 +40,53 @@ export function trimSessions(
     .filter((s) => !!s?.id)
     .filter((s) => !s.time?.archived)
     .sort((a, b) => cmp(a.id, b.id))
+  const byId = new Map(all.map((item) => [item.id, item]))
+  const byParent = new Map<string, Session[]>()
+  for (const item of all) {
+    if (!item.parentID) continue
+    const list = byParent.get(item.parentID)
+    if (list) {
+      list.push(item)
+      continue
+    }
+    byParent.set(item.parentID, [item])
+  }
   const roots = all.filter((s) => !s.parentID)
   const children = all.filter((s) => !!s.parentID)
   const base = roots.slice(0, limit)
   const recent = takeRecentSessions(roots.slice(limit), SESSION_RECENT_LIMIT, cutoff)
-  const keepRoots = [...base, ...recent]
-  const keepRootIds = new Set(keepRoots.map((s) => s.id))
-  const keepChildren = children.filter((s) => {
-    if (s.parentID && keepRootIds.has(s.parentID)) return true
-    const perms = options.permission[s.id] ?? []
-    if (perms.length > 0) return true
-    return sessionUpdatedAt(s) > cutoff
-  })
-  return [...keepRoots, ...keepChildren].sort((a, b) => cmp(a.id, b.id))
+  const keep = new Set([...base, ...recent].map((item) => item.id))
+
+  const add = (id: string) => {
+    if (keep.has(id)) return
+    keep.add(id)
+  }
+
+  const walk = (id: string) => {
+    const list = byParent.get(id)
+    if (!list) return
+    for (const item of list) {
+      if (keep.has(item.id)) continue
+      keep.add(item.id)
+      walk(item.id)
+    }
+  }
+
+  for (const item of [...base, ...recent]) {
+    walk(item.id)
+  }
+
+  for (const item of children) {
+    const perms = options.permission[item.id] ?? []
+    if (perms.length === 0 && sessionUpdatedAt(item) <= cutoff) continue
+    walk(item.id)
+    add(item.id)
+    let pid = item.parentID
+    while (pid) {
+      add(pid)
+      pid = byId.get(pid)?.parentID
+    }
+  }
+
+  return all.filter((item) => keep.has(item.id))
 }

@@ -54,6 +54,24 @@ describe("trimSessions", () => {
       "child-kept-by-root",
       "root-1",
       "root-2",
+      "z-root",
     ])
+  })
+
+  test("keeps nested descendants for visible roots and ancestor chains for active descendants", () => {
+    const now = 1_000_000
+    const list = [
+      session({ id: "root", created: now - 1_000 }),
+      session({ id: "child", parentID: "root", created: now - 2_000 }),
+      session({ id: "grand", parentID: "child", created: now - 3_000 }),
+      session({ id: "z-root", created: now - 30_000_000 }),
+      session({ id: "z-child", parentID: "z-root", created: now - 20_000_000 }),
+      session({ id: "z-grand", parentID: "z-child", created: now - 500 }),
+      session({ id: "z-sibling", parentID: "z-root", created: now - 20_000_000 }),
+    ]
+
+    const result = trimSessions(list, { limit: 1, permission: {}, now })
+
+    expect(result.map((x) => x.id)).toEqual(["child", "grand", "root", "z-child", "z-grand", "z-root"])
   })
 })

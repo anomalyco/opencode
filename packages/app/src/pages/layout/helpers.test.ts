@@ -8,11 +8,14 @@ import {
 } from "./deep-links"
 import { type Session } from "@opencode-ai/sdk/v2/client"
 import {
+  childMapByParent,
+  childSessions,
   displayName,
   effectiveWorkspaceOrder,
   errorMessage,
   hasProjectPermissions,
   latestRootSession,
+  sessionMap,
   workspaceKey,
 } from "./helpers"
 
@@ -196,6 +199,39 @@ describe("layout workspace helpers", () => {
     )
 
     expect(result?.id).toBe("root")
+  })
+
+  test("builds sorted child session lists from the tree", () => {
+    const list = [
+      session({ id: "root", directory: "/workspace", time: { created: 1, updated: 1, archived: undefined } }),
+      session({
+        id: "child-old",
+        directory: "/workspace",
+        parentID: "root",
+        time: { created: 1, updated: 10, archived: undefined },
+      }),
+      session({
+        id: "child-new",
+        directory: "/workspace",
+        parentID: "root",
+        time: { created: 2, updated: 20, archived: undefined },
+      }),
+      session({
+        id: "archived",
+        directory: "/workspace",
+        parentID: "root",
+        time: { created: 3, updated: 30, archived: 30 },
+      }),
+    ]
+
+    const result = childSessions({
+      parentID: "root",
+      sessions: sessionMap(list),
+      children: childMapByParent(list),
+      now: 1_000,
+    })
+
+    expect(result.map((item) => item.id)).toEqual(["child-new", "child-old"])
   })
 
   test("formats fallback project display name", () => {

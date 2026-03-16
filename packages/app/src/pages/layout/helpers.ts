@@ -43,7 +43,7 @@ export function hasProjectPermissions<T>(
 export const childMapByParent = (sessions: Session[]) => {
   const map = new Map<string, string[]>()
   for (const session of sessions) {
-    if (!session.parentID) continue
+    if (!session.parentID || session.time?.archived) continue
     const existing = map.get(session.parentID)
     if (existing) {
       existing.push(session.id)
@@ -53,6 +53,19 @@ export const childMapByParent = (sessions: Session[]) => {
   }
   return map
 }
+
+export const sessionMap = (sessions: Session[]) => new Map(sessions.map((session) => [session.id, session]))
+
+export const childSessions = (input: {
+  parentID: string
+  sessions: Map<string, Session>
+  children: Map<string, string[]>
+  now: number
+}) =>
+  (input.children.get(input.parentID) ?? [])
+    .map((id) => input.sessions.get(id))
+    .filter((session): session is Session => !!session && !session.time?.archived)
+    .toSorted(sortSessions(input.now))
 
 export const displayName = (project: { name?: string; worktree: string }) =>
   project.name || getFilename(project.worktree)

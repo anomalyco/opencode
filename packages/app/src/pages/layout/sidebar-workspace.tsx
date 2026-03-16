@@ -17,7 +17,7 @@ import { type LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { NewSessionItem, SessionItem, SessionSkeleton } from "./sidebar-items"
-import { childMapByParent, sortedRootSessions } from "./helpers"
+import { childMapByParent, childSessions, sessionMap, sortedRootSessions } from "./helpers"
 
 type InlineEditorComponent = (props: {
   id: string
@@ -244,29 +244,28 @@ const WorkspaceSessionList = (props: {
   showNew: Accessor<boolean>
   loading: Accessor<boolean>
   sessions: Accessor<Session[]>
+  byId: Accessor<Map<string, Session>>
   children: Accessor<Map<string, string[]>>
+  sortNow: Accessor<number>
   hasMore: Accessor<boolean>
   loadMore: () => Promise<void>
   language: ReturnType<typeof useLanguage>
-}): JSX.Element => (
-  <nav class="flex flex-col gap-1">
-    <Show when={props.showNew()}>
-      <NewSessionItem
-        slug={props.slug()}
-        mobile={props.mobile}
-        sidebarExpanded={props.ctx.sidebarExpanded}
-        clearHoverProjectSoon={props.ctx.clearHoverProjectSoon}
-        setHoverSession={props.ctx.setHoverSession}
-      />
-    </Show>
-    <Show when={props.loading()}>
-      <SessionSkeleton />
-    </Show>
-    <For each={props.sessions()}>
-      {(session) => (
+}) => {
+  const Tree = (tree: { session: Session; list: Session[] }): JSX.Element => {
+    const kids = createMemo(() =>
+      childSessions({
+        parentID: tree.session.id,
+        sessions: props.byId(),
+        children: props.children(),
+        now: props.sortNow(),
+      }),
+    )
+
+    return (
+      <div class="flex flex-col gap-1">
         <SessionItem
-          session={session}
-          list={props.sessions()}
+          session={tree.session}
+          list={tree.list}
           navList={props.ctx.navList}
           slug={props.slug()}
           mobile={props.mobile}
@@ -281,25 +280,48 @@ const WorkspaceSessionList = (props: {
           prefetchSession={props.ctx.prefetchSession}
           archiveSession={props.ctx.archiveSession}
         />
-      )}
-    </For>
-    <Show when={props.hasMore()}>
-      <div class="relative w-full py-1">
-        <Button
-          variant="ghost"
-          class="flex w-full text-left justify-start text-14-regular text-text-weak pl-9 pr-10"
-          size="large"
-          onClick={(e: MouseEvent) => {
-            props.loadMore()
-            ;(e.currentTarget as HTMLButtonElement).blur()
-          }}
-        >
-          {props.language.t("common.loadMore")}
-        </Button>
+        <Show when={kids().length > 0}>
+          <div class="ml-5 flex flex-col gap-1 border-l border-border-weaker-base pl-2">
+            <For each={kids()}>{(session) => <Tree session={session} list={kids()} />}</For>
+          </div>
+        </Show>
       </div>
-    </Show>
-  </nav>
-)
+    )
+  }
+
+  return (
+    <nav class="flex flex-col gap-1">
+      <Show when={props.showNew()}>
+        <NewSessionItem
+          slug={props.slug()}
+          mobile={props.mobile}
+          sidebarExpanded={props.ctx.sidebarExpanded}
+          clearHoverProjectSoon={props.ctx.clearHoverProjectSoon}
+          setHoverSession={props.ctx.setHoverSession}
+        />
+      </Show>
+      <Show when={props.loading()}>
+        <SessionSkeleton />
+      </Show>
+      <For each={props.sessions()}>{(session) => <Tree session={session} list={props.sessions()} />}</For>
+      <Show when={props.hasMore()}>
+        <div class="relative w-full py-1">
+          <Button
+            variant="ghost"
+            class="flex w-full text-left justify-start text-14-regular text-text-weak pl-9 pr-10"
+            size="large"
+            onClick={(e: MouseEvent) => {
+              props.loadMore()
+              ;(e.currentTarget as HTMLButtonElement).blur()
+            }}
+          >
+            {props.language.t("common.loadMore")}
+          </Button>
+        </div>
+      </Show>
+    </nav>
+  )
+}
 
 export const SortableWorkspace = (props: {
   ctx: WorkspaceSidebarContext
@@ -321,6 +343,7 @@ export const SortableWorkspace = (props: {
   })
   const slug = createMemo(() => base64Encode(props.directory))
   const sessions = createMemo(() => sortedRootSessions(workspaceStore, props.sortNow()))
+  const byId = createMemo(() => sessionMap(workspaceStore.session))
   const children = createMemo(() => childMapByParent(workspaceStore.session))
   const local = createMemo(() => props.directory === props.project.worktree)
   const active = createMemo(() => props.ctx.currentDir() === props.directory)
@@ -444,7 +467,9 @@ export const SortableWorkspace = (props: {
             showNew={showNew}
             loading={loading}
             sessions={sessions}
+            byId={byId}
             children={children}
+            sortNow={props.sortNow}
             hasMore={hasMore}
             loadMore={loadMore}
             language={language}
@@ -470,6 +495,7 @@ export const LocalWorkspace = (props: {
   })
   const slug = createMemo(() => base64Encode(props.project.worktree))
   const sessions = createMemo(() => sortedRootSessions(workspace().store, props.sortNow()))
+  const byId = createMemo(() => sessionMap(workspace().store.session))
   const children = createMemo(() => childMapByParent(workspace().store.session))
   const booted = createMemo((prev) => prev || workspace().store.status === "complete", false)
   const loading = createMemo(() => !booted() && sessions().length === 0)
@@ -492,7 +518,9 @@ export const LocalWorkspace = (props: {
         showNew={() => false}
         loading={loading}
         sessions={sessions}
+        byId={byId}
         children={children}
+        sortNow={props.sortNow}
         hasMore={hasMore}
         loadMore={loadMore}
         language={language}
