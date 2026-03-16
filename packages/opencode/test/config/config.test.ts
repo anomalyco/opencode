@@ -587,7 +587,7 @@ Nested agent prompt`,
   })
 })
 
-test("loads commands from .opencode/command (singular)", async () => {
+test("loads text commands from .opencode/command (singular)", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       const opencodeDir = path.join(dir, ".opencode")
@@ -597,7 +597,7 @@ test("loads commands from .opencode/command (singular)", async () => {
       await fs.mkdir(path.join(commandDir, "nested"), { recursive: true })
 
       await Filesystem.write(
-        path.join(commandDir, "hello.md"),
+        path.join(commandDir, "hello.txt"),
         `---
 description: Test command
 ---
@@ -605,12 +605,14 @@ Hello from singular command`,
       )
 
       await Filesystem.write(
-        path.join(commandDir, "nested", "child.md"),
+        path.join(commandDir, "nested", "child.prompt"),
         `---
 description: Nested command
 ---
 Nested command template`,
       )
+
+      await Filesystem.write(path.join(commandDir, "script"), "#!/usr/bin/env bash\necho hello")
     },
   })
 
@@ -628,11 +630,15 @@ Nested command template`,
         description: "Nested command",
         template: "Nested command template",
       })
+
+      expect(config.command?.["script"]).toEqual({
+        template: "#!/usr/bin/env bash\necho hello",
+      })
     },
   })
 })
 
-test("loads commands from .opencode/commands (plural)", async () => {
+test("loads text commands from .opencode/commands (plural)", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       const opencodeDir = path.join(dir, ".opencode")
@@ -642,7 +648,7 @@ test("loads commands from .opencode/commands (plural)", async () => {
       await fs.mkdir(path.join(commandsDir, "nested"), { recursive: true })
 
       await Filesystem.write(
-        path.join(commandsDir, "hello.md"),
+        path.join(commandsDir, "hello.txt"),
         `---
 description: Test command
 ---
@@ -650,12 +656,14 @@ Hello from plural commands`,
       )
 
       await Filesystem.write(
-        path.join(commandsDir, "nested", "child.md"),
+        path.join(commandsDir, "nested", "child.prompt"),
         `---
 description: Nested command
 ---
 Nested command template`,
       )
+
+      await Filesystem.write(path.join(commandsDir, "binary.bin"), Uint8Array.from([0, 159, 146, 150]))
     },
   })
 
@@ -673,6 +681,8 @@ Nested command template`,
         description: "Nested command",
         template: "Nested command template",
       })
+
+      expect(config.command?.["binary"]).toBeUndefined()
     },
   })
 })

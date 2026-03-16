@@ -38,6 +38,7 @@ import { ConfigPaths } from "./paths"
 import { Filesystem } from "@/util/filesystem"
 import { Process } from "@/util/process"
 import { Lock } from "@/util/lock"
+import { ConfigCommands } from "./commands"
 
 export namespace Config {
   const ModelId = z.string().meta({ $ref: "https://models.dev/model-schema.json#/$defs/Model" })
@@ -368,11 +369,11 @@ export namespace Config {
   }
 
   function rel(item: string, patterns: string[]) {
-    const normalizedItem = item.replaceAll("\\", "/")
+    const file = item.replaceAll("\\", "/")
     for (const pattern of patterns) {
-      const index = normalizedItem.indexOf(pattern)
+      const index = file.indexOf(pattern)
       if (index === -1) continue
-      return normalizedItem.slice(index + pattern.length)
+      return file.slice(index + pattern.length)
     }
   }
 
@@ -382,41 +383,7 @@ export namespace Config {
   }
 
   async function loadCommand(dir: string) {
-    const result: Record<string, Command> = {}
-    for (const item of await Glob.scan("{command,commands}/**/*.md", {
-      cwd: dir,
-      absolute: true,
-      dot: true,
-      symlink: true,
-    })) {
-      const md = await ConfigMarkdown.parse(item).catch(async (err) => {
-        const message = ConfigMarkdown.FrontmatterError.isInstance(err)
-          ? err.data.message
-          : `Failed to parse command ${item}`
-        const { Session } = await import("@/session")
-        Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
-        log.error("failed to load command", { command: item, err })
-        return undefined
-      })
-      if (!md) continue
-
-      const patterns = ["/.opencode/command/", "/.opencode/commands/", "/command/", "/commands/"]
-      const file = rel(item, patterns) ?? path.basename(item)
-      const name = trim(file)
-
-      const config = {
-        name,
-        ...md.data,
-        template: md.content.trim(),
-      }
-      const parsed = Command.safeParse(config)
-      if (parsed.success) {
-        result[config.name] = parsed.data
-        continue
-      }
-      throw new InvalidError({ path: item, issues: parsed.error.issues }, { cause: parsed.error })
-    }
-    return result
+    return ConfigCommands.load(dir, Command)
   }
 
   async function loadAgent(dir: string) {
@@ -691,14 +658,8 @@ export namespace Config {
     })
   export type Permission = z.infer<typeof Permission>
 
-  export const Command = z.object({
-    template: z.string(),
-    description: z.string().optional(),
-    agent: z.string().optional(),
-    model: ModelId.optional(),
-    subtask: z.boolean().optional(),
-  })
-  export type Command = z.infer<typeof Command>
+  export const Command = ConfigCommands.schema(ModelId)
+  export type Command = ConfigCommands.Command
 
   export const Skills = z.object({
     paths: z.array(z.string()).optional().describe("Additional paths to skill folders"),

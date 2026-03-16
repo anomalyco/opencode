@@ -15,7 +15,7 @@ Custom commands are in addition to the built-in commands like `/init`, `/undo`, 
 
 ## Create command files
 
-Create markdown files in the `commands/` directory to define custom commands.
+Create text files in the `commands/` directory to define custom commands.
 
 Create `.opencode/commands/test.md`:
 
@@ -31,6 +31,7 @@ Focus on the failing tests and suggest fixes.
 ```
 
 The frontmatter defines command properties. The content becomes the template.
+OpenCode discovers text-based command files such as `.md`, `.txt`, `.prompt`, or extensionless scripts.
 
 Use the command by typing `/` followed by the command name.
 
@@ -42,7 +43,7 @@ Use the command by typing `/` followed by the command name.
 
 ## Configure
 
-You can add custom commands through the OpenCode config or by creating markdown files in the `commands/` directory.
+You can add custom commands through the OpenCode config or by creating text-based files in the `commands/` directory.
 
 ---
 
@@ -75,14 +76,14 @@ Now you can run this command in the TUI:
 
 ---
 
-### Markdown
+### File-based commands
 
-You can also define commands using markdown files. Place them in:
+You can also define commands using text-based files. Place them in:
 
 - Global: `~/.config/opencode/commands/`
 - Per-project: `.opencode/commands/`
 
-```markdown title="~/.config/opencode/commands/test.md"
+```markdown title="~/.config/opencode/commands/test.txt"
 ---
 description: Run tests with coverage
 agent: build
@@ -93,7 +94,7 @@ Run the full test suite with coverage report and show any failures.
 Focus on the failing tests and suggest fixes.
 ```
 
-The markdown file name becomes the command name. For example, `test.md` lets
+The file name becomes the command name. For example, `test.txt` lets
 you run:
 
 ```bash frame="none"
