@@ -1,5 +1,5 @@
 import { useIsRouting, useLocation } from "@solidjs/router"
-import { batch, createEffect, onCleanup, onMount } from "solid-js"
+import { Show, batch, createEffect, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useLanguage } from "@/context/language"
@@ -74,6 +74,20 @@ function Cell(props: { bad?: boolean; dim?: boolean; label: string; tip: string;
   )
 }
 
+function Arrow(props: { left?: boolean }) {
+  return (
+    <svg aria-hidden="true" class="size-3.5" fill="none" viewBox="0 0 16 16">
+      <path
+        d={props.left ? "M10.5 3.5 6 8l4.5 4.5" : "M5.5 3.5 10 8l-4.5 4.5"}
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="1.75"
+      />
+    </svg>
+  )
+}
+
 export function DebugBar() {
   const language = useLanguage()
   const location = useLocation()
@@ -97,6 +111,9 @@ export function DebugBar() {
     nav: {
       dur: undefined as number | undefined,
       pending: false,
+    },
+    ui: {
+      collapsed: false,
     },
   })
 
@@ -363,84 +380,100 @@ export function DebugBar() {
   return (
     <aside
       aria-label={language.t("debugBar.ariaLabel")}
-      class="pointer-events-auto fixed bottom-3 right-3 z-50 w-[308px] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-xl border p-0.5 text-text-on-interactive-base shadow-[var(--shadow-lg-border-base)] sm:bottom-4 sm:right-4 sm:w-[324px]"
+      classList={{
+        "pointer-events-auto fixed bottom-3 right-3 z-50 overflow-hidden rounded-xl border p-0.5 text-text-on-interactive-base shadow-[var(--shadow-lg-border-base)] transition-[width] duration-200 sm:bottom-4 sm:right-4": true,
+        "w-10": state.ui.collapsed,
+        "w-[308px] max-w-[calc(100vw-1.5rem)] sm:w-[324px]": !state.ui.collapsed,
+      }}
       style={{
         "background-color": "color-mix(in srgb, var(--icon-interactive-base) 42%, black)",
         "border-color": "color-mix(in srgb, white 14%, transparent)",
       }}
     >
-      <div class="grid grid-cols-5 gap-px font-mono">
-        <Cell
-          label={language.t("debugBar.nav.label")}
-          tip={language.t("debugBar.nav.tip")}
-          value={navv()}
-          bad={bad(state.nav.dur, 400)}
-          dim={state.nav.dur === undefined && !state.nav.pending}
-        />
-        <Cell
-          label={language.t("debugBar.fps.label")}
-          tip={language.t("debugBar.fps.tip")}
-          value={state.fps === undefined ? na() : `${Math.round(state.fps)}`}
-          bad={bad(state.fps, 50, true)}
-          dim={state.fps === undefined}
-        />
-        <Cell
-          label={language.t("debugBar.frame.label")}
-          tip={language.t("debugBar.frame.tip")}
-          value={time(state.gap) ?? na()}
-          bad={bad(state.gap, 50)}
-          dim={state.gap === undefined}
-        />
-        <Cell
-          label={language.t("debugBar.jank.label")}
-          tip={language.t("debugBar.jank.tip")}
-          value={state.jank === undefined ? na() : `${state.jank}`}
-          bad={bad(state.jank, 8)}
-          dim={state.jank === undefined}
-        />
-        <Cell
-          label={language.t("debugBar.long.label")}
-          tip={language.t("debugBar.long.tip", { max: ms(state.long.max) ?? na() })}
-          value={longv()}
-          bad={bad(state.long.block, 200)}
-          dim={state.long.count === undefined}
-        />
-        <Cell
-          label={language.t("debugBar.delay.label")}
-          tip={language.t("debugBar.delay.tip")}
-          value={time(state.delay) ?? na()}
-          bad={bad(state.delay, 100)}
-          dim={state.delay === undefined}
-        />
-        <Cell
-          label={language.t("debugBar.inp.label")}
-          tip={language.t("debugBar.inp.tip")}
-          value={time(state.inp) ?? na()}
-          bad={bad(state.inp, 200)}
-          dim={state.inp === undefined}
-        />
-        <Cell
-          label={language.t("debugBar.cls.label")}
-          tip={language.t("debugBar.cls.tip")}
-          value={state.cls === undefined ? na() : state.cls.toFixed(2)}
-          bad={bad(state.cls, 0.1)}
-          dim={state.cls === undefined}
-        />
-        <Cell
-          label={language.t("debugBar.mem.label")}
-          tip={
-            state.heap.used === undefined
-              ? language.t("debugBar.mem.tipUnavailable")
-              : language.t("debugBar.mem.tip", {
-                  used: mb(state.heap.used) ?? na(),
-                  limit: mb(state.heap.limit) ?? na(),
-                })
-          }
-          value={heapv()}
-          bad={bad(heap(), 0.8)}
-          dim={state.heap.used === undefined}
-          wide
-        />
+      <div class="flex items-stretch gap-px font-mono">
+        <button
+          type="button"
+          class="flex w-9 shrink-0 items-center justify-center rounded-[10px] bg-white/7 text-text-on-interactive-base/80 transition-colors hover:bg-white/12 hover:text-text-on-interactive-base"
+          onClick={() => setState("ui", "collapsed", (value) => !value)}
+        >
+          <span class="sr-only">{state.ui.collapsed ? "Expand debug bar" : "Collapse debug bar"}</span>
+          <Arrow left={state.ui.collapsed} />
+        </button>
+        <Show when={!state.ui.collapsed}>
+          <div class="grid min-w-0 flex-1 grid-cols-5 gap-px">
+            <Cell
+              label={language.t("debugBar.nav.label")}
+              tip={language.t("debugBar.nav.tip")}
+              value={navv()}
+              bad={bad(state.nav.dur, 400)}
+              dim={state.nav.dur === undefined && !state.nav.pending}
+            />
+            <Cell
+              label={language.t("debugBar.fps.label")}
+              tip={language.t("debugBar.fps.tip")}
+              value={state.fps === undefined ? na() : `${Math.round(state.fps)}`}
+              bad={bad(state.fps, 50, true)}
+              dim={state.fps === undefined}
+            />
+            <Cell
+              label={language.t("debugBar.frame.label")}
+              tip={language.t("debugBar.frame.tip")}
+              value={time(state.gap) ?? na()}
+              bad={bad(state.gap, 50)}
+              dim={state.gap === undefined}
+            />
+            <Cell
+              label={language.t("debugBar.jank.label")}
+              tip={language.t("debugBar.jank.tip")}
+              value={state.jank === undefined ? na() : `${state.jank}`}
+              bad={bad(state.jank, 8)}
+              dim={state.jank === undefined}
+            />
+            <Cell
+              label={language.t("debugBar.long.label")}
+              tip={language.t("debugBar.long.tip", { max: ms(state.long.max) ?? na() })}
+              value={longv()}
+              bad={bad(state.long.block, 200)}
+              dim={state.long.count === undefined}
+            />
+            <Cell
+              label={language.t("debugBar.delay.label")}
+              tip={language.t("debugBar.delay.tip")}
+              value={time(state.delay) ?? na()}
+              bad={bad(state.delay, 100)}
+              dim={state.delay === undefined}
+            />
+            <Cell
+              label={language.t("debugBar.inp.label")}
+              tip={language.t("debugBar.inp.tip")}
+              value={time(state.inp) ?? na()}
+              bad={bad(state.inp, 200)}
+              dim={state.inp === undefined}
+            />
+            <Cell
+              label={language.t("debugBar.cls.label")}
+              tip={language.t("debugBar.cls.tip")}
+              value={state.cls === undefined ? na() : state.cls.toFixed(2)}
+              bad={bad(state.cls, 0.1)}
+              dim={state.cls === undefined}
+            />
+            <Cell
+              label={language.t("debugBar.mem.label")}
+              tip={
+                state.heap.used === undefined
+                  ? language.t("debugBar.mem.tipUnavailable")
+                  : language.t("debugBar.mem.tip", {
+                      used: mb(state.heap.used) ?? na(),
+                      limit: mb(state.heap.limit) ?? na(),
+                    })
+              }
+              value={heapv()}
+              bad={bad(heap(), 0.8)}
+              dim={state.heap.used === undefined}
+              wide
+            />
+          </div>
+        </Show>
       </div>
     </aside>
   )

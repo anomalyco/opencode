@@ -1,6 +1,7 @@
 import "solid-js"
 
 interface ImportMetaEnv {
+  readonly VITE_HIDE_DEBUG_BAR?: string
   readonly VITE_OPENCODE_SERVER_HOST: string
   readonly VITE_OPENCODE_SERVER_PORT: string
 }
