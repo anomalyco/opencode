@@ -212,7 +212,9 @@ function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean }>) {
           />
         }
       >
-        {props.children}
+        <Show when={server.key} keyed>
+          {props.children}
+        </Show>
       </Show>
     </Show>
   )
