@@ -3,6 +3,21 @@ import { Bus } from "@/bus"
 import { SessionID } from "@/session/schema"
 import z from "zod"
 
+/**
+ * TUI event definitions for the terminal user interface.
+ *
+ * Defines events used for communication between TUI components and the bus system,
+ * including prompt operations, command execution, toast notifications, and session navigation.
+ *
+ * @example
+ * ```typescript
+ * // Show a toast notification
+ * Bus.emit(TuiEvent.ToastShow, { message: "Hello", variant: "info" })
+ *
+ * // Select a session
+ * Bus.emit(TuiEvent.SessionSelect, { sessionID: "abc123" })
+ * ```
+ */
 export const TuiEvent = {
   PromptAppend: BusEvent.define("tui.prompt.append", z.object({ text: z.string() })),
   CommandExecute: BusEvent.define(
