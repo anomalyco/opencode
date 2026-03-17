@@ -37,6 +37,7 @@ const OPEN_APPS = [
   "iterm2",
   "ghostty",
   "wezterm",
+  "warp",
   "xcode",
   "android-studio",
   "powershell",
@@ -47,18 +48,39 @@ type OpenApp = (typeof OPEN_APPS)[number]
 type OS = "macos" | "windows" | "linux" | "unknown"
 
 const MAC_APPS = [
-  { id: "vscode", label: "VS Code", icon: "vscode", openWith: "Visual Studio Code" },
-  { id: "cursor", label: "Cursor", icon: "cursor", openWith: "Cursor" },
-  { id: "zed", label: "Zed", icon: "zed", openWith: "Zed" },
-  { id: "textmate", label: "TextMate", icon: "textmate", openWith: "TextMate" },
-  { id: "antigravity", label: "Antigravity", icon: "antigravity", openWith: "Antigravity" },
-  { id: "terminal", label: "Terminal", icon: "terminal", openWith: "Terminal" },
-  { id: "iterm2", label: "iTerm2", icon: "iterm2", openWith: "iTerm" },
-  { id: "ghostty", label: "Ghostty", icon: "ghostty", openWith: "Ghostty" },
-  { id: "wezterm", label: "WezTerm", icon: "wezterm", openWith: "WezTerm" },
-  { id: "xcode", label: "Xcode", icon: "xcode", openWith: "Xcode" },
-  { id: "android-studio", label: "Android Studio", icon: "android-studio", openWith: "Android Studio" },
-  { id: "sublime-text", label: "Sublime Text", icon: "sublime-text", openWith: "Sublime Text" },
+  {
+    id: "vscode",
+    label: "session.header.open.app.vscode",
+    icon: "vscode",
+    openWith: "Visual Studio Code",
+  },
+  { id: "cursor", label: "session.header.open.app.cursor", icon: "cursor", openWith: "Cursor" },
+  { id: "zed", label: "session.header.open.app.zed", icon: "zed", openWith: "Zed" },
+  { id: "textmate", label: "session.header.open.app.textmate", icon: "textmate", openWith: "TextMate" },
+  {
+    id: "antigravity",
+    label: "session.header.open.app.antigravity",
+    icon: "antigravity",
+    openWith: "Antigravity",
+  },
+  { id: "terminal", label: "session.header.open.app.terminal", icon: "terminal", openWith: "Terminal" },
+  { id: "iterm2", label: "session.header.open.app.iterm2", icon: "iterm2", openWith: "iTerm" },
+  { id: "ghostty", label: "session.header.open.app.ghostty", icon: "ghostty", openWith: "Ghostty" },
+  { id: "wezterm", label: "session.header.open.app.wezterm", icon: "wezterm", openWith: "WezTerm" },
+  { id: "warp", label: "session.header.open.app.warp", icon: "warp", openWith: "Warp" },
+  { id: "xcode", label: "session.header.open.app.xcode", icon: "xcode", openWith: "Xcode" },
+  {
+    id: "android-studio",
+    label: "session.header.open.app.androidStudio",
+    icon: "android-studio",
+    openWith: "Android Studio",
+  },
+  {
+    id: "sublime-text",
+    label: "session.header.open.app.sublimeText",
+    icon: "sublime-text",
+    openWith: "Sublime Text",
+  },
 ] as const
 
 const WINDOWS_APPS = [

@@ -80,6 +80,7 @@ export interface CommandOption {
   title: string
   description?: string
   category?: string
+  keywords?: string
   keybind?: KeybindConfig
   slash?: string
   suggested?: boolean
@@ -344,7 +345,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     }
 
     const showPalette = () => {
-      run("file.open", "palette")
+      run("command.palette", "palette")
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {

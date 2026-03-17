@@ -72,27 +72,36 @@ export const childSessionOnPath = (sessions: Session[] | undefined, rootID: stri
 export const displayName = (project: { name?: string; worktree: string }) =>
   project.name || getFilename(project.worktree)
 
-const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
+export type SessionGroupKey = "today" | "yesterday" | "thisWeek" | "thisMonth" | "older"
 
-export function getProjectAvatarSource(id?: string, icon?: { color?: string; url?: string; override?: string }) {
-  if (id === OPENCODE_PROJECT_ID) return "https://opencode.ai/favicon.svg"
-  if (icon?.override) return icon.override
-  if (icon?.color) return undefined
-  return icon?.url
+function startOfDay(timestamp: number): number {
+  const date = new Date(timestamp)
+  date.setHours(0, 0, 0, 0)
+  return date.getTime()
 }
 
-export function projectForSession<T extends { id?: string; worktree: string; sandboxes?: string[] }>(
-  session: Session,
-  projects: T[],
-  byID: Map<string, T>,
-) {
-  const direct = byID.get(session.projectID)
-  if (direct) return direct
-  const directory = pathKey(session.directory)
-  return projects.find(
-    (project) =>
-      pathKey(project.worktree) === directory || project.sandboxes?.some((sandbox) => pathKey(sandbox) === directory),
-  )
+function sessionGroupKey(session: Session, now: number): SessionGroupKey {
+  const today = startOfDay(now)
+  const t = session.time.updated ?? session.time.created
+  if (t >= today) return "today"
+  if (t >= today - 86_400_000) return "yesterday"
+  if (t >= today - 7 * 86_400_000) return "thisWeek"
+  if (t >= today - 30 * 86_400_000) return "thisMonth"
+  return "older"
+}
+
+/** Returns a Map from session ID to its group key, only for sessions that START a new group. */
+export function sessionGroupBoundaries(sessions: Session[], now: number): Map<string, SessionGroupKey> {
+  const headers = new Map<string, SessionGroupKey>()
+  let lastKey: SessionGroupKey | undefined
+  for (const session of sessions) {
+    const key = sessionGroupKey(session, now)
+    if (key !== lastKey) {
+      headers.set(session.id, key)
+      lastKey = key
+    }
+  }
+  return headers
 }
 
 export const errorMessage = (err: unknown, fallback: string) => {

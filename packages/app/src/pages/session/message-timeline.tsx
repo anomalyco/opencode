@@ -1224,89 +1224,31 @@ export function MessageTimeline(props: {
             "--sticky-accordion-top": showHeader() ? "48px" : "0px",
           }}
         >
-          <Show when={showHeader()}>
-            <div
-              classList={{
-                "sticky top-0 z-30 bg-background-stronger border-b border-border-weak-base": true,
-                "w-full": true,
-                "px-4 md:px-5": true,
-                "md:mx-auto": props.centered,
-              }}
-              style={{
-                "max-width": props.centered ? "var(--session-content-width)" : undefined,
-              }}
-            >
-              <div class="h-12 w-full flex items-center justify-between gap-2">
-                <div class="flex items-center gap-1 min-w-0 flex-1 pr-3">
-                  <Show when={parentID()}>
-                    <button
-                      type="button"
-                      data-slot="session-title-parent"
-                      class="min-w-0 max-w-[40%] truncate text-14-medium text-text-weak transition-colors hover:text-text-base"
-                      onClick={navigateParent}
-                    >
-                      {parentTitle()}
-                    </button>
-                    <span
-                      data-slot="session-title-separator"
-                      class="px-2 text-14-medium text-text-weak"
-                      aria-hidden="true"
-                    >
-                      /
-                    </span>
-                  </Show>
-                  <div
-                    class="shrink-0 flex items-center justify-center overflow-hidden transition-[width,margin] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
-                    style={{
-                      width: working() ? "16px" : "0px",
-                      "margin-right": working() ? "8px" : "0px",
-                    }}
-                    aria-hidden="true"
-                  >
-                    <Show when={workingStatus() !== "hidden"}>
-                      <div
-                        class="transition-opacity duration-200 ease-out"
-                        classList={{ "opacity-0": workingStatus() === "hiding" }}
-                      >
-                        <Spinner class="size-4" style={{ color: tint() ?? "var(--icon-interactive-base)" }} />
-                      </div>
-                    </Show>
-                  </div>
-                  <Show when={childTitle() || title.editing}>
-                    <Show
-                      when={title.editing}
-                      fallback={
-                        <h1
-                          class="text-14-medium text-text-strong truncate grow-1 min-w-0"
-                          onDblClick={openTitleEditor}
-                        >
-                          {childTitle()}
-                        </h1>
-                      }
-                    >
-                      <InlineInput
-                        ref={(el) => {
-                          titleRef = el
-                        }}
-                        data-slot="session-title-child"
-                        value={title.draft}
-                        disabled={title.saving}
-                        class="text-14-medium text-text-strong grow-1 min-w-0 rounded-[6px]"
-                        style={{ "--inline-input-shadow": "var(--shadow-xs-border-select)" }}
-                        onInput={(event) => setTitle("draft", event.currentTarget.value)}
-                        onKeyDown={(event) => {
-                          event.stopPropagation()
-                          if (event.key === "Enter") {
-                            event.preventDefault()
-                            void saveTitleEditor()
-                            return
-                          }
-                          if (event.key === "Escape") {
-                            event.preventDefault()
-                            closeTitleEditor()
-                          }
-                        }}
-                        onBlur={closeTitleEditor}
+          <div ref={props.setContentRef} class="min-w-0 w-full">
+            <Show when={showHeader()}>
+              <div
+                data-session-title
+                classList={{
+                  "sticky top-0 z-30 bg-[linear-gradient(to_bottom,var(--background-stronger)_48px,transparent)]": true,
+                  "w-full": true,
+                  "pb-4": true,
+                  "pl-2 pr-3 md:pl-4 md:pr-3": true,
+                }}
+                style={{
+                  "max-width": props.centered ? "var(--session-content-width, 60rem)" : undefined,
+                  "margin-left": props.centered ? "auto" : undefined,
+                  "margin-right": props.centered ? "auto" : undefined,
+                }}
+              >
+                <div class="h-12 w-full flex items-center justify-between gap-2">
+                  <div class="flex items-center gap-1 min-w-0 flex-1 pr-3">
+                    <Show when={parentID()}>
+                      <IconButton
+                        tabIndex={-1}
+                        icon="arrow-left"
+                        variant="ghost"
+                        onClick={navigateParent}
+                        aria-label={language.t("common.goBack")}
                       />
                     </Show>
                   </Show>
@@ -1391,89 +1333,88 @@ export function MessageTimeline(props: {
                         </DropdownMenu.Portal>
                       </DropdownMenu>
 
-          <div
-            ref={props.setContentRef}
-            role="log"
-            class="flex flex-col gap-12 items-start justify-start pb-16 transition-[margin]"
-            classList={{
-              "w-full": true,
-              "md:mx-auto": props.centered,
-              "mt-0.5": props.centered,
-              "mt-0": !props.centered,
-            }}
-            style={{
-              "max-width": props.centered ? "var(--session-content-width)" : undefined,
-            }}
-          >
-            <Show when={props.turnStart > 0}>
-              <div class="w-full flex justify-center">
-                <Button variant="ghost" size="large" class="text-12-medium opacity-50" onClick={props.onRenderEarlier}>
-                  {language.t("session.messages.renderEarlier")}
-                </Button>
-              </div>
-            </Show>
-            <Show when={props.historyMore}>
-              <div class="w-full flex justify-center">
-                <Button
-                  variant="ghost"
-                  size="large"
-                  class="text-12-medium opacity-50"
-                  disabled={props.historyLoading}
-                  onClick={props.onLoadEarlier}
-                >
-                  {props.historyLoading
-                    ? language.t("session.messages.loadingEarlier")
-                    : language.t("session.messages.loadEarlier")}
-                </Button>
-              </div>
-            </Show>
-            <For each={props.renderedUserMessages}>
-              {(message) => (
-                <div
-                  id={props.anchor(message.id)}
-                  data-message-id={message.id}
-                  ref={(el) => {
-                    props.onRegisterMessage(el, message.id)
-                    onCleanup(() => props.onUnregisterMessage(message.id))
-                  }}
-                  classList={{
-                    "min-w-0 w-full max-w-full": true,
-                  }}
-                  style={{
-                    "max-width": props.centered ? "var(--session-content-width)" : undefined,
-                  }}
-                >
-                  <SessionTurn
-                    sessionID={sessionID() ?? ""}
-                    messageID={message.id}
-                    lastUserMessageID={props.lastUserMessageID}
-                    classes={{
-                      root: "min-w-0 w-full relative",
-                      content: "flex flex-col justify-between !overflow-visible",
-                      container: "w-full px-4 md:px-5",
-                    }}
-                    classList={{
-                      "min-w-0 w-full max-w-full": true,
-                    }}
-                    style={{ "content-visibility": "auto", "contain-intrinsic-size": "auto 500px" }}
+            <div
+              role="log"
+              class="flex flex-col gap-12 items-start justify-start pb-16 transition-[margin]"
+              classList={{
+                "w-full": true,
+                "mt-0.5": props.centered,
+                "mt-0": !props.centered,
+              }}
+              style={{
+                "max-width": props.centered ? "var(--session-content-width, 60rem)" : undefined,
+                "margin-left": props.centered ? "auto" : undefined,
+                "margin-right": props.centered ? "auto" : undefined,
+              }}
+            >
+              <Show when={props.turnStart > 0 || props.historyMore}>
+                <div class="w-full flex justify-center">
+                  <Button
+                    variant="ghost"
+                    size="large"
+                    class="text-12-medium opacity-50"
+                    disabled={props.historyLoading}
+                    onClick={props.onLoadEarlier}
                   >
-                    <Show when={commentCount() > 0}>
-                      <div class="w-full px-4 md:px-5 pb-2">
-                        <div class="ml-auto max-w-[82%] overflow-x-auto no-scrollbar">
-                          <div class="flex w-max min-w-full justify-end gap-2">
-                            <For each={comments()}>
-                              {(comment) => (
-                                <div class="shrink-0 max-w-[260px] rounded-[6px] border border-border-weak-base bg-background-stronger px-2.5 py-2">
-                                  <div class="flex items-center gap-1.5 min-w-0 text-11-medium text-text-strong">
-                                    <FileIcon node={{ path: comment.path, type: "file" }} class="size-3.5 shrink-0" />
-                                    <span class="truncate">{getFilename(comment.path)}</span>
-                                    <Show when={comment.selection}>
-                                      {(selection) => (
-                                        <span class="shrink-0 text-text-weak">
-                                          {selection().startLine === selection().endLine
-                                            ? `:${selection().startLine}`
-                                            : `:${selection().startLine}-${selection().endLine}`}
-                                        </span>
+                    {props.historyLoading
+                      ? language.t("session.messages.loadingEarlier")
+                      : language.t("session.messages.loadEarlier")}
+                  </Button>
+                </div>
+              </Show>
+              <For each={rendered()}>
+                {(messageID) => {
+                  const active = createMemo(() => activeMessageID() === messageID)
+                  const comments = createMemo(() => messageComments(sync.data.part[messageID] ?? []), [], {
+                    equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+                  })
+                  const commentCount = createMemo(() => comments().length)
+                  return (
+                    <div
+                      id={props.anchor(messageID)}
+                      data-message-id={messageID}
+                      classList={{
+                        "min-w-0 w-full max-w-full": true,
+                      }}
+                      style={{
+                        "content-visibility": "auto",
+                        "contain-intrinsic-size": "auto 500px",
+                        "max-width": props.centered ? "var(--session-content-width, 60rem)" : undefined,
+                        "margin-left": props.centered ? "auto" : undefined,
+                        "margin-right": props.centered ? "auto" : undefined,
+                      }}
+                    >
+                      <Show when={commentCount() > 0}>
+                        <div class="w-full px-4 md:px-5 pb-2">
+                          <div class="ml-auto max-w-[82%] overflow-x-auto no-scrollbar">
+                            <div class="flex w-max min-w-full justify-end gap-2">
+                              <Index each={comments()}>
+                                {(commentAccessor: () => MessageComment) => {
+                                  const comment = createMemo(() => commentAccessor())
+                                  return (
+                                    <Show when={comment()}>
+                                      {(c) => (
+                                        <div class="shrink-0 max-w-[260px] rounded-[6px] border border-border-weak-base bg-background-stronger px-2.5 py-2">
+                                          <div class="flex items-center gap-1.5 min-w-0 text-11-medium text-text-strong">
+                                            <FileIcon
+                                              node={{ path: c().path, type: "file" }}
+                                              class="size-3.5 shrink-0"
+                                            />
+                                            <span class="truncate">{getFilename(c().path)}</span>
+                                            <Show when={c().selection}>
+                                              {(selection) => (
+                                                <span class="shrink-0 text-text-weak">
+                                                  {selection().startLine === selection().endLine
+                                                    ? `:${selection().startLine}`
+                                                    : `:${selection().startLine}-${selection().endLine}`}
+                                                </span>
+                                              )}
+                                            </Show>
+                                          </div>
+                                          <div class="pt-1 text-12-regular text-text-strong whitespace-pre-wrap break-words">
+                                            {c().comment}
+                                          </div>
+                                        </div>
                                       )}
                                     </Show>
                                   </div>
@@ -1485,25 +1426,28 @@ export function MessageTimeline(props: {
                             </For>
                           </div>
                         </div>
-                      </div>
-                    </Show>
-                    <SessionTurn
-                      sessionID={sessionID() ?? ""}
-                      messageID={message.id}
-                      showReasoningSummaries={settings.general.showReasoningSummaries()}
-                      showCustomHookParts={settings.general.showCustomHookParts()}
-                      shellToolDefaultOpen={settings.general.shellToolPartsExpanded()}
-                      editToolDefaultOpen={settings.general.editToolPartsExpanded()}
-                      classes={{
-                        root: "min-w-0 w-full relative",
-                        content: "flex flex-col justify-between !overflow-visible",
-                        container: "w-full px-4 md:px-5",
-                      }}
-                    />
-                  </div>
-                )
-              }}
-            </For>
+                      </Show>
+                      <SessionTurn
+                        sessionID={sessionID() ?? ""}
+                        messageID={messageID}
+                        actions={props.actions}
+                        active={active()}
+                        status={active() ? sessionStatus() : undefined}
+                        showReasoningSummaries={settings.general.showReasoningSummaries()}
+                        showCustomHookParts={settings.general.showCustomHookParts()}
+                        shellToolDefaultOpen={settings.general.shellToolPartsExpanded()}
+                        editToolDefaultOpen={settings.general.editToolPartsExpanded()}
+                        classes={{
+                          root: "min-w-0 w-full relative",
+                          content: "flex flex-col justify-between !overflow-visible",
+                          container: "w-full px-4 md:px-5",
+                        }}
+                      />
+                    </div>
+                  )
+                }}
+              </For>
+            </div>
           </div>
         </Show>
         <Show when={scrollRoot()}>

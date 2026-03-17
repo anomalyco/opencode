@@ -13,8 +13,7 @@ import { getAvatarColors, useLayout, type LocalProject } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
-import { useSettings } from "@/context/settings"
-import { WindowsAppMenu } from "./windows-app-menu"
+import { dict as enDict } from "@/i18n/en"
 import { applyPath, backPath, forwardPath } from "./titlebar-history"
 import { useGlobalSync } from "@/context/global-sync"
 import { decodeDirectory } from "@/pages/directory-layout"
@@ -66,7 +65,9 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
   const platform = usePlatform()
   const command = useCommand()
   const language = useLanguage()
-  const settings = useSettings()
+  type DictKey = keyof typeof enDict
+  const kw = (...keys: DictKey[]) =>
+    language.locale() === "en" ? undefined : keys.map((k) => enDict[k]).join(" ")
   const theme = useTheme()
   const navigate = useNavigate()
   const location = useLocation()
@@ -135,6 +136,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
     {
       id: "common.goBack",
       title: language.t("common.goBack"),
+      keywords: kw("common.goBack"),
       category: language.t("command.category.view"),
       keybind: "mod+[",
       onSelect: back,
@@ -142,6 +144,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
     {
       id: "common.goForward",
       title: language.t("common.goForward"),
+      keywords: kw("common.goForward"),
       category: language.t("command.category.view"),
       keybind: "mod+]",
       onSelect: forward,

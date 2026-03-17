@@ -35,6 +35,11 @@ export const dict = {
 
   "command.project.open": "打开项目",
   "command.project.switch": "切换项目",
+  "command.project.copyPath": "复制工作区路径",
+  "command.project.copyPath.description": "复制当前工作区的绝对路径到剪贴板",
+
+  "command.project.open": "打开项目",
+  "command.project.switch": "切换项目",
   "command.provider.connect": "连接提供商",
 
   "command.server.switch": "切换服务器",
@@ -50,6 +55,7 @@ export const dict = {
   "command.palette": "命令面板",
 
   "command.theme.cycle": "切换主题",
+  "command.theme.select": "选择主题",
   "command.theme.set": "使用主题：{{theme}}",
   "command.theme.scheme.cycle": "切换配色方案",
   "command.theme.scheme.set": "使用配色方案：{{scheme}}",
@@ -95,6 +101,8 @@ export const dict = {
 
   "command.mcp.toggle": "切换 MCPs",
   "command.mcp.toggle.description": "切换 MCPs",
+  "command.skill.list": "查看技能",
+  "command.skill.list.description": "查看已加载的技能",
 
   "command.skill.list": "查看技能",
   "command.skill.list.description": "查看已加载的技能",
@@ -130,6 +138,7 @@ export const dict = {
   "command.session.unshare.description": "停止分享此会话",
 
   "palette.search.placeholder": "搜索文件、命令和会话",
+  "palette.search.commands": "搜索命令",
   "palette.empty": "未找到结果",
   "palette.group.commands": "命令",
   "palette.group.files": "文件",
@@ -137,7 +146,6 @@ export const dict = {
   "dialog.theme.search.placeholder": "搜索主题",
   "dialog.theme.empty": "未找到主题",
   "dialog.theme.group.theme": "主题",
-  "command.theme.select": "选择主题",
 
   "dialog.provider.search.placeholder": "搜索提供商",
   "dialog.provider.empty": "未找到提供商",
@@ -603,6 +611,8 @@ export const dict = {
   "session.share.action.view": "查看",
   "session.share.copy.copied": "已复制",
   "session.share.copy.copyLink": "复制链接",
+  "session.restore": "恢复",
+  "session.restore.failed.title": "恢复会话失败",
 
   "lsp.tooltip.none": "没有 LSP 服务器",
   "lsp.label.connected": "{{count}} LSP",
@@ -641,11 +651,19 @@ export const dict = {
   "sidebar.gettingStarted.line2": "连接任意提供商即可使用更多模型，如 Claude、GPT、Gemini 等。",
   "sidebar.project.recentSessions": "最近会话",
   "sidebar.project.viewAllSessions": "查看全部会话",
+  "sidebar.dropFolder": "释放文件夹以打开项目",
+  "sidebar.dropFile": "释放以添加为附件",
   "sidebar.project.viewArchivedSessions": "查看已归档会话",
   "sidebar.project.archivedSessions": "已归档会话",
   "sidebar.project.noArchivedSessions": "没有已归档会话",
-  "sidebar.dropFolder": "释放文件夹以打开项目",
-  "sidebar.dropFile": "释放以添加为附件",
+  "sidebar.project.clearNotifications": "清除通知",
+
+  "sidebar.group.today": "今天",
+  "sidebar.group.yesterday": "昨天",
+  "sidebar.group.thisWeek": "本周",
+  "sidebar.group.thisMonth": "本月",
+  "sidebar.group.older": "更早",
+  "sidebar.search.placeholder": "搜索会话...",
 
   "app.name.desktop": "OpenCode Desktop",
 
@@ -675,12 +693,18 @@ export const dict = {
   "settings.general.row.theme.description": "自定义 OpenCode 的主题。",
   "settings.general.row.font.title": "字体",
   "settings.general.row.font.description": "自定义代码块使用的等宽字体",
-
+  "settings.general.row.followup.title": "跟进消息行为",
+  "settings.general.row.followup.description": "选择跟进提示是立即引导还是在队列中等待",
+  "settings.general.row.followup.option.queue": "排队",
+  "settings.general.row.followup.option.steer": "引导",
+  "settings.general.row.reasoningSummaries.title": "显示推理摘要",
+  "settings.general.row.reasoningSummaries.description": "在时间线中显示模型推理摘要",
+  "settings.general.row.customHookParts.title": "显示自定义 hooks",
+  "settings.general.row.customHookParts.description": "在时间线中显示自定义 hook 条目",
   "settings.general.row.fontSize.title": "消息字体大小",
   "settings.general.row.fontSize.description": "调整用户和助手消息的字体大小",
   "settings.general.row.fontSize.decrease": "减小字体大小",
   "settings.general.row.fontSize.increase": "增大字体大小",
-
   "settings.general.row.contentWidth.title": "内容宽度",
   "settings.general.row.contentWidth.description": "调整对话消息的最大宽度",
   "settings.general.row.contentWidth.decrease": "减小内容宽度",
@@ -688,9 +712,8 @@ export const dict = {
   "settings.general.row.contentWidth.narrow": "窄",
   "settings.general.row.contentWidth.medium": "中",
   "settings.general.row.contentWidth.wide": "宽",
-  "settings.general.row.contentWidth.extraWide": "较宽",
+  "settings.general.row.contentWidth.extraWide": "超宽",
   "settings.general.row.contentWidth.fullWidth": "全宽",
-
   "settings.general.row.shellToolPartsExpanded.title": "展开 shell 工具部分",
   "settings.general.row.shellToolPartsExpanded.description": "默认在时间线中展开 shell 工具部分",
   "settings.general.row.editToolPartsExpanded.title": "展开编辑工具部分",
@@ -917,6 +940,7 @@ export const dict = {
   "session.header.open.app.terminal": "终端",
   "session.header.open.app.iterm2": "iTerm2",
   "session.header.open.app.ghostty": "Ghostty",
+  "session.header.open.app.wezterm": "WezTerm",
   "session.header.open.app.warp": "Warp",
   "session.header.open.app.xcode": "Xcode",
   "session.header.open.app.androidStudio": "Android Studio",

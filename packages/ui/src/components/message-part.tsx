@@ -1269,6 +1269,98 @@ export function UserMessageDisplay(props: {
               </Tooltip>
             </div>
           </div>
+          <div data-slot="user-message-meta-bar">
+            <Show when={agent() || provider() || model() || metaTail()}>
+              <span data-slot="user-message-meta-wrap">
+                <Show when={agent()}>
+                  <span data-slot="user-message-meta-agent" class="text-12-regular cursor-default">
+                    {agent()}
+                  </span>
+                </Show>
+                <Show when={agent() && (provider() || model())}>
+                  <span data-slot="user-message-meta-sep" class="text-12-regular cursor-default">
+                    {"\u00A0\u00B7\u00A0"}
+                  </span>
+                </Show>
+                <Show when={provider()}>
+                  <span data-slot="user-message-meta-provider" class="text-12-regular cursor-default">
+                    {provider()}
+                  </span>
+                </Show>
+                <Show when={provider() && model()}>
+                  <span data-slot="user-message-meta-sep" class="text-12-regular cursor-default">
+                    {"\u00A0\u00B7\u00A0"}
+                  </span>
+                </Show>
+                <Show when={model()}>
+                  <span data-slot="user-message-meta-model" class="text-12-regular cursor-default">
+                    {model()}
+                  </span>
+                </Show>
+                <Show when={(agent() || provider() || model()) && metaTail()}>
+                  <span data-slot="user-message-meta-sep" class="text-12-regular cursor-default">
+                    {"\u00A0\u00B7\u00A0"}
+                  </span>
+                </Show>
+                <Show when={metaTail()}>
+                  <span data-slot="user-message-meta-tail" class="text-12-regular cursor-default">
+                    {metaTail()}
+                  </span>
+                </Show>
+              </span>
+            </Show>
+            <div data-slot="user-message-copy-wrapper" data-interrupted={props.interrupted ? "" : undefined}>
+              <Show when={props.actions?.fork}>
+                <Tooltip value={i18n.t("ui.message.forkMessage")} placement="top" gutter={4}>
+                  <IconButton
+                    icon="fork"
+                    size="normal"
+                    variant="ghost"
+                    disabled={!!busy()}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      run("fork")
+                    }}
+                    aria-label={i18n.t("ui.message.forkMessage")}
+                  />
+                </Tooltip>
+              </Show>
+              <Show when={props.actions?.revert}>
+                <Tooltip value={i18n.t("ui.message.revertMessage")} placement="top" gutter={4}>
+                  <IconButton
+                    icon="reset"
+                    size="normal"
+                    variant="ghost"
+                    disabled={!!busy()}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      run("revert")
+                    }}
+                    aria-label={i18n.t("ui.message.revertMessage")}
+                  />
+                </Tooltip>
+              </Show>
+              <Tooltip
+                value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
+                placement="top"
+                gutter={4}
+              >
+                <IconButton
+                  icon={copied() ? "check" : "copy"}
+                  size="normal"
+                  variant="ghost"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    handleCopy()
+                  }}
+                  aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
+                />
+              </Tooltip>
+            </div>
+          </div>
         </>
       </Show>
       <Show when={isSkillCommand() && skillTemplatePart()}>
@@ -1505,6 +1597,13 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     return match?.models?.[message.modelID]?.name ?? message.modelID
   })
 
+  const provider = createMemo(() => {
+    if (props.message.role !== "assistant") return ""
+    const message = props.message as AssistantMessage
+    const match = data.store.provider?.all?.find((p) => p.id === message.providerID)
+    return match?.name ?? message.providerID
+  })
+
   const duration = createMemo(() => {
     if (props.message.role !== "assistant") return ""
     const message = props.message as AssistantMessage
@@ -1531,6 +1630,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     const agent = (props.message as AssistantMessage).agent
     const items = [
       agent ? agent[0]?.toUpperCase() + agent.slice(1) : "",
+      provider(),
       model(),
       duration(),
       interrupted() ? i18n.t("ui.message.interrupted") : "",
@@ -2823,6 +2923,8 @@ ToolRegistry.register({
           </Show>
         </div>
       </div>
-    </Collapsible>
-  )
-}
+    )
+
+    return <BasicTool icon="models" status={props.status} trigger={trigger()} hideDetails />
+  },
+})

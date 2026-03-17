@@ -2,7 +2,7 @@ import {
   batch,
   createEffect,
   createMemo,
-  createResource,
+  createSignal,
   For,
   on,
   onCleanup,
@@ -11,10 +11,9 @@ import {
   Show,
   untrack,
   type Accessor,
+  type JSX,
 } from "solid-js"
-import { makeEventListener } from "@solid-primitives/event-listener"
-import { useLocation, useNavigate, useParams } from "@solidjs/router"
-import { useQuery } from "@tanstack/solid-query"
+import { useNavigate, useParams } from "@solidjs/router"
 import { useLayout, LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { Persist, persisted } from "@/utils/persist"
@@ -22,12 +21,10 @@ import { base64Encode } from "@opencode-ai/core/util/encode"
 import { decode64 } from "@/utils/base64"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Button } from "@opencode-ai/ui/button"
+import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { InlineInput } from "@opencode-ai/ui/inline-input"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
-import { HoverCard } from "@opencode-ai/ui/hover-card"
-import { Popover } from "@opencode-ai/ui/popover"
-import { MessageNav } from "@opencode-ai/ui/message-nav"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { getFilename } from "@opencode-ai/core/util/path"
@@ -62,6 +59,7 @@ import { Worktree as WorktreeState } from "@/utils/worktree"
 import { setSessionHandoff } from "@/pages/session/handoff"
 
 import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { triggerFileFind } from "@opencode-ai/ui/pierre/file-find"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
 import { DialogSelectProvider } from "@/components/dialog-select-provider"
 import { DialogSelectServer } from "@/components/dialog-select-server"
@@ -72,11 +70,15 @@ import { ConstrainDragXAxis } from "@/utils/solid-dnd"
 import { navStart } from "@/utils/perf"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { DialogEditProject } from "@/components/dialog-edit-project"
+import { DialogSelectSkill } from "@/components/dialog-select-skill"
+import { DialogSelectTheme } from "@/components/dialog-select-theme"
 import { DialogSwitchProject } from "@/components/dialog-switch-project"
+import { DebugBar } from "@/components/debug-bar"
 import { Titlebar } from "@/components/titlebar"
+import { Spinner } from "@opencode-ai/ui/spinner"
 import { useServer } from "@/context/server"
 import { useLanguage, type Locale } from "@/context/language"
-import { pathKey } from "@/utils/path-key"
+import { dict as enDict } from "@/i18n/en"
 import {
   displayName,
   effectiveWorkspaceOrder,
@@ -141,6 +143,9 @@ export default function Layout(props: ParentProps) {
   const command = useCommand()
   const theme = useTheme()
   const language = useLanguage()
+  type DictKey = keyof typeof enDict
+  const kw = (...keys: DictKey[]) =>
+    language.locale() === "en" ? undefined : keys.map((k) => enDict[k]).join(" ")
   const initialDirectory = decode64(params.dir)
   const location = useLocation()
   const route = createMemo(() => {
@@ -177,9 +182,6 @@ export default function Layout(props: ParentProps) {
     peeked: false,
   })
 
-  const [update, setUpdate] = createStore({
-    installing: false,
-  })
   const [findbar, setFindbar] = createStore({
     open: false,
     q: "",
@@ -192,6 +194,11 @@ export default function Layout(props: ParentProps) {
 
   const openFindbar = (seed?: string) => {
     const q = seed?.trim() || findbar.q
+    if (triggerFileFind("open", q || undefined)) {
+      closeFindbar()
+      return
+    }
+    if (!platform.find) return
     setFindbar({ open: true, q })
     queueMicrotask(() => {
       findInput?.focus()
@@ -200,6 +207,10 @@ export default function Layout(props: ParentProps) {
   }
 
   const runFindbar = (dir: 1 | -1) => {
+    if (triggerFileFind(dir === 1 ? "next" : "previous")) {
+      closeFindbar()
+      return
+    }
     const q = findbar.q.trim()
     if (!q) return
     void platform.find?.(q, dir)
@@ -217,6 +228,8 @@ export default function Layout(props: ParentProps) {
     event.stopPropagation()
     runFindbar(event.shiftKey ? -1 : 1)
   }
+
+  const editor = createInlineEditorController()
   const setBusy = (directory: string, value: boolean) => {
     const key = pathKey(directory)
     if (value) {
@@ -282,7 +295,10 @@ export default function Layout(props: ParentProps) {
   const sidebarExpanded = createMemo(() => layout.sidebar.opened() || sidebarHovering())
   const setHoverProject = (value: string | undefined) => {
     setState("hoverProject", value)
-    if (value !== undefined) return
+    if (value !== undefined) {
+      globalSync.child(value)
+      return
+    }
     aim.reset()
   }
   const clearHoverProjectSoon = () => queueMicrotask(() => setHoverProject(undefined))
@@ -700,7 +716,7 @@ export default function Layout(props: ParentProps) {
       seen: lru,
       keep: sessionID,
       limit: PREFETCH_MAX_SESSIONS_PER_DIR,
-      preserve: params.id && pathKey(directory) === pathKey(currentDir()) ? [params.id] : undefined,
+      preserve: directory === currentDir() && params.id ? [params.id] : undefined,
     })
   }
 
@@ -1108,6 +1124,7 @@ export default function Layout(props: ParentProps) {
       {
         id: "sidebar.toggle",
         title: language.t("command.sidebar.toggle"),
+        keywords: kw("command.sidebar.toggle"),
         category: language.t("command.category.view"),
         keybind: "mod+b",
         onSelect: () => layout.sidebar.toggle(),
@@ -1116,6 +1133,7 @@ export default function Layout(props: ParentProps) {
         id: "page.find",
         title: language.t("command.page.find"),
         description: language.t("command.page.find.description"),
+        keywords: kw("command.page.find", "command.page.find.description"),
         category: language.t("command.category.view"),
         keybind: "mod+f",
         disabled: !platform.find,
@@ -1124,6 +1142,7 @@ export default function Layout(props: ParentProps) {
       {
         id: "project.open",
         title: language.t("command.project.open"),
+        keywords: kw("command.project.open"),
         category: language.t("command.category.project"),
         keybind: "mod+o",
         onSelect: () => chooseProject(),
@@ -1131,6 +1150,7 @@ export default function Layout(props: ParentProps) {
       {
         id: "project.switch",
         title: language.t("command.project.switch"),
+        keywords: kw("command.project.switch"),
         category: language.t("command.category.project"),
         keybind: "mod+t",
         disabled: layout.projects.list().length === 0,
@@ -1141,18 +1161,21 @@ export default function Layout(props: ParentProps) {
       {
         id: "provider.connect",
         title: language.t("command.provider.connect"),
+        keywords: kw("command.provider.connect"),
         category: language.t("command.category.provider"),
         onSelect: () => connectProvider(),
       },
       {
         id: "server.switch",
         title: language.t("command.server.switch"),
+        keywords: kw("command.server.switch"),
         category: language.t("command.category.server"),
         onSelect: () => openServer(),
       },
       {
         id: "settings.open",
         title: language.t("command.settings.open"),
+        keywords: kw("command.settings.open"),
         category: language.t("command.category.settings"),
         keybind: "mod+comma",
         onSelect: () => openSettings(),
@@ -1249,8 +1272,77 @@ export default function Layout(props: ParentProps) {
         },
       },
       {
+        id: "project.openInFinder",
+        title:
+          platform.os === "macos"
+            ? "Open in Finder"
+            : platform.os === "windows"
+              ? "Open in Explorer"
+              : "Open in File Manager",
+        category: language.t("command.category.project"),
+        disabled: !params.dir || !platform.openInFinder,
+        onSelect: async () => {
+          const dir = params.dir ? decode64(params.dir) : null
+          if (dir && platform.openInFinder) await platform.openInFinder(dir)
+        },
+      },
+      {
+        id: "project.openInVscode",
+        title: "Open in VSCode",
+        category: language.t("command.category.project"),
+        disabled: !params.dir || !platform.openInVscode,
+        onSelect: async () => {
+          const dir = params.dir ? decode64(params.dir) : null
+          if (dir && platform.openInVscode) await platform.openInVscode(dir)
+        },
+      },
+      {
+        id: "project.openInCursor",
+        title: "Open in Cursor",
+        category: language.t("command.category.project"),
+        disabled: !params.dir || !platform.openInEditor,
+        onSelect: async () => {
+          const dir = params.dir ? decode64(params.dir) : null
+          if (dir && platform.openInEditor) await platform.openInEditor("cursor", dir)
+        },
+      },
+      {
+        id: "project.openInSublime",
+        title: "Open in Sublime Text",
+        category: language.t("command.category.project"),
+        disabled: !params.dir || !platform.openInEditor,
+        onSelect: async () => {
+          const dir = params.dir ? decode64(params.dir) : null
+          if (dir && platform.openInEditor) await platform.openInEditor("sublime", dir)
+        },
+      },
+      {
+        id: "project.openInZed",
+        title: "Open in Zed",
+        category: language.t("command.category.project"),
+        disabled: !params.dir || !platform.openInEditor,
+        onSelect: async () => {
+          const dir = params.dir ? decode64(params.dir) : null
+          if (dir && platform.openInEditor) await platform.openInEditor("zed", dir)
+        },
+      },
+      {
+        id: "project.openInEditor",
+        title: "Open in Editor",
+        category: language.t("command.category.project"),
+        disabled: !params.dir || !platform.openInEditor,
+        onSelect: async () => {
+          const dir = params.dir ? decode64(params.dir) : null
+          if (dir && platform.openInEditor && platform.getDefaultEditor) {
+            const editor = (await platform.getDefaultEditor()) || "vscode"
+            await platform.openInEditor(editor, dir)
+          }
+        },
+      },
+      {
         id: "session.previous",
         title: language.t("command.session.previous"),
+        keywords: kw("command.session.previous"),
         category: language.t("command.category.session"),
         keybind: "alt+arrowup",
         onSelect: () => navigateSessionByOffset(-1),
@@ -1258,6 +1350,7 @@ export default function Layout(props: ParentProps) {
       {
         id: "session.next",
         title: language.t("command.session.next"),
+        keywords: kw("command.session.next"),
         category: language.t("command.category.session"),
         keybind: "alt+arrowdown",
         onSelect: () => navigateSessionByOffset(1),
@@ -1265,6 +1358,7 @@ export default function Layout(props: ParentProps) {
       {
         id: "session.previous.unseen",
         title: language.t("command.session.previous.unseen"),
+        keywords: kw("command.session.previous.unseen"),
         category: language.t("command.category.session"),
         keybind: "shift+alt+arrowup",
         onSelect: () => navigateSessionByUnseen(-1),
@@ -1272,6 +1366,7 @@ export default function Layout(props: ParentProps) {
       {
         id: "session.next.unseen",
         title: language.t("command.session.next.unseen"),
+        keywords: kw("command.session.next.unseen"),
         category: language.t("command.category.session"),
         keybind: "shift+alt+arrowdown",
         onSelect: () => navigateSessionByUnseen(1),
@@ -1279,6 +1374,7 @@ export default function Layout(props: ParentProps) {
       {
         id: "session.archive",
         title: language.t("command.session.archive"),
+        keywords: kw("command.session.archive"),
         category: language.t("command.category.session"),
         keybind: "mod+shift+backspace",
         disabled: !params.dir || !params.id,
@@ -1290,6 +1386,7 @@ export default function Layout(props: ParentProps) {
       {
         id: "workspace.new",
         title: language.t("workspace.new"),
+        keywords: kw("workspace.new"),
         category: language.t("command.category.workspace"),
         keybind: "mod+shift+w",
         disabled: !workspaceSetting(),
@@ -1303,6 +1400,7 @@ export default function Layout(props: ParentProps) {
         id: "workspace.toggle",
         title: language.t("command.workspace.toggle"),
         description: language.t("command.workspace.toggle.description"),
+        keywords: kw("command.workspace.toggle", "command.workspace.toggle.description"),
         category: language.t("command.category.workspace"),
         slash: "workspace",
         disabled: !currentProject() || currentProject()?.vcs !== "git",
@@ -1325,6 +1423,7 @@ export default function Layout(props: ParentProps) {
       {
         id: "theme.cycle",
         title: language.t("command.theme.cycle"),
+        keywords: kw("command.theme.cycle"),
         category: language.t("command.category.theme"),
         keybind: "mod+shift+t",
         onSelect: () => cycleTheme(1),
@@ -1332,21 +1431,38 @@ export default function Layout(props: ParentProps) {
       {
         id: "theme.select",
         title: language.t("command.theme.select"),
+        keywords: kw("command.theme.select"),
         category: language.t("command.category.theme"),
         onSelect: () => dialog.show(() => <DialogSelectTheme />),
-      },
-      {
-        id: "theme.scheme.cycle",
-        title: language.t("command.theme.scheme.cycle"),
-        category: language.t("command.category.theme"),
-        keybind: "mod+shift+s",
-        onSelect: () => cycleColorScheme(1),
       },
     ]
 
     commands.push({
+      id: "theme.scheme.cycle",
+      title: language.t("command.theme.scheme.cycle"),
+      keywords: kw("command.theme.scheme.cycle"),
+      category: language.t("command.category.theme"),
+      keybind: "mod+shift+s",
+      onSelect: () => cycleColorScheme(1),
+    })
+
+    for (const scheme of colorSchemeOrder) {
+      commands.push({
+        id: `theme.scheme.${scheme}`,
+        title: language.t("command.theme.scheme.set", { scheme: colorSchemeLabel(scheme) }),
+        category: language.t("command.category.theme"),
+        onSelect: () => theme.commitPreview(),
+        onHighlight: () => {
+          theme.previewColorScheme(scheme)
+          return () => theme.cancelPreview()
+        },
+      })
+    }
+
+    commands.push({
       id: "language.cycle",
       title: language.t("command.language.cycle"),
+      keywords: kw("command.language.cycle"),
       category: language.t("command.category.language"),
       onSelect: () => cycleLanguage(1),
     })
@@ -1552,7 +1668,6 @@ export default function Layout(props: ParentProps) {
     makeEventListener(window, deepLinkEvent, handler as EventListener)
   })
 
-  // Folder drag-drop handling (desktop only - Tauri native drag events)
   const [folderDragging, setFolderDragging] = createSignal(false)
   const [fileDragging, setFileDragging] = createSignal(false)
 
@@ -1562,8 +1677,7 @@ export default function Layout(props: ParentProps) {
     const dragDropEventName = "opencode:drag-drop"
 
     const handler = async (event: Event) => {
-      const detail = (event as CustomEvent<{ type: string; paths: string[]; position: { x: number; y: number } }>)
-        .detail
+      const detail = (event as CustomEvent<{ type: string; paths: string[]; position: { x: number; y: number } }>).detail
       if (!detail) return
 
       if (detail.type === "enter") {
@@ -1573,37 +1687,39 @@ export default function Layout(props: ParentProps) {
           setFolderDragging(dirs.length > 0)
           setFileDragging(hasFiles)
         }
-      } else if (detail.type === "leave") {
+        return
+      }
+
+      if (detail.type === "leave") {
         setFolderDragging(false)
         setFileDragging(false)
-      } else if (detail.type === "drop") {
-        setFolderDragging(false)
-        setFileDragging(false)
-        if (detail.paths.length === 0 || !platform.filterDirectories) return
+        return
+      }
 
-        const dirs = await platform.filterDirectories(detail.paths).catch((): string[] => [])
-        const files = detail.paths.filter((p) => !dirs.includes(p))
+      if (detail.type !== "drop") return
 
-        // Open directories as projects
-        if (dirs.length > 0) {
-          for (const dir of dirs) {
-            openProject(dir, false)
-          }
-          navigateToProject(dirs[0])
+      setFolderDragging(false)
+      setFileDragging(false)
+      if (detail.paths.length === 0 || !platform.filterDirectories) return
+
+      const dirs = await platform.filterDirectories(detail.paths).catch((): string[] => [])
+      const files = detail.paths.filter((path) => !dirs.includes(path))
+
+      if (dirs.length > 0) {
+        for (const dir of dirs) {
+          openProject(dir, false)
         }
+        await navigateToProject(dirs[0])
+      }
 
-        // Forward files as @mention attachments
-        if (files.length > 0) {
-          window.dispatchEvent(new CustomEvent("opencode:file-drop", { detail: { paths: files } }))
-        }
+      if (files.length > 0) {
+        window.dispatchEvent(new CustomEvent("opencode:file-drop", { detail: { paths: files } }))
       }
     }
 
     window.addEventListener(dragDropEventName, handler as EventListener)
     onCleanup(() => window.removeEventListener(dragDropEventName, handler as EventListener))
   })
-
-  const displayName = (project: LocalProject) => project.name || getFilename(project.worktree)
 
   async function renameProject(project: LocalProject, next: string) {
     const current = displayName(project)
@@ -1972,35 +2088,6 @@ export default function Layout(props: ParentProps) {
     )
   }
 
-  function DialogDeleteSession(props: { session: Session; onDeleted?: () => void }) {
-    const handleDelete = async () => {
-      const ok = await deleteSession(props.session)
-      if (!ok) return
-      props.onDeleted?.()
-      dialog.close()
-    }
-
-    return (
-      <Dialog title={language.t("session.delete.title")} fit>
-        <div class="flex flex-col gap-4 pl-6 pr-2.5 pb-3">
-          <div class="flex flex-col gap-1">
-            <span class="text-14-regular text-text-strong">
-              {language.t("session.delete.confirm", { name: props.session.title })}
-            </span>
-          </div>
-          <div class="flex justify-end gap-2">
-            <Button variant="ghost" size="large" onClick={() => dialog.close()}>
-              {language.t("common.cancel")}
-            </Button>
-            <Button variant="primary" size="large" onClick={handleDelete}>
-              {language.t("session.delete.button")}
-            </Button>
-          </div>
-        </div>
-      </Dialog>
-    )
-  }
-
   function DialogArchivedSessions(props: { project: LocalProject }) {
     const [state, setState] = createStore({
       status: "loading" as "loading" | "ready" | "error",
@@ -2017,55 +2104,68 @@ export default function Layout(props: ParentProps) {
             .catch(() => []),
         ),
       )
-      const sessions = rows
-        .flatMap((list) => list)
-        .filter((item) => item.time.archived !== undefined)
-        .toSorted(sortSessions(Date.now()))
-      setState({ status: "ready", sessions })
+      setState({
+        status: "ready",
+        sessions: rows
+          .flatMap((list) => list)
+          .filter((item) => item.time.archived !== undefined)
+          .toSorted((a, b) => b.time.updated - a.time.updated),
+      })
     }
 
     onMount(() => {
-      load().catch(() => {
-        setState("status", "error")
-      })
+      load().catch(() => setState("status", "error"))
     })
 
-    const removeDeleted = (sessionID: string) => {
-      setState("sessions", (list) => list.filter((item) => item.id !== sessionID))
-    }
+    const remove = (sessionID: string) => setState("sessions", (list) => list.filter((item) => item.id !== sessionID))
 
-    const openSession = (session: Session) => {
+    const open = (session: Session) => {
       dialog.close()
       navigateWithSidebarReset(`/${base64Encode(session.directory)}/session/${session.id}`)
     }
 
-    const directoryLabel = (session: Session) => {
+    const label = (session: Session) => {
       if (session.directory === props.project.worktree) return language.t("workspace.type.local")
       const [workspace] = globalSync.child(session.directory, { bootstrap: false })
       return workspaceLabel(session.directory, workspace.vcs?.branch, props.project.id)
     }
 
-    const restoreSession = async (session: Session) => {
+    const restore = async (session: Session) => {
       try {
         await globalSDK.client.session.update({
           directory: session.directory,
           sessionID: session.id,
           time: { archived: null },
         })
-        const [, setChildStore] = globalSync.child(session.directory)
-        setChildStore(
+        const [, setChild] = globalSync.child(session.directory)
+        setChild(
           produce((draft) => {
             draft.session.push(session)
             draft.session.sort((a, b) => b.time.updated - a.time.updated)
           }),
         )
-        removeDeleted(session.id)
+        remove(session.id)
       } catch (err) {
         showToast({
           title: language.t("session.restore.failed.title"),
-          description: errorMessage(err),
+          description: errorMessage(err, language.t("common.requestFailed")),
         })
       }
+    }
+
+    const removeArchived = async (session: Session) => {
+      const ok = await globalSDK.client.session
+        .delete({ sessionID: session.id, directory: session.directory })
+        .then((x) => x.data)
+        .catch((err) => {
+          showToast({
+            title: language.t("session.delete.failed.title"),
+            description: errorMessage(err, language.t("common.requestFailed")),
+          })
+          return false
+        })
+      if (!ok) return false
+      return true
     }
 
     return (
@@ -2087,32 +2187,32 @@ export default function Layout(props: ParentProps) {
             <div class="max-h-80 overflow-y-auto flex flex-col gap-1 pr-1">
               <For each={state.sessions}>
                 {(session) => {
-                  const [confirming, setConfirming] = createSignal(false)
+                  const [confirm, setConfirm] = createStore({ on: false })
                   let timer: ReturnType<typeof setTimeout> | undefined
 
-                  const startConfirm = () => {
-                    setConfirming(true)
+                  const start = () => {
+                    setConfirm("on", true)
                     clearTimeout(timer)
-                    timer = setTimeout(() => setConfirming(false), 3000)
+                    timer = setTimeout(() => setConfirm("on", false), 3000)
                   }
 
-                  const handleDelete = async () => {
+                  const removeSession = async () => {
                     clearTimeout(timer)
-                    const ok = await deleteSession(session)
+                    const ok = await removeArchived(session)
                     if (!ok) {
-                      setConfirming(false)
+                      setConfirm("on", false)
                       return
                     }
-                    removeDeleted(session.id)
+                    remove(session.id)
                   }
 
                   onCleanup(() => clearTimeout(timer))
 
                   return (
                     <div class="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-surface-raised-base-hover">
-                      <button class="flex-1 min-w-0 text-left" onClick={() => openSession(session)}>
+                      <button class="flex-1 min-w-0 text-left" onClick={() => open(session)}>
                         <div class="text-14-regular text-text-strong truncate">{session.title}</div>
-                        <div class="text-12-regular text-text-weak truncate">{directoryLabel(session)}</div>
+                        <div class="text-12-regular text-text-weak truncate">{label(session)}</div>
                       </button>
                       <div class="flex items-center gap-1 shrink-0">
                         <Tooltip value={language.t("session.restore")} placement="top">
@@ -2121,11 +2221,11 @@ export default function Layout(props: ParentProps) {
                             variant="ghost"
                             class="size-6 rounded-md cursor-pointer"
                             aria-label={language.t("session.restore")}
-                            onClick={() => void restoreSession(session)}
+                            onClick={() => void restore(session)}
                           />
                         </Tooltip>
                         <Show
-                          when={confirming()}
+                          when={confirm.on}
                           fallback={
                             <Tooltip value={language.t("common.delete")} placement="top">
                               <IconButton
@@ -2134,7 +2234,7 @@ export default function Layout(props: ParentProps) {
                                 class="size-6 rounded-md cursor-pointer"
                                 style={{ "--icon-base": "var(--icon-critical-base)" }}
                                 aria-label={language.t("common.delete")}
-                                onClick={startConfirm}
+                                onClick={start}
                               />
                             </Tooltip>
                           }
@@ -2148,7 +2248,7 @@ export default function Layout(props: ParentProps) {
                               "border-color": "var(--surface-critical-base)",
                               color: "var(--text-on-critical-base)",
                             }}
-                            onClick={handleDelete}
+                            onClick={removeSession}
                           >
                             {language.t("session.delete.button")}
                           </Button>
@@ -2168,6 +2268,11 @@ export default function Layout(props: ParentProps) {
         </div>
       </Dialog>
     )
+  }
+
+  const activeRoute = {
+    session: "",
+    sessionProject: "",
   }
 
   createEffect(
@@ -3305,13 +3410,10 @@ export default function Layout(props: ParentProps) {
     sidebarOpened: () => layout.sidebar.opened(),
     sidebarHovering,
     hoverProject: () => state.hoverProject,
-    onProjectMouseEnter: (worktree, event) => aim.enter(worktree, event),
-    onProjectMouseLeave: (worktree) => aim.leave(worktree),
-    onProjectFocus: (worktree) => aim.activate(worktree),
-    onHoverOpenChanged: (worktree, hoverOpen) => {
-      if (!hoverOpen && state.hoverProject && state.hoverProject !== worktree) return
-      setState("hoverProject", hoverOpen ? worktree : undefined)
-    },
+    nav: () => state.nav,
+    onProjectMouseEnter: () => {},
+    onProjectMouseLeave: () => {},
+    onProjectFocus: () => {},
     navigateToProject,
     openSidebar: () => layout.sidebar.open(),
     closeProject,
@@ -3515,30 +3617,24 @@ export default function Layout(props: ParentProps) {
                   fallback={
                     <>
                       <div class="shrink-0 py-4 px-3">
-                        <div class="flex flex-col gap-2">
-                          <TooltipKeybind
-                            title={language.t("command.session.new")}
-                            keybind={command.keybind("session.new")}
-                            placement="top"
-                          >
-                            <Button
-                              size="large"
-                              icon="plus-small"
-                              class="w-full"
-                              onClick={() => navigateWithSidebarReset(`/${base64Encode(p().worktree)}/session`)}
-                            >
-                              {language.t("command.session.new")}
-                            </Button>
-                          </TooltipKeybind>
+                        <div class="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
                           <Button
+                            variant="ghost"
                             size="large"
+                            icon="plus-small"
+                            class="w-full rounded-lg border border-border-weak-base hover:bg-surface-base-hover active:bg-surface-base-active"
+                            onClick={() => navigateWithSidebarReset(`/${base64Encode(p().worktree)}/session`)}
+                          >
+                            {language.t("command.session.new")}
+                          </Button>
+                          <IconButton
                             icon="archive"
                             variant="ghost"
-                            class="w-full"
+                            size="large"
+                            class="rounded-lg border border-border-weak-base"
+                            aria-label={language.t("sidebar.project.viewArchivedSessions")}
                             onClick={() => dialog.show(() => <DialogArchivedSessions project={p()} />)}
-                          >
-                            {language.t("sidebar.project.viewArchivedSessions")}
-                          </Button>
+                          />
                         </div>
                       </div>
                       <div class="flex-1 min-h-0">
@@ -3554,25 +3650,18 @@ export default function Layout(props: ParentProps) {
                 >
                   <>
                     <div class="shrink-0 py-4 px-3">
-                      <div class="flex flex-col gap-2">
-                        <TooltipKeybind
-                          title={language.t("workspace.new")}
-                          keybind={command.keybind("workspace.new")}
-                          placement="top"
-                        >
-                          <Button size="large" icon="plus-small" class="w-full" onClick={() => createWorkspace(p())}>
-                            {language.t("workspace.new")}
-                          </Button>
-                        </TooltipKeybind>
-                        <Button
-                          size="large"
+                      <div class="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                        <Button size="large" icon="plus-small" class="w-full" onClick={() => createWorkspace(p())}>
+                          {language.t("workspace.new")}
+                        </Button>
+                        <IconButton
                           icon="archive"
                           variant="ghost"
-                          class="w-full"
+                          size="large"
+                          class="rounded-lg border border-border-weak-base"
+                          aria-label={language.t("sidebar.project.viewArchivedSessions")}
                           onClick={() => dialog.show(() => <DialogArchivedSessions project={p()} />)}
-                        >
-                          {language.t("sidebar.project.viewArchivedSessions")}
-                        </Button>
+                        />
                       </div>
                     </div>
                     <div class="relative flex-1 min-h-0">
@@ -3703,7 +3792,7 @@ export default function Layout(props: ParentProps) {
   }
 
   return (
-    <div class="relative bg-background-base flex-1 min-h-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
+    <div class="relative bg-background-base flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
       <Show when={folderDragging() || fileDragging()}>
         <div class="fixed inset-0 z-[100] flex items-center justify-center bg-background-base/80 pointer-events-none">
           <div class="flex flex-col items-center gap-3 text-text-weak">
@@ -3741,7 +3830,25 @@ export default function Layout(props: ParentProps) {
                 arm()
               }}
             >
-              <div class="@container w-full h-full contain-strict">{sidebarContent()}</div>
+              <div class="@container w-full h-full">{sidebarContent()}</div>
+              <Show when={layout.sidebar.opened()}>
+                <div onPointerDown={() => setState("sizing", true)}>
+                  <ResizeHandle
+                    direction="horizontal"
+                    size={layout.sidebar.width()}
+                    min={244}
+                    max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.3 + 64}
+                    collapseThreshold={244}
+                    onResize={(w) => {
+                      setState("sizing", true)
+                      if (sizet !== undefined) clearTimeout(sizet)
+                      sizet = window.setTimeout(() => setState("sizing", false), 120)
+                      layout.sidebar.resize(w)
+                    }}
+                    onCollapse={layout.sidebar.close}
+                  />
+                </div>
+              </Show>
             </nav>
 
         <main
@@ -3795,11 +3902,117 @@ export default function Layout(props: ParentProps) {
                 </div>
               </div>
             </div>
-          </Show>
-          <Show when={!autoselecting()} fallback={<div class="size-full" />}>
-            {props.children}
-          </Show>
-        </main>
+
+            <Show when={findbar.open && platform.find}>
+              <div class="pointer-events-none absolute top-3 right-3 z-30 w-[min(480px,calc(100%-24px))]">
+                <div class="pointer-events-auto flex flex-row items-center gap-2 rounded-2xl border border-border-weak-base bg-background-stronger/92 px-2 py-2 shadow-lg backdrop-blur-xl">
+                  <div class="flex flex-1 min-w-0 flex-row items-center gap-2 rounded-xl bg-surface-panel px-3 ring-1 ring-border-weaker-base/70">
+                    <Icon name="magnifying-glass" size="small" class="shrink-0 text-text-weaker" />
+                    <InlineInput
+                      ref={findInput}
+                      value={findbar.q}
+                      autofocus
+                      placeholder={language.t("common.search.placeholder")}
+                      style={{ "--inline-input-shadow": "none" }}
+                      class="h-10 flex-1 min-w-0 bg-transparent text-14-regular text-text-strong placeholder:text-text-weaker"
+                      onInput={(event) => setFindbar("q", event.currentTarget.value)}
+                      onKeyDown={findbarKeyDown}
+                    />
+                  </div>
+                  <div class="flex flex-row items-center gap-1 rounded-xl bg-surface-panel px-1.5 py-1 ring-1 ring-border-weaker-base/70">
+                    <IconButton
+                      icon="arrow-left"
+                      variant="ghost"
+                      size="large"
+                      class="rounded-lg text-text-weak hover:text-text-strong"
+                      aria-label={language.t("command.page.find.previous")}
+                      onClick={() => runFindbar(-1)}
+                    />
+                    <IconButton
+                      icon="arrow-right"
+                      variant="ghost"
+                      size="large"
+                      class="rounded-lg text-text-weak hover:text-text-strong"
+                      aria-label={language.t("command.page.find.next")}
+                      onClick={() => runFindbar(1)}
+                    />
+                    <div class="mx-0.5 h-5 w-px bg-border-weaker-base" />
+                    <IconButton
+                      icon="close"
+                      variant="ghost"
+                      size="large"
+                      class="rounded-lg text-text-weak hover:text-text-strong"
+                      aria-label={language.t("common.close")}
+                      onClick={closeFindbar}
+                    />
+                  </div>
+                </div>
+              </div>
+            </Show>
+
+            <div
+              classList={{
+                "absolute inset-0": true,
+                "xl:inset-y-0 xl:right-0 xl:left-[var(--main-left)]": true,
+                "z-20": true,
+                "transition-[left] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[left] motion-reduce:transition-none":
+                  !state.sizing,
+              }}
+              style={{
+                "--main-left": layout.sidebar.opened() ? `${Math.max(layout.sidebar.width(), 244)}px` : "4rem",
+              }}
+            >
+              <main
+                classList={{
+                  "size-full overflow-x-hidden flex flex-col items-start contain-strict border-t border-border-weak-base bg-background-base xl:border-l xl:rounded-tl-[12px]": true,
+                }}
+              >
+                <Show when={!autoselecting()} fallback={<div class="size-full" />}>
+                  {props.children}
+                </Show>
+              </main>
+            </div>
+
+            <div
+              classList={{
+                "hidden xl:flex absolute inset-y-0 left-16 z-30": true,
+                "opacity-100 translate-x-0 pointer-events-auto": state.peeked && !layout.sidebar.opened(),
+                "opacity-0 -translate-x-2 pointer-events-none": !state.peeked || layout.sidebar.opened(),
+                "transition-[opacity,transform] motion-reduce:transition-none": true,
+                "duration-180 ease-out": state.peeked && !layout.sidebar.opened(),
+                "duration-120 ease-in": !state.peeked || layout.sidebar.opened(),
+              }}
+              onMouseMove={disarm}
+              onMouseEnter={() => {
+                disarm()
+                aim.reset()
+              }}
+              onPointerDown={disarm}
+              onMouseLeave={() => {
+                arm()
+              }}
+            >
+              <Show when={state.peek}>
+                <SidebarPanel project={state.peek} merged={false} />
+              </Show>
+            </div>
+
+            <div
+              classList={{
+                "hidden xl:block pointer-events-none absolute inset-y-0 right-0 z-25 overflow-hidden": true,
+                "opacity-100 translate-x-0": state.peeked && !layout.sidebar.opened(),
+                "opacity-0 -translate-x-2": !state.peeked || layout.sidebar.opened(),
+                "transition-[opacity,transform] motion-reduce:transition-none": true,
+                "duration-180 ease-out": state.peeked && !layout.sidebar.opened(),
+                "duration-120 ease-in": !state.peeked || layout.sidebar.opened(),
+              }}
+              style={{ left: `calc(4rem + ${Math.max(Math.max(layout.sidebar.width(), 244) - 64, 0)}px)` }}
+            >
+              <div class="h-full w-px" style={{ "box-shadow": "var(--shadow-sidebar-overlay)" }} />
+            </div>
+          </div>
+        </div>
+        {import.meta.env.DEV && <DebugBar />}
       </div>
       <Toast.Region />
     </div>

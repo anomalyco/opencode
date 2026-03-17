@@ -3,15 +3,14 @@
   "name": "Gruvbox",
   "id": "gruvbox",
   "light": {
-    "palette": {
+    "seeds": {
       "neutral": "#fbf1c7",
-      "ink": "#3c3836",
       "primary": "#076678",
-      "accent": "#9d0006",
       "success": "#79740e",
       "warning": "#b57614",
       "error": "#9d0006",
       "info": "#8f3f71",
+      "interactive": "#076678",
       "diffAdd": "#79740e",
       "diffDelete": "#9d0006"
     },
@@ -72,15 +71,14 @@
     }
   },
   "dark": {
-    "palette": {
+    "seeds": {
       "neutral": "#282828",
-      "ink": "#ebdbb2",
       "primary": "#83a598",
-      "accent": "#fb4934",
       "success": "#b8bb26",
       "warning": "#fabd2f",
       "error": "#fb4934",
       "info": "#d3869b",
+      "interactive": "#83a598",
       "diffAdd": "#b8bb26",
       "diffDelete": "#fb4934"
     },
@@ -124,7 +122,7 @@
       "markdown-text": "#ebdbb2",
       "markdown-link": "#83a598",
       "markdown-link-text": "#8ec07c",
-      "markdown-code": "#b8bb26",
+      "markdown-code": "#d3869b",
       "markdown-block-quote": "#928374",
       "markdown-emph": "#d3869b",
       "markdown-strong": "#fe8019",
