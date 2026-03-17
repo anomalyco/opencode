@@ -1,6 +1,19 @@
 import { Schema, SchemaAST } from "effect"
 import z from "zod"
 
+/**
+ * Converts Effect Schema definitions to Zod schemas.
+ *
+ * Provides interoperability between Effect Schema and Zod by converting
+ * Effect Schema AST to equivalent Zod type definitions.
+ *
+ * @example
+ * ```typescript
+ * const UserSchema = Schema.Struct({ name: Schema.String })
+ * const UserZod = zod(UserSchema) // z.ZodType<{ name: string }>
+ * ```
+ */
+
 export function zod<S extends Schema.Top>(schema: S): z.ZodType<Schema.Schema.Type<S>> {
   return walk(schema.ast) as z.ZodType<Schema.Schema.Type<S>>
 }
