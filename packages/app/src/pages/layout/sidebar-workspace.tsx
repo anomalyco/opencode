@@ -32,6 +32,7 @@ type InlineEditorComponent = (props: {
 
 export type WorkspaceSidebarContext = {
   currentDir: Accessor<string>
+  navList: Accessor<Session[]>
   sidebarExpanded: Accessor<boolean>
   sidebarHovering: Accessor<boolean>
   nav: Accessor<HTMLElement | undefined>
@@ -146,8 +147,6 @@ const WorkspaceActions = (props: {
   setMenuOpen: (open: boolean) => void
   setPendingRename: (value: boolean) => void
   sidebarHovering: Accessor<boolean>
-  mobile?: boolean
-  nav: Accessor<HTMLElement | undefined>
   touch: Accessor<boolean>
   language: ReturnType<typeof useLanguage>
   workspaceValue: Accessor<string>
@@ -186,7 +185,7 @@ const WorkspaceActions = (props: {
           aria-label={props.language.t("common.moreOptions")}
         />
       </Tooltip>
-      <DropdownMenu.Portal mount={!props.mobile ? props.nav() : undefined}>
+      <DropdownMenu.Portal>
         <DropdownMenu.Content
           onCloseAutoFocus={(event) => {
             if (!props.pendingRename()) return
@@ -231,7 +230,7 @@ const WorkspaceActions = (props: {
     <Show when={!props.touch()}>
       <Tooltip value={props.language.t("command.session.new")} placement="top">
         <IconButton
-          icon="plus-small"
+          icon="new-session"
           variant="ghost"
           class="size-6 rounded-md opacity-0 pointer-events-none group-hover/workspace:opacity-100 group-hover/workspace:pointer-events-auto group-focus-within/workspace:opacity-100 group-focus-within/workspace:pointer-events-auto"
           data-action="workspace-new-session"
@@ -253,6 +252,7 @@ const WorkspaceActions = (props: {
 const WorkspaceSessionList = (props: {
   slug: Accessor<string>
   mobile?: boolean
+  popover?: boolean
   ctx: WorkspaceSidebarContext
   showNew: Accessor<boolean>
   loading: Accessor<boolean>
@@ -262,7 +262,7 @@ const WorkspaceSessionList = (props: {
   loadMore: () => Promise<void>
   language: ReturnType<typeof useLanguage>
 }): JSX.Element => (
-  <nav class="flex flex-col gap-1 px-2">
+  <nav class="flex flex-col gap-1">
     <Show when={props.showNew()}>
       <NewSessionItem
         slug={props.slug()}
@@ -279,8 +279,11 @@ const WorkspaceSessionList = (props: {
       {(session) => (
         <SessionItem
           session={session}
+          list={props.sessions()}
+          navList={props.ctx.navList}
           slug={props.slug()}
           mobile={props.mobile}
+          popover={props.popover}
           children={props.children()}
           sidebarExpanded={props.ctx.sidebarExpanded}
           sidebarHovering={props.ctx.sidebarHovering}
@@ -318,6 +321,7 @@ export const SortableWorkspace = (props: {
   sortNow: Accessor<number>
   divider?: boolean
   mobile?: boolean
+  popover?: boolean
 }): JSX.Element => {
   const navigate = useNavigate()
   const params = useParams()
@@ -355,6 +359,22 @@ export const SortableWorkspace = (props: {
   }
 
   const workspaceEditActive = createMemo(() => props.ctx.editorOpen(`workspace:${props.directory}`))
+  const header = () => (
+    <WorkspaceHeader
+      local={local}
+      busy={busy}
+      open={open}
+      directory={props.directory}
+      language={language}
+      branch={() => workspaceStore.vcs?.branch}
+      workspaceValue={workspaceValue}
+      workspaceEditActive={workspaceEditActive}
+      InlineEditor={props.ctx.InlineEditor}
+      renameWorkspace={props.ctx.renameWorkspace}
+      setEditor={props.ctx.setEditor}
+      projectId={props.project.id}
+    />
+  )
 
   const openWrapper = (value: boolean) => {
     props.ctx.setWorkspaceExpanded(props.directory, value)
@@ -378,7 +398,7 @@ export const SortableWorkspace = (props: {
       }}
     >
       <Collapsible variant="ghost" open={open()} class="shrink-0" onOpenChange={openWrapper}>
-        <div class="px-2 py-1">
+        <div class="py-1">
           <div
             class="group/workspace relative"
             data-component="workspace-item"
@@ -396,20 +416,7 @@ export const SortableWorkspace = (props: {
                     data-action="workspace-toggle"
                     data-workspace={base64Encode(props.directory)}
                   >
-                    <WorkspaceHeader
-                      local={local}
-                      busy={busy}
-                      open={open}
-                      directory={props.directory}
-                      language={language}
-                      branch={() => workspaceStore.vcs?.branch}
-                      workspaceValue={workspaceValue}
-                      workspaceEditActive={workspaceEditActive}
-                      InlineEditor={props.ctx.InlineEditor}
-                      renameWorkspace={props.ctx.renameWorkspace}
-                      setEditor={props.ctx.setEditor}
-                      projectId={props.project.id}
-                    />
+                    {header()}
                   </Collapsible.Trigger>
                 }
               >
@@ -418,20 +425,7 @@ export const SortableWorkspace = (props: {
                     menu.open ? "pr-16" : "pr-2"
                   } group-hover/workspace:pr-16 group-focus-within/workspace:pr-16`}
                 >
-                  <WorkspaceHeader
-                    local={local}
-                    busy={busy}
-                    open={open}
-                    directory={props.directory}
-                    language={language}
-                    branch={() => workspaceStore.vcs?.branch}
-                    workspaceValue={workspaceValue}
-                    workspaceEditActive={workspaceEditActive}
-                    InlineEditor={props.ctx.InlineEditor}
-                    renameWorkspace={props.ctx.renameWorkspace}
-                    setEditor={props.ctx.setEditor}
-                    projectId={props.project.id}
-                  />
+                  {header()}
                 </div>
               </Show>
               <WorkspaceActions
@@ -443,8 +437,6 @@ export const SortableWorkspace = (props: {
                 setMenuOpen={(open) => setMenu("open", open)}
                 setPendingRename={(value) => setMenu("pendingRename", value)}
                 sidebarHovering={props.ctx.sidebarHovering}
-                mobile={props.mobile}
-                nav={props.ctx.nav}
                 touch={touch}
                 language={language}
                 workspaceValue={workspaceValue}
@@ -466,6 +458,7 @@ export const SortableWorkspace = (props: {
           <WorkspaceSessionList
             slug={slug}
             mobile={props.mobile}
+            popover={props.popover}
             ctx={props.ctx}
             showNew={showNew}
             loading={loading}
@@ -486,6 +479,7 @@ export const LocalWorkspace = (props: {
   project: LocalProject
   sortNow: Accessor<number>
   mobile?: boolean
+  popover?: boolean
 }): JSX.Element => {
   const globalSync = useGlobalSync()
   const language = useLanguage()
@@ -509,44 +503,19 @@ export const LocalWorkspace = (props: {
       ref={(el) => props.ctx.setScrollContainerRef(el, props.mobile)}
       class="size-full flex flex-col py-2 overflow-y-auto no-scrollbar [overflow-anchor:none]"
     >
-      <nav class="flex flex-col gap-1 px-2">
-        <Show when={loading()}>
-          <SessionSkeleton />
-        </Show>
-        <For each={sessions()}>
-          {(session) => (
-            <SessionItem
-              session={session}
-              slug={slug()}
-              mobile={props.mobile}
-              children={children()}
-              sidebarExpanded={props.ctx.sidebarExpanded}
-              sidebarHovering={props.ctx.sidebarHovering}
-              nav={props.ctx.nav}
-              hoverSession={props.ctx.hoverSession}
-              setHoverSession={props.ctx.setHoverSession}
-              clearHoverProjectSoon={props.ctx.clearHoverProjectSoon}
-              prefetchSession={props.ctx.prefetchSession}
-              archiveSession={props.ctx.archiveSession}
-            />
-          )}
-        </For>
-        <Show when={hasMore()}>
-          <div class="relative w-full py-1">
-            <Button
-              variant="ghost"
-              class="flex w-full text-left justify-start text-14-regular text-text-weak pl-9 pr-10"
-              size="large"
-              onClick={(e: MouseEvent) => {
-                loadMore()
-                ;(e.currentTarget as HTMLButtonElement).blur()
-              }}
-            >
-              {language.t("common.loadMore")}
-            </Button>
-          </div>
-        </Show>
-      </nav>
+      <WorkspaceSessionList
+        slug={slug}
+        mobile={props.mobile}
+        popover={props.popover}
+        ctx={props.ctx}
+        showNew={() => false}
+        loading={loading}
+        sessions={sessions}
+        children={children}
+        hasMore={hasMore}
+        loadMore={loadMore}
+        language={language}
+      />
     </div>
   )
 }

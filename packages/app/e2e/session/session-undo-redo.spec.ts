@@ -45,7 +45,7 @@ async function seedConversation(input: {
     .toBe(true)
 
   if (!userMessageID) throw new Error("Expected a user message id")
-  await expect(input.page.locator(`[data-message-id="${userMessageID}"]`).first()).toBeVisible({ timeout: 30_000 })
+  await expect(input.page.locator(`[data-message-id="${userMessageID}"]`)).toHaveCount(1, { timeout: 30_000 })
   return { prompt, userMessageID }
 }
 
@@ -123,7 +123,7 @@ test("slash redo clears revert and restores latest state", async ({ page, withPr
         .toBeUndefined()
 
       await expect(seeded.prompt).not.toContainText(token)
-      await expect(page.locator(`[data-message-id="${seeded.userMessageID}"]`).first()).toBeVisible()
+      await expect(page.locator(`[data-message-id="${seeded.userMessageID}"]`)).toHaveCount(1)
     })
   })
 })
@@ -158,8 +158,8 @@ test("slash undo/redo traverses multi-step revert stack", async ({ page, withPro
       const firstMessage = page.locator(`[data-message-id="${first.userMessageID}"]`)
       const secondMessage = page.locator(`[data-message-id="${second.userMessageID}"]`)
 
-      await expect(firstMessage.first()).toBeVisible()
-      await expect(secondMessage.first()).toBeVisible()
+      await expect(firstMessage).toHaveCount(1)
+      await expect(secondMessage).toHaveCount(1)
 
       await second.prompt.click()
       await page.keyboard.press(`${modKey}+A`)
@@ -176,7 +176,7 @@ test("slash undo/redo traverses multi-step revert stack", async ({ page, withPro
         })
         .toBe(second.userMessageID)
 
-      await expect(firstMessage.first()).toBeVisible()
+      await expect(firstMessage).toHaveCount(1)
       await expect(secondMessage).toHaveCount(0)
 
       await second.prompt.click()
@@ -210,7 +210,7 @@ test("slash undo/redo traverses multi-step revert stack", async ({ page, withPro
         })
         .toBe(second.userMessageID)
 
-      await expect(firstMessage.first()).toBeVisible()
+      await expect(firstMessage).toHaveCount(1)
       await expect(secondMessage).toHaveCount(0)
 
       await second.prompt.click()
@@ -226,8 +226,8 @@ test("slash undo/redo traverses multi-step revert stack", async ({ page, withPro
         })
         .toBeUndefined()
 
-      await expect(firstMessage.first()).toBeVisible()
-      await expect(secondMessage.first()).toBeVisible()
+      await expect(firstMessage).toHaveCount(1)
+      await expect(secondMessage).toHaveCount(1)
     })
   })
 })
