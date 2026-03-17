@@ -248,7 +248,7 @@ function App() {
         const session = sync.data.session.find((s) => s.id === sessionID)
         if (session) {
           if (tab.label === "Untitled") tabs.rename(tab.id, session.displayName ?? session.slug)
-          tabs.updateSessionID(tab.id, sessionID)
+          if (tab.sessionID !== sessionID) tabs.updateSessionID(tab.id, sessionID)
         }
       }
     })
