@@ -123,6 +123,107 @@ async function spot(page: Parameters<typeof test>[0]["page"], file: string) {
   }, file)
 }
 
+async function comment(page: Parameters<typeof test>[0]["page"], file: string, note: string) {
+  const row = page.locator(`[data-file="${file}"]`).first()
+  await expect(row).toBeVisible()
+
+  const line = row.locator('diffs-container [data-line="2"]').first()
+  await expect(line).toBeVisible()
+  await line.hover()
+
+  const add = row.getByRole("button", { name: /^Comment$/ }).first()
+  await expect(add).toBeVisible()
+  await add.click()
+
+  const area = row.locator('[data-slot="line-comment-textarea"]').first()
+  await expect(area).toBeVisible()
+  await area.fill(note)
+
+  const submit = row.locator('[data-slot="line-comment-action"][data-variant="primary"]').first()
+  await expect(submit).toBeEnabled()
+  await submit.click()
+
+  await expect(row.locator('[data-slot="line-comment-content"]').filter({ hasText: note }).first()).toBeVisible()
+  await expect(row.locator('[data-slot="line-comment-tools"]').first()).toBeVisible()
+}
+
+async function overflow(page: Parameters<typeof test>[0]["page"], file: string) {
+  return page.evaluate((file) => {
+    const row = document.querySelector(`[data-file="${file}"]`)
+    if (!(row instanceof HTMLElement)) return null
+
+    const view = document.querySelector('[data-slot="session-review-scroll"] .scroll-view__viewport')
+    const host = row.querySelector("diffs-container")
+    if (!(view instanceof HTMLElement) || !(host instanceof HTMLElement)) return null
+
+    const root = host.shadowRoot
+    if (!root) return null
+
+    const pop = root.querySelector('[data-slot="line-comment-popover"][data-inline-body]')
+    const tools = root.querySelector('[data-slot="line-comment-tools"]')
+    if (!(pop instanceof HTMLElement) || !(tools instanceof HTMLElement)) return null
+
+    const box = view.getBoundingClientRect()
+    const popBox = pop.getBoundingClientRect()
+    const toolsBox = tools.getBoundingClientRect()
+
+    return {
+      width: view.scrollWidth - view.clientWidth,
+      pop: popBox.right - box.right,
+      tools: toolsBox.right - box.right,
+    }
+  }, file)
+}
+
+test("review applies inline comment clicks without horizontal overflow", async ({ page, withProject }) => {
+  test.setTimeout(180_000)
+
+  const tag = `review-comment-${Date.now()}`
+  const file = `review-comment-${tag}.txt`
+  const note = `comment ${tag}`
+
+  await page.setViewportSize({ width: 1280, height: 900 })
+
+  await withProject(async (project) => {
+    const sdk = createSdk(project.directory)
+
+    await withSession(sdk, `e2e review comment ${tag}`, async (session) => {
+      await patch(sdk, session.id, seed([{ file, mark: tag }]))
+
+      await expect
+        .poll(
+          async () => {
+            const diff = await sdk.session.diff({ sessionID: session.id }).then((res) => res.data ?? [])
+            return diff.length
+          },
+          { timeout: 60_000 },
+        )
+        .toBe(1)
+
+      await project.gotoSession(session.id)
+      await show(page)
+
+      const tab = page.getByRole("tab", { name: /Review/i }).first()
+      await expect(tab).toBeVisible()
+      await tab.click()
+
+      await expand(page)
+      await waitMark(page, file, tag)
+      await comment(page, file, note)
+
+      await expect
+        .poll(async () => (await overflow(page, file))?.width ?? Number.POSITIVE_INFINITY, { timeout: 10_000 })
+        .toBeLessThanOrEqual(1)
+      await expect
+        .poll(async () => (await overflow(page, file))?.pop ?? Number.POSITIVE_INFINITY, { timeout: 10_000 })
+        .toBeLessThanOrEqual(1)
+      await expect
+        .poll(async () => (await overflow(page, file))?.tools ?? Number.POSITIVE_INFINITY, { timeout: 10_000 })
+        .toBeLessThanOrEqual(1)
+    })
+  })
+})
+
 test("review keeps scroll position after a live diff update", async ({ page, withProject }) => {
   test.skip(Boolean(process.env.CI), "Flaky in CI for now.")
   test.setTimeout(180_000)
