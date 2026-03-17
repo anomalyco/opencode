@@ -7,7 +7,36 @@ import { Filesystem } from "@/util/filesystem"
 import { Flag } from "@/flag/flag"
 import { Global } from "@/global"
 
+/**
+ * Configuration file path resolution utilities.
+ *
+ * Provides functions for locating, reading, and parsing configuration files
+ * across the project hierarchy. Supports JSONC format with comments,
+ * environment variable substitution, and file reference inclusion.
+ *
+ * @example
+ * ```typescript
+ * const files = await ConfigPaths.projectFiles("config", "/project", "/repo")
+ * for (const file of files) {
+ *   const content = await ConfigPaths.readFile(file)
+ *   if (content) {
+ *     const data = await ConfigPaths.parseText(content, file)
+ *   }
+ * }
+ * ```
+ */
 export namespace ConfigPaths {
+  /**
+   * Finds configuration files by name in the project hierarchy.
+   *
+   * Searches for both `.jsonc` and `.json` variants, starting from the
+   * specified directory and walking up to the worktree root.
+   *
+   * @param name - The base name of the config file (without extension)
+   * @param directory - The starting directory for the search
+   * @param worktree - The worktree root to stop searching at
+   * @returns Array of absolute paths to found config files, ordered from root to leaf
+   */
   export async function projectFiles(name: string, directory: string, worktree: string) {
     const files: string[] = []
     for (const file of [`${name}.jsonc`, `${name}.json`]) {
@@ -19,6 +48,17 @@ export namespace ConfigPaths {
     return files
   }
 
+  /**
+   * Collects all configuration directories in the project hierarchy.
+   *
+   * Returns directories in priority order: global config first, then
+   * project configs from root to current directory, then any custom
+   * config directory specified via environment variable.
+   *
+   * @param directory - The starting directory for the search
+   * @param worktree - The worktree root to stop searching at
+   * @returns Array of configuration directory paths
+   */
   export async function directories(directory: string, worktree: string) {
     return [
       Global.Path.config,
@@ -42,10 +82,22 @@ export namespace ConfigPaths {
     ]
   }
 
+  /**
+   * Generates possible config file paths within a directory.
+   *
+   * Returns paths for both `.jsonc` and `.json` variants.
+   *
+   * @param dir - The directory containing the config files
+   * @param name - The base name of the config file (without extension)
+   * @returns Array of possible file paths
+   */
   export function fileInDirectory(dir: string, name: string) {
-    return [path.join(dir, `${name}.jsonc`), path.join(dir, `${name}.json`)]
+    return [path.join(dir, `${name}.jsonc`), path.join(dir, `${name}.json`])]
   }
 
+  /**
+   * Error thrown when a config file contains JSON syntax errors.
+   */
   export const JsonError = NamedError.create(
     "ConfigJsonError",
     z.object({
@@ -54,6 +106,9 @@ export namespace ConfigPaths {
     }),
   )
 
+  /**
+   * Error thrown when config file content fails validation.
+   */
   export const InvalidError = NamedError.create(
     "ConfigInvalidError",
     z.object({
@@ -63,7 +118,15 @@ export namespace ConfigPaths {
     }),
   )
 
-  /** Read a config file, returning undefined for missing files and throwing JsonError for other failures. */
+  /**
+   * Reads a config file, returning undefined for missing files.
+   *
+   * Throws JsonError for other failures (permissions, etc.).
+   *
+   * @param filepath - Path to the config file to read
+   * @returns File content as string, or undefined if file doesn't exist
+   * @throws JsonError when file cannot be read (excluding ENOENT)
+   */
   export async function readFile(filepath: string) {
     return Filesystem.readText(filepath).catch((err: NodeJS.ErrnoException) => {
       if (err.code === "ENOENT") return
@@ -81,7 +144,19 @@ export namespace ConfigPaths {
     return typeof input === "string" ? path.dirname(input) : input.dir
   }
 
-  /** Apply {env:VAR} and {file:path} substitutions to config text. */
+  /**
+   * Applies {env:VAR} and {file:path} substitutions to config text.
+   *
+   * Environment variables are replaced with their values (empty string if unset).
+   * File references are replaced with the file content (JSON-escaped).
+   * Supports ~/ shorthand for home directory in file paths.
+   *
+   * @param text - The config text to process
+   * @param input - The source file path or source+dir object for error reporting
+   * @param missing - How to handle missing file references: "error" throws, "empty" uses empty string
+   * @returns Text with substitutions applied
+   * @throws InvalidError when a referenced file cannot be found and missing="error"
+   */
   async function substitute(text: string, input: ParseSource, missing: "error" | "empty" = "error") {
     text = text.replace(/\{env:([^}]+)\}/g, (_, varName) => {
       return process.env[varName] || ""
@@ -140,7 +215,19 @@ export namespace ConfigPaths {
     return out
   }
 
-  /** Substitute and parse JSONC text, throwing JsonError on syntax errors. */
+  /**
+   * Substitutes variables and parses JSONC text.
+   *
+   * Applies environment variable and file reference substitutions,
+   * then parses the result as JSONC (JSON with Comments).
+   * Returns the parsed data as a JavaScript value.
+   *
+   * @param text - The JSONC text to parse
+   * @param input - The source file path or source+dir object for error reporting
+   * @param missing - How to handle missing file references: "error" throws, "empty" uses empty string
+   * @returns Parsed JSONC data
+   * @throws JsonError when JSONC syntax errors are encountered
+   */
   export async function parseText(text: string, input: ParseSource, missing: "error" | "empty" = "error") {
     const configSource = source(input)
     text = await substitute(text, input, missing)
