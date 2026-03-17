@@ -13,6 +13,7 @@ import { GlobalBus } from "@/bus/global"
 import { existsSync } from "fs"
 import { git } from "../util/git"
 import { Glob } from "../util/glob"
+import { Hash } from "../util/hash"
 import { which } from "../util/which"
 import { ProjectID } from "./schema"
 
@@ -107,10 +108,8 @@ export namespace Project {
 
         const gitBinary = which("git")
 
-        // cached id calculation
-        let id = await readCachedId(dotgit)
-
         if (!gitBinary) {
+          const id = await readCachedId(dotgit)
           return {
             id: id ?? ProjectID.global,
             worktree: sandbox,
@@ -130,6 +129,7 @@ export namespace Project {
           .catch(() => undefined)
 
         if (!worktree) {
+          const id = await readCachedId(dotgit)
           return {
             id: id ?? ProjectID.global,
             worktree: sandbox,
@@ -138,10 +138,13 @@ export namespace Project {
           }
         }
 
+        // cached id calculation
+        let id = await readCachedId(dotgit)
+
         // In the case of a git worktree, it can't cache the id
         // because `.git` is not a folder, but it always needs the
         // same project id as the common dir, so we resolve it now
-        if (id == null) {
+        if (id == null && sandbox !== worktree) {
           id = await readCachedId(path.join(worktree, ".git"))
         }
 
@@ -168,7 +171,10 @@ export namespace Project {
             }
           }
 
-          id = roots[0] ? ProjectID.make(roots[0]) : undefined
+          // Combine the root commit with the worktree path so that
+          // separate clones (different worktree paths) get distinct IDs
+          // while git worktrees (same common root) share one ID.
+          id = roots[0] ? ProjectID.make(Hash.fast(roots[0] + "\0" + worktree)) : undefined
           if (id) {
             // Write to common dir so the cache is shared across worktrees.
             await Filesystem.write(path.join(worktree, ".git", "opencode"), id).catch(() => undefined)

@@ -198,7 +198,7 @@ describe("Project.fromDirectory with worktrees", () => {
     }
   })
 
-  test("separate clones of the same repo should share project ID", async () => {
+  test("separate clones of the same repo should get distinct project IDs", async () => {
     const p = await loadProject()
     await using tmp = await tmpdir({ git: true })
 
@@ -212,7 +212,11 @@ describe("Project.fromDirectory with worktrees", () => {
       const { project: a } = await p.fromDirectory(tmp.path)
       const { project: b } = await p.fromDirectory(clone)
 
-      expect(b.id).toBe(a.id)
+      // Separate clones must get distinct IDs so they each have their
+      // own snapshot, icon, and name -- preventing the bug where the
+      // last-opened clone's worktree overwrites the snapshot path for
+      // all clones.
+      expect(b.id).not.toBe(a.id)
     } finally {
       await $`rm -rf ${bare} ${clone}`.quiet().nothrow()
     }
