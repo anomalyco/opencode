@@ -148,31 +148,25 @@ async function comment(page: Parameters<typeof test>[0]["page"], file: string, n
 }
 
 async function overflow(page: Parameters<typeof test>[0]["page"], file: string) {
-  return page.evaluate((file) => {
-    const row = document.querySelector(`[data-file="${file}"]`)
-    if (!(row instanceof HTMLElement)) return null
+  const row = page.locator(`[data-file="${file}"]`).first()
+  const view = page.locator('[data-slot="session-review-scroll"] .scroll-view__viewport').first()
+  const pop = row.locator('[data-slot="line-comment-popover"][data-inline-body]').first()
+  const tools = row.locator('[data-slot="line-comment-tools"]').first()
 
-    const view = document.querySelector('[data-slot="session-review-scroll"] .scroll-view__viewport')
-    const host = row.querySelector("diffs-container")
-    if (!(view instanceof HTMLElement) || !(host instanceof HTMLElement)) return null
+  const [width, viewBox, popBox, toolsBox] = await Promise.all([
+    view.evaluate((el) => el.scrollWidth - el.clientWidth),
+    view.boundingBox(),
+    pop.boundingBox(),
+    tools.boundingBox(),
+  ])
 
-    const root = host.shadowRoot
-    if (!root) return null
+  if (!viewBox || !popBox || !toolsBox) return null
 
-    const pop = root.querySelector('[data-slot="line-comment-popover"][data-inline-body]')
-    const tools = root.querySelector('[data-slot="line-comment-tools"]')
-    if (!(pop instanceof HTMLElement) || !(tools instanceof HTMLElement)) return null
-
-    const box = view.getBoundingClientRect()
-    const popBox = pop.getBoundingClientRect()
-    const toolsBox = tools.getBoundingClientRect()
-
-    return {
-      width: view.scrollWidth - view.clientWidth,
-      pop: popBox.right - box.right,
-      tools: toolsBox.right - box.right,
-    }
-  }, file)
+  return {
+    width,
+    pop: popBox.x + popBox.width - (viewBox.x + viewBox.width),
+    tools: toolsBox.x + toolsBox.width - (viewBox.x + viewBox.width),
+  }
 }
 
 test("review applies inline comment clicks without horizontal overflow", async ({ page, withProject }) => {
