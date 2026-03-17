@@ -1,5 +1,6 @@
 import type { Message, Session, TextPart, UserMessage } from "@opencode-ai/sdk/v2/client"
 import { Avatar } from "@opencode-ai/ui/avatar"
+import { ContextMenu } from "@opencode-ai/ui/context-menu"
 import { HoverCard } from "@opencode-ai/ui/hover-card"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -15,6 +16,7 @@ import { useLanguage } from "@/context/language"
 import { getAvatarColors, type LocalProject, useLayout } from "@/context/layout"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
+import { useServer } from "@/context/server"
 import { messageAgentColor } from "@/utils/agent"
 import { sessionPermissionRequest } from "../session/composer/session-request-tree"
 import { hasProjectPermissions } from "./helpers"
@@ -62,6 +64,30 @@ export const ProjectIcon = (props: { project: LocalProject; class?: string; noti
         />
       </Show>
     </div>
+  )
+}
+
+export const ProjectPinItem = (props: { project: LocalProject }): JSX.Element => {
+  const language = useLanguage()
+  const server = useServer()
+  return (
+    <ContextMenu.Item
+      data-action="project-pin-toggle"
+      data-project={base64Encode(props.project.worktree)}
+      onSelect={() => {
+        if (server.projects.isPinned(props.project.worktree)) {
+          server.projects.unpin(props.project.worktree)
+          return
+        }
+        server.projects.pin(props.project.worktree)
+      }}
+    >
+      <ContextMenu.ItemLabel>
+        {server.projects.isPinned(props.project.worktree)
+          ? language.t("sidebar.project.unpin")
+          : language.t("sidebar.project.pin")}
+      </ContextMenu.ItemLabel>
+    </ContextMenu.Item>
   )
 }
 

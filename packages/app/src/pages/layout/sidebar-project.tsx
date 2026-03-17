@@ -10,7 +10,7 @@ import { useLayout, type LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { useNotification } from "@/context/notification"
-import { ProjectIcon, SessionItem, type SessionItemProps } from "./sidebar-items"
+import { ProjectIcon, ProjectPinItem, SessionItem, type SessionItemProps } from "./sidebar-items"
 import { childMapByParent, displayName, sortedRootSessions } from "./helpers"
 
 export type ProjectSidebarContext = {
@@ -146,6 +146,7 @@ const ProjectTile = (props: {
           <ContextMenu.Item onSelect={() => props.showEditProjectDialog(props.project)}>
             <ContextMenu.ItemLabel>{props.language.t("common.edit")}</ContextMenu.ItemLabel>
           </ContextMenu.Item>
+          <ProjectPinItem project={props.project} />
           <ContextMenu.Item
             data-action="project-workspaces-toggle"
             data-project={base64Encode(props.project.worktree)}
