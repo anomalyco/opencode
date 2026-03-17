@@ -3,6 +3,24 @@ import { STATUS_CODES } from "http"
 import { iife } from "@/util/iife"
 import type { ProviderID } from "./schema"
 
+/**
+ * Provider error handling utilities for parsing and categorizing API errors.
+ *
+ * This namespace provides functions to detect context overflow errors,
+ * retryable errors, and format error messages from various LLM providers.
+ *
+ * @example
+ * ```typescript
+ * const parsedError = ProviderError.parseAPICallError({
+ *   providerID: "openai",
+ *   error: apiError
+ * })
+ *
+ * if (parsedError.type === "context_overflow") {
+ *   // Handle context window exceeded
+ * }
+ * ```
+ */
 export namespace ProviderError {
   // Adapted from overflow detection patterns in:
   // https://github.com/badlogic/pi-mono/blob/main/packages/ai/src/utils/overflow.ts
@@ -98,6 +116,9 @@ export namespace ProviderError {
     return undefined
   }
 
+  /**
+   * Represents a parsed stream error from provider responses.
+   */
   export type ParsedStreamError =
     | {
         type: "context_overflow"
@@ -111,6 +132,12 @@ export namespace ProviderError {
         responseBody: string
       }
 
+  /**
+   * Parses a stream error from provider responses and categorizes it.
+   *
+   * @param input - The raw error input to parse
+   * @returns Parsed stream error details or undefined if not a valid error
+   */
   export function parseStreamError(input: unknown): ParsedStreamError | undefined {
     const body = json(input)
     if (!body) return
@@ -149,6 +176,9 @@ export namespace ProviderError {
     }
   }
 
+  /**
+   * Represents a parsed API call error with detailed error information.
+   */
   export type ParsedAPICallError =
     | {
         type: "context_overflow"
@@ -165,6 +195,17 @@ export namespace ProviderError {
         metadata?: Record<string, string>
       }
 
+  /**
+   * Parses an API call error and categorizes it as context overflow or API error.
+   *
+   * This function detects context window exceeded errors across different providers
+   * and formats error messages appropriately.
+   *
+   * @param input - Object containing provider ID and the API call error
+   * @param input.providerID - The provider identifier
+   * @param input.error - The APICallError to parse
+   * @returns Parsed error details with type classification
+   */
   export function parseAPICallError(input: { providerID: ProviderID; error: APICallError }): ParsedAPICallError {
     const m = message(input.providerID, input.error)
     const body = json(input.error.responseBody)
