@@ -56,38 +56,35 @@ export namespace Server {
   export const Default = lazy(() => createApp({}))
 
   export const createApp = (opts: { cors?: string[] }): Hono => {
+    const match = (input?: string) => {
+      if (!input) return
+      if (input.startsWith("http://localhost:") || input === "http://localhost") return input
+      if (input.startsWith("http://127.0.0.1:") || input === "http://127.0.0.1") return input
+
+      const host = input.split("://")[1]?.split(":")[0]
+      if (host) {
+        if (host.startsWith("192.168.")) return input
+        if (host.startsWith("10.")) return input
+        if (/^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host)) return input
+        if (host.endsWith(".local")) return input
+      }
+
+      if (
+        input === "tauri://localhost" ||
+        input === "http://tauri.localhost" ||
+        input === "https://tauri.localhost"
+      )
+        return input
+
+      if (/^https?:\/\/([a-z0-9-]+\.)*opencode\.ai$/.test(input)) return input
+      if (opts?.cors?.includes(input)) return input
+    }
+
     const app = new Hono()
     return app
-      .onError((err, c) => {
-        log.error("failed", {
-          error: err,
-        })
-        if (err instanceof NamedError) {
-          let status: ContentfulStatusCode
-          if (err instanceof NotFoundError) status = 404
-          else if (err instanceof Provider.ModelNotFoundError) status = 400
-          else if (err.name.startsWith("Worktree")) status = 400
-          else status = 500
-          return c.json(err.toObject(), { status })
-        }
-        if (err instanceof HTTPException) return err.getResponse()
-        const message = err instanceof Error && err.stack ? err.stack : err.toString()
-        return c.json(new NamedError.Unknown({ message }).toObject(), {
-          status: 500,
-        })
-      })
-      .use((c, next) => {
-        // Allow CORS preflight requests to succeed without auth.
-        // Browser clients sending Authorization headers will preflight with OPTIONS.
-        if (c.req.method === "OPTIONS") return next()
-        const password = Flag.OPENCODE_SERVER_PASSWORD
-        if (!password) return next()
-        const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
-        return basicAuth({ username, password })(c, next)
-      })
       .use(async (c, next) => {
-        const skipLogging = c.req.path === "/log"
-        if (!skipLogging) {
+        const skip = c.req.path === "/log"
+        if (!skip) {
           log.info("request", {
             method: c.req.method,
             path: c.req.path,
@@ -98,36 +95,67 @@ export namespace Server {
           path: c.req.path,
         })
         await next()
-        if (!skipLogging) {
+        if (!skip) {
           timer.stop()
         }
       })
+      .onError((err, c) => {
+        log.error("failed", {
+          err,
+        })
+
+        const ok = match(c.req.header("origin"))
+        const headers = (res: Response) => {
+          if (!ok) return res
+          res.headers.set("Access-Control-Allow-Origin", ok)
+          res.headers.set("Access-Control-Allow-Credentials", "true")
+          res.headers.set("Access-Control-Allow-Methods", "GET, HEAD, PUT, POST, DELETE, PATCH")
+          res.headers.set(
+            "Access-Control-Allow-Headers",
+            "Content-Type, Authorization, x-opencode-directory, x-opencode-workspace, Last-Event-ID",
+          )
+          return res
+        }
+
+        if (err instanceof NamedError) {
+          const status = (() => {
+            if (err instanceof NotFoundError) return 404
+            if (err instanceof Provider.ModelNotFoundError) return 400
+            if (err.name.startsWith("Worktree")) return 400
+            return 500
+          })() as ContentfulStatusCode
+          return headers(c.json(err.toObject(), { status }))
+        }
+        if (err instanceof HTTPException) return headers(err.getResponse())
+        const msg = err instanceof Error && err.stack ? err.stack : err.toString()
+        return headers(
+          c.json(new NamedError.Unknown({ message: msg }).toObject(), {
+            status: 500,
+          }),
+        )
+      })
       .use(
         cors({
-          origin(input) {
-            if (!input) return
-
-            if (input.startsWith("http://localhost:")) return input
-            if (input.startsWith("http://127.0.0.1:")) return input
-            if (
-              input === "tauri://localhost" ||
-              input === "http://tauri.localhost" ||
-              input === "https://tauri.localhost"
-            )
-              return input
-
-            // *.opencode.ai (https only, adjust if needed)
-            if (/^https:\/\/([a-z0-9-]+\.)*opencode\.ai$/.test(input)) {
-              return input
-            }
-            if (opts?.cors?.includes(input)) {
-              return input
-            }
-
-            return
-          },
+          origin: match,
+          credentials: true,
+          allowHeaders: [
+            "Content-Type",
+            "Authorization",
+            "x-opencode-directory",
+            "x-opencode-workspace",
+            "Last-Event-ID",
+          ],
         }),
       )
+      .use((c, next) => {
+        // Allow CORS preflight requests to succeed without auth.
+        // Browser clients sending Authorization headers will preflight with OPTIONS.
+        if (c.req.method === "OPTIONS") return next()
+        const password = Flag.OPENCODE_SERVER_PASSWORD
+        if (!password) return next()
+        const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
+        return basicAuth({ username, password })(c, next)
+      })
       .route("/global", GlobalRoutes())
       .put(
         "/auth/:providerID",
@@ -567,7 +595,7 @@ export namespace Server {
         })
         response.headers.set(
           "Content-Security-Policy",
-          "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:",
+          "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data: http://localhost:* http://127.0.0.1:* http://192.168.*:* http://10.*:* http://172.16.*:* http://172.17.*:* http://172.18.*:* http://172.19.*:* http://172.20.*:* http://172.21.*:* http://172.22.*:* http://172.23.*:* http://172.24.*:* http://172.25.*:* http://172.26.*:* http://172.27.*:* http://172.28.*:* http://172.29.*:* http://172.30.*:* http://172.31.*:* *.local:*",
         )
         return response
       })
