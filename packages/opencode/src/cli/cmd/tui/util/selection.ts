@@ -10,6 +10,17 @@ type Renderer = {
   clearSelection: () => void
 }
 
+/**
+ * Text selection utilities for the TUI.
+ *
+ * Provides functionality for copying selected text to the clipboard
+ * with user feedback via toast notifications.
+ *
+ * @example
+ * ```typescript
+ * Selection.copy(renderer, toast)
+ * ```
+ */
 export namespace Selection {
   export function copy(renderer: Renderer, toast: Toast): boolean {
     const text = renderer.getSelection()?.getSelectedText()
