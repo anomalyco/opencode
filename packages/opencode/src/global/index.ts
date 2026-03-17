@@ -11,17 +11,42 @@ const cache = path.join(xdgCache!, app)
 const config = path.join(xdgConfig!, app)
 const state = path.join(xdgState!, app)
 
+/**
+ * Global application paths and initialization.
+ *
+ * Defines standard XDG-compliant paths for application data, configuration,
+ * cache, and state directories. Automatically creates required directories
+ * on module load and manages cache versioning.
+ *
+ * @example
+ * ```typescript
+ * const configPath = Global.Path.config
+ * const dataPath = Global.Path.data
+ * ```
+ */
 export namespace Global {
+  /**
+   * Standard application paths following XDG directory specifications.
+   */
   export const Path = {
-    // Allow override via OPENCODE_TEST_HOME for test isolation
+    /**
+     * User home directory.
+     * Can be overridden via OPENCODE_TEST_HOME environment variable for testing.
+     */
     get home() {
       return process.env.OPENCODE_TEST_HOME || os.homedir()
     },
+    /** Base directory for application data files. */
     data,
+    /** Directory for executable binaries. */
     bin: path.join(data, "bin"),
+    /** Directory for log files. */
     log: path.join(data, "log"),
+    /** Base directory for cached files. */
     cache,
+    /** Base directory for configuration files. */
     config,
+    /** Base directory for state files (runtime data). */
     state,
   }
 }
