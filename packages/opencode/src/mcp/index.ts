@@ -135,7 +135,7 @@ export namespace MCP {
         return client.callTool(
           {
             name: mcpTool.name,
-            arguments: args as Record<string, unknown>,
+            arguments: (args || {}) as Record<string, unknown>,
           },
           CallToolResultSchema,
           {
@@ -158,6 +158,28 @@ export namespace MCP {
   type McpEntry = NonNullable<Config.Info["mcp"]>[string]
   function isMcpConfigured(entry: McpEntry): entry is Config.Mcp {
     return typeof entry === "object" && entry !== null && "type" in entry
+  }
+
+  async function descendants(pid: number): Promise<number[]> {
+    if (process.platform === "win32") return []
+    const pids: number[] = []
+    const queue = [pid]
+    while (queue.length > 0) {
+      const current = queue.shift()!
+      const proc = Bun.spawn(["pgrep", "-P", String(current)], { stdout: "pipe", stderr: "pipe" })
+      const [code, out] = await Promise.all([proc.exited, new Response(proc.stdout).text()]).catch(
+        () => [-1, ""] as const,
+      )
+      if (code !== 0) continue
+      for (const tok of out.trim().split(/\s+/)) {
+        const cpid = parseInt(tok, 10)
+        if (!isNaN(cpid) && pids.indexOf(cpid) === -1) {
+          pids.push(cpid)
+          queue.push(cpid)
+        }
+      }
+    }
+    return pids
   }
 
   const state = Instance.state(
@@ -196,6 +218,21 @@ export namespace MCP {
       }
     },
     async (state) => {
+      // The MCP SDK only signals the direct child process on close.
+      // Servers like chrome-devtools-mcp spawn grandchild processes
+      // (e.g. Chrome) that the SDK never reaches, leaving them orphaned.
+      // Kill the full descendant tree first so the server exits promptly
+      // and no processes are left behind.
+      for (const client of Object.values(state.clients)) {
+        const pid = (client.transport as any)?.pid
+        if (typeof pid !== "number") continue
+        for (const dpid of await descendants(pid)) {
+          try {
+            process.kill(dpid, "SIGTERM")
+          } catch {}
+        }
+      }
+
       await Promise.all(
         Object.values(state.clients).map((client) =>
           client.close().catch((error) => {
@@ -308,8 +345,6 @@ export namespace MCP {
       let authProvider: McpOAuthProvider | undefined
 
       if (!oauthDisabled) {
-        await McpOAuthCallback.ensureRunning(oauthConfig?.redirectUri)
-
         authProvider = new McpOAuthProvider(
           key,
           mcp.url,
@@ -317,7 +352,6 @@ export namespace MCP {
             clientId: oauthConfig?.clientId,
             clientSecret: oauthConfig?.clientSecret,
             scope: oauthConfig?.scope,
-            redirectUri: oauthConfig?.redirectUri,
           },
           {
             onRedirect: async (url) => {
@@ -347,7 +381,6 @@ export namespace MCP {
 
       let lastError: Error | undefined
       const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
-
       for (const { name, transport } of transports) {
         try {
           const client = new Client({
@@ -363,8 +396,14 @@ export namespace MCP {
         } catch (error) {
           lastError = error instanceof Error ? error : new Error(String(error))
 
-          // Handle OAuth-specific errors
-          if (error instanceof UnauthorizedError) {
+          // Handle OAuth-specific errors.
+          // The SDK throws UnauthorizedError when auth() returns 'REDIRECT',
+          // but may also throw plain Errors when auth() fails internally
+          // (e.g. during discovery, registration, or state generation).
+          // When an authProvider is attached, treat both cases as auth-related.
+          const isAuthError =
+            error instanceof UnauthorizedError || (authProvider && lastError.message.includes("OAuth"))
+          if (isAuthError) {
             log.info("mcp server requires authentication", { key, transport: name })
 
             // Check if this is a "needs registration" error
@@ -413,7 +452,7 @@ export namespace MCP {
       const [cmd, ...args] = mcp.command
       const cwd = Instance.directory
       const transport = new StdioClientTransport({
-        stderr: "ignore",
+        stderr: "pipe",
         command: cmd,
         args,
         cwd,
@@ -422,6 +461,9 @@ export namespace MCP {
           ...(cmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
           ...mcp.environment,
         },
+      })
+      transport.stderr?.on("data", (chunk: Buffer) => {
+        log.info(`mcp stderr: ${chunk.toString()}`, { key })
       })
 
       const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
@@ -572,26 +614,28 @@ export namespace MCP {
     const clientsSnapshot = await clients()
     const defaultTimeout = cfg.experimental?.mcp_timeout
 
-    for (const [clientName, client] of Object.entries(clientsSnapshot)) {
-      // Only include tools from connected MCPs (skip disabled ones)
-      const clientStatus = s.status[clientName]?.status
-      if (clientStatus !== "connected") {
-        continue
-      }
+    const connectedClients = Object.entries(clientsSnapshot).filter(
+      ([clientName]) => s.status[clientName]?.status === "connected",
+    )
 
-      const toolsResult = await client.listTools().catch((e) => {
-        log.error("failed to get tools", { clientName, error: e.message })
-        const failedStatus = {
-          status: "failed" as const,
-          error: e instanceof Error ? e.message : String(e),
-        }
-        s.status[clientName] = failedStatus
-        delete s.clients[clientName]
-        return undefined
-      })
-      if (!toolsResult) {
-        continue
-      }
+    const toolsResults = await Promise.all(
+      connectedClients.map(async ([clientName, client]) => {
+        const toolsResult = await client.listTools().catch((e) => {
+          log.error("failed to get tools", { clientName, error: e.message })
+          const failedStatus = {
+            status: "failed" as const,
+            error: e instanceof Error ? e.message : String(e),
+          }
+          s.status[clientName] = failedStatus
+          delete s.clients[clientName]
+          return undefined
+        })
+        return { clientName, client, toolsResult }
+      }),
+    )
+
+    for (const { clientName, client, toolsResult } of toolsResults) {
+      if (!toolsResult) continue
       const mcpConfig = config[clientName]
       const entry = isMcpConfigured(mcpConfig) ? mcpConfig : undefined
       const timeout = entry?.timeout ?? defaultTimeout
@@ -725,10 +769,8 @@ export namespace MCP {
       throw new Error(`MCP server ${mcpName} has OAuth explicitly disabled`)
     }
 
-    // OAuth config is optional - if not provided, we'll use auto-discovery
-    const oauthConfig = typeof mcpConfig.oauth === "object" ? mcpConfig.oauth : undefined
-
-    await McpOAuthCallback.ensureRunning(oauthConfig?.redirectUri)
+    // Start the callback server
+    await McpOAuthCallback.ensureRunning()
 
     // Generate and store a cryptographically secure state parameter BEFORE creating the provider
     // The SDK will call provider.state() to read this value
@@ -738,6 +780,8 @@ export namespace MCP {
     await McpAuth.updateOAuthState(mcpName, oauthState)
 
     // Create a new auth provider for this flow
+    // OAuth config is optional - if not provided, we'll use auto-discovery
+    const oauthConfig = typeof mcpConfig.oauth === "object" ? mcpConfig.oauth : undefined
     let capturedUrl: URL | undefined
     const authProvider = new McpOAuthProvider(
       mcpName,
@@ -746,7 +790,6 @@ export namespace MCP {
         clientId: oauthConfig?.clientId,
         clientSecret: oauthConfig?.clientSecret,
         scope: oauthConfig?.scope,
-        redirectUri: oauthConfig?.redirectUri,
       },
       {
         onRedirect: async (url) => {
@@ -775,7 +818,6 @@ export namespace MCP {
         pendingOAuthTransports.set(mcpName, transport)
         return { authorizationUrl: capturedUrl.toString() }
       }
-
       throw error
     }
   }
@@ -785,9 +827,9 @@ export namespace MCP {
    * Opens the browser and waits for callback.
    */
   export async function authenticate(mcpName: string): Promise<Status> {
-    const result = await startAuth(mcpName)
+    const { authorizationUrl } = await startAuth(mcpName)
 
-    if (!result.authorizationUrl) {
+    if (!authorizationUrl) {
       // Already authenticated
       const s = await state()
       return s.status[mcpName] ?? { status: "connected" }
@@ -801,9 +843,14 @@ export namespace MCP {
 
     // The SDK has already added the state parameter to the authorization URL
     // We just need to open the browser
-    log.info("opening browser for oauth", { mcpName, url: result.authorizationUrl, state: oauthState })
+    log.info("opening browser for oauth", { mcpName, url: authorizationUrl, state: oauthState })
+
+    // Register the callback BEFORE opening the browser to avoid race condition
+    // when the IdP has an active SSO session and redirects immediately
+    const callbackPromise = McpOAuthCallback.waitForCallback(oauthState)
+
     try {
-      const subprocess = await open(result.authorizationUrl)
+      const subprocess = await open(authorizationUrl)
       // The open package spawns a detached process and returns immediately.
       // We need to listen for errors which fire asynchronously:
       // - "error" event: command not found (ENOENT)
@@ -826,11 +873,11 @@ export namespace MCP {
       // Browser opening failed (e.g., in remote/headless sessions like SSH, devcontainers)
       // Emit event so CLI can display the URL for manual opening
       log.warn("failed to open browser, user must open URL manually", { mcpName, error })
-      Bus.publish(BrowserOpenFailed, { mcpName, url: result.authorizationUrl })
+      Bus.publish(BrowserOpenFailed, { mcpName, url: authorizationUrl })
     }
 
-    // Wait for callback using the OAuth state parameter
-    const code = await McpOAuthCallback.waitForCallback(oauthState)
+    // Wait for callback using the already-registered promise
+    const code = await callbackPromise
 
     // Validate and clear the state
     const storedState = await McpAuth.getOAuthState(mcpName)

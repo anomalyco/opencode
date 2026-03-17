@@ -1,5 +1,6 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
+import { SessionID } from "@/session/schema"
 import z from "zod"
 
 export const TuiEvent = {
@@ -16,6 +17,8 @@ export const TuiEvent = {
           "session.compact",
           "session.page.up",
           "session.page.down",
+          "session.line.up",
+          "session.line.down",
           "session.half.page.up",
           "session.half.page.down",
           "session.first",
@@ -40,7 +43,7 @@ export const TuiEvent = {
   SessionSelect: BusEvent.define(
     "tui.session.select",
     z.object({
-      sessionID: z.string().regex(/^ses/).describe("Session ID to navigate to"),
+      sessionID: SessionID.zod.describe("Session ID to navigate to"),
     }),
   ),
 }

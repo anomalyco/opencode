@@ -17,7 +17,6 @@ export interface McpOAuthConfig {
   clientId?: string
   clientSecret?: string
   scope?: string
-  redirectUri?: string
 }
 
 export interface McpOAuthCallbacks {
@@ -33,10 +32,6 @@ export class McpOAuthProvider implements OAuthClientProvider {
   ) {}
 
   get redirectUrl(): string {
-    // Use configured redirectUri if provided, otherwise use OpenCode defaults
-    if (this.config.redirectUri) {
-      return this.config.redirectUri
-    }
     return `http://127.0.0.1:${OAUTH_CALLBACK_PORT}${OAUTH_CALLBACK_PATH}`
   }
 
@@ -149,30 +144,42 @@ export class McpOAuthProvider implements OAuthClientProvider {
 
   async state(): Promise<string> {
     const entry = await McpAuth.get(this.mcpName)
-    if (!entry?.oauthState) {
-      throw new Error(`No OAuth state saved for MCP server: ${this.mcpName}`)
+    if (entry?.oauthState) {
+      return entry.oauthState
     }
-    return entry.oauthState
+
+    // Generate a new state if none exists — the SDK calls state() as a
+    // generator, not just a reader, so we need to produce a value even when
+    // startAuth() hasn't pre-saved one (e.g. during automatic auth on first
+    // connect).
+    const newState = Array.from(crypto.getRandomValues(new Uint8Array(32)))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("")
+    await McpAuth.updateOAuthState(this.mcpName, newState)
+    return newState
+  }
+
+  async invalidateCredentials(type: "all" | "client" | "tokens"): Promise<void> {
+    log.info("invalidating credentials", { mcpName: this.mcpName, type })
+    const entry = await McpAuth.get(this.mcpName)
+    if (!entry) {
+      return
+    }
+
+    switch (type) {
+      case "all":
+        await McpAuth.remove(this.mcpName)
+        break
+      case "client":
+        delete entry.clientInfo
+        await McpAuth.set(this.mcpName, entry)
+        break
+      case "tokens":
+        delete entry.tokens
+        await McpAuth.set(this.mcpName, entry)
+        break
+    }
   }
 }
 
 export { OAUTH_CALLBACK_PORT, OAUTH_CALLBACK_PATH }
-
-/**
- * Parse a redirect URI to extract port and path for the callback server.
- * Returns defaults if the URI can't be parsed.
- */
-export function parseRedirectUri(redirectUri?: string): { port: number; path: string } {
-  if (!redirectUri) {
-    return { port: OAUTH_CALLBACK_PORT, path: OAUTH_CALLBACK_PATH }
-  }
-
-  try {
-    const url = new URL(redirectUri)
-    const port = url.port ? parseInt(url.port, 10) : url.protocol === "https:" ? 443 : 80
-    const path = url.pathname || OAUTH_CALLBACK_PATH
-    return { port, path }
-  } catch {
-    return { port: OAUTH_CALLBACK_PORT, path: OAUTH_CALLBACK_PATH }
-  }
-}

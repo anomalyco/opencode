@@ -39,3 +39,11 @@
   font-size: 1.25rem;
   line-height: 2rem;
 }
+
+[data-component="avatar"] [data-slot="avatar-image"] {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  border-radius: inherit;
+}

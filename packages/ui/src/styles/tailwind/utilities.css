@@ -8,6 +8,16 @@
   }
 }
 
+@utility badge-mask {
+  -webkit-mask-image: radial-gradient(circle 5px at calc(100% - 4px) 4px, transparent 5px, black 5.5px);
+  mask-image: radial-gradient(circle 5px at calc(100% - 4px) 4px, transparent 5px, black 5.5px);
+}
+
+@utility badge-mask-tight {
+  -webkit-mask-image: radial-gradient(circle 5px at calc(100% - 2px) 2px, transparent 5px, black 5.5px);
+  mask-image: radial-gradient(circle 5px at calc(100% - 2px) 2px, transparent 5px, black 5.5px);
+}
+
 @utility truncate-start {
   text-overflow: ellipsis;
   overflow: hidden;

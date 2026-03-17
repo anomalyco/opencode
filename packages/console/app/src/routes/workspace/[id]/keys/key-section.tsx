@@ -7,22 +7,24 @@ import { createStore } from "solid-js/store"
 import { formatDateUTC, formatDateForTable } from "../../common"
 import styles from "./key-section.module.css"
 import { Actor } from "@opencode-ai/console-core/actor.js"
+import { useI18n } from "~/context/i18n"
+import { formError, localizeError } from "~/lib/form-error"
 
 const removeKey = action(async (form: FormData) => {
   "use server"
   const id = form.get("id")?.toString()
-  if (!id) return { error: "ID is required" }
+  if (!id) return { error: formError.idRequired }
   const workspaceID = form.get("workspaceID")?.toString()
-  if (!workspaceID) return { error: "Workspace ID is required" }
+  if (!workspaceID) return { error: formError.workspaceRequired }
   return json(await withActor(() => Key.remove({ id }), workspaceID), { revalidate: listKeys.key })
 }, "key.remove")
 
 const createKey = action(async (form: FormData) => {
   "use server"
   const name = form.get("name")?.toString().trim()
-  if (!name) return { error: "Name is required" }
+  if (!name) return { error: formError.nameRequired }
   const workspaceID = form.get("workspaceID")?.toString()
-  if (!workspaceID) return { error: "Workspace ID is required" }
+  if (!workspaceID) return { error: formError.workspaceRequired }
   return json(
     await withActor(
       () =>
@@ -45,6 +47,7 @@ const listKeys = query(async (workspaceID: string) => {
 
 export function KeySection() {
   const params = useParams()
+  const i18n = useI18n()
   const keys = createAsync(() => listKeys(params.id!))
   const submission = useSubmission(createKey)
   const [store, setStore] = createStore({ show: false })
@@ -73,11 +76,11 @@ export function KeySection() {
   return (
     <section class={styles.root}>
       <div data-slot="section-title">
-        <h2>API Keys</h2>
+        <h2>{i18n.t("workspace.keys.title")}</h2>
         <div data-slot="title-row">
-          <p>Manage your API keys for accessing opencode services.</p>
+          <p>{i18n.t("workspace.keys.subtitle")}</p>
           <button data-color="primary" onClick={() => show()}>
-            Create API Key
+            {i18n.t("workspace.keys.create")}
           </button>
         </div>
       </div>
@@ -89,19 +92,19 @@ export function KeySection() {
               data-component="input"
               name="name"
               type="text"
-              placeholder="Enter key name"
+              placeholder={i18n.t("workspace.keys.placeholder")}
             />
             <Show when={submission.result && submission.result.error}>
-              {(err) => <div data-slot="form-error">{err()}</div>}
+              {(err) => <div data-slot="form-error">{localizeError(i18n.t, err())}</div>}
             </Show>
           </div>
           <input type="hidden" name="workspaceID" value={params.id} />
           <div data-slot="form-actions">
             <button type="reset" data-color="ghost" onClick={() => hide()}>
-              Cancel
+              {i18n.t("common.cancel")}
             </button>
             <button type="submit" data-color="primary" disabled={submission.pending}>
-              {submission.pending ? "Creating..." : "Create"}
+              {submission.pending ? i18n.t("common.creating") : i18n.t("common.create")}
             </button>
           </div>
         </form>
@@ -111,17 +114,17 @@ export function KeySection() {
           when={keys()?.length}
           fallback={
             <div data-component="empty-state">
-              <p>Create an opencode Gateway API key</p>
+              <p>{i18n.t("workspace.keys.empty")}</p>
             </div>
           }
         >
           <table data-slot="api-keys-table-element">
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Key</th>
-                <th>Created By</th>
-                <th>Last Used</th>
+                <th>{i18n.t("workspace.keys.table.name")}</th>
+                <th>{i18n.t("workspace.keys.table.key")}</th>
+                <th>{i18n.t("workspace.keys.table.createdBy")}</th>
+                <th>{i18n.t("workspace.keys.table.lastUsed")}</th>
                 <th></th>
               </tr>
             </thead>
@@ -143,7 +146,7 @@ export function KeySection() {
                               setCopied(true)
                               setTimeout(() => setCopied(false), 1000)
                             }}
-                            title="Copy API key"
+                            title={i18n.t("workspace.keys.copyApiKey")}
                           >
                             <span>{key.keyDisplay}</span>
                             <Show when={copied()} fallback={<IconCopy style={{ width: "14px", height: "14px" }} />}>
@@ -160,7 +163,7 @@ export function KeySection() {
                         <form action={removeKey} method="post">
                           <input type="hidden" name="id" value={key.id} />
                           <input type="hidden" name="workspaceID" value={params.id} />
-                          <button data-color="ghost">Delete</button>
+                          <button data-color="ghost">{i18n.t("workspace.keys.delete")}</button>
                         </form>
                       </td>
                     </tr>

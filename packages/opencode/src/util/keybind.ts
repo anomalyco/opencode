@@ -23,7 +23,7 @@ export namespace Keybind {
    */
   export function fromParsedKey(key: ParsedKey, leader = false): Info {
     return {
-      name: key.name,
+      name: key.name === " " ? "space" : key.name,
       ctrl: key.ctrl,
       meta: key.meta,
       shift: key.shift,

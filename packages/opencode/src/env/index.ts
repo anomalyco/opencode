@@ -2,7 +2,9 @@ import { Instance } from "../project/instance"
 
 export namespace Env {
   const state = Instance.state(() => {
-    return process.env as Record<string, string | undefined>
+    // Create a shallow copy to isolate environment per instance
+    // Prevents parallel tests from interfering with each other's env vars
+    return { ...process.env } as Record<string, string | undefined>
   })
 
   export function get(key: string) {
