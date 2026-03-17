@@ -546,6 +546,7 @@ export const dict = {
   "workspace.billing.addAction": "Tilføj",
   "workspace.billing.addBalance": "Tilføj saldo",
   "workspace.billing.alipay": "Alipay",
+  "workspace.billing.wechat": "WeChat Pay",
   "workspace.billing.linkedToStripe": "Forbundet til Stripe",
   "workspace.billing.manage": "Administrer",
   "workspace.billing.enable": "Aktiver fakturering",

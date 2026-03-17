@@ -91,7 +91,7 @@ export namespace Pty {
   }
 
   const state = Instance.state(
-    () => new Map<string, ActiveSession>(),
+    () => new Map<PtyID, ActiveSession>(),
     async (sessions) => {
       for (const session of sessions.values()) {
         try {
@@ -113,7 +113,7 @@ export namespace Pty {
     return Array.from(state().values()).map((s) => s.info)
   }
 
-  export function get(id: string) {
+  export function get(id: PtyID) {
     return state().get(id)?.info
   }
 
@@ -167,45 +167,49 @@ export namespace Pty {
       subscribers: new Map(),
     }
     state().set(id, session)
-    ptyProcess.onData((chunk) => {
-      session.cursor += chunk.length
+    ptyProcess.onData(
+      Instance.bind((chunk) => {
+        session.cursor += chunk.length
 
-      for (const [key, ws] of session.subscribers.entries()) {
-        if (ws.readyState !== 1) {
-          session.subscribers.delete(key)
-          continue
+        for (const [key, ws] of session.subscribers.entries()) {
+          if (ws.readyState !== 1) {
+            session.subscribers.delete(key)
+            continue
+          }
+
+          if (ws.data !== key) {
+            session.subscribers.delete(key)
+            continue
+          }
+
+          try {
+            ws.send(chunk)
+          } catch {
+            session.subscribers.delete(key)
+          }
         }
 
-        if (ws.data !== key) {
-          session.subscribers.delete(key)
-          continue
-        }
-
-        try {
-          ws.send(chunk)
-        } catch {
-          session.subscribers.delete(key)
-        }
-      }
-
-      session.buffer += chunk
-      if (session.buffer.length <= BUFFER_LIMIT) return
-      const excess = session.buffer.length - BUFFER_LIMIT
-      session.buffer = session.buffer.slice(excess)
-      session.bufferCursor += excess
-    })
-    ptyProcess.onExit(({ exitCode }) => {
-      if (session.info.status === "exited") return
-      log.info("session exited", { id, exitCode })
-      session.info.status = "exited"
-      Bus.publish(Event.Exited, { id, exitCode })
-      remove(id)
-    })
+        session.buffer += chunk
+        if (session.buffer.length <= BUFFER_LIMIT) return
+        const excess = session.buffer.length - BUFFER_LIMIT
+        session.buffer = session.buffer.slice(excess)
+        session.bufferCursor += excess
+      }),
+    )
+    ptyProcess.onExit(
+      Instance.bind(({ exitCode }) => {
+        if (session.info.status === "exited") return
+        log.info("session exited", { id, exitCode })
+        session.info.status = "exited"
+        Bus.publish(Event.Exited, { id, exitCode })
+        remove(id)
+      }),
+    )
     Bus.publish(Event.Created, { info })
     return info
   }
 
-  export async function update(id: string, input: UpdateInput) {
+  export async function update(id: PtyID, input: UpdateInput) {
     const session = state().get(id)
     if (!session) return
     if (input.title) {
@@ -218,7 +222,7 @@ export namespace Pty {
     return session.info
   }
 
-  export async function remove(id: string) {
+  export async function remove(id: PtyID) {
     const session = state().get(id)
     if (!session) return
     state().delete(id)
@@ -237,21 +241,21 @@ export namespace Pty {
     Bus.publish(Event.Deleted, { id: session.info.id })
   }
 
-  export function resize(id: string, cols: number, rows: number) {
+  export function resize(id: PtyID, cols: number, rows: number) {
     const session = state().get(id)
     if (session && session.info.status === "running") {
       session.process.resize(cols, rows)
     }
   }
 
-  export function write(id: string, data: string) {
+  export function write(id: PtyID, data: string) {
     const session = state().get(id)
     if (session && session.info.status === "running") {
       session.process.write(data)
     }
   }
 
-  export function connect(id: string, ws: Socket, cursor?: number) {
+  export function connect(id: PtyID, ws: Socket, cursor?: number) {
     const session = state().get(id)
     if (!session) {
       ws.close()
