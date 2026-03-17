@@ -260,7 +260,11 @@ function createSessionEntries(props: {
   return { sessions }
 }
 
-export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFile?: (path: string) => void }) {
+export function DialogSelectFile(props: {
+  mode?: DialogSelectFileMode
+  onOpenFile?: (path: string) => void
+  onSelectComplete?: () => void
+}) {
   const command = useCommand()
   const language = useLanguage()
   const layout = useLayout()
@@ -356,6 +360,17 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
     tabs().setActive(value)
   }
 
+  const completeSelection = () => {
+    if (!props.onSelectComplete) return
+
+    window.setTimeout(() => {
+      requestAnimationFrame(() => {
+        if (dialog.active) return
+        props.onSelectComplete?.()
+      })
+    }, 220)
+  }
+
   const handleSelect = (item: Entry | undefined) => {
     if (!item) return
     state.committed = true
@@ -364,17 +379,20 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
 
     if (item.type === "command") {
       item.option?.onSelect?.("palette")
+      completeSelection()
       return
     }
 
     if (item.type === "session") {
       if (!item.directory || !item.sessionID) return
       navigate(`/${base64Encode(item.directory)}/session/${item.sessionID}`)
+      completeSelection()
       return
     }
 
     if (!item.path) return
     open(item.path)
+    completeSelection()
   }
 
   onCleanup(() => {

@@ -899,7 +899,21 @@ export default function Page() {
     setFileTreeTab("all")
   }
 
-  const focusInput = () => inputRef?.focus()
+  const focusInput = () => {
+    if (!inputRef) return
+
+    requestAnimationFrame(() => {
+      inputRef.focus()
+      const selection = window.getSelection()
+      if (!selection) return
+
+      const range = document.createRange()
+      range.selectNodeContents(inputRef)
+      range.collapse(false)
+      selection.removeAllRanges()
+      selection.addRange(range)
+    })
+  }
 
   useSessionCommands({
     navigateMessageByOffset,

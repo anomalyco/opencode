@@ -257,7 +257,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         description: language.t("palette.search.placeholder"),
         keybind: "mod+p",
         slash: "open",
-        onSelect: () => dialog.show(() => <DialogSelectFile onOpenFile={showAllFiles} />),
+        onSelect: () => dialog.show(() => <DialogSelectFile onOpenFile={showAllFiles} onSelectComplete={focusInput} />),
       }),
       fileCommand({
         id: "tab.close",
