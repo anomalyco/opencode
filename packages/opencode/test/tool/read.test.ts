@@ -503,3 +503,85 @@ describe("tool.read binary detection", () => {
     })
   })
 })
+
+describe("tool.read video and audio files", () => {
+  test("video file (.mp4) returns base64 attachment", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const mp4 = Buffer.from([0x00, 0x00, 0x00, 0x1c, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d])
+        await Bun.write(path.join(dir, "video.mp4"), mp4)
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const result = await read.execute({ filePath: path.join(tmp.path, "video.mp4") }, ctx)
+        expect(result.attachments).toHaveLength(1)
+        expect(result.attachments![0].type).toBe("file")
+        expect(result.attachments![0].mime!.startsWith("video/")).toBe(true)
+        expect(result.attachments![0].url!.startsWith("data:video/")).toBe(true)
+        expect(result.output).toContain("Video read successfully")
+        expect(result.metadata.truncated).toBe(false)
+      },
+    })
+  })
+
+  test("audio file (.mp3) returns base64 attachment", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const mp3 = Buffer.from([0x49, 0x44, 0x33, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
+        await Bun.write(path.join(dir, "audio.mp3"), mp3)
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const result = await read.execute({ filePath: path.join(tmp.path, "audio.mp3") }, ctx)
+        expect(result.attachments).toHaveLength(1)
+        expect(result.attachments![0].type).toBe("file")
+        expect(result.attachments![0].mime!.startsWith("audio/")).toBe(true)
+        expect(result.attachments![0].url!.startsWith("data:audio/")).toBe(true)
+        expect(result.output).toContain("Audio read successfully")
+        expect(result.metadata.truncated).toBe(false)
+      },
+    })
+  })
+
+  test(".ts file is NOT treated as video", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "code.ts"), "const x = 1\nexport default x\n")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const result = await read.execute({ filePath: path.join(tmp.path, "code.ts") }, ctx)
+        expect(result.attachments).toBeUndefined()
+        expect(result.output).toContain("const x = 1")
+      },
+    })
+  })
+
+  test("video file over 20MB throws error", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const buf = Buffer.alloc(21 * 1024 * 1024)
+        buf.set([0x00, 0x00, 0x00, 0x1c, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d])
+        await Bun.write(path.join(dir, "huge.mp4"), buf)
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        await expect(read.execute({ filePath: path.join(tmp.path, "huge.mp4") }, ctx)).rejects.toThrow(
+          /File too large.*20MB/,
+        )
+      },
+    })
+  })
+})
