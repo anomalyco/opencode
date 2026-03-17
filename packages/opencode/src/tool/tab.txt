@@ -1,0 +1,19 @@
+Open a visible tab in the TUI with a new independent session that runs asynchronously.
+
+The tab tool creates a new tab that appears in the user's tab bar, starts a new session in it, and fires off the prompt without waiting for it to complete. The parent session returns immediately and can continue working.
+
+Use this tool when:
+- The user asks to do multiple things in parallel or wants visible background work
+- The user explicitly asks for a new tab
+- You want to kick off an independent task the user can monitor and switch to
+
+Do NOT use this tool when:
+- You need the result of the subtask before continuing — use `task` instead (it blocks and returns results)
+- The work is a quick, invisible subtask — use `task` instead
+
+Available agent types:
+{agents}
+
+You must specify a subagent_type parameter to select which agent type to use.
+
+The new tab runs independently. You will not receive its output. If you need results back, use the `task` tool instead.
