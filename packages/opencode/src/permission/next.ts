@@ -1,18 +1,9 @@
-import { runtime } from "@/effect/runtime"
+import { runPromiseInstance } from "@/effect/runtime"
 import { Config } from "@/config/config"
 import { fn } from "@/util/fn"
 import { Wildcard } from "@/util/wildcard"
-import { Effect } from "effect"
 import os from "os"
 import * as S from "./service"
-import type {
-  Action as ActionType,
-  PermissionError,
-  Reply as ReplyType,
-  Request as RequestType,
-  Rule as RuleType,
-  Ruleset as RulesetType,
-} from "./service"
 
 export namespace PermissionNext {
   function expand(pattern: string): string {
@@ -23,20 +14,16 @@ export namespace PermissionNext {
     return pattern
   }
 
-  function runPromise<A>(f: (service: S.PermissionService.Api) => Effect.Effect<A, PermissionError>) {
-    return runtime.runPromise(S.PermissionService.use(f))
-  }
-
   export const Action = S.Action
-  export type Action = ActionType
+  export type Action = S.Action
   export const Rule = S.Rule
-  export type Rule = RuleType
+  export type Rule = S.Rule
   export const Ruleset = S.Ruleset
-  export type Ruleset = RulesetType
+  export type Ruleset = S.Ruleset
   export const Request = S.Request
-  export type Request = RequestType
+  export type Request = S.Request
   export const Reply = S.Reply
-  export type Reply = ReplyType
+  export type Reply = S.Reply
   export const Approval = S.Approval
   export const Event = S.Event
   export const Service = S.PermissionService
@@ -66,12 +53,16 @@ export namespace PermissionNext {
     return rulesets.flat()
   }
 
-  export const ask = fn(S.AskInput, async (input) => runPromise((service) => service.ask(input)))
+  export const ask = fn(S.AskInput, async (input) =>
+    runPromiseInstance(S.PermissionService.use((service) => service.ask(input))),
+  )
 
-  export const reply = fn(S.ReplyInput, async (input) => runPromise((service) => service.reply(input)))
+  export const reply = fn(S.ReplyInput, async (input) =>
+    runPromiseInstance(S.PermissionService.use((service) => service.reply(input))),
+  )
 
   export async function list() {
-    return runPromise((service) => service.list())
+    return runPromiseInstance(S.PermissionService.use((service) => service.list()))
   }
 
   export function evaluate(permission: string, pattern: string, ...rulesets: Ruleset[]): Rule {
