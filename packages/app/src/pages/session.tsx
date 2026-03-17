@@ -1732,6 +1732,16 @@ export default function Page() {
                     }}
                     renderedUserMessages={historyWindow.renderedUserMessages()}
                     anchor={anchor}
+                    onRevert={(messageID) => {
+                      const sessionID = params.id
+                      if (!sessionID) return
+                      void revert({ sessionID, messageID })
+                    }}
+                    onFork={(messageID) => {
+                      const sessionID = params.id
+                      if (!sessionID) return
+                      void fork({ sessionID, messageID })
+                    }}
                   />
                 </Show>
               </Match>

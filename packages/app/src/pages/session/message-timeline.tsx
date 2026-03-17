@@ -216,6 +216,8 @@ export function MessageTimeline(props: {
   onLoadEarlier: () => void
   renderedUserMessages: UserMessage[]
   anchor: (id: string) => string
+  onRevert?: (messageID: string) => void
+  onFork?: (messageID: string) => void
 }) {
   let touchGesture: number | undefined
 
@@ -1007,6 +1009,8 @@ export function MessageTimeline(props: {
                         showReasoningSummaries={settings.general.showReasoningSummaries()}
                         shellToolDefaultOpen={settings.general.shellToolPartsExpanded()}
                         editToolDefaultOpen={settings.general.editToolPartsExpanded()}
+                        onRevert={props.onRevert ? () => props.onRevert!(messageID) : undefined}
+                        onFork={props.onFork ? () => props.onFork!(messageID) : undefined}
                         classes={{
                           root: "min-w-0 w-full relative",
                           content: "flex flex-col justify-between !overflow-visible",

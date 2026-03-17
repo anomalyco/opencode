@@ -1,4 +1,10 @@
-import { AssistantMessage, type FileDiff, Message as MessageType, Part as PartType } from "@opencode-ai/sdk/v2/client"
+import {
+  AssistantMessage,
+  type FileDiff,
+  Message as MessageType,
+  Part as PartType,
+  UserMessage,
+} from "@opencode-ai/sdk/v2/client"
 import type { SessionStatus } from "@opencode-ai/sdk/v2"
 import { useData } from "../context"
 import { useFileComponent } from "../context/file"
@@ -18,6 +24,10 @@ import { Icon } from "./icon"
 import { TextShimmer } from "./text-shimmer"
 import { SessionRetry } from "./session-retry"
 import { TextReveal } from "./text-reveal"
+import { ProviderIcon } from "./provider-icon"
+import type { IconName } from "./provider-icons/types"
+import { Tooltip } from "./tooltip"
+import { IconButton } from "./icon-button"
 import { createAutoScroll } from "../hooks"
 import { useI18n } from "../context/i18n"
 
@@ -149,6 +159,8 @@ export function SessionTurn(
     active?: boolean
     status?: SessionStatus
     onUserInteracted?: () => void
+    onRevert?: () => void
+    onFork?: () => void
     classes?: {
       root?: string
       content?: string
@@ -393,6 +405,36 @@ export function SessionTurn(
               data-slot="session-turn-message-container"
               class={props.classes?.container}
             >
+              <Show when={props.onRevert || props.onFork}>
+                <div data-slot="session-turn-header">
+                  <div data-slot="session-turn-message-actions">
+                    <Show when={props.onRevert}>
+                      <Tooltip value="Revert to this message" placement="top" gutter={8}>
+                        <IconButton icon="arrow-left" variant="secondary" onClick={props.onRevert} />
+                      </Tooltip>
+                    </Show>
+                    <Show when={props.onFork}>
+                      <Tooltip value="Fork from this message" placement="top" gutter={8}>
+                        <IconButton icon="branch" variant="secondary" onClick={props.onFork} />
+                      </Tooltip>
+                    </Show>
+                  </div>
+                  <div data-slot="session-turn-user-badges">
+                    <Show when={(message()! as UserMessage).agent}>
+                      <span data-slot="session-turn-badge">{(message()! as UserMessage).agent}</span>
+                    </Show>
+                    <Show when={(message()! as UserMessage).model?.modelID}>
+                      <span data-slot="session-turn-badge" class="inline-flex items-center gap-1">
+                        <ProviderIcon
+                          id={(message()! as UserMessage).model!.providerID as IconName}
+                          class="size-3.5 shrink-0"
+                        />
+                        {(message()! as UserMessage).model?.modelID}
+                      </span>
+                    </Show>
+                  </div>
+                </div>
+              </Show>
               <div data-slot="session-turn-message-content" aria-live="off">
                 <Message message={message()!} parts={parts()} actions={props.actions} />
               </div>
