@@ -6,7 +6,7 @@ import { Keybind } from "@opencode-ai/ui/keybind"
 import { List } from "@opencode-ai/ui/list"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { useNavigate, useParams } from "@solidjs/router"
+import { useNavigate } from "@solidjs/router"
 import { createMemo, createSignal, Match, onCleanup, Show, Switch } from "solid-js"
 import { formatKeybind, useCommand, type CommandOption } from "@/context/command"
 import { useGlobalSDK } from "@/context/global-sdk"
@@ -14,6 +14,8 @@ import { useGlobalSync } from "@/context/global-sync"
 import { useLayout } from "@/context/layout"
 import { useFile } from "@/context/file"
 import { useLanguage } from "@/context/language"
+import { useSessionLayout } from "@/pages/session/session-layout"
+import { createSessionTabs } from "@/pages/session/helpers"
 import { decode64 } from "@/utils/base64"
 import { getRelativeTime } from "@/utils/time"
 
@@ -132,9 +134,14 @@ function createFileEntries(props: {
   tabs: () => ReturnType<ReturnType<typeof useLayout>["tabs"]>
   language: ReturnType<typeof useLanguage>
 }) {
+  const tabState = createSessionTabs({
+    tabs: props.tabs,
+    pathFromTab: props.file.pathFromTab,
+    normalizeTab: (tab) => (tab.startsWith("file://") ? props.file.tab(tab) : tab),
+  })
   const recent = createMemo(() => {
-    const all = props.tabs().all()
-    const active = props.tabs().active()
+    const all = tabState.openedTabs()
+    const active = tabState.activeFileTab()
     const order = active ? [active, ...all.filter((item) => item !== active)] : all
     const seen = new Set<string>()
     const category = props.language.t("palette.group.files")
@@ -259,14 +266,11 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
   const layout = useLayout()
   const file = useFile()
   const dialog = useDialog()
-  const params = useParams()
   const navigate = useNavigate()
   const globalSDK = useGlobalSDK()
   const globalSync = useGlobalSync()
+  const { params, tabs, view } = useSessionLayout()
   const filesOnly = () => props.mode === "files"
-  const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
-  const tabs = createMemo(() => layout.tabs(sessionKey))
-  const view = createMemo(() => layout.view(sessionKey))
   const state = { cleanup: undefined as (() => void) | void, committed: false }
   const [grouped, setGrouped] = createSignal(false)
   const commandEntries = createCommandEntries({ filesOnly, command, language })
@@ -422,7 +426,7 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
                   </Show>
                 </div>
                 <Show when={item.keybind}>
-                  <Keybind class="rounded-[4px]">{formatKeybind(item.keybind ?? "")}</Keybind>
+                  <Keybind class="rounded-[4px]">{formatKeybind(item.keybind ?? "", language.t)}</Keybind>
                 </Show>
               </div>
             </Match>

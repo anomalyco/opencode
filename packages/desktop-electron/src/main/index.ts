@@ -1,14 +1,18 @@
-import { app, BrowserWindow, dialog } from "electron"
-import type { Event } from "electron"
-import pkg from "electron-updater"
 import { randomUUID } from "node:crypto"
 import { EventEmitter } from "node:events"
 import { existsSync } from "node:fs"
+import { createServer } from "node:net"
 import { homedir } from "node:os"
 import { join } from "node:path"
-import { createServer } from "node:net"
+import type { Event } from "electron"
+import { app, BrowserWindow, dialog } from "electron"
+import pkg from "electron-updater"
 
-const APP_NAMES: Record<string, string> = { dev: "OpenCode Dev", beta: "OpenCode Beta", prod: "OpenCode" }
+const APP_NAMES: Record<string, string> = {
+  dev: "OpenCode Dev",
+  beta: "OpenCode Beta",
+  prod: "OpenCode",
+}
 const APP_IDS: Record<string, string> = {
   dev: "ai.opencode.desktop.dev",
   beta: "ai.opencode.desktop.beta",
@@ -18,54 +22,34 @@ app.setName(app.isPackaged ? APP_NAMES[CHANNEL] : "OpenCode Dev")
 app.setPath("userData", join(app.getPath("appData"), app.isPackaged ? APP_IDS[CHANNEL] : "ai.opencode.desktop.dev"))
 const { autoUpdater } = pkg
 
+import type { InitStep, ServerReadyData, SqliteMigrationProgress, WslConfig } from "../preload/types"
 import { checkAppExists, resolveAppPath, wslPath } from "./apps"
+import type { CommandChild } from "./cli"
 import { installCli, syncCli } from "./cli"
 import { CHANNEL, UPDATER_ENABLED } from "./constants"
 import { registerIpcHandlers, sendDeepLinks, sendMenuCommand, sendSqliteMigrationProgress } from "./ipc"
 import { initLogging } from "./logging"
 import { parseMarkdown } from "./markdown"
 import { createMenu } from "./menu"
-import {
-  checkHealth,
-  checkHealthOrAskRetry,
-  getDefaultServerUrl,
-  getSavedServerUrl,
-  getWslConfig,
-  setDefaultServerUrl,
-  setWslConfig,
-  spawnLocalServer,
-} from "./server"
-import { createLoadingWindow, createMainWindow, setDockIcon } from "./windows"
-
-import type { InitStep, ServerReadyData, SqliteMigrationProgress, WslConfig } from "../preload/types"
-import type { CommandChild } from "./cli"
-
-type ServerConnection =
-  | { variant: "existing"; url: string }
-  | {
-      variant: "cli"
-      url: string
-      password: null | string
-      health: {
-        wait: Promise<void>
-      }
-      events: any
-    }
+import { getDefaultServerUrl, getWslConfig, setDefaultServerUrl, setWslConfig, spawnLocalServer } from "./server"
+import { createLoadingWindow, createMainWindow, setBackgroundColor, setDockIcon } from "./windows"
 
 const initEmitter = new EventEmitter()
 let initStep: InitStep = { phase: "server_waiting" }
 
 let mainWindow: BrowserWindow | null = null
-let loadingWindow: BrowserWindow | null = null
 let sidecar: CommandChild | null = null
-let loadingComplete = defer<void>()
+const loadingComplete = defer<void>()
 
 const pendingDeepLinks: string[] = []
 
 const serverReady = defer<ServerReadyData>()
 const logger = initLogging()
 
-logger.log("app starting", { version: app.getVersion(), packaged: app.isPackaged })
+logger.log("app starting", {
+  version: app.getVersion(),
+  packaged: app.isPackaged,
+})
 
 setupApp()
 
@@ -125,106 +109,75 @@ function setInitStep(step: InitStep) {
   initEmitter.emit("step", step)
 }
 
-async function setupServerConnection(): Promise<ServerConnection> {
-  const customUrl = await getSavedServerUrl()
-
-  if (customUrl && (await checkHealthOrAskRetry(customUrl))) {
-    serverReady.resolve({ url: customUrl, password: null })
-    return { variant: "existing", url: customUrl }
-  }
-
-  const port = await getSidecarPort()
-  const hostname = "127.0.0.1"
-  const localUrl = `http://${hostname}:${port}`
-
-  if (await checkHealth(localUrl)) {
-    serverReady.resolve({ url: localUrl, password: null })
-    return { variant: "existing", url: localUrl }
-  }
-
-  const password = randomUUID()
-  const { child, health, events } = spawnLocalServer(hostname, port, password)
-  sidecar = child
-
-  return {
-    variant: "cli",
-    url: localUrl,
-    password,
-    health,
-    events,
-  }
-}
-
 async function initialize() {
   const needsMigration = !sqliteFileExists()
   const sqliteDone = needsMigration ? defer<void>() : undefined
+  let overlay: BrowserWindow | null = null
+
+  const port = await getSidecarPort()
+  const hostname = "127.0.0.1"
+  const url = `http://${hostname}:${port}`
+  const password = randomUUID()
+
+  logger.log("spawning sidecar", { url })
+  const { child, health, events } = spawnLocalServer(hostname, port, password)
+  sidecar = child
+  serverReady.resolve({
+    url,
+    username: "opencode",
+    password,
+  })
 
   const loadingTask = (async () => {
-    logger.log("setting up server connection")
-    const serverConnection = await setupServerConnection()
-    logger.log("server connection ready", { variant: serverConnection.variant, url: serverConnection.url })
+    logger.log("sidecar connection started", { url })
 
-    const cliHealthCheck = (() => {
-      if (serverConnection.variant == "cli") {
-        return async () => {
-          const { events, health } = serverConnection
-          events.on("sqlite", (progress: SqliteMigrationProgress) => {
-            setInitStep({ phase: "sqlite_waiting" })
-            if (loadingWindow) sendSqliteMigrationProgress(loadingWindow, progress)
-            if (mainWindow) sendSqliteMigrationProgress(mainWindow, progress)
-            if (progress.type === "Done") sqliteDone?.resolve()
-          })
-          await health.wait
-          serverReady.resolve({ url: serverConnection.url, password: serverConnection.password })
-        }
-      } else {
-        serverReady.resolve({ url: serverConnection.url, password: null })
-        return null
-      }
-    })()
+    events.on("sqlite", (progress: SqliteMigrationProgress) => {
+      setInitStep({ phase: "sqlite_waiting" })
+      if (overlay) sendSqliteMigrationProgress(overlay, progress)
+      if (mainWindow) sendSqliteMigrationProgress(mainWindow, progress)
+      if (progress.type === "Done") sqliteDone?.resolve()
+    })
 
-    logger.log("server connection started")
-
-    if (cliHealthCheck) {
-      if (needsMigration) await sqliteDone?.promise
-      cliHealthCheck?.()
+    if (needsMigration) {
+      await sqliteDone?.promise
     }
+
+    await Promise.race([
+      health.wait,
+      delay(30_000).then(() => {
+        throw new Error("Sidecar health check timed out")
+      }),
+    ]).catch((error) => {
+      logger.error("sidecar health check failed", error)
+    })
 
     logger.log("loading task finished")
   })()
 
   const globals = {
     updaterEnabled: UPDATER_ENABLED,
-    wsl: getWslConfig().enabled,
     deepLinks: pendingDeepLinks,
   }
 
-  const loadingWindow = await (async () => {
-    if (needsMigration /** TOOD: 1 second timeout */) {
-      // showLoading = await Promise.race([init.then(() => false).catch(() => false), delay(1000).then(() => true)])
-      const loadingWindow = createLoadingWindow(globals)
-      await delay(1000)
-      return loadingWindow
-    } else {
-      logger.log("showing main window without loading window")
-      mainWindow = createMainWindow(globals)
-      wireMenu()
+  if (needsMigration) {
+    const show = await Promise.race([loadingTask.then(() => false), delay(1_000).then(() => true)])
+    if (show) {
+      overlay = createLoadingWindow(globals)
+      await delay(1_000)
     }
-  })()
+  }
 
   await loadingTask
   setInitStep({ phase: "done" })
 
-  if (loadingWindow) {
+  if (overlay) {
     await loadingComplete.promise
   }
 
-  if (!mainWindow) {
-    mainWindow = createMainWindow(globals)
-    wireMenu()
-  }
+  mainWindow = createMainWindow(globals)
+  wireMenu()
 
-  loadingWindow?.close()
+  overlay?.close()
 }
 
 function wireMenu() {
@@ -276,6 +229,7 @@ registerIpcHandlers({
   runUpdater: async (alertOnFail) => checkForUpdates(alertOnFail),
   checkUpdate: async () => checkUpdate(),
   installUpdate: async () => installUpdate(),
+  setBackgroundColor: (color) => setBackgroundColor(color),
 })
 
 function killSidecar() {
@@ -370,8 +324,10 @@ async function checkUpdate() {
       files: updateInfo?.files?.map((file) => file.url) ?? [],
     })
     const version = result?.updateInfo?.version
-    if (!version) {
-      logger.log("no update available", { reason: "provider returned no newer version" })
+    if (result?.isUpdateAvailable === false || !version) {
+      logger.log("no update available", {
+        reason: "provider returned no newer version",
+      })
       return { updateAvailable: false }
     }
     logger.log("update available", { version })
