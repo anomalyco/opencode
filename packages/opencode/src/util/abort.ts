@@ -1,4 +1,14 @@
 /**
+ * AbortController utilities with automatic timeout support.
+ *
+ * Provides functions for creating AbortControllers that automatically abort after
+ * a specified timeout, with support for combining multiple abort signals.
+ *
+ * Uses bind() instead of arrow functions to avoid capturing the surrounding
+ * scope in closures, preventing GC issues.
+ */
+
+/**
  * Creates an AbortController that automatically aborts after a timeout.
  *
  * Uses bind() instead of arrow functions to avoid capturing the surrounding
