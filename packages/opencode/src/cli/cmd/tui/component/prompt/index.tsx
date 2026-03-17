@@ -852,6 +852,18 @@ export function Prompt(props: PromptProps) {
                   e.preventDefault()
                   return
                 }
+                // Filter out IME (Input Method Editor) switching keys to prevent unwanted character insertion
+                // When switching input methods on Mac (e.g., pressing Caps Lock or using Cmd+Space),
+                // terminals like Kitty send special key events with:
+                // - empty name and sequence fields
+                // - raw escape sequences (e.g., "\u001b[57358u" for key code 0xE00E)
+                // - no modifier keys pressed
+                // These should not insert any visible characters into the input
+                const disabledWhenChangeIME = e.source ==='kitty' && e.name === ""
+                if(disabledWhenChangeIME) {
+                  e.preventDefault()
+                  return
+                }
                 // Handle clipboard paste (Ctrl+V) - check for images first on Windows
                 // This is needed because Windows terminal doesn't properly send image data
                 // through bracketed paste, so we need to intercept the keypress and
