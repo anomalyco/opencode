@@ -4,6 +4,23 @@ import { Instance } from "../project/instance"
 import { BusEvent } from "./bus-event"
 import { GlobalBus } from "./global"
 
+/**
+ * Event bus for publishing and subscribing to application events.
+ *
+ * Provides a typed pub/sub mechanism for cross-component communication
+ * with support for wildcards and one-time subscriptions.
+ *
+ * @example
+ * ```typescript
+ * // Subscribe to an event
+ * Bus.subscribe(MyEvent, (event) => {
+ *   console.log(event.properties)
+ * })
+ *
+ * // Publish an event
+ * await Bus.publish(MyEvent, { data: "value" })
+ * ```
+ */
 export namespace Bus {
   const log = Log.create({ service: "bus" })
   type Subscription = (event: any) => void
@@ -63,6 +80,13 @@ export namespace Bus {
     return Promise.all(pending)
   }
 
+  /**
+   * Subscribes to events of a specific type.
+   *
+   * @param def - The event definition to subscribe to
+   * @param callback - Function called when the event is published
+   * @returns Unsubscribe function
+   */
   export function subscribe<Definition extends BusEvent.Definition>(
     def: Definition,
     callback: (event: { type: Definition["type"]; properties: z.infer<Definition["properties"]> }) => void,
@@ -70,6 +94,12 @@ export namespace Bus {
     return raw(def.type, callback)
   }
 
+  /**
+   * Subscribes to an event once, automatically unsubscribing after first occurrence.
+   *
+   * @param def - The event definition to subscribe to
+   * @param callback - Function called when the event is published, return "done" to unsubscribe
+   */
   export function once<Definition extends BusEvent.Definition>(
     def: Definition,
     callback: (event: {
@@ -82,6 +112,12 @@ export namespace Bus {
     })
   }
 
+  /**
+   * Subscribes to all events using a wildcard pattern.
+   *
+   * @param callback - Function called when any event is published
+   * @returns Unsubscribe function
+   */
   export function subscribeAll(callback: (event: any) => void) {
     return raw("*", callback)
   }
