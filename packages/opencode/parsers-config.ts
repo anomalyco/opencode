@@ -255,10 +255,10 @@ export default {
       wasm: "https://github.com/ionide/tree-sitter-fsharp/releases/download/0.2.2/tree-sitter-fsharp.wasm",
       queries: {
         highlights: [
-          "https://raw.githubusercontent.com/ionide/tree-sitter-fsharp/1c2d9351d1f731c08cfdc4ed41e63126ae56e462/queries/highlights.scm",
+          "https://raw.githubusercontent.com/ionide/tree-sitter-fsharp/refs/heads/main/queries/highlights.scm",
         ],
         locals: [
-          "https://raw.githubusercontent.com/ionide/tree-sitter-fsharp/1c2d9351d1f731c08cfdc4ed41e63126ae56e462/queries/locals.scm",
+          "https://raw.githubusercontent.com/ionide/tree-sitter-fsharp/refs/heads/main/queries/locals.scm",
         ],
       },
     },
