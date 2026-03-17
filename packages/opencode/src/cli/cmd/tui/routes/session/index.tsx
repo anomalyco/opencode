@@ -81,6 +81,7 @@ import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { formatTranscript } from "../../util/transcript"
 import { UI } from "@/cli/ui.ts"
 import { useTuiConfig } from "../../context/tui-config"
+import { syncSession } from "./resume"
 
 addDefaultParsers(parsers.parsers)
 
@@ -193,25 +194,25 @@ export function Session() {
   let resumed: string | undefined
   createEffect(async () => {
     const sessionID = route.sessionID
-    await sync.session
-      .sync(sessionID)
-      .then(async () => {
-        if (scroll) scroll.scrollBy(100_000)
-        if (route.resume === false || resumed === sessionID) return
-        resumed = sessionID
-        await sdk.client.session.resume({ sessionID }).catch((err) => {
-          console.error(err)
-          resumed = undefined
-        })
-      })
-      .catch((e) => {
+    resumed = await syncSession({
+      sessionID,
+      resume: route.resume,
+      resumed,
+      sync: sync.session.sync,
+      resumeSession: sdk.client.session.resume,
+      onScroll: () => scroll?.scrollBy(100_000),
+      onResumeError: (err) => {
+        console.error(err)
+      },
+      onSyncError: (e) => {
         console.error(e)
         toast.show({
           message: `Session not found: ${sessionID}`,
           variant: "error",
         })
-        return navigate({ type: "home" })
-      })
+      },
+      onMissing: () => navigate({ type: "home" }),
+    })
   })
 
   // Handle initial prompt from fork

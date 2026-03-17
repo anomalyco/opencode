@@ -74,7 +74,11 @@ export namespace LLM {
     // Consume one-shot session-start context injected by plugins via the
     // session.start hook. take() reads and clears in a single Database.use()
     // call. If the stream setup fails after this point, the context is lost —
-    // this is an accepted tradeoff to keep the code simple.
+    // this is an accepted tradeoff to keep the code simple. Because this state
+    // is only cleared on the next LLM turn, pending context can also become
+    // stale if a session is resumed/start-triggered but not prompted soon after.
+    // If plugins start depending on fresher resume state, consider trigger-aware
+    // expiry or replacement semantics instead of unbounded accumulation.
     const pending = await SessionStart.take(SessionID.make(input.sessionID))
     system.push(
       [

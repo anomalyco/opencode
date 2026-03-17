@@ -379,18 +379,16 @@ export const RunCommand = cmd({
     }
 
     async function session(sdk: OpencodeClient) {
-      const baseID = args.continue ? (await sdk.session.list()).data?.find((s) => !s.parentID)?.id : args.session
-
-      if (baseID && args.fork) {
-        const forked = await sdk.session.fork({ sessionID: baseID })
-        return { id: forked.data?.id, resume: false }
-      }
-
-      if (baseID) return { id: baseID, resume: true }
-
-      const name = title()
-      const result = await sdk.session.create({ title: name, permission: rules })
-      return { id: result.data?.id, resume: false }
+      return resolveSession({
+        args: {
+          continue: !!args.continue,
+          fork: !!args.fork,
+          session: args.session,
+        },
+        sdk,
+        title: title(),
+        rules,
+      })
     }
 
     async function share(sdk: OpencodeClient, sessionID: string) {
@@ -620,13 +618,10 @@ export const RunCommand = cmd({
       })()
 
       const result = await session(sdk)
-      const sessionID = result.id
+      const sessionID = await activateSession({ sdk, result })
       if (!sessionID) {
         UI.error("Session not found")
         process.exit(1)
-      }
-      if (result.resume) {
-        await sdk.session.resume({ sessionID })
       }
       await share(sdk, sessionID)
 
@@ -678,3 +673,39 @@ export const RunCommand = cmd({
     })
   },
 })
+
+export async function resolveSession(input: {
+  args: {
+    continue: boolean
+    fork: boolean
+    session?: string
+  }
+  sdk: Pick<OpencodeClient, "session">
+  title?: string
+  rules: PermissionNext.Ruleset
+}) {
+  const baseID = input.args.continue
+    ? (await input.sdk.session.list()).data?.find((s) => !s.parentID)?.id
+    : input.args.session
+
+  if (baseID && input.args.fork) {
+    const forked = await input.sdk.session.fork({ sessionID: baseID })
+    return { id: forked.data?.id, resume: false }
+  }
+
+  if (baseID) return { id: baseID, resume: true }
+
+  const result = await input.sdk.session.create({ title: input.title, permission: input.rules })
+  return { id: result.data?.id, resume: false }
+}
+
+export async function activateSession(input: {
+  sdk: Pick<OpencodeClient, "session">
+  result: { id?: string; resume: boolean }
+}) {
+  if (!input.result.id) return
+  if (input.result.resume) {
+    await input.sdk.session.resume({ sessionID: input.result.id })
+  }
+  return input.result.id
+}
