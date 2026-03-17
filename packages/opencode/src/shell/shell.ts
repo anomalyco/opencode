@@ -8,7 +8,31 @@ import { setTimeout as sleep } from "node:timers/promises"
 
 const SIGKILL_TIMEOUT_MS = 200
 
+/**
+ * Shell utilities for process management and shell detection.
+ *
+ * Provides functionality for terminating process trees and detecting
+ * the appropriate shell for the current platform.
+ *
+ * @example
+ * ```typescript
+ * await Shell.killTree(childProcess)
+ * const shell = Shell.preferred()
+ * const acceptable = Shell.acceptable()
+ * ```
+ */
 export namespace Shell {
+  /**
+   * Kills a process and its entire process tree.
+   *
+   * On Windows, uses taskkill with /f /t flags. On Unix-like systems,
+   * sends SIGTERM first, then SIGKILL after a timeout if needed.
+   *
+   * @param proc - The child process to kill
+   * @param opts - Optional configuration
+   * @param opts.exited - Function to check if process has already exited
+   * @returns Promise that resolves when the process tree is terminated
+   */
   export async function killTree(proc: ChildProcess, opts?: { exited?: () => boolean }): Promise<void> {
     const pid = proc.pid
     if (!pid || opts?.exited?.()) return
@@ -59,12 +83,28 @@ export namespace Shell {
     return "/bin/sh"
   }
 
+  /**
+   * Returns the preferred shell for the current platform.
+   *
+   * Uses the SHELL environment variable if available, otherwise
+   * falls back to platform-specific defaults (zsh on macOS, bash on Linux, etc.).
+   *
+   * @returns Lazy-evaluated preferred shell path
+   */
   export const preferred = lazy(() => {
     const s = process.env.SHELL
     if (s) return s
     return fallback()
   })
 
+  /**
+   * Returns an acceptable shell for the current platform, avoiding blacklisted shells.
+   *
+   * Falls back to platform defaults if the user's SHELL is blacklisted
+   * (e.g., fish, nu shells that may have compatibility issues).
+   *
+   * @returns Lazy-evaluated acceptable shell path
+   */
   export const acceptable = lazy(() => {
     const s = process.env.SHELL
     if (s && !BLACKLIST.has(process.platform === "win32" ? path.win32.basename(s) : path.basename(s))) return s
