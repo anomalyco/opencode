@@ -14,7 +14,7 @@ describe("session.workspaceDirectory endpoint", () => {
       directory: project.path,
       fn: async () => {
         const session = await Session.create({})
-        const app = Server.App()
+        const app = Server.createApp({})
         const response = await app.request(
           `/session/${session.id}/workspace/directory?directory=${encodeURIComponent(project.path)}`,
           {
@@ -60,7 +60,7 @@ describe("session.workspaceDirectory endpoint", () => {
       directory: project.path,
       fn: async () => {
         const session = await Session.create({})
-        const app = Server.App()
+        const app = Server.createApp({})
         const response = await app.request(
           `/session/${session.id}/workspace/directory?directory=${encodeURIComponent(project.path)}`,
           {
@@ -82,7 +82,7 @@ describe("session.workspaceDirectory endpoint", () => {
       directory: project.path,
       fn: async () => {
         const session = await Session.create({})
-        const app = Server.App()
+        const app = Server.createApp({})
         const response = await app.request(
           `/session/${session.id}/workspace/directory?directory=${encodeURIComponent(project.path)}`,
           {

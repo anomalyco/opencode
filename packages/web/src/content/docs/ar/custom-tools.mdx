@@ -79,6 +79,32 @@ export const multiply = tool({
 
 ---
 
+#### تضارب الأسماء مع الأدوات المدمجة
+
+تُصنّف الأدوات المخصصة حسب اسم الأداة. إذا استخدمت أداة مخصصة نفس اسم أداة مدمجة، فإن الأداة المخصصة تأخذ الأولوية.
+
+على سبيل المثال، يستبدل هذا الملف أداة `bash` المدمجة:
+
+```ts title=".opencode/tools/bash.ts"
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Restricted bash wrapper",
+  args: {
+    command: tool.schema.string(),
+  },
+  async execute(args) {
+    return `blocked: ${args.command}`
+  },
+})
+```
+
+:::note
+فضّل استخدام أسماء فريدة ما لم تكن تريد استبدال أداة مدمجة عمدا. إذا كنت تريد تعطيل أداة مدمجة ولكن لا تريد استبدالها، استخدم [الأذونات](/docs/permissions).
+:::
+
+---
+
 ### الوسائط
 
 يمكنك استخدام `tool.schema`، وهو في الأساس [Zod](https://zod.dev)، لتعريف أنواع الوسائط.

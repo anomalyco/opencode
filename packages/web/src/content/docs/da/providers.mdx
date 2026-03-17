@@ -81,6 +81,37 @@ Det fungerer som alle andre udbydere i OpenCode og er helt valgfrit at bruge.
 
 ---
 
+## OpenCode Go
+
+OpenCode Go er en billig abonnementsplan, der giver pålidelig adgang til populære åbne kodningsmodeller leveret af OpenCode-teamet, som er testet og verificeret til at fungere godt med OpenCode.
+
+1. Kør kommandoen `/connect` i TUI, vælg `OpenCode Go`, og gå til [opencode.ai/auth](https://opencode.ai/zen).
+
+   ```txt
+   /connect
+   ```
+
+2. Log ind, tilføj dine faktureringsoplysninger og kopier din API-nøgle.
+
+3. Indsæt din API-nøgle.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Kør `/models` i TUI for at se listen over modeller, vi anbefaler.
+
+   ```txt
+   /models
+   ```
+
+Det fungerer som alle andre udbydere i OpenCode og er helt valgfrit at bruge.
+
+---
+
 ## Katalog
 
 Lad os se på nogle af udbyderne i detaljer. Hvis du vil tilføje en udbyder til listen, er du velkommen til at åbne en PR.
@@ -1467,6 +1498,39 @@ SAP AI Core giver adgang til 40+ modeller fra OpenAI, Anthropic, Google, Amazon,
    :::
 
 5. Kør kommandoen `/models` for at vælge fra 40+ tilgængelige modeller.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### STACKIT
+
+STACKIT AI Model Serving leverer fuldt administreret suverænt hostingmiljø til AI-modeller, med fokus på LLM'er som Llama, Mistral og Qwen, med maksimal datasuverænitet på europæisk infrastruktur.
+
+1. Gå til [STACKIT Portal](https://portal.stackit.cloud), naviger til **AI Model Serving**, og opret en auth-token til dit projekt.
+
+   :::tip
+   Du skal have en STACKIT-kundekonto, brugerkonto og projekt, før du opretter auth-tokens.
+   :::
+
+2. Kør kommandoen `/connect` og søg efter **STACKIT**.
+
+   ```txt
+   /connect
+   ```
+
+3. Indtast din STACKIT AI Model Serving auth-token.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Kør kommandoen `/models` for at vælge fra tilgængelige modeller som _Qwen3-VL 235B_ eller _Llama 3.3 70B_.
 
    ```txt
    /models

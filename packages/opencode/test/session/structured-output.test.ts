@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { MessageV2 } from "../../src/session/message-v2"
 import { SessionPrompt } from "../../src/session/prompt"
+import { SessionID, MessageID } from "../../src/session/schema"
 
 describe("structured-output.OutputFormat", () => {
   test("parses text format", () => {
@@ -95,8 +96,8 @@ describe("structured-output.StructuredOutputError", () => {
 describe("structured-output.UserMessage", () => {
   test("user message accepts outputFormat", () => {
     const result = MessageV2.User.safeParse({
-      id: "test-id",
-      sessionID: "test-session",
+      id: MessageID.ascending(),
+      sessionID: SessionID.descending(),
       role: "user",
       time: { created: Date.now() },
       agent: "default",
@@ -111,8 +112,8 @@ describe("structured-output.UserMessage", () => {
 
   test("user message works without outputFormat (optional)", () => {
     const result = MessageV2.User.safeParse({
-      id: "test-id",
-      sessionID: "test-session",
+      id: MessageID.ascending(),
+      sessionID: SessionID.descending(),
       role: "user",
       time: { created: Date.now() },
       agent: "default",
@@ -124,10 +125,10 @@ describe("structured-output.UserMessage", () => {
 
 describe("structured-output.AssistantMessage", () => {
   const baseAssistantMessage = {
-    id: "test-id",
-    sessionID: "test-session",
+    id: MessageID.ascending(),
+    sessionID: SessionID.descending(),
     role: "assistant" as const,
-    parentID: "parent-id",
+    parentID: MessageID.ascending(),
     modelID: "claude-3",
     providerID: "anthropic",
     mode: "default",
