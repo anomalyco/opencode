@@ -1223,7 +1223,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               aria-label={placeholder()}
               contenteditable="true"
               autocapitalize={store.mode === "normal" ? "sentences" : "off"}
-              autocorrect={store.mode === "normal" ? "on" : "off"}
+              autocorrect="off"
               spellcheck={store.mode === "normal"}
               onInput={handleInput}
               onPaste={handlePaste}
