@@ -150,6 +150,18 @@ import type {
   SessionUpdateErrors,
   SessionUpdateResponses,
   SubtaskPartInput,
+  TabActivateErrors,
+  TabActivateResponses,
+  TabAddResponses,
+  TabGetErrors,
+  TabGetResponses,
+  TabLastResponses,
+  TabListResponses,
+  TabRemoveErrors,
+  TabRemoveResponses,
+  TabSetPositionResponses,
+  TabUpdateErrors,
+  TabUpdateResponses,
   TextPartInput,
   ToolIdsErrors,
   ToolIdsResponses,
@@ -3128,6 +3140,301 @@ export class Mcp extends HeyApiClient {
   }
 }
 
+export class Tab extends HeyApiClient {
+  /**
+   * List tabs
+   *
+   * List all tabs with active tab ID and position.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<TabListResponses, unknown, ThrowOnError>({
+      url: "/tab",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Create tab
+   *
+   * Create a new tab and activate it.
+   */
+  public add<ThrowOnError extends boolean = false>(
+    parameters?: {
+      query_directory?: string
+      workspace?: string
+      sessionID?: string
+      body_directory?: string
+      label?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            {
+              in: "query",
+              key: "query_directory",
+              map: "directory",
+            },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "sessionID" },
+            {
+              in: "body",
+              key: "body_directory",
+              map: "directory",
+            },
+            { in: "body", key: "label" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<TabAddResponses, unknown, ThrowOnError>({
+      url: "/tab",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Close tab
+   *
+   * Close a tab by ID. Cannot close the last remaining tab.
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<TabRemoveResponses, TabRemoveErrors, ThrowOnError>({
+      url: "/tab/{id}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get tab
+   *
+   * Get a single tab by ID.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<TabGetResponses, TabGetErrors, ThrowOnError>({
+      url: "/tab/{id}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Update tab
+   *
+   * Update tab properties (label, sessionID, directory).
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      query_directory?: string
+      workspace?: string
+      label?: string
+      sessionID?: string
+      body_directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            {
+              in: "query",
+              key: "query_directory",
+              map: "directory",
+            },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "label" },
+            { in: "body", key: "sessionID" },
+            {
+              in: "body",
+              key: "body_directory",
+              map: "directory",
+            },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<TabUpdateResponses, TabUpdateErrors, ThrowOnError>({
+      url: "/tab/{id}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Activate tab
+   *
+   * Set a tab as the active tab.
+   */
+  public activate<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<TabActivateResponses, TabActivateErrors, ThrowOnError>({
+      url: "/tab/{id}/activate",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Switch to previous tab
+   *
+   * Switch to the previously active tab.
+   */
+  public last<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<TabLastResponses, unknown, ThrowOnError>({
+      url: "/tab/last",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Set tab bar position
+   *
+   * Set the tab bar position to top or bottom.
+   */
+  public setPosition<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      position?: "top" | "bottom"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "position" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<TabSetPositionResponses, unknown, ThrowOnError>({
+      url: "/tab/position",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Control extends HeyApiClient {
   /**
    * Get next TUI request
@@ -3992,6 +4299,11 @@ export class OpencodeClient extends HeyApiClient {
   private _mcp?: Mcp
   get mcp(): Mcp {
     return (this._mcp ??= new Mcp({ client: this.client }))
+  }
+
+  private _tab?: Tab
+  get tab(): Tab {
+    return (this._tab ??= new Tab({ client: this.client }))
   }
 
   private _tui?: Tui

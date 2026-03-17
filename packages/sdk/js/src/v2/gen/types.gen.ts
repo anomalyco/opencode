@@ -963,6 +963,48 @@ export type EventWorktreeFailed = {
   }
 }
 
+export type Tab = {
+  id: string
+  sessionID: string | null
+  label: string
+  route:
+    | {
+        type: "home"
+      }
+    | {
+        type: "session"
+        sessionID: string
+      }
+  directory?: string
+}
+
+export type EventTabUpdated = {
+  type: "tab.updated"
+  properties: Tab
+}
+
+export type EventTabRemoved = {
+  type: "tab.removed"
+  properties: {
+    id: string
+  }
+}
+
+export type EventTabActivated = {
+  type: "tab.activated"
+  properties: {
+    id: string
+    previousID: string | null
+  }
+}
+
+export type EventTabPositionChanged = {
+  type: "tab.position.changed"
+  properties: {
+    position: "top" | "bottom"
+  }
+}
+
 export type Event =
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
@@ -1009,6 +1051,10 @@ export type Event =
   | EventPtyDeleted
   | EventWorktreeReady
   | EventWorktreeFailed
+  | EventTabUpdated
+  | EventTabRemoved
+  | EventTabActivated
+  | EventTabPositionChanged
 
 export type GlobalEvent = {
   directory: string
@@ -1869,6 +1915,13 @@ export type McpStatus =
   | McpStatusFailed
   | McpStatusNeedsAuth
   | McpStatusNeedsClientRegistration
+
+export type TabListResponse = {
+  tabs: Array<Tab>
+  activeID: string
+  previousID: string | null
+  position: "top" | "bottom"
+}
 
 export type Path = {
   home: string
@@ -4458,6 +4511,233 @@ export type McpDisconnectResponses = {
 }
 
 export type McpDisconnectResponse = McpDisconnectResponses[keyof McpDisconnectResponses]
+
+export type TabListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/tab"
+}
+
+export type TabListResponses = {
+  /**
+   * Tab list
+   */
+  200: TabListResponse
+}
+
+export type TabListResponse2 = TabListResponses[keyof TabListResponses]
+
+export type TabAddData = {
+  body?: {
+    /**
+     * Session to associate with this tab
+     */
+    sessionID?: string
+    /**
+     * Working directory for this tab
+     */
+    directory?: string
+    /**
+     * Tab label
+     */
+    label?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/tab"
+}
+
+export type TabAddResponses = {
+  /**
+   * Created tab
+   */
+  200: Tab
+}
+
+export type TabAddResponse = TabAddResponses[keyof TabAddResponses]
+
+export type TabRemoveData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/tab/{id}"
+}
+
+export type TabRemoveErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type TabRemoveError = TabRemoveErrors[keyof TabRemoveErrors]
+
+export type TabRemoveResponses = {
+  /**
+   * Tab closed
+   */
+  200: boolean
+}
+
+export type TabRemoveResponse = TabRemoveResponses[keyof TabRemoveResponses]
+
+export type TabGetData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/tab/{id}"
+}
+
+export type TabGetErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type TabGetError = TabGetErrors[keyof TabGetErrors]
+
+export type TabGetResponses = {
+  /**
+   * Tab
+   */
+  200: Tab
+}
+
+export type TabGetResponse = TabGetResponses[keyof TabGetResponses]
+
+export type TabUpdateData = {
+  body?: {
+    /**
+     * New tab label
+     */
+    label?: string
+    /**
+     * New session ID
+     */
+    sessionID?: string
+    /**
+     * New working directory
+     */
+    directory?: string
+  }
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/tab/{id}"
+}
+
+export type TabUpdateErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type TabUpdateError = TabUpdateErrors[keyof TabUpdateErrors]
+
+export type TabUpdateResponses = {
+  /**
+   * Updated tab
+   */
+  200: Tab
+}
+
+export type TabUpdateResponse = TabUpdateResponses[keyof TabUpdateResponses]
+
+export type TabActivateData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/tab/{id}/activate"
+}
+
+export type TabActivateErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type TabActivateError = TabActivateErrors[keyof TabActivateErrors]
+
+export type TabActivateResponses = {
+  /**
+   * Tab activated
+   */
+  200: boolean
+}
+
+export type TabActivateResponse = TabActivateResponses[keyof TabActivateResponses]
+
+export type TabLastData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/tab/last"
+}
+
+export type TabLastResponses = {
+  /**
+   * Switched
+   */
+  200: boolean
+}
+
+export type TabLastResponse = TabLastResponses[keyof TabLastResponses]
+
+export type TabSetPositionData = {
+  body?: {
+    /**
+     * Tab bar position
+     */
+    position: "top" | "bottom"
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/tab/position"
+}
+
+export type TabSetPositionResponses = {
+  /**
+   * Position set
+   */
+  200: boolean
+}
+
+export type TabSetPositionResponse = TabSetPositionResponses[keyof TabSetPositionResponses]
 
 export type TuiAppendPromptData = {
   body?: {
