@@ -1379,11 +1379,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             />
 
             <div class="flex items-center gap-1 pointer-events-auto">
-              <Tooltip
-                placement="top"
-                inactive={!prompt.dirty() && !working()}
-                value={tip()}
-              >
+              <Tooltip placement="top" inactive={!prompt.dirty() && !working()} value={tip()}>
                 <IconButton
                   data-action="prompt-submit"
                   type="submit"
