@@ -57,7 +57,8 @@ export const WriteTool = Tool.define("write", {
     const normalizedFilepath = Filesystem.normalizePath(filepath)
     let projectDiagnosticsCount = 0
     for (const [file, issues] of Object.entries(diagnostics)) {
-      const errors = issues.filter((item) => item.severity === 1)
+      const min = await LSP.minSeverity(file)
+      const errors = LSP.Diagnostic.filter(issues, min)
       if (errors.length === 0) continue
       const limited = errors.slice(0, MAX_DIAGNOSTICS_PER_FILE)
       const suffix =

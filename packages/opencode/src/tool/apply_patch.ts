@@ -259,7 +259,8 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
       const target = change.movePath ?? change.filePath
       const normalized = Filesystem.normalizePath(target)
       const issues = diagnostics[normalized] ?? []
-      const errors = issues.filter((item) => item.severity === 1)
+      const min = await LSP.minSeverity(target)
+      const errors = LSP.Diagnostic.filter(issues, min)
       if (errors.length > 0) {
         const limited = errors.slice(0, MAX_DIAGNOSTICS_PER_FILE)
         const suffix =
