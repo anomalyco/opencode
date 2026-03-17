@@ -29,6 +29,8 @@ export const dict = {
   "command.page.find.next": "Next match",
   "command.project.open": "Open project",
   "command.project.switch": "Switch project",
+  "command.project.copyPath": "Copy workspace path",
+  "command.project.copyPath.description": "Copy the absolute path of the current workspace to clipboard",
   "command.provider.connect": "Connect provider",
   "command.server.switch": "Switch server",
   "command.settings.open": "Open settings",
@@ -102,6 +104,7 @@ export const dict = {
   "command.session.unshare.description": "Stop sharing this session",
 
   "palette.search.placeholder": "Search files, commands, and sessions",
+  "palette.search.commands": "Search commands",
   "palette.empty": "No results found",
   "palette.group.commands": "Commands",
   "palette.group.files": "Files",
@@ -617,6 +620,7 @@ export const dict = {
   "session.header.open.app.terminal": "Terminal",
   "session.header.open.app.iterm2": "iTerm2",
   "session.header.open.app.ghostty": "Ghostty",
+  "session.header.open.app.wezterm": "WezTerm",
   "session.header.open.app.warp": "Warp",
   "session.header.open.app.xcode": "Xcode",
   "session.header.open.app.androidStudio": "Android Studio",
@@ -710,6 +714,13 @@ export const dict = {
   "sidebar.dropFolder": "Drop folder to open project",
   "sidebar.dropFile": "Drop to add as attachment",
   "sidebar.project.clearNotifications": "Clear notifications",
+
+  "sidebar.group.today": "Today",
+  "sidebar.group.yesterday": "Yesterday",
+  "sidebar.group.thisWeek": "This Week",
+  "sidebar.group.thisMonth": "This Month",
+  "sidebar.group.older": "Older",
+  "sidebar.search.placeholder": "Search sessions...",
 
   "debugBar.ariaLabel": "Development performance diagnostics",
   "debugBar.na": "n/a",

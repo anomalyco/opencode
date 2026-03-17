@@ -6,6 +6,7 @@
   display: flex;
   align-items: flex-start;
   justify-content: flex-start;
+  contain: layout style;
 
   [data-slot="session-turn-content"] {
     flex-grow: 1;
@@ -28,6 +29,7 @@
     min-width: 0;
     gap: 18px;
     overflow-anchor: none;
+    contain: layout style;
   }
 
   [data-slot="session-turn-message-content"] {
@@ -35,6 +37,7 @@
     width: 100%;
     min-width: 0;
     max-width: 100%;
+    contain: layout style;
   }
 
   [data-slot="session-turn-compaction"] {

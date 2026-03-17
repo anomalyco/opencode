@@ -1,5 +1,6 @@
 [data-component="assistant-message"] {
   content-visibility: auto;
+  contain: layout style;
   width: 100%;
   display: flex;
   flex-direction: column;
@@ -48,10 +49,15 @@
   display: flex;
   flex-direction: column;
   align-items: flex-end;
+  contain: layout style;
   align-self: stretch;
   width: 100%;
   max-width: 100%;
-  gap: 0;
+  gap: 8px;
+
+  &[data-interrupted] {
+    color: var(--text-weak);
+  }
 
   [data-slot="user-message-attachments"] {
     display: flex;
@@ -191,8 +197,7 @@
     }
   }
 
-  [data-slot="user-message-copy-wrapper"] {
-    min-height: 24px;
+  [data-slot="user-message-meta-bar"] {
     margin-top: 4px;
     display: flex;
     align-items: center;
@@ -205,8 +210,9 @@
   [data-slot="user-message-copy-wrapper"] {
     display: flex;
     align-items: center;
-    opacity: 0;
-    pointer-events: none;
+    gap: 4px;
+    opacity: 1;
+    pointer-events: auto;
     transition: opacity 0.15s ease;
     will-change: opacity;
 
@@ -223,20 +229,46 @@
     align-items: center;
     justify-content: flex-end;
     overflow: hidden;
-    gap: 0;
+    flex-wrap: nowrap;
+  }
+
+  [data-slot="user-message-meta-agent"] {
+    user-select: none;
+    white-space: nowrap;
+    color: var(--syntax-type);
+    opacity: 0.68;
+  }
+
+  [data-slot="user-message-meta-provider"] {
+    user-select: none;
+    white-space: nowrap;
+    color: var(--syntax-info);
+    opacity: 0.68;
+  }
+
+  [data-slot="user-message-meta-model"] {
+    user-select: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--syntax-constant);
+    opacity: 0.68;
+  }
+
+  [data-slot="user-message-meta-sep"] {
+    user-select: none;
+    flex: 0 0 auto;
+    color: var(--text-weaker);
+    white-space: nowrap;
+    opacity: 0.42;
   }
 
   [data-slot="user-message-meta-tail"] {
     user-select: none;
     flex: 0 0 auto;
     white-space: nowrap;
-    text-align: right;
-  }
-
-  &:hover [data-slot="user-message-copy-wrapper"],
-  &:focus-within [data-slot="user-message-copy-wrapper"] {
-    opacity: 1;
-    pointer-events: auto;
+    color: var(--text-weak);
+    opacity: 0.72;
   }
 
   .text-text-strong {
@@ -298,8 +330,8 @@
     align-items: center;
     justify-content: flex-start;
     gap: 10px;
-    opacity: 0;
-    pointer-events: none;
+    opacity: 1;
+    pointer-events: auto;
     transition: opacity 0.15s ease;
     will-change: opacity;
 
@@ -311,6 +343,8 @@
 
   [data-slot="text-part-meta"] {
     user-select: none;
+    color: var(--text-weaker);
+    opacity: 0.48;
   }
 
   [data-slot="text-part-copy-wrapper"][data-interrupted] {
@@ -319,15 +353,44 @@
     gap: 12px;
   }
 
-  &:hover [data-slot="text-part-copy-wrapper"],
-  &:focus-within [data-slot="text-part-copy-wrapper"] {
-    opacity: 1;
-    pointer-events: auto;
-  }
-
   [data-component="markdown"] {
     margin-top: 0;
     font-size: var(--font-size-base);
+  }
+}
+
+[data-component="tool-error"] {
+  display: flex;
+  align-items: start;
+  gap: 8px;
+
+  [data-slot="icon-svg"] {
+    color: var(--icon-critical-base);
+    margin-top: 4px;
+  }
+
+  [data-slot="message-part-tool-error-content"] {
+    display: flex;
+    align-items: start;
+    gap: 8px;
+  }
+
+  [data-slot="message-part-tool-error-title"] {
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-base);
+    font-style: normal;
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-large);
+    letter-spacing: var(--letter-spacing-normal);
+    color: var(--text-on-critical-base);
+    white-space: nowrap;
+  }
+
+  [data-slot="message-part-tool-error-message"] {
+    color: var(--text-on-critical-weak);
+    max-height: 240px;
+    overflow-y: auto;
+    word-break: break-word;
   }
 }
 
@@ -699,8 +762,8 @@
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 0px;
-  cursor: default;
+  gap: 8px;
+  cursor: pointer;
 
   [data-slot="context-tool-group-indicator"] {
     width: 16px;
@@ -742,7 +805,6 @@
 
   [data-slot="collapsible-arrow"] {
     color: var(--icon-weaker);
-    cursor: pointer;
   }
 }
 
@@ -807,6 +869,7 @@
 [data-component="user-message"] [data-slot="user-message-text"],
 [data-component="text-part"],
 [data-component="reasoning-part"],
+[data-component="tool-error"],
 [data-component="tool-output"],
 [data-component="bash-output"],
 [data-component="edit-content"],

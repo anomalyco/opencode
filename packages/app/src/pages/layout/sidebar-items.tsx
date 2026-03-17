@@ -91,6 +91,7 @@ const SessionRow = (props: {
   slug: string
   mobile?: boolean
   dense?: boolean
+  active?: boolean
   tint: Accessor<string | undefined>
   isWorking: Accessor<boolean>
   hasPermissions: Accessor<boolean>
@@ -118,26 +119,34 @@ const SessionRow = (props: {
     }}
   >
     <div class="flex items-center gap-1 w-full">
-      <div
-        class="shrink-0 size-6 flex items-center justify-center"
-        style={{ color: props.tint() ?? "var(--icon-interactive-base)" }}
+      <Show when={props.isWorking() || props.hasPermissions() || props.hasError() || props.unseenCount() > 0}>
+        <div
+          class="shrink-0 size-6 flex items-center justify-center"
+          style={{ color: props.tint() ?? "var(--icon-interactive-base)" }}
+        >
+          <Switch>
+            <Match when={props.isWorking()}>
+              <Spinner class="size-[15px]" />
+            </Match>
+            <Match when={props.hasPermissions()}>
+              <div class="size-1.5 rounded-full bg-surface-warning-strong" />
+            </Match>
+            <Match when={props.hasError()}>
+              <div class="size-1.5 rounded-full bg-text-diff-delete-base" />
+            </Match>
+            <Match when={props.unseenCount() > 0}>
+              <div class="size-1.5 rounded-full bg-text-interactive-base" />
+            </Match>
+          </Switch>
+        </div>
+      </Show>
+      <span
+        classList={{
+          "text-14-regular grow-1 min-w-0 overflow-hidden text-ellipsis truncate transition-colors": true,
+          "text-icon-warning-base font-medium": !!props.active,
+          "text-text-weak group-hover/session:text-text-strong": !props.active,
+        }}
       >
-        <Switch fallback={<Icon name="dash" size="small" class="text-icon-weak" />}>
-          <Match when={props.isWorking()}>
-            <Spinner class="size-[15px]" />
-          </Match>
-          <Match when={props.hasPermissions()}>
-            <div class="size-1.5 rounded-full bg-surface-warning-strong" />
-          </Match>
-          <Match when={props.hasError()}>
-            <div class="size-1.5 rounded-full bg-text-diff-delete-base" />
-          </Match>
-          <Match when={props.unseenCount() > 0}>
-            <div class="size-1.5 rounded-full bg-text-interactive-base" />
-          </Match>
-        </Switch>
-      </div>
-      <span class="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate">
         {props.session.title}
       </span>
     </div>
@@ -209,6 +218,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
     const status = sessionStore.session_status[props.session.id]
     return status?.type === "busy" || status?.type === "retry"
   })
+  const isActive = createMemo(() => props.session.id === params.id)
 
   const tint = createMemo(() => {
     const messages = sessionStore.message[props.session.id]
@@ -232,7 +242,6 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   const hoverReady = createMemo(() => hoverMessages() !== undefined)
   const hoverAllowed = createMemo(() => !props.mobile && props.sidebarExpanded())
   const hoverEnabled = createMemo(() => (props.popover ?? true) && hoverAllowed())
-  const isActive = createMemo(() => props.session.id === params.id)
 
   const warm = (span: number, priority: "high" | "low") => {
     const nav = props.navList?.()
@@ -284,6 +293,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
       slug={props.slug}
       mobile={props.mobile}
       dense={props.dense}
+      active={isActive()}
       tint={tint}
       isWorking={isWorking}
       hasPermissions={hasPermissions}
@@ -302,9 +312,18 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   return (
     <div
       data-session-id={props.session.id}
-      class="group/session relative w-full rounded-md cursor-default transition-colors pl-2 pr-3
-             hover:bg-surface-raised-base-hover [&:has(:focus-visible)]:bg-surface-raised-base-hover has-[[data-expanded]]:bg-surface-raised-base-hover has-[.active]:bg-surface-base-active"
+      classList={{
+        "group/session relative w-full rounded-lg cursor-default transition-colors pl-2 pr-3": true,
+        "hover:bg-surface-raised-base-hover [&:has(:focus-visible)]:bg-surface-raised-base-hover has-[[data-expanded]]:bg-surface-raised-base-hover": !isActive(),
+        "bg-surface-raised-base-hover": isActive(),
+      }}
     >
+      <Show when={isActive()}>
+        <div
+          class="absolute left-0.5 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-full"
+          style={{ "background-color": tint() ?? "var(--icon-interactive-base)" }}
+        />
+      </Show>
       <Show
         when={hoverEnabled()}
         fallback={
@@ -388,9 +407,9 @@ export const NewSessionItem = (props: {
     >
       <div class="flex items-center gap-1 w-full">
         <div class="shrink-0 size-6 flex items-center justify-center">
-          <Icon name="plus-small" size="small" class="text-icon-weak" />
+          <Icon name="plus" size="small" class="text-icon-weak group-hover/session:text-icon-base" />
         </div>
-        <span class="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate">
+        <span class="text-14-regular text-text-weak group-hover/session:text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate transition-colors">
           {label}
         </span>
       </div>
@@ -398,7 +417,7 @@ export const NewSessionItem = (props: {
   )
 
   return (
-    <div class="group/session relative w-full rounded-md cursor-default transition-colors pl-2 pr-3 hover:bg-surface-raised-base-hover [&:has(:focus-visible)]:bg-surface-raised-base-hover has-[.active]:bg-surface-base-active">
+    <div class="group/session relative w-full rounded-lg cursor-default transition-colors pl-2 pr-3 hover:bg-surface-raised-base-hover [&:has(:focus-visible)]:bg-surface-raised-base-hover has-[.active]:bg-surface-base-active">
       <Show
         when={!tooltip()}
         fallback={
@@ -418,8 +437,44 @@ export const SessionSkeleton = (props: { count?: number }): JSX.Element => {
   return (
     <div class="flex flex-col gap-1">
       <For each={items}>
-        {() => <div class="h-8 w-full rounded-md bg-surface-raised-base opacity-60 animate-pulse" />}
+        {() => <div class="h-8 w-full rounded-lg bg-surface-raised-base opacity-60 animate-pulse" />}
       </For>
     </div>
   )
 }
+
+export const SessionGroupHeader = (props: { label: string }): JSX.Element => (
+  <div class="px-4 pt-3 pb-1 first:pt-1 flex justify-end">
+    <span class="text-[11px] font-medium uppercase tracking-wider text-text-weak opacity-60">
+      {props.label}
+    </span>
+  </div>
+)
+
+export const SessionSearchBar = (props: {
+  value: Accessor<string>
+  onInput: (value: string) => void
+  placeholder: string
+}): JSX.Element => (
+  <div class="px-3 py-2">
+    <div class="flex items-center gap-2 px-2.5 h-8 rounded-lg border border-transparent transition-colors focus-within:bg-surface-base focus-within:border-border-weak-base">
+      <Icon name="magnifying-glass" size="small" class="text-icon-weak shrink-0" />
+      <input
+        type="text"
+        value={props.value()}
+        onInput={(e) => props.onInput(e.currentTarget.value)}
+        placeholder={props.placeholder}
+        class="flex-1 bg-transparent outline-none text-text-base placeholder:text-text-weak"
+        style={{ "font-size": "13px" }}
+      />
+      <Show when={props.value()}>
+        <IconButton
+          icon="close-small"
+          variant="ghost"
+          class="size-5 rounded"
+          onClick={() => props.onInput("")}
+        />
+      </Show>
+    </div>
+  </div>
+)

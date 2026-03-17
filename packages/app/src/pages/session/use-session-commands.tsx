@@ -14,6 +14,7 @@ import { useTerminal } from "@/context/terminal"
 import { DialogSelectFile } from "@/components/dialog-select-file"
 import { DialogSelectModel } from "@/components/dialog-select-model"
 import { DialogSelectMcp } from "@/components/dialog-select-mcp"
+import { DialogSelectSkill } from "@/components/dialog-select-skill"
 import { DialogFork } from "@/components/dialog-fork"
 import { showToast } from "@opencode-ai/ui/toast"
 import { findLast } from "@opencode-ai/util/array"
@@ -21,6 +22,8 @@ import { createSessionTabs } from "@/pages/session/helpers"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { UserMessage } from "@opencode-ai/sdk/v2"
 import { useSessionLayout } from "@/pages/session/session-layout"
+import { decode64 } from "@/utils/base64"
+import { dict as enDict } from "@/i18n/en"
 
 export type SessionCommandContext = {
   navigateMessageByOffset: (offset: number) => void
@@ -51,6 +54,10 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const navigate = useNavigate()
   const { params, tabs, view } = useSessionLayout()
 
+  type DictKey = keyof typeof enDict
+  const kw = (...keys: DictKey[]) =>
+    language.locale() === "en" ? undefined : keys.map((k) => enDict[k]).join(" ")
+
   const info = () => {
     const id = params.id
     if (!id) return
@@ -74,6 +81,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   })
   const activeFileTab = tabState.activeFileTab
   const closableTab = tabState.closableTab
+
+  const projectDirectory = () => decode64(params.dir) ?? ""
 
   const idle = { type: "idle" as const }
   const status = () => sync.data.session_status[params.id ?? ""] ?? idle
@@ -123,6 +132,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const viewCommand = withCategory(language.t("command.category.view"))
   const terminalCommand = withCategory(language.t("command.category.terminal"))
   const modelCommand = withCategory(language.t("command.category.model"))
+  const projectCommand = withCategory(language.t("command.category.project"))
   const mcpCommand = withCategory(language.t("command.category.mcp"))
   const agentCommand = withCategory(language.t("command.category.agent"))
   const permissionsCommand = withCategory(language.t("command.category.permissions"))
@@ -145,6 +155,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
               description: info()?.share?.url
                 ? language.t("toast.session.share.success.description")
                 : language.t("command.session.share.description"),
+              keywords: kw("command.session.share", "command.session.share.description"),
               slash: "share",
               disabled: !params.id,
               onSelect: async () => {
@@ -219,6 +230,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
               id: "session.unshare",
               title: language.t("command.session.unshare"),
               description: language.t("command.session.unshare.description"),
+              keywords: kw("command.session.unshare", "command.session.unshare.description"),
               slash: "unshare",
               disabled: !params.id || !info()?.share?.url,
               onSelect: async () => {
@@ -247,6 +259,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       sessionCommand({
         id: "session.new",
         title: language.t("command.session.new"),
+        keywords: kw("command.session.new"),
         keybind: "mod+shift+s",
         slash: "new",
         onSelect: () => navigate(`/${params.dir}/session`),
@@ -254,14 +267,52 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       fileCommand({
         id: "file.open",
         title: language.t("command.file.open"),
-        description: language.t("palette.search.placeholder"),
+        description: language.t("session.header.searchFiles"),
+        keywords: kw("command.file.open"),
         keybind: "mod+p",
         slash: "open",
-        onSelect: () => dialog.show(() => <DialogSelectFile onOpenFile={showAllFiles} />),
+        onSelect: () => dialog.show(() => <DialogSelectFile mode="files" onOpenFile={showAllFiles} />),
+      }),
+      fileCommand({
+        id: "command.palette",
+        title: language.t("command.palette"),
+        description: language.t("palette.search.commands"),
+        keywords: kw("command.palette"),
+        keybind: "mod+shift+p",
+        onSelect: () => dialog.show(() => <DialogSelectFile mode="commands" />),
+      }),
+      projectCommand({
+        id: "project.copyPath",
+        title: language.t("command.project.copyPath"),
+        description: language.t("command.project.copyPath.description"),
+        keywords: kw("command.project.copyPath", "command.project.copyPath.description"),
+        disabled: !projectDirectory(),
+        onSelect: () => {
+          const directory = projectDirectory()
+          if (!directory) return
+          navigator.clipboard
+            .writeText(directory)
+            .then(() => {
+              showToast({
+                variant: "success",
+                icon: "circle-check",
+                title: language.t("session.share.copy.copied"),
+                description: directory,
+              })
+            })
+            .catch((err: unknown) => {
+              showToast({
+                variant: "error",
+                title: language.t("common.requestFailed"),
+                description: err instanceof Error ? err.message : String(err),
+              })
+            })
+        },
       }),
       fileCommand({
         id: "tab.close",
         title: language.t("command.tab.close"),
+        keywords: kw("command.tab.close"),
         keybind: "mod+w",
         disabled: !closableTab(),
         onSelect: () => {
@@ -274,6 +325,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         id: "context.addSelection",
         title: language.t("command.context.addSelection"),
         description: language.t("command.context.addSelection.description"),
+        keywords: kw("command.context.addSelection", "command.context.addSelection.description"),
         keybind: "mod+shift+l",
         disabled: !canAddSelectionContext(),
         onSelect: () => {
@@ -297,6 +349,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       viewCommand({
         id: "terminal.toggle",
         title: language.t("command.terminal.toggle"),
+        keywords: kw("command.terminal.toggle"),
         keybind: "ctrl+`",
         slash: "terminal",
         onSelect: () => view().terminal.toggle(),
@@ -304,18 +357,21 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       viewCommand({
         id: "review.toggle",
         title: language.t("command.review.toggle"),
+        keywords: kw("command.review.toggle"),
         keybind: "mod+shift+r",
         onSelect: () => view().reviewPanel.toggle(),
       }),
       viewCommand({
         id: "fileTree.toggle",
         title: language.t("command.fileTree.toggle"),
+        keywords: kw("command.fileTree.toggle"),
         keybind: "mod+\\",
         onSelect: () => layout.fileTree.toggle(),
       }),
       viewCommand({
         id: "input.focus",
         title: language.t("command.input.focus"),
+        keywords: kw("command.input.focus"),
         keybind: "ctrl+l",
         onSelect: focusInput,
       }),
@@ -323,6 +379,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         id: "terminal.new",
         title: language.t("command.terminal.new"),
         description: language.t("command.terminal.new.description"),
+        keywords: kw("command.terminal.new", "command.terminal.new.description"),
         keybind: "ctrl+alt+t",
         onSelect: () => {
           if (terminal.all().length > 0) terminal.new()
@@ -333,6 +390,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         id: "message.previous",
         title: language.t("command.message.previous"),
         description: language.t("command.message.previous.description"),
+        keywords: kw("command.message.previous", "command.message.previous.description"),
         keybind: "mod+arrowup",
         disabled: !params.id,
         onSelect: () => navigateMessageByOffset(-1),
@@ -341,6 +399,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         id: "message.next",
         title: language.t("command.message.next"),
         description: language.t("command.message.next.description"),
+        keywords: kw("command.message.next", "command.message.next.description"),
         keybind: "mod+arrowdown",
         disabled: !params.id,
         onSelect: () => navigateMessageByOffset(1),
@@ -349,6 +408,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         id: "model.choose",
         title: language.t("command.model.choose"),
         description: language.t("command.model.choose.description"),
+        keywords: kw("command.model.choose", "command.model.choose.description"),
         keybind: "mod+'",
         slash: "model",
         onSelect: () => dialog.show(() => <DialogSelectModel />),
@@ -357,14 +417,24 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         id: "mcp.toggle",
         title: language.t("command.mcp.toggle"),
         description: language.t("command.mcp.toggle.description"),
+        keywords: kw("command.mcp.toggle", "command.mcp.toggle.description"),
         keybind: "mod+;",
         slash: "mcp",
         onSelect: () => dialog.show(() => <DialogSelectMcp />),
+      }),
+      withCategory(language.t("command.category.skill"))({
+        id: "skill.list",
+        title: language.t("command.skill.list"),
+        description: language.t("command.skill.list.description"),
+        keywords: kw("command.skill.list", "command.skill.list.description"),
+        keybind: "mod+shift+;",
+        onSelect: () => dialog.show(() => <DialogSelectSkill />),
       }),
       agentCommand({
         id: "agent.cycle",
         title: language.t("command.agent.cycle"),
         description: language.t("command.agent.cycle.description"),
+        keywords: kw("command.agent.cycle", "command.agent.cycle.description"),
         keybind: "mod+.",
         slash: "agent",
         onSelect: () => local.agent.move(1),
@@ -373,6 +443,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         id: "agent.cycle.reverse",
         title: language.t("command.agent.cycle.reverse"),
         description: language.t("command.agent.cycle.reverse.description"),
+        keywords: kw("command.agent.cycle.reverse", "command.agent.cycle.reverse.description"),
         keybind: "shift+mod+.",
         onSelect: () => local.agent.move(-1),
       }),
@@ -380,6 +451,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         id: "model.variant.cycle",
         title: language.t("command.model.variant.cycle"),
         description: language.t("command.model.variant.cycle.description"),
+        keywords: kw("command.model.variant.cycle", "command.model.variant.cycle.description"),
         keybind: "shift+mod+d",
         onSelect: () => local.model.variant.cycle(),
       }),
@@ -388,6 +460,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         title: isAutoAcceptActive()
           ? language.t("command.permissions.autoaccept.disable")
           : language.t("command.permissions.autoaccept.enable"),
+        keywords: kw("command.permissions.autoaccept.enable", "command.permissions.autoaccept.disable"),
         keybind: "mod+shift+a",
         disabled: false,
         onSelect: () => {
@@ -412,6 +485,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         id: "session.undo",
         title: language.t("command.session.undo"),
         description: language.t("command.session.undo.description"),
+        keywords: kw("command.session.undo", "command.session.undo.description"),
         slash: "undo",
         disabled: !params.id || visibleUserMessages().length === 0,
         onSelect: async () => {
@@ -437,6 +511,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         id: "session.redo",
         title: language.t("command.session.redo"),
         description: language.t("command.session.redo.description"),
+        keywords: kw("command.session.redo", "command.session.redo.description"),
         slash: "redo",
         disabled: !params.id || !info()?.revert?.messageID,
         onSelect: async () => {
@@ -461,6 +536,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         id: "session.compact",
         title: language.t("command.session.compact"),
         description: language.t("command.session.compact.description"),
+        keywords: kw("command.session.compact", "command.session.compact.description"),
         slash: "compact",
         disabled: !params.id || visibleUserMessages().length === 0,
         onSelect: async () => {
@@ -485,6 +561,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         id: "session.fork",
         title: language.t("command.session.fork"),
         description: language.t("command.session.fork.description"),
+        keywords: kw("command.session.fork", "command.session.fork.description"),
         slash: "fork",
         disabled: !params.id || visibleUserMessages().length === 0,
         onSelect: () => dialog.show(() => <DialogFork />),

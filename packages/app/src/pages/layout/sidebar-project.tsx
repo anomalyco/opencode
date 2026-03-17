@@ -12,6 +12,7 @@ import { useLanguage } from "@/context/language"
 import { useNotification } from "@/context/notification"
 import { ProjectIcon, SessionItem, type SessionItemProps } from "./sidebar-items"
 import { childMapByParent, displayName, sortedRootSessions } from "./helpers"
+import { projectSelected, projectTileActive } from "./sidebar-project-helpers"
 
 export type ProjectSidebarContext = {
   currentDir: Accessor<string>
@@ -101,9 +102,9 @@ const ProjectTile = (props: {
         data-action="project-switch"
         data-project={base64Encode(props.project.worktree)}
         classList={{
-          "flex items-center justify-center size-10 p-1 rounded-lg overflow-hidden transition-colors cursor-default": true,
-          "bg-transparent border-2 border-icon-strong-base hover:bg-surface-base-hover": props.selected(),
-          "bg-transparent border border-transparent hover:bg-surface-base-hover hover:border-border-weak-base":
+          "flex items-center justify-center size-10 p-1 rounded-xl overflow-hidden transition-all duration-150 cursor-default": true,
+          "bg-surface-interactive-selected": props.selected(),
+          "bg-transparent border border-transparent hover:bg-surface-base-hover hover:border-border-weak-base hover:scale-105":
             !props.selected() && !props.active(),
           "bg-surface-base-hover border border-border-weak-base": !props.selected() && props.active(),
         }}
@@ -278,11 +279,7 @@ export const SortableProject = (props: {
   const globalSync = useGlobalSync()
   const language = useLanguage()
   const sortable = createSortable(props.project.worktree)
-  const selected = createMemo(
-    () =>
-      props.project.worktree === props.ctx.currentDir() ||
-      props.project.sandboxes?.includes(props.ctx.currentDir()) === true,
-  )
+  const selected = createMemo(() => projectSelected(props.ctx.currentDir(), props.project.worktree, props.project.sandboxes))
   const workspaces = createMemo(() => props.ctx.workspaceIds(props.project).slice(0, 2))
   const workspaceEnabled = createMemo(() => props.ctx.workspacesEnabled(props.project))
   const dirs = createMemo(() => props.ctx.workspaceIds(props.project))
@@ -294,8 +291,15 @@ export const SortableProject = (props: {
 
   const preview = createMemo(() => !props.mobile && props.ctx.sidebarOpened())
   const overlay = createMemo(() => !props.mobile && !props.ctx.sidebarOpened())
-  const active = createMemo(
-    () => state.menu || (preview() ? state.open : overlay() && props.ctx.hoverProject() === props.project.worktree),
+  const active = createMemo(() =>
+    projectTileActive({
+      menu: state.menu,
+      preview: preview(),
+      open: state.open,
+      overlay: overlay(),
+      hoverProject: props.ctx.hoverProject(),
+      worktree: props.project.worktree,
+    }),
   )
 
   createEffect(() => {
@@ -319,11 +323,11 @@ export const SortableProject = (props: {
   }
 
   const projectStore = createMemo(() => globalSync.child(props.project.worktree, { bootstrap: false })[0])
-  const projectSessions = createMemo(() => sortedRootSessions(projectStore(), props.sortNow()))
+  const projectSessions = createMemo(() => sortedRootSessions(projectStore(), props.sortNow()).slice(0, 2))
   const projectChildren = createMemo(() => childMapByParent(projectStore().session))
   const workspaceSessions = (directory: string) => {
     const [data] = globalSync.child(directory, { bootstrap: false })
-    return sortedRootSessions(data, props.sortNow())
+    return sortedRootSessions(data, props.sortNow()).slice(0, 2)
   }
   const workspaceChildren = (directory: string) => {
     const [data] = globalSync.child(directory, { bootstrap: false })
@@ -358,10 +362,10 @@ export const SortableProject = (props: {
   return (
     // @ts-ignore
     <div use:sortable classList={{ "opacity-30": sortable.isActiveDraggable }}>
-      <Show when={preview() && !selected()} fallback={tile()}>
+      <Show when={preview()} fallback={tile()}>
         <HoverCard
           open={!state.suppressHover && state.open && !state.menu}
-          openDelay={0}
+          openDelay={999999}
           closeDelay={0}
           placement="right-start"
           gutter={6}
@@ -369,7 +373,7 @@ export const SortableProject = (props: {
           onOpenChange={(value) => {
             if (state.menu) return
             if (value && state.suppressHover) return
-            setState("open", value)
+            if (!value) setState("open", false)
             if (value) props.ctx.setHoverSession(undefined)
           }}
         >

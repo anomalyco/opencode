@@ -11,6 +11,7 @@ import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
+import { dict as enDict } from "@/i18n/en"
 import { applyPath, backPath, forwardPath } from "./titlebar-history"
 
 type TauriDesktopWindow = {
@@ -40,6 +41,9 @@ export function Titlebar() {
   const platform = usePlatform()
   const command = useCommand()
   const language = useLanguage()
+  type DictKey = keyof typeof enDict
+  const kw = (...keys: DictKey[]) =>
+    language.locale() === "en" ? undefined : keys.map((k) => enDict[k]).join(" ")
   const theme = useTheme()
   const navigate = useNavigate()
   const location = useLocation()
@@ -96,6 +100,7 @@ export function Titlebar() {
     {
       id: "common.goBack",
       title: language.t("common.goBack"),
+      keywords: kw("common.goBack"),
       category: language.t("command.category.view"),
       keybind: "mod+[",
       onSelect: back,
@@ -103,6 +108,7 @@ export function Titlebar() {
     {
       id: "common.goForward",
       title: language.t("common.goForward"),
+      keywords: kw("common.goForward"),
       category: language.t("command.category.view"),
       keybind: "mod+]",
       onSelect: forward,

@@ -33,6 +33,7 @@ const OPEN_APPS = [
   "terminal",
   "iterm2",
   "ghostty",
+  "wezterm",
   "warp",
   "xcode",
   "android-studio",
@@ -62,6 +63,7 @@ const MAC_APPS = [
   { id: "terminal", label: "session.header.open.app.terminal", icon: "terminal", openWith: "Terminal" },
   { id: "iterm2", label: "session.header.open.app.iterm2", icon: "iterm2", openWith: "iTerm" },
   { id: "ghostty", label: "session.header.open.app.ghostty", icon: "ghostty", openWith: "Ghostty" },
+  { id: "wezterm", label: "session.header.open.app.wezterm", icon: "wezterm", openWith: "WezTerm" },
   { id: "warp", label: "session.header.open.app.warp", icon: "warp", openWith: "Warp" },
   { id: "xcode", label: "session.header.open.app.xcode", icon: "xcode", openWith: "Xcode" },
   {

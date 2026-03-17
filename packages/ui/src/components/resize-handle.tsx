@@ -31,6 +31,7 @@ export function ResizeHandle(props: ResizeHandleProps) {
     const start = local.direction === "horizontal" ? e.clientX : e.clientY
     const startSize = local.size
     let current = startSize
+    let rafId: number | null = null
 
     document.body.style.userSelect = "none"
     document.body.style.overflow = "hidden"
@@ -47,7 +48,15 @@ export function ResizeHandle(props: ResizeHandleProps) {
             : pos - start
       current = startSize + delta
       const clamped = Math.min(local.max, Math.max(local.min, current))
-      local.onResize(clamped)
+
+      // Throttle resize updates using requestAnimationFrame
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId)
+      }
+      rafId = requestAnimationFrame(() => {
+        rafId = null
+        local.onResize(clamped)
+      })
     }
 
     const onMouseUp = () => {
@@ -55,6 +64,16 @@ export function ResizeHandle(props: ResizeHandleProps) {
       document.body.style.overflow = ""
       document.removeEventListener("mousemove", onMouseMove)
       document.removeEventListener("mouseup", onMouseUp)
+
+      // Cancel any pending animation frame
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId)
+        rafId = null
+      }
+
+      // Ensure final resize is applied
+      const clamped = Math.min(local.max, Math.max(local.min, current))
+      local.onResize(clamped)
 
       const threshold = local.collapseThreshold ?? 0
       if (local.onCollapse && threshold > 0 && current < threshold) {
