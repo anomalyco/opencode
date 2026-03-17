@@ -22,6 +22,19 @@ function writeOsc52(text: string): void {
   process.stdout.write(sequence)
 }
 
+/**
+ * Cross-platform clipboard operations for text and images.
+ *
+ * Supports reading and writing to the clipboard across macOS, Windows, Linux (X11/Wayland),
+ * and WSL. Automatically detects the best available method for the current platform.
+ * Also supports OSC 52 for clipboard operations over SSH.
+ *
+ * @example
+ * ```typescript
+ * await Clipboard.copy("Hello, world!")
+ * const content = await Clipboard.read()
+ * ```
+ */
 export namespace Clipboard {
   export interface Content {
     data: string
