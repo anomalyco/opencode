@@ -1,6 +1,7 @@
 import type { BoxRenderable, TextareaRenderable, KeyEvent, ScrollBoxRenderable } from "@opentui/core"
 import { pathToFileURL } from "bun"
 import fuzzysort from "fuzzysort"
+import os from "os"
 import { firstBy } from "remeda"
 import { createMemo, createResource, createEffect, onMount, onCleanup, Index, Show, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -248,14 +249,22 @@ export function Autocomplete(props: {
         })
 
         const width = props.anchor().width - 4
+        const baseDir = (sync.data.path.directory || process.cwd()).replace(/\/+$/, "")
+        // Convert absolute home-dir paths to ~/... format so the display matches what
+        // the user typed and the secondary fuzzysort pass can find the results.
+        const home = os.homedir()
+        const toDisplay = (p: string) => {
+          if (p === home || p.startsWith(home + "/")) return "~" + p.slice(home.length)
+          return p
+        }
         options.push(
           ...sortedFiles.map((item): AutocompleteOption => {
-            const baseDir = (sync.data.path.directory || process.cwd()).replace(/\/+$/, "")
-            const fullPath = `${baseDir}/${item}`
+            // Use absolute paths from the server as-is; join relative paths with the session directory.
+            const fullPath = item.startsWith("/") ? item.replace(/\/$/, "") || "/" : `${baseDir}/${item}`
             const urlObj = pathToFileURL(fullPath)
-            let filename = item
+            let filename = toDisplay(item)
             if (lineRange && !item.endsWith("/")) {
-              filename = `${item}#${lineRange.startLine}${lineRange.endLine ? `-${lineRange.endLine}` : ""}`
+              filename = `${toDisplay(item)}#${lineRange.startLine}${lineRange.endLine ? `-${lineRange.endLine}` : ""}`
               urlObj.searchParams.set("start", String(lineRange.startLine))
               if (lineRange.endLine !== undefined) {
                 urlObj.searchParams.set("end", String(lineRange.endLine))

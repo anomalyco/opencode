@@ -5,8 +5,10 @@ import { AppFileSystem } from "@/filesystem"
 import { Git } from "@/git"
 import { Effect, Layer, ServiceMap } from "effect"
 import { formatPatch, structuredPatch } from "diff"
+import fs from "fs"
 import fuzzysort from "fuzzysort"
 import ignore from "ignore"
+import os from "os"
 import path from "path"
 import z from "zod"
 import { Global } from "../global"
@@ -15,6 +17,35 @@ import { Filesystem } from "../util/filesystem"
 import { Log } from "../util/log"
 import { Protected } from "./protected"
 import { Ripgrep } from "./ripgrep"
+
+async function searchAbsolute(input: { query: string; limit: number; kind: "file" | "directory" | "all" }) {
+  const { query, limit, kind } = input
+  const trailingSlash = query.endsWith("/") || query.endsWith(path.sep)
+  const dirPath = trailingSlash ? query.replace(/[/\\]+$/, "") || "/" : path.dirname(query)
+  const base = trailingSlash ? "" : path.basename(query)
+
+  let entries: fs.Dirent[]
+  try {
+    entries = await fs.promises.readdir(dirPath, { withFileTypes: true })
+  } catch {
+    return []
+  }
+
+  const filtered = entries.filter((d) => {
+    if (kind === "file") return !d.isDirectory()
+    if (kind === "directory") return d.isDirectory()
+    return true
+  })
+
+  const toFullPath = (d: fs.Dirent) => path.join(dirPath, d.name) + (d.isDirectory() ? "/" : "")
+
+  if (!base) return filtered.map(toFullPath).slice(0, limit)
+
+  const names = filtered.map((d) => d.name)
+  const byName = new Map(filtered.map((d) => [d.name, d]))
+  const sorted = fuzzysort.go(base, names, { limit })
+  return sorted.map((r) => toFullPath(byName.get(r.target)!))
+}
 
 export namespace File {
   export const Info = z
@@ -629,13 +660,20 @@ export namespace File {
         dirs?: boolean
         type?: "file" | "directory"
       }) {
-        yield* ensure()
-        const { cache } = yield* InstanceState.get(state)
-
         const query = input.query.trim()
         const limit = input.limit ?? 100
         const kind = input.type ?? (input.dirs === false ? "file" : "all")
         log.info("search", { query, kind })
+
+        // Expand ~ to the home directory, then delegate to filesystem search for absolute paths.
+        const expanded =
+          query === "~" ? os.homedir() + "/" : query.startsWith("~/") ? os.homedir() + query.slice(1) : query
+        if (path.isAbsolute(expanded)) {
+          return yield* Effect.promise(() => searchAbsolute({ query: expanded, limit, kind }))
+        }
+
+        yield* ensure()
+        const { cache } = yield* InstanceState.get(state)
 
         const preferHidden = query.startsWith(".") || query.includes("/.")
 

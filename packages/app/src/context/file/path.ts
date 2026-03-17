@@ -118,14 +118,19 @@ export function createPathHelpers(scope: () => string) {
     ) {
       // Slice from original path to preserve native separators
       path = path.slice(root.length)
+      // Strip the separator left over after removing the root prefix.
+      if (path.startsWith("/") || path.startsWith("\\")) {
+        path = path.slice(1)
+      }
     }
+
+    // If the path is still absolute after root stripping, it lives outside the
+    // project subtree. Preserve it as-is so external files keep valid paths.
+    const isAbsolute = path.startsWith("/") || path.startsWith("\\") || /^[A-Za-z]:[\\/]/.test(path)
+    if (isAbsolute) return path
 
     if (path.startsWith("./") || path.startsWith(".\\")) {
       path = path.slice(2)
-    }
-
-    if (path.startsWith("/") || path.startsWith("\\")) {
-      path = path.slice(1)
     }
     return path
   }
