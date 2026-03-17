@@ -1,6 +1,19 @@
 import { isDeepEqual } from "remeda"
 import type { ParsedKey } from "@opentui/core"
 
+/**
+ * Keyboard binding utilities for parsing and matching key combinations.
+ *
+ * Provides functions for parsing keybinding strings, converting between formats,
+ * and matching key combinations. Supports modifiers like ctrl, alt, shift, super,
+ * and a custom leader key.
+ *
+ * @example
+ * ```typescript
+ * const key = Keybind.parse("ctrl+shift+p")[0]
+ * Keybind.toString(key) // "ctrl+shift+p"
+ * ```
+ */
 export namespace Keybind {
   /**
    * Keybind info derived from OpenTUI's ParsedKey with our custom `leader` field.
