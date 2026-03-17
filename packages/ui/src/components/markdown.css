@@ -3,7 +3,7 @@
   min-width: 0;
   max-width: 100%;
   overflow-wrap: break-word;
-  color: var(--text-strong);
+  color: var(--markdown-text, var(--text-base));
   font-family: var(--font-family-sans);
   font-size: var(--font-size-base); /* 14px */
   line-height: var(--line-height-x-large);
@@ -12,6 +12,7 @@
   > *:first-child {
     margin-top: 0;
   }
+
   > *:last-child {
     margin-bottom: 0;
   }
@@ -225,7 +226,7 @@
   :not(pre) > code {
     font-family: var(--font-family-mono);
     font-feature-settings: var(--font-family-mono--font-feature-settings);
-    color: #e096ab;
+    color: var(--markdown-code, var(--syntax-string));
     font-weight: var(--font-weight-medium);
     /* font-size: 13px; */
 

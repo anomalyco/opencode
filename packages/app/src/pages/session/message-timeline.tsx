@@ -659,7 +659,11 @@ export function MessageTimeline(props: {
                   "w-full": true,
                   "pb-4": true,
                   "pl-2 pr-3 md:pl-4 md:pr-3": true,
-                  "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
+                }}
+                style={{
+                  "max-width": props.centered ? "var(--session-content-width, 60rem)" : undefined,
+                  "margin-left": props.centered ? "auto" : undefined,
+                  "margin-right": props.centered ? "auto" : undefined,
                 }}
               >
                 <div class="h-12 w-full flex items-center justify-between gap-2">
@@ -919,9 +923,13 @@ export function MessageTimeline(props: {
               class="flex flex-col gap-12 items-start justify-start pb-16 transition-[margin]"
               classList={{
                 "w-full": true,
-                "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
                 "mt-0.5": props.centered,
                 "mt-0": !props.centered,
+              }}
+              style={{
+                "max-width": props.centered ? "var(--session-content-width, 60rem)" : undefined,
+                "margin-left": props.centered ? "auto" : undefined,
+                "margin-right": props.centered ? "auto" : undefined,
               }}
             >
               <Show when={props.turnStart > 0 || props.historyMore}>
@@ -952,9 +960,14 @@ export function MessageTimeline(props: {
                       data-message-id={messageID}
                       classList={{
                         "min-w-0 w-full max-w-full": true,
-                        "md:max-w-200 2xl:max-w-[1000px]": props.centered,
                       }}
-                      style={{ "content-visibility": "auto", "contain-intrinsic-size": "auto 500px" }}
+                      style={{
+                        "content-visibility": "auto",
+                        "contain-intrinsic-size": "auto 500px",
+                        "max-width": props.centered ? "var(--session-content-width, 60rem)" : undefined,
+                        "margin-left": props.centered ? "auto" : undefined,
+                        "margin-right": props.centered ? "auto" : undefined,
+                      }}
                     >
                       <Show when={commentCount() > 0}>
                         <div class="w-full px-4 md:px-5 pb-2">
@@ -1003,6 +1016,7 @@ export function MessageTimeline(props: {
                         active={active()}
                         status={active() ? sessionStatus() : undefined}
                         showReasoningSummaries={settings.general.showReasoningSummaries()}
+                        showCustomHookParts={settings.general.showCustomHookParts()}
                         shellToolDefaultOpen={settings.general.shellToolPartsExpanded()}
                         editToolDefaultOpen={settings.general.editToolPartsExpanded()}
                         classes={{

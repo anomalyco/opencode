@@ -135,6 +135,35 @@ const createPlatform = (): Platform => {
     os,
     version: pkg.version,
 
+    async openInFinder(path: string) {
+      await commands.openInFinder(path)
+    },
+
+    async openInVscode(path: string) {
+      await commands.openInVscode(path)
+    },
+
+    async openInEditor(editor: string, path: string) {
+      const customPath = await commands.getCustomEditorPath().catch(() => null)
+      await commands.openInEditor(editor, path, customPath)
+    },
+
+    async getCustomEditorPath() {
+      return commands.getCustomEditorPath().catch(() => null)
+    },
+
+    async setCustomEditorPath(path: string | null) {
+      await commands.setCustomEditorPath(path)
+    },
+
+    async getDefaultEditor() {
+      return commands.getDefaultEditor().catch(() => null)
+    },
+
+    async setDefaultEditor(editor: string | null) {
+      await commands.setDefaultEditor(editor)
+    },
+
     async openDirectoryPickerDialog(opts) {
       const defaultPath = await wslHome()
       const result = await open({

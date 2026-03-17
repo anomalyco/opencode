@@ -3,7 +3,7 @@ import { createStore } from "solid-js/store"
 
 export type FindHost = {
   element: () => HTMLElement | undefined
-  open: () => void
+  open: (query?: string) => void
   close: () => void
   next: (dir: 1 | -1) => void
   isOpen: () => boolean
@@ -25,8 +25,49 @@ function hostForNode(node: unknown) {
   if (!(node instanceof Node)) return
   for (const host of hosts) {
     const el = host.element()
-    if (el && el.isConnected && el.contains(node)) return host
+    if (el && isVisibleHost(el) && el.contains(node)) return host
   }
+}
+
+function isVisibleHost(el: HTMLElement) {
+  if (!el.isConnected) return false
+  if (el.closest("[hidden], [inert], [aria-hidden='true']")) return false
+  if (el.getClientRects().length === 0) return false
+  return true
+}
+
+function firstVisibleHost() {
+  for (const host of hosts) {
+    const el = host.element()
+    if (el && isVisibleHost(el)) return host
+  }
+}
+
+export function triggerFileFind(action: "open" | "next" | "previous" = "open", query?: string) {
+  if (typeof window === "undefined") return false
+
+  if (action === "next") {
+    if (!current || !current.isOpen()) return false
+    current.next(1)
+    return true
+  }
+
+  if (action === "previous") {
+    if (!current || !current.isOpen()) return false
+    current.next(-1)
+    return true
+  }
+
+  const active = current
+  if (active && active.isOpen()) {
+    active.open(query)
+    return true
+  }
+
+  const host = hostForNode(document.activeElement) ?? (target && target.element() && isVisibleHost(target.element()!) ? target : undefined) ?? firstVisibleHost()
+  if (!host) return false
+  host.open(query)
+  return true
 }
 
 function installShortcuts() {
@@ -63,7 +104,11 @@ function installShortcuts() {
         return
       }
 
-      const host = hostForNode(document.activeElement) ?? hostForNode(event.target) ?? target ?? Array.from(hosts)[0]
+      const host =
+        hostForNode(document.activeElement) ??
+        hostForNode(event.target) ??
+        (target && target.element() && isVisibleHost(target.element()!) ? target : undefined) ??
+        firstVisibleHost()
       if (!host) return
 
       event.preventDefault()
@@ -356,13 +401,17 @@ export function createFileFind(opts: CreateFileFindOptions) {
     if (current === host) current = undefined
   }
 
-  const focus = () => {
+  const focus = (value?: string) => {
     if (current && current !== host) current.close()
     current = host
     target = host
     if (!open()) setState("open", true)
+    if (value !== undefined) {
+      setState("query", value)
+      setState("index", 0)
+    }
     requestAnimationFrame(() => {
-      apply({ scroll: true })
+      apply({ reset: value !== undefined, scroll: true })
       input?.focus()
       input?.select()
     })

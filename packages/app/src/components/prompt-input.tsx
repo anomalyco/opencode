@@ -33,6 +33,7 @@ import { useCommand } from "@/context/command"
 import { Persist, persisted } from "@/utils/persist"
 import { usePermission } from "@/context/permission"
 import { useLanguage } from "@/context/language"
+import { dict as enDict } from "@/i18n/en"
 import { usePlatform } from "@/context/platform"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
@@ -117,6 +118,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const command = useCommand()
   const permission = usePermission()
   const language = useLanguage()
+  type DictKey = keyof typeof enDict
+  const kw = (...keys: DictKey[]) =>
+    language.locale() === "en" ? undefined : keys.map((k) => enDict[k]).join(" ")
   const platform = usePlatform()
   const { params, tabs, view } = useSessionLayout()
   let editorRef!: HTMLDivElement
@@ -428,6 +432,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     {
       id: "file.attach",
       title: language.t("prompt.action.attachFile"),
+      keywords: kw("prompt.action.attachFile"),
       category: language.t("command.category.file"),
       keybind: "mod+u",
       disabled: store.mode !== "normal",
@@ -436,6 +441,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     {
       id: "prompt.mode.shell",
       title: language.t("command.prompt.mode.shell"),
+      keywords: kw("command.prompt.mode.shell"),
       category: language.t("command.category.session"),
       keybind: shellModeKey,
       disabled: store.mode === "shell",
@@ -444,6 +450,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     {
       id: "prompt.mode.normal",
       title: language.t("command.prompt.mode.normal"),
+      keywords: kw("command.prompt.mode.normal"),
       category: language.t("command.category.session"),
       keybind: normalModeKey,
       disabled: store.mode === "normal",

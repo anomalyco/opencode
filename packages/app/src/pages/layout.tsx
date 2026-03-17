@@ -1,4 +1,18 @@
-import { batch, createEffect, createMemo, For, on, onCleanup, onMount, ParentProps, Show, untrack } from "solid-js"
+import {
+  batch,
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  on,
+  onCleanup,
+  onMount,
+  ParentProps,
+  Show,
+  untrack,
+  type Accessor,
+  type JSX,
+} from "solid-js"
 import { useNavigate, useParams } from "@solidjs/router"
 import { useLayout, LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
@@ -7,8 +21,10 @@ import { base64Encode } from "@opencode-ai/util/encode"
 import { decode64 } from "@/utils/base64"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Button } from "@opencode-ai/ui/button"
+import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { InlineInput } from "@opencode-ai/ui/inline-input"
+import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { getFilename } from "@opencode-ai/util/path"
@@ -43,6 +59,7 @@ import { Worktree as WorktreeState } from "@/utils/worktree"
 import { setSessionHandoff } from "@/pages/session/handoff"
 
 import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { triggerFileFind } from "@opencode-ai/ui/pierre/file-find"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
 import { DialogSelectProvider } from "@/components/dialog-select-provider"
 import { DialogSelectServer } from "@/components/dialog-select-server"
@@ -51,10 +68,15 @@ import { useCommand, type CommandOption } from "@/context/command"
 import { ConstrainDragXAxis, getDraggableId } from "@/utils/solid-dnd"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { DialogEditProject } from "@/components/dialog-edit-project"
+import { DialogSelectSkill } from "@/components/dialog-select-skill"
+import { DialogSelectTheme } from "@/components/dialog-select-theme"
+import { DialogSwitchProject } from "@/components/dialog-switch-project"
 import { DebugBar } from "@/components/debug-bar"
 import { Titlebar } from "@/components/titlebar"
+import { Spinner } from "@opencode-ai/ui/spinner"
 import { useServer } from "@/context/server"
 import { useLanguage, type Locale } from "@/context/language"
+import { dict as enDict } from "@/i18n/en"
 import {
   displayName,
   effectiveWorkspaceOrder,
@@ -115,6 +137,9 @@ export default function Layout(props: ParentProps) {
   const command = useCommand()
   const theme = useTheme()
   const language = useLanguage()
+  type DictKey = keyof typeof enDict
+  const kw = (...keys: DictKey[]) =>
+    language.locale() === "en" ? undefined : keys.map((k) => enDict[k]).join(" ")
   const initialDirectory = decode64(params.dir)
   const availableThemeEntries = createMemo(() => Object.entries(theme.themes()))
   const colorSchemeOrder: ColorScheme[] = ["system", "light", "dark"]
@@ -138,6 +163,53 @@ export default function Layout(props: ParentProps) {
     peek: undefined as LocalProject | undefined,
     peeked: false,
   })
+
+  const [findbar, setFindbar] = createStore({
+    open: false,
+    q: "",
+  })
+  let findInput: HTMLInputElement | undefined
+
+  const closeFindbar = () => {
+    setFindbar("open", false)
+  }
+
+  const openFindbar = (seed?: string) => {
+    const q = seed?.trim() || findbar.q
+    if (triggerFileFind("open", q || undefined)) {
+      closeFindbar()
+      return
+    }
+    if (!platform.find) return
+    setFindbar({ open: true, q })
+    queueMicrotask(() => {
+      findInput?.focus()
+      findInput?.select()
+    })
+  }
+
+  const runFindbar = (dir: 1 | -1) => {
+    if (triggerFileFind(dir === 1 ? "next" : "previous")) {
+      closeFindbar()
+      return
+    }
+    const q = findbar.q.trim()
+    if (!q) return
+    void platform.find?.(q, dir)
+  }
+
+  const findbarKeyDown = (event: KeyboardEvent) => {
+    if (event.key === "Escape") {
+      event.preventDefault()
+      event.stopPropagation()
+      closeFindbar()
+      return
+    }
+    if (event.key !== "Enter") return
+    event.preventDefault()
+    event.stopPropagation()
+    runFindbar(event.shiftKey ? -1 : 1)
+  }
 
   const editor = createInlineEditorController()
   const setBusy = (directory: string, value: boolean) => {
@@ -202,7 +274,10 @@ export default function Layout(props: ParentProps) {
   const sidebarExpanded = createMemo(() => layout.sidebar.opened() || sidebarHovering())
   const setHoverProject = (value: string | undefined) => {
     setState("hoverProject", value)
-    if (value !== undefined) return
+    if (value !== undefined) {
+      globalSync.child(value)
+      return
+    }
     aim.reset()
   }
   const clearHoverProjectSoon = () => queueMicrotask(() => setHoverProject(undefined))
@@ -683,7 +758,7 @@ export default function Layout(props: ParentProps) {
       seen: lru,
       keep: sessionID,
       limit: PREFETCH_MAX_SESSIONS_PER_DIR,
-      preserve: directory === params.dir && params.id ? [params.id] : undefined,
+      preserve: directory === currentDir() && params.id ? [params.id] : undefined,
     })
   }
 
@@ -977,39 +1052,134 @@ export default function Layout(props: ParentProps) {
       {
         id: "sidebar.toggle",
         title: language.t("command.sidebar.toggle"),
+        keywords: kw("command.sidebar.toggle"),
         category: language.t("command.category.view"),
         keybind: "mod+b",
         onSelect: () => layout.sidebar.toggle(),
       },
       {
+        id: "page.find",
+        title: language.t("command.page.find"),
+        description: language.t("command.page.find.description"),
+        keywords: kw("command.page.find", "command.page.find.description"),
+        category: language.t("command.category.view"),
+        keybind: "mod+f",
+        disabled: !platform.find,
+        onSelect: () => openFindbar(window.getSelection?.()?.toString().trim() || ""),
+      },
+      {
         id: "project.open",
         title: language.t("command.project.open"),
+        keywords: kw("command.project.open"),
         category: language.t("command.category.project"),
         keybind: "mod+o",
         onSelect: () => chooseProject(),
       },
       {
+        id: "project.switch",
+        title: language.t("command.project.switch"),
+        keywords: kw("command.project.switch"),
+        category: language.t("command.category.project"),
+        keybind: "mod+t",
+        disabled: layout.projects.list().length === 0,
+        onSelect: () => {
+          dialog.show(() => <DialogSwitchProject onSelect={navigateToProject} />)
+        },
+      },
+      {
         id: "provider.connect",
         title: language.t("command.provider.connect"),
+        keywords: kw("command.provider.connect"),
         category: language.t("command.category.provider"),
         onSelect: () => connectProvider(),
       },
       {
         id: "server.switch",
         title: language.t("command.server.switch"),
+        keywords: kw("command.server.switch"),
         category: language.t("command.category.server"),
         onSelect: () => openServer(),
       },
       {
         id: "settings.open",
         title: language.t("command.settings.open"),
+        keywords: kw("command.settings.open"),
         category: language.t("command.category.settings"),
         keybind: "mod+comma",
         onSelect: () => openSettings(),
       },
       {
+        id: "project.openInFinder",
+        title:
+          platform.os === "macos"
+            ? "Open in Finder"
+            : platform.os === "windows"
+              ? "Open in Explorer"
+              : "Open in File Manager",
+        category: language.t("command.category.project"),
+        disabled: !params.dir || !platform.openInFinder,
+        onSelect: async () => {
+          const dir = params.dir ? decode64(params.dir) : null
+          if (dir && platform.openInFinder) await platform.openInFinder(dir)
+        },
+      },
+      {
+        id: "project.openInVscode",
+        title: "Open in VSCode",
+        category: language.t("command.category.project"),
+        disabled: !params.dir || !platform.openInVscode,
+        onSelect: async () => {
+          const dir = params.dir ? decode64(params.dir) : null
+          if (dir && platform.openInVscode) await platform.openInVscode(dir)
+        },
+      },
+      {
+        id: "project.openInCursor",
+        title: "Open in Cursor",
+        category: language.t("command.category.project"),
+        disabled: !params.dir || !platform.openInEditor,
+        onSelect: async () => {
+          const dir = params.dir ? decode64(params.dir) : null
+          if (dir && platform.openInEditor) await platform.openInEditor("cursor", dir)
+        },
+      },
+      {
+        id: "project.openInSublime",
+        title: "Open in Sublime Text",
+        category: language.t("command.category.project"),
+        disabled: !params.dir || !platform.openInEditor,
+        onSelect: async () => {
+          const dir = params.dir ? decode64(params.dir) : null
+          if (dir && platform.openInEditor) await platform.openInEditor("sublime", dir)
+        },
+      },
+      {
+        id: "project.openInZed",
+        title: "Open in Zed",
+        category: language.t("command.category.project"),
+        disabled: !params.dir || !platform.openInEditor,
+        onSelect: async () => {
+          const dir = params.dir ? decode64(params.dir) : null
+          if (dir && platform.openInEditor) await platform.openInEditor("zed", dir)
+        },
+      },
+      {
+        id: "project.openInEditor",
+        title: "Open in Editor",
+        category: language.t("command.category.project"),
+        disabled: !params.dir || !platform.openInEditor,
+        onSelect: async () => {
+          const dir = params.dir ? decode64(params.dir) : null
+          if (dir && platform.openInEditor && platform.getDefaultEditor) {
+            const editor = (await platform.getDefaultEditor()) || "vscode"
+            await platform.openInEditor(editor, dir)
+          }
+        },
+      },
+      {
         id: "session.previous",
         title: language.t("command.session.previous"),
+        keywords: kw("command.session.previous"),
         category: language.t("command.category.session"),
         keybind: "alt+arrowup",
         onSelect: () => navigateSessionByOffset(-1),
@@ -1017,6 +1187,7 @@ export default function Layout(props: ParentProps) {
       {
         id: "session.next",
         title: language.t("command.session.next"),
+        keywords: kw("command.session.next"),
         category: language.t("command.category.session"),
         keybind: "alt+arrowdown",
         onSelect: () => navigateSessionByOffset(1),
@@ -1024,6 +1195,7 @@ export default function Layout(props: ParentProps) {
       {
         id: "session.previous.unseen",
         title: language.t("command.session.previous.unseen"),
+        keywords: kw("command.session.previous.unseen"),
         category: language.t("command.category.session"),
         keybind: "shift+alt+arrowup",
         onSelect: () => navigateSessionByUnseen(-1),
@@ -1031,6 +1203,7 @@ export default function Layout(props: ParentProps) {
       {
         id: "session.next.unseen",
         title: language.t("command.session.next.unseen"),
+        keywords: kw("command.session.next.unseen"),
         category: language.t("command.category.session"),
         keybind: "shift+alt+arrowdown",
         onSelect: () => navigateSessionByUnseen(1),
@@ -1038,6 +1211,7 @@ export default function Layout(props: ParentProps) {
       {
         id: "session.archive",
         title: language.t("command.session.archive"),
+        keywords: kw("command.session.archive"),
         category: language.t("command.category.session"),
         keybind: "mod+shift+backspace",
         disabled: !params.dir || !params.id,
@@ -1049,6 +1223,7 @@ export default function Layout(props: ParentProps) {
       {
         id: "workspace.new",
         title: language.t("workspace.new"),
+        keywords: kw("workspace.new"),
         category: language.t("command.category.workspace"),
         keybind: "mod+shift+w",
         disabled: !workspaceSetting(),
@@ -1062,6 +1237,7 @@ export default function Layout(props: ParentProps) {
         id: "workspace.toggle",
         title: language.t("command.workspace.toggle"),
         description: language.t("command.workspace.toggle.description"),
+        keywords: kw("command.workspace.toggle", "command.workspace.toggle.description"),
         category: language.t("command.category.workspace"),
         slash: "workspace",
         disabled: !currentProject() || currentProject()?.vcs !== "git",
@@ -1084,28 +1260,24 @@ export default function Layout(props: ParentProps) {
       {
         id: "theme.cycle",
         title: language.t("command.theme.cycle"),
+        keywords: kw("command.theme.cycle"),
         category: language.t("command.category.theme"),
         keybind: "mod+shift+t",
         onSelect: () => cycleTheme(1),
       },
-    ]
-
-    for (const [id, definition] of availableThemeEntries()) {
-      commands.push({
-        id: `theme.set.${id}`,
-        title: language.t("command.theme.set", { theme: definition.name ?? id }),
+      {
+        id: "theme.select",
+        title: language.t("command.theme.select"),
+        keywords: kw("command.theme.select"),
         category: language.t("command.category.theme"),
-        onSelect: () => theme.commitPreview(),
-        onHighlight: () => {
-          theme.previewTheme(id)
-          return () => theme.cancelPreview()
-        },
-      })
-    }
+        onSelect: () => dialog.show(() => <DialogSelectTheme />),
+      },
+    ]
 
     commands.push({
       id: "theme.scheme.cycle",
       title: language.t("command.theme.scheme.cycle"),
+      keywords: kw("command.theme.scheme.cycle"),
       category: language.t("command.category.theme"),
       keybind: "mod+shift+s",
       onSelect: () => cycleColorScheme(1),
@@ -1127,6 +1299,7 @@ export default function Layout(props: ParentProps) {
     commands.push({
       id: "language.cycle",
       title: language.t("command.language.cycle"),
+      keywords: kw("command.language.cycle"),
       category: language.t("command.category.language"),
       onSelect: () => cycleLanguage(1),
     })
@@ -1325,6 +1498,59 @@ export default function Layout(props: ParentProps) {
     handleDeepLinks(drainPendingDeepLinks(window))
     window.addEventListener(deepLinkEvent, handler as EventListener)
     onCleanup(() => window.removeEventListener(deepLinkEvent, handler as EventListener))
+  })
+
+  const [folderDragging, setFolderDragging] = createSignal(false)
+  const [fileDragging, setFileDragging] = createSignal(false)
+
+  onMount(() => {
+    if (platform.platform !== "desktop") return
+
+    const dragDropEventName = "opencode:drag-drop"
+
+    const handler = async (event: Event) => {
+      const detail = (event as CustomEvent<{ type: string; paths: string[]; position: { x: number; y: number } }>).detail
+      if (!detail) return
+
+      if (detail.type === "enter") {
+        if (detail.paths.length > 0 && platform.filterDirectories) {
+          const dirs = await platform.filterDirectories(detail.paths).catch((): string[] => [])
+          const hasFiles = dirs.length < detail.paths.length
+          setFolderDragging(dirs.length > 0)
+          setFileDragging(hasFiles)
+        }
+        return
+      }
+
+      if (detail.type === "leave") {
+        setFolderDragging(false)
+        setFileDragging(false)
+        return
+      }
+
+      if (detail.type !== "drop") return
+
+      setFolderDragging(false)
+      setFileDragging(false)
+      if (detail.paths.length === 0 || !platform.filterDirectories) return
+
+      const dirs = await platform.filterDirectories(detail.paths).catch((): string[] => [])
+      const files = detail.paths.filter((path) => !dirs.includes(path))
+
+      if (dirs.length > 0) {
+        for (const dir of dirs) {
+          openProject(dir, false)
+        }
+        await navigateToProject(dirs[0])
+      }
+
+      if (files.length > 0) {
+        window.dispatchEvent(new CustomEvent("opencode:file-drop", { detail: { paths: files } }))
+      }
+    }
+
+    window.addEventListener(dragDropEventName, handler as EventListener)
+    onCleanup(() => window.removeEventListener(dragDropEventName, handler as EventListener))
   })
 
   async function renameProject(project: LocalProject, next: string) {
@@ -1681,6 +1907,188 @@ export default function Layout(props: ParentProps) {
     )
   }
 
+  function DialogArchivedSessions(props: { project: LocalProject }) {
+    const [state, setState] = createStore({
+      status: "loading" as "loading" | "ready" | "error",
+      sessions: [] as Session[],
+    })
+
+    const load = async () => {
+      const dirs = [props.project.worktree, ...(props.project.sandboxes ?? [])]
+      const rows = await Promise.all(
+        dirs.map((directory) =>
+          globalSDK.client.session
+            .list({ directory, roots: true })
+            .then((x) => x.data ?? [])
+            .catch(() => []),
+        ),
+      )
+      setState({
+        status: "ready",
+        sessions: rows
+          .flatMap((list) => list)
+          .filter((item) => item.time.archived !== undefined)
+          .toSorted((a, b) => b.time.updated - a.time.updated),
+      })
+    }
+
+    onMount(() => {
+      load().catch(() => setState("status", "error"))
+    })
+
+    const remove = (sessionID: string) => setState("sessions", (list) => list.filter((item) => item.id !== sessionID))
+
+    const open = (session: Session) => {
+      dialog.close()
+      navigateWithSidebarReset(`/${base64Encode(session.directory)}/session/${session.id}`)
+    }
+
+    const label = (session: Session) => {
+      if (session.directory === props.project.worktree) return language.t("workspace.type.local")
+      const [workspace] = globalSync.child(session.directory, { bootstrap: false })
+      return workspaceLabel(session.directory, workspace.vcs?.branch, props.project.id)
+    }
+
+    const restore = async (session: Session) => {
+      try {
+        await globalSDK.client.session.update({
+          directory: session.directory,
+          sessionID: session.id,
+          time: { archived: null },
+        })
+        const [, setChild] = globalSync.child(session.directory)
+        setChild(
+          produce((draft) => {
+            draft.session.push(session)
+            draft.session.sort((a, b) => b.time.updated - a.time.updated)
+          }),
+        )
+        remove(session.id)
+      } catch (err) {
+        showToast({
+          title: language.t("session.restore.failed.title"),
+          description: errorMessage(err, language.t("common.requestFailed")),
+        })
+      }
+    }
+
+    const removeArchived = async (session: Session) => {
+      const ok = await globalSDK.client.session
+        .delete({ sessionID: session.id, directory: session.directory })
+        .then((x) => x.data)
+        .catch((err) => {
+          showToast({
+            title: language.t("session.delete.failed.title"),
+            description: errorMessage(err, language.t("common.requestFailed")),
+          })
+          return false
+        })
+      if (!ok) return false
+      return true
+    }
+
+    return (
+      <Dialog title={language.t("sidebar.project.archivedSessions")} fit>
+        <div class="flex flex-col gap-3 pl-6 pr-2.5 pb-3 min-w-[32rem] max-w-[40rem]">
+          <Show when={state.status === "loading"}>
+            <div class="flex items-center gap-2 text-12-regular text-text-weak">
+              <Spinner class="size-4" />
+              {language.t("prompt.loading")}
+            </div>
+          </Show>
+          <Show when={state.status === "error"}>
+            <div class="text-12-regular text-text-weak">{language.t("common.requestFailed")}</div>
+          </Show>
+          <Show when={state.status === "ready" && state.sessions.length === 0}>
+            <div class="text-12-regular text-text-weak">{language.t("sidebar.project.noArchivedSessions")}</div>
+          </Show>
+          <Show when={state.status === "ready" && state.sessions.length > 0}>
+            <div class="max-h-80 overflow-y-auto flex flex-col gap-1 pr-1">
+              <For each={state.sessions}>
+                {(session) => {
+                  const [confirm, setConfirm] = createStore({ on: false })
+                  let timer: ReturnType<typeof setTimeout> | undefined
+
+                  const start = () => {
+                    setConfirm("on", true)
+                    clearTimeout(timer)
+                    timer = setTimeout(() => setConfirm("on", false), 3000)
+                  }
+
+                  const removeSession = async () => {
+                    clearTimeout(timer)
+                    const ok = await removeArchived(session)
+                    if (!ok) {
+                      setConfirm("on", false)
+                      return
+                    }
+                    remove(session.id)
+                  }
+
+                  onCleanup(() => clearTimeout(timer))
+
+                  return (
+                    <div class="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-surface-raised-base-hover">
+                      <button class="flex-1 min-w-0 text-left" onClick={() => open(session)}>
+                        <div class="text-14-regular text-text-strong truncate">{session.title}</div>
+                        <div class="text-12-regular text-text-weak truncate">{label(session)}</div>
+                      </button>
+                      <div class="flex items-center gap-1 shrink-0">
+                        <Tooltip value={language.t("session.restore")} placement="top">
+                          <IconButton
+                            icon="arrow-left"
+                            variant="ghost"
+                            class="size-6 rounded-md cursor-pointer"
+                            aria-label={language.t("session.restore")}
+                            onClick={() => void restore(session)}
+                          />
+                        </Tooltip>
+                        <Show
+                          when={confirm.on}
+                          fallback={
+                            <Tooltip value={language.t("common.delete")} placement="top">
+                              <IconButton
+                                icon="trash"
+                                variant="ghost"
+                                class="size-6 rounded-md cursor-pointer"
+                                style={{ "--icon-base": "var(--icon-critical-base)" }}
+                                aria-label={language.t("common.delete")}
+                                onClick={start}
+                              />
+                            </Tooltip>
+                          }
+                        >
+                          <Button
+                            variant="primary"
+                            size="small"
+                            class="shrink-0 cursor-pointer"
+                            style={{
+                              "background-color": "var(--surface-critical-base)",
+                              "border-color": "var(--surface-critical-base)",
+                              color: "var(--text-on-critical-base)",
+                            }}
+                            onClick={removeSession}
+                          >
+                            {language.t("session.delete.button")}
+                          </Button>
+                        </Show>
+                      </div>
+                    </div>
+                  )
+                }}
+              </For>
+            </div>
+          </Show>
+          <div class="flex justify-end gap-2">
+            <Button variant="ghost" size="large" onClick={() => dialog.close()}>
+              {language.t("common.close")}
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+    )
+  }
+
   const activeRoute = {
     session: "",
     sessionProject: "",
@@ -1907,9 +2315,9 @@ export default function Layout(props: ParentProps) {
     sidebarHovering,
     hoverProject: () => state.hoverProject,
     nav: () => state.nav,
-    onProjectMouseEnter: (worktree, event) => aim.enter(worktree, event),
-    onProjectMouseLeave: (worktree) => aim.leave(worktree),
-    onProjectFocus: (worktree) => aim.activate(worktree),
+    onProjectMouseEnter: () => {},
+    onProjectMouseLeave: () => {},
+    onProjectFocus: () => {},
     navigateToProject,
     openSidebar: () => layout.sidebar.open(),
     closeProject,
@@ -2064,14 +2472,25 @@ export default function Layout(props: ParentProps) {
                   fallback={
                     <>
                       <div class="shrink-0 py-4 px-3">
-                        <Button
-                          size="large"
-                          icon="plus-small"
-                          class="w-full"
-                          onClick={() => navigateWithSidebarReset(`/${base64Encode(p().worktree)}/session`)}
-                        >
-                          {language.t("command.session.new")}
-                        </Button>
+                        <div class="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                          <Button
+                            variant="ghost"
+                            size="large"
+                            icon="plus-small"
+                            class="w-full rounded-lg border border-border-weak-base hover:bg-surface-base-hover active:bg-surface-base-active"
+                            onClick={() => navigateWithSidebarReset(`/${base64Encode(p().worktree)}/session`)}
+                          >
+                            {language.t("command.session.new")}
+                          </Button>
+                          <IconButton
+                            icon="archive"
+                            variant="ghost"
+                            size="large"
+                            class="rounded-lg border border-border-weak-base"
+                            aria-label={language.t("sidebar.project.viewArchivedSessions")}
+                            onClick={() => dialog.show(() => <DialogArchivedSessions project={p()} />)}
+                          />
+                        </div>
                       </div>
                       <div class="flex-1 min-h-0">
                         <LocalWorkspace
@@ -2087,9 +2506,19 @@ export default function Layout(props: ParentProps) {
                 >
                   <>
                     <div class="shrink-0 py-4 px-3">
-                      <Button size="large" icon="plus-small" class="w-full" onClick={() => createWorkspace(p())}>
-                        {language.t("workspace.new")}
-                      </Button>
+                      <div class="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                        <Button size="large" icon="plus-small" class="w-full" onClick={() => createWorkspace(p())}>
+                          {language.t("workspace.new")}
+                        </Button>
+                        <IconButton
+                          icon="archive"
+                          variant="ghost"
+                          size="large"
+                          class="rounded-lg border border-border-weak-base"
+                          aria-label={language.t("sidebar.project.viewArchivedSessions")}
+                          onClick={() => dialog.show(() => <DialogArchivedSessions project={p()} />)}
+                        />
+                      </div>
                     </div>
                     <div class="relative flex-1 min-h-0">
                       <DragDropProvider
@@ -2206,6 +2635,18 @@ export default function Layout(props: ParentProps) {
 
   return (
     <div class="relative bg-background-base flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
+      <Show when={folderDragging() || fileDragging()}>
+        <div class="fixed inset-0 z-[100] flex items-center justify-center bg-background-base/80 pointer-events-none">
+          <div class="flex flex-col items-center gap-3 text-text-weak">
+            <Show when={folderDragging()} fallback={<Icon name="photo" class="size-12" />}>
+              <Icon name="folder" class="size-12" />
+            </Show>
+            <span class="text-16-medium">
+              {folderDragging() ? language.t("sidebar.dropFolder") : language.t("sidebar.dropFile")}
+            </span>
+          </div>
+        </div>
+      </Show>
       <Titlebar />
       <div class="flex-1 min-h-0 min-w-0 flex">
         <div class="flex-1 min-h-0 relative">
@@ -2232,7 +2673,7 @@ export default function Layout(props: ParentProps) {
                 arm()
               }}
             >
-              <div class="@container w-full h-full contain-strict">{sidebarContent()}</div>
+              <div class="@container w-full h-full">{sidebarContent()}</div>
               <Show when={layout.sidebar.opened()}>
                 <div onPointerDown={() => setState("sizing", true)}>
                   <ResizeHandle
@@ -2282,6 +2723,53 @@ export default function Layout(props: ParentProps) {
                 {sidebarContent(true)}
               </nav>
             </div>
+
+            <Show when={findbar.open && platform.find}>
+              <div class="pointer-events-none absolute top-3 right-3 z-30 w-[min(480px,calc(100%-24px))]">
+                <div class="pointer-events-auto flex flex-row items-center gap-2 rounded-2xl border border-border-weak-base bg-background-stronger/92 px-2 py-2 shadow-lg backdrop-blur-xl">
+                  <div class="flex flex-1 min-w-0 flex-row items-center gap-2 rounded-xl bg-surface-panel px-3 ring-1 ring-border-weaker-base/70">
+                    <Icon name="magnifying-glass" size="small" class="shrink-0 text-text-weaker" />
+                    <InlineInput
+                      ref={findInput}
+                      value={findbar.q}
+                      autofocus
+                      placeholder={language.t("common.search.placeholder")}
+                      style={{ "--inline-input-shadow": "none" }}
+                      class="h-10 flex-1 min-w-0 bg-transparent text-14-regular text-text-strong placeholder:text-text-weaker"
+                      onInput={(event) => setFindbar("q", event.currentTarget.value)}
+                      onKeyDown={findbarKeyDown}
+                    />
+                  </div>
+                  <div class="flex flex-row items-center gap-1 rounded-xl bg-surface-panel px-1.5 py-1 ring-1 ring-border-weaker-base/70">
+                    <IconButton
+                      icon="arrow-left"
+                      variant="ghost"
+                      size="large"
+                      class="rounded-lg text-text-weak hover:text-text-strong"
+                      aria-label={language.t("command.page.find.previous")}
+                      onClick={() => runFindbar(-1)}
+                    />
+                    <IconButton
+                      icon="arrow-right"
+                      variant="ghost"
+                      size="large"
+                      class="rounded-lg text-text-weak hover:text-text-strong"
+                      aria-label={language.t("command.page.find.next")}
+                      onClick={() => runFindbar(1)}
+                    />
+                    <div class="mx-0.5 h-5 w-px bg-border-weaker-base" />
+                    <IconButton
+                      icon="close"
+                      variant="ghost"
+                      size="large"
+                      class="rounded-lg text-text-weak hover:text-text-strong"
+                      aria-label={language.t("common.close")}
+                      onClick={closeFindbar}
+                    />
+                  </div>
+                </div>
+              </div>
+            </Show>
 
             <div
               classList={{

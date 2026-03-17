@@ -338,6 +338,140 @@ export const SettingsGeneral: Component = () => {
     </div>
   )
 
+  const FeedSection = () => (
+    <div class="flex flex-col gap-1">
+      <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.feed")}</h3>
+
+      <SettingsList>
+        <SettingsRow
+          title={language.t("settings.general.row.fontSize.title")}
+          description={language.t("settings.general.row.fontSize.description")}
+        >
+          <div class="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="small"
+              onClick={() => {
+                const size = settings.appearance.fontSize()
+                if (size > 10) settings.appearance.setFontSize(size - 1)
+              }}
+              disabled={settings.appearance.fontSize() <= 10}
+              aria-label={language.t("settings.general.row.fontSize.decrease")}
+            >
+              -
+            </Button>
+            <span class="text-14-regular text-text-strong min-w-[48px] text-center">
+              {settings.appearance.fontSize()}px
+            </span>
+            <Button
+              variant="secondary"
+              size="small"
+              onClick={() => {
+                const size = settings.appearance.fontSize()
+                if (size < 24) settings.appearance.setFontSize(size + 1)
+              }}
+              disabled={settings.appearance.fontSize() >= 24}
+              aria-label={language.t("settings.general.row.fontSize.increase")}
+            >
+              +
+            </Button>
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.contentWidth.title")}
+          description={language.t("settings.general.row.contentWidth.description")}
+        >
+          <div class="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="small"
+              onClick={() => {
+                const width = settings.appearance.contentWidth()
+                const opts = [200, 250, 300, 350, 400]
+                const idx = opts.indexOf(width)
+                if (idx > 0) settings.appearance.setContentWidth(opts[idx - 1])
+              }}
+              disabled={settings.appearance.contentWidth() <= 200}
+              aria-label={language.t("settings.general.row.contentWidth.decrease")}
+            >
+              -
+            </Button>
+            <span class="text-14-regular text-text-strong min-w-[80px] text-center">
+              {settings.appearance.contentWidth() === 200 && language.t("settings.general.row.contentWidth.narrow")}
+              {settings.appearance.contentWidth() === 250 && language.t("settings.general.row.contentWidth.medium")}
+              {settings.appearance.contentWidth() === 300 && language.t("settings.general.row.contentWidth.wide")}
+              {settings.appearance.contentWidth() === 350 && language.t("settings.general.row.contentWidth.extraWide")}
+              {settings.appearance.contentWidth() === 400 && language.t("settings.general.row.contentWidth.fullWidth")}
+            </span>
+            <Button
+              variant="secondary"
+              size="small"
+              onClick={() => {
+                const width = settings.appearance.contentWidth()
+                const opts = [200, 250, 300, 350, 400]
+                const idx = opts.indexOf(width)
+                if (idx >= 0 && idx < opts.length - 1) settings.appearance.setContentWidth(opts[idx + 1])
+              }}
+              disabled={settings.appearance.contentWidth() >= 400}
+              aria-label={language.t("settings.general.row.contentWidth.increase")}
+            >
+              +
+            </Button>
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.reasoningSummaries.title")}
+          description={language.t("settings.general.row.reasoningSummaries.description")}
+        >
+          <div data-action="settings-feed-reasoning-summaries">
+            <Switch
+              checked={settings.general.showReasoningSummaries()}
+              onChange={(checked) => settings.general.setShowReasoningSummaries(checked)}
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.customHookParts.title")}
+          description={language.t("settings.general.row.customHookParts.description")}
+        >
+          <div data-action="settings-feed-custom-hook-parts">
+            <Switch
+              checked={settings.general.showCustomHookParts()}
+              onChange={(checked) => settings.general.setShowCustomHookParts(checked)}
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.shellToolPartsExpanded.title")}
+          description={language.t("settings.general.row.shellToolPartsExpanded.description")}
+        >
+          <div data-action="settings-feed-shell-tool-parts-expanded">
+            <Switch
+              checked={settings.general.shellToolPartsExpanded()}
+              onChange={(checked) => settings.general.setShellToolPartsExpanded(checked)}
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.editToolPartsExpanded.title")}
+          description={language.t("settings.general.row.editToolPartsExpanded.description")}
+        >
+          <div data-action="settings-feed-edit-tool-parts-expanded">
+            <Switch
+              checked={settings.general.editToolPartsExpanded()}
+              onChange={(checked) => settings.general.setEditToolPartsExpanded(checked)}
+            />
+          </div>
+        </SettingsRow>
+      </SettingsList>
+    </div>
+  )
+
   const NotificationsSection = () => (
     <div class="flex flex-col gap-1">
       <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.notifications")}</h3>
@@ -491,6 +625,8 @@ export const SettingsGeneral: Component = () => {
         <GeneralSection />
 
         <AppearanceSection />
+
+        <FeedSection />
 
         <NotificationsSection />
 
