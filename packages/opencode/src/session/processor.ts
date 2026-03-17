@@ -524,6 +524,15 @@ export const layer: Layer.Layer<
         slog.error("process", { error: errorMessage(e), stack: e instanceof Error ? e.stack : undefined })
         const error = parse(e)
         if (MessageV2.ContextOverflowError.isInstance(error)) {
+          if ((yield* config.get()).compaction?.auto === false) {
+            ctx.assistantMessage.error = error
+            yield* bus.publish(Session.Event.Error, {
+              sessionID: ctx.sessionID,
+              error: ctx.assistantMessage.error,
+            })
+            yield* status.set(ctx.sessionID, { type: "idle" })
+            return
+          }
           ctx.needsCompaction = true
           yield* bus.publish(Session.Event.Error, { sessionID: ctx.sessionID, error })
           return
