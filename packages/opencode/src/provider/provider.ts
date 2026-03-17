@@ -725,6 +725,13 @@ export namespace Provider {
       headers: z.record(z.string(), z.string()),
       release_date: z.string(),
       variants: z.record(z.string(), z.record(z.string(), z.any())).optional(),
+      race: z
+        .array(z.record(z.string(), z.any()))
+        .optional()
+        .describe(
+          "Race multiple provider configurations in parallel. Each entry is a providerOptions override " +
+            "(e.g. OpenRouter provider routing). The first stream to produce output wins; others are aborted.",
+        ),
     })
     .meta({
       ref: "Model",
@@ -938,6 +945,7 @@ export namespace Provider {
           family: model.family ?? existingModel?.family ?? "",
           release_date: model.release_date ?? existingModel?.release_date ?? "",
           variants: {},
+          race: model.race ?? existingModel?.race,
         }
         const merged = mergeDeep(ProviderTransform.variants(parsedModel), model.variants ?? {})
         parsedModel.variants = mapValues(

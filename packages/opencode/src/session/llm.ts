@@ -170,13 +170,8 @@ export namespace LLM {
       })
     }
 
-    return streamText({
-      onError(error) {
-        l.error("stream error", {
-          error,
-        })
-      },
-      async experimental_repairToolCall(failed) {
+    const sharedStreamParams = {
+      async experimental_repairToolCall(failed: any) {
         const lower = failed.toolCall.toolName.toLowerCase()
         if (lower !== failed.toolCall.toolName && tools[lower]) {
           l.info("repairing tool call", {
@@ -200,12 +195,10 @@ export namespace LLM {
       temperature: params.temperature,
       topP: params.topP,
       topK: params.topK,
-      providerOptions: ProviderTransform.providerOptions(input.model, params.options),
       activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
       tools,
       toolChoice: input.toolChoice,
       maxOutputTokens,
-      abortSignal: input.abort,
       headers: {
         ...(input.model.providerID.startsWith("opencode")
           ? {
@@ -236,9 +229,8 @@ export namespace LLM {
         model: language,
         middleware: [
           {
-            async transformParams(args) {
+            async transformParams(args: any) {
               if (args.type === "stream") {
-                // @ts-expect-error
                 args.params.prompt = ProviderTransform.message(args.params.prompt, input.model, options)
               }
               return args.params
@@ -253,7 +245,101 @@ export namespace LLM {
           sessionId: input.sessionID,
         },
       },
+    }
+
+    // If model has race configs, fire parallel streams and return the first to produce output
+    const raceConfigs = input.model.race
+    if (raceConfigs && raceConfigs.length > 1) {
+      return raceStreams(l, input, sharedStreamParams, raceConfigs, params.options)
+    }
+
+    return streamText({
+      ...sharedStreamParams,
+      onError(error) {
+        l.error("stream error", { error })
+      },
+      abortSignal: input.abort,
+      providerOptions: ProviderTransform.providerOptions(input.model, params.options),
     })
+  }
+
+  /**
+   * Race multiple streamText calls with different providerOptions.
+   * Each entry in `raceConfigs` is merged into the base providerOptions.
+   * The first stream to emit a text chunk wins; all others are aborted.
+   */
+  async function raceStreams(
+    l: ReturnType<typeof log.clone>,
+    input: StreamInput,
+    sharedParams: Record<string, any>,
+    raceConfigs: Record<string, any>[],
+    baseOptions: Record<string, any>,
+  ): Promise<StreamOutput> {
+    const controllers: AbortController[] = []
+    const lanes: { label: string; stream: StreamOutput; controller: AbortController }[] = []
+
+    for (let i = 0; i < raceConfigs.length; i++) {
+      const controller = new AbortController()
+      controllers.push(controller)
+
+      // Link to parent abort signal so all lanes stop if the session is cancelled
+      if (input.abort.aborted) {
+        controller.abort()
+      } else {
+        input.abort.addEventListener("abort", () => controller.abort(), { once: true })
+      }
+
+      const laneOptions = mergeDeep(baseOptions, raceConfigs[i])
+      const label = `lane-${i}`
+      l.info("race: starting lane", { lane: label, providerOverride: raceConfigs[i] })
+
+      const result = streamText({
+        ...(sharedParams as any),
+        abortSignal: controller.signal,
+        providerOptions: ProviderTransform.providerOptions(input.model, laneOptions),
+        onError(error: any) {
+          l.error("race: stream error", { lane: label, error })
+        },
+      })
+
+      lanes.push({ label, stream: result, controller })
+    }
+
+    // Race: the first lane to produce a text chunk wins
+    const winnerIndex = await Promise.race(
+      lanes.map(
+        (lane, i) =>
+          new Promise<number>(async (resolve, reject) => {
+            try {
+              for await (const part of lane.stream.fullStream) {
+                if (part.type === "text-delta" || part.type === "tool-call") {
+                  resolve(i)
+                  return
+                }
+              }
+              // Stream ended without text — still counts as "finished"
+              resolve(i)
+            } catch (err: any) {
+              // If this lane was aborted because another won, don't reject
+              if (err.name === "AbortError") return
+              reject(err)
+            }
+          }),
+      ),
+    )
+
+    const winner = lanes[winnerIndex]
+    l.info("race: winner", { lane: winner.label })
+
+    // Abort all other lanes
+    for (let i = 0; i < lanes.length; i++) {
+      if (i !== winnerIndex) {
+        l.info("race: aborting loser", { lane: lanes[i].label })
+        lanes[i].controller.abort()
+      }
+    }
+
+    return winner.stream
   }
 
   async function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "permission" | "user">) {
