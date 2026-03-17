@@ -13,6 +13,19 @@ declare global {
   const OPENCODE_CHANNEL: string
 }
 
+/**
+ * Installation management namespace for version and upgrade handling.
+ *
+ * Provides functionality for detecting installation methods, checking for updates,
+ * and upgrading opencode across different package managers (npm, brew, etc.).
+ *
+ * @example
+ * ```typescript
+ * const info = await Installation.info()
+ * const method = await Installation.method()
+ * await Installation.upgrade(method, "latest")
+ * ```
+ */
 export namespace Installation {
   const log = Log.create({ service: "installation" })
 
@@ -75,6 +88,11 @@ export namespace Installation {
     })
   export type Info = z.infer<typeof Info>
 
+  /**
+   * Returns current installation information including version and latest available.
+   *
+   * @returns Installation info object with version and latest version
+   */
   export async function info() {
     return {
       version: VERSION,
@@ -82,14 +100,31 @@ export namespace Installation {
     }
   }
 
+  /**
+   * Checks if running a preview (non-stable) version.
+   *
+   * @returns True if running a preview/beta version
+   */
   export function isPreview() {
     return CHANNEL !== "latest"
   }
 
+  /**
+   * Checks if running a local development version.
+   *
+   * @returns True if running a local build
+   */
   export function isLocal() {
     return CHANNEL === "local"
   }
 
+  /**
+   * Detects the installation method used (npm, yarn, pnpm, bun, brew, etc.).
+   *
+   * Checks various package managers to determine how opencode was installed.
+   *
+   * @returns The detected installation method
+   */
   export async function method() {
     if (process.execPath.includes(path.join(".opencode", "bin"))) return "curl"
     if (process.execPath.includes(path.join(".local", "bin"))) return "curl"
@@ -161,6 +196,13 @@ export namespace Installation {
     return "opencode"
   }
 
+  /**
+   * Upgrades opencode to the specified version using the detected method.
+   *
+   * @param method - The installation method to use for upgrade
+   * @param target - The target version to upgrade to
+   * @throws UpgradeFailedError if the upgrade fails
+   */
   export async function upgrade(method: Method, target: string) {
     let result: Awaited<ReturnType<typeof upgradeCurl>> | undefined
     switch (method) {
@@ -233,8 +275,17 @@ export namespace Installation {
 
   export const VERSION = typeof OPENCODE_VERSION === "string" ? OPENCODE_VERSION : "local"
   export const CHANNEL = typeof OPENCODE_CHANNEL === "string" ? OPENCODE_CHANNEL : "local"
+  /**
+   * User agent string for HTTP requests.
+   */
   export const USER_AGENT = `opencode/${CHANNEL}/${VERSION}/${Flag.OPENCODE_CLIENT}`
 
+  /**
+   * Fetches the latest available version from the appropriate registry.
+   *
+   * @param installMethod - Optional installation method override
+   * @returns The latest version string
+   */
   export async function latest(installMethod?: Method) {
     const detectedMethod = installMethod || (await method())
 
