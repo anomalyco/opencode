@@ -1,6 +1,20 @@
 import { Schema } from "effect"
 
 /**
+ * Schema utilities for Effect schema definitions.
+ *
+ * Provides helpers for attaching static methods to schemas and creating nominal
+ * wrapper types for scalar types.
+ *
+ * @example
+ * ```typescript
+ * const MySchema = Schema.String.pipe(withStatics((s) => ({
+ *   fromString: Schema.decodeUnknownOption(s)
+ * })))
+ * ```
+ */
+
+/**
  * Attach static methods to a schema object. Designed to be used with `.pipe()`:
  *
  * @example
