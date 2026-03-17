@@ -7,7 +7,31 @@ import { Filesystem } from "@/util/filesystem"
 import { Flag } from "@/flag/flag"
 import { Global } from "@/global"
 
+/**
+ * ConfigPaths namespace providing utilities for locating and parsing configuration files.
+ *
+ * Handles finding configuration files in project directories, user home directories,
+ * and system-wide locations. Also provides JSONC parsing with environment variable
+ * and file reference substitutions.
+ *
+ * @example
+ * ```typescript
+ * const files = await ConfigPaths.projectFiles("opencode", "/project", "/project")
+ * const dirs = await ConfigPaths.directories("/project", "/project")
+ * ```
+ */
 export namespace ConfigPaths {
+  /**
+   * Finds configuration files for a given project name.
+   *
+   * Searches for files with .jsonc and .json extensions in the specified directory
+   * and its parent directories up to the worktree root.
+   *
+   * @param name - The base name of the configuration file (e.g., "opencode")
+   * @param directory - The starting directory for the search
+   * @param worktree - The worktree root to stop searching at
+   * @returns A promise resolving to an array of file paths
+   */
   export async function projectFiles(name: string, directory: string, worktree: string) {
     const files: string[] = []
     for (const file of [`${name}.jsonc`, `${name}.json`]) {
@@ -19,6 +43,16 @@ export namespace ConfigPaths {
     return files
   }
 
+  /**
+   * Returns a list of directories to search for configuration files.
+   *
+   * Includes the global config directory, project directories (if not disabled),
+   * user home directory, and any custom config directory specified via environment variable.
+   *
+   * @param directory - The starting directory for searching project configs
+   * @param worktree - The worktree root to stop at when searching
+   * @returns A promise resolving to an array of directory paths
+   */
   export async function directories(directory: string, worktree: string) {
     return [
       Global.Path.config,
@@ -42,10 +76,22 @@ export namespace ConfigPaths {
     ]
   }
 
+  /**
+   * Generates file paths for a configuration file in a specific directory.
+   *
+   * Returns paths for both .jsonc and .json variants.
+   *
+   * @param dir - The directory containing the config file
+   * @param name - The base name of the configuration file
+   * @returns An array of file paths
+   */
   export function fileInDirectory(dir: string, name: string) {
     return [path.join(dir, `${name}.jsonc`), path.join(dir, `${name}.json`)]
   }
 
+  /**
+   * Error thrown when a JSON configuration file has syntax errors.
+   */
   export const JsonError = NamedError.create(
     "ConfigJsonError",
     z.object({
@@ -54,6 +100,9 @@ export namespace ConfigPaths {
     }),
   )
 
+  /**
+   * Error thrown when a configuration file has validation errors.
+   */
   export const InvalidError = NamedError.create(
     "ConfigInvalidError",
     z.object({
