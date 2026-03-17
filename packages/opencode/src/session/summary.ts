@@ -134,29 +134,45 @@ export namespace SessionSummary {
   )
 
   export async function computeDiff(input: { messages: MessageV2.WithParts[] }) {
-    let from: string | undefined
-    let to: string | undefined
+    // pair step-start -> step-finish snapshots and run git diffs per pair
+    const agg = new Map<string, Snapshot.FileDiff>()
+    const stack: string[] = []
 
-    // scan assistant messages to find earliest from and latest to
-    // snapshot
-    for (const item of input.messages) {
-      if (!from) {
-        for (const part of item.parts) {
-          if (part.type === "step-start" && part.snapshot) {
-            from = part.snapshot
-            break
-          }
+    const merge = (fds: Snapshot.FileDiff[]) => {
+      for (const fd of fds) {
+        const file = fd.file
+        const prev = agg.get(file)
+        if (!prev) {
+          agg.set(file, { ...fd })
+          continue
         }
+        prev.additions += fd.additions
+        prev.deletions += fd.deletions
+        // keep earliest before, update after to latest
+        if (fd.after) prev.after = fd.after
+        if (fd.status) prev.status = fd.status
       }
+    }
 
-      for (const part of item.parts) {
+    for (const msg of input.messages) {
+      const parts = msg.parts ?? []
+      for (const part of parts) {
+        if (part.type === "step-start" && part.snapshot) {
+          stack.push(part.snapshot)
+          continue
+        }
         if (part.type === "step-finish" && part.snapshot) {
-          to = part.snapshot
+          const from = stack.pop()
+          const to = part.snapshot
+          if (!from) continue
+          try {
+            const fds = await Snapshot.diffFull(from, to)
+            merge(fds)
+          } catch (e) {}
         }
       }
     }
 
-    if (from && to) return Snapshot.diffFull(from, to)
-    return []
+    return Array.from(agg.values())
   }
 }
