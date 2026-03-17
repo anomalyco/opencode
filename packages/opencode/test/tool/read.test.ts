@@ -414,6 +414,27 @@ describe("tool.read truncation", () => {
     })
   })
 
+  test("spreadsheet files are attached instead of rejected as binary", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "sheet.xlsx"), Buffer.from([0x50, 0x4b, 0x03, 0x04]))
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const result = await read.execute({ filePath: path.join(tmp.path, "sheet.xlsx") }, ctx)
+        expect(result.output).toBe("Spreadsheet read successfully")
+        expect(result.metadata.truncated).toBe(false)
+        expect(result.attachments).toBeDefined()
+        expect(result.attachments?.length).toBe(1)
+        expect(result.attachments?.[0].type).toBe("file")
+        expect(result.attachments?.[0].mime).toBe("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+      },
+    })
+  })
+
   test(".fbs files (FlatBuffers schema) are read as text, not images", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {

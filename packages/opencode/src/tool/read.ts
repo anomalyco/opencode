@@ -18,6 +18,13 @@ const MAX_LINE_SUFFIX = `... (line truncated to ${MAX_LINE_LENGTH} chars)`
 const MAX_BYTES = 50 * 1024
 const MAX_BYTES_LABEL = `${MAX_BYTES / 1024} KB`
 
+const spreadsheetExtensions = new Set(["xls", "xlsx", "xlsm", "xlsb", "csv", "ods"])
+
+function isSpreadsheet(filepath: string): boolean {
+  const ext = path.extname(filepath).toLowerCase().slice(1)
+  return spreadsheetExtensions.has(ext)
+}
+
 export const ReadTool = Tool.define("read", {
   description: DESCRIPTION,
   parameters: z.object({
@@ -123,6 +130,26 @@ export const ReadTool = Tool.define("read", {
     const isPdf = mime === "application/pdf"
     if (isImage || isPdf) {
       const msg = `${isImage ? "Image" : "PDF"} read successfully`
+      return {
+        title,
+        output: msg,
+        metadata: {
+          preview: msg,
+          truncated: false,
+          loaded: instructions.map((i) => i.filepath),
+        },
+        attachments: [
+          {
+            type: "file",
+            mime,
+            url: `data:${mime};base64,${Buffer.from(await Filesystem.readBytes(filepath)).toString("base64")}`,
+          },
+        ],
+      }
+    }
+
+    if (isSpreadsheet(filepath)) {
+      const msg = "Spreadsheet read successfully"
       return {
         title,
         output: msg,
@@ -248,12 +275,9 @@ async function isBinaryFile(filepath: string, fileSize: number): Promise<boolean
     case ".7z":
     case ".doc":
     case ".docx":
-    case ".xls":
-    case ".xlsx":
     case ".ppt":
     case ".pptx":
     case ".odt":
-    case ".ods":
     case ".odp":
     case ".bin":
     case ".dat":

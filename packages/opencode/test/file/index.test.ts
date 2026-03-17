@@ -391,4 +391,40 @@ describe("file/index Filesystem patterns", () => {
       })
     })
   })
+
+  test("reads spreadsheet files as base64", async () => {
+    await using tmp = await tmpdir()
+    const filepath = path.join(tmp.path, "sheet.xlsx")
+    const content = Buffer.from([0x50, 0x4b, 0x03, 0x04])
+    await fs.writeFile(filepath, content)
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const result = await File.read("sheet.xlsx")
+        expect(result.type).toBe("binary")
+        expect(result.encoding).toBe("base64")
+        expect(result.mimeType).toBe("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        expect(result.content).toBe(content.toString("base64"))
+      },
+    })
+  })
+
+  test("reads spreadsheet files by absolute path", async () => {
+    await using tmp = await tmpdir()
+    const filepath = path.join(tmp.path, "sheet.xlsx")
+    const content = Buffer.from([0x50, 0x4b, 0x03, 0x04])
+    await fs.writeFile(filepath, content)
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const result = await File.read(filepath)
+        expect(result.type).toBe("binary")
+        expect(result.encoding).toBe("base64")
+        expect(result.mimeType).toBe("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        expect(result.content).toBe(content.toString("base64"))
+      },
+    })
+  })
 })
