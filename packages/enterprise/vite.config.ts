@@ -24,7 +24,7 @@ export default defineConfig({
     nitro({
       ...nitroConfig,
       baseURL: process.env.OPENCODE_BASE_URL,
-    }),
+    }) as PluginOption,
   ],
   server: {
     host: "0.0.0.0",

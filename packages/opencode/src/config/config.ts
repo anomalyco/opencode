@@ -971,6 +971,13 @@ export namespace Config {
               )
               .optional()
               .describe("Variant-specific configuration"),
+            race: z
+              .array(z.record(z.string(), z.any()))
+              .optional()
+              .describe(
+                "Race multiple provider configurations in parallel. Each entry is a providerOptions override " +
+                  "(e.g. OpenRouter provider routing). The first stream to produce output wins; others are aborted.",
+              ),
           }),
         )
         .optional(),

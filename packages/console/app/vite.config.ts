@@ -13,7 +13,7 @@ export default defineConfig({
       cloudflare: {
         nodeCompat: true,
       },
-    }),
+    }) as PluginOption,
   ],
   server: {
     allowedHosts: true,
