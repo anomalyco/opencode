@@ -7,6 +7,20 @@ import { Readable } from "stream"
 import { pipeline } from "stream/promises"
 import { Glob } from "./glob"
 
+/**
+ * Filesystem utilities for reading, writing, and path manipulation.
+ *
+ * Provides convenient wrappers for common filesystem operations including
+ * reading/writing files, path normalization (especially for Windows),
+ * directory traversal, and MIME type detection.
+ *
+ * @example
+ * ```typescript
+ * const content = await Filesystem.readText("file.txt")
+ * await Filesystem.write("file.json", JSON.stringify(data))
+ * const found = await Filesystem.findUp("package.json", process.cwd())
+ * ```
+ */
 export namespace Filesystem {
   // Fast sync version for metadata checks
   export async function exists(p: string): Promise<boolean> {
