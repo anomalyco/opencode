@@ -19,6 +19,7 @@ import type {
   ConfigProvidersResponses,
   ConfigUpdateErrors,
   ConfigUpdateResponses,
+  DirectoryCreateResponses,
   EventSubscribeResponses,
   EventTuiCommandExecute,
   EventTuiPromptAppend,
@@ -31,11 +32,13 @@ import type {
   ExperimentalWorkspaceListResponses,
   ExperimentalWorkspaceRemoveErrors,
   ExperimentalWorkspaceRemoveResponses,
+  FileDeleteResponses,
   FileListResponses,
   FilePartInput,
   FilePartSource,
   FileReadResponses,
   FileStatusResponses,
+  FileUploadResponses,
   FindFilesResponses,
   FindSymbolsResponses,
   FindTextResponses,
@@ -76,6 +79,8 @@ import type {
   PermissionRespondErrors,
   PermissionRespondResponses,
   PermissionRuleset,
+  ProjectCreateErrors,
+  ProjectCreateResponses,
   ProjectCurrentResponses,
   ProjectInitGitResponses,
   ProjectListResponses,
@@ -423,6 +428,43 @@ export class Project extends HeyApiClient {
       url: "/project/current",
       ...options,
       ...params,
+    })
+  }
+
+  /**
+   * Create project
+   *
+   * Create a new project folder in the workspace root and initialize it for OpenCode.
+   */
+  public create<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      name?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "name" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<ProjectCreateResponses, ProjectCreateErrors, ThrowOnError>({
+      url: "/project/create",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 
@@ -2745,6 +2787,40 @@ export class Find extends HeyApiClient {
 
 export class File extends HeyApiClient {
   /**
+   * Delete file or directory
+   *
+   * Delete a file or directory at the specified path.
+   */
+  public delete<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      path: string
+      recursive?: "true" | "false"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "path" },
+            { in: "query", key: "recursive" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<FileDeleteResponses, unknown, ThrowOnError>({
+      url: "/file",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
    * List files
    *
    * List files and directories in a specified path.
@@ -2773,6 +2849,45 @@ export class File extends HeyApiClient {
       url: "/file",
       ...options,
       ...params,
+    })
+  }
+
+  /**
+   * Upload file
+   *
+   * Upload a file to the specified path. Content should be base64 encoded.
+   */
+  public upload<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      path?: string
+      content?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "path" },
+            { in: "body", key: "content" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<FileUploadResponses, unknown, ThrowOnError>({
+      url: "/file",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 
@@ -2833,6 +2948,40 @@ export class File extends HeyApiClient {
     )
     return (options?.client ?? this.client).get<FileStatusResponses, unknown, ThrowOnError>({
       url: "/file/status",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Directory extends HeyApiClient {
+  /**
+   * Create directory
+   *
+   * Create a new directory at the specified path.
+   */
+  public create<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      path: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "path" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<DirectoryCreateResponses, unknown, ThrowOnError>({
+      url: "/directory",
       ...options,
       ...params,
     })
@@ -3973,6 +4122,11 @@ export class OpencodeClient extends HeyApiClient {
   private _file?: File
   get file(): File {
     return (this._file ??= new File({ client: this.client }))
+  }
+
+  private _directory?: Directory
+  get directory(): Directory {
+    return (this._directory ??= new Directory({ client: this.client }))
   }
 
   private _mcp?: Mcp

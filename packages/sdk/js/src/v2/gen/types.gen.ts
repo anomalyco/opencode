@@ -2091,6 +2091,39 @@ export type ProjectCurrentResponses = {
 
 export type ProjectCurrentResponse = ProjectCurrentResponses[keyof ProjectCurrentResponses]
 
+export type ProjectCreateData = {
+  body?: {
+    name: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/project/create"
+}
+
+export type ProjectCreateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ProjectCreateError = ProjectCreateErrors[keyof ProjectCreateErrors]
+
+export type ProjectCreateResponses = {
+  /**
+   * Created project information
+   */
+  200: {
+    directory: string
+    project: Project
+  }
+}
+
+export type ProjectCreateResponse = ProjectCreateResponses[keyof ProjectCreateResponses]
+
 export type ProjectInitGitData = {
   body?: never
   path?: never
@@ -4129,6 +4162,29 @@ export type FindSymbolsResponses = {
 
 export type FindSymbolsResponse = FindSymbolsResponses[keyof FindSymbolsResponses]
 
+export type FileDeleteData = {
+  body?: never
+  path?: never
+  query: {
+    directory?: string
+    workspace?: string
+    path: string
+    recursive?: "true" | "false"
+  }
+  url: "/file"
+}
+
+export type FileDeleteResponses = {
+  /**
+   * File or directory deleted successfully
+   */
+  200: {
+    success: boolean
+  }
+}
+
+export type FileDeleteResponse = FileDeleteResponses[keyof FileDeleteResponses]
+
 export type FileListData = {
   body?: never
   path?: never
@@ -4148,6 +4204,28 @@ export type FileListResponses = {
 }
 
 export type FileListResponse = FileListResponses[keyof FileListResponses]
+
+export type FileUploadData = {
+  body?: {
+    path: string
+    content: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/file"
+}
+
+export type FileUploadResponses = {
+  /**
+   * File uploaded successfully
+   */
+  200: FileNode
+}
+
+export type FileUploadResponse = FileUploadResponses[keyof FileUploadResponses]
 
 export type FileReadData = {
   body?: never
@@ -4187,6 +4265,26 @@ export type FileStatusResponses = {
 }
 
 export type FileStatusResponse = FileStatusResponses[keyof FileStatusResponses]
+
+export type DirectoryCreateData = {
+  body?: never
+  path?: never
+  query: {
+    directory?: string
+    workspace?: string
+    path: string
+  }
+  url: "/directory"
+}
+
+export type DirectoryCreateResponses = {
+  /**
+   * Directory created successfully
+   */
+  200: FileNode
+}
+
+export type DirectoryCreateResponse = DirectoryCreateResponses[keyof DirectoryCreateResponses]
 
 export type McpStatusData = {
   body?: never

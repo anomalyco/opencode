@@ -200,6 +200,32 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         () => [],
       )
 
+    const upload = async (filepath: string, content: Uint8Array) => {
+      const normalized = path.normalize(filepath)
+      const base64 = btoa(String.fromCharCode(...content))
+      const result = await sdk.client.file.upload({ path: normalized, content: base64 })
+      if (result.error) throw new Error("Upload failed")
+      void tree.listDir(path.dirname(normalized), { force: true })
+      return result.data
+    }
+
+    const mkdir = async (dirpath: string) => {
+      const normalized = path.normalize(dirpath)
+      const result = await sdk.client.directory.create({ path: normalized })
+      if (result.error) throw new Error("Create directory failed")
+      const parent = path.dirname(normalized)
+      void tree.listDir(parent || normalized, { force: true })
+      return result.data
+    }
+
+    const remove = async (filepath: string, recursive = false) => {
+      const normalized = path.normalize(filepath)
+      const result = await sdk.client.file.delete({ path: normalized, recursive: recursive ? "true" : "false" })
+      if (result.error) throw new Error("Delete failed")
+      void tree.listDir(path.dirname(normalized), { force: true })
+      return result.data
+    }
+
     const stop = sdk.event.listen((e) => {
       invalidateFromWatcher(e.details, {
         normalize: path.normalize,
@@ -275,6 +301,9 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       setSelectedLines,
       searchFiles: (query: string) => search(query, "false"),
       searchFilesAndDirectories: (query: string) => search(query, "true"),
+      upload,
+      mkdir,
+      remove,
     }
   },
 })

@@ -520,6 +520,11 @@ export const dict = {
   "session.files.empty": "No files",
   "session.files.binaryContent": "Binary file (content cannot be displayed)",
 
+  "filetree.empty": "This folder is empty",
+  "filetree.newFolder": "New Folder",
+  "filetree.upload": "Upload Files",
+  "filetree.dropHere": "Drop files here",
+
   "session.messages.renderEarlier": "Render earlier messages",
   "session.messages.loadingEarlier": "Loading earlier messages...",
   "session.messages.loadEarlier": "Load earlier messages",

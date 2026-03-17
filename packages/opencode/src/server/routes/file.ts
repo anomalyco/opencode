@@ -193,5 +193,96 @@ export const FileRoutes = lazy(() =>
         const content = await File.status()
         return c.json(content)
       },
+    )
+    .post(
+      "/file",
+      describeRoute({
+        summary: "Upload file",
+        description: "Upload a file to the specified path. Content should be base64 encoded.",
+        operationId: "file.upload",
+        responses: {
+          200: {
+            description: "File uploaded successfully",
+            content: {
+              "application/json": {
+                schema: resolver(File.Node),
+              },
+            },
+          },
+        },
+      }),
+      validator(
+        "json",
+        z.object({
+          path: z.string(),
+          content: z.string(), // base64 encoded
+        }),
+      ),
+      async (c) => {
+        const { path, content } = c.req.valid("json")
+        const decoded = Buffer.from(content, "base64")
+        const result = await File.write(path, new Uint8Array(decoded))
+        return c.json(result)
+      },
+    )
+    .post(
+      "/directory",
+      describeRoute({
+        summary: "Create directory",
+        description: "Create a new directory at the specified path.",
+        operationId: "directory.create",
+        responses: {
+          200: {
+            description: "Directory created successfully",
+            content: {
+              "application/json": {
+                schema: resolver(File.Node),
+              },
+            },
+          },
+        },
+      }),
+      validator(
+        "query",
+        z.object({
+          path: z.string(),
+        }),
+      ),
+      async (c) => {
+        const { path } = c.req.valid("query")
+        const result = await File.mkdir(path)
+        return c.json(result)
+      },
+    )
+    .delete(
+      "/file",
+      describeRoute({
+        summary: "Delete file or directory",
+        description: "Delete a file or directory at the specified path.",
+        operationId: "file.delete",
+        responses: {
+          200: {
+            description: "File or directory deleted successfully",
+            content: {
+              "application/json": {
+                schema: resolver(z.object({ success: z.boolean() })),
+              },
+            },
+          },
+        },
+      }),
+      validator(
+        "query",
+        z.object({
+          path: z.string(),
+          recursive: z.enum(["true", "false"]).optional(),
+        }),
+      ),
+      async (c) => {
+        const path = c.req.valid("query").path
+        const recursive = c.req.valid("query").recursive === "true"
+        await File.remove(path, recursive)
+        return c.json({ success: true })
+      },
     ),
 )

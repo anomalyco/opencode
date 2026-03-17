@@ -1,11 +1,15 @@
 import { useFile } from "@/context/file"
 import { encodeFilePath } from "@/context/file/path"
+import { useLanguage } from "@/context/language"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
+import { IconButton } from "@opencode-ai/ui/icon-button"
+import { showToast } from "@opencode-ai/ui/toast"
 import {
   createEffect,
   createMemo,
+  createSignal,
   For,
   Match,
   on,
@@ -202,6 +206,9 @@ export default function FileTree(props: {
   kinds?: ReadonlyMap<string, Kind>
   draggable?: boolean
   onFileClick?: (file: FileNode) => void
+  droppable?: boolean
+  onUpload?: (files: FileList) => void
+  emptyActions?: boolean
 
   _filter?: Filter
   _marks?: Set<string>
@@ -210,8 +217,11 @@ export default function FileTree(props: {
   _chain?: readonly string[]
 }) {
   const file = useFile()
+  const lang = useLanguage()
   const level = props.level ?? 0
   const draggable = () => props.draggable ?? true
+  const droppable = () => props.droppable ?? false
+  const [isDragging, setIsDragging] = createSignal(false)
 
   const key = (p: string) =>
     file
@@ -384,8 +394,83 @@ export default function FileTree(props: {
     return out
   })
 
+  const handleDragOver = (e: DragEvent) => {
+    if (!droppable()) return
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: DragEvent) => {
+    if (!droppable()) return
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+  }
+
+  const handleDrop = async (e: DragEvent) => {
+    if (!droppable()) return
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+
+    const files = e.dataTransfer?.files
+    if (!files || files.length === 0) return
+
+    props.onUpload?.(files)
+  }
+
+  const handleNewFolder = async () => {
+    const name = prompt(lang.t("filetree.newFolderName") || "Enter folder name:")
+    if (!name) return
+
+    const folderPath = props.path ? `${props.path}/${name}` : name
+    try {
+      await file.mkdir(folderPath)
+      showToast({ variant: "success", title: lang.t("filetree.folderCreated") || "Folder created" })
+    } catch (e) {
+      showToast({
+        variant: "error",
+        title: lang.t("filetree.folderCreateFailed") || "Failed to create folder",
+        description: String(e),
+      })
+    }
+  }
+
+  const handleUploadClick = () => {
+    const input = document.createElement("input")
+    input.type = "file"
+    input.multiple = true
+    input.onchange = (e) => {
+      const files = (e.target as HTMLInputElement).files
+      if (files) props.onUpload?.(files)
+    }
+    input.click()
+  }
+
+  const isEmpty = () => nodes().length === 0 && level === 0
+
   return (
-    <div data-component="filetree" class={`flex flex-col gap-0.5 ${props.class ?? ""}`}>
+    <div
+      data-component="filetree"
+      class={`flex flex-col gap-0.5 ${props.class ?? ""}`}
+      classList={{
+        "bg-surface-raised-base ring-2 ring-primary-base ring-inset": isDragging(),
+      }}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      <Show when={isEmpty() && props.emptyActions}>
+        <div class="flex flex-col items-center justify-center gap-4 py-12 px-4 text-center">
+          <div class="text-12-regular text-text-weak">{lang.t("filetree.empty") || "This folder is empty"}</div>
+          <div class="flex gap-2">
+            <IconButton icon="plus" variant="secondary" onClick={handleNewFolder} />
+            <IconButton icon="folder" variant="secondary" onClick={handleUploadClick} />
+          </div>
+        </div>
+      </Show>
+
       <For each={nodes()}>
         {(node) => {
           const expanded = () => file.tree.state(node.path)?.expanded ?? false
@@ -441,6 +526,8 @@ export default function FileTree(props: {
                         active={props.active}
                         draggable={props.draggable}
                         onFileClick={props.onFileClick}
+                        droppable={droppable()}
+                        onUpload={props.onUpload}
                         _filter={filter()}
                         _marks={marks()}
                         _deeps={deeps()}

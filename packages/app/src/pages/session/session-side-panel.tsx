@@ -1,4 +1,4 @@
-import { For, Match, Show, Switch, createEffect, createMemo, onCleanup, type JSX } from "solid-js"
+import { For, Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { useParams } from "@solidjs/router"
@@ -13,6 +13,7 @@ import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 
 import FileTree from "@/components/file-tree"
+import { FileTreeDragOverlay } from "@/components/file-tree-drag-overlay"
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { DialogSelectFile } from "@/components/dialog-select-file"
 import { SessionContextTab, SortableTab, FileVisual } from "@/components/session"
@@ -46,6 +47,8 @@ export function SessionSidePanel(props: {
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey))
   const view = createMemo(() => layout.view(sessionKey))
+
+  let fileTreePanelRef: HTMLDivElement | undefined
 
   const reviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
   const fileOpen = createMemo(() => isDesktop() && layout.fileTree.opened())
@@ -177,6 +180,21 @@ export function SessionSidePanel(props: {
     activeDraggable: undefined as string | undefined,
   })
 
+  // Drag-and-drop state for file tree panel
+  // isDraggingOverFileTree: shows/hides the drop zone overlay
+  // dragCounter: tracks nested dragenter/dragleave events to handle child elements
+  //
+  // WHY WE NEED A COUNTER:
+  // When dragging over a parent container with child elements (like the file tree),
+  // the browser fires dragenter for the parent, then dragenter for each child
+  // as you move the cursor, followed by dragleave when leaving each child.
+  // Without a counter, leaving a child would immediately hide the overlay,
+  // even though you're still dragging over the parent. The counter increments
+  // on each dragenter and decrements on each dragleave. When it reaches 0,
+  // we know we've actually left the entire file tree panel.
+  const [isDraggingOverFileTree, setIsDraggingOverFileTree] = createSignal(false)
+  const [dragCounter, setDragCounter] = createSignal(0)
+
   const handleDragStart = (event: unknown) => {
     const id = getDraggableId(event)
     if (!id) return
@@ -196,6 +214,82 @@ export function SessionSidePanel(props: {
   const handleDragEnd = () => {
     setStore("activeDraggable", undefined)
   }
+
+  // File tree drag-drop using CAPTURE PHASE to intercept events before they reach the chat
+  //
+  // PROBLEM: The chat input has document-level drag handlers (bubble phase) that show a
+  // "drop files here" overlay. When dragging files over the file tree, we want OUR overlay
+  // to show (for uploading to the project) not the chat overlay (for attaching to message).
+  //
+  // SOLUTION: Use capture phase (addEventListener(..., true)) which fires BEFORE bubble phase.
+  // When user drags over file tree:
+  //   1. Capture phase: Our handler fires, shows file tree overlay, calls stopPropagation()
+  //   2. Bubble phase: Chat's document handler never fires because propagation stopped
+  //
+  // This ensures the file tree always "wins" when dragging over it, preventing the chat
+  // from intercepting the drag and showing its overlay.
+  createEffect(() => {
+    if (!fileTreePanelRef || !fileOpen()) return
+
+    const handleDragEnter = (e: globalThis.DragEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      const count = dragCounter() + 1
+      setDragCounter(count)
+      if (count > 0 && e.dataTransfer?.types.includes("Files")) {
+        setIsDraggingOverFileTree(true)
+      }
+    }
+
+    const handleDragLeave = (e: globalThis.DragEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      const count = dragCounter() - 1
+      setDragCounter(Math.max(0, count))
+      if (count <= 0) {
+        setIsDraggingOverFileTree(false)
+      }
+    }
+
+    const handleDragOver = (e: globalThis.DragEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      if (e.dataTransfer) {
+        e.dataTransfer.dropEffect = "copy"
+      }
+    }
+
+    const handleDrop = async (e: globalThis.DragEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      setIsDraggingOverFileTree(false)
+      setDragCounter(0)
+
+      const dt = e.dataTransfer
+      if (!dt || dt.files.length === 0) return
+
+      for (let i = 0; i < dt.files.length; i++) {
+        const f = dt.files.item(i)
+        if (!f) continue
+        const arrayBuffer = await f.arrayBuffer()
+        const content = new Uint8Array(arrayBuffer)
+        await file.upload(f.name, content)
+      }
+    }
+
+    // Capture phase fires before bubble phase
+    fileTreePanelRef.addEventListener("dragenter", handleDragEnter, true)
+    fileTreePanelRef.addEventListener("dragleave", handleDragLeave, true)
+    fileTreePanelRef.addEventListener("dragover", handleDragOver, true)
+    fileTreePanelRef.addEventListener("drop", handleDrop, true)
+
+    onCleanup(() => {
+      fileTreePanelRef?.removeEventListener("dragenter", handleDragEnter, true)
+      fileTreePanelRef?.removeEventListener("dragleave", handleDragLeave, true)
+      fileTreePanelRef?.removeEventListener("dragover", handleDragOver, true)
+      fileTreePanelRef?.removeEventListener("drop", handleDrop, true)
+    })
+  })
 
   createEffect(() => {
     if (!file.ready()) return
@@ -372,6 +466,7 @@ export function SessionSidePanel(props: {
 
           <div
             id="file-tree-panel"
+            ref={fileTreePanelRef}
             aria-hidden={!fileOpen()}
             inert={!fileOpen()}
             class="relative min-w-0 h-full shrink-0 overflow-hidden"
@@ -382,6 +477,10 @@ export function SessionSidePanel(props: {
             }}
             style={{ width: treeWidth() }}
           >
+            <FileTreeDragOverlay
+              active={isDraggingOverFileTree()}
+              label={language.t("filetree.dropHere") || "Drop files here"}
+            />
             <div
               class="h-full flex flex-col overflow-hidden group/filetree"
               classList={{ "border-l border-border-weaker-base": reviewOpen() }}
@@ -434,14 +533,37 @@ export function SessionSidePanel(props: {
                 </Tabs.Content>
                 <Tabs.Content value="all" class="bg-background-stronger px-3 py-0">
                   <Switch>
-                    <Match when={nofiles()}>{empty(language.t("session.files.empty"))}</Match>
+                    <Match when={nofiles()}>
+                      <FileTree
+                        path=""
+                        class="pt-3"
+                        droppable={true}
+                        emptyActions={true}
+                        onUpload={async (files) => {
+                          for (const f of files) {
+                            const arrayBuffer = await f.arrayBuffer()
+                            const content = new Uint8Array(arrayBuffer)
+                            await file.upload(f.name, content)
+                          }
+                        }}
+                      />
+                    </Match>
                     <Match when={true}>
                       <FileTree
                         path=""
                         class="pt-3"
                         modified={diffFiles()}
                         kinds={kinds()}
+                        droppable={true}
+                        emptyActions={true}
                         onFileClick={(node) => openTab(file.tab(node.path))}
+                        onUpload={async (files) => {
+                          for (const f of files) {
+                            const arrayBuffer = await f.arrayBuffer()
+                            const content = new Uint8Array(arrayBuffer)
+                            await file.upload(f.name, content)
+                          }
+                        }}
                       />
                     </Match>
                   </Switch>

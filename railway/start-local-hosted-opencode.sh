@@ -31,7 +31,7 @@ bun run build:veritly-hosted
     OPENCODE_PROJECTS_ROOT="$WORKSPACE_ROOT" \
     OPENCODE_SERVER_USERNAME="$BACKEND_USERNAME" \
     OPENCODE_SERVER_PASSWORD="$BACKEND_PASSWORD" \
-    bun --cwd "$ROOT/packages/opencode" src/index.ts serve --hostname 127.0.0.1 --port "$BACKEND_PORT"
+    bun --cwd "$ROOT/packages/opencode" --watch src/index.ts serve --hostname 127.0.0.1 --port "$BACKEND_PORT"
 ) &
 backend_pid=$!
 

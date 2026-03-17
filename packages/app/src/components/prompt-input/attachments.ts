@@ -117,7 +117,6 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
 
   const handleGlobalDragOver = (event: DragEvent) => {
     if (input.isDialogActive()) return
-
     event.preventDefault()
     const hasFiles = event.dataTransfer?.types.includes("Files")
     const hasText = event.dataTransfer?.types.includes("text/plain")
@@ -136,10 +135,9 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
   }
 
   const handleGlobalDrop = async (event: DragEvent) => {
-    if (input.isDialogActive()) return
-
-    event.preventDefault()
     input.setDraggingType(null)
+    if (input.isDialogActive()) return
+    event.preventDefault()
 
     const plainText = event.dataTransfer?.getData("text/plain")
     const filePrefix = "file:"
