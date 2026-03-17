@@ -330,6 +330,7 @@ export async function handler(
     logger.metric({
       "error.type": error.constructor.name,
       "error.message": error.message,
+      "error.cause": error.cause?.toString(),
     })
 
     // Note: both top level "type" and "error.type" fields are used by the @ai-sdk/anthropic client to render the error message.
