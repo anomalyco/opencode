@@ -8,6 +8,20 @@ const disposers = new Set<Disposer>()
 const TypeId = "~opencode/InstanceState"
 
 /**
+ * Effect-based state management for OpenCode instances.
+ *
+ * Provides a lazily-initialized, per-directory cached state for Effect services.
+ * Values are created on first access for a given directory and cached for
+ * subsequent reads. Concurrent access shares a single initialization.
+ *
+ * @example
+ * ```typescript
+ * const myState = yield* InstanceState.make((dir) => Effect.succeed({ count: 0 }))
+ * const value = yield* InstanceState.get(myState)
+ * ```
+ */
+
+/**
  * Effect version of `Instance.state` — lazily-initialized, per-directory
  * cached state for Effect services.
  *
