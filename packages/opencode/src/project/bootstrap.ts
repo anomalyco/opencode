@@ -14,6 +14,18 @@ import { Snapshot } from "../snapshot"
 import { Truncate } from "../tool/truncation"
 import { runPromiseInstance } from "@/effect/runtime"
 
+/**
+ * Bootstraps a project instance by initializing all required services.
+ *
+ * Initializes plugins, file sharing, formatting, LSP, file watching, VCS,
+ * snapshots, and tool truncation. Also subscribes to command events to
+ * track project initialization status.
+ *
+ * @example
+ * ```typescript
+ * await InstanceBootstrap()
+ * ```
+ */
 export async function InstanceBootstrap() {
   Log.Default.info("bootstrapping", { directory: Instance.directory })
   await Plugin.init()
