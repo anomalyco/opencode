@@ -97,8 +97,8 @@ export async function handler(
     const zenData = ZenData.list(opts.modelList)
     const modelInfo = validateModel(zenData, model)
     const dataDumper = createDataDumper(sessionId, requestId, projectId)
-    const trialLimiter = createTrialLimiter(modelInfo.trialProvider, ip)
-    const trialProvider = await trialLimiter?.check()
+    const trialLimiter = createTrialLimiter(modelInfo.trialProviders, ip)
+    const trialProviders = await trialLimiter?.check()
     const rateLimiter = createRateLimiter(
       modelInfo.id,
       modelInfo.allowAnonymous,
@@ -120,7 +120,7 @@ export async function handler(
         authInfo,
         modelInfo,
         sessionId,
-        trialProvider,
+        trialProviders,
         retry,
         stickyProvider,
       )
@@ -402,7 +402,7 @@ export async function handler(
     authInfo: AuthInfo,
     modelInfo: ModelInfo,
     sessionId: string,
-    trialProvider: string | undefined,
+    trialProviders: string[] | undefined,
     retry: RetryOptions,
     stickyProvider: string | undefined,
   ) {
@@ -411,12 +411,14 @@ export async function handler(
         return modelInfo.providers.find((provider) => provider.id === modelInfo.byokProvider)
       }
 
-      if (trialProvider) {
-        return modelInfo.providers.find((provider) => provider.id === trialProvider)
-      }
-
       if (stickyProvider) {
         const provider = modelInfo.providers.find((provider) => provider.id === stickyProvider)
+        if (provider) return provider
+      }
+
+      if (trialProviders) {
+        const trialProvider = trialProviders[Math.floor(Math.random() * trialProviders.length)]
+        const provider = modelInfo.providers.find((provider) => provider.id === trialProvider)
         if (provider) return provider
       }
 
