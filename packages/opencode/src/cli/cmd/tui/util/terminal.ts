@@ -1,5 +1,18 @@
 import { RGBA } from "@opentui/core"
 
+/**
+ * Terminal color detection and querying utilities.
+ *
+ * Provides functions to query terminal colors using OSC escape sequences,
+ * including background, foreground, and palette colors. Also supports
+ * detecting whether the terminal has a dark or light background.
+ *
+ * @example
+ * ```typescript
+ * const colors = await Terminal.colors()
+ * const theme = await Terminal.getTerminalBackgroundColor()
+ * ```
+ */
 export namespace Terminal {
   export type Colors = Awaited<ReturnType<typeof colors>>
   /**
