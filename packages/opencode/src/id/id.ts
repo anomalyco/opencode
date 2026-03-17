@@ -1,6 +1,20 @@
 import z from "zod"
 import { randomBytes } from "crypto"
 
+/**
+ * Utility namespace for generating and validating unique identifiers.
+ *
+ * Provides functions for creating time-sortable unique IDs with various prefixes
+ * for different entity types (sessions, messages, users, etc.). Supports both
+ * ascending and descending sort orders for different use cases.
+ *
+ * @example
+ * ```typescript
+ * const sessionId = Identifier.create("session", false)
+ * const messageId = Identifier.ascending("message")
+ * const timestamp = Identifier.timestamp(sessionId)
+ * ```
+ */
 export namespace Identifier {
   const prefixes = {
     session: "ses",
@@ -14,6 +28,12 @@ export namespace Identifier {
     workspace: "wrk",
   } as const
 
+  /**
+   * Creates a Zod schema for validating IDs with a specific prefix.
+   *
+   * @param prefix - The entity type prefix to validate against
+   * @returns A Zod string schema that validates IDs starting with the given prefix
+   */
   export function schema(prefix: keyof typeof prefixes) {
     return z.string().startsWith(prefixes[prefix])
   }
@@ -24,10 +44,33 @@ export namespace Identifier {
   let lastTimestamp = 0
   let counter = 0
 
+  /**
+   * Generates or validates an ascending (chronological) ID.
+   *
+   * If a specific ID is provided, validates it has the correct prefix and returns it.
+   * Otherwise, generates a new ascending ID that sorts chronologically.
+   *
+   * @param prefix - The entity type prefix for the ID
+   * @param given - Optional existing ID to validate instead of generating a new one
+   * @returns A valid ascending ID string
+   * @throws Error if the given ID has an incorrect prefix
+   */
   export function ascending(prefix: keyof typeof prefixes, given?: string) {
     return generateID(prefix, false, given)
   }
 
+  /**
+   * Generates or validates a descending (reverse chronological) ID.
+   *
+   * If a specific ID is provided, validates it has the correct prefix and returns it.
+   * Otherwise, generates a new descending ID that sorts in reverse chronological order.
+   * Useful for retrieving items with newest first.
+   *
+   * @param prefix - The entity type prefix for the ID
+   * @param given - Optional existing ID to validate instead of generating a new one
+   * @returns A valid descending ID string
+   * @throws Error if the given ID has an incorrect prefix
+   */
   export function descending(prefix: keyof typeof prefixes, given?: string) {
     return generateID(prefix, true, given)
   }
@@ -53,6 +96,18 @@ export namespace Identifier {
     return result
   }
 
+  /**
+   * Creates a new unique ID with the specified prefix and sort order.
+   *
+   * Generates a time-based ID using the current timestamp and a monotonic counter
+   * to ensure uniqueness. The ID format includes a prefix, timestamp (encoded),
+   * and random base62 characters.
+   *
+   * @param prefix - The entity type prefix for the ID
+   * @param descending - Whether to generate a descending (reverse chronological) ID
+   * @param timestamp - Optional custom timestamp (defaults to Date.now())
+   * @returns A unique ID string with the format "prefix_hexTimestamp_random"
+   */
   export function create(prefix: keyof typeof prefixes, descending: boolean, timestamp?: number): string {
     const currentTimestamp = timestamp ?? Date.now()
 
