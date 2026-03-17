@@ -13,8 +13,20 @@ function run(target) {
     console.error(result.error.message)
     process.exit(1)
   }
-  const code = typeof result.status === "number" ? result.status : 0
-  process.exit(code)
+  if (result.signal) {
+    try {
+      process.kill(process.pid, result.signal)
+      return
+    } catch {
+      process.exit(1)
+    }
+  }
+
+  if (typeof result.status !== "number") {
+    process.exit(1)
+  }
+
+  process.exit(result.status)
 }
 
 const envPath = process.env.OPENCODE_BIN_PATH
