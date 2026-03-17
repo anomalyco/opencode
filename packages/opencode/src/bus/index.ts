@@ -4,6 +4,20 @@ import { Instance } from "../project/instance"
 import { BusEvent } from "./bus-event"
 import { GlobalBus } from "./global"
 
+/**
+ * Event bus for publishing and subscribing to typed events.
+ *
+ * Provides a type-safe pub/sub system for cross-component communication
+ * within an OpenCode instance. Supports filtering by event type and
+ * broadcasting to all subscribers.
+ *
+ * @example
+ * ```typescript
+ * const MyEvent = BusEvent.define("my.event", z.object({ id: z.string() }))
+ * Bus.subscribe(MyEvent, (event) => console.log(event.properties.id))
+ * await Bus.publish(MyEvent, { id: "123" })
+ * ```
+ */
 export namespace Bus {
   const log = Log.create({ service: "bus" })
   type Subscription = (event: any) => void
