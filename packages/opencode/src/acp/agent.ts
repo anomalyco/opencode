@@ -264,6 +264,66 @@ export namespace ACP {
           return
         }
 
+        case "question.asked": {
+          const question = event.properties
+          const session = this.sessionManager.tryGet(question.sessionID)
+          if (!session) return
+
+          const directory = session.cwd
+          const firstQuestion = question.questions[0]
+          if (!firstQuestion) return
+
+          const options: PermissionOption[] = firstQuestion.options.map((opt) => ({
+            optionId: opt.label,
+            name: opt.label,
+            kind: "allow_once" as const,
+          }))
+
+          const res = await this.connection
+            .requestPermission({
+              sessionId: question.sessionID,
+              toolCall: {
+                toolCallId: question.tool?.callID ?? question.id,
+                status: "pending",
+                title: firstQuestion.question,
+                rawInput: {
+                  questions: question.questions,
+                },
+                kind: "other",
+              },
+              options,
+            })
+            .catch(async (error) => {
+              log.error("failed to request permission from ACP for question", {
+                error,
+                questionID: question.id,
+                sessionID: question.sessionID,
+              })
+              await this.sdk.question.reject({
+                requestID: question.id,
+                directory,
+              })
+              return undefined
+            })
+
+          if (!res) return
+          if (res.outcome.outcome !== "selected") {
+            await this.sdk.question.reject({
+              requestID: question.id,
+              directory,
+            })
+            return
+          }
+
+          const answers = [[res.outcome.optionId!]]
+          await this.sdk.question.reply({
+            requestID: question.id,
+            directory,
+            answers,
+          })
+          return
+        }
+
         case "message.part.updated": {
           log.info("message part updated", { event: event.properties })
           const props = event.properties
