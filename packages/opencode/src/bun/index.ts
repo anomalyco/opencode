@@ -9,6 +9,18 @@ import { PackageRegistry } from "./registry"
 import { proxied } from "@/util/proxied"
 import { Process } from "../util/process"
 
+/**
+ * Bun process execution and package management utilities.
+ *
+ * Provides functions for running Bun commands and installing packages
+ * with caching and version management.
+ *
+ * @example
+ * ```typescript
+ * await BunProc.run(["--version"])
+ * const modPath = await BunProc.install("lodash", "latest")
+ * ```
+ */
 export namespace BunProc {
   const log = Log.create({ service: "bun" })
 
