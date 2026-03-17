@@ -259,7 +259,8 @@ export namespace ProviderTransform {
         model.id.includes("anthropic") ||
         model.id.includes("claude") ||
         model.api.npm === "@ai-sdk/anthropic") &&
-      model.api.npm !== "@ai-sdk/gateway"
+      model.api.npm !== "@ai-sdk/gateway" &&
+      options.authType !== "oauth"
     ) {
       msgs = applyCaching(msgs, model)
     }
