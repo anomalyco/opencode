@@ -1052,7 +1052,12 @@ export namespace Config {
         })
         .optional(),
       plugin: z.string().array().optional(),
-      snapshot: z.boolean().optional(),
+      snapshot: z
+        .boolean()
+        .optional()
+        .describe(
+          "Enable or disable snapshot tracking. When false, filesystem snapshots are not recorded and session undo/revert will be unavailable. Defaults to true.",
+        ),
       share: z
         .enum(["manual", "auto", "disabled"])
         .optional()
