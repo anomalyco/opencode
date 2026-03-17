@@ -268,6 +268,15 @@ export function SessionTurn(
       if (index < 0) return emptyAssistant
 
       const result: AssistantMessage[] = []
+      // Scan backwards for assistant messages that may sort before the user
+      // message due to client/server clock skew (client-generated user message
+      // IDs can have a higher timestamp than server-generated assistant IDs)
+      for (let i = index - 1; i >= 0; i--) {
+        const item = messages[i]
+        if (!item) continue
+        if (item.role === "user") break
+        if (item.role === "assistant" && item.parentID === msg.id) result.unshift(item as AssistantMessage)
+      }
       for (let i = index + 1; i < messages.length; i++) {
         const item = messages[i]
         if (!item) continue
