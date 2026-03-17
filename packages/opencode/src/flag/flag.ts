@@ -17,7 +17,7 @@ export namespace Flag {
   export declare const OPENCODE_TUI_CONFIG: string | undefined
   export declare const OPENCODE_CONFIG_DIR: string | undefined
   export const OPENCODE_CONFIG_CONTENT = process.env["OPENCODE_CONFIG_CONTENT"]
-  export const OPENCODE_DISABLE_AUTOUPDATE = truthy("OPENCODE_DISABLE_AUTOUPDATE")
+  export declare const OPENCODE_DISABLE_AUTOUPDATE: boolean
   export const OPENCODE_DISABLE_PRUNE = truthy("OPENCODE_DISABLE_PRUNE")
   export const OPENCODE_DISABLE_TERMINAL_TITLE = truthy("OPENCODE_DISABLE_TERMINAL_TITLE")
   export const OPENCODE_PERMISSION = process.env["OPENCODE_PERMISSION"]
@@ -26,6 +26,16 @@ export namespace Flag {
   export const OPENCODE_ENABLE_EXPERIMENTAL_MODELS = truthy("OPENCODE_ENABLE_EXPERIMENTAL_MODELS")
   export const OPENCODE_DISABLE_AUTOCOMPACT = truthy("OPENCODE_DISABLE_AUTOCOMPACT")
   export const OPENCODE_DISABLE_MODELS_FETCH = truthy("OPENCODE_DISABLE_MODELS_FETCH")
+  // Offline mode: disables non-essential outbound connections (autoupdate, sharing, app proxy).
+  // models.dev and Exa search are intentionally excluded — models.dev is essential metadata;
+  // Exa is user-initiated and already gated by a permission prompt.
+  // Individual granular flags still work independently; this is a single kill switch.
+  // Declared as getters (not plain constants) because flag.ts is imported before the CLI
+  // handler or config loading runs, so process.env.OPENCODE_OFFLINE isn't set yet at
+  // module evaluation time.
+  export declare const OPENCODE_OFFLINE: boolean
+  export declare const OPENCODE_DISABLE_SHARE: boolean
+  export declare const OPENCODE_DISABLE_APP_PROXY: boolean
   export const OPENCODE_DISABLE_CLAUDE_CODE = truthy("OPENCODE_DISABLE_CLAUDE_CODE")
   export const OPENCODE_DISABLE_CLAUDE_CODE_PROMPT =
     OPENCODE_DISABLE_CLAUDE_CODE || truthy("OPENCODE_DISABLE_CLAUDE_CODE_PROMPT")
@@ -120,6 +130,40 @@ Object.defineProperty(Flag, "OPENCODE_CONFIG_DIR", {
 Object.defineProperty(Flag, "OPENCODE_CLIENT", {
   get() {
     return process.env["OPENCODE_CLIENT"] ?? "cli"
+  },
+  enumerable: true,
+  configurable: false,
+})
+
+// Offline mode — getters instead of constants because flag.ts loads before the CLI handler
+// or config sets process.env.OPENCODE_OFFLINE.
+Object.defineProperty(Flag, "OPENCODE_OFFLINE", {
+  get() {
+    return truthy("OPENCODE_OFFLINE")
+  },
+  enumerable: true,
+  configurable: false,
+})
+
+Object.defineProperty(Flag, "OPENCODE_DISABLE_AUTOUPDATE", {
+  get() {
+    return truthy("OPENCODE_OFFLINE") || truthy("OPENCODE_DISABLE_AUTOUPDATE")
+  },
+  enumerable: true,
+  configurable: false,
+})
+
+Object.defineProperty(Flag, "OPENCODE_DISABLE_SHARE", {
+  get() {
+    return truthy("OPENCODE_OFFLINE") || truthy("OPENCODE_DISABLE_SHARE")
+  },
+  enumerable: true,
+  configurable: false,
+})
+
+Object.defineProperty(Flag, "OPENCODE_DISABLE_APP_PROXY", {
+  get() {
+    return truthy("OPENCODE_OFFLINE") || truthy("OPENCODE_DISABLE_APP_PROXY")
   },
   enumerable: true,
   configurable: false,

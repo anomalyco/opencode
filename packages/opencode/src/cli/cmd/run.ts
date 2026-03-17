@@ -1,4 +1,5 @@
 import type { Argv } from "yargs"
+import { withOfflineOption } from "../network"
 import path from "path"
 import { pathToFileURL } from "url"
 import { UI } from "../ui"
@@ -222,7 +223,7 @@ export const RunCommand = cmd({
   command: "run [message..]",
   describe: "run opencode with a message",
   builder: (yargs: Argv) => {
-    return yargs
+    return withOfflineOption(yargs
       .positional("message", {
         describe: "message to send",
         type: "string",
@@ -301,9 +302,11 @@ export const RunCommand = cmd({
         type: "boolean",
         describe: "show thinking blocks",
         default: false,
-      })
+      }),
+    )
   },
   handler: async (args) => {
+    if (args.offline) process.env["OPENCODE_OFFLINE"] = "true"
     let message = [...args.message, ...(args["--"] || [])]
       .map((arg) => (arg.includes(" ") ? `"${arg.replace(/"/g, '\\"')}"` : arg))
       .join(" ")

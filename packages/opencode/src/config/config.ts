@@ -248,6 +248,17 @@ export namespace Config {
       result.share = "auto"
     }
 
+    // Apply offline mode: set env var so all dynamic Flag getters pick it up at runtime
+    if (result.offline) {
+      process.env["OPENCODE_OFFLINE"] = "true"
+    }
+    // When offline, force share to disabled so the UI hides the /share command.
+    // Check both result.offline (config file) and Flag.OPENCODE_OFFLINE (env var / --offline flag)
+    // to avoid relying on the getter picking up the just-set env var above.
+    if (result.offline || Flag.OPENCODE_OFFLINE) {
+      result.share = "disabled"
+    }
+
     // Apply flag overrides for compaction settings
     if (Flag.OPENCODE_DISABLE_AUTOCOMPACT) {
       result.compaction = { ...result.compaction, auto: false }
@@ -1040,6 +1051,12 @@ export namespace Config {
     .object({
       $schema: z.string().optional().describe("JSON schema reference for configuration validation"),
       logLevel: Log.Level.optional().describe("Log level"),
+      offline: z
+        .boolean()
+        .optional()
+        .describe(
+          "When true, disables non-essential outbound connections (auto-update, session sharing, app proxy). Equivalent to setting OPENCODE_OFFLINE=true. Essential connections (LLM providers, models.dev model catalog) are not affected.",
+        ),
       server: Server.optional().describe("Server configuration for opencode serve and web commands"),
       command: z
         .record(z.string(), Command)

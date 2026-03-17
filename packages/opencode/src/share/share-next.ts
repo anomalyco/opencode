@@ -10,6 +10,7 @@ import { Database, eq } from "@/storage/db"
 import { SessionShareTable } from "./share.sql"
 import { Log } from "@/util/log"
 import type * as SDK from "@opencode-ai/sdk/v2"
+import { Flag } from "@/flag/flag"
 
 export namespace ShareNext {
   const log = Log.create({ service: "share-next" })
@@ -61,10 +62,8 @@ export namespace ShareNext {
     return { headers, api: consoleApi, baseUrl: active.url }
   }
 
-  const disabled = process.env["OPENCODE_DISABLE_SHARE"] === "true" || process.env["OPENCODE_DISABLE_SHARE"] === "1"
-
   export async function init() {
-    if (disabled) return
+    if (Flag.OPENCODE_DISABLE_SHARE) return
     Bus.subscribe(Session.Event.Updated, async (evt) => {
       await sync(evt.properties.info.id, [
         {
@@ -112,7 +111,7 @@ export namespace ShareNext {
   }
 
   export async function create(sessionID: SessionID) {
-    if (disabled) return { id: "", url: "", secret: "" }
+    if (Flag.OPENCODE_DISABLE_SHARE) return { id: "", url: "", secret: "" }
     log.info("creating share", { sessionID })
     const req = await request()
     const response = await fetch(`${req.baseUrl}${req.api.create}`, {
@@ -189,7 +188,7 @@ export namespace ShareNext {
 
   const queue = new Map<string, { timeout: NodeJS.Timeout; data: Map<string, Data> }>()
   async function sync(sessionID: SessionID, data: Data[]) {
-    if (disabled) return
+    if (Flag.OPENCODE_DISABLE_SHARE) return
     const existing = queue.get(sessionID)
     if (existing) {
       for (const item of data) {
@@ -228,7 +227,7 @@ export namespace ShareNext {
   }
 
   export async function remove(sessionID: SessionID) {
-    if (disabled) return
+    if (Flag.OPENCODE_DISABLE_SHARE) return
     log.info("removing share", { sessionID })
     const share = get(sessionID)
     if (!share) return

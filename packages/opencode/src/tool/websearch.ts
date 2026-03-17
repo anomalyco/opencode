@@ -2,7 +2,6 @@ import z from "zod"
 import { Tool } from "./tool"
 import DESCRIPTION from "./websearch.txt"
 import { abortAfterAny } from "../util/abort"
-
 const API_CONFIG = {
   BASE_URL: "https://mcp.exa.ai",
   ENDPOINTS: {
@@ -63,6 +62,7 @@ export const WebSearchTool = Tool.define("websearch", async () => {
         .describe("Maximum characters for context string optimized for LLMs (default: 10000)"),
     }),
     async execute(params, ctx) {
+
       await ctx.ask({
         permission: "websearch",
         patterns: [params.query],
