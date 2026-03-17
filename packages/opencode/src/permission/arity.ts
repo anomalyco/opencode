@@ -1,4 +1,26 @@
+/**
+ * Bash command arity (token count) definitions.
+ *
+ * Maps command prefixes to their expected token counts for extracting the
+ * "human-understandable command" from shell commands. Used to identify
+ * commands like "git checkout" (2 tokens) vs "npm run dev" (3 tokens).
+ *
+ * @example
+ * ```typescript
+ * const prefix = BashArity.prefix(["git", "checkout", "main"])
+ * // Returns ["git", "checkout"]
+ * ```
+ */
 export namespace BashArity {
+  /**
+   * Extracts the command prefix from a token array based on known arities.
+   *
+   * Finds the longest matching prefix with a defined arity and returns
+   * that many tokens as the "human-understandable command".
+   *
+   * @param tokens - Array of command tokens
+   * @returns The tokens representing the command prefix
+   */
   export function prefix(tokens: string[]) {
     for (let len = tokens.length; len > 0; len--) {
       const prefix = tokens.slice(0, len).join(" ")
