@@ -254,3 +254,25 @@ export function navigatePromptHistory(input: HistoryNavInput): HistoryNavResult 
     savedPrompt: input.savedPrompt,
   }
 }
+
+/**
+ * Search prompt history entries for a query string (case-insensitive).
+ * Returns the index of the first matching entry starting from `startIndex`,
+ * or -1 if no match is found. Used for Ctrl+R reverse history search.
+ */
+export function searchPromptHistory(
+  entries: PromptHistoryStoredEntry[],
+  query: string,
+  startIndex = 0,
+): number {
+  if (!query.trim()) return -1
+  const lower = query.toLowerCase()
+  for (let i = startIndex; i < entries.length; i++) {
+    const entry = normalizePromptHistoryEntry(entries[i])
+    const text = entry.prompt
+      .map((part) => ("content" in part ? part.content : ""))
+      .join("")
+    if (text.toLowerCase().includes(lower)) return i
+  }
+  return -1
+}

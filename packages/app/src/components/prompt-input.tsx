@@ -44,6 +44,9 @@ import {
   canNavigateHistoryAtCursor,
   navigatePromptHistory,
   prependHistoryEntry,
+  searchPromptHistory,
+  normalizePromptHistoryEntry,
+  clonePromptParts,
   type PromptHistoryComment,
   type PromptHistoryEntry,
   type PromptHistoryStoredEntry,
@@ -273,6 +276,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     draggingType: "image" | "@mention" | null
     mode: "normal" | "shell"
     applyingHistory: boolean
+    historySearch: string | null
+    historySearchIndex: number
   }>({
     popover: null,
     historyIndex: -1,
@@ -281,6 +286,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     draggingType: null,
     mode: "normal",
     applyingHistory: false,
+    historySearch: null,
+    historySearchIndex: -1,
   })
 
   const buttonsSpring = useSpring(() => (store.mode === "normal" ? 1 : 0), { visualDuration: 0.2, bounce: 0 })
@@ -1208,6 +1215,84 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       }
     }
 
+    if (ctrl && event.code === "KeyR") {
+      // Ctrl+R: reverse history search
+      if (store.historySearch === null) {
+        // Enter search mode
+        setStore("historySearch", "")
+        setStore("historySearchIndex", -1)
+      } else {
+        // Already searching: find next match
+        const entries = prompt.history()
+        const nextIndex = searchPromptHistory(entries, store.historySearch, store.historySearchIndex + 1)
+        if (nextIndex >= 0) {
+          setStore("historySearchIndex", nextIndex)
+          const entry = normalizePromptHistoryEntry(entries[nextIndex])
+          setStore("historyIndex", nextIndex)
+          setStore("savedPrompt", {
+            prompt: clonePromptParts(prompt.current()),
+            comments: [],
+          })
+          applyHistoryPrompt(entry, "end")
+        }
+      }
+      event.preventDefault()
+      return
+    }
+
+    // When in history search mode, handle special keys
+    if (store.historySearch !== null) {
+      if (event.key === "Escape") {
+        setStore("historySearch", null)
+        setStore("historySearchIndex", -1)
+        event.preventDefault()
+        return
+      }
+      if (event.key === "Enter") {
+        // Accept current search result
+        setStore("historySearch", null)
+        setStore("historySearchIndex", -1)
+        event.preventDefault()
+        return
+      }
+      if (event.key === "Backspace") {
+        const search = store.historySearch
+        if (search.length > 0) {
+          const newSearch = search.slice(0, -1)
+          setStore("historySearch", newSearch)
+          if (newSearch) {
+            const entries = prompt.history()
+            const idx = searchPromptHistory(entries, newSearch, 0)
+            if (idx >= 0) {
+              setStore("historySearchIndex", idx)
+              setStore("historyIndex", idx)
+              const entry = normalizePromptHistoryEntry(entries[idx])
+              applyHistoryPrompt(entry, "end")
+            }
+          }
+        } else {
+          setStore("historySearch", null)
+          setStore("historySearchIndex", -1)
+        }
+        event.preventDefault()
+        return
+      }
+      if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        const newSearch = store.historySearch + event.key
+        setStore("historySearch", newSearch)
+        const entries = prompt.history()
+        const idx = searchPromptHistory(entries, newSearch, 0)
+        if (idx >= 0) {
+          setStore("historySearchIndex", idx)
+          setStore("historyIndex", idx)
+          const entry = normalizePromptHistoryEntry(entries[idx])
+          applyHistoryPrompt(entry, "end")
+        }
+        event.preventDefault()
+        return
+      }
+    }
+
     if (ctrl && event.code === "KeyG") {
       if (store.popover) {
         closePopover()
@@ -1311,6 +1396,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             editorRef?.focus()
           }}
         >
+          <Show when={store.historySearch !== null}>
+            <div class="px-3 py-1 text-12-regular text-text-dimmed bg-surface-secondary border-b border-border-secondary flex items-center gap-1">
+              <span class="text-text-dimmed">reverse-i-search:</span>
+              <span class="text-text-strong">{store.historySearch}</span>
+            </div>
+          </Show>
           <div
             class="relative max-h-[240px] overflow-y-auto no-scrollbar"
             ref={(el) => (scrollRef = el)}
