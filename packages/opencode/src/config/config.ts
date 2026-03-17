@@ -576,7 +576,7 @@ export namespace Config {
         .optional()
         .describe("Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified."),
     })
-    .strict()
+    .passthrough()
     .meta({
       ref: "McpLocalConfig",
     })
@@ -590,7 +590,7 @@ export namespace Config {
       clientSecret: z.string().optional().describe("OAuth client secret (if required by the authorization server)"),
       scope: z.string().optional().describe("OAuth scopes to request during authorization"),
     })
-    .strict()
+    .passthrough()
     .meta({
       ref: "McpOAuthConfig",
     })
@@ -615,7 +615,7 @@ export namespace Config {
         .optional()
         .describe("Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified."),
     })
-    .strict()
+    .passthrough()
     .meta({
       ref: "McpRemoteConfig",
     })
@@ -1130,7 +1130,7 @@ export namespace Config {
               .object({
                 enabled: z.boolean(),
               })
-              .strict(),
+              .passthrough(),
           ]),
         )
         .optional()
