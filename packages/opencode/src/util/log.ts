@@ -5,6 +5,20 @@ import { Global } from "../global"
 import z from "zod"
 import { Glob } from "./glob"
 
+/**
+ * Logging utilities for the OpenCode CLI.
+ *
+ * Provides a structured logging system with multiple log levels (DEBUG, INFO, WARN, ERROR),
+ * file output, and tagged loggers for different services.
+ *
+ * @example
+ * ```typescript
+ * Log.init({ print: false, level: "DEBUG" })
+ * const logger = Log.create({ service: "my-service" })
+ * logger.info("Application started")
+ * logger.time("Processing request").stop()
+ * ```
+ */
 export namespace Log {
   export const Level = z.enum(["DEBUG", "INFO", "WARN", "ERROR"]).meta({ ref: "LogLevel", description: "Log level" })
   export type Level = z.infer<typeof Level>
