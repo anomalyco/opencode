@@ -51,9 +51,7 @@ describe("extractSessionID edge cases", () => {
   })
 
   test("handles part with non-string sessionID", () => {
-    expect(
-      extractSessionID({ type: "message.part.updated", properties: { part: { sessionID: 99 } } }),
-    ).toBeUndefined()
+    expect(extractSessionID({ type: "message.part.updated", properties: { part: { sessionID: 99 } } })).toBeUndefined()
   })
 
   test("ignores non-object part", () => {

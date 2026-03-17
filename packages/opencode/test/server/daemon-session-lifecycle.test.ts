@@ -111,11 +111,7 @@ describe("session forking preserves daemon metadata", () => {
       modelID: "claude-4",
     })
 
-    const { res: forkRes, data: forked } = await jsonPost(
-      app,
-      `/session/${parent.id}/fork?directory=${tmp.path}`,
-      {},
-    )
+    const { res: forkRes, data: forked } = await jsonPost(app, `/session/${parent.id}/fork?directory=${tmp.path}`, {})
     expect(forkRes.status).toBe(200)
     expect(forked.id).not.toBe(parent.id)
     expect(forked.title).toContain("(fork")
@@ -287,9 +283,7 @@ describe("concurrent session creation stress", () => {
     await using tmp = await tmpdir({ git: true })
     const app = Server.createApp({ daemon: true })
 
-    const results = await Promise.all(
-      Array.from({ length: 10 }, () => jsonPost(app, `/session?directory=${tmp.path}`)),
-    )
+    const results = await Promise.all(Array.from({ length: 10 }, () => jsonPost(app, `/session?directory=${tmp.path}`)))
 
     for (const { res } of results) {
       expect(res.status).toBe(200)

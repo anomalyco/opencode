@@ -300,11 +300,7 @@ describe("session forking", () => {
 
     const { data: original } = await jsonPost(app, `/session?directory=${tmp.path}`, { title: "Original" })
 
-    const { res: forkRes, data: forked } = await jsonPost(
-      app,
-      `/session/${original.id}/fork?directory=${tmp.path}`,
-      {},
-    )
+    const { res: forkRes, data: forked } = await jsonPost(app, `/session/${original.id}/fork?directory=${tmp.path}`, {})
     expect(forkRes.status).toBe(200)
     expect(forked.id).not.toBe(original.id)
     expect(forked.title).toContain("(fork")

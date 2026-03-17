@@ -2,19 +2,6 @@ import { describe, expect, test, beforeEach } from "bun:test"
 import { createRoot } from "solid-js"
 import { createTabState, resetTabID } from "../../../../src/cli/cmd/tui/context/tab-state"
 
-function mockKV() {
-  const store: Record<string, any> = {}
-  return {
-    get(key: string, defaultValue?: any) {
-      return store[key] ?? defaultValue
-    },
-    set(key: string, value: any) {
-      store[key] = value
-    },
-    store,
-  }
-}
-
 describe("createTabState", () => {
   beforeEach(() => {
     resetTabID()
@@ -23,7 +10,7 @@ describe("createTabState", () => {
   describe("initial state", () => {
     test("single tab exists on creation", () => {
       createRoot((dispose) => {
-        const state = createTabState(mockKV())
+        const state = createTabState()
         expect(state.tabs()).toHaveLength(1)
         dispose()
       })
@@ -31,7 +18,7 @@ describe("createTabState", () => {
 
     test("initial tab label is Untitled", () => {
       createRoot((dispose) => {
-        const state = createTabState(mockKV())
+        const state = createTabState()
         expect(state.tabs()[0].label).toBe("Untitled")
         dispose()
       })
@@ -39,7 +26,7 @@ describe("createTabState", () => {
 
     test("initial tab route is home", () => {
       createRoot((dispose) => {
-        const state = createTabState(mockKV())
+        const state = createTabState()
         expect(state.tabs()[0].route).toEqual({ type: "home" })
         dispose()
       })
@@ -47,7 +34,7 @@ describe("createTabState", () => {
 
     test("initial tab sessionID is null", () => {
       createRoot((dispose) => {
-        const state = createTabState(mockKV())
+        const state = createTabState()
         expect(state.tabs()[0].sessionID).toBeNull()
         dispose()
       })
@@ -55,7 +42,7 @@ describe("createTabState", () => {
 
     test("active tab is the initial tab", () => {
       createRoot((dispose) => {
-        const state = createTabState(mockKV())
+        const state = createTabState()
         expect(state.active().id).toBe(state.tabs()[0].id)
         expect(state.activeIndex()).toBe(0)
         dispose()
@@ -66,7 +53,7 @@ describe("createTabState", () => {
   describe("add", () => {
     test("default label is Untitled when no options provided", () => {
       createRoot((dispose) => {
-        const state = createTabState(mockKV())
+        const state = createTabState()
         state.add()
         expect(state.tabs()[1].label).toBe("Untitled")
         dispose()
@@ -75,7 +62,7 @@ describe("createTabState", () => {
 
     test("custom label used when label option given", () => {
       createRoot((dispose) => {
-        const state = createTabState(mockKV())
+        const state = createTabState()
         state.add({ label: "My Tab" })
         expect(state.tabs()[1].label).toBe("My Tab")
         dispose()
@@ -84,7 +71,7 @@ describe("createTabState", () => {
 
     test("route is home when no sessionID", () => {
       createRoot((dispose) => {
-        const state = createTabState(mockKV())
+        const state = createTabState()
         state.add()
         expect(state.tabs()[1].route).toEqual({ type: "home" })
         dispose()
@@ -93,7 +80,7 @@ describe("createTabState", () => {
 
     test("route is session when sessionID provided", () => {
       createRoot((dispose) => {
-        const state = createTabState(mockKV())
+        const state = createTabState()
         state.add({ sessionID: "ses_123" })
         expect(state.tabs()[1].route).toEqual({ type: "session", sessionID: "ses_123" })
         dispose()
@@ -102,7 +89,7 @@ describe("createTabState", () => {
 
     test("new tab becomes the active tab", () => {
       createRoot((dispose) => {
-        const state = createTabState(mockKV())
+        const state = createTabState()
         const id = state.add()
         expect(state.active().id).toBe(id)
         dispose()
@@ -111,7 +98,7 @@ describe("createTabState", () => {
 
     test("tab count increments", () => {
       createRoot((dispose) => {
-        const state = createTabState(mockKV())
+        const state = createTabState()
         expect(state.tabs()).toHaveLength(1)
         state.add()
         expect(state.tabs()).toHaveLength(2)
@@ -125,7 +112,7 @@ describe("createTabState", () => {
   describe("close", () => {
     test("prevents closing when only 1 tab remains", () => {
       createRoot((dispose) => {
-        const state = createTabState(mockKV())
+        const state = createTabState()
         const id = state.tabs()[0].id
         state.close(id)
         expect(state.tabs()).toHaveLength(1)
@@ -135,7 +122,7 @@ describe("createTabState", () => {
 
     test("removes tab when multiple exist", () => {
       createRoot((dispose) => {
-        const state = createTabState(mockKV())
+        const state = createTabState()
         const secondID = state.add()
         expect(state.tabs()).toHaveLength(2)
         state.close(secondID)
@@ -146,7 +133,7 @@ describe("createTabState", () => {
 
     test("activates neighbor when closing active tab", () => {
       createRoot((dispose) => {
-        const state = createTabState(mockKV())
+        const state = createTabState()
         const firstID = state.tabs()[0].id
         const secondID = state.add()
         expect(state.active().id).toBe(secondID)
@@ -158,7 +145,7 @@ describe("createTabState", () => {
 
     test("no-op for non-existent tab ID", () => {
       createRoot((dispose) => {
-        const state = createTabState(mockKV())
+        const state = createTabState()
         state.add()
         expect(state.tabs()).toHaveLength(2)
         state.close("nonexistent")
@@ -171,7 +158,7 @@ describe("createTabState", () => {
   describe("activate", () => {
     test("switches active tab by ID", () => {
       createRoot((dispose) => {
-        const state = createTabState(mockKV())
+        const state = createTabState()
         const firstID = state.tabs()[0].id
         state.add()
         expect(state.active().id).not.toBe(firstID)
@@ -183,7 +170,7 @@ describe("createTabState", () => {
 
     test("no-op for non-existent ID", () => {
       createRoot((dispose) => {
-        const state = createTabState(mockKV())
+        const state = createTabState()
         const activeID = state.active().id
         state.activate("nonexistent")
         expect(state.active().id).toBe(activeID)
@@ -195,7 +182,7 @@ describe("createTabState", () => {
   describe("rename", () => {
     test("updates label of specified tab", () => {
       createRoot((dispose) => {
-        const state = createTabState(mockKV())
+        const state = createTabState()
         const id = state.tabs()[0].id
         state.rename(id, "Renamed")
         expect(state.tabs()[0].label).toBe("Renamed")
@@ -207,7 +194,7 @@ describe("createTabState", () => {
   describe("last", () => {
     test("no-op when no history", () => {
       createRoot((dispose) => {
-        const state = createTabState(mockKV())
+        const state = createTabState()
         const activeID = state.active().id
         state.last()
         expect(state.active().id).toBe(activeID)
@@ -217,7 +204,7 @@ describe("createTabState", () => {
 
     test("switches to previously active tab after add", () => {
       createRoot((dispose) => {
-        const state = createTabState(mockKV())
+        const state = createTabState()
         const firstID = state.tabs()[0].id
         state.add()
         state.last()
@@ -228,7 +215,7 @@ describe("createTabState", () => {
 
     test("toggles between two tabs", () => {
       createRoot((dispose) => {
-        const state = createTabState(mockKV())
+        const state = createTabState()
         const firstID = state.tabs()[0].id
         const secondID = state.add()
         expect(state.active().id).toBe(secondID)
@@ -242,7 +229,7 @@ describe("createTabState", () => {
 
     test("previousID set when adding a tab", () => {
       createRoot((dispose) => {
-        const state = createTabState(mockKV())
+        const state = createTabState()
         const firstID = state.tabs()[0].id
         state.add()
         expect(state.previousID()).toBe(firstID)
@@ -252,7 +239,7 @@ describe("createTabState", () => {
 
     test("previousID cleared when previous tab is closed", () => {
       createRoot((dispose) => {
-        const state = createTabState(mockKV())
+        const state = createTabState()
         const firstID = state.tabs()[0].id
         const secondID = state.add()
         state.activate(firstID)
@@ -265,7 +252,7 @@ describe("createTabState", () => {
 
     test("activate same tab is no-op for history", () => {
       createRoot((dispose) => {
-        const state = createTabState(mockKV())
+        const state = createTabState()
         const firstID = state.tabs()[0].id
         state.add()
         const prevBefore = state.previousID()
@@ -277,21 +264,49 @@ describe("createTabState", () => {
   })
 
   describe("position", () => {
-    test("defaults to top", () => {
+    test("defaults to bottom", () => {
       createRoot((dispose) => {
-        const state = createTabState(mockKV())
+        const state = createTabState()
+        expect(state.position()).toBe("bottom")
+        dispose()
+      })
+    })
+
+    test("setPosition updates position", () => {
+      createRoot((dispose) => {
+        const state = createTabState()
+        state.setPosition("top")
         expect(state.position()).toBe("top")
         dispose()
       })
     })
 
-    test("setPosition persists to KV", () => {
+    test("initial position can be overridden", () => {
       createRoot((dispose) => {
-        const kv = mockKV()
-        const state = createTabState(kv)
-        state.setPosition("bottom")
-        expect(state.position()).toBe("bottom")
-        expect(kv.store["tab_position"]).toBe("bottom")
+        const state = createTabState({ position: "top" })
+        expect(state.position()).toBe("top")
+        dispose()
+      })
+    })
+  })
+
+  describe("load", () => {
+    test("replaces all state from server data", () => {
+      createRoot((dispose) => {
+        const state = createTabState()
+        state.load({
+          tabs: [
+            { id: "srv_1", sessionID: null, label: "Server Tab", route: { type: "home" } },
+            { id: "srv_2", sessionID: "ses_1", label: "Session", route: { type: "session", sessionID: "ses_1" } },
+          ],
+          activeID: "srv_2",
+          previousID: "srv_1",
+          position: "top",
+        })
+        expect(state.tabs()).toHaveLength(2)
+        expect(state.active().id).toBe("srv_2")
+        expect(state.previousID()).toBe("srv_1")
+        expect(state.position()).toBe("top")
         dispose()
       })
     })
