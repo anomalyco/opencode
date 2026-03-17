@@ -22,12 +22,45 @@ function writeOsc52(text: string): void {
   process.stdout.write(sequence)
 }
 
+/**
+ * Clipboard namespace providing cross-platform clipboard operations.
+ *
+ * Supports reading and writing text to the system clipboard on macOS, Windows,
+ * and Linux (X11 and Wayland). Also supports reading image data from the clipboard
+ * and uses OSC 52 for SSH compatibility.
+ *
+ * @example
+ * ```typescript
+ * // Copy text to clipboard
+ * await Clipboard.copy("Hello, World!")
+ *
+ * // Read from clipboard
+ * const content = await Clipboard.read()
+ * if (content) {
+ *   console.log(content.data) // text or base64 image data
+ * }
+ * ```
+ */
 export namespace Clipboard {
+  /**
+   * Content interface for clipboard data.
+   */
   export interface Content {
+    /** The clipboard data as a string (text or base64-encoded binary) */
     data: string
+    /** The MIME type of the content (e.g., "text/plain", "image/png") */
     mime: string
   }
 
+  /**
+   * Reads content from the system clipboard.
+   *
+   * Attempts to read image data first (PNG format) on supported platforms
+   * (macOS, Windows/WSL, Linux with wl-paste/xclip). Falls back to text content
+   * if no image is available.
+   *
+   * @returns A promise resolving to the clipboard content, or undefined if empty/unavailable
+   */
   export async function read(): Promise<Content | undefined> {
     const os = platform()
 
@@ -175,6 +208,16 @@ export namespace Clipboard {
     }
   })
 
+  /**
+   * Copies text to the system clipboard.
+   *
+   * First writes the text using OSC 52 escape sequence for SSH compatibility,
+   * then uses the platform-specific method (osascript on macOS, wl-copy/xclip/xsel
+   * on Linux, PowerShell on Windows, or clipboardy as fallback).
+   *
+   * @param text - The text to copy to the clipboard
+   * @returns A promise that resolves when the copy is complete
+   */
   export async function copy(text: string): Promise<void> {
     writeOsc52(text)
     await getCopyMethod()(text)
