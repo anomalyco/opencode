@@ -1,5 +1,17 @@
 import { RGBA } from "@opentui/core"
 
+/**
+ * Terminal namespace containing utilities for querying and working with terminal properties.
+ *
+ * Provides functionality to detect terminal colors, including background, foreground,
+ * and palette colors using OSC escape sequences.
+ *
+ * @example
+ * ```typescript
+ * const colors = await Terminal.colors()
+ * const theme = await Terminal.getTerminalBackgroundColor()
+ * ```
+ */
 export namespace Terminal {
   export type Colors = Awaited<ReturnType<typeof colors>>
   /**
@@ -100,6 +112,20 @@ export namespace Terminal {
     })
   }
 
+  /**
+   * Determines whether the terminal background is dark or light based on the
+   * actual background color reported by the terminal.
+   *
+   * Uses the relative luminance formula to calculate brightness and classifies
+   * the background as "dark" or "light" based on a 0.5 threshold.
+   *
+   * @returns A promise that resolves to "dark" or "light"
+   * @example
+   * ```typescript
+   * const theme = await Terminal.getTerminalBackgroundColor()
+   * // Returns "dark" or "light"
+   * ```
+   */
   export async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
     const result = await colors()
     if (!result.background) return "dark"
