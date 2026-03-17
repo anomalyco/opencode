@@ -448,7 +448,7 @@ export class FileService extends ServiceMap.Service<FileService, FileService.Ser
       }
 
       const init = Effect.fn("FileService.init")(function* () {
-        void kick()
+        yield* Effect.promise(() => kick())
       })
 
       const status = Effect.fn("FileService.status")(function* () {

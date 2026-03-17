@@ -9,6 +9,7 @@ import { VcsService } from "@/project/vcs"
 import { FileTimeService } from "@/file/time"
 import { FormatService } from "@/format"
 import { FileService } from "@/file"
+import { SkillService } from "@/skill/skill"
 import { Instance } from "@/project/instance"
 
 export { InstanceContext } from "./instance-context"
@@ -22,6 +23,7 @@ export type InstanceServices =
   | FileTimeService
   | FormatService
   | FileService
+  | SkillService
 
 function lookup(directory: string) {
   const project = Instance.project
@@ -35,6 +37,7 @@ function lookup(directory: string) {
     Layer.fresh(FileTimeService.layer).pipe(Layer.orDie),
     Layer.fresh(FormatService.layer),
     Layer.fresh(FileService.layer),
+    Layer.fresh(SkillService.layer),
   ).pipe(Layer.provide(ctx))
 }
 
