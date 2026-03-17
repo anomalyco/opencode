@@ -516,8 +516,10 @@ export const Terminal = (props: TerminalProps) => {
         next.searchParams.set("directory", directory)
         next.searchParams.set("cursor", String(seek))
         next.protocol = next.protocol === "https:" ? "wss:" : "ws:"
-        next.username = username
-        next.password = password
+        if (password) {
+          next.username = username
+          next.password = password
+        }
 
         const socket = new WebSocket(next)
         socket.binaryType = "arraybuffer"
