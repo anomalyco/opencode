@@ -14,12 +14,27 @@ import { createResource, Show, type Component, type JSX } from "solid-js";
 import { evaluate } from "@mdx-js/mdx";
 import remarkGfm from "remark-gfm";
 import * as runtime from "solid-js/h/jsx-runtime";
-import { Chart } from "./chart";
+import { BarChart, Chart, ChartAreaInteractive, LineChart, RadarChart } from "./chart";
 
-export { Chart, type ChartData, type ChartDataset } from "./chart";
+export {
+	BarChart,
+	Chart,
+	ChartAreaInteractive,
+	LineChart,
+	RadarChart,
+	type AreaPoint,
+	type AreaRange,
+	type ChartData,
+	type ChartDataset,
+	type ChartType,
+} from "./chart";
 
 export interface MDXComponents {
 	Chart?: typeof Chart;
+	ChartAreaInteractive?: typeof ChartAreaInteractive;
+	LineChart?: typeof LineChart;
+	BarChart?: typeof BarChart;
+	RadarChart?: typeof RadarChart;
 	[key: string]: Component<any> | undefined;
 }
 
@@ -71,4 +86,8 @@ export function MDXContent(props: MDXContentProps): JSX.Element {
 
 export const defaultComponents: MDXComponents = {
 	Chart,
+	ChartAreaInteractive,
+	LineChart,
+	BarChart,
+	RadarChart,
 };

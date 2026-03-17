@@ -115,7 +115,21 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
     input.addPart({ type: "text", content: plainText, start: 0, end: 0 })
   }
 
+  const isOverFileTreePanel = (event: DragEvent): boolean => {
+    // Check if drag is over file tree panel using elementFromPoint for accuracy
+    const element = document.elementFromPoint(event.clientX, event.clientY)
+    return element?.closest("#file-tree-panel") !== null
+  }
+
   const handleGlobalDragOver = (event: DragEvent) => {
+    const overFileTree = isOverFileTreePanel(event)
+
+    // Don't show chat overlay if over file tree
+    if (overFileTree) {
+      input.setDraggingType(null)
+      return
+    }
+
     if (input.isDialogActive()) return
     event.preventDefault()
     const hasFiles = event.dataTransfer?.types.includes("Files")
@@ -136,6 +150,12 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
 
   const handleGlobalDrop = async (event: DragEvent) => {
     input.setDraggingType(null)
+
+    // Don't process if over file tree (file tree handler will handle it)
+    if (isOverFileTreePanel(event)) {
+      return
+    }
+
     if (input.isDialogActive()) return
     event.preventDefault()
 
@@ -158,16 +178,25 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
     }
   }
 
+  // Global safety: clear chat drag state when ANY drop happens anywhere on page
+  // This fixes the issue where dragging between zones leaves the chat overlay stuck
+  const handleAnyDrop = () => {
+    input.setDraggingType(null)
+  }
+
   onMount(() => {
     document.addEventListener("dragover", handleGlobalDragOver)
     document.addEventListener("dragleave", handleGlobalDragLeave)
     document.addEventListener("drop", handleGlobalDrop)
+    // Use capture phase to ensure we catch all drops
+    document.addEventListener("drop", handleAnyDrop, true)
   })
 
   onCleanup(() => {
     document.removeEventListener("dragover", handleGlobalDragOver)
     document.removeEventListener("dragleave", handleGlobalDragLeave)
     document.removeEventListener("drop", handleGlobalDrop)
+    document.removeEventListener("drop", handleAnyDrop, true)
   })
 
   return {

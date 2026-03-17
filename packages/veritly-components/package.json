@@ -15,6 +15,7 @@
 	},
 	"dependencies": {
 		"@mdx-js/mdx": "catalog:",
+		"apexcharts": "5.10.4",
 		"remark-gfm": "catalog:",
 		"solid-js": "catalog:",
 		"vfile": "catalog:"

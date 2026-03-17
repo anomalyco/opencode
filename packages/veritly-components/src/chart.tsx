@@ -1,5 +1,6 @@
-import { createMemo, For } from "solid-js";
+import { createEffect, createMemo, onCleanup } from "solid-js";
 import type { JSX } from "solid-js";
+import { createSignal } from "solid-js";
 
 export interface ChartDataset {
 	label: string;
@@ -12,205 +13,348 @@ export interface ChartData {
 	datasets: ChartDataset[];
 }
 
-const DEFAULT_COLORS = ["#06b6d4", "#f43f5e", "#8b5cf6", "#10b981", "#f59e0b", "#3b82f6", "#ec4899"];
+export type ChartType = "line" | "bar" | "radar";
+export type AreaRange = "7d" | "30d" | "90d";
 
-const CHART_PADDING = { top: 24, right: 24, bottom: 48, left: 56 };
-const CHART_WIDTH = 600;
-const CHART_HEIGHT = 300;
+export interface AreaPoint {
+	date: string;
+	desktop: number;
+	mobile: number;
+}
 
-function parseChartData(raw: ChartData | string): ChartData | null {
+const COLOR = ["#06b6d4", "#f43f5e", "#8b5cf6", "#10b981", "#f59e0b", "#3b82f6", "#ec4899"];
+
+function parse(raw: ChartData | string): ChartData | null {
 	try {
-		if (typeof raw === "string") {
-			return JSON.parse(raw) as ChartData;
-		}
+		if (typeof raw === "string") return JSON.parse(raw) as ChartData;
 		return raw;
 	} catch {
 		return null;
 	}
 }
 
-export function Chart(props: { data?: ChartData | string; type?: "line" | "bar" }): JSX.Element {
-	const chartData = createMemo(() => {
+function num(n: number): string {
+	if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+	if (Math.abs(n) >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+	return n % 1 === 0 ? String(n) : n.toFixed(1);
+}
+
+function chartColor(ds: ChartDataset, i: number): string {
+	return ds.color || COLOR[i % COLOR.length];
+}
+
+function days(range: AreaRange): number {
+	if (range === "7d") return 7;
+	if (range === "30d") return 30;
+	return 90;
+}
+
+function parseArea(raw: AreaPoint[] | string): AreaPoint[] | null {
+	try {
+		if (typeof raw === "string") return JSON.parse(raw) as AreaPoint[];
+		return raw;
+	} catch {
+		return null;
+	}
+}
+
+function sample(days = 120): AreaPoint[] {
+	const out: AreaPoint[] = [];
+	const end = new Date();
+	end.setHours(0, 0, 0, 0);
+	for (let i = days - 1; i >= 0; i--) {
+		const d = new Date(end);
+		d.setDate(end.getDate() - i);
+		const desktop = Math.round(170 + Math.sin(i / 4.2) * 110 + (i % 9) * 14 + (i % 5) * 9);
+		const mobile = Math.round(130 + Math.cos(i / 5.6) * 90 + (i % 7) * 11 + (i % 4) * 7);
+		out.push({
+			date: d.toISOString().slice(0, 10),
+			desktop: Math.max(20, desktop),
+			mobile: Math.max(20, mobile),
+		});
+	}
+	return out;
+}
+
+export function Chart(props: { data?: ChartData | string; type?: ChartType }): JSX.Element {
+	const data = createMemo(() => {
 		if (!props.data) return null;
-		return parseChartData(props.data);
+		return parse(props.data);
 	});
+	const kind = createMemo<ChartType>(() => props.type || "line");
+	let node: HTMLDivElement | undefined;
+	let chart: { destroy: () => void; render: () => Promise<unknown> } | undefined;
 
-	const plotArea = createMemo(() => ({
-		x: CHART_PADDING.left,
-		y: CHART_PADDING.top,
-		width: CHART_WIDTH - CHART_PADDING.left - CHART_PADDING.right,
-		height: CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom,
-	}));
+	createEffect(() => {
+		const d = data();
+		const el = node;
+		if (!d) return;
+		if (!el) return;
 
-	const yRange = createMemo(() => {
-		const d = chartData();
-		if (!d) return { min: 0, max: 1 };
-		let min = Number.POSITIVE_INFINITY;
-		let max = Number.NEGATIVE_INFINITY;
-		for (const ds of d.datasets) {
-			for (const v of ds.data) {
-				if (v < min) min = v;
-				if (v > max) max = v;
-			}
-		}
-		if (min === max) {
-			min -= 1;
-			max += 1;
-		}
-		const padding = (max - min) * 0.1;
-		return { min: min - padding, max: max + padding };
+		let stop = false;
+
+		void import("apexcharts").then(async (mod) => {
+			if (stop) return;
+			const Apex = mod.default;
+			const common = {
+				chart: {
+					type: kind(),
+					background: "transparent",
+					foreColor: "#cbd5e1",
+					toolbar: { show: false },
+					animations: { enabled: true, speed: 550 },
+				},
+				theme: { mode: "dark" as const },
+				stroke: { curve: "smooth" as const, width: kind() === "bar" ? 0 : 3 },
+				fill: { opacity: kind() === "radar" ? 0.18 : 0.9 },
+				dataLabels: { enabled: false },
+				legend: {
+					show: true,
+					position: "bottom" as const,
+					labels: { colors: "#cbd5e1" },
+					itemMargin: { horizontal: 10, vertical: 2 },
+				},
+				tooltip: {
+					theme: "dark" as const,
+					y: {
+						formatter: (v: number) => num(v),
+					},
+				},
+				grid: { borderColor: "#334155" },
+				series: d.datasets.map((ds, i) => ({
+					name: ds.label,
+					data: ds.data,
+					color: chartColor(ds, i),
+				})),
+				labels: d.labels,
+				xaxis: {
+					categories: d.labels,
+					labels: { style: { colors: "#94a3b8" } },
+				},
+				yaxis: {
+					labels: {
+						style: { colors: "#94a3b8" },
+						formatter: (v: number) => num(v),
+					},
+				},
+				plotOptions: {
+					bar: {
+						borderRadius: 4,
+						columnWidth: "58%",
+					},
+					radar: {
+						polygons: {
+							strokeColors: "#334155",
+							connectorColors: "#334155",
+							fill: { colors: ["#0f172a", "#111827"] },
+						},
+					},
+				},
+				markers: { size: kind() === "line" ? 3 : 0 },
+				responsive: [
+					{
+						breakpoint: 700,
+						options: {
+							legend: { position: "bottom" as const },
+							chart: { height: 300 },
+						},
+					},
+				],
+			};
+
+			chart?.destroy();
+			const inst = new Apex(el, {
+				...common,
+				chart: {
+					...common.chart,
+					height: kind() === "radar" ? 360 : 320,
+				},
+			});
+			chart = inst;
+			await inst.render();
+		});
+
+		onCleanup(() => {
+			stop = true;
+			chart?.destroy();
+			chart = undefined;
+		});
 	});
-
-	const yTicks = createMemo(() => {
-		const { min, max } = yRange();
-		const count = 5;
-		const step = (max - min) / (count - 1);
-		return Array.from({ length: count }, (_, i) => min + step * i);
-	});
-
-	function toX(index: number, total: number): number {
-		const area = plotArea();
-		if (total <= 1) return area.x + area.width / 2;
-		return area.x + (index / (total - 1)) * area.width;
-	}
-
-	function toY(value: number): number {
-		const area = plotArea();
-		const { min, max } = yRange();
-		const ratio = (value - min) / (max - min);
-		return area.y + area.height - ratio * area.height;
-	}
-
-	function polyline(data: number[]): string {
-		return data.map((v, i) => `${toX(i, data.length)},${toY(v)}`).join(" ");
-	}
-
-	const isBar = createMemo(() => props.type === "bar");
-
-	function formatNumber(n: number): string {
-		if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-		if (Math.abs(n) >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-		return n % 1 === 0 ? String(n) : n.toFixed(1);
-	}
 
 	return (
-		<div class="my-6 rounded-xl bg-slate-800/60 border border-slate-700 p-4 overflow-x-auto">
+		<div class="my-6 rounded-xl bg-slate-800/60 border border-slate-700 p-4 overflow-hidden">
 			{(() => {
-				const d = chartData();
-				if (!d) {
-					return <div class="text-sm text-slate-400 italic">Unable to render chart (invalid data)</div>;
-				}
-
+				const d = data();
+				if (!d) return <div class="text-sm text-slate-400 italic">Unable to render chart (invalid data)</div>;
 				return (
-					<>
-						<svg
-							viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
-							class="w-full max-w-[600px] mx-auto"
-							xmlns="http://www.w3.org/2000/svg"
-							role="img"
-							aria-label="Data chart"
-						>
-							<For each={yTicks()}>
-								{(tick) => (
-									<g>
-										<line
-											x1={plotArea().x}
-											y1={toY(tick)}
-											x2={plotArea().x + plotArea().width}
-											y2={toY(tick)}
-											stroke="#334155"
-											stroke-width="1"
-										/>
-										<text x={plotArea().x - 8} y={toY(tick) + 4} text-anchor="end" fill="#94a3b8" font-size="11">
-											{formatNumber(tick)}
-										</text>
-									</g>
-								)}
-							</For>
-
-							<For each={d.labels}>
-								{(label, i) => {
-									const total = d.labels.length;
-									const skip = Math.ceil(total / 12);
-									if (i() % skip !== 0) return null;
-									return (
-										<text x={toX(i(), total)} y={CHART_HEIGHT - 8} text-anchor="middle" fill="#94a3b8" font-size="10">
-											{label.length > 8 ? `${label.slice(0, 8)}…` : label}
-										</text>
-									);
-								}}
-							</For>
-
-							<For each={d.datasets}>
-								{(dataset, dsIdx) => {
-									const color = () => dataset.color || DEFAULT_COLORS[dsIdx() % DEFAULT_COLORS.length];
-
-									if (isBar()) {
-										const total = d.labels.length;
-										const dsCount = d.datasets.length;
-										const groupWidth = plotArea().width / total;
-										const barWidth = (groupWidth * 0.7) / dsCount;
-
-										return (
-											<For each={dataset.data}>
-												{(value, i) => {
-													const x = () => toX(i(), total) - (groupWidth * 0.7) / 2 + dsIdx() * barWidth;
-													const barHeight = () => plotArea().y + plotArea().height - toY(value);
-													return (
-														<rect
-															x={x()}
-															y={toY(value)}
-															width={barWidth - 1}
-															height={Math.max(0, barHeight())}
-															fill={color()}
-															opacity="0.85"
-															rx="2"
-														/>
-													);
-												}}
-											</For>
-										);
-									}
-
-									return (
-										<>
-											<polyline
-												points={polyline(dataset.data)}
-												fill="none"
-												stroke={color()}
-												stroke-width="2.5"
-												stroke-linejoin="round"
-												stroke-linecap="round"
-											/>
-											<For each={dataset.data}>
-												{(value, i) => (
-													<circle cx={toX(i(), dataset.data.length)} cy={toY(value)} r="3" fill={color()} />
-												)}
-											</For>
-										</>
-									);
-								}}
-							</For>
-						</svg>
-
-						<div class="flex flex-wrap gap-4 justify-center mt-3">
-							<For each={d.datasets}>
-								{(dataset, dsIdx) => (
-									<div class="flex items-center gap-1.5 text-xs text-slate-300">
-										<span
-											class="inline-block w-3 h-3 rounded-sm"
-											style={{
-												"background-color": dataset.color || DEFAULT_COLORS[dsIdx() % DEFAULT_COLORS.length],
-											}}
-										/>
-										{dataset.label}
-									</div>
-								)}
-							</For>
-						</div>
-					</>
+					<div class="w-full min-h-[320px]">
+						<div ref={node} class="w-full h-[320px]" />
+					</div>
 				);
 			})()}
+		</div>
+	);
+}
+
+export function LineChart(props: { data?: ChartData | string }) {
+	return <Chart data={props.data} type="line" />;
+}
+
+export function BarChart(props: { data?: ChartData | string }) {
+	return <Chart data={props.data} type="bar" />;
+}
+
+export function RadarChart(props: { data?: ChartData | string }) {
+	return <Chart data={props.data} type="radar" />;
+}
+
+export function ChartAreaInteractive(props: {
+	data?: AreaPoint[] | string;
+	title?: string;
+	description?: string;
+	defaultRange?: AreaRange;
+}) {
+	const data = createMemo(() => {
+		if (!props.data) return sample();
+		const parsed = parseArea(props.data);
+		return parsed && parsed.length > 0 ? parsed : sample();
+	});
+
+	const [range, setRange] = createSignal<AreaRange>(props.defaultRange || "90d");
+	const filtered = createMemo(() => {
+		const src = [...data()].sort((a, b) => +new Date(a.date) - +new Date(b.date));
+		if (src.length === 0) return src;
+		const ref = new Date(src[src.length - 1].date);
+		ref.setHours(0, 0, 0, 0);
+		const start = new Date(ref);
+		start.setDate(ref.getDate() - days(range()));
+		return src.filter((x) => new Date(x.date) >= start);
+	});
+
+	let node: HTMLDivElement | undefined;
+	let chart: { destroy: () => void; render: () => Promise<unknown> } | undefined;
+
+	createEffect(() => {
+		const el = node;
+		const src = filtered();
+		if (!el || src.length === 0) return;
+		let stop = false;
+
+		void import("apexcharts").then(async (mod) => {
+			if (stop) return;
+			const Apex = mod.default;
+			const series = [
+				{
+					name: "Mobile",
+					data: src.map((x) => [new Date(x.date).getTime(), x.mobile]),
+					color: "#06b6d4",
+				},
+				{
+					name: "Desktop",
+					data: src.map((x) => [new Date(x.date).getTime(), x.desktop]),
+					color: "#8b5cf6",
+				},
+			];
+
+			chart?.destroy();
+			const inst = new Apex(el, {
+				chart: {
+					type: "area",
+					stacked: true,
+					height: 280,
+					background: "transparent",
+					foreColor: "#cbd5e1",
+					toolbar: { show: false },
+					animations: { enabled: true, speed: 550 },
+				},
+				theme: { mode: "dark" as const },
+				series,
+				xaxis: {
+					type: "datetime",
+					labels: { style: { colors: "#94a3b8" }, datetimeUTC: false },
+				},
+				yaxis: {
+					labels: {
+						style: { colors: "#94a3b8" },
+						formatter: (v: number) => num(v),
+					},
+				},
+				grid: { borderColor: "#334155" },
+				dataLabels: { enabled: false },
+				stroke: { curve: "smooth", width: 2.6 },
+				fill: {
+					type: "gradient",
+					gradient: {
+						shadeIntensity: 0.35,
+						opacityFrom: 0.72,
+						opacityTo: 0.12,
+						stops: [5, 95],
+					},
+				},
+				markers: { size: 0 },
+				tooltip: {
+					theme: "dark",
+					x: { format: "MMM dd, yyyy" },
+					y: { formatter: (v: number) => num(v) },
+				},
+				legend: {
+					show: true,
+					position: "bottom",
+					labels: { colors: "#cbd5e1" },
+					itemMargin: { horizontal: 10, vertical: 2 },
+				},
+			});
+			chart = inst;
+			await inst.render();
+		});
+
+		onCleanup(() => {
+			stop = true;
+			chart?.destroy();
+			chart = undefined;
+		});
+	});
+
+	return (
+		<div class="my-6 rounded-xl bg-slate-800/60 border border-slate-700 overflow-hidden">
+			<div class="px-4 py-3 border-b border-slate-700/80 flex items-center justify-between gap-3">
+				<div>
+					<div class="text-sm font-medium text-slate-100">{props.title || "Area Chart - Interactive"}</div>
+					<div class="text-xs text-slate-400">{props.description || "Showing total visitors for the last 3 months"}</div>
+				</div>
+				<div class="flex items-center gap-1">
+					<button
+						type="button"
+						data-component="button"
+						data-variant={range() === "90d" ? "secondary" : "ghost"}
+						data-size="small"
+						onClick={() => setRange("90d")}
+					>
+						90d
+					</button>
+					<button
+						type="button"
+						data-component="button"
+						data-variant={range() === "30d" ? "secondary" : "ghost"}
+						data-size="small"
+						onClick={() => setRange("30d")}
+					>
+						30d
+					</button>
+					<button
+						type="button"
+						data-component="button"
+						data-variant={range() === "7d" ? "secondary" : "ghost"}
+						data-size="small"
+						onClick={() => setRange("7d")}
+					>
+						7d
+					</button>
+				</div>
+			</div>
+			<div class="px-2 pt-3 pb-2 sm:px-4">
+				<div ref={node} class="w-full h-[280px]" />
+			</div>
 		</div>
 	);
 }

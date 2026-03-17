@@ -236,18 +236,28 @@ export function SessionSidePanel(props: {
       e.stopPropagation()
       const count = dragCounter() + 1
       setDragCounter(count)
-      if (count > 0 && e.dataTransfer?.types.includes("Files")) {
+      if (count === 1 && e.dataTransfer?.types.includes("Files")) {
         setIsDraggingOverFileTree(true)
+        console.log("[FILE TREE] drag started, overlay shown")
       }
     }
 
     const handleDragLeave = (e: globalThis.DragEvent) => {
+      const relatedTarget = e.relatedTarget as HTMLElement
+      const isMovingToChild = relatedTarget?.closest?.("#file-tree-panel")
+
       e.preventDefault()
       e.stopPropagation()
+
+      // If moving to a child element, don't decrement counter
+      if (isMovingToChild) return
+
       const count = dragCounter() - 1
       setDragCounter(Math.max(0, count))
+
       if (count <= 0) {
         setIsDraggingOverFileTree(false)
+        console.log("[FILE TREE] drag ended, overlay hidden")
       }
     }
 
@@ -268,6 +278,7 @@ export function SessionSidePanel(props: {
       const dt = e.dataTransfer
       if (!dt || dt.files.length === 0) return
 
+      console.log("[FILE TREE] uploading", dt.files.length, "files")
       for (let i = 0; i < dt.files.length; i++) {
         const f = dt.files.item(i)
         if (!f) continue
@@ -283,11 +294,21 @@ export function SessionSidePanel(props: {
     fileTreePanelRef.addEventListener("dragover", handleDragOver, true)
     fileTreePanelRef.addEventListener("drop", handleDrop, true)
 
+    // Safety: if drag leaves window or ends, reset state
+    const handleWindowDragLeave = () => {
+      setIsDraggingOverFileTree(false)
+      setDragCounter(0)
+    }
+    window.addEventListener("dragleave", handleWindowDragLeave)
+    window.addEventListener("dragend", handleWindowDragLeave)
+
     onCleanup(() => {
       fileTreePanelRef?.removeEventListener("dragenter", handleDragEnter, true)
       fileTreePanelRef?.removeEventListener("dragleave", handleDragLeave, true)
       fileTreePanelRef?.removeEventListener("dragover", handleDragOver, true)
       fileTreePanelRef?.removeEventListener("drop", handleDrop, true)
+      window.removeEventListener("dragleave", handleWindowDragLeave)
+      window.removeEventListener("dragend", handleWindowDragLeave)
     })
   })
 

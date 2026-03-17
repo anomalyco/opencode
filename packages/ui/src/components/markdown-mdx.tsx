@@ -10,11 +10,15 @@ import { isServer } from "solid-js/web";
 import { evaluate } from "@mdx-js/mdx";
 import remarkGfm from "remark-gfm";
 import * as runtime from "solid-js/h/jsx-runtime";
-import { Chart } from "@veritly/components";
+import { BarChart, Chart, ChartAreaInteractive, LineChart, RadarChart } from "@veritly/components";
 
 // Components available in MDX
 const mdxComponents = {
 	Chart,
+	ChartAreaInteractive,
+	LineChart,
+	BarChart,
+	RadarChart,
 };
 
 async function compileMdx(markdown: string): Promise<(() => JSX.Element) | null> {
@@ -67,5 +71,5 @@ export function MarkdownMdx(
 	);
 }
 
-export { Chart };
-export type { ChartData, ChartDataset } from "@veritly/components";
+export { BarChart, Chart, ChartAreaInteractive, LineChart, RadarChart };
+export type { AreaPoint, AreaRange, ChartData, ChartDataset, ChartType } from "@veritly/components";
