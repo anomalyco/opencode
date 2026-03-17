@@ -16,6 +16,7 @@ import flexoki from "./theme/flexoki.json" with { type: "json" }
 import github from "./theme/github.json" with { type: "json" }
 import gruvbox from "./theme/gruvbox.json" with { type: "json" }
 import kanagawa from "./theme/kanagawa.json" with { type: "json" }
+import lightClean from "./theme/light-clean.json" with { type: "json" }
 import material from "./theme/material.json" with { type: "json" }
 import matrix from "./theme/matrix.json" with { type: "json" }
 import mercury from "./theme/mercury.json" with { type: "json" }
@@ -152,6 +153,7 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   github,
   gruvbox,
   kanagawa,
+  ["light-clean"]: lightClean,
   material,
   matrix,
   mercury,
