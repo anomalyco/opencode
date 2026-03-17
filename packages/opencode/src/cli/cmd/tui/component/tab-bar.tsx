@@ -34,6 +34,7 @@ export function TabBar() {
           const sessionStatus = () => (tab.sessionID ? sync.data.session_status[tab.sessionID] : undefined)
           const session = () => (tab.sessionID ? sync.data.session.find((s) => s.id === tab.sessionID) : undefined)
           const label = () => {
+            if (tab.label && tab.label !== "Untitled") return tab.label
             const s = session()
             if (s?.displayName) return s.displayName
             if (s?.slug) return s.slug
@@ -61,6 +62,17 @@ export function TabBar() {
               </Show>
               <Show when={tab.sessionID}>
                 <text fg={statusColor(sessionStatus()?.type)}> ●</text>
+              </Show>
+              <Show when={tabs.tabs().length > 1}>
+                <text
+                  fg={theme.textMuted}
+                  onMouseUp={(e) => {
+                    e.stopPropagation()
+                    tabs.close(tab.id)
+                  }}
+                >
+                  {" ×"}
+                </text>
               </Show>
             </box>
           )

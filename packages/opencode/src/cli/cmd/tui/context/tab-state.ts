@@ -35,9 +35,10 @@ export type TabContext = {
   previousID: Accessor<string | null>
   position: Accessor<"top" | "bottom">
   setPosition(p: "top" | "bottom"): void
+  load(state: { tabs: Tab[]; activeID: string; previousID: string | null; position: "top" | "bottom" }): void
 }
 
-export function createTabState(kv: { get(key: string, defaultValue?: any): any; set(key: string, value: any): void }) {
+export function createTabState(opts?: { position?: "top" | "bottom" }) {
   const initial: Tab = {
     id: tabID(),
     sessionID: null,
@@ -47,7 +48,7 @@ export function createTabState(kv: { get(key: string, defaultValue?: any): any; 
   const [tabs, setTabs] = createStore<Tab[]>([initial])
   const [activeID, setActiveID] = createSignal(initial.id)
   const [previousID, setPreviousID] = createSignal<string | null>(null)
-  const [position, setPositionRaw] = createSignal<"top" | "bottom">(kv.get("tab_position", "bottom"))
+  const [position, setPositionRaw] = createSignal<"top" | "bottom">(opts?.position ?? "bottom")
 
   let navigator: ((route: Route) => void) | undefined
 
@@ -149,7 +150,16 @@ export function createTabState(kv: { get(key: string, defaultValue?: any): any; 
     position,
     setPosition(p) {
       setPositionRaw(p)
-      kv.set("tab_position", p)
+    },
+    load(state) {
+      batch(() => {
+        setTabs(state.tabs)
+        setActiveID(state.activeID)
+        setPreviousID(state.previousID)
+        setPositionRaw(state.position)
+        const active = state.tabs.find((t) => t.id === state.activeID)
+        if (active && navigator) navigator(active.route)
+      })
     },
   }
   return result

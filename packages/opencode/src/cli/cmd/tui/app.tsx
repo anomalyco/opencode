@@ -143,18 +143,18 @@ export function tui(input: {
             <ArgsProvider {...input.args}>
               <ExitProvider onExit={onExit}>
                 <KVProvider>
-                  <TabProvider>
-                    <ToastProvider>
-                      <RouteProvider>
-                        <TuiConfigProvider config={input.config}>
-                          <SDKProvider
-                            url={input.url}
-                            directory={input.directory}
-                            fetch={input.fetch}
-                            headers={input.headers}
-                            events={input.events}
-                          >
-                            <SyncProvider>
+                  <ToastProvider>
+                    <RouteProvider>
+                      <TuiConfigProvider config={input.config}>
+                        <SDKProvider
+                          url={input.url}
+                          directory={input.directory}
+                          fetch={input.fetch}
+                          headers={input.headers}
+                          events={input.events}
+                        >
+                          <SyncProvider>
+                            <TabProvider>
                               <ThemeProvider mode={mode}>
                                 <LocalProvider>
                                   <KeybindProvider>
@@ -174,12 +174,12 @@ export function tui(input: {
                                   </KeybindProvider>
                                 </LocalProvider>
                               </ThemeProvider>
-                            </SyncProvider>
-                          </SDKProvider>
-                        </TuiConfigProvider>
-                      </RouteProvider>
-                    </ToastProvider>
-                  </TabProvider>
+                            </TabProvider>
+                          </SyncProvider>
+                        </SDKProvider>
+                      </TuiConfigProvider>
+                    </RouteProvider>
+                  </ToastProvider>
                 </KVProvider>
               </ExitProvider>
             </ArgsProvider>
@@ -247,7 +247,7 @@ function App() {
       if (type === "session" && sessionID) {
         const session = sync.data.session.find((s) => s.id === sessionID)
         if (session) {
-          tabs.rename(tab.id, session.displayName ?? session.slug)
+          if (tab.label === "Untitled") tabs.rename(tab.id, session.displayName ?? session.slug)
           tabs.updateSessionID(tab.id, sessionID)
         }
       }
@@ -259,7 +259,9 @@ function App() {
     const tab = tabs.active()
     if (!tab.sessionID) return
     const session = sync.data.session.find((s) => s.id === tab.sessionID)
-    if (session) untrack(() => tabs.rename(tab.id, session.displayName ?? session.slug))
+    if (session) untrack(() => {
+      if (tab.label === "Untitled") tabs.rename(tab.id, session.displayName ?? session.slug)
+    })
   })
 
   useKeyboard((evt) => {
@@ -386,42 +388,6 @@ function App() {
         toast.show({ message: "Failed to fork session", variant: "error" })
       }
     })
-  })
-
-  // Restore tabs from KV when reconnecting to a daemon
-  let tabsRestored = false
-  createEffect(() => {
-    if (tabsRestored || sync.status !== "complete" || !args.daemon) return
-    tabsRestored = true
-
-    const key = `daemon_tabs_${sdk.url}`
-    const savedIDs: string[] = kv.get(key, [])
-    if (savedIDs.length === 0) return
-
-    batch(() => {
-      for (const sessionID of savedIDs) {
-        const session = sync.data.session.find((s) => s.id === sessionID)
-        if (!session) continue
-        tabs.add({
-          sessionID,
-          label: session.displayName ?? session.slug,
-          directory: session.gitWorktree ?? session.directory,
-        })
-      }
-      const firstTab = tabs.tabs().find((t) => t.sessionID === savedIDs[0])
-      if (firstTab) tabs.activate(firstTab.id)
-    })
-  })
-
-  // Persist open tab session IDs to KV whenever tabs change (daemon mode)
-  createEffect(() => {
-    if (!args.daemon || !tabsRestored) return
-    const key = `daemon_tabs_${sdk.url}`
-    const sessionIDs = tabs
-      .tabs()
-      .map((t) => t.sessionID)
-      .filter((id): id is string => id !== null)
-    kv.set(key, sessionIDs)
   })
 
   createEffect(
