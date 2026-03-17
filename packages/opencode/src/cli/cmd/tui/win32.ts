@@ -25,6 +25,12 @@ function load() {
 
 /**
  * Clear ENABLE_PROCESSED_INPUT on the console stdin handle.
+ *
+ * Disables processed input mode on Windows consoles to allow raw input handling.
+ * This is necessary for proper terminal control in the TUI on Windows.
+ *
+ * @remarks
+ * This function is a no-op on non-Windows platforms.
  */
 export function win32DisableProcessedInput() {
   if (process.platform !== "win32") return
@@ -42,6 +48,12 @@ export function win32DisableProcessedInput() {
 
 /**
  * Discard any queued console input (mouse events, key presses, etc.).
+ *
+ * Flushes the console input buffer to clear any pending input events.
+ * Useful when resetting input state or switching input modes.
+ *
+ * @remarks
+ * This function is a no-op on non-Windows platforms.
  */
 export function win32FlushInputBuffer() {
   if (process.platform !== "win32") return
@@ -64,6 +76,11 @@ let unhook: (() => void) | undefined
  * We combine:
  * - A `setRawMode(...)` hook to re-clear after known raw-mode toggles.
  * - A low-frequency poll as a backstop for native/external mode changes.
+ *
+ * @returns A cleanup function to restore original console mode, or undefined if not on Windows
+ *
+ * @remarks
+ * This function is a no-op on non-Windows platforms and returns undefined.
  */
 export function win32InstallCtrlCGuard() {
   if (process.platform !== "win32") return
