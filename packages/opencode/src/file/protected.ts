@@ -37,15 +37,42 @@ const DARWIN_ROOT = ["/.DocumentRevisions-V100", "/.Spotlight-V100", "/.Trashes"
 
 const WIN32_HOME = ["AppData", "Downloads", "Desktop", "Documents", "Pictures", "Music", "Videos", "OneDrive"]
 
+/**
+ * Protected directory utilities for platform-specific sensitive paths.
+ *
+ * Provides functions to identify directories that should be excluded from
+ * file watching, scanning, and other operations due to privacy concerns
+ * or system restrictions (TCC on macOS).
+ *
+ * @example
+ * ```typescript
+ * const names = Protected.names() // Set of protected directory names
+ * const paths = Protected.paths() // Array of absolute protected paths
+ * ```
+ */
 export namespace Protected {
-  /** Directory basenames to skip when scanning the home directory. */
+  /**
+   * Returns a set of directory basenames to skip when scanning the home directory.
+   *
+   * Platform-specific: returns macOS protected directories on Darwin,
+   * Windows home directories on Win32, or empty set on other platforms.
+   *
+   * @returns Readonly set of protected directory names
+   */
   export function names(): ReadonlySet<string> {
     if (process.platform === "darwin") return new Set(DARWIN_HOME)
     if (process.platform === "win32") return new Set(WIN32_HOME)
     return new Set()
   }
 
-  /** Absolute paths that should never be watched, stated, or scanned. */
+  /**
+   * Returns absolute paths that should never be watched, stated, or scanned.
+   *
+   * These paths include system directories and user data folders that trigger
+   * permission prompts (TCC on macOS) or contain sensitive information.
+   *
+   * @returns Array of absolute paths to protected directories
+   */
   export function paths(): string[] {
     if (process.platform === "darwin")
       return [
