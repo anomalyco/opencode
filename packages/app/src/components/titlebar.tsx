@@ -93,6 +93,8 @@ export function Titlebar() {
     navigate(next.to)
   }
 
+  const toggleSidebar = () => command.trigger("sidebar.toggle")
+
   command.register(() => [
     {
       id: "common.goBack",
@@ -177,26 +179,38 @@ export function Titlebar() {
         <Show when={mac()}>
           <div class="h-full shrink-0" style={{ width: `${72 / zoom()}px` }} />
           <div class="xl:hidden w-10 shrink-0 flex items-center justify-center">
-            <IconButton
-              icon="menu"
-              variant="ghost"
-              class="titlebar-icon rounded-md"
-              onClick={layout.mobileSidebar.toggle}
-              aria-label={language.t("sidebar.menu.toggle")}
-              aria-expanded={layout.mobileSidebar.opened()}
-            />
+            <TooltipKeybind
+              placement="bottom"
+              title={language.t("command.sidebar.toggle")}
+              keybind={command.keybind("sidebar.toggle")}
+            >
+              <IconButton
+                icon="menu"
+                variant="ghost"
+                class="titlebar-icon rounded-md"
+                onClick={toggleSidebar}
+                aria-label={language.t("command.sidebar.toggle")}
+                aria-expanded={layout.mobileSidebar.opened()}
+              />
+            </TooltipKeybind>
           </div>
         </Show>
         <Show when={!mac()}>
           <div class="xl:hidden w-[48px] shrink-0 flex items-center justify-center">
-            <IconButton
-              icon="menu"
-              variant="ghost"
-              class="titlebar-icon rounded-md"
-              onClick={layout.mobileSidebar.toggle}
-              aria-label={language.t("sidebar.menu.toggle")}
-              aria-expanded={layout.mobileSidebar.opened()}
-            />
+            <TooltipKeybind
+              placement="bottom"
+              title={language.t("command.sidebar.toggle")}
+              keybind={command.keybind("sidebar.toggle")}
+            >
+              <IconButton
+                icon="menu"
+                variant="ghost"
+                class="titlebar-icon rounded-md"
+                onClick={toggleSidebar}
+                aria-label={language.t("command.sidebar.toggle")}
+                aria-expanded={layout.mobileSidebar.opened()}
+              />
+            </TooltipKeybind>
           </div>
         </Show>
         <div class="flex items-center gap-1 shrink-0">
@@ -209,7 +223,7 @@ export function Titlebar() {
             <Button
               variant="ghost"
               class="group/sidebar-toggle titlebar-icon w-8 h-6 p-0 box-border"
-              onClick={layout.sidebar.toggle}
+              onClick={toggleSidebar}
               aria-label={language.t("command.sidebar.toggle")}
               aria-expanded={layout.sidebar.opened()}
             >

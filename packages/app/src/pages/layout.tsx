@@ -12,6 +12,7 @@ import {
   type Accessor,
 } from "solid-js"
 import { useNavigate, useParams } from "@solidjs/router"
+import { createMediaQuery } from "@solid-primitives/media"
 import { useLayout, LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { Persist, persisted } from "@/utils/persist"
@@ -137,6 +138,7 @@ export default function Layout(props: ParentProps) {
   }
   const colorSchemeLabel = (scheme: ColorScheme) => language.t(colorSchemeKey[scheme])
   const currentDir = createMemo(() => decode64(params.dir) ?? "")
+  const wide = createMediaQuery("(min-width: 1280px)")
 
   const [state, setState] = createStore({
     autoselect: !initialDirectory,
@@ -964,6 +966,14 @@ export default function Layout(props: ParentProps) {
     }
   }
 
+  const toggleSidebar = () => {
+    if (wide()) {
+      layout.sidebar.toggle()
+      return
+    }
+    layout.mobileSidebar.toggle()
+  }
+
   async function archiveSession(session: Session) {
     const [store, setStore] = globalSync.child(session.directory)
     const sessions = store.session ?? []
@@ -997,7 +1007,7 @@ export default function Layout(props: ParentProps) {
         title: language.t("command.sidebar.toggle"),
         category: language.t("command.category.view"),
         keybind: "mod+b",
-        onSelect: () => layout.sidebar.toggle(),
+        onSelect: toggleSidebar,
       },
       {
         id: "project.open",
