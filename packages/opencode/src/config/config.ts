@@ -39,6 +39,21 @@ import { Filesystem } from "@/util/filesystem"
 import { Process } from "@/util/process"
 import { Lock } from "@/util/lock"
 
+/**
+ * Configuration management for OpenCode settings and preferences.
+ *
+ * Handles loading, merging, and validating configuration from multiple sources
+ * including user settings, project settings, and system-managed settings.
+ *
+ * @example
+ * ```typescript
+ * // Read a config value
+ * const value = await Config.read("setting.name")
+ *
+ * // Write a config value
+ * await Config.write("setting.name", newValue)
+ * ```
+ */
 export namespace Config {
   const ModelId = z.string().meta({ $ref: "https://models.dev/model-schema.json#/$defs/Model" })
 
@@ -57,6 +72,12 @@ export namespace Config {
     }
   }
 
+  /**
+   * Returns the directory for managed configuration.
+   * Uses environment variable override in test mode.
+   *
+   * @returns Path to the managed config directory
+   */
   export function managedConfigDir() {
     return process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR || systemManagedConfigDir()
   }
@@ -1333,14 +1354,30 @@ export namespace Config {
     }),
   )
 
+  /**
+   * Gets the current project configuration.
+   *
+   * @returns Promise resolving to the current configuration
+   */
   export async function get() {
     return state().then((x) => x.config)
   }
 
+  /**
+   * Gets the global configuration.
+   *
+   * @returns Promise resolving to the global configuration
+   */
   export async function getGlobal() {
     return global()
   }
 
+  /**
+   * Updates the project configuration by merging with existing config.
+   *
+   * @param config - Partial configuration to merge
+   * @returns Promise that resolves when update is complete
+   */
   export async function update(config: Info) {
     const filepath = path.join(Instance.directory, "config.json")
     const existing = await loadFile(filepath)
@@ -1413,6 +1450,12 @@ export namespace Config {
     })
   }
 
+  /**
+   * Updates the global configuration by merging with existing config.
+   *
+   * @param config - Partial configuration to merge
+   * @returns Promise that resolves when update is complete
+   */
   export async function updateGlobal(config: Info) {
     const filepath = globalConfigFile()
     const before = await Filesystem.readText(filepath).catch((err: any) => {
@@ -1451,6 +1494,11 @@ export namespace Config {
     return next
   }
 
+  /**
+   * Gets all configuration directories.
+   *
+   * @returns Promise resolving to configuration directories info
+   */
   export async function directories() {
     return state().then((x) => x.directories)
   }
