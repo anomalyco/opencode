@@ -3,20 +3,63 @@ import matter from "gray-matter"
 import { z } from "zod"
 import { Filesystem } from "../util/filesystem"
 
+/**
+ * Markdown configuration parsing utilities.
+ *
+ * Provides functions for parsing markdown templates with file references,
+ * shell commands, and YAML frontmatter. Includes fallback sanitization
+ * for invalid YAML frontmatter commonly found in other coding agents.
+ *
+ * @example
+ * ```typescript
+ * const md = await ConfigMarkdown.parse("/path/to/file.md")
+ * console.log(md.data) // frontmatter data
+ * console.log(md.content) // markdown content
+ * ```
+ */
 export namespace ConfigMarkdown {
+  /**
+   * Regular expression to match file references in templates.
+   * Matches patterns like @file.txt or @path/to/file.ts
+   */
   export const FILE_REGEX = /(?<![\w`])@(\.?[^\s`,.]*(?:\.[^\s`,.]+)*)/g
+
+  /**
+   * Regular expression to match shell command references in templates.
+   * Matches patterns like !`command`
+   */
   export const SHELL_REGEX = /!`([^`]+)`/g
 
+  /**
+   * Extracts file references from a template string.
+   *
+   * @param template - The template string to search
+   * @returns Array of regex match results for file references
+   */
   export function files(template: string) {
     return Array.from(template.matchAll(FILE_REGEX))
   }
 
+  /**
+   * Extracts shell command references from a template string.
+   *
+   * @param template - The template string to search
+   * @returns Array of regex match results for shell commands
+   */
   export function shell(template: string) {
     return Array.from(template.matchAll(SHELL_REGEX))
   }
 
-  // other coding agents like claude code allow invalid yaml in their
-  // frontmatter, we need to fallback to a more permissive parser for those cases
+  /**
+   * Sanitizes invalid YAML frontmatter for compatibility.
+   *
+   * Other coding agents like Claude Code allow invalid YAML in their frontmatter.
+   * This function provides a fallback parser that handles common issues such as
+   * unquoted colons in values by converting them to block scalar format.
+   *
+   * @param content - The markdown content with frontmatter to sanitize
+   * @returns Sanitized content with valid YAML frontmatter
+   */
   export function fallbackSanitization(content: string): string {
     const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/)
     if (!match) return content
@@ -68,6 +111,17 @@ export namespace ConfigMarkdown {
     return content.replace(frontmatter, () => processed)
   }
 
+  /**
+   * Parses a markdown file, extracting frontmatter and content.
+   *
+   * First attempts standard YAML frontmatter parsing with gray-matter.
+   * If that fails, applies fallback sanitization and retries.
+   * Throws FrontmatterError if parsing fails after sanitization.
+   *
+   * @param filePath - Path to the markdown file to parse
+   * @returns Parsed markdown object with data (frontmatter) and content
+   * @throws FrontmatterError when YAML frontmatter cannot be parsed
+   */
   export async function parse(filePath: string) {
     const template = await Filesystem.readText(filePath)
 
@@ -89,6 +143,9 @@ export namespace ConfigMarkdown {
     }
   }
 
+  /**
+   * Error thrown when markdown frontmatter parsing fails.
+   */
   export const FrontmatterError = NamedError.create(
     "ConfigFrontmatterError",
     z.object({
