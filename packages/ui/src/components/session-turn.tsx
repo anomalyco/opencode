@@ -1,5 +1,5 @@
 import { AssistantMessage, type FileDiff, Message as MessageType, Part as PartType } from "@opencode-ai/sdk/v2/client"
-import type { SessionStatus } from "@opencode-ai/sdk/v2"
+import type { SessionStatus, UserMessage } from "@opencode-ai/sdk/v2"
 import { useData } from "../context"
 import { useFileComponent } from "../context/file"
 
@@ -525,6 +525,9 @@ export function SessionTurn(
                     </Collapsible.Content>
                   </Collapsible>
                 </div>
+              </Show>
+              <Show when={(message()! as UserMessage).pinned}>
+                <span data-slot="session-turn-pinned-badge">Pinned</span>
               </Show>
               <Show when={error()}>
                 <Card variant="error" class="error-card">

@@ -4,7 +4,9 @@ import { DialogSelect } from "@tui/ui/dialog-select"
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
 import { Clipboard } from "@tui/util/clipboard"
+import { useToast } from "@tui/ui/toast"
 import type { PromptInfo } from "@tui/component/prompt/history"
+import type { UserMessage } from "@opencode-ai/sdk/v2"
 
 export function DialogMessage(props: {
   messageID: string
@@ -13,6 +15,7 @@ export function DialogMessage(props: {
 }) {
   const sync = useSync()
   const sdk = useSDK()
+  const toast = useToast()
   const message = createMemo(() => sync.data.message[props.sessionID]?.find((x) => x.id === props.messageID))
   const route = useRoute()
 
@@ -47,6 +50,41 @@ export function DialogMessage(props: {
               )
               props.setPrompt(promptInfo)
             }
+
+            dialog.clear()
+          },
+        },
+        {
+          get title() {
+            const msg = message()
+            if (!msg || msg.role !== "user") return "Pin"
+            const wasPinned = (msg as UserMessage).pinned
+            return wasPinned ? "Unpin" : "Pin"
+          },
+          value: "message.pin",
+          description: "preserve message during compaction",
+          disabled: message()?.role !== "user",
+          onSelect: async (dialog) => {
+            const msg = message()
+            if (!msg || msg.role !== "user") return
+
+            const wasPinned = (msg as UserMessage).pinned
+
+            sdk.client.session.message2
+              .pin({
+                sessionID: props.sessionID,
+                messageID: msg.id,
+                pinned: !wasPinned,
+              })
+              .then(() => {
+                toast.show({
+                  message: wasPinned ? "Message unpinned" : "Message pinned",
+                  variant: "success",
+                })
+              })
+              .catch(() => {
+                toast.show({ message: "Failed to pin message", variant: "error" })
+              })
 
             dialog.clear()
           },

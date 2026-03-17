@@ -778,6 +778,48 @@ export const SessionRoutes = lazy(() =>
         return c.json(part)
       },
     )
+    .patch(
+      "/:sessionID/message/:messageID/pin",
+      describeRoute({
+        summary: "Pin or unpin message",
+        description: "Pin or unpin a user message to preserve it across compaction.",
+        operationId: "session.message.pin",
+        responses: {
+          200: {
+            description: "Message pinned status updated",
+            content: {
+              "application/json": {
+                schema: resolver(MessageV2.User),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod.meta({ description: "Session ID" }),
+          messageID: MessageID.zod.meta({ description: "Message ID" }),
+        }),
+      ),
+      validator(
+        "json",
+        z.object({
+          pinned: z.boolean().meta({ description: "Whether to pin (true) or unpin (false) the message" }),
+        }),
+      ),
+      async (c) => {
+        const params = c.req.valid("param")
+        const body = c.req.valid("json")
+        const result = await Session.pinMessage({
+          sessionID: params.sessionID,
+          messageID: params.messageID,
+          pinned: body.pinned,
+        })
+        return c.json(result)
+      },
+    )
     .post(
       "/:sessionID/message",
       describeRoute({

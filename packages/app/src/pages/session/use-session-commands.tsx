@@ -1,4 +1,5 @@
 import { useNavigate } from "@solidjs/router"
+import { createMemo } from "solid-js"
 import { useCommand, type CommandOption } from "@/context/command"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
@@ -132,6 +133,126 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     if (sessionID) return permission.isAutoAccepting(sessionID, sdk.directory)
     return permission.isAutoAcceptingDirectory(sdk.directory)
   }
+
+  const sessionActionCommands = createMemo(() => [
+    sessionCommand({
+      id: "session.undo",
+      title: language.t("command.session.undo"),
+      description: language.t("command.session.undo.description"),
+      slash: "undo",
+      disabled: !params.id || visibleUserMessages().length === 0,
+      onSelect: async () => {
+        const sessionID = params.id
+        if (!sessionID) return
+        if (status()?.type !== "idle") {
+          await sdk.client.session.abort({ sessionID }).catch(() => {})
+        }
+        const revert = info()?.revert?.messageID
+        const message = findLast(userMessages(), (x) => !revert || x.id < revert)
+        if (!message) return
+        await sdk.client.session.revert({ sessionID, messageID: message.id })
+        const parts = sync.data.part[message.id]
+        if (parts) {
+          const restored = extractPromptFromParts(parts, { directory: sdk.directory })
+          prompt.set(restored)
+        }
+        const priorMessage = findLast(userMessages(), (x) => x.id < message.id)
+        setActiveMessage(priorMessage)
+      },
+    }),
+    sessionCommand({
+      id: "session.redo",
+      title: language.t("command.session.redo"),
+      description: language.t("command.session.redo.description"),
+      slash: "redo",
+      disabled: !params.id || !info()?.revert?.messageID,
+      onSelect: async () => {
+        const sessionID = params.id
+        if (!sessionID) return
+        const revertMessageID = info()?.revert?.messageID
+        if (!revertMessageID) return
+        const nextMessage = userMessages().find((x) => x.id > revertMessageID)
+        if (!nextMessage) {
+          await sdk.client.session.unrevert({ sessionID })
+          prompt.reset()
+          const lastMsg = findLast(userMessages(), (x) => x.id >= revertMessageID)
+          setActiveMessage(lastMsg)
+          return
+        }
+        await sdk.client.session.revert({ sessionID, messageID: nextMessage.id })
+        const priorMsg = findLast(userMessages(), (x) => x.id < nextMessage.id)
+        setActiveMessage(priorMsg)
+      },
+    }),
+    sessionCommand({
+      id: "session.compact",
+      title: language.t("command.session.compact"),
+      description: language.t("command.session.compact.description"),
+      slash: "compact",
+      disabled: !params.id || visibleUserMessages().length === 0,
+      onSelect: async () => {
+        const sessionID = params.id
+        if (!sessionID) return
+        const model = local.model.current()
+        if (!model) {
+          showToast({
+            title: language.t("toast.model.none.title"),
+            description: language.t("toast.model.none.description"),
+          })
+          return
+        }
+        await sdk.client.session.summarize({
+          sessionID,
+          modelID: model.id,
+          providerID: model.provider.id,
+        })
+      },
+    }),
+    sessionCommand({
+      id: "session.fork",
+      title: language.t("command.session.fork"),
+      description: language.t("command.session.fork.description"),
+      slash: "fork",
+      disabled: !params.id || visibleUserMessages().length === 0,
+      onSelect: () => dialog.show(() => <DialogFork />),
+    }),
+    sessionCommand({
+      id: "session.pin",
+      get title() {
+        const last = visibleUserMessages().at(-1)
+        if (!last) return "Pin last message"
+        return last.pinned ? "Unpin last message" : "Pin last message"
+      },
+      get description() {
+        const last = visibleUserMessages().at(-1)
+        if (!last) return "Pin the last message to preserve it during compaction"
+        return last.pinned
+          ? "Unpin the last message to allow compaction"
+          : "Pin the last message to preserve it during compaction"
+      },
+      slash: "pin",
+      disabled: !params.id || visibleUserMessages().length === 0,
+      onSelect: async () => {
+        const sessionID = params.id
+        if (!sessionID) return
+        const last = visibleUserMessages().at(-1)
+        if (!last) return
+        const wasPinned = last.pinned
+        await sdk.client.session.message2.pin({
+          sessionID,
+          messageID: last.id,
+          pinned: !wasPinned,
+        })
+        showToast({
+          title: wasPinned ? "Message unpinned" : "Message pinned",
+          description: wasPinned
+            ? "Message will be subject to compaction"
+            : "Message will be preserved during compaction",
+        })
+      },
+    }),
+  ])
+
   command.register("session", () => {
     const share =
       sync.data.config.share === "disabled"
@@ -408,87 +529,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
           })
         },
       }),
-      sessionCommand({
-        id: "session.undo",
-        title: language.t("command.session.undo"),
-        description: language.t("command.session.undo.description"),
-        slash: "undo",
-        disabled: !params.id || visibleUserMessages().length === 0,
-        onSelect: async () => {
-          const sessionID = params.id
-          if (!sessionID) return
-          if (status().type !== "idle") {
-            await sdk.client.session.abort({ sessionID }).catch(() => {})
-          }
-          const revert = info()?.revert?.messageID
-          const message = findLast(userMessages(), (x) => !revert || x.id < revert)
-          if (!message) return
-          await sdk.client.session.revert({ sessionID, messageID: message.id })
-          const parts = sync.data.part[message.id]
-          if (parts) {
-            const restored = extractPromptFromParts(parts, { directory: sdk.directory })
-            prompt.set(restored)
-          }
-          const priorMessage = findLast(userMessages(), (x) => x.id < message.id)
-          setActiveMessage(priorMessage)
-        },
-      }),
-      sessionCommand({
-        id: "session.redo",
-        title: language.t("command.session.redo"),
-        description: language.t("command.session.redo.description"),
-        slash: "redo",
-        disabled: !params.id || !info()?.revert?.messageID,
-        onSelect: async () => {
-          const sessionID = params.id
-          if (!sessionID) return
-          const revertMessageID = info()?.revert?.messageID
-          if (!revertMessageID) return
-          const nextMessage = userMessages().find((x) => x.id > revertMessageID)
-          if (!nextMessage) {
-            await sdk.client.session.unrevert({ sessionID })
-            prompt.reset()
-            const lastMsg = findLast(userMessages(), (x) => x.id >= revertMessageID)
-            setActiveMessage(lastMsg)
-            return
-          }
-          await sdk.client.session.revert({ sessionID, messageID: nextMessage.id })
-          const priorMsg = findLast(userMessages(), (x) => x.id < nextMessage.id)
-          setActiveMessage(priorMsg)
-        },
-      }),
-      sessionCommand({
-        id: "session.compact",
-        title: language.t("command.session.compact"),
-        description: language.t("command.session.compact.description"),
-        slash: "compact",
-        disabled: !params.id || visibleUserMessages().length === 0,
-        onSelect: async () => {
-          const sessionID = params.id
-          if (!sessionID) return
-          const model = local.model.current()
-          if (!model) {
-            showToast({
-              title: language.t("toast.model.none.title"),
-              description: language.t("toast.model.none.description"),
-            })
-            return
-          }
-          await sdk.client.session.summarize({
-            sessionID,
-            modelID: model.id,
-            providerID: model.provider.id,
-          })
-        },
-      }),
-      sessionCommand({
-        id: "session.fork",
-        title: language.t("command.session.fork"),
-        description: language.t("command.session.fork.description"),
-        slash: "fork",
-        disabled: !params.id || visibleUserMessages().length === 0,
-        onSelect: () => dialog.show(() => <DialogFork />),
-      }),
+      ...sessionActionCommands(),
       ...share,
     ]
   })

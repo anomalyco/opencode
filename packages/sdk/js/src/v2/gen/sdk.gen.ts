@@ -124,6 +124,8 @@ import type {
   SessionInitResponses,
   SessionListResponses,
   SessionMessageErrors,
+  SessionMessagePinErrors,
+  SessionMessagePinResponses,
   SessionMessageResponses,
   SessionMessagesErrors,
   SessionMessagesResponses,
@@ -1244,6 +1246,49 @@ export class Worktree extends HeyApiClient {
   }
 }
 
+export class Message extends HeyApiClient {
+  /**
+   * Pin or unpin message
+   *
+   * Pin or unpin a user message to preserve it across compaction.
+   */
+  public pin<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      messageID: string
+      directory?: string
+      workspace?: string
+      pinned?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "messageID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "pinned" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<SessionMessagePinResponses, SessionMessagePinErrors, ThrowOnError>({
+      url: "/session/{sessionID}/message/{messageID}/pin",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Session2 extends HeyApiClient {
   /**
    * List sessions
@@ -1835,6 +1880,7 @@ export class Session2 extends HeyApiClient {
       }
       agent?: string
       noReply?: boolean
+      pinned?: boolean
       tools?: {
         [key: string]: boolean
       }
@@ -1857,6 +1903,7 @@ export class Session2 extends HeyApiClient {
             { in: "body", key: "model" },
             { in: "body", key: "agent" },
             { in: "body", key: "noReply" },
+            { in: "body", key: "pinned" },
             { in: "body", key: "tools" },
             { in: "body", key: "format" },
             { in: "body", key: "system" },
@@ -1967,6 +2014,7 @@ export class Session2 extends HeyApiClient {
       }
       agent?: string
       noReply?: boolean
+      pinned?: boolean
       tools?: {
         [key: string]: boolean
       }
@@ -1989,6 +2037,7 @@ export class Session2 extends HeyApiClient {
             { in: "body", key: "model" },
             { in: "body", key: "agent" },
             { in: "body", key: "noReply" },
+            { in: "body", key: "pinned" },
             { in: "body", key: "tools" },
             { in: "body", key: "format" },
             { in: "body", key: "system" },
@@ -2185,6 +2234,11 @@ export class Session2 extends HeyApiClient {
       ...options,
       ...params,
     })
+  }
+
+  private _message?: Message
+  get message2(): Message {
+    return (this._message ??= new Message({ client: this.client }))
   }
 }
 

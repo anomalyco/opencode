@@ -369,6 +369,7 @@ export namespace MessageV2 {
     system: z.string().optional(),
     tools: z.record(z.string(), z.boolean()).optional(),
     variant: z.string().optional(),
+    pinned: z.boolean().optional(),
   }).meta({
     ref: "UserMessage",
   })
@@ -882,18 +883,53 @@ export namespace MessageV2 {
   export async function filterCompacted(stream: AsyncIterable<MessageV2.WithParts>) {
     const result = [] as MessageV2.WithParts[]
     const completed = new Set<string>()
+    const pinnedBeforeCompaction = [] as MessageV2.WithParts[]
+    let compactionMessageID: string | undefined
+    let foundCompaction = false
+
     for await (const msg of stream) {
+      const isCompactionMessage =
+        msg.info.role === "user" && completed.has(msg.info.id) && msg.parts.some((part) => part.type === "compaction")
+
+      if (isCompactionMessage) {
+        compactionMessageID = msg.info.id
+        result.push(msg)
+        foundCompaction = true
+        continue
+      }
+
+      // After finding compaction, only collect pinned messages
+      if (foundCompaction) {
+        if (msg.info.role === "user" && (msg.info as MessageV2.User).pinned === true) {
+          pinnedBeforeCompaction.push(msg)
+        }
+        continue
+      }
+
+      // Before compaction is found, collect messages normally
       result.push(msg)
-      if (
-        msg.info.role === "user" &&
-        completed.has(msg.info.id) &&
-        msg.parts.some((part) => part.type === "compaction")
-      )
-        break
+
       if (msg.info.role === "assistant" && msg.info.summary && msg.info.finish && !msg.info.error)
         completed.add(msg.info.parentID)
     }
+
     result.reverse()
+
+    // Only reposition pinned messages if we found a compaction message
+    if (foundCompaction && compactionMessageID && pinnedBeforeCompaction.length > 0) {
+      // Remove pinned messages from before compaction
+      const pinnedIds = new Set(pinnedBeforeCompaction.map((m) => m.info.id))
+      const withoutPinned = result.filter((msg) => !pinnedIds.has(msg.info.id))
+
+      // Find compaction message index and re-insert pinned messages after it
+      const compactionIndex = withoutPinned.findIndex((msg) => msg.info.id === compactionMessageID)
+      if (compactionIndex !== -1) {
+        withoutPinned.splice(compactionIndex + 1, 0, ...pinnedBeforeCompaction)
+      }
+
+      return withoutPinned
+    }
+
     return result
   }
 

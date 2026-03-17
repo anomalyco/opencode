@@ -705,6 +705,24 @@ export namespace Session {
     return msg
   })
 
+  export const pinMessage = fn(
+    z.object({
+      sessionID: SessionID.zod,
+      messageID: MessageID.zod,
+      pinned: z.boolean(),
+    }),
+    async (input) => {
+      const msg = await MessageV2.get({ sessionID: input.sessionID, messageID: input.messageID })
+      if (msg.info.role !== "user") {
+        throw new Error("Only user messages can be pinned")
+      }
+      const userMsg = msg.info as MessageV2.User
+      userMsg.pinned = input.pinned
+      await updateMessage(userMsg)
+      return userMsg
+    },
+  )
+
   export const removeMessage = fn(
     z.object({
       sessionID: SessionID.zod,

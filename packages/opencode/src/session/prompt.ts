@@ -102,6 +102,7 @@ export namespace SessionPrompt {
       .optional(),
     agent: z.string().optional(),
     noReply: z.boolean().optional(),
+    pinned: z.boolean().optional(),
     tools: z
       .record(z.string(), z.boolean())
       .optional()
@@ -985,6 +986,7 @@ export namespace SessionPrompt {
       system: input.system,
       format: input.format,
       variant,
+      pinned: input.pinned,
     }
     using _ = defer(() => InstructionPrompt.clear(info.id))
 
