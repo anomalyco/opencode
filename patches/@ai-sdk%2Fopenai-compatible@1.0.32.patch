@@ -1,0 +1,152 @@
+diff --git a/dist/index.mjs b/dist/index.mjs
+index e6f9923d1d91f832d8a15d126b900a7f5303d767..a000000000000000000000000000000000000001 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -59,11 +59,28 @@
+                     },
+                     ...partMetadata
+                   };
+-                } else {
+-                  throw new UnsupportedFunctionalityError({
+-                    functionality: `file part media type ${part.mediaType}`
+-                  });
+-                }
++                } else if (part.mediaType.startsWith("video/")) {
++                  return {
++                    type: "video_url",
++                    video_url: {
++                      url: part.data instanceof URL ? part.data.toString() : `data:${part.mediaType};base64,${convertToBase64(part.data)}`
++                    },
++                    ...partMetadata
++                  };
++                } else if (part.mediaType.startsWith("audio/")) {
++                  return {
++                    type: "input_audio",
++                    input_audio: {
++                      data: part.data instanceof URL ? part.data.toString() : convertToBase64(part.data),
++                      format: part.mediaType.split("/")[1]
++                    },
++                    ...partMetadata
++                  };
++                } else {
++                  throw new UnsupportedFunctionalityError({
++                    functionality: `file part media type ${part.mediaType}`
++                  });
++                }
+               }
+             }
+           }),
+diff --git a/dist/internal/index.mjs b/dist/internal/index.mjs
+index 2b8e41cfea4ef1491ee79e270c8fd0de005f6ef5..a000000000000000000000000000000000000002 100644
+--- a/dist/internal/index.mjs
++++ b/dist/internal/index.mjs
+@@ -43,11 +43,28 @@
+                     },
+                     ...partMetadata
+                   };
+-                } else {
+-                  throw new UnsupportedFunctionalityError({
+-                    functionality: `file part media type ${part.mediaType}`
+-                  });
+-                }
++                } else if (part.mediaType.startsWith("video/")) {
++                  return {
++                    type: "video_url",
++                    video_url: {
++                      url: part.data instanceof URL ? part.data.toString() : `data:${part.mediaType};base64,${convertToBase64(part.data)}`
++                    },
++                    ...partMetadata
++                  };
++                } else if (part.mediaType.startsWith("audio/")) {
++                  return {
++                    type: "input_audio",
++                    input_audio: {
++                      data: part.data instanceof URL ? part.data.toString() : convertToBase64(part.data),
++                      format: part.mediaType.split("/")[1]
++                    },
++                    ...partMetadata
++                  };
++                } else {
++                  throw new UnsupportedFunctionalityError({
++                    functionality: `file part media type ${part.mediaType}`
++                  });
++                }
+               }
+             }
+           }),
+diff --git a/dist/index.js b/dist/index.js
+index 210819172d611c64900564de97c1f23c5f5c132f..a000000000000000000000000000000000000003 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -77,11 +77,28 @@
+                     },
+                     ...partMetadata
+                   };
+-                } else {
+-                  throw new import_provider.UnsupportedFunctionalityError({
+-                    functionality: `file part media type ${part.mediaType}`
+-                  });
+-                }
++                } else if (part.mediaType.startsWith("video/")) {
++                  return {
++                    type: "video_url",
++                    video_url: {
++                      url: part.data instanceof URL ? part.data.toString() : `data:${part.mediaType};base64,${(0, import_provider_utils.convertToBase64)(part.data)}`
++                    },
++                    ...partMetadata
++                  };
++                } else if (part.mediaType.startsWith("audio/")) {
++                  return {
++                    type: "input_audio",
++                    input_audio: {
++                      data: part.data instanceof URL ? part.data.toString() : (0, import_provider_utils.convertToBase64)(part.data),
++                      format: part.mediaType.split("/")[1]
++                    },
++                    ...partMetadata
++                  };
++                } else {
++                  throw new import_provider.UnsupportedFunctionalityError({
++                    functionality: `file part media type ${part.mediaType}`
++                  });
++                }
+               }
+             }
+           }),
+diff --git a/dist/internal/index.js b/dist/internal/index.js
+index 41eb4555dbc1321a531e464c2f562ee3e56374a5..a000000000000000000000000000000000000004 100644
+--- a/dist/internal/index.js
++++ b/dist/internal/index.js
+@@ -69,11 +69,28 @@
+                     },
+                     ...partMetadata
+                   };
+-                } else {
+-                  throw new import_provider.UnsupportedFunctionalityError({
+-                    functionality: `file part media type ${part.mediaType}`
+-                  });
+-                }
++                } else if (part.mediaType.startsWith("video/")) {
++                  return {
++                    type: "video_url",
++                    video_url: {
++                      url: part.data instanceof URL ? part.data.toString() : `data:${part.mediaType};base64,${(0, import_provider_utils.convertToBase64)(part.data)}`
++                    },
++                    ...partMetadata
++                  };
++                } else if (part.mediaType.startsWith("audio/")) {
++                  return {
++                    type: "input_audio",
++                    input_audio: {
++                      data: part.data instanceof URL ? part.data.toString() : (0, import_provider_utils.convertToBase64)(part.data),
++                      format: part.mediaType.split("/")[1]
++                    },
++                    ...partMetadata
++                  };
++                } else {
++                  throw new import_provider.UnsupportedFunctionalityError({
++                    functionality: `file part media type ${part.mediaType}`
++                  });
++                }
+               }
+             }
+           }),
