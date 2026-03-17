@@ -31,6 +31,7 @@ import { SessionPrompt } from "@/session/prompt"
 import { setTimeout as sleep } from "node:timers/promises"
 import { Process } from "@/util/process"
 import { git } from "@/util/git"
+import { Agent } from "@/agent/agent"
 
 type GitHubAuthor = {
   login: string
@@ -454,6 +455,7 @@ export const GithubRunCommand = cmd({
 
       const { providerID, modelID } = normalizeModel()
       const variant = process.env["VARIANT"] || undefined
+      const agent = await resolveAgent()
       const runId = normalizeRunId()
       const share = normalizeShare()
       const oidcBaseUrl = normalizeOidcBaseUrl()
@@ -739,6 +741,24 @@ export const GithubRunCommand = cmd({
         return value.replace(/\/+$/, "")
       }
 
+      async function resolveAgent(): Promise<string | undefined> {
+        const envAgent = prcoess.env["AGENT"]
+        if (!envAgent) return undefined
+
+        const agent = await Agent.get(envAgent)
+        if (!agent) {
+          console.warn(`agent "${envAgent}" not found. Falling back to default agent`)
+          return undefined
+        }
+
+        if (agent.mode === "subagent"){
+          console.warn(`agent "${envAgent}" is a subagent, not a primary agent. Falling back to default agent`)
+          return undefined
+        }
+
+        return envAgent
+      }
+
       function isIssueCommentEvent(
         event:
           | IssueCommentEvent
@@ -941,7 +961,7 @@ export const GithubRunCommand = cmd({
             providerID,
             modelID,
           },
-          // agent is omitted - server will use default_agent from config or fall back to "build"
+          agent,
           parts: [
             {
               id: PartID.ascending(),
