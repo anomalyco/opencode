@@ -10,8 +10,19 @@ import { Effect, Layer, ServiceMap } from "effect"
 
 const log = Log.create({ service: "vcs" })
 
+/**
+ * VCS (Version Control System) namespace providing types and event definitions.
+ *
+ * Defines events for VCS operations and schemas for VCS information such as branch names.
+ */
 export namespace Vcs {
+  /**
+   * VCS events published via the event bus.
+   */
   export const Event = {
+    /**
+     * Published when the current branch changes.
+     */
     BranchUpdated: BusEvent.define(
       "vcs.branch.updated",
       z.object({
@@ -20,6 +31,9 @@ export namespace Vcs {
     ),
   }
 
+  /**
+   * Schema for VCS information.
+   */
   export const Info = z
     .object({
       branch: z.string(),
@@ -30,13 +44,27 @@ export namespace Vcs {
   export type Info = z.infer<typeof Info>
 }
 
+/**
+ * VCS service interface definition.
+ */
 export namespace VcsService {
+  /**
+   * Service interface for VCS operations.
+   */
   export interface Service {
+    /** Initializes the VCS service */
     readonly init: () => Effect.Effect<void>
+    /** Returns the current branch name */
     readonly branch: () => Effect.Effect<string | undefined>
   }
 }
 
+/**
+ * VCS service implementation using Effect.
+ *
+ * Manages Git repository state including the current branch. Watches for
+ * changes to the HEAD file and publishes events when the branch changes.
+ */
 export class VcsService extends ServiceMap.Service<VcsService, VcsService.Service>()("@opencode/Vcs") {
   static readonly layer = Layer.effect(
     VcsService,
