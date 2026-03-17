@@ -6,6 +6,20 @@ import { CliRenderer } from "@opentui/core"
 import { Filesystem } from "@/util/filesystem"
 import { Process } from "@/util/process"
 
+/**
+ * External editor integration for the TUI.
+ *
+ * Opens the system's default editor ($VISUAL or $EDITOR) for editing text,
+ * with automatic cleanup of temporary files.
+ *
+ * @example
+ * ```typescript
+ * const content = await Editor.open({
+ *   value: "Initial content",
+ *   renderer: cliRenderer
+ * })
+ * ```
+ */
 export namespace Editor {
   export async function open(opts: { value: string; renderer: CliRenderer }): Promise<string | undefined> {
     const editor = process.env["VISUAL"] || process.env["EDITOR"]
