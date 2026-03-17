@@ -1,3 +1,21 @@
+/**
+ * RPC (Remote Procedure Call) utilities for worker communication.
+ *
+ * Provides a simple RPC implementation for communication between the main thread
+ * and Web Workers. Supports method calls and event emission with type safety.
+ *
+ * @example
+ * ```typescript
+ * // In worker
+ * Rpc.listen({
+ *   add: (a: number, b: number) => a + b
+ * })
+ *
+ * // In main thread
+ * const client = Rpc.client<typeof rpc>(worker)
+ * const result = await client.call("add", 1, 2)
+ * ```
+ */
 export namespace Rpc {
   type Definition = {
     [method: string]: (input: any) => any
