@@ -378,6 +378,18 @@ export const SettingsGeneral: Component = () => {
             />
           </div>
         </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.notifications.notifyWhenFocused.title")}
+          description={language.t("settings.general.notifications.notifyWhenFocused.description")}
+        >
+          <div data-action="settings-notifications-notify-when-focused">
+            <Switch
+              checked={settings.notifications.notifyWhenFocused()}
+              onChange={(checked) => settings.notifications.setNotifyWhenFocused(checked)}
+            />
+          </div>
+        </SettingsRow>
       </SettingsList>
     </div>
   )
