@@ -9,6 +9,19 @@ import PROMPT_REVIEW from "./template/review.txt"
 import { MCP } from "../mcp"
 import { Skill } from "../skill"
 
+/**
+ * Command management namespace for handling custom commands.
+ *
+ * Provides functionality for registering and executing custom commands, including
+ * built-in commands (init, review), user-defined commands from configuration,
+ * MCP prompts, and skills. Commands use templates with variable substitution.
+ *
+ * @example
+ * ```typescript
+ * const command = await Command.get("init")
+ * const allCommands = await Command.list()
+ * ```
+ */
 export namespace Command {
   export const Event = {
     Executed: BusEvent.define(
@@ -42,6 +55,15 @@ export namespace Command {
   // for some reason zod is inferring `string` for z.promise(z.string()).or(z.string()) so we have to manually override it
   export type Info = Omit<z.infer<typeof Info>, "template"> & { template: Promise<string> | string }
 
+  /**
+   * Extracts template variables from a command template string.
+   *
+   * Scans the template for numbered placeholders ($1, $2, etc.) and the
+   * special $ARGUMENTS placeholder, returning them as an array of hints.
+   *
+   * @param template - The command template string to parse
+   * @returns An array of variable placeholders found in the template
+   */
   export function hints(template: string): string[] {
     const result: string[] = []
     const numbered = template.match(/\$\d+/g)
@@ -52,6 +74,9 @@ export namespace Command {
     return result
   }
 
+  /**
+   * Default built-in command names.
+   */
   export const Default = {
     INIT: "init",
     REVIEW: "review",
@@ -141,10 +166,21 @@ export namespace Command {
     return result
   })
 
+  /**
+   * Retrieves a specific command by name.
+   *
+   * @param name - The name of the command to retrieve
+   * @returns The command info, or undefined if not found
+   */
   export async function get(name: string) {
     return state().then((x) => x[name])
   }
 
+  /**
+   * Lists all available commands.
+   *
+   * @returns An array of all command info objects from all sources
+   */
   export async function list() {
     return state().then((x) => Object.values(x))
   }
