@@ -1,3 +1,19 @@
+/**
+ * Read-write lock namespace for concurrent access control.
+ *
+ * Provides async read and write locks with reader-writer priority
+ * to prevent writer starvation. Multiple readers can hold the lock
+ * simultaneously, but writers require exclusive access.
+ *
+ * @example
+ * ```typescript
+ * using lock = await Lock.read("resource-key")
+ * // Read operations here
+ *
+ * using writeLock = await Lock.write("resource-key")
+ * // Write operations here
+ * ```
+ */
 export namespace Lock {
   const locks = new Map<
     string,
@@ -44,6 +60,15 @@ export namespace Lock {
     }
   }
 
+  /**
+   * Acquires a read lock on the given key.
+   *
+   * Multiple readers can hold the lock simultaneously.
+   * Writers are prioritized to prevent starvation.
+   *
+   * @param key - The lock identifier
+   * @returns A disposable lock object
+   */
   export async function read(key: string): Promise<Disposable> {
     const lock = get(key)
 
@@ -70,6 +95,14 @@ export namespace Lock {
     })
   }
 
+  /**
+   * Acquires a write lock on the given key.
+   *
+   * Requires exclusive access - no other readers or writers can hold the lock.
+   *
+   * @param key - The lock identifier
+   * @returns A disposable lock object
+   */
   export async function write(key: string): Promise<Disposable> {
     const lock = get(key)
 
