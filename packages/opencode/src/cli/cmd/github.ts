@@ -742,7 +742,7 @@ export const GithubRunCommand = cmd({
       }
 
       async function resolveAgent(): Promise<string | undefined> {
-        const envAgent = prcoess.env["AGENT"]
+        const envAgent = process.env["OPENCODE_AGENT"] || process.env["AGENT"]
         if (!envAgent) return undefined
 
         const agent = await Agent.get(envAgent)
@@ -756,6 +756,7 @@ export const GithubRunCommand = cmd({
           return undefined
         }
 
+        console.log(`Using agent "${envAgent}"`)
         return envAgent
       }
 
