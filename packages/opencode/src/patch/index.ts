@@ -4,6 +4,18 @@ import * as fs from "fs/promises"
 import { readFileSync } from "fs"
 import { Log } from "../util/log"
 
+/**
+ * Patch parsing and application namespace.
+ *
+ * Provides functionality for parsing and applying text-based patches to files.
+ * Supports add, delete, and update operations with context-based matching.
+ *
+ * @example
+ * ```typescript
+ * const { hunks } = Patch.parsePatch(patchText)
+ * await Patch.applyPatch(patchText)
+ * ```
+ */
 export namespace Patch {
   const log = Log.create({ service: "patch" })
 
@@ -15,12 +27,18 @@ export namespace Patch {
   export type PatchParams = z.infer<typeof PatchSchema>
 
   // Core types matching the Rust implementation
+  /**
+   * Arguments for applying a patch.
+   */
   export interface ApplyPatchArgs {
     patch: string
     hunks: Hunk[]
     workdir?: string
   }
 
+  /**
+   * Represents a single hunk (change) in a patch.
+   */
   export type Hunk =
     | { type: "add"; path: string; contents: string }
     | { type: "delete"; path: string }
@@ -44,12 +62,18 @@ export namespace Patch {
     | { type: "delete"; content: string }
     | { type: "update"; unified_diff: string; move_path?: string; new_content: string }
 
+  /**
+   * Result containing affected paths after applying a patch.
+   */
   export interface AffectedPaths {
     added: string[]
     modified: string[]
     deleted: string[]
   }
 
+  /**
+   * Errors that can occur during patch application.
+   */
   export enum ApplyPatchError {
     ParseError = "ParseError",
     IoError = "IoError",
@@ -187,6 +211,13 @@ export namespace Patch {
     return input
   }
 
+  /**
+   * Parses a patch text into structured hunks.
+   *
+   * @param patchText - The raw patch text to parse
+   * @returns An object containing the parsed hunks
+   * @throws Error if the patch format is invalid
+   */
   export function parsePatch(patchText: string): { hunks: Hunk[] } {
     const cleaned = stripHeredoc(patchText.trim())
     const lines = cleaned.split("\n")
@@ -515,6 +546,16 @@ export namespace Patch {
   }
 
   // Apply hunks to filesystem
+
+  /**
+   * Applies parsed hunks to the filesystem.
+   *
+   * Executes add, delete, and update operations based on the parsed hunks.
+   *
+   * @param hunks - Array of hunks to apply
+   * @returns Affected paths (added, modified, deleted)
+   * @throws Error if no hunks are provided
+   */
   export async function applyHunksToFiles(hunks: Hunk[]): Promise<AffectedPaths> {
     if (hunks.length === 0) {
       throw new Error("No files were modified.")
@@ -572,6 +613,16 @@ export namespace Patch {
   }
 
   // Main patch application function
+
+  /**
+   * Applies a patch to the filesystem.
+   *
+   * Parses the patch text and applies all hunks to create, update, or delete files.
+   *
+   * @param patchText - The patch text to apply
+   * @returns Affected paths (added, modified, deleted)
+   * @throws Error if no files were modified
+   */
   export async function applyPatch(patchText: string): Promise<AffectedPaths> {
     const { hunks } = parsePatch(patchText)
     return applyHunksToFiles(hunks)
