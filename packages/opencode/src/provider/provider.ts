@@ -1091,10 +1091,13 @@ export namespace Provider {
     for (const [id, fn] of Object.entries(CUSTOM_LOADERS)) {
       const providerID = ProviderID.make(id)
       if (disabled.has(providerID)) continue
-      const data = database[providerID]
-      if (!data) {
-        log.error("Provider does not exist in model list " + providerID)
-        continue
+      const data = database[providerID] ?? {
+        id: providerID,
+        name: id,
+        source: "custom" as const,
+        env: [],
+        options: configProviders.find(([k]) => k === id)?.[1]?.options ?? {},
+        models: {},
       }
       const result = await fn(data)
       if (result && (result.autoload || providers[providerID])) {
