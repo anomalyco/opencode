@@ -8,7 +8,7 @@ import { existsSync } from "fs"
 
 export const AttachCommand = cmd({
   command: "attach <url>",
-  describe: "attach to a running opencode server",
+  describe: "attach to a running securecode server",
   builder: (yargs) =>
     yargs
       .positional("url", {
