@@ -12,7 +12,7 @@ export function FormatError(input: unknown) {
     return [
       `Model not found: ${providerID}/${modelID}`,
       ...(Array.isArray(suggestions) && suggestions.length ? ["Did you mean: " + suggestions.join(", ")] : []),
-      `Try: \`securecode models\` to list available models`,
+      `Try: \`SecreCode models\` to list available models`,
       `Or check your config (opencode.json) provider/model names`,
     ].join("\n")
   }

@@ -1,15 +1,15 @@
-# Acompany Secure Code
+# Acompany SecreCode
 
 機密ソースコードを漏洩させずに AI コーディング支援を実現する、Acompany のセキュアなコーディングエージェントです。
 2026年3月13日に、Confidential AI Suite の第二弾製品としてベータ版の提供を開始しました。
 
-[![Acompany Secure Code top screen](https://img.youtube.com/vi/QCwp4IbuP2I/maxresdefault.jpg)](https://youtu.be/QCwp4IbuP2I?si=Qx4Za7sfdluWB0Ca)
+[![Acompany SecreCode top screen](https://img.youtube.com/vi/QCwp4IbuP2I/maxresdefault.jpg)](https://youtu.be/QCwp4IbuP2I?si=Qx4Za7sfdluWB0Ca)
 
 [リリース文](https://prtimes.jp/main/html/rd/p/000000128.000046917.html) | [お問い合わせ](https://www.acompany.tech/contact) | [English README](./README.en.md)
 
 ## 概要
 
-Acompany Secure Code は、機密ソースコードを Confidential Computing 環境に送信し、秘匿化された実行領域で LLM 推論を行うことで、インフラ事業者やモデル提供者を含む第三者から処理中データを見えなくしたまま AI コーディング支援を提供します。
+Acompany SecreCode は、機密ソースコードを Confidential Computing 環境に送信し、秘匿化された実行領域で LLM 推論を行うことで、インフラ事業者やモデル提供者を含む第三者から処理中データを見えなくしたまま AI コーディング支援を提供します。
 
 企業の機密コードを扱う開発組織でも、既存のターミナル中心のワークフローを崩さずに、コード生成、レビュー、リファクタリング、バグ修正、テスト生成を進められることを狙っています。
 
@@ -24,15 +24,15 @@ Acompany Secure Code は、機密ソースコードを Confidential Computing �
 
 ### トップ画面
 
-![Acompany Secure Code home screen](github/assets/top-secure-code.png)
+![Acompany SecreCode home screen](github/assets/top-secure-code.png)
 
 ### モデル選択
 
-![Acompany Secure Code model picker](github/assets/models-secure-code.png)
+![Acompany SecreCode model picker](github/assets/models-secure-code.png)
 
 ## デモ動画
 
-[![Acompany Secure Code demo video](https://img.youtube.com/vi/QCwp4IbuP2I/maxresdefault.jpg)](https://youtu.be/QCwp4IbuP2I?si=Qx4Za7sfdluWB0Ca)
+[![Acompany SecreCode demo video](https://img.youtube.com/vi/QCwp4IbuP2I/maxresdefault.jpg)](https://youtu.be/QCwp4IbuP2I?si=Qx4Za7sfdluWB0Ca)
 
 - [YouTube で見る](https://youtu.be/QCwp4IbuP2I?si=Qx4Za7sfdluWB0Ca)
 - クリックで、トップ画面から実際のコーディング支援フローまで確認できます。
@@ -41,12 +41,12 @@ Acompany Secure Code は、機密ソースコードを Confidential Computing �
 
 最新版の CLI バイナリは [GitHub Releases](https://github.com/acompany-develop/securecode/releases) から取得できます。
 
-- macOS Apple Silicon: `securecode-darwin-arm64.zip`
-- macOS Intel: `securecode-darwin-x64.zip`
-- Linux x86_64: `securecode-linux-x64.tar.gz`
-- Linux ARM64: `securecode-linux-arm64.tar.gz`
-- Windows x86_64: `securecode-windows-x64.zip`
-- Windows ARM64: `securecode-windows-arm64.zip`
+- macOS Apple Silicon: `SecreCode-darwin-arm64.zip`
+- macOS Intel: `SecreCode-darwin-x64.zip`
+- Linux x86_64: `SecreCode-linux-x64.tar.gz`
+- Linux ARM64: `SecreCode-linux-arm64.tar.gz`
+- Windows x86_64: `SecreCode-windows-x64.zip`
+- Windows ARM64: `SecreCode-windows-arm64.zip`
 
 補足:
 
@@ -57,28 +57,28 @@ macOS / Linux:
 
 ```bash
 # 例: Linux x86_64
-tar -xzf securecode-linux-x64.tar.gz
-chmod +x securecode
+tar -xzf SecreCode-linux-x64.tar.gz
+chmod +x SecreCode
 mkdir -p ~/.local/bin
-mv securecode ~/.local/bin/securecode
+mv SecreCode ~/.local/bin/SecreCode
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
 ```bash
 # 例: macOS Apple Silicon
-unzip securecode-darwin-arm64.zip
-chmod +x securecode
+unzip SecreCode-darwin-arm64.zip
+chmod +x SecreCode
 mkdir -p ~/.local/bin
-mv securecode ~/.local/bin/securecode
+mv SecreCode ~/.local/bin/SecreCode
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
 Windows:
 
 ```powershell
-Expand-Archive .\securecode-windows-x64.zip -DestinationPath .
+Expand-Archive .\SecreCode-windows-x64.zip -DestinationPath .
 $env:Path += ";$PWD"
-.\securecode.exe run "hello"
+.\SecreCode.exe run "hello"
 ```
 
 前提:
@@ -99,7 +99,7 @@ export OPENAI_API_KEY="your-api-key"
 2. 利用可能な model ID を確認します。
 
 ```bash
-securecode models openai --refresh
+SecreCode models openai --refresh
 ```
 
 3. `opencode.json` を作成して既定 model を固定します。
@@ -141,30 +141,30 @@ OpenAI 互換 endpoint を使う場合は `baseURL` を追加してください�
 単発で使う:
 
 ```bash
-securecode run "Summarize the current repository structure"
+SecreCode run "Summarize the current repository structure"
 ```
 
 model を都度切り替える:
 
 ```bash
-securecode run -m openai/gpt-5.2 "Review auth.ts for security issues"
+SecreCode run -m openai/gpt-5.2 "Review auth.ts for security issues"
 ```
 
 ファイルを添付する:
 
 ```bash
-securecode run -f README.md -f src/auth.ts "Explain the auth flow and list risks"
+SecreCode run -f README.md -f src/auth.ts "Explain the auth flow and list risks"
 ```
 
 認証状態を確認する:
 
 ```bash
-securecode providers list
+SecreCode providers list
 ```
 
 ## ローカル開発
 
-このリポジトリは upstream の release tag を取り込みながら Acompany Secure Code 向けの変更を重ねる fork です。内部 package 名や一部コマンド名には upstream 互換性のため旧名が残っていますが、公開面のブランドは Secure Code に揃えています。
+このリポジトリは upstream の release tag を取り込みながら Acompany SecreCode 向けの変更を重ねる fork です。内部 package 名や一部互換用設定名には旧名が残っていますが、公開面のブランドは SecreCode に揃えています。
 
 ```bash
 bun install

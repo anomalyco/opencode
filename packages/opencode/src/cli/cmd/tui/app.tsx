@@ -265,20 +265,20 @@ function App() {
     if (!terminalTitleEnabled() || Flag.OPENCODE_DISABLE_TERMINAL_TITLE) return
 
     if (route.data.type === "home") {
-      renderer.setTerminalTitle("securecode")
+      renderer.setTerminalTitle("SecreCode")
       return
     }
 
     if (route.data.type === "session") {
       const session = sync.session.get(route.data.sessionID)
       if (!session || SessionApi.isDefaultTitle(session.title)) {
-        renderer.setTerminalTitle("securecode")
+        renderer.setTerminalTitle("SecreCode")
         return
       }
 
       // Truncate title to 40 chars max
       const title = session.title.length > 40 ? session.title.slice(0, 37) + "..." : session.title
-      renderer.setTerminalTitle(`securecode | ${title}`)
+      renderer.setTerminalTitle(`SecreCode | ${title}`)
     }
   })
 
@@ -733,7 +733,7 @@ function App() {
     toast.show({
       variant: "info",
       title: "Update Available",
-      message: `securecode v${evt.properties.version} is available. Run 'securecode upgrade' to update manually.`,
+      message: `SecreCode v${evt.properties.version} is available. Run 'SecreCode upgrade' to update manually.`,
       duration: 10000,
     })
   })

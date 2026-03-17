@@ -31,10 +31,10 @@ for (const dir of await fs.readdir(dist, { withFileTypes: true })) {
   const src = await bin(path.join(dist, dir.name, "bin"), win)
   if (!src) continue
 
-  const name = dir.name.replace(/^opencode-/, "securecode-")
+  const name = dir.name.replace(/^opencode-/, "SecreCode-")
   const ext = win || dir.name.includes("darwin") ? "zip" : "tar.gz"
   const tmp = path.join(out, name)
-  const dst = path.join(tmp, `securecode${win ? ".exe" : ""}`)
+  const dst = path.join(tmp, `SecreCode${win ? ".exe" : ""}`)
   const arc = path.join(out, `${name}.${ext}`)
 
   await fs.rm(tmp, { recursive: true, force: true })
@@ -57,11 +57,11 @@ if (sums.length === 0) {
   throw new Error("No CLI binaries found in packages/opencode/dist")
 }
 
-const sumfile = path.join(out, "securecode-sha256.txt")
+const sumfile = path.join(out, "SecreCode-sha256.txt")
 await Bun.write(sumfile, sums.join("\n") + "\n")
 
 const files = (await fs.readdir(out))
-  .filter((x) => x === "securecode-sha256.txt" || x.endsWith(".zip") || x.endsWith(".tar.gz"))
+  .filter((x) => x === "SecreCode-sha256.txt" || x.endsWith(".zip") || x.endsWith(".tar.gz"))
   .map((x) => path.join(out, x))
   .sort()
 
@@ -99,9 +99,9 @@ function sum(buf: Uint8Array) {
 }
 
 function note(name: string, win: boolean) {
-  const cmd = win ? "securecode.exe" : "./securecode"
+  const cmd = win ? "SecreCode.exe" : "./SecreCode"
   return [
-    "Acompany Secure Code CLI",
+    "Acompany SecreCode CLI",
     "",
     `Asset: ${name}`,
     "",

@@ -220,7 +220,7 @@ function normalizePath(input?: string) {
 
 export const RunCommand = cmd({
   command: "run [message..]",
-  describe: "run securecode with a message",
+  describe: "run SecreCode with a message",
   builder: (yargs: Argv) => {
     return yargs
       .positional("message", {
@@ -278,7 +278,7 @@ export const RunCommand = cmd({
       })
       .option("attach", {
         type: "string",
-        describe: "attach to a running securecode server (e.g., http://localhost:4096)",
+        describe: "attach to a running SecreCode server (e.g., http://localhost:4096)",
       })
       .option("password", {
         alias: ["p"],

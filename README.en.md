@@ -1,15 +1,15 @@
-# Acompany Secure Code
+# Acompany SecreCode
 
 A secure coding agent from Acompany that enables AI-assisted development without leaking confidential source code.  
 The beta release became available on March 13, 2026 as the second product in the Confidential AI Suite.
 
-[![Acompany Secure Code top screen](https://img.youtube.com/vi/QCwp4IbuP2I/maxresdefault.jpg)](https://youtu.be/QCwp4IbuP2I?si=Qx4Za7sfdluWB0Ca)
+[![Acompany SecreCode top screen](https://img.youtube.com/vi/QCwp4IbuP2I/maxresdefault.jpg)](https://youtu.be/QCwp4IbuP2I?si=Qx4Za7sfdluWB0Ca)
 
 [Press release](https://prtimes.jp/main/html/rd/p/000000128.000046917.html) | [Contact](https://www.acompany.tech/contact) | [Japanese README](./README.md)
 
 ## Overview
 
-Acompany Secure Code sends confidential source code into a Confidential Computing environment and runs LLM inference inside an isolated execution boundary. This allows teams to use AI coding assistance while preventing infrastructure operators, model providers, and other third parties from viewing data during processing.
+Acompany SecreCode sends confidential source code into a Confidential Computing environment and runs LLM inference inside an isolated execution boundary. This allows teams to use AI coding assistance while preventing infrastructure operators, model providers, and other third parties from viewing data during processing.
 
 The goal is to support code generation, review, refactoring, bug fixing, and test generation for organizations that handle sensitive codebases, without forcing them to abandon their existing terminal-centric workflow.
 
@@ -24,15 +24,15 @@ The goal is to support code generation, review, refactoring, bug fixing, and tes
 
 ### Home Screen
 
-![Acompany Secure Code home screen](github/assets/top-secure-code.png)
+![Acompany SecreCode home screen](github/assets/top-secure-code.png)
 
 ### Model Picker
 
-![Acompany Secure Code model picker](github/assets/models-secure-code.png)
+![Acompany SecreCode model picker](github/assets/models-secure-code.png)
 
 ## Demo Video
 
-[![Acompany Secure Code demo video](https://img.youtube.com/vi/QCwp4IbuP2I/maxresdefault.jpg)](https://youtu.be/QCwp4IbuP2I?si=Qx4Za7sfdluWB0Ca)
+[![Acompany SecreCode demo video](https://img.youtube.com/vi/QCwp4IbuP2I/maxresdefault.jpg)](https://youtu.be/QCwp4IbuP2I?si=Qx4Za7sfdluWB0Ca)
 
 - [Watch on YouTube](https://youtu.be/QCwp4IbuP2I?si=Qx4Za7sfdluWB0Ca)
 - The demo shows the flow from the home screen into actual coding assistance.
@@ -41,12 +41,12 @@ The goal is to support code generation, review, refactoring, bug fixing, and tes
 
 The latest CLI binaries are published on [GitHub Releases](https://github.com/acompany-develop/securecode/releases).
 
-- macOS Apple Silicon: `securecode-darwin-arm64.zip`
-- macOS Intel: `securecode-darwin-x64.zip`
-- Linux x86_64: `securecode-linux-x64.tar.gz`
-- Linux ARM64: `securecode-linux-arm64.tar.gz`
-- Windows x86_64: `securecode-windows-x64.zip`
-- Windows ARM64: `securecode-windows-arm64.zip`
+- macOS Apple Silicon: `SecreCode-darwin-arm64.zip`
+- macOS Intel: `SecreCode-darwin-x64.zip`
+- Linux x86_64: `SecreCode-linux-x64.tar.gz`
+- Linux ARM64: `SecreCode-linux-arm64.tar.gz`
+- Windows x86_64: `SecreCode-windows-x64.zip`
+- Windows ARM64: `SecreCode-windows-arm64.zip`
 
 Notes:
 
@@ -57,28 +57,28 @@ macOS / Linux:
 
 ```bash
 # Example: Linux x86_64
-tar -xzf securecode-linux-x64.tar.gz
-chmod +x securecode
+tar -xzf SecreCode-linux-x64.tar.gz
+chmod +x SecreCode
 mkdir -p ~/.local/bin
-mv securecode ~/.local/bin/securecode
+mv SecreCode ~/.local/bin/SecreCode
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
 ```bash
 # Example: macOS Apple Silicon
-unzip securecode-darwin-arm64.zip
-chmod +x securecode
+unzip SecreCode-darwin-arm64.zip
+chmod +x SecreCode
 mkdir -p ~/.local/bin
-mv securecode ~/.local/bin/securecode
+mv SecreCode ~/.local/bin/SecreCode
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
 Windows:
 
 ```powershell
-Expand-Archive .\securecode-windows-x64.zip -DestinationPath .
+Expand-Archive .\SecreCode-windows-x64.zip -DestinationPath .
 $env:Path += ";$PWD"
-.\securecode.exe run "hello"
+.\SecreCode.exe run "hello"
 ```
 
 Prerequisites:
@@ -99,7 +99,7 @@ export OPENAI_API_KEY="your-api-key"
 2. Inspect available model IDs.
 
 ```bash
-securecode models openai --refresh
+SecreCode models openai --refresh
 ```
 
 3. Pin the default model in `opencode.json`.
@@ -141,30 +141,30 @@ If you use an OpenAI-compatible gateway, add `baseURL`.
 Single prompt:
 
 ```bash
-securecode run "Summarize the current repository structure"
+SecreCode run "Summarize the current repository structure"
 ```
 
 Override the model for one run:
 
 ```bash
-securecode run -m openai/gpt-5.2 "Review auth.ts for security issues"
+SecreCode run -m openai/gpt-5.2 "Review auth.ts for security issues"
 ```
 
 Attach files:
 
 ```bash
-securecode run -f README.md -f src/auth.ts "Explain the auth flow and list risks"
+SecreCode run -f README.md -f src/auth.ts "Explain the auth flow and list risks"
 ```
 
 Check configured credentials:
 
 ```bash
-securecode providers list
+SecreCode providers list
 ```
 
 ## Local Development
 
-This repository is a fork that tracks upstream release tags while layering Acompany Secure Code specific changes on top. Some internal package names and command names remain for upstream compatibility, but the public-facing branding is aligned to Secure Code.
+This repository is a fork that tracks upstream release tags while layering Acompany SecreCode specific changes on top. Some internal package names and compatibility settings still keep the old names, but the public-facing branding is aligned to SecreCode.
 
 ```bash
 bun install
