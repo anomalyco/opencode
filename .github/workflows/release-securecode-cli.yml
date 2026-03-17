@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to create or update (default: v<packages/opencode version>)"
+        description: "Release tag to create or update (default: v<securecode.version>)"
         required: false
         type: string
 
@@ -34,7 +34,7 @@ jobs:
         run: |
           TAG="${EVENT_TAG:-$INPUT_TAG}"
           if [ -z "$TAG" ]; then
-            VERSION="$(node -p "require('./packages/opencode/package.json').version")"
+            VERSION="$(tr -d '\r\n' < securecode.version)"
             TAG="v${VERSION}"
           else
             VERSION="${TAG#v}"
