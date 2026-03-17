@@ -1,5 +1,18 @@
 import { sortBy, pipe } from "remeda"
 
+/**
+ * Wildcard pattern matching utilities for commands and file paths.
+ *
+ * Provides functions for matching strings against wildcard patterns with support
+ * for glob-style wildcards (* and ?) and command-specific matching with
+ * structured input (head/tail format).
+ *
+ * @example
+ * ```typescript
+ * Wildcard.match("ls -la", "ls *") // true
+ * Wildcard.all("my-command", { "my-*": handler, "other": otherHandler })
+ * ```
+ */
 export namespace Wildcard {
   export function match(str: string, pattern: string) {
     if (str) str = str.replaceAll("\\", "/")
