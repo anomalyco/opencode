@@ -2,6 +2,21 @@ import z from "zod"
 import type { ZodType } from "zod"
 import { Log } from "../util/log"
 
+/**
+ * Typed event definitions for the event bus.
+ *
+ * Provides a way to define events with Zod schemas for type-safe
+ * publishing and subscribing. All defined events are tracked in a
+ * registry for payload validation.
+ *
+ * @example
+ * ```typescript
+ * const UserCreatedEvent = BusEvent.define(
+ *   "user.created",
+ *   z.object({ id: z.string(), name: z.string() })
+ * )
+ * ```
+ */
 export namespace BusEvent {
   const log = Log.create({ service: "event" })
 
