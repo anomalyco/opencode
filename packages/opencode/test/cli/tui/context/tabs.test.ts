@@ -290,6 +290,84 @@ describe("createTabState", () => {
     })
   })
 
+  describe("updateRoute", () => {
+    test("sets session route on tab", () => {
+      createRoot((dispose) => {
+        const state = createTabState()
+        const id = state.tabs()[0].id
+        state.updateRoute(id, { type: "session", sessionID: "ses_abc" })
+        expect(state.tabs()[0].route).toEqual({ type: "session", sessionID: "ses_abc" })
+        dispose()
+      })
+    })
+
+    test("resets to home route", () => {
+      createRoot((dispose) => {
+        const state = createTabState()
+        const id = state.tabs()[0].id
+        state.updateRoute(id, { type: "session", sessionID: "ses_abc" })
+        state.updateRoute(id, { type: "home" })
+        expect(state.tabs()[0].route).toEqual({ type: "home" })
+        dispose()
+      })
+    })
+
+    test("no-op for non-existent tab", () => {
+      createRoot((dispose) => {
+        const state = createTabState()
+        state.updateRoute("nonexistent", { type: "session", sessionID: "ses_abc" })
+        expect(state.tabs()[0].route).toEqual({ type: "home" })
+        dispose()
+      })
+    })
+  })
+
+  describe("updateSessionID", () => {
+    test("sets sessionID on tab", () => {
+      createRoot((dispose) => {
+        const state = createTabState()
+        const id = state.tabs()[0].id
+        state.updateSessionID(id, "ses_123")
+        expect(state.tabs()[0].sessionID).toBe("ses_123")
+        dispose()
+      })
+    })
+
+    test("overwrites existing sessionID", () => {
+      createRoot((dispose) => {
+        const state = createTabState()
+        const id = state.tabs()[0].id
+        state.updateSessionID(id, "ses_123")
+        state.updateSessionID(id, "ses_456")
+        expect(state.tabs()[0].sessionID).toBe("ses_456")
+        dispose()
+      })
+    })
+  })
+
+  describe("updateDirectory", () => {
+    test("sets directory on tab", () => {
+      createRoot((dispose) => {
+        const state = createTabState()
+        const id = state.tabs()[0].id
+        state.updateDirectory(id, "/tmp/project")
+        expect(state.tabs()[0].directory).toBe("/tmp/project")
+        dispose()
+      })
+    })
+
+    test("overwrites existing directory", () => {
+      createRoot((dispose) => {
+        const state = createTabState()
+        const id = state.tabs()[0].id
+        state.updateDirectory(id, "/tmp/project")
+        state.updateDirectory(id, "/tmp/other")
+        expect(state.tabs()[0].directory).toBe("/tmp/other")
+        dispose()
+      })
+    })
+  })
+
   describe("load", () => {
     test("replaces all state from server data", () => {
       createRoot((dispose) => {
