@@ -12,8 +12,11 @@ import z from "zod"
 import path from "path"
 import { readFileSync, readdirSync, existsSync } from "fs"
 import * as schema from "./schema"
+import { Installation } from "../installation"
+import { Flag } from "../flag/flag"
+import { iife } from "@/util/iife"
 
-declare const OPENCODE_MIGRATIONS: { sql: string; timestamp: number }[] | undefined
+declare const OPENCODE_MIGRATIONS: { sql: string; timestamp: number; name: string }[] | undefined
 
 export const NotFoundError = NamedError.create(
   "NotFoundError",
@@ -25,13 +28,20 @@ export const NotFoundError = NamedError.create(
 const log = Log.create({ service: "db" })
 
 export namespace Database {
-  export const Path = path.join(Global.Path.data, "opencode.db")
+  export const Path = iife(() => {
+    const channel = Installation.CHANNEL
+    if (["latest", "beta"].includes(channel) || Flag.OPENCODE_DISABLE_CHANNEL_DB)
+      return path.join(Global.Path.data, "opencode.db")
+    const safe = channel.replace(/[^a-zA-Z0-9._-]/g, "-")
+    return path.join(Global.Path.data, `opencode-${safe}.db`)
+  })
+
   type Schema = typeof schema
   export type Transaction = SQLiteTransaction<"sync", void, Schema>
 
-  type Client = SQLiteBunDatabase<Schema>
+  type Client = SQLiteBunDatabase
 
-  type Journal = { sql: string; timestamp: number }[]
+  type Journal = { sql: string; timestamp: number; name: string }[]
 
   const state = {
     sqlite: undefined as BunDatabase | undefined,
@@ -62,6 +72,7 @@ export namespace Database {
         return {
           sql: readFileSync(file, "utf-8"),
           timestamp: time(name),
+          name,
         }
       })
       .filter(Boolean) as Journal
@@ -70,9 +81,9 @@ export namespace Database {
   }
 
   export const Client = lazy(() => {
-    log.info("opening database", { path: path.join(Global.Path.data, "opencode.db") })
+    log.info("opening database", { path: Path })
 
-    const sqlite = new BunDatabase(path.join(Global.Path.data, "opencode.db"), { create: true })
+    const sqlite = new BunDatabase(Path, { create: true })
     state.sqlite = sqlite
 
     sqlite.run("PRAGMA journal_mode = WAL")
@@ -82,7 +93,7 @@ export namespace Database {
     sqlite.run("PRAGMA foreign_keys = ON")
     sqlite.run("PRAGMA wal_checkpoint(PASSIVE)")
 
-    const db = drizzle({ client: sqlite, schema })
+    const db = drizzle({ client: sqlite })
 
     // Apply schema migrations
     const entries =
@@ -94,6 +105,11 @@ export namespace Database {
         count: entries.length,
         mode: typeof OPENCODE_MIGRATIONS !== "undefined" ? "bundled" : "dev",
       })
+      if (Flag.OPENCODE_SKIP_MIGRATIONS) {
+        for (const item of entries) {
+          item.sql = "select 1;"
+        }
+      }
       migrate(db, entries)
     }
 
@@ -108,7 +124,7 @@ export namespace Database {
     Client.reset()
   }
 
-  export type TxOrDb = Transaction | Client
+  export type TxOrDb = SQLiteTransaction<"sync", void, any, any> | Client
 
   const ctx = Context.create<{
     tx: TxOrDb
@@ -143,7 +159,7 @@ export namespace Database {
     } catch (err) {
       if (err instanceof Context.NotFound) {
         const effects: (() => void | Promise<void>)[] = []
-        const result = Client().transaction((tx) => {
+        const result = (Client().transaction as any)((tx: TxOrDb) => {
           return ctx.provide({ tx, effects }, () => callback(tx))
         })
         for (const effect of effects) effect()

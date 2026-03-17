@@ -8,7 +8,7 @@ export const workspaceKey = (directory: string) => {
   return directory.replace(/[\\/]+$/, "")
 }
 
-export function sortSessions(now: number) {
+function sortSessions(now: number) {
   const oneMinuteAgo = now - 60 * 1000
   return (a: Session, b: Session) => {
     const aUpdated = a.time.updated ?? a.time.created
@@ -22,11 +22,23 @@ export function sortSessions(now: number) {
   }
 }
 
-export const isRootVisibleSession = (session: Session, directory: string) =>
+const isRootVisibleSession = (session: Session, directory: string) =>
   workspaceKey(session.directory) === workspaceKey(directory) && !session.parentID && !session.time?.archived
 
 export const sortedRootSessions = (store: { session: Session[]; path: { directory: string } }, now: number) =>
   store.session.filter((session) => isRootVisibleSession(session, store.path.directory)).sort(sortSessions(now))
+
+export const latestRootSession = (stores: { session: Session[]; path: { directory: string } }[], now: number) =>
+  stores
+    .flatMap((store) => store.session.filter((session) => isRootVisibleSession(session, store.path.directory)))
+    .sort(sortSessions(now))[0]
+
+export function hasProjectPermissions<T>(
+  request: Record<string, T[] | undefined>,
+  include: (item: T) => boolean = () => true,
+) {
+  return Object.values(request).some((list) => list?.some(include))
+}
 
 export const childMapByParent = (sessions: Session[]) => {
   const map = new Map<string, string[]>()
@@ -42,14 +54,6 @@ export const childMapByParent = (sessions: Session[]) => {
   return map
 }
 
-export function getDraggableId(event: unknown): string | undefined {
-  if (typeof event !== "object" || event === null) return undefined
-  if (!("draggable" in event)) return undefined
-  const draggable = (event as { draggable?: { id?: unknown } }).draggable
-  if (!draggable) return undefined
-  return typeof draggable.id === "string" ? draggable.id : undefined
-}
-
 export const displayName = (project: { name?: string; worktree: string }) =>
   project.name || getFilename(project.worktree)
 
@@ -62,9 +66,27 @@ export const errorMessage = (err: unknown, fallback: string) => {
   return fallback
 }
 
-export const syncWorkspaceOrder = (local: string, dirs: string[], existing?: string[]) => {
-  if (!existing) return dirs
-  const keep = existing.filter((d) => d !== local && dirs.includes(d))
-  const missing = dirs.filter((d) => d !== local && !existing.includes(d))
-  return [local, ...missing, ...keep]
+export const effectiveWorkspaceOrder = (local: string, dirs: string[], persisted?: string[]) => {
+  const root = workspaceKey(local)
+  const live = new Map<string, string>()
+
+  for (const dir of dirs) {
+    const key = workspaceKey(dir)
+    if (key === root) continue
+    if (!live.has(key)) live.set(key, dir)
+  }
+
+  if (!persisted?.length) return [local, ...live.values()]
+
+  const result = [local]
+  for (const dir of persisted) {
+    const key = workspaceKey(dir)
+    if (key === root) continue
+    const match = live.get(key)
+    if (!match) continue
+    result.push(match)
+    live.delete(key)
+  }
+
+  return [...result, ...live.values()]
 }

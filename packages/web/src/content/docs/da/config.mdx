@@ -14,10 +14,11 @@ OpenCode understøtter både **JSON** og **JSONC** (JSON med kommentarer) format
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
-  // Theme configuration
-  "theme": "opencode",
   "model": "anthropic/claude-sonnet-4-5",
   "autoupdate": true,
+  "server": {
+    "port": 4096,
+  },
 }
 ```
 
@@ -34,7 +35,7 @@ Konfigurationsfiler **flettes sammen**, erstattes ikke.
 
 Konfigurationsfiler flettes sammen, erstattes ikke. Indstillinger fra følgende konfigurationssteder kombineret. Senere konfigurationer tilsidesætter kun tidligere konfigurationer for modstridende nøgler. Ikke-modstridende indstillinger fra alle konfigurationer bevares.
 
-For eksempel, hvis dine globale konfigurationssæt `theme: "opencode"` og `autoupdate: true`, og dine projektkonfigurationssæt `model: "anthropic/claude-sonnet-4-5"`, vil den endelige konfiguration integrere alle tre indstillinger.
+For eksempel, hvis dine globale konfigurationssæt `autoupdate: true`, og dine projektkonfigurationssæt `model: "anthropic/claude-sonnet-4-5"`, vil den endelige konfiguration integrere begge indstillinger.
 
 ---
 
@@ -490,13 +491,15 @@ Du kan styre kontekstkomprimeringsadfærd gennem indstillingen `compaction`.
   "$schema": "https://opencode.ai/config.json",
   "compaction": {
     "auto": true,
-    "prune": true
+    "prune": true,
+    "reserved": 10000
   }
 }
 ```
 
 - `auto` - Komprimer automatisk sessionen, når konteksten er fuld (standard: `true`).
 - `prune` - Fjern gamle værktøjsudgange for at gemme tokens (standard: `true`).
+- `reserved` - Tokenbuffer til komprimering. Efterlader nok vindue til at undgå overløb under komprimering
 
 ---
 
@@ -582,8 +585,8 @@ Du kan deaktivere udbydere, der indlæses automatisk gennem `disabled_providers`
 
 Indstillingen `disabled_providers` accepterer en række udbyder-id'er. Når en udbyder er deaktiveret:
 
-- Det vil ikke blive indlæst, omgivelserne miljøvariabler er indstillet.
-- Den vil ikke blive indlæst, gennem API-nøgler er konfigureret kommandoen `/connect`.
+- Den vil ikke blive indlæst, selvom miljøvariabler er indstillet.
+- Den vil ikke blive indlæst, selvom API-nøgler er konfigureret via `/connect`-kommandoen.
 - Udbyderens modeller vises ikke på modelvalgslisten.
 
 ---
