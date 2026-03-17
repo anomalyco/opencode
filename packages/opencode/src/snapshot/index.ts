@@ -14,6 +14,8 @@ export namespace Snapshot {
   const log = Log.create({ service: "snapshot" })
   const hour = 60 * 60 * 1000
   const prune = "7.days"
+  // Warn when snapshot exceeds 1GB
+  const warnThreshold = 1024 * 1024 * 1024
 
   function args(git: string, cmd: string[]) {
     return ["--git-dir", git, "--work-tree", Instance.worktree, ...cmd]
@@ -58,6 +60,17 @@ export namespace Snapshot {
     const cfg = await Config.get()
     if (cfg.snapshot === false) return
     const git = gitdir()
+
+    // Check snapshot directory size and warn if it's too large
+    const size = await getDirSize(git)
+    if (size > warnThreshold) {
+      log.warn("snapshot directory is large", {
+        size: formatSize(size),
+        threshold: formatSize(warnThreshold),
+        hint: 'Consider setting `"snapshot": false` in config or running cleanup',
+      })
+    }
+
     if (await fs.mkdir(git, { recursive: true })) {
       await Process.run(["git", "init"], {
         env: {
@@ -360,6 +373,52 @@ export namespace Snapshot {
       })
     }
     return result
+  }
+
+  async function getDirSize(dir: string): Promise<number> {
+    const exists = await fs
+      .stat(dir)
+      .then(() => true)
+      .catch(() => false)
+    if (!exists) return 0
+
+    // Pure Node.js implementation - no external commands
+    let totalSize = 0
+    const stack: string[] = [dir]
+    const maxDepth = 20 // Prevent infinite recursion
+
+    while (stack.length > 0) {
+      const current = stack.pop()!
+      try {
+        const entries = await fs.readdir(current, { withFileTypes: true })
+        for (const entry of entries) {
+          const fullPath = path.join(current, entry.name)
+          if (entry.isDirectory()) {
+            // Skip nested .git directories to avoid infinite loops
+            if (entry.name !== ".git" && current.split(path.sep).length < maxDepth) {
+              stack.push(fullPath)
+            }
+          } else if (entry.isFile()) {
+            try {
+              const stat = await fs.stat(fullPath)
+              totalSize += stat.size
+            } catch {
+              // Ignore files that can't be accessed
+            }
+          }
+        }
+      } catch {
+        // Ignore directories that can't be read
+      }
+    }
+    return totalSize
+  }
+
+  function formatSize(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
   }
 
   function gitdir() {
