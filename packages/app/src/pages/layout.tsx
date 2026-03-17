@@ -1959,6 +1959,7 @@ export default function Layout(props: ParentProps) {
     const merged = createMemo(() => panelProps.mobile || (panelProps.merged ?? layout.sidebar.opened()))
     const hover = createMemo(() => !panelProps.mobile && panelProps.merged === false && !layout.sidebar.opened())
     const popover = createMemo(() => !!panelProps.mobile || panelProps.merged === false || layout.sidebar.opened())
+    const empty = createMemo(() => !params.dir && layout.projects.list().length === 0)
     const projectName = createMemo(() => {
       const item = project()
       if (!item) return ""
@@ -2014,19 +2015,21 @@ export default function Layout(props: ParentProps) {
         <Show
           when={project()}
           fallback={
-            <div class="flex-1 min-h-0 -mt-4 flex items-center justify-center px-6 pb-64 text-center">
-              <div class="mt-8 flex max-w-60 flex-col items-center gap-6 text-center">
-                <div class="flex flex-col gap-3">
-                  <div class="text-14-medium text-text-strong">{language.t("sidebar.empty.title")}</div>
-                  <div class="text-14-regular text-text-base" style={{ "line-height": "var(--line-height-normal)" }}>
-                    {language.t("sidebar.empty.description")}
+            <Show when={empty()}>
+              <div class="flex-1 min-h-0 -mt-4 flex items-center justify-center px-6 pb-64 text-center">
+                <div class="mt-8 flex max-w-60 flex-col items-center gap-6 text-center">
+                  <div class="flex flex-col gap-3">
+                    <div class="text-14-medium text-text-strong">{language.t("sidebar.empty.title")}</div>
+                    <div class="text-14-regular text-text-base" style={{ "line-height": "var(--line-height-normal)" }}>
+                      {language.t("sidebar.empty.description")}
+                    </div>
                   </div>
+                  <Button size="large" icon="folder-add-left" onClick={chooseProject}>
+                    {language.t("command.project.open")}
+                  </Button>
                 </div>
-                <Button size="large" icon="folder-add-left" onClick={chooseProject}>
-                  {language.t("command.project.open")}
-                </Button>
               </div>
-            </div>
+            </Show>
           }
         >
           <>
