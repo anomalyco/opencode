@@ -555,4 +555,26 @@ describe("filesystem", () => {
       expect(() => Filesystem.resolve(path.join(file, "child"))).toThrow()
     })
   })
+
+  describe("Windows reserved names", () => {
+    test("detects reserved Windows basenames", () => {
+      if (process.platform !== "win32") return
+      expect(Filesystem.hasReservedWindowsBasename("C:\\temp\\NUL")).toBe(true)
+      expect(Filesystem.hasReservedWindowsBasename("C:\\temp\\nul.txt")).toBe(true)
+      expect(Filesystem.hasReservedWindowsBasename("C:\\temp\\NUL.")).toBe(true)
+      expect(Filesystem.hasReservedWindowsBasename("C:\\temp\\NUL ")).toBe(true)
+      expect(Filesystem.hasReservedWindowsBasename("C:\\temp\\COM¹")).toBe(true)
+      expect(Filesystem.hasReservedWindowsBasename("C:\\temp\\LPT².txt")).toBe(true)
+      expect(Filesystem.hasReservedWindowsBasename("C:\\temp\\nested\\COM1.log")).toBe(true)
+      expect(Filesystem.hasReservedWindowsBasename("C:\\temp\\notes.txt")).toBe(false)
+    })
+
+    test("rejects reserved Windows basenames", () => {
+      if (process.platform !== "win32") return
+      expect(() => Filesystem.assertSafeWindowsPath("C:\\temp\\NUL")).toThrow("reserved Windows name")
+      expect(() => Filesystem.assertSafeWindowsPath("C:\\temp\\NUL.")).toThrow("reserved Windows name")
+      expect(() => Filesystem.assertSafeWindowsPath("C:\\temp\\COM³")).toThrow("reserved Windows name")
+      expect(() => Filesystem.assertSafeWindowsPath("C:\\temp\\dir\\LPT1.txt")).toThrow("reserved Windows name")
+    })
+  })
 })

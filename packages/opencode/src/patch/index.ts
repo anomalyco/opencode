@@ -3,6 +3,7 @@ import * as path from "path"
 import * as fs from "fs/promises"
 import { readFileSync } from "fs"
 import { Log } from "../util/log"
+import { Filesystem } from "../util/filesystem"
 
 export namespace Patch {
   const log = Log.create({ service: "patch" })
@@ -528,6 +529,7 @@ export namespace Patch {
       switch (hunk.type) {
         case "add":
           // Create parent directories
+          Filesystem.assertSafeWindowsPath(hunk.path)
           const addDir = path.dirname(hunk.path)
           if (addDir !== "." && addDir !== "/") {
             await fs.mkdir(addDir, { recursive: true })
@@ -539,16 +541,19 @@ export namespace Patch {
           break
 
         case "delete":
+          Filesystem.assertSafeWindowsPath(hunk.path)
           await fs.unlink(hunk.path)
           deleted.push(hunk.path)
           log.info(`Deleted file: ${hunk.path}`)
           break
 
         case "update":
+          Filesystem.assertSafeWindowsPath(hunk.path)
           const fileUpdate = deriveNewContentsFromChunks(hunk.path, hunk.chunks)
 
           if (hunk.move_path) {
             // Handle file move
+            Filesystem.assertSafeWindowsPath(hunk.move_path)
             const moveDir = path.dirname(hunk.move_path)
             if (moveDir !== "." && moveDir !== "/") {
               await fs.mkdir(moveDir, { recursive: true })

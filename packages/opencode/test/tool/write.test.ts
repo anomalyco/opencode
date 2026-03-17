@@ -86,6 +86,28 @@ describe("tool.write", () => {
         },
       })
     })
+
+    test("rejects reserved Windows filenames", async () => {
+      if (process.platform !== "win32") return
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "NUL")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const write = await WriteTool.init()
+          await expect(
+            write.execute(
+              {
+                filePath: filepath,
+                content: "Hello, World!",
+              },
+              ctx,
+            ),
+          ).rejects.toThrow("reserved Windows name")
+        },
+      })
+    })
   })
 
   describe("existing file overwrite", () => {

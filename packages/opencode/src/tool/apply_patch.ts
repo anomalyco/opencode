@@ -59,6 +59,7 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
 
     for (const hunk of hunks) {
       const filePath = path.resolve(Instance.directory, hunk.path)
+      Filesystem.assertSafeWindowsPath(filePath)
       await assertExternalDirectory(ctx, filePath)
 
       switch (hunk.type) {
@@ -117,6 +118,7 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
           }
 
           const movePath = hunk.move_path ? path.resolve(Instance.directory, hunk.move_path) : undefined
+          if (movePath) Filesystem.assertSafeWindowsPath(movePath)
           await assertExternalDirectory(ctx, movePath)
 
           fileChanges.push({

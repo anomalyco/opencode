@@ -17,6 +17,7 @@ Before executing the command, please follow these steps:
      - mkdir /Users/name/My Documents (incorrect - will fail)
      - python "/path/with spaces/script.py" (correct)
      - python /path/with spaces/script.py (incorrect - will fail)
+   - On Windows, commands may run in Git Bash (or another POSIX shell) rather than `cmd.exe`. Redirect discarded output to `/dev/null`, not `NUL`.
    - After ensuring proper quoting, execute the command.
    - Capture the output of the command.
 

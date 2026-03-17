@@ -73,6 +73,29 @@ describe("tool.edit", () => {
       })
     })
 
+    test("rejects reserved Windows filenames when creating files", async () => {
+      if (process.platform !== "win32") return
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "NUL")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const edit = await EditTool.init()
+          await expect(
+            edit.execute(
+              {
+                filePath: filepath,
+                oldString: "",
+                newString: "new content",
+              },
+              ctx,
+            ),
+          ).rejects.toThrow("reserved Windows name")
+        },
+      })
+    })
+
     test("emits add event for new files", async () => {
       await using tmp = await tmpdir()
       const filepath = path.join(tmp.path, "new.txt")

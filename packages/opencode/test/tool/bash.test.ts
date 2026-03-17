@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import os from "os"
 import path from "path"
-import { BashTool } from "../../src/tool/bash"
+import { BashTool, hasLiteralWindowsReservedRedirectInCommand, isWindowsPosixShell } from "../../src/tool/bash"
 import { Instance } from "../../src/project/instance"
 import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
@@ -39,6 +39,27 @@ describe("tool.bash", () => {
         expect(result.metadata.output).toContain("test")
       },
     })
+  })
+
+  test("detects Windows POSIX shells", () => {
+    if (process.platform !== "win32") return
+    expect(isWindowsPosixShell("C:/Program Files/Git/bin/bash.exe")).toBe(true)
+    expect(isWindowsPosixShell("C:/Windows/System32/cmd.exe")).toBe(false)
+  })
+
+  test("detects literal reserved redirect targets", async () => {
+    if (process.platform !== "win32") return
+    expect(await hasLiteralWindowsReservedRedirectInCommand("dir >NUL")).toBe(true)
+    expect(await hasLiteralWindowsReservedRedirectInCommand("dir 2>NUL")).toBe(true)
+    expect(await hasLiteralWindowsReservedRedirectInCommand('dir >"NUL"')).toBe(true)
+    expect(await hasLiteralWindowsReservedRedirectInCommand('dir >N"UL"')).toBe(true)
+    expect(await hasLiteralWindowsReservedRedirectInCommand("dir >NU\\L")).toBe(true)
+    expect(await hasLiteralWindowsReservedRedirectInCommand('dir >"./NUL"')).toBe(true)
+    expect(await hasLiteralWindowsReservedRedirectInCommand('printf x > "./NUL/out.txt"')).toBe(true)
+    expect(await hasLiteralWindowsReservedRedirectInCommand('dir >"NU\\L"')).toBe(false)
+    expect(await hasLiteralWindowsReservedRedirectInCommand('cmd /c "dir >NUL 2>&1"')).toBe(false)
+    expect(await hasLiteralWindowsReservedRedirectInCommand('dir >"$OUT"')).toBe(false)
+    expect(await hasLiteralWindowsReservedRedirectInCommand('printf x >"$(printf NUL)"')).toBe(false)
   })
 })
 

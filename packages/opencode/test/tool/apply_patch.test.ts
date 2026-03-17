@@ -75,6 +75,22 @@ describe("tool.apply_patch freeform", () => {
     await expect(execute({ patchText: emptyPatch }, ctx)).rejects.toThrow("patch rejected: empty patch")
   })
 
+  test("rejects reserved Windows filenames", async () => {
+    if (process.platform !== "win32") return
+    await using fixture = await tmpdir({ git: true })
+    const { ctx } = makeCtx()
+
+    await Instance.provide({
+      directory: fixture.path,
+      fn: async () => {
+        const addPatch = "*** Begin Patch\n*** Add File: NUL\n+bad\n*** End Patch"
+        const deletePatch = "*** Begin Patch\n*** Delete File: NUL\n*** End Patch"
+        await expect(execute({ patchText: addPatch }, ctx)).rejects.toThrow("reserved Windows name")
+        await expect(execute({ patchText: deletePatch }, ctx)).rejects.toThrow("reserved Windows name")
+      },
+    })
+  })
+
   test("applies add/update/delete in one patch", async () => {
     await using fixture = await tmpdir({ git: true })
     const { ctx, calls } = makeCtx()

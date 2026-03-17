@@ -8,6 +8,12 @@ import { pipeline } from "stream/promises"
 import { Glob } from "./glob"
 
 export namespace Filesystem {
+  const WINDOWS_RESERVED_DEVICE_INDEX = "[1-9\u00b9\u00b2\u00b3]"
+  const WINDOWS_RESERVED_BASENAME = new RegExp(
+    `^(con|prn|aux|nul|com${WINDOWS_RESERVED_DEVICE_INDEX}|lpt${WINDOWS_RESERVED_DEVICE_INDEX})(?:\\..*)?$`,
+    "i",
+  )
+
   // Fast sync version for metadata checks
   export async function exists(p: string): Promise<boolean> {
     return existsSync(p)
@@ -51,7 +57,28 @@ export namespace Filesystem {
     return typeof e === "object" && e !== null && "code" in e && (e as { code: string }).code === "ENOENT"
   }
 
+  export function hasReservedWindowsBasename(p: string): boolean {
+    if (process.platform !== "win32") return false
+    const normalized = windowsPath(p).replace(/^\\\\\?\\/, "")
+    return normalized
+      .split(/[\\/]+/)
+      .filter(Boolean)
+      .some((segment) => {
+        if (/^[a-zA-Z]:$/.test(segment)) return false
+        const trimmed = segment.replace(/[ .]+$/g, "")
+        return trimmed.length > 0 && WINDOWS_RESERVED_BASENAME.test(trimmed)
+      })
+  }
+
+  export function assertSafeWindowsPath(p: string): void {
+    if (!hasReservedWindowsBasename(p)) return
+    throw new Error(
+      `Path contains a reserved Windows name: ${p}. Names like NUL, CON, PRN, AUX, COM1-COM9, and LPT1-LPT9 are not allowed.`,
+    )
+  }
+
   export async function write(p: string, content: string | Buffer | Uint8Array, mode?: number): Promise<void> {
+    assertSafeWindowsPath(p)
     try {
       if (mode) {
         await writeFile(p, content, { mode })
@@ -81,6 +108,7 @@ export namespace Filesystem {
     stream: ReadableStream<Uint8Array> | Readable,
     mode?: number,
   ): Promise<void> {
+    assertSafeWindowsPath(p)
     const dir = dirname(p)
     if (!existsSync(dir)) {
       await mkdir(dir, { recursive: true })

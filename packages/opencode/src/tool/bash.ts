@@ -21,7 +21,81 @@ import { Plugin } from "@/plugin"
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
 
+interface ShellNodeLike {
+  type: string
+  text: string
+  namedChildCount: number
+  namedChild(index: number): ShellNodeLike | null
+  descendantsOfType(type: string): ShellNodeLike[]
+}
+
 export const log = Log.create({ service: "bash-tool" })
+
+export function isWindowsPosixShell(shell: string) {
+  const basename =
+    shell
+      .split(/[\\/]+/)
+      .pop()
+      ?.toLowerCase() ?? ""
+  return !["cmd", "cmd.exe", "powershell", "powershell.exe", "pwsh", "pwsh.exe"].includes(basename)
+}
+
+function literalShellWord(node: ShellNodeLike): string | undefined {
+  switch (node.type) {
+    case "word":
+      return node.text.replace(/\\(.)/g, "$1")
+    case "string_content":
+      return node.text.replace(/\\(["$`\\\n])/g, "$1")
+    case "raw_string":
+      return node.text.replace(/^'/, "").replace(/'$/, "")
+    case "string":
+    case "concatenation": {
+      if (node.namedChildCount === 0) {
+        return node.text.replace(/^['"]/, "").replace(/['"]$/, "")
+      }
+      let result = ""
+      for (let i = 0; i < node.namedChildCount; i++) {
+        const child = node.namedChild(i)
+        if (!child) continue
+        const text = literalShellWord(child)
+        if (text === undefined) return undefined
+        result += text
+      }
+      return result
+    }
+    default:
+      return undefined
+  }
+}
+
+function literalRedirectTarget(node: ShellNodeLike): string | undefined {
+  const target = node.namedChild(node.namedChildCount - 1)
+  if (!target) return undefined
+  return literalShellWord(target)
+}
+
+export function hasLiteralWindowsReservedRedirect(rootNode: ShellNodeLike) {
+  for (const redirect of rootNode.descendantsOfType("file_redirect")) {
+    const target = literalRedirectTarget(redirect)
+    if (!target) continue
+    if (Filesystem.hasReservedWindowsBasename(target)) return true
+  }
+  return false
+}
+
+export async function hasLiteralWindowsReservedRedirectInCommand(command: string) {
+  const tree = await parser().then((p) => p.parse(command))
+  return tree ? hasLiteralWindowsReservedRedirect(tree.rootNode as ShellNodeLike) : false
+}
+
+export function assertWindowsLiteralRedirectCompatibility(rootNode: ShellNodeLike, shell: string) {
+  if (process.platform !== "win32") return
+  if (!isWindowsPosixShell(shell)) return
+  if (!hasLiteralWindowsReservedRedirect(rootNode)) return
+  throw new Error(
+    "On Windows, the bash tool may run in a POSIX shell such as Git Bash. Redirecting output to a reserved Windows name like `NUL` can create a literal artifact. Use `/dev/null` instead, or wrap the command with `cmd /c` if you need cmd.exe semantics.",
+  )
+}
 
 const resolveWasm = (asset: string) => {
   if (asset.startsWith("file://")) return fileURLToPath(asset)
@@ -85,6 +159,7 @@ export const BashTool = Tool.define("bash", async () => {
       if (!tree) {
         throw new Error("Failed to parse command")
       }
+      assertWindowsLiteralRedirectCompatibility(tree.rootNode as ShellNodeLike, shell)
       const directories = new Set<string>()
       if (!Instance.containsPath(cwd)) directories.add(cwd)
       const patterns = new Set<string>()

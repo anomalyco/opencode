@@ -51,6 +51,7 @@ export const EditTool = Tool.define("edit", {
     }
 
     const filePath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
+    Filesystem.assertSafeWindowsPath(filePath)
     await assertExternalDirectory(ctx, filePath)
 
     let diff = ""

@@ -24,6 +24,7 @@ export const WriteTool = Tool.define("write", {
   }),
   async execute(params, ctx) {
     const filepath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
+    Filesystem.assertSafeWindowsPath(filepath)
     await assertExternalDirectory(ctx, filepath)
 
     const exists = await Filesystem.exists(filepath)
