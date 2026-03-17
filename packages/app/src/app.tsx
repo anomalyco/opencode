@@ -276,7 +276,7 @@ function ServerScopedProviders(
 
   return (
     <Show when={server.key} keyed>
-      {() => (
+      {(_) => (
         <ConnectionGate disableHealthCheck={props.disableHealthCheck}>
           <GlobalSDKProvider>
             <GlobalSyncProvider>
