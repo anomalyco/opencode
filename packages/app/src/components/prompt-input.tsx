@@ -37,6 +37,7 @@ import { usePlatform } from "@/context/platform"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { promptEnabled, promptProbe } from "@/testing/prompt"
+import { useSettings } from "@/context/settings"
 import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge } from "./prompt-input/editor-dom"
 import { createPromptAttachments } from "./prompt-input/attachments"
 import { ACCEPTED_FILE_TYPES } from "./prompt-input/files"
@@ -115,6 +116,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const language = useLanguage()
   const platform = usePlatform()
   const { params, tabs, view } = useSessionLayout()
+  const settings = useSettings()
   let editorRef!: HTMLDivElement
   let fileInputRef: HTMLInputElement | undefined
   let scrollRef!: HTMLDivElement
@@ -1221,7 +1223,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return
     }
 
-    if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+    if (settings.general.historyArrows() && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
       if (event.altKey || event.ctrlKey || event.metaKey) return
       const { collapsed } = getCaretState()
       if (!collapsed) return
