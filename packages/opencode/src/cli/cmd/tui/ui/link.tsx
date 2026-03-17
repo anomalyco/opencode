@@ -11,15 +11,26 @@ export interface LinkProps {
 /**
  * Link component that renders clickable hyperlinks.
  * Clicking anywhere on the link text opens the URL in the default browser.
+ * A click-and-drag (text selection) is not treated as a click and does not open the browser.
  */
 export function Link(props: LinkProps) {
   const displayText = props.children ?? props.href
+  let mouseDownX = -1
+  let mouseDownY = -1
 
   return (
     <text
       fg={props.fg}
-      onMouseUp={() => {
-        open(props.href).catch(() => {})
+      onMouseDown={(evt) => {
+        mouseDownX = evt.x
+        mouseDownY = evt.y
+      }}
+      onMouseUp={(evt) => {
+        if (evt.x === mouseDownX && evt.y === mouseDownY) {
+          open(props.href).catch(() => {})
+        }
+        mouseDownX = -1
+        mouseDownY = -1
       }}
     >
       {displayText}

@@ -119,6 +119,11 @@ function AutoMethod(props: AutoMethodProps) {
         .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
         .catch(toast.error)
     }
+    if (evt.name === "u" && !evt.ctrl && !evt.meta) {
+      Clipboard.copy(props.authorization.url)
+        .then(() => toast.show({ message: "URL copied to clipboard", variant: "info" }))
+        .catch(toast.error)
+    }
   })
 
   onMount(async () => {
@@ -151,7 +156,8 @@ function AutoMethod(props: AutoMethodProps) {
       </box>
       <text fg={theme.textMuted}>Waiting for authorization...</text>
       <text fg={theme.text}>
-        c <span style={{ fg: theme.textMuted }}>copy</span>
+        c <span style={{ fg: theme.textMuted }}>copy code</span>{"  "}
+        u <span style={{ fg: theme.textMuted }}>copy url</span>
       </text>
     </box>
   )
@@ -168,7 +174,16 @@ function CodeMethod(props: CodeMethodProps) {
   const sdk = useSDK()
   const sync = useSync()
   const dialog = useDialog()
+  const toast = useToast()
   const [error, setError] = createSignal(false)
+
+  useKeyboard((evt) => {
+    if (evt.name === "u" && !evt.ctrl && !evt.meta) {
+      Clipboard.copy(props.authorization.url)
+        .then(() => toast.show({ message: "URL copied to clipboard", variant: "info" }))
+        .catch(toast.error)
+    }
+  })
 
   return (
     <DialogPrompt
@@ -195,6 +210,9 @@ function CodeMethod(props: CodeMethodProps) {
           <Show when={error()}>
             <text fg={theme.error}>Invalid code</text>
           </Show>
+          <text fg={theme.text}>
+            u <span style={{ fg: theme.textMuted }}>copy url</span>
+          </text>
         </box>
       )}
     />
