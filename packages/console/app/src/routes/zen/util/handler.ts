@@ -273,7 +273,7 @@ export async function handler(
                   await trackUsage(sessionId, billingSource, authInfo, modelInfo, providerInfo, usageInfo, costInfo)
                   await reload(billingSource, authInfo, costInfo)
                   const cost = calculateOccuredCost(billingSource, costInfo)
-                  c.enqueue(encoder.encode(usageParser.buidlCostChunk(cost)))
+                  c.enqueue(encoder.encode(usageParser.buildCostChunk(cost)))
                 }
                 c.close()
                 return
