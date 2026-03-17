@@ -1,6 +1,19 @@
 import { spawn as launch, type ChildProcess } from "child_process"
 import { buffer } from "node:stream/consumers"
 
+/**
+ * Process execution utilities with support for timeouts, abort signals,
+ * and comprehensive error handling.
+ *
+ * Provides functions for spawning processes, running commands with captured
+ * output, and handling process lifecycle including graceful termination.
+ *
+ * @example
+ * ```typescript
+ * const result = await Process.run(["git", "status"])
+ * const lines = await Process.lines(["ls", "-la"])
+ * ```
+ */
 export namespace Process {
   export type Stdio = "inherit" | "pipe" | "ignore"
 
