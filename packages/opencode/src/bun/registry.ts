@@ -2,6 +2,18 @@ import semver from "semver"
 import { Log } from "../util/log"
 import { Process } from "../util/process"
 
+/**
+ * Package registry utilities for checking package versions.
+ *
+ * Provides functions to query package information from the registry
+ * and check if cached versions are outdated.
+ *
+ * @example
+ * ```typescript
+ * const version = await PackageRegistry.info("lodash", "version")
+ * const outdated = await PackageRegistry.isOutdated("lodash", "4.17.0")
+ * ```
+ */
 export namespace PackageRegistry {
   const log = Log.create({ service: "bun" })
 
