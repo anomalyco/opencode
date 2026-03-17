@@ -38,6 +38,7 @@ export namespace LLM {
     sessionID: string
     model: Provider.Model
     agent: Agent.Info
+    permission?: PermissionNext.Ruleset
     system: string[]
     abort: AbortSignal
     messages: ModelMessage[]
@@ -271,8 +272,11 @@ export namespace LLM {
     })
   }
 
-  async function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "user">) {
-    const disabled = PermissionNext.disabled(Object.keys(input.tools), input.agent.permission)
+  async function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "permission" | "user">) {
+    const disabled = PermissionNext.disabled(
+      Object.keys(input.tools),
+      PermissionNext.merge(input.agent.permission, input.permission ?? []),
+    )
     for (const tool of Object.keys(input.tools)) {
       if (input.user.tools?.[tool] === false || disabled.has(tool)) {
         delete input.tools[tool]
