@@ -1930,6 +1930,45 @@ export namespace LSPServer {
     },
   }
 
+  export const ReScript: Info = {
+    id: "rescript",
+    extensions: [".res", ".resi"],
+    root: NearestRoot(["rescript.json", "bsconfig.json"]),
+    async spawn(root) {
+      let binary = which("rescript-language-server")
+      const args: string[] = []
+      if (!binary) {
+        const js = path.join(Global.Path.bin, "node_modules", "@rescript", "language-server", "out", "cli.js")
+        if (!(await Filesystem.exists(js))) {
+          if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+          await Process.spawn([BunProc.which(), "install", "@rescript/language-server"], {
+            cwd: Global.Path.bin,
+            env: {
+              ...process.env,
+              BUN_BE_BUN: "1",
+            },
+            stdout: "pipe",
+            stderr: "pipe",
+            stdin: "pipe",
+          }).exited
+        }
+        binary = BunProc.which()
+        args.push("run", js)
+      }
+      args.push("--stdio")
+      const proc = spawn(binary, args, {
+        cwd: root,
+        env: {
+          ...process.env,
+          BUN_BE_BUN: "1",
+        },
+      })
+      return {
+        process: proc,
+      }
+    },
+  }
+
   export const Nixd: Info = {
     id: "nixd",
     extensions: [".nix"],
