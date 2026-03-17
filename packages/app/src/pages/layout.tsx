@@ -1959,6 +1959,7 @@ export default function Layout(props: ParentProps) {
     const merged = createMemo(() => panelProps.mobile || (panelProps.merged ?? layout.sidebar.opened()))
     const hover = createMemo(() => !panelProps.mobile && panelProps.merged === false && !layout.sidebar.opened())
     const popover = createMemo(() => !!panelProps.mobile || panelProps.merged === false || layout.sidebar.opened())
+    const empty = createMemo(() => !params.dir && layout.projects.list().length === 0)
     const projectName = createMemo(() => {
       const item = project()
       if (!item) return ""
@@ -2011,7 +2012,26 @@ export default function Layout(props: ParentProps) {
           width: panelProps.mobile ? undefined : `${Math.max(Math.max(layout.sidebar.width(), 244) - 64, 0)}px`,
         }}
       >
-        <Show when={project()}>
+        <Show
+          when={project()}
+          fallback={
+            <Show when={empty()}>
+              <div class="flex-1 min-h-0 -mt-4 flex items-center justify-center px-6 pb-64 text-center">
+                <div class="mt-8 flex max-w-60 flex-col items-center gap-6 text-center">
+                  <div class="flex flex-col gap-3">
+                    <div class="text-14-medium text-text-strong">{language.t("sidebar.empty.title")}</div>
+                    <div class="text-14-regular text-text-base" style={{ "line-height": "var(--line-height-normal)" }}>
+                      {language.t("sidebar.empty.description")}
+                    </div>
+                  </div>
+                  <Button size="large" icon="folder-add-left" onClick={chooseProject}>
+                    {language.t("command.project.open")}
+                  </Button>
+                </div>
+              </div>
+            </Show>
+          }
+        >
           <>
             <div class="shrink-0 pl-1 py-1">
               <div class="group/project flex items-start justify-between gap-2 py-2 pl-2 pr-0">
@@ -2260,13 +2280,7 @@ export default function Layout(props: ParentProps) {
       helpLabel={() => language.t("sidebar.help")}
       onOpenHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
       renderPanel={() =>
-        mobile ? (
-          <SidebarPanel project={currentProject} mobile />
-        ) : (
-          <Show when={currentProject()}>
-            <SidebarPanel project={currentProject} merged />
-          </Show>
-        )
+        mobile ? <SidebarPanel project={currentProject} mobile /> : <SidebarPanel project={currentProject} merged />
       }
     />
   )
