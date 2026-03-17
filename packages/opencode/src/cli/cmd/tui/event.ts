@@ -3,6 +3,20 @@ import { Bus } from "@/bus"
 import { SessionID } from "@/session/schema"
 import z from "zod"
 
+/**
+ * TUI-specific events for prompt handling, commands, and toasts.
+ *
+ * Defines typed events for the TUI including prompt appending,
+ * command execution, toast notifications, and session selection.
+ *
+ * @example
+ * ```typescript
+ * Bus.publish(TuiEvent.ToastShow, {
+ *   message: "Hello",
+ *   variant: "info"
+ * })
+ * ```
+ */
 export const TuiEvent = {
   PromptAppend: BusEvent.define("tui.prompt.append", z.object({ text: z.string() })),
   CommandExecute: BusEvent.define(
