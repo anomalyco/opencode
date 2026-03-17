@@ -1,6 +1,23 @@
 import type { AssistantMessage, Part, UserMessage } from "@opencode-ai/sdk/v2"
 import { Locale } from "@/util/locale"
 
+/**
+ * Transcript formatting utilities for chat sessions.
+ *
+ * Converts chat sessions and messages to markdown format for export.
+ * Supports formatting user messages, assistant responses, tool calls,
+ * and reasoning content with configurable options.
+ *
+ * @example
+ * ```typescript
+ * const transcript = formatTranscript(session, messages, {
+ *   thinking: true,
+ *   toolDetails: true,
+ *   assistantMetadata: true
+ * })
+ * ```
+ */
+
 export type TranscriptOptions = {
   thinking: boolean
   toolDetails: boolean
