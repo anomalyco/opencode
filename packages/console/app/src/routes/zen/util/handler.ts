@@ -228,7 +228,7 @@ export async function handler(
       const body = JSON.stringify(
         responseConverter({
           ...json,
-          cost: calculateOccuredCost(billingSource, costInfo),
+          cost: calculateOccurredCost(billingSource, costInfo),
         }),
       )
       logger.metric({ response_length: body.length })
@@ -811,7 +811,7 @@ export async function handler(
     }
   }
 
-  function calculateOccuredCost(billingSource: BillingSource, costInfo: CostInfo) {
+  function calculateOccurredCost(billingSource: BillingSource, costInfo: CostInfo) {
     return billingSource === "balance" ? (costInfo.totalCostInCent / 100).toFixed(8) : "0"
   }
 
