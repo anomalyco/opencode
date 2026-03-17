@@ -44,6 +44,7 @@ import { Filesystem } from "@/util/filesystem"
 import { QuestionRoutes } from "./routes/question"
 import { PermissionRoutes } from "./routes/permission"
 import { GlobalRoutes } from "./routes/global"
+import { TabRoutes } from "./routes/tab"
 import { MDNS } from "./mdns"
 import { lazy } from "@/util/lazy"
 
@@ -259,6 +260,7 @@ export namespace Server {
       .route("/provider", ProviderRoutes())
       .route("/", FileRoutes())
       .route("/mcp", McpRoutes())
+      .route("/tab", TabRoutes())
       .route("/tui", TuiRoutes())
       .post(
         "/instance/dispose",
