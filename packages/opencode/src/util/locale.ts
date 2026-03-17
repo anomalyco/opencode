@@ -1,3 +1,17 @@
+/**
+ * Locale-aware formatting utilities for strings, dates, numbers, and durations.
+ *
+ * Provides functions for formatting various data types according to locale conventions,
+ * including title case conversion, time/date formatting, number abbreviation, and
+ * duration formatting.
+ *
+ * @example
+ * ```typescript
+ * Locale.titlecase("hello world") // "Hello World"
+ * Locale.number(1500) // "1.5K"
+ * Locale.duration(65000) // "1m 5s"
+ * ```
+ */
 export namespace Locale {
   export function titlecase(str: string) {
     return str.replace(/\b\w/g, (c) => c.toUpperCase())
