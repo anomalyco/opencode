@@ -365,7 +365,6 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
           "gpt-5.2",
           "gpt-5.4",
           "gpt-5.4-mini",
-          "gpt-5.4-nano",
           "gpt-5.2-codex",
           "gpt-5.3-codex",
           "gpt-5.1-codex",

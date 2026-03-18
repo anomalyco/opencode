@@ -175,13 +175,13 @@ describe("plugin.codex", () => {
       expect(remaining).toContain("gpt-5.4-mini")
     })
 
-    test("keeps gpt-5.4-nano in models", async () => {
+    test("filters out gpt-5.4-nano (API-only)", async () => {
       const models = {
         "gpt-5.4-nano": createMockModel("gpt-5.4-nano"),
         "gpt-4o": createMockModel("gpt-4o"),
       }
       const remaining = await runLoaderFilter(models)
-      expect(remaining).toContain("gpt-5.4-nano")
+      expect(remaining).not.toContain("gpt-5.4-nano")
     })
 
     test("filters out unrelated non-codex models", async () => {
@@ -195,7 +195,7 @@ describe("plugin.codex", () => {
       }
       const remaining = await runLoaderFilter(models)
       expect(remaining).toContain("gpt-5.4-mini")
-      expect(remaining).toContain("gpt-5.4-nano")
+      expect(remaining).not.toContain("gpt-5.4-nano")
       expect(remaining).not.toContain("gpt-4o")
       expect(remaining).not.toContain("gpt-4-turbo")
       expect(remaining).not.toContain("o1-preview")
