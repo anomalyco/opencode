@@ -109,16 +109,30 @@ export const ProviderRoutes = lazy(() =>
         "json",
         z.object({
           method: z.number().meta({ description: "Auth method index" }),
+          inputs: z.record(z.string(), z.string()).optional().meta({ description: "Prompt inputs" }),
         }),
       ),
       async (c) => {
         const providerID = c.req.valid("param").providerID
-        const { method } = c.req.valid("json")
-        const result = await ProviderAuth.authorize({
+        const { method, inputs } = c.req.valid("json")
+        return ProviderAuth.authorize({
           providerID,
           method,
+          inputs,
         })
-        return c.json(result)
+          .then((result) => c.json(result))
+          .catch((error) => {
+            if (ProviderAuth.ValidationFailed.isInstance(error)) {
+              return c.json(
+                {
+                  field: error.data.field,
+                  message: error.data.message,
+                },
+                400,
+              )
+            }
+            throw error
+          })
       },
     )
     .post(

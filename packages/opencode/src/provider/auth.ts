@@ -20,6 +20,7 @@ export namespace ProviderAuth {
     z.object({
       providerID: ProviderID.zod,
       method: z.number(),
+      inputs: z.record(z.string(), z.string()).optional(),
     }),
     async (input): Promise<Authorization | undefined> =>
       runPromiseInstance(S.ProviderAuthService.use((service) => service.authorize(input))),
@@ -37,4 +38,5 @@ export namespace ProviderAuth {
   export import OauthMissing = S.OauthMissing
   export import OauthCodeMissing = S.OauthCodeMissing
   export import OauthCallbackFailed = S.OauthCallbackFailed
+  export import ValidationFailed = S.ValidationFailed
 }
