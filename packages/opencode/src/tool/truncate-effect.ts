@@ -30,7 +30,7 @@ export namespace TruncateEffect {
     return PermissionNext.evaluate("task", "*", agent.permission).action !== "deny"
   }
 
-  export interface Api {
+  export interface Interface {
     readonly cleanup: () => Effect.Effect<void>
     /**
      * Returns output unchanged when it fits within the limits, otherwise writes the full text
@@ -39,14 +39,14 @@ export namespace TruncateEffect {
     readonly output: (text: string, options?: Options, agent?: Agent.Info) => Effect.Effect<Result>
   }
 
-  export class Service extends ServiceMap.Service<Service, Api>()("@opencode/Truncate") {}
+  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Truncate") {}
 
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem
 
-      const cleanup = Effect.fn("TruncateEffect.cleanup")(function* () {
+      const cleanup = Effect.fn("Truncate.cleanup")(function* () {
         const cutoff = Identifier.timestamp(Identifier.create("tool", false, Date.now() - Duration.toMillis(RETENTION)))
         const entries = yield* fs.readDirectory(TRUNCATION_DIR).pipe(
           Effect.map((all) => all.filter((name) => name.startsWith("tool_"))),
@@ -58,7 +58,7 @@ export namespace TruncateEffect {
         }
       })
 
-      const output = Effect.fn("TruncateEffect.output")(function* (
+      const output = Effect.fn("Truncate.output")(function* (
         text: string,
         options: Options = {},
         agent?: Agent.Info,

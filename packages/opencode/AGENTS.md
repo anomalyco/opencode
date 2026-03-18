@@ -31,20 +31,6 @@ See `specs/effect-migration.md` for the compact pattern reference and examples.
 - Use `Schema.Defect` instead of `unknown` for defect-like causes.
 - In `Effect.gen` / `Effect.fn`, prefer `yield* new MyError(...)` over `yield* Effect.fail(new MyError(...))` for direct early-failure branches.
 
-## Service shape
-
-- For a fully migrated module, use the public namespace directly:
-  - `Foo.Interface`
-  - `Foo.Service`
-  - `Foo.layer`
-  - `Foo.defaultLayer` when needed
-- Use `export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Foo") {}` as the tag class.
-- Put `layer` on the namespace with `Layer.effect(Service, Effect.gen(...))`, not as `static readonly layer` on the class.
-- Do not add compatibility shims like `Object.assign(Foo.Service, { layer: Foo.layer })`.
-- Prefer a single namespace whenever possible.
-- Use a temporary `*Effect` namespace only when there is a real mixed-mode split, often because a legacy boundary facade still exists or because merging everything immediately would create awkward cycles.
-- Shared leaf schema/model files can stay outside the service namespace when lower layers also depend on them.
-
 ## Runtime vs Instances
 
 - Use the shared runtime for process-wide services with one lifecycle for the whole app.
@@ -59,14 +45,7 @@ See `specs/effect-migration.md` for the compact pattern reference and examples.
 - Prefer `ChildProcessSpawner.ChildProcessSpawner` with `ChildProcess.make(...)` instead of custom process wrappers.
 - Prefer `HttpClient.HttpClient` instead of raw `fetch`.
 - Prefer `Path.Path`, `Config`, `Clock`, and `DateTime` when those concerns are already inside Effect code.
-
-## Startup and loops
-
-- Do not add fake no-op `init()` methods just to force startup.
-- If startup side effects are the only goal, request the service directly so the layer is constructed.
-- In Effect code, prefer `yield* Foo.Service`.
-- For background loops, use `Effect.repeat` or `Effect.schedule` with `Effect.forkScoped`.
-- Old scheduler-style helpers are gone.
+- For background loops or scheduled tasks, use `Effect.repeat` or `Effect.schedule` with `Effect.forkScoped` in the layer definition.
 
 ## Instance.bind — ALS for native callbacks
 

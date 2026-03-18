@@ -237,25 +237,24 @@ export namespace Snapshot {
       })
 
       const revert = Effect.fn("Snapshot.revert")(function* (patches: Snapshot.Patch[]) {
-        const map = new Map(patches.flatMap((patch) => patch.files.map((file) => [file, patch] as const)))
         const seen = new Set<string>()
-        for (const file of patches.flatMap((patch) => patch.files)) {
-          if (seen.has(file)) continue
-          const patch = map.get(file)
-          if (!patch) continue
-          log.info("reverting", { file, hash: patch.hash })
-          const result = yield* git([...core, ...args(["checkout", patch.hash, "--", file])], { cwd: worktree })
-          if (result.code !== 0) {
-            const rel = path.relative(worktree, file)
-            const tree = yield* git([...core, ...args(["ls-tree", patch.hash, "--", rel])], { cwd: worktree })
-            if (tree.code === 0 && tree.text.trim()) {
-              log.info("file existed in snapshot but checkout failed, keeping", { file })
-            } else {
-              log.info("file did not exist in snapshot, deleting", { file })
-              yield* remove(file)
+        for (const item of patches) {
+          for (const file of item.files) {
+            if (seen.has(file)) continue
+            seen.add(file)
+            log.info("reverting", { file, hash: item.hash })
+            const result = yield* git([...core, ...args(["checkout", item.hash, "--", file])], { cwd: worktree })
+            if (result.code !== 0) {
+              const rel = path.relative(worktree, file)
+              const tree = yield* git([...core, ...args(["ls-tree", item.hash, "--", rel])], { cwd: worktree })
+              if (tree.code === 0 && tree.text.trim()) {
+                log.info("file existed in snapshot but checkout failed, keeping", { file })
+              } else {
+                log.info("file did not exist in snapshot, deleting", { file })
+                yield* remove(file)
+              }
             }
           }
-          seen.add(file)
         }
       })
 
