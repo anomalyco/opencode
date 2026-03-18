@@ -186,7 +186,7 @@ export namespace SessionProcessor {
                       state: {
                         status: "completed",
                         input: value.input ?? match.state.input,
-                        output: value.output.output,
+                        output: value.output.output?.toWellFormed?.() ?? value.output.output,
                         metadata: value.output.metadata,
                         title: value.output.title,
                         time: {
@@ -210,7 +210,7 @@ export namespace SessionProcessor {
                       state: {
                         status: "error",
                         input: value.input ?? match.state.input,
-                        error: (value.error as any).toString(),
+                        error: (value.error as any).toString()?.toWellFormed?.() ?? (value.error as any).toString(),
                         time: {
                           start: match.state.time.start,
                           end: Date.now(),
