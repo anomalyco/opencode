@@ -21,7 +21,8 @@ import { findLast } from "@opencode-ai/util/array"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { UserMessage } from "@opencode-ai/sdk/v2"
 import { canAddSelectionContext } from "@/pages/session/session-command-helpers"
-import { createSessionScreenshot, saveScreenshot, screenshotName } from "@/pages/session/session-screenshot"
+import { createSessionScreenshotAction } from "@/pages/session/session-screenshot-action"
+import { createSessionScreenshotCommand } from "@/pages/session/session-command-screenshot"
 
 export type SessionCommandContext = {
   navigateMessageByOffset: (offset: number) => void
@@ -60,6 +61,16 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const idle = { type: "idle" as const }
   const status = createMemo(() => sync.data.session_status[params.id ?? ""] ?? idle)
   const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
+  const screen = createSessionScreenshotAction({
+    sessionID: () => params.id,
+    title: () => info()?.title,
+    dir: () => sdk.directory,
+    messages,
+    parts: (id) => sync.data.part[id] ?? [],
+    revert: () => info()?.revert?.messageID,
+    platform,
+    language,
+  })
   const userMessages = createMemo(() => messages().filter((m) => m.role === "user") as UserMessage[])
   const visibleUserMessages = createMemo(() => {
     const revert = info()?.revert?.messageID
@@ -371,54 +382,11 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: () => dialog.show(() => <DialogFork />),
     }),
-    sessionCommand({
-      id: "session.screenshot",
-      title: language.t("command.session.screenshot"),
-      description: language.t("command.session.screenshot.description"),
-      slash: "screenshot",
-      disabled: platform.platform !== "desktop" || !params.id || visibleUserMessages().length === 0,
-      onSelect: async () => {
-        const id = params.id
-        if (!id || visibleUserMessages().length === 0) return
-
-        const blob = await createSessionScreenshot({
-          sessionID: id,
-          title: info()?.title,
-          dir: sdk.directory,
-          messages: messages(),
-          parts: (msg) => sync.data.part[msg] ?? [],
-          revert: info()?.revert?.messageID,
-        }).catch(() => undefined)
-
-        if (!blob) {
-          showToast({
-            title: language.t("toast.session.screenshot.failed.title"),
-            description: language.t("toast.session.screenshot.failed.description"),
-            variant: "error",
-          })
-          return
-        }
-
-        const path = await saveScreenshot(blob, screenshotName(info()?.title), platform).catch(() => undefined)
-        if (path === undefined) return
-
-        showToast({
-          title: language.t("toast.session.screenshot.success.title"),
-          description: path ?? language.t("toast.session.screenshot.success.description"),
-          actions:
-            path && platform.openPath
-              ? [
-                  {
-                    label: language.t("common.open"),
-                    onClick: () => {
-                      void platform.openPath!(path)
-                    },
-                  },
-                ]
-              : undefined,
-          variant: "success",
-        })
-      },
+    createSessionScreenshotCommand({
+      command: sessionCommand,
+      language,
+      ready: screen.ready,
+      shot: screen.shot,
     }),
   ])
 
