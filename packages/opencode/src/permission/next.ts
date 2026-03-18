@@ -69,7 +69,7 @@ export namespace PermissionNext {
     return S.evaluate(permission, pattern, ...rulesets)
   }
 
-  const EDIT_TOOLS = ["edit", "write", "patch", "multiedit"]
+  const EDIT_TOOLS = ["edit", "write", "apply_patch", "multiedit"]
 
   export function disabled(tools: string[], ruleset: Ruleset): Set<string> {
     const result = new Set<string>()
