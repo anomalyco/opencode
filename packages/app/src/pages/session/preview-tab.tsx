@@ -1,4 +1,5 @@
 import { Button } from "@opencode-ai/ui/button"
+import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Mark } from "@opencode-ai/ui/logo"
 import { getFilename } from "@opencode-ai/util/path"
 import { createEffect, createMemo, createSignal, on, onCleanup, Match, Show, Switch } from "solid-js"
@@ -195,10 +196,45 @@ export function SessionPreviewTab(props: {
     window.open(url, "_blank", "noopener,noreferrer")
   }
 
+  const openInNewTab = () => {
+    const html = htmlSrc()
+    if (html) {
+      const blob = new Blob([html], { type: "text/html;charset=utf-8" })
+      const url = URL.createObjectURL(blob)
+      window.open(url, "_blank", "noopener,noreferrer")
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+      return
+    }
+    const img = imageDataUrl()
+    if (img) {
+      window.open(img, "_blank", "noopener,noreferrer")
+      return
+    }
+    const svg = svgPreviewUrl()
+    if (svg) {
+      window.open(svg, "_blank", "noopener,noreferrer")
+      return
+    }
+    openPdf()
+  }
+
+  const canOpenInNewTab = createMemo(
+    () => !!htmlSrc() || !!imageDataUrl() || !!svgPreviewUrl() || !!pdfObjectUrl(),
+  )
+
   return (
     <div class="flex flex-col h-full overflow-hidden bg-background-stronger contain-strict">
-      <div class="sticky top-0 z-20 h-8 shrink-0 px-6 flex items-center justify-between bg-background-stronger">
+      <div class="sticky top-0 z-20 h-8 shrink-0 px-6 flex items-center justify-between gap-2 bg-background-stronger">
         <div class="min-w-0 truncate text-16-medium text-text-strong">{filename()}</div>
+        <Show when={canOpenInNewTab()}>
+          <IconButton
+            icon="square-arrow-top-right"
+            size="small"
+            variant="ghost"
+            aria-label={props.language.t("session.preview.openInNewTab")}
+            onClick={openInNewTab}
+          />
+        </Show>
       </div>
       <div
         ref={(el) => {

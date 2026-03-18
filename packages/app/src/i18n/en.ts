@@ -501,6 +501,7 @@ export const dict = {
   "session.preview.deletedUnavailable": "Preview is not available because this file cannot be read",
   "session.preview.openCode": "Open code",
   "session.preview.exportPdf": "Export PDF",
+  "session.preview.openInNewTab": "Open in new tab",
 
   "session.messages.renderEarlier": "Render earlier messages",
   "session.messages.loadingEarlier": "Loading earlier messages...",
