@@ -1241,6 +1241,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     // Note: Shift+Enter is handled earlier, before IME check
     if (event.key === "Enter" && !event.shiftKey) {
+      if (event.repeat) return
+      event.preventDefault()
       handleSubmit(event)
     }
   }
