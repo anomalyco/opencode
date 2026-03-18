@@ -2,7 +2,7 @@ import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Cause, Duration, Effect, FileSystem, Layer, Schedule, ServiceMap } from "effect"
 import path from "path"
 import type { Agent } from "../agent/agent"
-import { PermissionEffect } from "../permission/service"
+import { PermissionNext } from "../permission"
 import { Identifier } from "../id/id"
 import { Log } from "../util/log"
 import { ToolID } from "./schema"
@@ -27,7 +27,7 @@ export namespace TruncateEffect {
 
   function hasTaskTool(agent?: Agent.Info) {
     if (!agent?.permission) return false
-    return PermissionEffect.evaluate("task", "*", agent.permission).action !== "deny"
+    return PermissionNext.evaluate("task", "*", agent.permission).action !== "deny"
   }
 
   export interface Api {
