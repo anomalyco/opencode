@@ -922,6 +922,108 @@ export namespace MessageV2 {
     return filterCompacted(stream(sessionID))
   })
 
+  // ── Lightweight conversation loading ──────────────────────────────────
+  //
+  // filterCompactedLazy avoids materializing the full WithParts[] array.
+  // Phase 1: scan message *info only* (no parts) newest→oldest to find
+  //          the compaction boundary and collect message IDs.
+  // Phase 2: load parts only for messages after the boundary.
+  //
+  // For a 7,000-message session with no compaction this still loads all
+  // parts, but for compacted sessions it skips everything before the
+  // summary — which is the common case for long-running sessions.
+
+  /** Scan info-only (no parts) newest→oldest. Returns message rows from
+   *  the compaction boundary forward, in oldest-first order. */
+  function scanBoundary(sessionID: SessionID) {
+    const size = 50
+    let before: string | undefined
+    const rows: (typeof MessageTable.$inferSelect)[] = []
+    const completed = new Set<string>()
+
+    while (true) {
+      const cursor_before = before ? cursor.decode(before) : undefined
+      const where = cursor_before
+        ? and(eq(MessageTable.session_id, sessionID), older(cursor_before))
+        : eq(MessageTable.session_id, sessionID)
+      const batch = Database.use((db) =>
+        db
+          .select()
+          .from(MessageTable)
+          .where(where)
+          .orderBy(desc(MessageTable.time_created), desc(MessageTable.id))
+          .limit(size + 1)
+          .all(),
+      )
+      if (batch.length === 0) break
+      const more = batch.length > size
+      const slice = more ? batch.slice(0, size) : batch
+
+      let found = false
+      for (const row of slice) {
+        rows.push(row)
+        const msg = info(row)
+        if (
+          msg.role === "assistant" &&
+          (msg as Assistant).summary &&
+          (msg as Assistant).finish &&
+          !(msg as Assistant).error
+        )
+          completed.add(msg.parentID)
+        if (msg.role === "user" && completed.has(msg.id)) {
+          // Potential boundary — need to check parts for compaction type.
+          // Only load parts for THIS message to check.
+          const partRows = Database.use((db) =>
+            db.select().from(PartTable).where(eq(PartTable.message_id, row.id)).all(),
+          )
+          if (partRows.some((p) => (p.data as any).type === "compaction")) {
+            found = true
+            break
+          }
+        }
+      }
+      if (found || !more) break
+      const tail = slice.at(-1)!
+      before = cursor.encode({ id: tail.id, time: tail.time_created })
+    }
+    rows.reverse()
+    return rows
+  }
+
+  /** Load conversation from compaction boundary forward, with full parts.
+   *  For compacted sessions: two-pass (info scan → selective hydrate) is
+   *  much cheaper. For uncompacted sessions: falls back to the original
+   *  single-pass filterCompacted(stream()) to avoid the extra info scan. */
+  export function filterCompactedLazy(sessionID: SessionID) {
+    // Quick probe: check newest 50 message infos for any compaction summary.
+    // One DB query, no parts loaded.
+    const probe = Database.use((db) =>
+      db
+        .select()
+        .from(MessageTable)
+        .where(eq(MessageTable.session_id, sessionID))
+        .orderBy(desc(MessageTable.time_created), desc(MessageTable.id))
+        .limit(50)
+        .all(),
+    )
+    const compacted = probe.some((row) => {
+      const msg = info(row)
+      return (
+        msg.role === "assistant" && (msg as Assistant).summary && (msg as Assistant).finish && !(msg as Assistant).error
+      )
+    })
+    if (!compacted) {
+      // No recent compaction summary — fall back to single-pass which
+      // loads parts alongside info (avoids 155+ wasted info-only queries
+      // for uncompacted sessions).
+      return filterCompacted(stream(sessionID))
+    }
+    // Compacted session: two-pass is efficient — scan info to find boundary,
+    // then hydrate only messages after it.
+    const rows = scanBoundary(sessionID)
+    return hydrate(rows)
+  }
+
   export function fromError(
     e: unknown,
     ctx: { providerID: ProviderID; aborted?: boolean },
