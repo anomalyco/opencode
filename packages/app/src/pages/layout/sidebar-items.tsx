@@ -320,9 +320,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   return (
     <div
       data-session-id={props.session.id}
-      class={`group/session relative w-full rounded-md cursor-default pl-2 pr-3 hover:bg-surface-raised-base-hover [&:has(:focus-visible)]:bg-surface-raised-base-hover has-[[data-expanded]]:bg-surface-raised-base-hover has-[.active]:bg-surface-base-active ${
-        isPinned() ? "outline outline-1 outline-border-weak/50 bg-surface-raised-base/20 shadow-[0_0_2px_rgba(0,0,0,0.05)]" : "transition-colors"
-      }`}
+      class="group/session relative w-full rounded-md cursor-default pl-2 pr-3 transition-colors hover:bg-surface-raised-base-hover [&:has(:focus-visible)]:bg-surface-raised-base-hover has-[[data-expanded]]:bg-surface-raised-base-hover has-[.active]:bg-surface-base-active"
     >
       <Show
         when={hoverEnabled()}
