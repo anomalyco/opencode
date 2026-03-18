@@ -5,7 +5,7 @@ import path from "path"
 import { Deferred, Effect, Fiber, Option } from "effect"
 import { tmpdir } from "../fixture/fixture"
 import { watcherConfigLayer, withServices } from "../fixture/instance"
-import { FileWatcher, FileWatcherService } from "../../src/file/watcher"
+import { FileWatcher } from "../../src/file/watcher"
 import { Instance } from "../../src/project/instance"
 import { GlobalBus } from "../../src/bus/global"
 
@@ -19,13 +19,12 @@ const describeWatcher = FileWatcher.hasNativeBinding() && !process.env.CI ? desc
 type BusUpdate = { directory?: string; payload: { type: string; properties: WatcherEvent } }
 type WatcherEvent = { file: string; event: "add" | "change" | "unlink" }
 
-/** Run `body` with a live FileWatcherService. */
+/** Run `body` with a live FileWatcher service. */
 function withWatcher<E>(directory: string, body: Effect.Effect<void, E>) {
   return withServices(
     directory,
-    FileWatcherService.layer,
+    FileWatcher.layer,
     async (rt) => {
-      await rt.runPromise(FileWatcherService.use((s) => s.init()))
       await Effect.runPromise(ready(directory))
       await Effect.runPromise(body)
     },
@@ -138,7 +137,7 @@ function ready(directory: string) {
 // Tests
 // ---------------------------------------------------------------------------
 
-describeWatcher("FileWatcherService", () => {
+describeWatcher("FileWatcher", () => {
   afterEach(() => Instance.disposeAll())
 
   test("publishes root create, update, and delete events", async () => {
