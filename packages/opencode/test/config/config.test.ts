@@ -1994,3 +1994,65 @@ describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
     }
   })
 })
+
+describe("experimental.auto_continue", () => {
+  test("normalizes boolean config", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Filesystem.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            experimental: {
+              auto_continue: true,
+            },
+          }),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const cfg = await Config.get()
+        expect(cfg.experimental?.auto_continue).toEqual({
+          enabled: true,
+          prompt: "Yes. Do this.",
+          patterns: [
+            "\\bif you want\\b",
+            "\\bif you like\\b",
+            "\\bif you(?:'d| would)? like\\b",
+            "\\blet me know if you(?:'d| would)? like me to continue\\b",
+          ],
+        })
+      },
+    })
+  })
+
+  test("normalizes custom config", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Filesystem.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            experimental: {
+              auto_continue: {
+                prompt: "Keep going.",
+                patterns: ["continue please"],
+              },
+            },
+          }),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const cfg = await Config.get()
+        expect(cfg.experimental?.auto_continue).toEqual({
+          enabled: true,
+          prompt: "Keep going.",
+          patterns: ["continue please"],
+        })
+      },
+    })
+  })
+})

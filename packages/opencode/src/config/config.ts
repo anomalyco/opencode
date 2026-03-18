@@ -654,6 +654,54 @@ export namespace Config {
   })
   export type Command = z.infer<typeof Command>
 
+  const AutoContinuePattern = z.string().refine(
+    (value) => {
+      try {
+        new RegExp(value, "i")
+        return true
+      } catch {
+        return false
+      }
+    },
+    {
+      message: "Invalid regex pattern",
+    },
+  )
+
+  export const AutoContinue = z
+    .union([
+      z.boolean(),
+      z.object({
+        prompt: z.string().min(1).optional().describe("Message to auto-send when a match is detected"),
+        patterns: z
+          .array(AutoContinuePattern)
+          .min(1)
+          .optional()
+          .describe("Case-insensitive regex patterns matched against the assistant's closing paragraph"),
+      }),
+    ])
+    .transform((value) => {
+      const prompt = typeof value === "object" && value.prompt ? value.prompt : "Yes. Do this."
+      const patterns =
+        typeof value === "object" && value.patterns
+          ? value.patterns
+          : [
+              "\\bif you want\\b",
+              "\\bif you like\\b",
+              "\\bif you(?:'d| would)? like\\b",
+              "\\blet me know if you(?:'d| would)? like me to continue\\b",
+            ]
+      return {
+        enabled: value === true || typeof value === "object",
+        prompt,
+        patterns,
+      }
+    })
+    .meta({
+      ref: "AutoContinueConfig",
+    })
+  export type AutoContinue = z.infer<typeof AutoContinue>
+
   export const Skills = z.object({
     paths: z.array(z.string()).optional().describe("Additional paths to skill folders"),
     urls: z
@@ -1150,6 +1198,9 @@ export namespace Config {
       experimental: z
         .object({
           disable_paste_summary: z.boolean().optional(),
+          auto_continue: AutoContinue.optional().describe(
+            "Automatically continue when the assistant ends with a continuation prompt",
+          ),
           batch_tool: z.boolean().optional().describe("Enable the batch tool"),
           openTelemetry: z
             .boolean()

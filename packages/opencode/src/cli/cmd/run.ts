@@ -218,6 +218,13 @@ function normalizePath(input?: string) {
   return input
 }
 
+function auth() {
+  const password = Flag.OPENCODE_SERVER_PASSWORD
+  if (!password) return
+  const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
+  return `Basic ${btoa(`${username}:${password}`)}`
+}
+
 export const RunCommand = cmd({
   command: "run [message..]",
   describe: "run opencode with a message",
@@ -648,7 +655,18 @@ export const RunCommand = cmd({
     }
 
     if (args.attach) {
-      const sdk = createOpencodeClient({ baseUrl: args.attach, directory })
+      const authorization = auth()
+      const sdk = createOpencodeClient({
+        baseUrl: args.attach,
+        directory,
+        ...(authorization
+          ? {
+              headers: {
+                authorization,
+              },
+            }
+          : {}),
+      })
       return await execute(sdk)
     }
 
@@ -657,7 +675,19 @@ export const RunCommand = cmd({
         const request = new Request(input, init)
         return Server.App().fetch(request)
       }) as typeof globalThis.fetch
-      const sdk = createOpencodeClient({ baseUrl: "http://opencode.internal", fetch: fetchFn })
+      const authorization = auth()
+      const sdk = createOpencodeClient({
+        baseUrl: "http://opencode.internal",
+        fetch: fetchFn,
+        directory: process.cwd(),
+        ...(authorization
+          ? {
+              headers: {
+                authorization,
+              },
+            }
+          : {}),
+      })
       await execute(sdk)
     })
   },
