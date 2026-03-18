@@ -10,6 +10,8 @@ import finder from "../assets/icons/app/finder.png"
 import ghostty from "../assets/icons/app/ghostty.svg"
 import iterm2 from "../assets/icons/app/iterm2.svg"
 import powershell from "../assets/icons/app/powershell.svg"
+import windsurf from "../assets/icons/app/windsurf.svg"
+import windsurfDark from "../assets/icons/app/windsurf-dark.svg"
 import terminal from "../assets/icons/app/terminal.png"
 import textmate from "../assets/icons/app/textmate.png"
 import vscode from "../assets/icons/app/vscode.svg"
@@ -22,6 +24,7 @@ import sublimetext from "../assets/icons/app/sublimetext.svg"
 const icons = {
   vscode,
   cursor,
+  windsurf,
   zed,
   "file-explorer": fileExplorer,
   finder,
@@ -38,6 +41,10 @@ const icons = {
 } satisfies Record<IconName, string>
 
 const themed: Partial<Record<IconName, { light: string; dark: string }>> = {
+  windsurf: {
+    light: windsurf,
+    dark: windsurfDark,
+  },
   zed: {
     light: zed,
     dark: zedDark,

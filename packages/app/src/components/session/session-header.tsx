@@ -28,6 +28,7 @@ import { StatusPopover } from "../status-popover"
 const OPEN_APPS = [
   "vscode",
   "cursor",
+  "windsurf",
   "zed",
   "textmate",
   "antigravity",
@@ -53,6 +54,7 @@ const MAC_APPS = [
     openWith: "Visual Studio Code",
   },
   { id: "cursor", label: "session.header.open.app.cursor", icon: "cursor", openWith: "Cursor" },
+  { id: "windsurf", label: "session.header.open.app.windsurf", icon: "windsurf", openWith: "Windsurf" },
   { id: "zed", label: "session.header.open.app.zed", icon: "zed", openWith: "Zed" },
   { id: "textmate", label: "session.header.open.app.textmate", icon: "textmate", openWith: "TextMate" },
   {
@@ -83,6 +85,7 @@ const MAC_APPS = [
 const WINDOWS_APPS = [
   { id: "vscode", label: "session.header.open.app.vscode", icon: "vscode", openWith: "code" },
   { id: "cursor", label: "session.header.open.app.cursor", icon: "cursor", openWith: "cursor" },
+  { id: "windsurf", label: "session.header.open.app.windsurf", icon: "windsurf", openWith: "windsurf" },
   { id: "zed", label: "session.header.open.app.zed", icon: "zed", openWith: "zed" },
   {
     id: "powershell",
@@ -101,6 +104,7 @@ const WINDOWS_APPS = [
 const LINUX_APPS = [
   { id: "vscode", label: "session.header.open.app.vscode", icon: "vscode", openWith: "code" },
   { id: "cursor", label: "session.header.open.app.cursor", icon: "cursor", openWith: "cursor" },
+  { id: "windsurf", label: "session.header.open.app.windsurf", icon: "windsurf", openWith: "windsurf" },
   { id: "zed", label: "session.header.open.app.zed", icon: "zed", openWith: "zed" },
   {
     id: "sublime-text",

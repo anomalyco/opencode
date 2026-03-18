@@ -885,6 +885,7 @@ export const dict = {
   "session.header.open.fileManager": "Файловый менеджер",
   "session.header.open.app.vscode": "VS Code",
   "session.header.open.app.cursor": "Cursor",
+  "session.header.open.app.windsurf": "Windsurf",
   "session.header.open.app.zed": "Zed",
   "session.header.open.app.textmate": "TextMate",
   "session.header.open.app.antigravity": "Antigravity",
