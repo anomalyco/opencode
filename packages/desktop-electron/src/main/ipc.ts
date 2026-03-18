@@ -1,4 +1,6 @@
 import { execFile } from "node:child_process"
+import { writeFile } from "node:fs/promises"
+import { join } from "node:path"
 import { BrowserWindow, Notification, app, clipboard, dialog, ipcMain, shell } from "electron"
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
 
@@ -114,6 +116,10 @@ export function registerIpcHandlers(deps: Deps) {
     },
   )
 
+  ipcMain.handle("get-downloads-path", (_event: IpcMainInvokeEvent, name: string) =>
+    join(app.getPath("downloads"), name),
+  )
+
   ipcMain.on("open-link", (_event: IpcMainEvent, url: string) => {
     void shell.openExternal(url)
   })
@@ -125,6 +131,10 @@ export function registerIpcHandlers(deps: Deps) {
         process.platform === "darwin" ? (["open", ["-a", app, path]] as const) : ([app, [path]] as const)
       execFile(cmd, args, (err) => (err ? reject(err) : resolve()))
     })
+  })
+
+  ipcMain.handle("write-file", async (_event: IpcMainInvokeEvent, path: string, data: Uint8Array) => {
+    await writeFile(path, Buffer.from(data))
   })
 
   ipcMain.handle("read-clipboard-image", () => {

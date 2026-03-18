@@ -19,6 +19,8 @@ export const commands = {
 	wslPath: (path: string, mode: "windows" | "linux" | null) => __TAURI_INVOKE<string>("wsl_path", { path, mode }),
 	resolveAppPath: (appName: string) => __TAURI_INVOKE<string | null>("resolve_app_path", { appName }),
 	openPath: (path: string, appName: string | null) => __TAURI_INVOKE<null>("open_path", { path, appName }),
+	writeFile: (path: string, data: number[]) => __TAURI_INVOKE<null>("write_file", { path, data }),
+	getDownloadsPath: (name: string) => __TAURI_INVOKE<string>("get_downloads_path", { name }),
 };
 
 /** Events */

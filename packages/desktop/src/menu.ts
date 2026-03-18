@@ -74,6 +74,11 @@ export async function createMenu(trigger: (id: string) => void) {
             accelerator: "Cmd+O",
             action: () => trigger("project.open"),
           }),
+          await MenuItem.new({
+            text: t("desktop.menu.file.exportScreenshot"),
+            accelerator: "Shift+Cmd+E",
+            action: () => trigger("session.screenshot"),
+          }),
           await PredefinedMenuItem.new({
             item: "Separator",
           }),

@@ -10,6 +10,7 @@ export const dict = {
   "desktop.menu.help": "Help",
   "desktop.menu.file.newSession": "New Session",
   "desktop.menu.file.openProject": "Open Project...",
+  "desktop.menu.file.exportScreenshot": "Export Screenshot...",
   "desktop.menu.view.toggleSidebar": "Toggle Sidebar",
   "desktop.menu.view.toggleTerminal": "Toggle Terminal",
   "desktop.menu.view.toggleFileTree": "Toggle File Tree",

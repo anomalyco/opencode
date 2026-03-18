@@ -17,6 +17,7 @@
     "test": "bun run test:unit",
     "test:unit": "bun test --preload ./happydom.ts ./src",
     "test:unit:watch": "bun test --watch --preload ./happydom.ts ./src",
+    "test:screenshot": "bun script/session-screenshot-cli.ts",
     "test:e2e": "playwright test",
     "test:e2e:local": "bun script/e2e-local.ts",
     "test:e2e:ui": "playwright test --ui",

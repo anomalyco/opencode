@@ -1,0 +1,53 @@
+{
+  "title": "Strawberry RS count inquiry",
+  "dir": "/repo/strawberry",
+  "sessionID": "ses_demo",
+  "messages": [
+    {
+      "id": "user_1",
+      "sessionID": "ses_demo",
+      "role": "user",
+      "time": { "created": 1742331000000 },
+      "agent": "build",
+      "model": { "providerID": "openrouter", "modelID": "deepseek-v3.2" }
+    },
+    {
+      "id": "assistant_1",
+      "sessionID": "ses_demo",
+      "role": "assistant",
+      "time": { "created": 1742331030000, "completed": 1742331060000 },
+      "parentID": "user_1",
+      "modelID": "deepseek-v3.2",
+      "providerID": "openrouter",
+      "mode": "chat",
+      "agent": "build",
+      "path": { "cwd": "/repo/strawberry", "root": "/repo/strawberry" },
+      "cost": 0,
+      "tokens": { "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } }
+    }
+  ],
+  "parts": {
+    "user_1": [
+      {
+        "id": "p_user_1",
+        "sessionID": "ses_demo",
+        "messageID": "user_1",
+        "type": "text",
+        "text": "how many rs in strawberry",
+        "synthetic": false,
+        "ignored": false
+      }
+    ],
+    "assistant_1": [
+      {
+        "id": "p_assistant_1",
+        "sessionID": "ses_demo",
+        "messageID": "assistant_1",
+        "type": "text",
+        "text": "3",
+        "synthetic": false,
+        "ignored": false
+      }
+    ]
+  }
+}

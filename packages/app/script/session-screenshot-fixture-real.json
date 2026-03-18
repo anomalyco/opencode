@@ -1,0 +1,97 @@
+{
+  "title": "Session screenshot renderer cleanup",
+  "dir": "/repo/opencode",
+  "sessionID": "ses_real",
+  "messages": [
+    {
+      "id": "user_1",
+      "sessionID": "ses_real",
+      "role": "user",
+      "time": { "created": 1742334600000 },
+      "agent": "build",
+      "model": { "providerID": "openai", "modelID": "gpt-5" }
+    },
+    {
+      "id": "assistant_1",
+      "sessionID": "ses_real",
+      "role": "assistant",
+      "time": { "created": 1742334630000, "completed": 1742334660000 },
+      "parentID": "user_1",
+      "modelID": "gpt-5",
+      "providerID": "openai",
+      "mode": "chat",
+      "agent": "build",
+      "path": { "cwd": "/repo/opencode", "root": "/repo/opencode" },
+      "cost": 0,
+      "tokens": { "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } }
+    },
+    {
+      "id": "user_2",
+      "sessionID": "ses_real",
+      "role": "user",
+      "time": { "created": 1742334720000 },
+      "agent": "build",
+      "model": { "providerID": "openai", "modelID": "gpt-5" }
+    },
+    {
+      "id": "assistant_2",
+      "sessionID": "ses_real",
+      "role": "assistant",
+      "time": { "created": 1742334750000, "completed": 1742334810000 },
+      "parentID": "user_2",
+      "modelID": "gpt-5",
+      "providerID": "openai",
+      "mode": "chat",
+      "agent": "build",
+      "path": { "cwd": "/repo/opencode", "root": "/repo/opencode" },
+      "cost": 0,
+      "tokens": { "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } }
+    }
+  ],
+  "parts": {
+    "user_1": [
+      {
+        "id": "p_user_1",
+        "sessionID": "ses_real",
+        "messageID": "user_1",
+        "type": "text",
+        "text": "make the exported session screenshot look closer to the actual desktop conversation",
+        "synthetic": false,
+        "ignored": false
+      }
+    ],
+    "assistant_1": [
+      {
+        "id": "p_assistant_1",
+        "sessionID": "ses_real",
+        "messageID": "assistant_1",
+        "type": "text",
+        "text": "I can flatten the design, tighten spacing, and use chat-like metadata so the export reads like a real transcript instead of a polished promo card.",
+        "synthetic": false,
+        "ignored": false
+      }
+    ],
+    "user_2": [
+      {
+        "id": "p_user_2",
+        "sessionID": "ses_real",
+        "messageID": "user_2",
+        "type": "text",
+        "text": "also add a CLI fixture so we can render and inspect the screenshot from the command line",
+        "synthetic": false,
+        "ignored": false
+      }
+    ],
+    "assistant_2": [
+      {
+        "id": "p_assistant_2",
+        "sessionID": "ses_real",
+        "messageID": "assistant_2",
+        "type": "text",
+        "text": "Done. The renderer now uses title, bubble placement, metadata rows, and slimmer spacing, and the CLI script can generate PNGs from saved fixture JSON for regression checks.",
+        "synthetic": false,
+        "ignored": false
+      }
+    ]
+  }
+}

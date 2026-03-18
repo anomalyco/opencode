@@ -45,6 +45,9 @@ export type Platform = {
   /** Save file picker dialog (Tauri only) */
   saveFilePickerDialog?(opts?: SaveFilePickerOptions): Promise<string | null>
 
+  /** Default downloads path for a file (desktop only) */
+  getDownloadsPath?(name: string): Promise<string | null>
+
   /** Storage mechanism, defaults to localStorage */
   storage?: (name?: string) => SyncStorage | AsyncStorage
 
@@ -86,6 +89,9 @@ export type Platform = {
 
   /** Read image from clipboard (desktop only) */
   readClipboardImage?(): Promise<File | null>
+
+  /** Write a local file (desktop only) */
+  writeFile?(path: string, data: Uint8Array): Promise<void>
 }
 
 export type DisplayBackend = "auto" | "wayland"

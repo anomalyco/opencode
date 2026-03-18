@@ -18,10 +18,12 @@ import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
+import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { parseCommentNote, readCommentMetadata } from "@/utils/comment-note"
+import { createSessionScreenshot, saveScreenshot, screenshotName } from "@/pages/session/session-screenshot"
 
 type MessageComment = {
   path: string
@@ -213,6 +215,7 @@ export function MessageTimeline(props: {
   const navigate = useNavigate()
   const sdk = useSDK()
   const sync = useSync()
+  const platform = usePlatform()
   const settings = useSettings()
   const dialog = useDialog()
   const language = useLanguage()
@@ -261,6 +264,12 @@ export function MessageTimeline(props: {
   })
   const titleValue = createMemo(() => info()?.title)
   const parentID = createMemo(() => info()?.parentID)
+  const users = createMemo(() => sessionMessages().filter((message): message is UserMessage => message.role === "user"))
+  const visible = createMemo(() => {
+    const revert = info()?.revert?.messageID
+    if (!revert) return users()
+    return users().filter((message) => message.id < revert)
+  })
   const showHeader = createMemo(() => !!(titleValue() || parentID()))
   const stageCfg = { init: 1, batch: 3 }
   const staging = createTimelineStaging({
@@ -446,6 +455,49 @@ export function MessageTimeline(props: {
     const id = parentID()
     if (!id) return
     navigate(`/${params.dir}/session/${id}`)
+  }
+
+  const shot = async () => {
+    const id = sessionID()
+    if (!props.isDesktop || !id || visible().length === 0) return
+
+    const blob = await createSessionScreenshot({
+      sessionID: id,
+      title: info()?.title,
+      dir: sdk.directory,
+      messages: sessionMessages(),
+      parts: (msg) => sync.data.part[msg] ?? [],
+      revert: info()?.revert?.messageID,
+    }).catch(() => undefined)
+
+    if (!blob) {
+      showToast({
+        title: language.t("toast.session.screenshot.failed.title"),
+        description: language.t("toast.session.screenshot.failed.description"),
+        variant: "error",
+      })
+      return
+    }
+
+    const path = await saveScreenshot(blob, screenshotName(info()?.title), platform).catch(() => undefined)
+    if (path === undefined) return
+
+    showToast({
+      title: language.t("toast.session.screenshot.success.title"),
+      description: path ?? language.t("toast.session.screenshot.success.description"),
+      actions:
+        path && platform.openPath
+          ? [
+              {
+                label: language.t("common.open"),
+                onClick: () => {
+                  void platform.openPath!(path)
+                },
+              },
+            ]
+          : undefined,
+      variant: "success",
+    })
   }
 
   function DialogDeleteSession(props: { sessionID: string }) {
@@ -649,6 +701,13 @@ export function MessageTimeline(props: {
                               <DropdownMenu.Item onSelect={() => void archiveSession(id)}>
                                 <DropdownMenu.ItemLabel>{language.t("common.archive")}</DropdownMenu.ItemLabel>
                               </DropdownMenu.Item>
+                              <Show when={props.isDesktop}>
+                                <DropdownMenu.Item onSelect={() => void shot()}>
+                                  <DropdownMenu.ItemLabel>
+                                    {language.t("command.session.screenshot")}
+                                  </DropdownMenu.ItemLabel>
+                                </DropdownMenu.Item>
+                              </Show>
                               <DropdownMenu.Separator />
                               <DropdownMenu.Item
                                 onSelect={() => dialog.show(() => <DialogDeleteSession sessionID={id} />)}

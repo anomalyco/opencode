@@ -124,6 +124,10 @@ const createPlatform = (): Platform => {
       return handleWslPicker(result)
     },
 
+    async getDownloadsPath(name) {
+      return window.api.getDownloadsPath(name)
+    },
+
     openLink(url: string) {
       window.api.openLink(url)
     },
@@ -140,6 +144,10 @@ const createPlatform = (): Platform => {
         return window.api.openPath(resolvedPath, resolvedApp ?? undefined)
       }
       return window.api.openPath(path, app)
+    },
+
+    async writeFile(path, data) {
+      await window.api.writeFile(path, data)
     },
 
     back() {

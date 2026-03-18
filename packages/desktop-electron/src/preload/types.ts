@@ -47,8 +47,10 @@ export type ElectronAPI = {
     defaultPath?: string
   }) => Promise<string | string[] | null>
   saveFilePicker: (opts?: { title?: string; defaultPath?: string }) => Promise<string | null>
+  getDownloadsPath: (name: string) => Promise<string>
   openLink: (url: string) => void
   openPath: (path: string, app?: string) => Promise<void>
+  writeFile: (path: string, data: Uint8Array) => Promise<void>
   readClipboardImage: () => Promise<{ buffer: ArrayBuffer; width: number; height: number } | null>
   showNotification: (title: string, body?: string) => void
   getWindowFocused: () => Promise<boolean>

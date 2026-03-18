@@ -208,6 +208,22 @@ fn open_path(_app: AppHandle, path: String, app_name: Option<String>) -> Result<
         .map_err(|e| format!("Failed to open path: {e}"))
 }
 
+#[tauri::command]
+#[specta::specta]
+fn write_file(path: String, data: Vec<u8>) -> Result<(), String> {
+    std::fs::write(path, data).map_err(|e| format!("Failed to write file: {e}"))
+}
+
+#[tauri::command]
+#[specta::specta]
+fn get_downloads_path(app: AppHandle, name: String) -> Result<String, String> {
+    let dir = app
+        .path()
+        .download_dir()
+        .map_err(|e| format!("Failed to resolve downloads path: {e}"))?;
+    Ok(dir.join(name).to_string_lossy().into_owned())
+}
+
 #[cfg(target_os = "macos")]
 fn check_macos_app(app_name: &str) -> bool {
     // Check common installation locations
@@ -403,7 +419,9 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             check_app_exists,
             wsl_path,
             resolve_app_path,
-            open_path
+            open_path,
+            write_file,
+            get_downloads_path
         ])
         .events(tauri_specta::collect_events![
             LoadingWindowComplete,

@@ -111,11 +111,19 @@ const createPlatform = (): Platform => {
       return handleWslPicker(result)
     },
 
+    async getDownloadsPath(name) {
+      return commands.getDownloadsPath(name)
+    },
+
     openLink(url: string) {
       void shellOpen(url).catch(() => undefined)
     },
     async openPath(path: string, app?: string) {
       await commands.openPath(path, app ?? null)
+    },
+
+    async writeFile(path, data) {
+      await commands.writeFile(path, [...data])
     },
 
     back() {
