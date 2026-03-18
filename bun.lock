@@ -190,9 +190,11 @@
       "dependencies": {
         "@opencode-ai/app": "workspace:*",
         "@opencode-ai/ui": "workspace:*",
+        "@opencode-ai/util": "workspace:*",
         "@solid-primitives/i18n": "2.2.1",
         "@solid-primitives/storage": "catalog:",
         "@solidjs/meta": "catalog:",
+        "@solidjs/router": "catalog:",
         "@tauri-apps/api": "^2",
         "@tauri-apps/plugin-clipboard-manager": "~2",
         "@tauri-apps/plugin-deep-link": "~2",

@@ -31,6 +31,7 @@ import "./styles.css"
 import { Channel } from "@tauri-apps/api/core"
 import { commands, type InitStep } from "./bindings"
 import { createMenu } from "./menu"
+import { Duplicate } from "./duplicate"
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
@@ -469,6 +470,7 @@ render(() => {
               <AppInterface
                 defaultServer={defaultServer.latest ?? ServerConnection.Key.make("sidecar")}
                 servers={servers()}
+                sessionChildren={<Duplicate />}
               >
                 <Inner />
               </AppInterface>

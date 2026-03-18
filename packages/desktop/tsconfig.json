@@ -12,11 +12,12 @@
     "resolveJsonModule": true,
     "strict": true,
     "isolatedModules": true,
+    "disableSourceOfProjectReferenceRedirect": true,
     "noEmit": true,
     "emitDeclarationOnly": false,
     "outDir": "node_modules/.ts-dist",
     "types": ["vite/client"]
   },
-  "references": [{ "path": "../app" }],
+  "references": [{ "path": "../app" }, { "path": "../sdk/js" }],
   "include": ["src", "package.json"]
 }
