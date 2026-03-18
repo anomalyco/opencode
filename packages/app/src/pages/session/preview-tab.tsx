@@ -180,16 +180,6 @@ export function SessionPreviewTab(props: {
     </div>
   )
 
-  const downloadPdf = () => {
-    const url = pdfObjectUrl()
-    if (!url) return
-
-    const link = document.createElement("a")
-    link.href = url
-    link.download = filename().toLowerCase().endsWith(".pdf") ? filename() : `${filename()}.pdf`
-    link.click()
-  }
-
   const openPdf = () => {
     const url = pdfObjectUrl()
     if (!url) return
@@ -296,36 +286,24 @@ export function SessionPreviewTab(props: {
           </Match>
           <Match when={isPdf()}>
             <div class="h-full px-6 pb-6">
-              <div class="flex min-h-96 h-full justify-center">
-                <div class="w-full max-w-[960px] flex flex-col gap-4">
-                  <Show
-                    when={pdfObjectUrl()}
-                    fallback={
-                      <div class="px-4 py-3 rounded-lg border border-border-weak-base text-text-weak bg-background">
-                        {props.language.t("session.preview.deletedUnavailable")}
-                      </div>
-                    }
-                  >
-                    {(src) => (
-                      <>
-                        <iframe
-                          src={src()}
-                          title={filename()}
-                          class="w-full min-h-[70vh] rounded-lg border border-border-weak-base bg-white"
-                          onLoad={() => requestAnimationFrame(restoreScroll)}
-                        />
-                        <div class="flex items-center gap-2">
-                          <Button size="small" variant="secondary" onClick={openPdf}>
-                            Open PDF
-                          </Button>
-                          <Button size="small" variant="ghost" onClick={downloadPdf}>
-                            Download PDF
-                          </Button>
-                        </div>
-                      </>
-                    )}
-                  </Show>
-                </div>
+              <div class="h-full min-h-0 flex flex-col">
+                <Show
+                  when={pdfObjectUrl()}
+                  fallback={
+                    <div class="px-4 py-3 rounded-lg border border-border-weak-base text-text-weak bg-background">
+                      {props.language.t("session.preview.deletedUnavailable")}
+                    </div>
+                  }
+                >
+                  {(src) => (
+                    <iframe
+                      src={src()}
+                      title={filename()}
+                      class="w-full flex-1 min-h-[80vh] rounded-lg border border-border-weak-base bg-white"
+                      onLoad={() => requestAnimationFrame(restoreScroll)}
+                    />
+                  )}
+                </Show>
               </div>
             </div>
           </Match>
