@@ -409,10 +409,27 @@ export namespace LSPServer {
   }
 
   export const Rubocop: Info = {
-    id: "ruby-lsp",
+    id: "rubocop-lsp",
     root: NearestRoot(["Gemfile"]),
     extensions: [".rb", ".rake", ".gemspec", ".ru"],
     async spawn(root) {
+      const gemfile = path.join(root, "Gemfile")
+      const useBundler = which("bundle") && (await pathExists(gemfile))
+
+      if (useBundler) {
+        try {
+          const content = await fs.readFile(gemfile, "utf-8")
+          if (new RegExp(`^\\s*gem\\s+["']rubocop["']`, "m").test(content)) {
+            log.info("using bundle exec rubocop --lsp")
+            return {
+              process: spawn("bundle", ["exec", "rubocop", "--lsp"], {
+                cwd: root,
+              }),
+            }
+          }
+        } catch {}
+      }
+
       let bin = which("rubocop", {
         PATH: process.env["PATH"] + path.delimiter + Global.Path.bin,
       })

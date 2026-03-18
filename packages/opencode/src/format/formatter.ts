@@ -12,6 +12,7 @@ export interface Info {
   environment?: Record<string, string>
   extensions: string[]
   enabled(): Promise<boolean>
+  resolve?(): Promise<string[]>
 }
 
 export const gofmt: Info = {
@@ -249,12 +250,34 @@ export const uvformat: Info = {
   },
 }
 
+async function gemInGemfile(gem: string): Promise<boolean> {
+  const gemfiles = await Filesystem.findUp("Gemfile", Instance.directory, Instance.worktree)
+  for (const gemfile of gemfiles) {
+    try {
+      const content = await Filesystem.readText(gemfile)
+      if (new RegExp(`^\\s*gem\\s+["']${gem}["']`, "m").test(content)) return true
+    } catch {}
+  }
+  return false
+}
+
+async function rubyCommand(executable: string, args: string[], gem?: string): Promise<string[]> {
+  if (which("bundle") && (await gemInGemfile(gem ?? executable))) {
+    return ["bundle", "exec", executable, ...args]
+  }
+  return [executable, ...args]
+}
+
 export const rubocop: Info = {
   name: "rubocop",
   command: ["rubocop", "--autocorrect", "$FILE"],
   extensions: [".rb", ".rake", ".gemspec", ".ru"],
   async enabled() {
+    if (which("bundle") && (await gemInGemfile("rubocop"))) return true
     return which("rubocop") !== null
+  },
+  async resolve() {
+    return rubyCommand("rubocop", ["--autocorrect", "$FILE"])
   },
 }
 
@@ -263,7 +286,11 @@ export const standardrb: Info = {
   command: ["standardrb", "--fix", "$FILE"],
   extensions: [".rb", ".rake", ".gemspec", ".ru"],
   async enabled() {
+    if (which("bundle") && (await gemInGemfile("standard"))) return true
     return which("standardrb") !== null
+  },
+  async resolve() {
+    return rubyCommand("standardrb", ["--fix", "$FILE"], "standard")
   },
 }
 
@@ -272,7 +299,11 @@ export const htmlbeautifier: Info = {
   command: ["htmlbeautifier", "$FILE"],
   extensions: [".erb", ".html.erb"],
   async enabled() {
+    if (which("bundle") && (await gemInGemfile("htmlbeautifier"))) return true
     return which("htmlbeautifier") !== null
+  },
+  async resolve() {
+    return rubyCommand("htmlbeautifier", ["$FILE"])
   },
 }
 

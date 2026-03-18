@@ -108,10 +108,11 @@ export class FormatService extends ServiceMap.Service<FormatService, FormatServi
           const ext = path.extname(file)
 
           for (const item of await getFormatter(ext)) {
-            log.info("running", { command: item.command })
+            const command = item.resolve ? await item.resolve() : item.command
+            log.info("running", { command })
             try {
               const proc = Process.spawn(
-                item.command.map((x) => x.replace("$FILE", file)),
+                command.map((x) => x.replace("$FILE", file)),
                 {
                   cwd: instance.directory,
                   env: { ...process.env, ...item.environment },
@@ -122,13 +123,13 @@ export class FormatService extends ServiceMap.Service<FormatService, FormatServi
               const exit = await proc.exited
               if (exit !== 0)
                 log.error("failed", {
-                  command: item.command,
+                  command,
                   ...item.environment,
                 })
             } catch (error) {
               log.error("failed to format file", {
                 error,
-                command: item.command,
+                command,
                 ...item.environment,
                 file,
               })
