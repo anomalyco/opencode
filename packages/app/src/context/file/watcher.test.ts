@@ -1,5 +1,15 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, beforeEach, describe, expect, jest, test } from "bun:test"
 import { invalidateFromWatcher } from "./watcher"
+
+beforeEach(() => {
+  jest.useFakeTimers()
+})
+
+afterEach(() => {
+  // Flush any pending timers so module-level state is clean between tests
+  jest.runAllTimers()
+  jest.useRealTimers()
+})
 
 describe("file watcher invalidation", () => {
   test("reloads open files and refreshes loaded parent on add", () => {
@@ -23,6 +33,7 @@ describe("file watcher invalidation", () => {
       },
     )
 
+    jest.advanceTimersByTime(200)
     expect(loads).toEqual(["src/new.ts"])
     expect(refresh).toEqual(["src"])
   })
@@ -55,6 +66,7 @@ describe("file watcher invalidation", () => {
       },
     )
 
+    jest.advanceTimersByTime(200)
     expect(loads).toEqual(["src/open.ts"])
   })
 
@@ -79,6 +91,9 @@ describe("file watcher invalidation", () => {
       },
     )
 
+    // Flush first event before the second, since the second uses different ops
+    jest.advanceTimersByTime(200)
+
     invalidateFromWatcher(
       {
         type: "file.watcher.updated",
@@ -102,6 +117,11 @@ describe("file watcher invalidation", () => {
         refreshDir: (path) => refresh.push(path),
       },
     )
+
+    // The second event targets a file (not a directory), so "change" on a file
+    // means node.type !== "directory" → dir is undefined → early return.
+    // No refreshDir should be called for the second event.
+    jest.advanceTimersByTime(200)
 
     expect(refresh).toEqual(["src"])
   })
@@ -144,6 +164,7 @@ describe("file watcher invalidation", () => {
       },
     )
 
+    jest.advanceTimersByTime(200)
     expect(refresh).toEqual([])
   })
 })
