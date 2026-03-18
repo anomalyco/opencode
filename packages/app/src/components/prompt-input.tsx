@@ -1573,11 +1573,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   </Button>
                 </TooltipKeybind>
 
-                <Show when={projectDirectory() && sync.data.vcs?.branch}>
-                  <div class="flex items-end gap-1 shrink-0" style={control()}>
+                <Show when={projectDirectory() && sync.project?.vcs === "git" && sync.data.vcs?.branch}>
+                  <div class="flex items-center justify-end gap-1 shrink-0" style={control()}>
                     <Tooltip placement="top" gutter={4} value={sync.data.vcs?.branch}>
                       <div
-                        class="flex items-center gap-1.5 px-1.5 h-7 rounded-md hover:bg-background-weak transition-colors cursor-default group"
+                        class="flex items-center gap-1.5 px-1.5 h-7 rounded-md hover:bg-surface-raised-strong transition-colors cursor-default group"
                         aria-label={language.t("prompt.branch.ariaLabel", {
                           branch: sync.data.vcs?.branch ?? "",
                         })}
