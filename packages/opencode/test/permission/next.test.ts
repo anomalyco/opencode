@@ -4,7 +4,7 @@ import { Effect } from "effect"
 import { Bus } from "../../src/bus"
 import { runtime } from "../../src/effect/runtime"
 import { Instances } from "../../src/effect/instances"
-import { PermissionNext } from "../../src/permission/next"
+import { PermissionNext } from "../../src/permission"
 import * as S from "../../src/permission/service"
 import { PermissionID } from "../../src/permission/schema"
 import { Instance } from "../../src/project/instance"
@@ -395,9 +395,9 @@ test("disabled - disables tool when denied", () => {
   expect(result.has("read")).toBe(false)
 })
 
-test("disabled - disables edit/write/patch/multiedit when edit denied", () => {
+test("disabled - disables edit/write/apply_patch/multiedit when edit denied", () => {
   const result = PermissionNext.disabled(
-    ["edit", "write", "patch", "multiedit", "bash"],
+    ["edit", "write", "apply_patch", "multiedit", "bash"],
     [
       { permission: "*", pattern: "*", action: "allow" },
       { permission: "edit", pattern: "*", action: "deny" },
@@ -405,7 +405,7 @@ test("disabled - disables edit/write/patch/multiedit when edit denied", () => {
   )
   expect(result.has("edit")).toBe(true)
   expect(result.has("write")).toBe(true)
-  expect(result.has("patch")).toBe(true)
+  expect(result.has("apply_patch")).toBe(true)
   expect(result.has("multiedit")).toBe(true)
   expect(result.has("bash")).toBe(false)
 })
@@ -1005,7 +1005,7 @@ test("ask - abort should clear pending request", async () => {
     fn: async () => {
       const ctl = new AbortController()
       const ask = runtime.runPromise(
-        S.PermissionService.use((svc) =>
+        S.PermissionEffect.Service.use((svc) =>
           svc.ask({
             sessionID: SessionID.make("session_test"),
             permission: "bash",
