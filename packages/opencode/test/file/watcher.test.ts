@@ -54,23 +54,31 @@ function listen(directory: string, check: (evt: WatcherEvent) => boolean, hit: (
   return cleanup
 }
 
-function nextUpdate<E>(directory: string, check: (evt: WatcherEvent) => boolean, trigger: Effect.Effect<void, E>) {
+function wait(directory: string, check: (evt: WatcherEvent) => boolean) {
   return Effect.gen(function* () {
     const deferred = yield* Deferred.make<WatcherEvent>()
-    return yield* Effect.acquireUseRelease(
-      Effect.sync(() =>
-        listen(directory, check, (evt) => {
-          Deferred.doneUnsafe(deferred, Effect.succeed(evt))
-        }),
-      ),
-      () =>
-        Effect.gen(function* () {
-          yield* trigger
-          return yield* Deferred.await(deferred).pipe(Effect.timeout("5 seconds"))
-        }),
-      (cleanup) => Effect.sync(cleanup),
-    )
+    const cleanup = yield* Effect.sync(() => {
+      let off = () => {}
+      off = listen(directory, check, (evt) => {
+        off()
+        Deferred.doneUnsafe(deferred, Effect.succeed(evt))
+      })
+      return off
+    })
+    return { cleanup, deferred }
   })
+}
+
+function nextUpdate<E>(directory: string, check: (evt: WatcherEvent) => boolean, trigger: Effect.Effect<void, E>) {
+  return Effect.acquireUseRelease(
+    wait(directory, check),
+    ({ deferred }) =>
+      Effect.gen(function* () {
+        yield* trigger
+        return yield* Deferred.await(deferred).pipe(Effect.timeout("5 seconds"))
+      }),
+    ({ cleanup }) => Effect.sync(cleanup),
+  )
 }
 
 /** Effect that asserts no matching event arrives within `ms`. */
@@ -80,23 +88,15 @@ function noUpdate<E>(
   trigger: Effect.Effect<void, E>,
   ms = 500,
 ) {
-  return Effect.gen(function* () {
-    const deferred = yield* Deferred.make<WatcherEvent>()
-
-    yield* Effect.acquireUseRelease(
-      Effect.sync(() =>
-        listen(directory, check, (evt) => {
-          Deferred.doneUnsafe(deferred, Effect.succeed(evt))
-        }),
-      ),
-      () =>
-        Effect.gen(function* () {
-          yield* trigger
-          expect(yield* Deferred.await(deferred).pipe(Effect.timeoutOption(`${ms} millis`))).toEqual(Option.none())
-        }),
-      (cleanup) => Effect.sync(cleanup),
-    )
-  })
+  return Effect.acquireUseRelease(
+    wait(directory, check),
+    ({ deferred }) =>
+      Effect.gen(function* () {
+        yield* trigger
+        expect(yield* Deferred.await(deferred).pipe(Effect.timeoutOption(`${ms} millis`))).toEqual(Option.none())
+      }),
+    ({ cleanup }) => Effect.sync(cleanup),
+  )
 }
 
 function ready(directory: string) {
