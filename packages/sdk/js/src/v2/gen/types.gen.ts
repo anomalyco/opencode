@@ -1888,8 +1888,30 @@ export type Path = {
   directory: string
 }
 
+export type VcsGithubCapability = {
+  available: boolean
+  authenticated: boolean
+}
+
 export type VcsInfo = {
   branch: string
+  staged: number
+  unstaged: number
+  hasRemote: boolean
+  github: VcsGithubCapability
+}
+
+export type VcsCommitResult = {
+  ok: boolean
+  url?: string
+}
+
+export type VcsCommitAction = "commit" | "push" | "pr"
+
+export type VcsCommitInput = {
+  message: string
+  includeUnstaged?: boolean
+  action?: VcsCommitAction
 }
 
 export type Command = {
@@ -4832,6 +4854,34 @@ export type VcsGetResponses = {
 }
 
 export type VcsGetResponse = VcsGetResponses[keyof VcsGetResponses]
+
+export type VcsCommitData = {
+  body?: VcsCommitInput
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/vcs/commit"
+}
+
+export type VcsCommitErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type VcsCommitError = VcsCommitErrors[keyof VcsCommitErrors]
+
+export type VcsCommitResponses = {
+  /**
+   * Commit result
+   */
+  200: VcsCommitResult
+}
+
+export type VcsCommitResponse = VcsCommitResponses[keyof VcsCommitResponses]
 
 export type CommandListData = {
   body?: never

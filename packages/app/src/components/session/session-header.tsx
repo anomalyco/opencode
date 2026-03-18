@@ -11,6 +11,7 @@ import { getFilename } from "@opencode-ai/util/path"
 import { createEffect, createMemo, For, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
@@ -23,6 +24,7 @@ import { useSessionLayout } from "@/pages/session/session-layout"
 import { messageAgentColor } from "@/utils/agent"
 import { decode64 } from "@/utils/base64"
 import { Persist, persisted } from "@/utils/persist"
+import { CommitDialog } from "../dialog-commit"
 import { StatusPopover } from "../status-popover"
 
 const OPEN_APPS = [
@@ -131,6 +133,7 @@ const showRequestError = (language: ReturnType<typeof useLanguage>, err: unknown
 export function SessionHeader() {
   const layout = useLayout()
   const command = useCommand()
+  const dialog = useDialog()
   const server = useServer()
   const platform = usePlatform()
   const language = useLanguage()
@@ -224,6 +227,7 @@ export function SessionHeader() {
   const tint = createMemo(() =>
     messageAgentColor(params.id ? sync.data.message[params.id] : undefined, sync.data.agent),
   )
+  const canCommit = createMemo(() => !!sync.data.vcs?.branch)
 
   const selectApp = (app: OpenApp) => {
     if (!options().some((item) => item.id === app)) return
@@ -435,6 +439,19 @@ export function SessionHeader() {
                 </TooltipKeybind>
 
                 <div class="hidden md:flex items-center gap-1 shrink-0">
+                  <Show when={canCommit()}>
+                    <Tooltip placement="bottom" value={language.t("commit.dialog.title")}>
+                      <Button
+                        variant="ghost"
+                        class="titlebar-icon w-8 h-6 p-0 box-border"
+                        onClick={() => dialog.show(() => <CommitDialog />)}
+                        aria-label={language.t("commit.dialog.title")}
+                      >
+                        <Icon size="small" name="branch" />
+                      </Button>
+                    </Tooltip>
+                  </Show>
+
                   <TooltipKeybind
                     title={language.t("command.review.toggle")}
                     keybind={command.keybind("review.toggle")}

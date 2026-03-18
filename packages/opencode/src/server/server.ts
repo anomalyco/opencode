@@ -318,7 +318,8 @@ export namespace Server {
         "/vcs",
         describeRoute({
           summary: "Get VCS info",
-          description: "Retrieve version control system (VCS) information for the current project, such as git branch.",
+          description:
+            "Retrieve version control system (VCS) information for the current project, including branch and change counts.",
           operationId: "vcs.get",
           responses: {
             200: {
@@ -332,10 +333,37 @@ export namespace Server {
           },
         }),
         async (c) => {
-          const branch = await runPromiseInstance(Vcs.Service.use((s) => s.branch()))
-          return c.json({
-            branch,
-          })
+          return c.json(await Vcs.info())
+        },
+      )
+      .post(
+        "/vcs/commit",
+        describeRoute({
+          summary: "Commit workspace changes",
+          description: "Commit staged changes, optionally include unstaged files, then optionally push or create a PR.",
+          operationId: "vcs.commit",
+          responses: {
+            200: {
+              description: "Commit result",
+              content: {
+                "application/json": {
+                  schema: resolver(Vcs.CommitResult),
+                },
+              },
+            },
+            ...errors(400),
+          },
+        }),
+        validator("json", Vcs.CommitInput),
+        async (c) => {
+          try {
+            return c.json(await Vcs.commit(c.req.valid("json")))
+          } catch (err) {
+            if (err instanceof Vcs.CommitFailedError) {
+              return c.json({ code: "COMMIT_FAILED", message: err.data.message }, { status: 400 })
+            }
+            throw err
+          }
         },
       )
       .get(

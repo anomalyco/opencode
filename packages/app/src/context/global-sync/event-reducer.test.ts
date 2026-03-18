@@ -494,8 +494,15 @@ describe("applyDirectoryEvent", () => {
   })
 
   test("updates vcs branch in store and cache", () => {
-    const [store, setStore] = createStore(baseState())
-    const [cacheStore, setCacheStore] = createStore({ value: undefined as State["vcs"] })
+    const vcs = {
+      branch: "main",
+      staged: 1,
+      unstaged: 2,
+      hasRemote: true,
+      github: { available: true, authenticated: true },
+    }
+    const [store, setStore] = createStore(baseState({ vcs }))
+    const [cacheStore, setCacheStore] = createStore({ value: vcs as State["vcs"] })
 
     applyDirectoryEvent({
       event: { type: "vcs.branch.updated", properties: { branch: "feature/test" } },
@@ -511,8 +518,8 @@ describe("applyDirectoryEvent", () => {
       },
     })
 
-    expect(store.vcs).toEqual({ branch: "feature/test" })
-    expect(cacheStore.value).toEqual({ branch: "feature/test" })
+    expect(store.vcs).toEqual({ ...vcs, branch: "feature/test" })
+    expect(cacheStore.value).toEqual({ ...vcs, branch: "feature/test" })
   })
 
   test("routes disposal and lsp events to side-effect handlers", () => {

@@ -172,6 +172,9 @@ import type {
   TuiSelectSessionResponses,
   TuiShowToastResponses,
   TuiSubmitPromptResponses,
+  VcsCommitErrors,
+  VcsCommitInput,
+  VcsCommitResponses,
   VcsGetResponses,
   WorktreeCreateErrors,
   WorktreeCreateInput,
@@ -3635,7 +3638,7 @@ export class Vcs extends HeyApiClient {
   /**
    * Get VCS info
    *
-   * Retrieve version control system (VCS) information for the current project, such as git branch.
+   * Retrieve version control system (VCS) information for the current project, including branch and change counts.
    */
   public get<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -3659,6 +3662,43 @@ export class Vcs extends HeyApiClient {
       url: "/vcs",
       ...options,
       ...params,
+    })
+  }
+
+  /**
+   * Commit workspace changes
+   *
+   * Commit staged changes, optionally include unstaged files, then optionally push or create a PR.
+   */
+  public commit<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      vcsCommitInput?: VcsCommitInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "vcsCommitInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<VcsCommitResponses, VcsCommitErrors, ThrowOnError>({
+      url: "/vcs/commit",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 }
