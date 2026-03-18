@@ -523,6 +523,30 @@ function scrollParent(el: HTMLElement): HTMLElement | undefined {
   }
 }
 
+function reveal(viewer: Viewer, range: SelectedLineRange | null | undefined) {
+  if (!range) return
+  const line = Math.min(range.start, range.end)
+  requestAnimationFrame(() => {
+    const root = viewer.getRoot()
+    const wrap = viewer.wrapper
+    if (!root || !wrap) return
+    const path = range.side ? `[data-${range.side}] [data-line="${line}"]` : `[data-line="${line}"]`
+    const node = root.querySelector(path) ?? root.querySelector(`[data-line="${line}"]`)
+    if (!(node instanceof HTMLElement)) return
+    const parent = scrollParent(wrap)
+    if (!parent) {
+      node.scrollIntoView({ block: "center", inline: "nearest" })
+      return
+    }
+    const box = parent.getBoundingClientRect()
+    const item = node.getBoundingClientRect()
+    const top = item.top - box.top + parent.scrollTop
+    const target = top - parent.clientHeight / 2 + item.height / 2
+    const max = Math.max(0, parent.scrollHeight - parent.clientHeight)
+    parent.scrollTop = Math.max(0, Math.min(target, max))
+  })
+}
+
 function createLocalVirtualStrategy(host: () => HTMLDivElement | undefined, enabled: () => boolean): VirtualStrategy {
   let virtualizer: Virtualizer | undefined
   let root: Document | HTMLElement | undefined
@@ -836,6 +860,11 @@ function TextViewer<T>(props: TextFileProps<T>) {
     })
   }
 
+  createEffect(() => {
+    viewer.rendered()
+    reveal(viewer, local.selectedLines)
+  })
+
   useSearchHandle({
     search: () => local.search,
     find: viewer.find,
@@ -1026,6 +1055,11 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
       },
     })
   }
+
+  createEffect(() => {
+    viewer.rendered()
+    reveal(viewer, local.selectedLines)
+  })
 
   useSearchHandle({
     search: () => local.search,

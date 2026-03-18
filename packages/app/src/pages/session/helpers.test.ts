@@ -21,6 +21,7 @@ describe("createOpenReviewFile", () => {
       },
       openTab: (tab) => calls.push(`open:${tab}`),
       setActive: (tab) => calls.push(`active:${tab}`),
+      getFile: () => ({ content: { content: "one\ntwo" } }),
       setSelectedLines: (path, range) => calls.push(`select:${path}:${range ? `${range.start}-${range.end}` : "none"}`),
       loadFile: (path) => calls.push(`load:${path}`),
     })
@@ -46,6 +47,7 @@ describe("createOpenReviewFile", () => {
       tabForPath: (path) => `file://${path}`,
       openTab: () => calls.push("open"),
       setActive: () => calls.push("active"),
+      getFile: () => ({ content: { content: "one\n".repeat(20) } }),
       setSelectedLines: (_path, range) => calls.push(`select:${range?.start}-${range?.end}`),
       loadFile: () => calls.push("load"),
     })
@@ -53,6 +55,25 @@ describe("createOpenReviewFile", () => {
     openReviewFile("src/a.ts", 12)
 
     expect(calls).toContain("select:12-12")
+  })
+
+  test("clamps out of range lines", () => {
+    const calls: string[] = []
+    const openReviewFile = createOpenReviewFile({
+      showAllFiles: () => undefined,
+      openReviewPanel: () => undefined,
+      tabForPath: (path) => `file://${path}`,
+      openTab: () => undefined,
+      setActive: () => undefined,
+      getFile: () => ({ content: { content: "one\ntwo" } }),
+      setSelectedLines: (_path, range) => calls.push(`select:${range?.start}-${range?.end}`),
+      onLineError: ({ line, max }) => calls.push(`warn:${line}->${max}`),
+      loadFile: () => undefined,
+    })
+
+    openReviewFile("src/a.ts", 12)
+
+    expect(calls).toEqual(["warn:12->2", "select:2-2"])
   })
 })
 

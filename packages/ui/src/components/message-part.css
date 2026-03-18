@@ -417,6 +417,29 @@
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
+
+  button.file-link {
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    padding: 0;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  button.file-link:hover,
+  button.file-link:focus-visible {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  button.file-link:focus-visible {
+    outline: 1px solid var(--border-interactive-base);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
 }
 
 [data-component="edit-trigger"],
