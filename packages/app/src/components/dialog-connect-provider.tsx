@@ -9,7 +9,7 @@ import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { showToast } from "@opencode-ai/ui/toast"
-import { createMemo, For, Match, onCleanup, onMount, Switch } from "solid-js"
+import { createMemo, Match, onCleanup, onMount, Switch } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { Link } from "@/components/link"
 import { useLanguage } from "@/context/language"
@@ -175,76 +175,115 @@ export function DialogConnectProvider(props: { provider: string }) {
   function OAuthPromptsView() {
     const [formStore, setFormStore] = createStore({
       value: {} as Record<string, string>,
+      index: 0,
     })
 
     const prompts = createMemo(() => method()?.prompts ?? [])
-    const visible = createMemo(() =>
-      prompts().filter((prompt) => {
-        if (!prompt.when) return true
-        const value = formStore.value[prompt.when.key]
-        if (value === undefined) return false
-        const matches = prompt.when.op === "eq" ? value === prompt.when.value : value !== prompt.when.value
-        if (!matches) return false
-        return true
-      }),
-    )
-    const valid = createMemo(() =>
-      visible().every((prompt) => {
-        const value = formStore.value[prompt.key] ?? ""
-        if (prompt.type === "text") return value.trim().length > 0
-        return value.length > 0
-      }),
-    )
+    const matches = (prompt: NonNullable<ReturnType<typeof prompts>[number]>, value: Record<string, string>) => {
+      if (!prompt.when) return true
+      const actual = value[prompt.when.key]
+      if (actual === undefined) return false
+      return prompt.when.op === "eq" ? actual === prompt.when.value : actual !== prompt.when.value
+    }
+    const current = createMemo(() => {
+      const all = prompts()
+      const index = all.findIndex((prompt, index) => index >= formStore.index && matches(prompt, formStore.value))
+      if (index === -1) return
+      return {
+        index,
+        prompt: all[index],
+      }
+    })
+    const valid = createMemo(() => {
+      const item = current()
+      if (!item || item.prompt.type !== "text") return false
+      const value = formStore.value[item.prompt.key] ?? ""
+      return value.trim().length > 0
+    })
+
+    async function next(index: number, value: Record<string, string>) {
+      if (store.methodIndex === undefined) return
+      const next = prompts().findIndex((prompt, i) => i > index && matches(prompt, value))
+      if (next !== -1) {
+        setFormStore("index", next)
+        return
+      }
+      await selectMethod(store.methodIndex, value)
+    }
 
     async function handleSubmit(e: SubmitEvent) {
       e.preventDefault()
+      const item = current()
+      if (!item || item.prompt.type !== "text") return
       if (!valid()) return
-      if (store.methodIndex === undefined) return
-      await selectMethod(store.methodIndex, formStore.value)
+      await next(item.index, formStore.value)
     }
+
+    const item = () => current()
+    const text = createMemo(() => {
+      const prompt = item()?.prompt
+      if (!prompt || prompt.type !== "text") return
+      return prompt
+    })
+    const select = createMemo(() => {
+      const prompt = item()?.prompt
+      if (!prompt || prompt.type !== "select") return
+      return prompt
+    })
 
     return (
       <form onSubmit={handleSubmit} class="flex flex-col items-start gap-4">
-        <For each={visible()}>
-          {(prompt) => {
-            if (prompt.type === "text") {
-              return (
-                <TextField
-                  type="text"
-                  label={prompt.message}
-                  placeholder={prompt.placeholder}
-                  value={formStore.value[prompt.key] ?? ""}
-                  onChange={(value) => setFormStore("value", prompt.key, value)}
-                />
-              )
-            }
-
-            return (
-              <div class="w-full flex flex-col gap-2">
-                <div class="text-14-medium text-text-strong">{prompt.message}</div>
+        <Switch>
+          <Match when={item()?.prompt.type === "text"}>
+            <TextField
+              type="text"
+              label={text()?.message ?? ""}
+              placeholder={text()?.placeholder}
+              value={text() ? (formStore.value[text()!.key] ?? "") : ""}
+              onChange={(value) => {
+                const prompt = text()
+                if (!prompt) return
+                setFormStore("value", prompt.key, value)
+              }}
+            />
+            <Button class="w-auto" type="submit" size="large" variant="primary" disabled={!valid()}>
+              {language.t("common.continue")}
+            </Button>
+          </Match>
+          <Match when={item()?.prompt.type === "select"}>
+            <div class="w-full flex flex-col gap-1.5">
+              <div class="text-14-regular text-text-base">{select()?.message}</div>
+              <div>
                 <List
-                  items={prompt.options}
+                  items={select()?.options ?? []}
                   key={(x) => x.value}
-                  current={prompt.options.find((x) => x.value === formStore.value[prompt.key])}
+                  current={select()?.options.find((x) => x.value === formStore.value[select()!.key])}
                   onSelect={(value) => {
                     if (!value) return
+                    const prompt = select()
+                    if (!prompt) return
+                    const nextValue = {
+                      ...formStore.value,
+                      [prompt.key]: value.value,
+                    }
                     setFormStore("value", prompt.key, value.value)
+                    void next(item()!.index, nextValue)
                   }}
                 >
                   {(option) => (
-                    <div class="w-full flex items-center gap-x-2.5">
+                    <div class="w-full flex items-center gap-x-2">
+                      <div class="w-4 h-2 rounded-[1px] bg-input-base shadow-xs-border-base flex items-center justify-center">
+                        <div class="w-2.5 h-0.5 ml-0 bg-icon-strong-base hidden" data-slot="list-item-extra-icon" />
+                      </div>
                       <span>{option.label}</span>
                       <span class="text-14-regular text-text-weak">{option.hint}</span>
                     </div>
                   )}
                 </List>
               </div>
-            )
-          }}
-        </For>
-        <Button class="w-auto" type="submit" size="large" variant="primary" disabled={!valid()}>
-          {language.t("common.continue")}
-        </Button>
+            </div>
+          </Match>
+        </Switch>
       </form>
     )
   }
