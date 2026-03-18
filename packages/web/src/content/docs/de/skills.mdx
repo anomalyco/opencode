@@ -13,12 +13,14 @@ Sie werden bei Bedarf ueber das native `skill`-Tool geladen, wenn ein Agent sie 
 Erstelle pro Skill-Namen einen Ordner und lege dort eine `SKILL.md` ab.
 OpenCode sucht in folgenden Pfaden:
 
-- Project config: `.opencode/skills/<name>/SKILL.md`
-- Global config: `~/.config/opencode/skills/<name>/SKILL.md`
+- Project config: `.opencode/skills/<name>/SKILL.md` oder `.opencode/skill/<name>/SKILL.md`
+- Global config: `~/.config/opencode/skills/<name>/SKILL.md` oder `~/.config/opencode/skill/<name>/SKILL.md`
 - Project Claude-compatible: `.claude/skills/<name>/SKILL.md`
 - Global Claude-compatible: `~/.claude/skills/<name>/SKILL.md`
 - Project agent-compatible: `.agents/skills/<name>/SKILL.md`
 - Global agent-compatible: `~/.agents/skills/<name>/SKILL.md`
+
+Hinweis: OpenCode unterstützt sowohl `skills` (Plural) als auch `skill` (Singular) als Verzeichnisnamen, während Claude und agents nur `skills` (Plural) unterstützen.
 
 ---
 

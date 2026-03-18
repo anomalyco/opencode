@@ -13,12 +13,14 @@ description: "กำหนดพฤติกรรมที่นำมาใช
 สร้างหนึ่งโฟลเดอร์ต่อชื่อทักษะ และใส่ `SKILL.md` ไว้ข้างใน
 OpenCode ค้นหาตำแหน่งเหล่านี้:
 
-- การกำหนดค่าโครงการ: `.opencode/skills/<name>/SKILL.md`
-- การกำหนดค่าส่วนกลาง: `~/.config/opencode/skills/<name>/SKILL.md`
+- การกำหนดค่าโครงการ: `.opencode/skills/<name>/SKILL.md` หรือ `.opencode/skill/<name>/SKILL.md`
+- การกำหนดค่าส่วนกลาง: `~/.config/opencode/skills/<name>/SKILL.md` หรือ `~/.config/opencode/skill/<name>/SKILL.md`
 - เข้ากันได้กับโครงการ Claude: `.claude/skills/<name>/SKILL.md`
 - เข้ากันได้กับ Global Claude: `~/.claude/skills/<name>/SKILL.md`
 - เข้ากันได้กับตัวแทนโครงการ: `.agents/skills/<name>/SKILL.md`
 - รองรับตัวแทนทั่วโลก: `~/.agents/skills/<name>/SKILL.md`
+
+หมายเหตุ: OpenCode รองรับชื่อไดเร็กทอรี `skills` (พหูพจน์) และ `skill` (เอกพจน์) ในขณะที่ Claude และ agents รองรับเฉพาะ `skills` (พหูพจน์)
 
 ---
 

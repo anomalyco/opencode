@@ -11,14 +11,16 @@ Les compétences sont chargées à la demande via l'outil natif `skill` : les a
 ## Placer des fichiers
 
 Créez un dossier par nom de compétence et insérez-y un `SKILL.md`.
-OpenCode recherche ces emplacements :
+OpenCode recherche ces emplacements :
 
-- Configuration du projet : `.opencode/skills/<name>/SKILL.md`
-- Configuration globale : `~/.config/opencode/skills/<name>/SKILL.md`
-- Compatible Projet Claude : `.claude/skills/<name>/SKILL.md`
-- Compatible Global Claude : `~/.claude/skills/<name>/SKILL.md`
-- Compatible avec l'agent de projet : `.agents/skills/<name>/SKILL.md`
-- Compatible avec les agents globaux : `~/.agents/skills/<name>/SKILL.md`
+- Configuration du projet : `.opencode/skills/<name>/SKILL.md` ou `.opencode/skill/<name>/SKILL.md`
+- Configuration globale : `~/.config/opencode/skills/<name>/SKILL.md` ou `~/.config/opencode/skill/<name>/SKILL.md`
+- Compatible Projet Claude : `.claude/skills/<name>/SKILL.md`
+- Compatible Global Claude : `~/.claude/skills/<name>/SKILL.md`
+- Compatible avec l'agent de projet : `.agents/skills/<name>/SKILL.md`
+- Compatible avec les agents globaux : `~/.agents/skills/<name>/SKILL.md`
+
+Remarque : OpenCode prend en charge les noms de répertoire `skills` (pluriel) et `skill` (singulier), tandis que Claude et agents ne prennent en charge que `skills` (pluriel).
 
 ---
 

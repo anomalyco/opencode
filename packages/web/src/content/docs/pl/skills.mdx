@@ -13,12 +13,14 @@ Umiejętności są ładowane na żądanie za pośrednictwem natywnego narzędzia
 Utwórz jeden folder na nazwę umiejętności i umieść w nim `SKILL.md`.
 opencode przeszukuje te lokalizacje:
 
-- Project config: `.opencode/skills/<name>/SKILL.md`
-- Global config: `~/.config/opencode/skills/<name>/SKILL.md`
+- Project config: `.opencode/skills/<name>/SKILL.md` lub `.opencode/skill/<name>/SKILL.md`
+- Global config: `~/.config/opencode/skills/<name>/SKILL.md` lub `~/.config/opencode/skill/<name>/SKILL.md`
 - Project Claude-compatible: `.claude/skills/<name>/SKILL.md`
 - Global Claude-compatible: `~/.claude/skills/<name>/SKILL.md`
 - Project agent-compatible: `.agents/skills/<name>/SKILL.md`
 - Global agent-compatible: `~/.agents/skills/<name>/SKILL.md`
+
+Uwaga: OpenCode obsługuje nazwy katalogów `skills` (liczba mnoga) i `skill` (liczba pojedyncza), podczas gdy Claude i agents obsługują tylko `skills` (liczba mnoga).
 
 ---
 

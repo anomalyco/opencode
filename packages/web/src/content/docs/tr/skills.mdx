@@ -13,12 +13,14 @@ Beceriler, yerel `skill` araci uzerinden ihtiyac aninda yuklenir; ajanlar mevcut
 Her beceri adi icin bir klasor olusturun ve icine bir `SKILL.md` koyun.
 opencode su konumlari tarar:
 
-- Proje konfigurasyonu: `.opencode/skills/<name>/SKILL.md`
-- Genel konfigurasyon: `~/.config/opencode/skills/<name>/SKILL.md`
+- Proje konfigurasyonu: `.opencode/skills/<name>/SKILL.md` veya `.opencode/skill/<name>/SKILL.md`
+- Genel konfigurasyon: `~/.config/opencode/skills/<name>/SKILL.md` veya `~/.config/opencode/skill/<name>/SKILL.md`
 - Proje Claude uyumlu: `.claude/skills/<name>/SKILL.md`
 - Genel Claude uyumlu: `~/.claude/skills/<name>/SKILL.md`
 - Proje agent uyumlu: `.agents/skills/<name>/SKILL.md`
 - Genel agent uyumlu: `~/.agents/skills/<name>/SKILL.md`
+
+Not: OpenCode hem `skills` (cogul) hem de `skill` (tekil) dizin adlarini desteklerken, Claude ve agents yalnizca `skills` (cogul) destekler.
 
 ---
 

@@ -13,12 +13,14 @@ Skills se ucitavaju po potrebi kroz ugradeni `skill` alat - agenti vide dostupne
 Kreirajte jedan folder po nazivu skill-a i stavite `SKILL.md` unutar njega.
 OpenCode pretrazuje ove lokacije:
 
-- Konfiguracija projekta: `.opencode/skills/<name>/SKILL.md`
-- Globalna konfiguracija: `~/.config/opencode/skills/<name>/SKILL.md`
+- Konfiguracija projekta: `.opencode/skills/<name>/SKILL.md` ili `.opencode/skill/<name>/SKILL.md`
+- Globalna konfiguracija: `~/.config/opencode/skills/<name>/SKILL.md` ili `~/.config/opencode/skill/<name>/SKILL.md`
 - Claude kompatibilno u projektu: `.claude/skills/<name>/SKILL.md`
 - Globalno Claude kompatibilno: `~/.claude/skills/<name>/SKILL.md`
 - Agent kompatibilno u projektu: `.agents/skills/<name>/SKILL.md`
 - Globalno agent kompatibilno: `~/.agents/skills/<name>/SKILL.md`
+
+Napomena: OpenCode podrzava nazive direktorija `skills` (mnozina) i `skill` (jednina), dok Claude i agents podrzavaju samo `skills` (mnozina).
 
 ---
 

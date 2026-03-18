@@ -13,12 +13,14 @@ description: SKILL.md 定義による再利用可能な動作の定義
 スキル名ごとにフォルダーを 1 つ作成し、その中に `SKILL.md` を置きます。
 OpenCode は次の場所を検索します。
 
-- プロジェクト設定: `.opencode/skills/<name>/SKILL.md`
-- グローバル設定: `~/.config/opencode/skills/<name>/SKILL.md`
+- プロジェクト設定: `.opencode/skills/<name>/SKILL.md` または `.opencode/skill/<name>/SKILL.md`
+- グローバル設定: `~/.config/opencode/skills/<name>/SKILL.md` または `~/.config/opencode/skill/<name>/SKILL.md`
 - プロジェクト Claude 互換: `.claude/skills/<name>/SKILL.md`
 - グローバル Claude 互換: `~/.claude/skills/<name>/SKILL.md`
 - プロジェクトエージェント互換: `.agents/skills/<name>/SKILL.md`
 - グローバルエージェント互換: `~/.agents/skills/<name>/SKILL.md`
+
+注意: OpenCode は `skills`(複数形)と `skill`(単数形)の両方のディレクトリ名をサポートしていますが、Claude と agents は `skills`(複数形)のみをサポートしています。
 
 ---
 

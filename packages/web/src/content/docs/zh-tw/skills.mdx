@@ -13,12 +13,14 @@ description: "透過 SKILL.md 定義可重複使用的行為"
 為每個技能名稱建立一個資料夾，並在其中放入 `SKILL.md`。
 OpenCode 會搜尋以下位置：
 
-- 專案設定：`.opencode/skills/<name>/SKILL.md`
-- 全域設定：`~/.config/opencode/skills/<name>/SKILL.md`
+- 專案設定：`.opencode/skills/<name>/SKILL.md` 或 `.opencode/skill/<name>/SKILL.md`
+- 全域設定：`~/.config/opencode/skills/<name>/SKILL.md` 或 `~/.config/opencode/skill/<name>/SKILL.md`
 - 專案 Claude 相容：`.claude/skills/<name>/SKILL.md`
 - 全域 Claude 相容：`~/.claude/skills/<name>/SKILL.md`
 - 專案代理相容：`.agents/skills/<name>/SKILL.md`
 - 全域代理相容：`~/.agents/skills/<name>/SKILL.md`
+
+注意：OpenCode 同時支援 `skills`（複數）和 `skill`（單數）目錄名稱，而 Claude 和 agents 僅支援 `skills`（複數）。
 
 ---
 

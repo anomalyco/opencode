@@ -13,12 +13,14 @@ Las habilidades se cargan bajo demanda a través de la herramienta nativa `skill
 Cree una carpeta por nombre de habilidad y coloque un `SKILL.md` dentro de ella.
 OpenCode busca estas ubicaciones:
 
-- Configuración del proyecto: `.opencode/skills/<name>/SKILL.md`
-- Configuración global: `~/.config/opencode/skills/<name>/SKILL.md`
+- Configuración del proyecto: `.opencode/skills/<name>/SKILL.md` o `.opencode/skill/<name>/SKILL.md`
+- Configuración global: `~/.config/opencode/skills/<name>/SKILL.md` o `~/.config/opencode/skill/<name>/SKILL.md`
 - Compatible con Proyecto Claude: `.claude/skills/<name>/SKILL.md`
 - Compatible con Claude global: `~/.claude/skills/<name>/SKILL.md`
 - Compatible con agente de proyecto: `.agents/skills/<name>/SKILL.md`
 - Compatible con agentes globales: `~/.agents/skills/<name>/SKILL.md`
+
+Nota: OpenCode admite nombres de directorio `skills` (plural) y `skill` (singular), mientras que Claude y agents solo admiten `skills` (plural).
 
 ---
 

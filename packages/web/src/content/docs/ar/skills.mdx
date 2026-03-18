@@ -13,12 +13,14 @@ description: "عرّف سلوكاً قابلاً لإعادة الاستخدام
 أنشئ مجلداً واحداً لكل اسم مهارة وضع بداخله ملف `SKILL.md`.
 يبحث OpenCode في هذه المواقع:
 
-- إعدادات المشروع: `.opencode/skills/<name>/SKILL.md`
-- إعدادات عامة: `~/.config/opencode/skills/<name>/SKILL.md`
+- إعدادات المشروع: `.opencode/skills/<name>/SKILL.md` أو `.opencode/skill/<name>/SKILL.md`
+- إعدادات عامة: `~/.config/opencode/skills/<name>/SKILL.md` أو `~/.config/opencode/skill/<name>/SKILL.md`
 - مشروع متوافق مع Claude: `.claude/skills/<name>/SKILL.md`
 - عام متوافق مع Claude: `~/.claude/skills/<name>/SKILL.md`
 - مشروع متوافق مع الوكلاء: `.agents/skills/<name>/SKILL.md`
 - عام متوافق مع الوكلاء: `~/.agents/skills/<name>/SKILL.md`
+
+ملاحظة: يدعم OpenCode اسمي الدليل `skills` (الجمع) و `skill` (المفرد)، بينما يدعم Claude و agents فقط `skills` (الجمع).
 
 ---
 

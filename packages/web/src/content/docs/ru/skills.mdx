@@ -13,12 +13,14 @@ description: Определите повторно используемое по
 Создайте одну папку для каждого имени навыка и поместите в нее `SKILL.md`.
 opencode выполняет поиск в следующих местах:
 
-- Конфигурация проекта: `.opencode/skills/<name>/SKILL.md`
-- Глобальная конфигурация: `~/.config/opencode/skills/<name>/SKILL.md`.
+- Конфигурация проекта: `.opencode/skills/<name>/SKILL.md` или `.opencode/skill/<name>/SKILL.md`
+- Глобальная конфигурация: `~/.config/opencode/skills/<name>/SKILL.md` или `~/.config/opencode/skill/<name>/SKILL.md`
 - Совместимость с Project Claude: `.claude/skills/<name>/SKILL.md`
 - Глобальная совместимость с Claude: `~/.claude/skills/<name>/SKILL.md`
 - Совместимость с агентом проекта: `.agents/skills/<name>/SKILL.md`
 - Совместимость с глобальным агентом: `~/.agents/skills/<name>/SKILL.md`
+
+Примечание: OpenCode поддерживает оба имени каталога `skills` (множественное число) и `skill` (единственное число), в то время как Claude и agents поддерживают только `skills` (множественное число).
 
 ---
 

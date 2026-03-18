@@ -13,12 +13,14 @@ Le skill vengono caricate on-demand tramite lo strumento nativo `skill`: gli age
 Crea una cartella per ogni nome di skill e metti un `SKILL.md` al suo interno.
 OpenCode cerca in queste posizioni:
 
-- Config di progetto: `.opencode/skills/<name>/SKILL.md`
-- Config globale: `~/.config/opencode/skills/<name>/SKILL.md`
+- Config di progetto: `.opencode/skills/<name>/SKILL.md` o `.opencode/skill/<name>/SKILL.md`
+- Config globale: `~/.config/opencode/skills/<name>/SKILL.md` o `~/.config/opencode/skill/<name>/SKILL.md`
 - Progetto compatibile con Claude: `.claude/skills/<name>/SKILL.md`
 - Globale compatibile con Claude: `~/.claude/skills/<name>/SKILL.md`
 - Progetto compatibile con agent: `.agents/skills/<name>/SKILL.md`
 - Globale compatibile con agent: `~/.agents/skills/<name>/SKILL.md`
+
+Nota: OpenCode supporta sia `skills` (plurale) che `skill` (singolare) come nomi di directory, mentre Claude e agents supportano solo `skills` (plurale).
 
 ---
 

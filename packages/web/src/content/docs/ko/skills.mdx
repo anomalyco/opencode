@@ -13,12 +13,14 @@ Skills are loaded on-demand via native `skill` tool-agents see available skills 
 기술 이름 당 하나의 폴더를 만들고 내부 `SKILL.md`를 넣어.
 opencode 이 위치를 검색:
 
-- 프로젝트 구성: `.opencode/skills/<name>/SKILL.md`
-- 글로벌 구성: `~/.config/opencode/skills/<name>/SKILL.md`
+- 프로젝트 구성: `.opencode/skills/<name>/SKILL.md` 또는 `.opencode/skill/<name>/SKILL.md`
+- 글로벌 구성: `~/.config/opencode/skills/<name>/SKILL.md` 또는 `~/.config/opencode/skill/<name>/SKILL.md`
 - 프로젝트 클로드 호환 : `.claude/skills/<name>/SKILL.md`
 - 글로벌 클로드 호환 : `~/.claude/skills/<name>/SKILL.md`
 - 프로젝트 에이전트 호환 : `.agents/skills/<name>/SKILL.md`
 - 글로벌 에이전트 호환 : `~/.agents/skills/<name>/SKILL.md`
+
+참고: OpenCode는 `skills`(복수형)와 `skill`(단수형) 디렉토리 이름을 모두 지원하지만, Claude와 agents는 `skills`(복수형)만 지원합니다.
 
 ---
 

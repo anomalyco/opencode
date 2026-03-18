@@ -13,12 +13,14 @@ Ferdigheter lastes inn på forespørsel via det innebygde `skill`-verktøyet –
 Opprett én mappe per ferdighetsnavn og legg inn en `SKILL.md` i den.
 opencode søker etter disse stedene:
 
-- Prosjektkonfigurasjon: `.opencode/skills/<name>/SKILL.md`
-- Global konfigurasjon: `~/.config/opencode/skills/<name>/SKILL.md`
+- Prosjektkonfigurasjon: `.opencode/skills/<name>/SKILL.md` eller `.opencode/skill/<name>/SKILL.md`
+- Global konfigurasjon: `~/.config/opencode/skills/<name>/SKILL.md` eller `~/.config/opencode/skill/<name>/SKILL.md`
 - Prosjekt Claude-kompatibel: `.claude/skills/<name>/SKILL.md`
 - Global Claude-kompatibel: `~/.claude/skills/<name>/SKILL.md`
 - Prosjektagent-kompatibel: `.agents/skills/<name>/SKILL.md`
 - Global agent-kompatibel: `~/.agents/skills/<name>/SKILL.md`
+
+Merk: OpenCode støtter både `skills` (flertall) og `skill` (entall) som mappenavn, mens Claude og agents bare støtter `skills` (flertall).
 
 ---
 
