@@ -1,37 +1,59 @@
 import { expect, test, describe } from "bun:test"
 import { MessageV2 } from "../../src/session/message-v2"
 import type { Provider } from "../../src/provider/provider"
+import { ModelID, ProviderID } from "../../src/provider/schema"
+import { MessageID, PartID, SessionID } from "../../src/session/schema"
 
 describe("Question tool with image attachments", () => {
   const model: Provider.Model = {
-    id: "test-model",
-    providerID: "test-provider",
+    id: ModelID.make("test-model"),
+    providerID: ProviderID.make("test-provider"),
     api: {
       npm: "@ai-sdk/openai-compatible",
       id: "test-model",
+      url: "https://example.com",
     },
+    name: "Test Model",
     capabilities: {
       input: {
+        text: true,
         image: true,
         pdf: false,
         audio: false,
         video: false,
       },
       output: {
+        text: true,
         image: false,
         audio: false,
         video: false,
+        pdf: false,
       },
+      temperature: true,
       reasoning: false,
-      tools: true,
-      streaming: true,
+      attachment: false,
+      toolcall: true,
+      interleaved: false,
     },
+    cost: {
+      input: 0,
+      output: 0,
+      cache: { read: 0, write: 0 },
+    },
+    limit: {
+      context: 0,
+      output: 0,
+    },
+    status: "active",
+    options: {},
+    headers: {},
+    release_date: "2026-01-01",
   }
 
   const basePart = (messageID: string, partID: string) => ({
-    id: partID,
-    sessionID: "session-1",
-    messageID,
+    id: PartID.make(partID),
+    sessionID: SessionID.make("session-1"),
+    messageID: MessageID.make(messageID),
   })
 
   test("handles question tool with image attachment", () => {
@@ -41,12 +63,14 @@ describe("Question tool with image attachments", () => {
     const input: MessageV2.WithParts[] = [
       {
         info: {
-          id: userID,
-          sessionID: "session-1",
+          id: MessageID.make(userID),
+          sessionID: SessionID.make("session-1"),
           role: "user",
           time: { created: 0 },
           agent: "build",
-          model: { providerID: "test-provider", modelID: "test-model" },
+          model: { providerID: ProviderID.make("test-provider"), modelID: ModelID.make("test-model") },
+          tools: {},
+          mode: "",
         } as MessageV2.User,
         parts: [
           {
@@ -58,13 +82,13 @@ describe("Question tool with image attachments", () => {
       },
       {
         info: {
-          id: assistantID,
-          sessionID: "session-1",
+          id: MessageID.make(assistantID),
+          sessionID: SessionID.make("session-1"),
           role: "assistant",
           time: { created: 1, completed: 2 },
-          parentID: userID,
-          modelID: "test-model",
-          providerID: "test-provider",
+          parentID: MessageID.make(userID),
+          modelID: ModelID.make("test-model"),
+          providerID: ProviderID.make("test-provider"),
           mode: "agentic",
           agent: "build",
           path: { cwd: "/", root: "/" },
@@ -142,9 +166,9 @@ describe("Question tool with image attachments", () => {
       expect(fileParts.length).toBeGreaterThan(0)
 
       // Verify the file part has the correct structure
-      const filePart = fileParts[0]
-      expect(filePart).toHaveProperty("data")
-      expect(filePart.data).toContain("data:image/png;base64,")
+      const filePart = fileParts[0] as any
+      expect(filePart).toHaveProperty("url")
+      expect(filePart.url).toContain("data:image/png;base64,")
     }
   })
 
@@ -153,17 +177,20 @@ describe("Question tool with image attachments", () => {
     const assistantID = "assistant-1"
 
     // Simulate a nested data URL that might come from the frontend
-    const nestedDataUrl = "data:image/png;base64,data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+    const nestedDataUrl =
+      "data:image/png;base64,data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
 
     const input: MessageV2.WithParts[] = [
       {
         info: {
-          id: userID,
-          sessionID: "session-1",
+          id: MessageID.make(userID),
+          sessionID: SessionID.make("session-1"),
           role: "user",
           time: { created: 0 },
           agent: "build",
-          model: { providerID: "test-provider", modelID: "test-model" },
+          model: { providerID: ProviderID.make("test-provider"), modelID: ModelID.make("test-model") },
+          tools: {},
+          mode: "",
         } as MessageV2.User,
         parts: [
           {
@@ -175,13 +202,13 @@ describe("Question tool with image attachments", () => {
       },
       {
         info: {
-          id: assistantID,
-          sessionID: "session-1",
+          id: MessageID.make(assistantID),
+          sessionID: SessionID.make("session-1"),
           role: "assistant",
           time: { created: 1, completed: 2 },
-          parentID: userID,
-          modelID: "test-model",
-          providerID: "test-provider",
+          parentID: MessageID.make(userID),
+          modelID: ModelID.make("test-model"),
+          providerID: ProviderID.make("test-provider"),
           mode: "agentic",
           agent: "build",
           path: { cwd: "/", root: "/" },
@@ -241,12 +268,12 @@ describe("Question tool with image attachments", () => {
       const fileParts = lastUserMessage.content.filter((part: any) => part.type === "file")
       expect(fileParts.length).toBeGreaterThan(0)
 
-      const filePart = fileParts[0]
-      expect(filePart.data).toBeDefined()
-      expect(filePart.data).toContain("data:image/png;base64,")
+      const filePart = fileParts[0] as any
+      expect(filePart.url).toBeDefined()
+      expect(filePart.url).toContain("data:image/png;base64,")
 
       // Verify there's only ONE data URL prefix
-      const dataUrlCount = (filePart.data.match(/data:image\/png;base64,/g) || []).length
+      const dataUrlCount = (filePart.url.match(/data:image\/png;base64,/g) || []).length
       expect(dataUrlCount).toBe(1)
     }
   })
