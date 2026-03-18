@@ -133,6 +133,17 @@ describe("Vcs diff", () => {
     })
   })
 
+  test("defaultBranch() uses init.defaultBranch when available", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await $`git branch -M trunk`.cwd(tmp.path).quiet()
+    await $`git config init.defaultBranch trunk`.cwd(tmp.path).quiet()
+
+    await withVcsOnly(tmp.path, async (rt) => {
+      const branch = await rt.runPromise(VcsService.use((s) => s.defaultBranch()))
+      expect(branch).toBe("trunk")
+    })
+  })
+
   test("detects current branch from the active worktree", async () => {
     await using tmp = await tmpdir({ git: true })
     await using wt = await tmpdir()
@@ -164,6 +175,24 @@ describe("Vcs diff", () => {
           expect.objectContaining({
             file: "file.txt",
             status: "modified",
+          }),
+        ]),
+      )
+    })
+  })
+
+  test("diff('git') handles tabs in filenames", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const file = "tab\tfile.txt"
+    await fs.writeFile(path.join(tmp.path, file), "hello\n", "utf-8")
+
+    await withVcsOnly(tmp.path, async (rt) => {
+      const diff = await rt.runPromise(VcsService.use((s) => s.diff("git")))
+      expect(diff).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            file,
+            status: "added",
           }),
         ]),
       )

@@ -13,6 +13,7 @@ import path from "path"
 
 const log = Log.create({ service: "vcs" })
 const cfg = [
+  "--no-optional-locks",
   "-c",
   "core.autocrlf=false",
   "-c",
@@ -26,6 +27,7 @@ const cfg = [
 ] as const
 
 type Base = { name: string; ref: string }
+type Item = { file: string; code: string; status: Snapshot.FileDiff["status"] }
 
 async function mapLimit<T, R>(list: T[], limit: number, fn: (item: T) => Promise<R>) {
   const size = Math.max(1, limit)
@@ -74,6 +76,16 @@ async function branches(cwd: string) {
     .filter(Boolean)
 }
 
+async function configured(cwd: string, list: string[]) {
+  const result = await run(cwd, ["config", "init.defaultBranch"])
+  if (result.exitCode !== 0) return
+  const name = out(result)
+  if (!name || !list.includes(name)) return
+  const ref = await run(cwd, ["rev-parse", "--verify", name])
+  if (ref.exitCode !== 0) return
+  return { name, ref: name } satisfies Base
+}
+
 async function remoteHead(cwd: string, remote: string) {
   const result = await run(cwd, ["ls-remote", "--symref", remote, "HEAD"])
   if (result.exitCode !== 0) return
@@ -114,6 +126,8 @@ async function base(cwd: string) {
   }
 
   const list = await branches(cwd)
+  const next = await configured(cwd, list)
+  if (next) return next
   for (const name of ["main", "master"]) {
     if (list.includes(name)) return { name, ref: name }
   }
@@ -132,7 +146,8 @@ async function work(cwd: string, file: string) {
   return buf.toString("utf8")
 }
 
-async function show(cwd: string, ref: string, file: string, base: string) {
+async function show(cwd: string, ref: string | undefined, file: string, base: string) {
+  if (!ref) return ""
   const target = base ? `${base}${file}` : file
   const result = await run(cwd, ["show", `${ref}:${target}`])
   if (result.exitCode !== 0) return ""
@@ -140,8 +155,10 @@ async function show(cwd: string, ref: string, file: string, base: string) {
 }
 
 function kind(code: string | undefined): "added" | "deleted" | "modified" {
-  if (code?.startsWith("A")) return "added"
-  if (code?.startsWith("D")) return "deleted"
+  if (code === "??") return "added"
+  if (code?.includes("U")) return "modified"
+  if (code?.includes("A") && !code.includes("D")) return "added"
+  if (code?.includes("D") && !code.includes("A")) return "deleted"
   return "modified"
 }
 
@@ -151,77 +168,110 @@ function count(text: string) {
   return text.slice(0, -1).split("\n").length
 }
 
-async function track(cwd: string, ref: string) {
-  const base = await prefix(cwd)
-  const names = await run(cwd, ["diff", "--no-ext-diff", "--no-renames", "--name-status", ref, "--", "."])
-  const nums = await run(cwd, ["diff", "--no-ext-diff", "--no-renames", "--numstat", ref, "--", "."])
-  const map = new Map<string, "added" | "deleted" | "modified">()
-  const list: Snapshot.FileDiff[] = []
-
-  for (const line of out(names).split("\n")) {
-    if (!line) continue
-    const [code, file] = line.split("\t")
-    if (!file) continue
-    map.set(file, kind(code))
-  }
-
-  const rows = out(nums).split("\n").filter(Boolean)
-  const next = await mapLimit(rows, 8, async (line) => {
-    const [adds, dels, file] = line.split("\t")
-    if (!file) return undefined
-    const binary = adds === "-" && dels === "-"
-    const status = map.get(file) ?? "modified"
-    const before = binary || status === "added" ? "" : await show(cwd, ref, file, base)
-    const after = binary || status === "deleted" ? "" : await work(cwd, file)
-    const add = binary ? 0 : Number.parseInt(adds || "0", 10)
-    const del = binary ? 0 : Number.parseInt(dels || "0", 10)
-    return {
-      file,
-      before,
-      after,
-      additions: Number.isFinite(add) ? add : 0,
-      deletions: Number.isFinite(del) ? del : 0,
-      status,
-    } satisfies Snapshot.FileDiff
-  })
-  for (const item of next) {
-    if (item) list.push(item)
-  }
-
-  const extra = await run(cwd, ["ls-files", "--others", "--exclude-standard", "--", "."])
-  const added = await mapLimit(out(extra).split("\n").filter(Boolean), 16, async (file) => {
-    if (map.has(file)) return undefined
-    const after = await work(cwd, file)
-    return {
-      file,
-      before: "",
-      after,
-      additions: count(after),
-      deletions: 0,
-      status: "added",
-    } satisfies Snapshot.FileDiff
-  })
-  for (const item of added) {
-    if (item) list.push(item)
-  }
-
-  return list.toSorted((a, b) => a.file.localeCompare(b.file))
+function split(text: string) {
+  return text.split("\0").filter(Boolean)
 }
 
-async function birth(cwd: string) {
-  const result = await run(cwd, ["ls-files", "--cached", "--others", "--exclude-standard", "--", "."])
-  const list = await mapLimit(out(result).split("\n").filter(Boolean), 16, async (file) => {
-    const after = await work(cwd, file)
+function parseStatus(text: string) {
+  return split(text).flatMap((item) => {
+    const file = item.slice(3)
+    if (!file) return []
+    const code = item.slice(0, 2)
+    return [{ file, code, status: kind(code) } satisfies Item]
+  })
+}
+
+function parseNames(text: string) {
+  const list = split(text)
+  const out: Item[] = []
+  for (let i = 0; i < list.length; i += 2) {
+    const code = list[i]
+    const file = list[i + 1]
+    if (!code || !file) continue
+    out.push({ file, code, status: kind(code) })
+  }
+  return out
+}
+
+function parseNums(text: string) {
+  const out = new Map<string, { additions: number; deletions: number }>()
+  for (const item of split(text)) {
+    const a = item.indexOf("\t")
+    const b = item.indexOf("\t", a + 1)
+    if (a === -1 || b === -1) continue
+    const file = item.slice(b + 1)
+    if (!file) continue
+    const adds = item.slice(0, a)
+    const dels = item.slice(a + 1, b)
+    const additions = adds === "-" ? 0 : Number.parseInt(adds || "0", 10)
+    const deletions = dels === "-" ? 0 : Number.parseInt(dels || "0", 10)
+    out.set(file, {
+      additions: Number.isFinite(additions) ? additions : 0,
+      deletions: Number.isFinite(deletions) ? deletions : 0,
+    })
+  }
+  return out
+}
+
+function merge(...lists: Item[][]) {
+  const out = new Map<string, Item>()
+  for (const list of lists) {
+    for (const item of list) {
+      if (!out.has(item.file)) out.set(item.file, item)
+    }
+  }
+  return [...out.values()]
+}
+
+async function files(cwd: string, ref: string | undefined, list: Item[], nums: Map<string, { additions: number; deletions: number }>) {
+  const base = ref ? await prefix(cwd) : ""
+  const next = await mapLimit(list, 8, async (item) => {
+    const before = item.status === "added" ? "" : await show(cwd, ref, item.file, base)
+    const after = item.status === "deleted" ? "" : await work(cwd, item.file)
+    const stat = nums.get(item.file)
     return {
-      file,
-      before: "",
+      file: item.file,
+      before,
       after,
-      additions: count(after),
-      deletions: 0,
-      status: "added",
+      additions: stat?.additions ?? (item.status === "added" ? count(after) : 0),
+      deletions: stat?.deletions ?? (item.status === "deleted" ? count(before) : 0),
+      status: item.status,
     } satisfies Snapshot.FileDiff
   })
-  return list.toSorted((a, b) => a.file.localeCompare(b.file))
+  return next.toSorted((a, b) => a.file.localeCompare(b.file))
+}
+
+async function status(cwd: string) {
+  const result = await run(cwd, ["status", "--porcelain=v1", "--untracked-files=all", "--no-renames", "-z", "--", "."])
+  return parseStatus(result.text())
+}
+
+async function stats(cwd: string, ref: string) {
+  const result = await run(cwd, ["diff", "--no-ext-diff", "--no-renames", "--numstat", "-z", ref, "--", "."])
+  return parseNums(result.text())
+}
+
+async function diff(cwd: string, ref: string) {
+  const result = await run(cwd, ["diff", "--no-ext-diff", "--no-renames", "--name-status", "-z", ref, "--", "."])
+  return parseNames(result.text())
+}
+
+async function track(cwd: string, ref: string | undefined) {
+  const [list, nums] = ref ? await Promise.all([status(cwd), stats(cwd, ref)]) : [await status(cwd), new Map()]
+  return files(cwd, ref, list, nums)
+}
+
+async function compare(cwd: string, ref: string) {
+  const [list, nums, extra] = await Promise.all([diff(cwd, ref), stats(cwd, ref), status(cwd)])
+  return files(
+    cwd,
+    ref,
+    merge(
+      list,
+      extra.filter((item) => item.code === "??"),
+    ),
+    nums,
+  )
 }
 
 export namespace Vcs {
@@ -301,16 +351,16 @@ export class VcsService extends ServiceMap.Service<VcsService, VcsService.Servic
           if (instance.project.vcs !== "git") return []
           if (mode === "git") {
             const ok = yield* Effect.promise(() => head(instance.directory))
-            return yield* Effect.promise(() => (ok ? track(instance.directory, "HEAD") : birth(instance.directory)))
+            return yield* Effect.promise(() => track(instance.directory, ok ? "HEAD" : undefined))
           }
 
           if (!root) return []
           if (current && current === root.name) return []
-          const ref = yield* Effect.promise(() => run(instance.project.worktree, ["merge-base", root.ref, "HEAD"]))
+          const ref = yield* Effect.promise(() => run(instance.directory, ["merge-base", root.ref, "HEAD"]))
           if (ref.exitCode !== 0) return []
           const text = out(ref)
           if (!text) return []
-          return yield* Effect.promise(() => track(instance.directory, text))
+          return yield* Effect.promise(() => compare(instance.directory, text))
         }),
       })
     }),
