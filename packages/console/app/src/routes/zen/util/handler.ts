@@ -74,8 +74,9 @@ export async function handler(
   const dict = i18n(localeFromRequest(input.request))
   const t = (key: Key, params?: Record<string, string | number>) => resolve(dict[key], params)
   const ADMIN_WORKSPACES = [
-    "wrk_01K46JDFR0E75SG2Q8K172KF3Y", // frank
-    "wrk_01K6W1A3VE0KMNVSCQT43BG2SX", // opencode bench
+    "wrk_01K46JDFR0E75SG2Q8K172KF3Y", // anomaly
+    "wrk_01K6W1A3VE0KMNVSCQT43BG2SX", // benchmark
+    "wrk_01KKZDKDWCS1VTJF8QTX62DD50", // contributors
   ]
 
   try {
@@ -97,8 +98,8 @@ export async function handler(
     const zenData = ZenData.list(opts.modelList)
     const modelInfo = validateModel(zenData, model)
     const dataDumper = createDataDumper(sessionId, requestId, projectId)
-    const trialLimiter = createTrialLimiter(modelInfo.trialProvider, ip)
-    const trialProvider = await trialLimiter?.check()
+    const trialLimiter = createTrialLimiter(modelInfo.trialProviders, ip)
+    const trialProviders = await trialLimiter?.check()
     const rateLimiter = createRateLimiter(
       modelInfo.id,
       modelInfo.allowAnonymous,
@@ -119,8 +120,9 @@ export async function handler(
         zenData,
         authInfo,
         modelInfo,
+        ip,
         sessionId,
-        trialProvider,
+        trialProviders,
         retry,
         stickyProvider,
       )
@@ -330,6 +332,7 @@ export async function handler(
     logger.metric({
       "error.type": error.constructor.name,
       "error.message": error.message,
+      "error.cause": error.cause?.toString(),
     })
 
     // Note: both top level "type" and "error.type" fields are used by the @ai-sdk/anthropic client to render the error message.
@@ -400,8 +403,9 @@ export async function handler(
     zenData: ZenData,
     authInfo: AuthInfo,
     modelInfo: ModelInfo,
+    ip: string,
     sessionId: string,
-    trialProvider: string | undefined,
+    trialProviders: string[] | undefined,
     retry: RetryOptions,
     stickyProvider: string | undefined,
   ) {
@@ -410,12 +414,14 @@ export async function handler(
         return modelInfo.providers.find((provider) => provider.id === modelInfo.byokProvider)
       }
 
-      if (trialProvider) {
-        return modelInfo.providers.find((provider) => provider.id === trialProvider)
-      }
-
       if (stickyProvider) {
         const provider = modelInfo.providers.find((provider) => provider.id === stickyProvider)
+        if (provider) return provider
+      }
+
+      if (trialProviders) {
+        const trialProvider = trialProviders[Math.floor(Math.random() * trialProviders.length)]
+        const provider = modelInfo.providers.find((provider) => provider.id === trialProvider)
         if (provider) return provider
       }
 
@@ -426,10 +432,11 @@ export async function handler(
           .flatMap((provider) => Array<typeof provider>(provider.weight ?? 1).fill(provider))
 
         // Use the last 4 characters of session ID to select a provider
+        const identifier = sessionId.length ? sessionId : ip
         let h = 0
-        const l = sessionId.length
+        const l = identifier.length
         for (let i = l - 4; i < l; i++) {
-          h = (h * 31 + sessionId.charCodeAt(i)) | 0 // 32-bit int
+          h = (h * 31 + identifier.charCodeAt(i)) | 0 // 32-bit int
         }
         const index = (h >>> 0) % providers.length // make unsigned + range 0..length-1
         const provider = providers[index || 0]
