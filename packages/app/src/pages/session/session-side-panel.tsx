@@ -21,6 +21,7 @@ import { useFile, type SelectedLineRange } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useSync } from "@/context/sync"
+import { isPreviewablePath } from "@/pages/session/helpers"
 
 export function SessionSidePanel(props: {
   open: boolean
@@ -334,7 +335,9 @@ export function SessionSidePanel(props: {
                     path=""
                     modified={props.diffFiles}
                     kinds={props.kinds}
-                    onFileClick={(node) => props.openTab(props.file.tab(node.path))}
+                    onFileClick={(node) =>
+                      isPreviewablePath(node.path) ? props.openPreviewFile(node.path) : props.openTab(props.file.tab(node.path))
+                    }
                   />
                 </Tabs.Content>
               </Tabs>

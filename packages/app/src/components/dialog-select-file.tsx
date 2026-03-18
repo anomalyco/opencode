@@ -5,6 +5,7 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { Keybind } from "@opencode-ai/ui/keybind"
 import { List } from "@opencode-ai/ui/list"
 import { base64Encode } from "@opencode-ai/util/encode"
+import { isPreviewablePath } from "@/pages/session/helpers"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { useNavigate, useParams } from "@solidjs/router"
 import { createMemo, createSignal, Match, onCleanup, Show, Switch } from "solid-js"
@@ -285,6 +286,17 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
   }
 
   const open = (path: string) => {
+    if (isPreviewablePath(path)) {
+      view().preview.setPath(path)
+      tabs().open("preview")
+      file.load(path)
+      if (!view().reviewPanel.opened()) view().reviewPanel.open()
+      layout.fileTree.open()
+      layout.fileTree.setTab("all")
+      props.onOpenFile?.(path)
+      return
+    }
+
     const value = file.tab(path)
     tabs().open(value)
     file.load(path)
