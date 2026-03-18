@@ -1159,11 +1159,18 @@ export namespace Config {
                 disabled: z.literal(true),
               }),
               z.object({
-                command: z.array(z.string()),
+                command: z.array(z.string()).optional(),
                 extensions: z.array(z.string()).optional(),
                 disabled: z.boolean().optional(),
                 env: z.record(z.string(), z.string()).optional(),
                 initialization: z.record(z.string(), z.any()).optional(),
+                min_severity: z
+                  .number()
+                  .int()
+                  .min(1)
+                  .max(4)
+                  .optional()
+                  .describe("Minimum diagnostic severity to show (1=Error, 2=Warning, 3=Info, 4=Hint). Default: 1"),
               }),
             ]),
           ),
@@ -1178,11 +1185,12 @@ export namespace Config {
             return Object.entries(data).every(([id, config]) => {
               if (config.disabled) return true
               if (serverIds.has(id)) return true
-              return Boolean(config.extensions)
+              return Boolean(config.extensions) || Boolean(config.min_severity)
             })
           },
           {
-            error: "For custom LSP servers, 'extensions' array is required.",
+            error:
+              "For custom LSP servers, 'extensions' array is required (unless only setting min_severity for a built-in server).",
           },
         ),
       instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),

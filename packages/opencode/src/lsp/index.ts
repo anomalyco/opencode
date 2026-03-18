@@ -105,6 +105,16 @@ export namespace LSP {
           delete servers[name]
           continue
         }
+        // If no command provided, just update config for existing server
+        if (!item.command) {
+          if (existing) {
+            servers[name] = {
+              ...existing,
+              extensions: item.extensions ?? existing.extensions,
+            }
+          }
+          continue
+        }
         servers[name] = {
           ...existing,
           id: name,
@@ -112,7 +122,7 @@ export namespace LSP {
           extensions: item.extensions ?? existing?.extensions ?? [],
           spawn: async (root) => {
             return {
-              process: spawn(item.command[0], item.command.slice(1), {
+              process: spawn(item.command![0], item.command!.slice(1), {
                 cwd: root,
                 windowsHide: true,
                 env: {
@@ -482,5 +492,28 @@ export namespace LSP {
 
       return `${severity} [${line}:${col}] ${diagnostic.message}`
     }
+
+    export function filter(items: LSPClient.Diagnostic[], min: number) {
+      return items.filter((d) => (d.severity ?? 1) <= min)
+    }
+  }
+
+  export async function minSeverity(file: string) {
+    const cfg = await Config.get()
+    if (!cfg.lsp || typeof cfg.lsp !== "object") return 1
+
+    const ext = path.extname(file)
+    const s = await state()
+
+    // Find servers that handle this file extension
+    for (const server of Object.values(s.servers)) {
+      if (server.extensions.length && !server.extensions.includes(ext)) continue
+      const item = cfg.lsp[server.id]
+      if (item && !("disabled" in item && item.disabled) && "min_severity" in item && item.min_severity) {
+        return item.min_severity
+      }
+    }
+
+    return 1
   }
 }

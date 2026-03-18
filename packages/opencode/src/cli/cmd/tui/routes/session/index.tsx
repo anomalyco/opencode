@@ -2228,10 +2228,29 @@ function Skill(props: ToolProps<typeof SkillTool>) {
 
 function Diagnostics(props: { diagnostics?: Record<string, Record<string, any>[]>; filePath: string }) {
   const { theme } = useTheme()
+  const sync = useSync()
   const errors = createMemo(() => {
     const normalized = Filesystem.normalizePath(props.filePath)
     const arr = props.diagnostics?.[normalized] ?? []
-    return arr.filter((x) => x.severity === 1).slice(0, 3)
+    const ext = path.extname(props.filePath)
+    let min = 1
+    // Look up min_severity from LSP config by matching file extension
+    const lspConfig = sync.data.config.lsp
+    if (lspConfig && typeof lspConfig === "object") {
+      for (const [id, cfg] of Object.entries(lspConfig)) {
+        if (!cfg || "disabled" in cfg) continue
+        const lsp = sync.data.lsp.find((l) => l.id === id)
+        if (lsp && "min_severity" in cfg && typeof cfg.min_severity === "number") {
+          // Check if this LSP handles this file extension
+          const exts = cfg.extensions
+          if (!exts || exts.includes(ext)) {
+            min = cfg.min_severity
+            break
+          }
+        }
+      }
+    }
+    return arr.filter((x) => (x.severity ?? 1) <= min).slice(0, 3)
   })
 
   return (
