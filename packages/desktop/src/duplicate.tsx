@@ -22,9 +22,9 @@ export function Duplicate() {
         const sessionID = params.id
         if (!sessionID) return
 
-        const dir = base64Encode(sdk.directory)
         const value = prompt.current()
         const cursor = prompt.cursor()
+        const dir = base64Encode(sdk.directory)
         sdk.client.session
           .fork({ sessionID })
           .then((result: { data?: { id: string } | null }) => {
@@ -33,8 +33,10 @@ export function Duplicate() {
               return
             }
 
-            prompt.set(value, cursor, { dir, id: result.data.id })
             navigate(`/${dir}/session/${result.data.id}`)
+            requestAnimationFrame(() => {
+              prompt.set(value, cursor)
+            })
           })
           .catch((err: unknown) => {
             const message = err instanceof Error ? err.message : String(err)

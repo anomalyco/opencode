@@ -1,5 +1,8 @@
 export { AppBaseProviders, AppInterface } from "./app"
 export { useCommand } from "./context/command"
+export { useLanguage } from "./context/language"
 export { type DisplayBackend, type Platform, PlatformProvider } from "./context/platform"
+export { usePrompt } from "./context/prompt"
+export { useSDK } from "./context/sdk"
 export { ServerConnection } from "./context/server"
 export { handleNotificationClick } from "./utils/notification-click"

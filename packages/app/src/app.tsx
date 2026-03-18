@@ -56,13 +56,16 @@ const HomeRoute = () => (
   </Suspense>
 )
 
-const SessionRoute = () => (
-  <SessionProviders>
-    <Suspense fallback={<Loading />}>
-      <Session />
-    </Suspense>
-  </SessionProviders>
-)
+function SessionRoute(props: { sessionChildren?: JSX.Element }) {
+  return (
+    <SessionProviders>
+      {props.sessionChildren}
+      <Suspense fallback={<Loading />}>
+        <Session />
+      </Suspense>
+    </SessionProviders>
+  )
+}
 
 const SessionIndexRoute = () => <Navigate href="session" />
 
@@ -271,6 +274,7 @@ export function AppInterface(props: {
   servers?: Array<ServerConnection.Any>
   router?: Component<BaseRouterProps>
   disableHealthCheck?: boolean
+  sessionChildren?: JSX.Element
 }) {
   return (
     <ServerProvider defaultServer={props.defaultServer} servers={props.servers}>
@@ -284,7 +288,10 @@ export function AppInterface(props: {
               <Route path="/" component={HomeRoute} />
               <Route path="/:dir" component={DirectoryLayout}>
                 <Route path="/" component={SessionIndexRoute} />
-                <Route path="/session/:id?" component={SessionRoute} />
+                <Route
+                  path="/session/:id?"
+                  component={() => <SessionRoute sessionChildren={props.sessionChildren} />}
+                />
               </Route>
             </Dynamic>
           </GlobalSyncProvider>
