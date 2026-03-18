@@ -47,10 +47,61 @@ export type EventProjectUpdated = {
   properties: Project
 }
 
+export type EventFileEdited = {
+  type: "file.edited"
+  properties: {
+    file: string
+  }
+}
+
 export type EventServerInstanceDisposed = {
   type: "server.instance.disposed"
   properties: {
     directory: string
+  }
+}
+
+export type EventFileWatcherUpdated = {
+  type: "file.watcher.updated"
+  properties: {
+    file: string
+    event: "add" | "change" | "unlink"
+  }
+}
+
+export type PermissionRequest = {
+  id: string
+  sessionID: string
+  permission: string
+  patterns: Array<string>
+  metadata: {
+    [key: string]: unknown
+  }
+  always: Array<string>
+  tool?: {
+    messageID: string
+    callID: string
+  }
+}
+
+export type EventPermissionAsked = {
+  type: "permission.asked"
+  properties: PermissionRequest
+}
+
+export type EventPermissionReplied = {
+  type: "permission.replied"
+  properties: {
+    sessionID: string
+    requestID: string
+    reply: "once" | "always" | "reject"
+  }
+}
+
+export type EventVcsBranchUpdated = {
+  type: "vcs.branch.updated"
+  properties: {
+    branch?: string
   }
 }
 
@@ -122,57 +173,6 @@ export type EventQuestionRejected = {
   properties: {
     sessionID: string
     requestID: string
-  }
-}
-
-export type PermissionRequest = {
-  id: string
-  sessionID: string
-  permission: string
-  patterns: Array<string>
-  metadata: {
-    [key: string]: unknown
-  }
-  always: Array<string>
-  tool?: {
-    messageID: string
-    callID: string
-  }
-}
-
-export type EventPermissionAsked = {
-  type: "permission.asked"
-  properties: PermissionRequest
-}
-
-export type EventPermissionReplied = {
-  type: "permission.replied"
-  properties: {
-    sessionID: string
-    requestID: string
-    reply: "once" | "always" | "reject"
-  }
-}
-
-export type EventFileWatcherUpdated = {
-  type: "file.watcher.updated"
-  properties: {
-    file: string
-    event: "add" | "change" | "unlink"
-  }
-}
-
-export type EventVcsBranchUpdated = {
-  type: "vcs.branch.updated"
-  properties: {
-    branch?: string
-  }
-}
-
-export type EventFileEdited = {
-  type: "file.edited"
-  properties: {
-    file: string
   }
 }
 
@@ -961,15 +961,15 @@ export type Event =
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
   | EventProjectUpdated
+  | EventFileEdited
   | EventServerInstanceDisposed
+  | EventFileWatcherUpdated
+  | EventPermissionAsked
+  | EventPermissionReplied
+  | EventVcsBranchUpdated
   | EventQuestionAsked
   | EventQuestionReplied
   | EventQuestionRejected
-  | EventPermissionAsked
-  | EventPermissionReplied
-  | EventFileWatcherUpdated
-  | EventVcsBranchUpdated
-  | EventFileEdited
   | EventServerConnected
   | EventGlobalDisposed
   | EventLspClientDiagnostics
