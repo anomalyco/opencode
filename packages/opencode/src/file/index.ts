@@ -2,7 +2,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { InstanceContext } from "@/effect/instance-context"
 import { runPromiseInstance } from "@/effect/runtime"
 import { git } from "@/util/git"
-import { Effect, Layer, ServiceMap } from "effect"
+import { Effect, Fiber, Layer, Scope, ServiceMap } from "effect"
 import { formatPatch, structuredPatch } from "diff"
 import fs from "fs"
 import fuzzysort from "fuzzysort"
@@ -367,73 +367,72 @@ export namespace File {
     Effect.gen(function* () {
       const instance = yield* InstanceContext
       let cache: Entry = { files: [], dirs: [] }
-      let task: Promise<void> | undefined
       const isGlobalHome = instance.directory === Global.Path.home && instance.project.id === "global"
 
-      function kick() {
-        if (task) return task
-        task = (async () => {
-          if (instance.directory === path.parse(instance.directory).root) return
-          const next: Entry = { files: [], dirs: [] }
-          try {
-            if (isGlobalHome) {
-              const dirs = new Set<string>()
-              const protectedNames = Protected.names()
-              const ignoreNested = new Set(["node_modules", "dist", "build", "target", "vendor"])
-              const shouldIgnoreName = (name: string) => name.startsWith(".") || protectedNames.has(name)
-              const shouldIgnoreNested = (name: string) => name.startsWith(".") || ignoreNested.has(name)
-              const top = await fs.promises
-                .readdir(instance.directory, { withFileTypes: true })
-                .catch(() => [] as fs.Dirent[])
+      const scan = Effect.fn("File.scan")(function* () {
+        if (instance.directory === path.parse(instance.directory).root) return
+        const next: Entry = { files: [], dirs: [] }
 
-              for (const entry of top) {
-                if (!entry.isDirectory()) continue
-                if (shouldIgnoreName(entry.name)) continue
-                dirs.add(entry.name + "/")
+        yield* Effect.promise(async () => {
+          if (isGlobalHome) {
+            const dirs = new Set<string>()
+            const protectedNames = Protected.names()
+            const ignoreNested = new Set(["node_modules", "dist", "build", "target", "vendor"])
+            const shouldIgnoreName = (name: string) => name.startsWith(".") || protectedNames.has(name)
+            const shouldIgnoreNested = (name: string) => name.startsWith(".") || ignoreNested.has(name)
+            const top = await fs.promises
+              .readdir(instance.directory, { withFileTypes: true })
+              .catch(() => [] as fs.Dirent[])
 
-                const base = path.join(instance.directory, entry.name)
-                const children = await fs.promises.readdir(base, { withFileTypes: true }).catch(() => [] as fs.Dirent[])
-                for (const child of children) {
-                  if (!child.isDirectory()) continue
-                  if (shouldIgnoreNested(child.name)) continue
-                  dirs.add(entry.name + "/" + child.name + "/")
-                }
-              }
+            for (const entry of top) {
+              if (!entry.isDirectory()) continue
+              if (shouldIgnoreName(entry.name)) continue
+              dirs.add(entry.name + "/")
 
-              next.dirs = Array.from(dirs).toSorted()
-            } else {
-              const seen = new Set<string>()
-              for await (const file of Ripgrep.files({ cwd: instance.directory })) {
-                next.files.push(file)
-                let current = file
-                while (true) {
-                  const dir = path.dirname(current)
-                  if (dir === ".") break
-                  if (dir === current) break
-                  current = dir
-                  if (seen.has(dir)) continue
-                  seen.add(dir)
-                  next.dirs.push(dir + "/")
-                }
+              const base = path.join(instance.directory, entry.name)
+              const children = await fs.promises.readdir(base, { withFileTypes: true }).catch(() => [] as fs.Dirent[])
+              for (const child of children) {
+                if (!child.isDirectory()) continue
+                if (shouldIgnoreNested(child.name)) continue
+                dirs.add(entry.name + "/" + child.name + "/")
               }
             }
-            cache = next
-          } catch {
-            // Directory may have been removed (instance disposed); leave cache as-is.
-          } finally {
-            task = undefined
-          }
-        })()
-        return task
-      }
 
-      const getFiles = async () => {
-        void kick()
-        return cache
-      }
+            next.dirs = Array.from(dirs).toSorted()
+          } else {
+            const seen = new Set<string>()
+            for await (const file of Ripgrep.files({ cwd: instance.directory })) {
+              next.files.push(file)
+              let current = file
+              while (true) {
+                const dir = path.dirname(current)
+                if (dir === ".") break
+                if (dir === current) break
+                current = dir
+                if (seen.has(dir)) continue
+                seen.add(dir)
+                next.dirs.push(dir + "/")
+              }
+            }
+          }
+        })
+
+        cache = next
+      })
+
+      const getFiles = () => cache
+
+      const scope = yield* Scope.Scope
+      let fiber: Fiber.Fiber<void> | undefined
 
       const init = Effect.fn("File.init")(function* () {
-        yield* Effect.promise(() => kick())
+        if (!fiber) {
+          fiber = yield* scan().pipe(
+            Effect.catchCause(() => Effect.void),
+            Effect.forkIn(scope),
+          )
+        }
+        yield* Fiber.join(fiber)
       })
 
       const status = Effect.fn("File.status")(function* () {
@@ -669,7 +668,7 @@ export namespace File {
           const kind = input.type ?? (input.dirs === false ? "file" : "all")
           log.info("search", { query, kind })
 
-          const result = await getFiles()
+          const result = getFiles()
           const preferHidden = query.startsWith(".") || query.includes("/.")
 
           if (!query) {
