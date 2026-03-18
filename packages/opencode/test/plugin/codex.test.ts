@@ -4,7 +4,10 @@ import {
   extractAccountIdFromClaims,
   extractAccountId,
   type IdTokenClaims,
+  CodexAuthPlugin,
 } from "../../src/plugin/codex"
+import type { PluginInput } from "@opencode-ai/plugin"
+import { ModelID, ProviderID } from "@/provider/schema"
 
 function createTestJwt(payload: object): string {
   const header = Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url")
@@ -118,6 +121,113 @@ describe("plugin.codex", () => {
           refresh_token: "rt",
         }),
       ).toBe("acc-123")
+    })
+  })
+
+  describe("loader model filtering", () => {
+    interface MockModel {
+      id: ReturnType<typeof ModelID.make>
+      providerID: typeof ProviderID.openai
+      name: string
+    }
+
+    interface MockProvider {
+      id: typeof ProviderID.openai
+      models: Record<string, MockModel>
+    }
+
+    function createMockProvider(models: Record<string, MockModel>): MockProvider {
+      return {
+        id: ProviderID.openai,
+        models: { ...models },
+      }
+    }
+
+    function createMockModel(id: string): MockModel {
+      return {
+        id: ModelID.make(id),
+        providerID: ProviderID.openai,
+        name: id,
+      }
+    }
+
+    async function runLoaderFilter(models: Record<string, MockModel>) {
+      const mockInput = {
+        client: { auth: { set: async () => {} } },
+        directory: "/tmp/test",
+        worktree: "/tmp/test",
+        serverUrl: "http://localhost:3000",
+      } as unknown as PluginInput
+      const plugin = await CodexAuthPlugin(mockInput)
+      const provider = createMockProvider(models)
+      const oauthAuth = { type: "oauth" as const, refresh: "rt", access: "at", expires: Date.now() + 3600000 }
+      const loader = plugin.auth!.loader!
+      await loader(async () => oauthAuth, provider as unknown as Parameters<typeof loader>[1])
+      return Object.keys(provider.models)
+    }
+
+    test("keeps gpt-5.4-mini in models", async () => {
+      const models = {
+        "gpt-5.4-mini": createMockModel("gpt-5.4-mini"),
+        "gpt-4o": createMockModel("gpt-4o"),
+      }
+      const remaining = await runLoaderFilter(models)
+      expect(remaining).toContain("gpt-5.4-mini")
+    })
+
+    test("keeps gpt-5.4-nano in models", async () => {
+      const models = {
+        "gpt-5.4-nano": createMockModel("gpt-5.4-nano"),
+        "gpt-4o": createMockModel("gpt-4o"),
+      }
+      const remaining = await runLoaderFilter(models)
+      expect(remaining).toContain("gpt-5.4-nano")
+    })
+
+    test("filters out unrelated non-codex models", async () => {
+      const models = {
+        "gpt-5.4-mini": createMockModel("gpt-5.4-mini"),
+        "gpt-5.4-nano": createMockModel("gpt-5.4-nano"),
+        "gpt-4o": createMockModel("gpt-4o"),
+        "gpt-4-turbo": createMockModel("gpt-4-turbo"),
+        "o1-preview": createMockModel("o1-preview"),
+        "claude-3": createMockModel("claude-3"),
+      }
+      const remaining = await runLoaderFilter(models)
+      expect(remaining).toContain("gpt-5.4-mini")
+      expect(remaining).toContain("gpt-5.4-nano")
+      expect(remaining).not.toContain("gpt-4o")
+      expect(remaining).not.toContain("gpt-4-turbo")
+      expect(remaining).not.toContain("o1-preview")
+      expect(remaining).not.toContain("claude-3")
+    })
+
+    test("keeps all codex-named models", async () => {
+      const models = {
+        "gpt-5.3-codex": createMockModel("gpt-5.3-codex"),
+        "gpt-5.2-codex": createMockModel("gpt-5.2-codex"),
+        "gpt-5.1-codex-mini": createMockModel("gpt-5.1-codex-mini"),
+        "some-random-model": createMockModel("some-random-model"),
+      }
+      const remaining = await runLoaderFilter(models)
+      expect(remaining).toContain("gpt-5.3-codex")
+      expect(remaining).toContain("gpt-5.2-codex")
+      expect(remaining).toContain("gpt-5.1-codex-mini")
+      expect(remaining).not.toContain("some-random-model")
+    })
+
+    test("keeps explicitly allowed non-codex models", async () => {
+      const models = {
+        "gpt-5.4": createMockModel("gpt-5.4"),
+        "gpt-5.2": createMockModel("gpt-5.2"),
+        "gpt-5.1-codex-max": createMockModel("gpt-5.1-codex-max"),
+        "random-model": createMockModel("random-model"),
+      }
+      const remaining = await runLoaderFilter(models)
+      expect(remaining).toContain("gpt-5.4")
+      expect(remaining).toContain("gpt-5.2")
+      expect(remaining).toContain("gpt-5.1-codex-max")
+      expect(remaining).not.toContain("random-model")
     })
   })
 })
