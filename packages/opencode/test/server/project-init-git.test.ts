@@ -112,7 +112,6 @@ describe("project.initGit endpoint", () => {
         vcs: "git",
         worktree: tmp.path,
       })
-
     } finally {
       await Instance.disposeAll()
       reloadSpy.mockRestore()

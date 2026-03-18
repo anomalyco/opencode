@@ -91,5 +91,4 @@ export namespace AuthEffect {
       return Service.of({ get, all, set, remove })
     }),
   )
-
 }
