@@ -28,7 +28,7 @@ import { createVertex } from "@ai-sdk/google-vertex"
 import { createVertexAnthropic } from "@ai-sdk/google-vertex/anthropic"
 import { createOpenAI } from "@ai-sdk/openai"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
-import { createOpenRouter, type LanguageModelV2 } from "@openrouter/ai-sdk-provider"
+import { createOpenRouter } from "@openrouter/ai-sdk-provider"
 import { createOpenaiCompatible as createGitHubCopilotOpenAICompatible } from "./sdk/copilot"
 import { createXai } from "@ai-sdk/xai"
 import { createMistral } from "@ai-sdk/mistral"
@@ -51,6 +51,9 @@ const DEFAULT_CHUNK_TIMEOUT = 300_000
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
+  type LoadedSDK = Record<string, any> & {
+    languageModel(modelId: string): ReturnType<SDK["languageModel"]>
+  }
 
   function shouldUseCopilotResponsesApi(modelID: string): boolean {
     const match = /^gpt-(\d+)/.exec(modelID)
@@ -106,7 +109,7 @@ export namespace Provider {
     })
   }
 
-  const BUNDLED_PROVIDERS: Record<string, (options: any) => SDK> = {
+  const BUNDLED_PROVIDERS: Record<string, (options: any) => LoadedSDK> = {
     "@ai-sdk/amazon-bedrock": createAmazonBedrock,
     "@ai-sdk/anthropic": createAnthropic,
     "@ai-sdk/azure": createAzure,
@@ -840,14 +843,14 @@ export namespace Provider {
     }
 
     const providers: { [providerID: string]: Info } = {}
-    const languages = new Map<string, LanguageModelV2>()
+    const languages = new Map<string, ReturnType<SDK["languageModel"]>>()
     const modelLoaders: {
       [providerID: string]: CustomModelLoader
     } = {}
     const varsLoaders: {
       [providerID: string]: CustomVarsLoader
     } = {}
-    const sdk = new Map<string, SDK>()
+    const sdk = new Map<string, LoadedSDK>()
 
     log.info("init")
 
@@ -1077,7 +1080,7 @@ export namespace Provider {
     return state().then((state) => state.providers)
   }
 
-  async function getSDK(model: Model) {
+  async function getSDK(model: Model): Promise<LoadedSDK> {
     try {
       using _ = log.time("getSDK", {
         providerID: model.providerID,
@@ -1185,7 +1188,7 @@ export namespace Provider {
           ...options,
         })
         s.sdk.set(key, loaded)
-        return loaded as SDK
+        return loaded
       }
 
       let installedPath: string
@@ -1204,7 +1207,7 @@ export namespace Provider {
         ...options,
       })
       s.sdk.set(key, loaded)
-      return loaded as SDK
+      return loaded
     } catch (e) {
       throw new InitError({ providerID: model.providerID }, { cause: e })
     }
@@ -1234,7 +1237,7 @@ export namespace Provider {
     return info
   }
 
-  export async function getLanguage(model: Model): Promise<LanguageModelV2> {
+  export async function getLanguage(model: Model): Promise<ReturnType<SDK["languageModel"]>> {
     const s = await state()
     const key = `${model.providerID}/${model.id}`
     if (s.models.has(key)) return s.models.get(key)!

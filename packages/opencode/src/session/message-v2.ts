@@ -556,11 +556,11 @@ export namespace MessageV2 {
     }))
   }
 
-  export function toModelMessages(
+  export async function toModelMessages(
     input: WithParts[],
     model: Provider.Model,
     options?: { stripMedia?: boolean },
-  ): ModelMessage[] {
+  ): Promise<ModelMessage[]> {
     const result: UIMessage[] = []
     const toolNames = new Set<string>()
     // Track media from tool results that need to be injected as user messages
@@ -585,23 +585,33 @@ export namespace MessageV2 {
     })()
 
     const toModelOutput = (output: unknown) => {
-      if (typeof output === "string") {
-        return { type: "text", value: output }
+      const value =
+        typeof output === "object" && output !== null && "toolCallId" in output && "output" in output
+          ? output.output
+          : output
+
+      if (typeof value === "string") {
+        return { type: "text", value }
       }
 
-      if (typeof output === "object") {
-        const outputObject = output as {
-          text: string
+      if (typeof value === "object" && value !== null) {
+        const item = value as {
+          output?: string
+          text?: string
           attachments?: Array<{ mime: string; url: string }>
         }
-        const attachments = (outputObject.attachments ?? []).filter((attachment) => {
+        const text = item.output ?? item.text
+        const attachments = (item.attachments ?? []).filter((attachment) => {
           return attachment.url.startsWith("data:") && attachment.url.includes(",")
         })
+        if (typeof text === "string" && attachments.length === 0) {
+          return { type: "text", value: text }
+        }
 
         return {
           type: "content",
           value: [
-            { type: "text", text: outputObject.text },
+            ...(typeof text === "string" ? [{ type: "text" as const, text }] : []),
             ...attachments.map((attachment) => ({
               type: "media",
               mediaType: attachment.mime,
@@ -614,7 +624,7 @@ export namespace MessageV2 {
         }
       }
 
-      return { type: "json", value: output as never }
+      return { type: "json", value: value as never }
     }
 
     for (const msg of input) {

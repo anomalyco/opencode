@@ -20,6 +20,10 @@ function mimeToModality(mime: string): Modality | undefined {
 export namespace ProviderTransform {
   export const OUTPUT_TOKEN_MAX = Flag.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
 
+  function providerPart(part: object): part is { providerOptions?: Record<string, unknown> } {
+    return "providerOptions" in part
+  }
+
   // Maps npm package to the key the AI SDK expects for providerOptions
   function sdkKey(npm: string): string | undefined {
     switch (npm) {
@@ -73,16 +77,33 @@ export namespace ProviderTransform {
 
     if (model.api.id.includes("claude")) {
       return msgs.map((msg) => {
-        if ((msg.role === "assistant" || msg.role === "tool") && Array.isArray(msg.content)) {
-          msg.content = msg.content.map((part) => {
-            if ((part.type === "tool-call" || part.type === "tool-result") && "toolCallId" in part) {
-              return {
-                ...part,
-                toolCallId: part.toolCallId.replace(/[^a-zA-Z0-9_-]/g, "_"),
+        if (msg.role === "assistant" && Array.isArray(msg.content)) {
+          return {
+            ...msg,
+            content: msg.content.map((part) => {
+              if ((part.type === "tool-call" || part.type === "tool-result") && "toolCallId" in part) {
+                return {
+                  ...part,
+                  toolCallId: part.toolCallId.replace(/[^a-zA-Z0-9_-]/g, "_"),
+                }
               }
-            }
-            return part
-          })
+              return part
+            }) as typeof msg.content,
+          }
+        }
+        if (msg.role === "tool" && Array.isArray(msg.content)) {
+          return {
+            ...msg,
+            content: msg.content.map((part) => {
+              if (part.type === "tool-result") {
+                return {
+                  ...part,
+                  toolCallId: part.toolCallId.replace(/[^a-zA-Z0-9_-]/g, "_"),
+                }
+              }
+              return part
+            }) as typeof msg.content,
+          }
         }
         return msg
       })
@@ -97,28 +118,46 @@ export namespace ProviderTransform {
         const msg = msgs[i]
         const nextMsg = msgs[i + 1]
 
-        if ((msg.role === "assistant" || msg.role === "tool") && Array.isArray(msg.content)) {
-          msg.content = msg.content.map((part) => {
-            if ((part.type === "tool-call" || part.type === "tool-result") && "toolCallId" in part) {
-              // Mistral requires alphanumeric tool call IDs with exactly 9 characters
-              const normalizedId = part.toolCallId
-                .replace(/[^a-zA-Z0-9]/g, "") // Remove non-alphanumeric characters
-                .substring(0, 9) // Take first 9 characters
-                .padEnd(9, "0") // Pad with zeros if less than 9 characters
+        const item = iife(() => {
+          if (msg.role === "assistant" && Array.isArray(msg.content)) {
+            return {
+              ...msg,
+              content: msg.content.map((part) => {
+                if ((part.type === "tool-call" || part.type === "tool-result") && "toolCallId" in part) {
+                  const normalizedId = part.toolCallId.replace(/[^a-zA-Z0-9]/g, "").substring(0, 9).padEnd(9, "0")
 
-              return {
-                ...part,
-                toolCallId: normalizedId,
-              }
+                  return {
+                    ...part,
+                    toolCallId: normalizedId,
+                  }
+                }
+                return part
+              }) as typeof msg.content,
             }
-            return part
-          })
-        }
+          }
+          if (msg.role === "tool" && Array.isArray(msg.content)) {
+            return {
+              ...msg,
+              content: msg.content.map((part) => {
+                if (part.type === "tool-result") {
+                  const normalizedId = part.toolCallId.replace(/[^a-zA-Z0-9]/g, "").substring(0, 9).padEnd(9, "0")
 
-        result.push(msg)
+                  return {
+                    ...part,
+                    toolCallId: normalizedId,
+                  }
+                }
+                return part
+              }) as typeof msg.content,
+            }
+          }
+          return msg
+        })
+
+        result.push(item)
 
         // Fix message sequence: tool messages cannot be followed by user messages
-        if (msg.role === "tool" && nextMsg?.role === "user") {
+        if (item.role === "tool" && nextMsg?.role === "user") {
           result.push({
             role: "assistant",
             content: [
@@ -199,7 +238,7 @@ export namespace ProviderTransform {
 
       if (shouldUseContentOptions) {
         const lastContent = msg.content[msg.content.length - 1]
-        if (lastContent && typeof lastContent === "object") {
+        if (lastContent && typeof lastContent === "object" && providerPart(lastContent)) {
           lastContent.providerOptions = mergeDeep(lastContent.providerOptions ?? {}, providerOptions)
           continue
         }
@@ -281,7 +320,13 @@ export namespace ProviderTransform {
         return {
           ...msg,
           providerOptions: remap(msg.providerOptions),
-          content: msg.content.map((part) => ({ ...part, providerOptions: remap(part.providerOptions) })),
+          content: msg.content.map((part) => {
+            if (!providerPart(part)) return part
+            return {
+              ...part,
+              providerOptions: remap(part.providerOptions),
+            }
+          }) as typeof msg.content,
         } as typeof msg
       })
     }

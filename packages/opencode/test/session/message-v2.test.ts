@@ -106,6 +106,12 @@ function basePart(messageID: string, id: string) {
   }
 }
 
+function expectModelMessages(input: MessageV2.WithParts[], output: unknown) {
+  return MessageV2.toModelMessages(input, model).then((result) => {
+    expect(result).toStrictEqual(output as any)
+  })
+}
+
 describe("session.message-v2.toModelMessage", () => {
   test("filters out messages with no parts", () => {
     const input: MessageV2.WithParts[] = [
@@ -125,7 +131,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([
+    return expectModelMessages(input, [
       {
         role: "user",
         content: [{ type: "text", text: "hello" }],
@@ -150,7 +156,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([])
+    return expectModelMessages(input, [])
   })
 
   test("includes synthetic text parts", () => {
@@ -181,7 +187,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([
+    return expectModelMessages(input, [
       {
         role: "user",
         content: [{ type: "text", text: "hello" }],
@@ -248,7 +254,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([
+    return expectModelMessages(input, [
       {
         role: "user",
         content: [
@@ -318,7 +324,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([
+    return expectModelMessages(input, [
       {
         role: "user",
         content: [{ type: "text", text: "run tool" }],
@@ -401,7 +407,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([
+    return expectModelMessages(input, [
       {
         role: "user",
         content: [{ type: "text", text: "run tool" }],
@@ -469,7 +475,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([
+    return expectModelMessages(input, [
       {
         role: "user",
         content: [{ type: "text", text: "run tool" }],
@@ -536,7 +542,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([
+    return expectModelMessages(input, [
       {
         role: "user",
         content: [{ type: "text", text: "run tool" }],
@@ -589,7 +595,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([])
+    return expectModelMessages(input, [])
   })
 
   test("includes aborted assistant messages only when they have non-step-start/reasoning content", () => {
@@ -632,7 +638,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([
+    return expectModelMessages(input, [
       {
         role: "assistant",
         content: [
@@ -668,7 +674,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([
+    return expectModelMessages(input, [
       {
         role: "assistant",
         content: [{ type: "text", text: "first" }],
@@ -695,10 +701,10 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([])
+    return expectModelMessages(input, [])
   })
 
-  test("converts pending/running tool calls to error results to prevent dangling tool_use", () => {
+  test("converts pending/running tool calls to error results to prevent dangling tool_use", async () => {
     const userID = "m-user"
     const assistantID = "m-assistant"
 
@@ -742,7 +748,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    const result = MessageV2.toModelMessages(input, model)
+    const result = await MessageV2.toModelMessages(input, model)
 
     expect(result).toStrictEqual([
       {
