@@ -9,7 +9,7 @@ import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { showToast } from "@opencode-ai/ui/toast"
-import { createMemo, Match, onCleanup, onMount, Switch } from "solid-js"
+import { createMemo, For, Match, onCleanup, onMount, Switch } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { Link } from "@/components/link"
 import { useLanguage } from "@/context/language"
@@ -49,13 +49,14 @@ export function DialogConnectProvider(props: { provider: string }) {
   const [store, setStore] = createStore({
     methodIndex: undefined as undefined | number,
     authorization: undefined as undefined | ProviderAuthAuthorization,
-    state: "pending" as undefined | "pending" | "complete" | "error",
+    state: "pending" as undefined | "pending" | "complete" | "error" | "prompt",
     error: undefined as string | undefined,
   })
 
   type Action =
     | { type: "method.select"; index: number }
     | { type: "method.reset" }
+    | { type: "auth.prompt" }
     | { type: "auth.pending" }
     | { type: "auth.complete"; authorization: ProviderAuthAuthorization }
     | { type: "auth.error"; error: string }
@@ -74,6 +75,11 @@ export function DialogConnectProvider(props: { provider: string }) {
           draft.methodIndex = undefined
           draft.authorization = undefined
           draft.state = undefined
+          draft.error = undefined
+          return
+        }
+        if (action.type === "auth.prompt") {
+          draft.state = "prompt"
           draft.error = undefined
           return
         }
@@ -120,7 +126,7 @@ export function DialogConnectProvider(props: { provider: string }) {
     return fallback
   }
 
-  async function selectMethod(index: number) {
+  async function selectMethod(index: number, inputs?: Record<string, string>) {
     if (timer.current !== undefined) {
       clearTimeout(timer.current)
       timer.current = undefined
@@ -130,6 +136,10 @@ export function DialogConnectProvider(props: { provider: string }) {
     dispatch({ type: "method.select", index })
 
     if (method.type === "oauth") {
+      if (method.prompts?.length && !inputs) {
+        dispatch({ type: "auth.prompt" })
+        return
+      }
       dispatch({ type: "auth.pending" })
       const start = Date.now()
       await globalSDK.client.provider.oauth
@@ -137,6 +147,7 @@ export function DialogConnectProvider(props: { provider: string }) {
           {
             providerID: props.provider,
             method: index,
+            inputs,
           },
           { throwOnError: true },
         )
@@ -161,6 +172,78 @@ export function DialogConnectProvider(props: { provider: string }) {
           dispatch({ type: "auth.error", error: formatError(e, language.t("common.requestFailed")) })
         })
     }
+  }
+
+  function OAuthPromptsView() {
+    const [formStore, setFormStore] = createStore({
+      value: {} as Record<string, string>,
+    })
+
+    const prompts = createMemo(() => method()?.prompts ?? [])
+    const visible = createMemo(() =>
+      prompts().filter((prompt) => {
+        if (!prompt.when) return true
+        const value = formStore.value[prompt.when.key]
+        if (value === undefined) return false
+        const matches = prompt.when.op === "eq" ? value === prompt.when.value : value !== prompt.when.value
+        if (!matches) return false
+        return true
+      }),
+    )
+
+    async function handleSubmit(e: SubmitEvent) {
+      e.preventDefault()
+      if (store.methodIndex === undefined) return
+      await selectMethod(store.methodIndex, formStore.value)
+    }
+
+    return (
+      <form onSubmit={handleSubmit} class="flex flex-col items-start gap-4">
+        <For each={visible()}>
+          {(prompt) => {
+            if (prompt.type === "text") {
+              return (
+                <TextField
+                  type="text"
+                  label={prompt.message}
+                  placeholder={prompt.placeholder}
+                  value={formStore.value[prompt.key] ?? ""}
+                  onChange={(value) => setFormStore("value", prompt.key, value)}
+                />
+              )
+            }
+
+            return (
+              <div class="w-full flex flex-col gap-2">
+                <div class="text-14-medium text-text-strong">{prompt.message}</div>
+                <List
+                  items={prompt.options}
+                  key={(x) => x.value}
+                  current={prompt.options.find((x) => x.value === formStore.value[prompt.key])}
+                  onSelect={(value) => {
+                    if (!value) return
+                    setFormStore("value", prompt.key, value.value)
+                  }}
+                >
+                  {(option) => (
+                    <div class="w-full flex items-center gap-x-2">
+                      <div class="w-4 h-2 rounded-[1px] bg-input-base shadow-xs-border-base flex items-center justify-center">
+                        <div class="w-2.5 h-0.5 ml-0 bg-icon-strong-base hidden" data-slot="list-item-extra-icon" />
+                      </div>
+                      <span>{option.label}</span>
+                      <span class="text-14-regular text-text-weak">{option.hint}</span>
+                    </div>
+                  )}
+                </List>
+              </div>
+            )
+          }}
+        </For>
+        <Button class="w-auto" type="submit" size="large" variant="primary">
+          {language.t("common.submit")}
+        </Button>
+      </form>
+    )
   }
 
   let listRef: ListRef | undefined
@@ -469,6 +552,9 @@ export function DialogConnectProvider(props: { provider: string }) {
                     <span>{language.t("provider.connect.status.inProgress")}</span>
                   </div>
                 </div>
+              </Match>
+              <Match when={store.state === "prompt"}>
+                <OAuthPromptsView />
               </Match>
               <Match when={store.state === "error"}>
                 <div class="text-14-regular text-text-base">
