@@ -279,6 +279,7 @@ export function LiteSection() {
             <li>Kimi K2.5</li>
             <li>GLM-5</li>
             <li>MiniMax M2.5</li>
+            <li>MiniMax M2.7</li>
           </ul>
           <p data-slot="promo-description">{i18n.t("workspace.lite.promo.footer")}</p>
           <button
