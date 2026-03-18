@@ -218,7 +218,9 @@ test("GitLab Duo: includes context-1m beta header in aiGatewayHeaders", async ()
     fn: async () => {
       const providers = await Provider.list()
       expect(providers[ProviderID.gitlab]).toBeDefined()
-      expect(providers[ProviderID.gitlab].options?.aiGatewayHeaders?.["anthropic-beta"]).toContain("context-1m-2025-08-07")
+      expect(providers[ProviderID.gitlab].options?.aiGatewayHeaders?.["anthropic-beta"]).toContain(
+        "context-1m-2025-08-07",
+      )
     },
   })
 })
