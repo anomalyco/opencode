@@ -300,13 +300,10 @@ export const RunCommand = cmd({
         default: "default",
         describe: "format: default (formatted) or json (raw JSON events)",
       })
-      .option("json", {
-        type: "boolean",
-        describe: "output final structured JSON only (requires --json-schema)",
-      })
-      .option("json-schema", {
+      .option("output-schema", {
+        alias: ["json-schema"],
         type: "string",
-        describe: "JSON schema as inline JSON or path to JSON file (used with --json)",
+        describe: "JSON schema as inline JSON or path to a JSON file",
       })
       .option("file", {
         alias: ["f"],
@@ -396,25 +393,20 @@ export const RunCommand = cmd({
       process.exit(1)
     }
 
-    if (args.json && args.format === "json") {
-      UI.error("--json cannot be used with --format json")
+    if (args.outputSchema && args.format === "json") {
+      UI.error("--output-schema cannot be used with --format json")
       process.exit(1)
     }
 
-    if (args.json && args.command) {
-      UI.error("--json is not supported with --command")
-      process.exit(1)
-    }
-
-    if (args.json && !args.jsonSchema) {
-      UI.error("--json requires --json-schema")
+    if (args.outputSchema && args.command) {
+      UI.error("--output-schema is not supported with --command")
       process.exit(1)
     }
 
     const schema = await (async () => {
-      if (!args.json) return undefined
+      if (typeof args.outputSchema !== "string") return undefined
       try {
-        return await parseSchema(args.jsonSchema as string)
+        return await parseSchema(args.outputSchema)
       } catch (error) {
         UI.error(error instanceof Error ? error.message : String(error))
         process.exit(1)
@@ -505,7 +497,7 @@ export const RunCommand = cmd({
         return false
       }
 
-      const events = await sdk.event.subscribe()
+      let events: Awaited<ReturnType<typeof sdk.event.subscribe>>
       let error: string | undefined
 
       async function loop() {
@@ -693,8 +685,10 @@ export const RunCommand = cmd({
       }
       await share(sdk, sessionID)
 
-      if (args.json) {
-        const model = args.model ? Provider.parseModel(args.model) : undefined
+      const model = args.model ? Provider.parseModel(args.model) : undefined
+      const parts = [...files, { type: "text", text: message }]
+
+      if (schema) {
         const result = await sdk.session.prompt({
           sessionID,
           agent,
@@ -702,9 +696,9 @@ export const RunCommand = cmd({
           variant: args.variant,
           format: {
             type: "json_schema",
-            schema: schema!,
+            schema,
           },
-          parts: [...files, { type: "text", text: message }],
+          parts,
         })
         const info = result.data?.info
         if (!info || info.role !== "assistant") {
@@ -725,6 +719,8 @@ export const RunCommand = cmd({
         return
       }
 
+      events = await sdk.event.subscribe()
+
       loop().catch((e) => {
         console.error(e)
         process.exit(1)
@@ -740,13 +736,12 @@ export const RunCommand = cmd({
           variant: args.variant,
         })
       } else {
-        const model = args.model ? Provider.parseModel(args.model) : undefined
         await sdk.session.prompt({
           sessionID,
           agent,
           model,
           variant: args.variant,
-          parts: [...files, { type: "text", text: message }],
+          parts,
         })
       }
     }

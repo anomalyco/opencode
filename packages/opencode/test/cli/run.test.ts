@@ -1,8 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import fs from "fs/promises"
-import os from "os"
 import path from "path"
 import { parseSchema } from "../../src/cli/cmd/run"
+import { tmpdir } from "../fixture/fixture"
 
 describe("run.parseSchema", () => {
   test("parses inline schema", async () => {
@@ -18,9 +17,9 @@ describe("run.parseSchema", () => {
   })
 
   test("parses schema file", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-run-schema-"))
-    const file = path.join(dir, "schema.json")
-    await fs.writeFile(file, '{"type":"object","required":["id"],"properties":{"id":{"type":"string"}}}')
+    await using tmp = await tmpdir()
+    const file = path.join(tmp.path, "schema.json")
+    await Bun.write(file, '{"type":"object","required":["id"],"properties":{"id":{"type":"string"}}}')
     const result = await parseSchema(file)
     expect(result).toEqual({
       type: "object",
@@ -31,7 +30,6 @@ describe("run.parseSchema", () => {
         },
       },
     })
-    await fs.rm(dir, { recursive: true, force: true })
   })
 
   test("rejects non-object schema", async () => {
