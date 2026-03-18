@@ -7,9 +7,9 @@
   "scripts": {
     "typecheck": "tsgo -b",
     "predev": "bun ./scripts/predev.ts",
-    "dev": "vite",
-    "build": "bun run typecheck && vite build",
-    "preview": "vite preview",
+    "dev": "vite --config vite.config.ts",
+    "build": "bun run typecheck && vite build --config vite.config.ts",
+    "preview": "vite preview --config vite.config.ts",
     "tauri": "tauri"
   },
   "dependencies": {

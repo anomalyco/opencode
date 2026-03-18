@@ -6,9 +6,9 @@ import { Splash } from "@opencode-ai/ui/logo"
 import { Progress } from "@opencode-ai/ui/progress"
 import "./styles.css"
 import { createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
-import { commands, events, InitStep } from "./bindings"
+import { commands, events, InitStep } from "./bindings.ts"
 import { Channel } from "@tauri-apps/api/core"
-import { initI18n, t } from "./i18n"
+import { initI18n, t } from "./i18n/index.ts"
 
 const root = document.getElementById("root")!
 const lines = [

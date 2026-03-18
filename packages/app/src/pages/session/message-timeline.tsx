@@ -412,7 +412,7 @@ export function MessageTimeline(props: {
   command.register("session-title", () => [
     {
       id: "session.rename",
-      title: language.t("common.rename"),
+      title: `${language.t("common.rename")} ${language.t("command.category.session")}`,
       category: language.t("command.category.session"),
       disabled: !sessionID(),
       onSelect: () => openTitleEditor(),
