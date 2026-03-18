@@ -13,7 +13,6 @@ import type { AsyncStorage } from "@solid-primitives/storage"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { readImage } from "@tauri-apps/plugin-clipboard-manager"
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link"
-import { open, save } from "@tauri-apps/plugin-dialog"
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http"
 import { isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification"
 import { type as ostype } from "@tauri-apps/plugin-os"
@@ -25,6 +24,7 @@ import { createResource, onCleanup, onMount, Show } from "solid-js"
 import { render } from "solid-js/web"
 import pkg from "../package.json"
 import { initI18n, t } from "./i18n"
+import { createProjectPlatform } from "./platform/project"
 import { UPDATER_ENABLED } from "./updater"
 import { webviewZoom } from "./webview-zoom"
 import "./styles.css"
@@ -64,72 +64,15 @@ const createPlatform = (): Platform => {
     return undefined
   })()
 
-  const wslHome = async () => {
-    if (os !== "windows" || !window.__OPENCODE__?.wsl) return undefined
-    return commands.wslPath("~", "windows").catch(() => undefined)
-  }
-
-  const handleWslPicker = async <T extends string | string[]>(result: T | null): Promise<T | null> => {
-    if (!result || !window.__OPENCODE__?.wsl) return result
-    if (Array.isArray(result)) {
-      return Promise.all(result.map((path) => commands.wslPath(path, "linux").catch(() => path))) as any
-    }
-    return commands.wslPath(result, "linux").catch(() => result) as any
-  }
-
   return {
     platform: "desktop",
     os,
     version: pkg.version,
 
-    async openDirectoryPickerDialog(opts) {
-      const defaultPath = await wslHome()
-      const result = await open({
-        directory: true,
-        multiple: opts?.multiple ?? false,
-        title: opts?.title ?? t("desktop.dialog.chooseFolder"),
-        defaultPath,
-      })
-      return await handleWslPicker(result)
-    },
-
-    async openFilePickerDialog(opts) {
-      const result = await open({
-        directory: false,
-        multiple: opts?.multiple ?? false,
-        title: opts?.title ?? t("desktop.dialog.chooseFile"),
-      })
-      return handleWslPicker(result)
-    },
-
-    async saveFilePickerDialog(opts) {
-      const result = await save({
-        title: opts?.title ?? t("desktop.dialog.saveFile"),
-        defaultPath: opts?.defaultPath,
-      })
-      return handleWslPicker(result)
-    },
+    ...createProjectPlatform(os),
 
     openLink(url: string) {
       void shellOpen(url).catch(() => undefined)
-    },
-    async normalizeProjectPath(path: string) {
-      if (os === "windows" && window.__OPENCODE__?.wsl) {
-        return commands.wslPath(path, "linux").catch(() => path)
-      }
-      return path
-    },
-    cloneGitRepository(url: string, directory?: string) {
-      return commands.cloneGitRepository(url, directory ?? null)
-    },
-    async getDefaultCloneDirectory() {
-      return commands.getDefaultCloneDirectory().catch(() => null)
-    },
-    async setDefaultCloneDirectory(path: string | null) {
-      await commands.setDefaultCloneDirectory(path)
-    },
-    async openPath(path: string, app?: string) {
-      await commands.openPath(path, app ?? null)
     },
 
     back() {

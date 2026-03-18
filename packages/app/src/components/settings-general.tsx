@@ -1,10 +1,9 @@
-import { Component, Show, createEffect, createMemo, createResource, type JSX } from "solid-js"
+import { Component, Show, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Select } from "@opencode-ai/ui/select"
 import { Switch } from "@opencode-ai/ui/switch"
-import { TextField } from "@opencode-ai/ui/text-field"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
 import { showToast } from "@opencode-ai/ui/toast"
@@ -13,7 +12,9 @@ import { usePlatform } from "@/context/platform"
 import { useSettings, monoFontFamily } from "@/context/settings"
 import { playSound, SOUND_OPTIONS } from "@/utils/sound"
 import { Link } from "./link"
+import { SettingsGeneralClonePath } from "./settings-general-clone-path"
 import { SettingsList } from "./settings-list"
+import { SettingsRow } from "./settings-row"
 
 let demoSoundState = {
   cleanup: undefined as (() => void) | undefined,
@@ -47,72 +48,9 @@ export const SettingsGeneral: Component = () => {
 
   const [store, setStore] = createStore({
     checking: false,
-    clonePath: "",
-    cloneBusy: false,
-    cloneDirty: false,
   })
 
   const linux = createMemo(() => platform.platform === "desktop" && platform.os === "linux")
-  const desktopClonePath = createMemo(
-    () => platform.platform === "desktop" && !!platform.getDefaultCloneDirectory && !!platform.setDefaultCloneDirectory,
-  )
-  const [clonePathResource, clonePathActions] = createResource(() =>
-    desktopClonePath() ? platform.getDefaultCloneDirectory?.() : null,
-  )
-
-  createEffect(() => {
-    const path = clonePathResource.latest
-    if (!path) return
-    if (store.cloneDirty) return
-    setStore("clonePath", path)
-  })
-
-  const saveClonePath = async () => {
-    const setClonePath = platform.setDefaultCloneDirectory
-    if (!setClonePath) return
-    setStore("cloneBusy", true)
-    const path = store.clonePath.trim()
-    await Promise.resolve()
-      .then(async () => {
-        await setClonePath(path || null)
-        setStore("cloneDirty", false)
-        await clonePathActions.refetch()
-      })
-      .catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : String(err)
-        showToast({ title: language.t("common.requestFailed"), description: message })
-      })
-      .finally(() => setStore("cloneBusy", false))
-  }
-
-  const resetClonePath = async () => {
-    const setClonePath = platform.setDefaultCloneDirectory
-    if (!setClonePath) return
-    setStore("cloneBusy", true)
-    await Promise.resolve()
-      .then(async () => {
-        await setClonePath(null)
-        setStore("cloneDirty", false)
-        await clonePathActions.refetch()
-      })
-      .catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : String(err)
-        showToast({ title: language.t("common.requestFailed"), description: message })
-      })
-      .finally(() => setStore("cloneBusy", false))
-  }
-
-  const chooseClonePath = async () => {
-    if (!platform.openDirectoryPickerDialog) return
-    const result = await platform.openDirectoryPickerDialog({
-      title: language.t("settings.desktop.clonePath.title"),
-      multiple: false,
-    })
-    const value = Array.isArray(result) ? result[0] : result
-    if (!value) return
-    setStore("clonePath", value)
-    setStore("cloneDirty", true)
-  }
 
   const check = () => {
     if (!platform.checkUpdate) return
@@ -543,48 +481,6 @@ export const SettingsGeneral: Component = () => {
     </div>
   )
 
-  const DesktopProjectsSection = () => (
-    <Show when={desktopClonePath()}>
-      <div class="flex flex-col gap-1">
-        <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.desktop.section.projects")}</h3>
-
-        <div class="bg-surface-raised-base px-4 rounded-lg">
-          <SettingsRow
-            title={language.t("settings.desktop.clonePath.title")}
-            description={language.t("settings.desktop.clonePath.description")}
-          >
-            <div class="flex items-center gap-2 min-w-[320px]">
-              <TextField
-                value={store.clonePath}
-                placeholder={language.t("settings.desktop.clonePath.placeholder")}
-                class="w-full"
-                onChange={(value) => {
-                  setStore("clonePath", value)
-                  setStore("cloneDirty", true)
-                }}
-              />
-              <Button type="button" variant="ghost" size="small" onClick={chooseClonePath} disabled={store.cloneBusy}>
-                {language.t("dialog.project.open.path.browse")}
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                size="small"
-                onClick={saveClonePath}
-                disabled={store.cloneBusy || !store.cloneDirty}
-              >
-                {language.t("common.save")}
-              </Button>
-              <Button type="button" variant="ghost" size="small" onClick={resetClonePath} disabled={store.cloneBusy}>
-                {language.t("common.reset")}
-              </Button>
-            </div>
-          </SettingsRow>
-        </div>
-      </div>
-    </Show>
-  )
-
   return (
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
@@ -602,7 +498,7 @@ export const SettingsGeneral: Component = () => {
 
         <SoundsSection />
 
-        <DesktopProjectsSection />
+        <SettingsGeneralClonePath />
 
         {/*<Show when={platform.platform === "desktop" && platform.os === "windows" && platform.getWslEnabled}>
           {(_) => {
@@ -670,24 +566,6 @@ export const SettingsGeneral: Component = () => {
           }}
         </Show>
       </div>
-    </div>
-  )
-}
-
-interface SettingsRowProps {
-  title: string | JSX.Element
-  description: string | JSX.Element
-  children: JSX.Element
-}
-
-const SettingsRow: Component<SettingsRowProps> = (props) => {
-  return (
-    <div class="flex flex-wrap items-center gap-4 py-3 border-b border-border-weak-base last:border-none sm:flex-nowrap">
-      <div class="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span class="text-14-medium text-text-strong">{props.title}</span>
-        <span class="text-12-regular text-text-weak">{props.description}</span>
-      </div>
-      <div class="flex w-full justify-end sm:w-auto sm:shrink-0">{props.children}</div>
     </div>
   )
 }
