@@ -1,5 +1,9 @@
 import { writeMarkdownClipboard } from "../../components/markdown-copy"
 
+type Root = {
+  querySelector(selector: string): Element | null
+}
+
 export function cleanMarkdownHTML(value: string) {
   if (!value) return value
   if (typeof DOMParser === "undefined") {
@@ -15,7 +19,7 @@ export function cleanMarkdownHTML(value: string) {
   return root.innerHTML
 }
 
-export async function copyMarkdownElement(root: ParentNode | undefined, text: string) {
+export async function copyMarkdownElement(root: Root | undefined, text: string) {
   if (!text) return
   const markdown = root?.querySelector('[data-component="markdown"]')
   if (!(markdown instanceof HTMLDivElement)) {
