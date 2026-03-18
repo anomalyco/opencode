@@ -6,15 +6,12 @@ import { useFile } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import {
-  PRINT_DONE_MESSAGE,
-  PRINT_MESSAGE,
   audioExtensions,
   blobUrlFromBase64,
   getExtension,
   htmlExtensions,
   normalizeMimeType,
   pdfExtensions,
-  printable,
 } from "./preview-tab-helper"
 
 export function SessionPreviewTab(props: {
@@ -22,7 +19,6 @@ export function SessionPreviewTab(props: {
   file: ReturnType<typeof useFile>
   view: () => ReturnType<ReturnType<typeof useLayout>["view"]>
   language: ReturnType<typeof useLanguage>
-  onOpenCode: (path: string) => void
 }) {
   let scroll: HTMLDivElement | undefined
   let frame: number | undefined
@@ -183,38 +179,6 @@ export function SessionPreviewTab(props: {
     </div>
   )
 
-  const exportPdf = () => {
-    const value = htmlSrc()
-    if (!value) return
-
-    const iframe = document.createElement("iframe")
-    iframe.setAttribute("sandbox", "allow-scripts allow-modals")
-    iframe.setAttribute("aria-hidden", "true")
-    iframe.style.position = "fixed"
-    iframe.style.top = "0"
-    iframe.style.left = "-20000px"
-    iframe.style.width = "1280px"
-    iframe.style.height = "1800px"
-    iframe.style.border = "0"
-    iframe.style.opacity = "0"
-    iframe.srcdoc = printable(value)
-
-    const cleanup = () => {
-      window.removeEventListener("message", done)
-      iframe.remove()
-    }
-
-    const done = (event: MessageEvent) => {
-      if (event.source !== iframe.contentWindow) return
-      if (event.data?.type !== PRINT_DONE_MESSAGE) return
-      cleanup()
-    }
-
-    window.addEventListener("message", done)
-    iframe.onload = () => iframe.contentWindow?.postMessage({ type: PRINT_MESSAGE }, "*")
-    document.body.append(iframe)
-  }
-
   const downloadPdf = () => {
     const url = pdfObjectUrl()
     if (!url) return
@@ -235,20 +199,6 @@ export function SessionPreviewTab(props: {
     <div class="flex flex-col h-full overflow-hidden bg-background-stronger contain-strict">
       <div class="sticky top-0 z-20 h-8 shrink-0 px-6 flex items-center justify-between bg-background-stronger">
         <div class="min-w-0 truncate text-16-medium text-text-strong">{filename()}</div>
-        <div class="flex items-center gap-1">
-          <Show when={htmlSrc()}>
-            <Button size="small" variant="ghost" onClick={exportPdf}>
-              {props.language.t("session.preview.exportPdf")}
-            </Button>
-          </Show>
-          <Show when={props.path()}>
-            {(path) => (
-              <Button size="small" variant="ghost" onClick={() => props.onOpenCode(path())}>
-                {props.language.t("session.preview.openCode")}
-              </Button>
-            )}
-          </Show>
-        </div>
       </div>
       <div
         ref={(el) => {

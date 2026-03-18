@@ -1060,7 +1060,6 @@ export default function Page() {
       file={file}
       view={view}
       language={language}
-      onOpenCode={openReviewFile}
     />
   )
 
