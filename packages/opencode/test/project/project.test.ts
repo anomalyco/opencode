@@ -218,6 +218,28 @@ describe("Project.fromDirectory with worktrees", () => {
     }
   })
 
+  test("different bare repos under same parent should not share project ID", async () => {
+    const p = await loadProject()
+    await using parent = await tmpdir()
+    await using repoA = await tmpdir({ git: true })
+    await using repoB = await tmpdir({ git: true })
+
+    const bareA = path.join(parent.path, "repo-a.git")
+    const bareB = path.join(parent.path, "repo-b.git")
+    const wtA = path.join(parent.path, "wt-a")
+    const wtB = path.join(parent.path, "wt-b")
+
+    await $`git clone --bare ${repoA.path} ${bareA}`.quiet()
+    await $`git clone --bare ${repoB.path} ${bareB}`.quiet()
+    await $`git --git-dir=${bareA} worktree add ${wtA} -b wt-a-${Date.now()} HEAD`.quiet()
+    await $`git --git-dir=${bareB} worktree add ${wtB} -b wt-b-${Date.now()} HEAD`.quiet()
+
+    const { project: a } = await p.fromDirectory(wtA)
+    const { project: b } = await p.fromDirectory(wtB)
+
+    expect(a.id).not.toBe(b.id)
+  })
+
   test("should accumulate multiple worktrees in sandboxes", async () => {
     const p = await loadProject()
     await using tmp = await tmpdir({ git: true })

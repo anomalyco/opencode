@@ -119,17 +119,25 @@ export namespace Project {
           }
         }
 
-        const worktree = await git(["rev-parse", "--git-common-dir"], {
+        const common = await git(["rev-parse", "--git-common-dir"], {
           cwd: sandbox,
         })
           .then(async (result) => {
-            const common = gitpath(sandbox, await result.text())
+            const resolved = gitpath(sandbox, await result.text())
             // Avoid going to parent of sandbox when git-common-dir is empty.
-            return common === sandbox ? sandbox : path.dirname(common)
+            return resolved === sandbox ? sandbox : resolved
           })
           .catch(() => undefined)
 
-        if (!worktree) {
+        // worktree is the repo root: parent of .git for normal repos,
+        // but for bare repos (e.g. opencode.git) path.dirname gives
+        // the parent directory which may be shared across repos.
+        // If common resolves to sandbox (empty git-common-dir output),
+        // preserve sandbox to keep previous fallback behavior.
+        // Only used for the returned project info, not for cache paths.
+        const worktree = common ? (common === sandbox ? sandbox : path.dirname(common)) : undefined
+
+        if (!worktree || !common) {
           return {
             id: id ?? ProjectID.global,
             worktree: sandbox,
@@ -140,9 +148,11 @@ export namespace Project {
 
         // In the case of a git worktree, it can't cache the id
         // because `.git` is not a folder, but it always needs the
-        // same project id as the common dir, so we resolve it now
+        // same project id as the common dir, so we resolve it now.
+        // Use `common` directly (the git dir) instead of reconstructing
+        // worktree + "/.git" which breaks for bare repos (e.g. repo.git).
         if (id == null) {
-          id = await readCachedId(path.join(worktree, ".git"))
+          id = await readCachedId(common)
         }
 
         // generate id from root commit
@@ -170,8 +180,10 @@ export namespace Project {
 
           id = roots[0] ? ProjectID.make(roots[0]) : undefined
           if (id) {
-            // Write to common dir so the cache is shared across worktrees.
-            await Filesystem.write(path.join(worktree, ".git", "opencode"), id).catch(() => undefined)
+            // Write cache inside the git common dir itself, not worktree/.git.
+            // For bare repos (e.g. opencode.git), worktree/.git would resolve
+            // to the parent org directory's .git, corrupting other repos.
+            await Filesystem.write(path.join(common, "opencode"), id).catch(() => undefined)
           }
         }
 
