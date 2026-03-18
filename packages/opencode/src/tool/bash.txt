@@ -80,8 +80,6 @@ Git Safety Protocol:
 4. If the commit fails due to pre-commit hook, fix the issue and create a NEW commit (see amend rules above)
 
 Important notes:
-- NEVER run additional commands to read or explore code, besides git bash commands
-- NEVER use the TodoWrite or Task tools
 - DO NOT push to the remote repository unless the user explicitly asks you to do so
 - IMPORTANT: Never use git commands with the -i flag (like git rebase -i or git add -i) since they require interactive input which is not supported.
 - If there are no changes to commit (i.e., no untracked files and no modifications), do not create an empty commit
@@ -108,7 +106,6 @@ gh pr create --title "the pr title" --body "$(cat <<'EOF'
 </example>
 
 Important:
-- DO NOT use the TodoWrite or Task tools
 - Return the PR URL when you're done, so the user can see it
 
 # Other common operations
