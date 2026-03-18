@@ -35,6 +35,7 @@ import { usePermission } from "@/context/permission"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useSessionLayout } from "@/pages/session/session-layout"
+import { decode64 } from "@/utils/base64"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { promptEnabled, promptProbe } from "@/testing/prompt"
 import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge } from "./prompt-input/editor-dom"
@@ -236,6 +237,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     return paths
   })
+  const projectDirectory = createMemo(() => decode64(params.dir) ?? "")
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const status = createMemo(
     () =>
@@ -1570,6 +1572,29 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     <Icon name="shield" size="small" classList={{ "text-icon-success-base": accepting() }} />
                   </Button>
                 </TooltipKeybind>
+
+                <Show when={projectDirectory() && sync.data.vcs?.branch}>
+                  <div class="flex items-end gap-1 shrink-0" style={control()}>
+                    <Tooltip placement="top" gutter={4} value={sync.data.vcs?.branch}>
+                      <div
+                        class="flex items-center gap-1.5 px-1.5 h-7 rounded-md hover:bg-background-weak transition-colors cursor-default group"
+                        aria-label={language.t("prompt.branch.ariaLabel", {
+                          branch: sync.data.vcs?.branch ?? "",
+                        })}
+                      >
+                        <Icon
+                          name="branch"
+                          size="small"
+                          class="text-icon-base opacity-40 group-hover:opacity-100 transition-opacity"
+                        />
+                        <span class="text-13-regular text-text-weak group-hover:text-text-base truncate max-w-[150px] transition-colors font-mono!">
+                          {sync.data.vcs?.branch}
+                        </span>
+                      </div>
+                    </Tooltip>
+                    <div class="w-px h-3 bg-border-base shrink-0 opacity-30" />
+                  </div>
+                </Show>
               </div>
             </div>
           </div>
