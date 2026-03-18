@@ -5,15 +5,21 @@ import { Question } from "../question"
 import { Session } from "../session"
 import { MessageV2 } from "../session/message-v2"
 import { Provider } from "../provider/provider"
+import { Agent } from "../agent/agent"
 import { Instance } from "../project/instance"
 import { type SessionID, MessageID, PartID } from "../session/schema"
 import EXIT_DESCRIPTION from "./plan-exit.txt"
 
-async function getLastModel(sessionID: SessionID) {
+async function lastModel(sessionID: SessionID) {
   for await (const item of MessageV2.stream(sessionID)) {
     if (item.info.role === "user" && item.info.model) return item.info.model
   }
   return Provider.defaultModel()
+}
+
+async function resolveModel(agentName: string, sessionID: SessionID) {
+  const info = await Agent.get(agentName)
+  return info?.model ?? (await lastModel(sessionID))
 }
 
 export const PlanExitTool = Tool.define("plan_exit", {
@@ -41,7 +47,7 @@ export const PlanExitTool = Tool.define("plan_exit", {
     const answer = answers[0]?.[0]
     if (answer === "No") throw new Question.RejectedError()
 
-    const model = await getLastModel(ctx.sessionID)
+    const model = await resolveModel("build", ctx.sessionID)
 
     const userMsg: MessageV2.User = {
       id: MessageID.ascending(),
@@ -99,7 +105,7 @@ export const PlanEnterTool = Tool.define("plan_enter", {
 
     if (answer === "No") throw new Question.RejectedError()
 
-    const model = await getLastModel(ctx.sessionID)
+    const model = await resolveModel("plan", ctx.sessionID)
 
     const userMsg: MessageV2.User = {
       id: MessageID.ascending(),
