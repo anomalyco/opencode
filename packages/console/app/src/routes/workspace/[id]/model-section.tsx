@@ -8,12 +8,15 @@ import { querySessionInfo } from "../common"
 import {
   IconAlibaba,
   IconAnthropic,
+  IconArcee,
   IconGemini,
   IconMiniMax,
   IconMoonshotAI,
+  IconNvidia,
   IconOpenAI,
   IconStealth,
   IconXai,
+  IconXiaomi,
   IconZai,
 } from "~/component/icon"
 import { useI18n } from "~/context/i18n"
@@ -29,6 +32,9 @@ const getModelLab = (modelId: string) => {
   if (modelId.startsWith("qwen")) return "Alibaba"
   if (modelId.startsWith("minimax")) return "MiniMax"
   if (modelId.startsWith("grok")) return "xAI"
+  if (modelId.startsWith("mimo")) return "Xiaomi"
+  if (modelId.startsWith("nemotron")) return "NVIDIA"
+  if (modelId.startsWith("trinity")) return "Arcee"
   return "Stealth"
 }
 
@@ -139,6 +145,12 @@ export function ModelSection() {
                                   return <IconXai width={16} height={16} />
                                 case "MiniMax":
                                   return <IconMiniMax width={16} height={16} />
+                                case "Xiaomi":
+                                  return <IconXiaomi width={16} height={16} />
+                                case "NVIDIA":
+                                  return <IconNvidia width={16} height={16} />
+                                case "Arcee":
+                                  return <IconArcee width={16} height={16} />
                                 default:
                                   return <IconStealth width={16} height={16} />
                               }

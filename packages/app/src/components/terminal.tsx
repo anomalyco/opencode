@@ -65,14 +65,11 @@ const debugTerminal = (...values: unknown[]) => {
   console.debug("[terminal]", ...values)
 }
 
-const errorStatus = (err: unknown) => {
+const errorName = (err: unknown) => {
   if (!err || typeof err !== "object") return
-  if (!("data" in err)) return
-  const data = err.data
-  if (!data || typeof data !== "object") return
-  if (!("statusCode" in data)) return
-  const status = data.statusCode
-  return typeof status === "number" ? status : undefined
+  if (!("name" in err)) return
+  const errorName = err.name
+  return typeof errorName === "string" ? errorName : undefined
 }
 
 const useTerminalUiBindings = (input: {
@@ -481,7 +478,7 @@ export const Terminal = (props: TerminalProps) => {
           .get({ ptyID: id })
           .then(() => false)
           .catch((err) => {
-            if (errorStatus(err) === 404) return true
+            if (errorName(err) === "NotFoundError") return true
             debugTerminal("failed to inspect terminal session", err)
             return false
           })
