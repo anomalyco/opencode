@@ -18,6 +18,7 @@ import { Instance } from "../project/instance"
 import { Config } from "../config/config"
 import path from "path"
 import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
+import { LSP } from "../lsp"
 import z from "zod"
 import { Plugin } from "../plugin"
 import { ProviderID, type ModelID } from "../provider/schema"
@@ -73,6 +74,14 @@ export namespace ToolRegistry {
             ...ctx,
             directory: Instance.directory,
             worktree: Instance.worktree,
+            lsp: {
+              touchFile: (filePath: string, waitForDiagnostics?: boolean) =>
+                LSP.touchFile(filePath, waitForDiagnostics),
+              diagnostics: () => LSP.diagnostics(),
+              diagnosticPretty: (diagnostic: Parameters<typeof LSP.Diagnostic.pretty>[0]) =>
+                LSP.Diagnostic.pretty(diagnostic),
+              hover: (input: { file: string; line: number; character: number }) => LSP.hover(input),
+            },
           } as unknown as PluginToolContext
           const result = await def.execute(args as any, pluginCtx)
           const out = await Truncate.output(result, {}, initCtx?.agent)
