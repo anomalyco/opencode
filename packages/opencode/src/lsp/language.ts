@@ -85,6 +85,8 @@ export const LANGUAGE_EXTENSIONS: Record<string, string> = {
   ".scss": "scss",
   ".sass": "sass",
   ".scala": "scala",
+  ".sbt": "scala",
+  ".sc": "scala",
   ".shader": "shaderlab",
   ".sh": "shellscript",
   ".bash": "shellscript",

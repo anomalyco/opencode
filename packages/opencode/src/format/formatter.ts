@@ -394,3 +394,23 @@ export const dfmt: Info = {
     return which("dfmt") !== null
   },
 }
+
+export const scalafmt: Info = {
+  name: "scalafmt",
+  command: ["scalafmt", "$FILE"],
+  extensions: [".scala", ".sbt", ".sc"],
+  async enabled() {
+    if (!which("scalafmt")) return false
+    const items = await Filesystem.findUp(".scalafmt.conf", Instance.directory, Instance.worktree)
+    return items.length > 0
+  },
+}
+
+export const swiftformat: Info = {
+  name: "swiftformat",
+  command: ["swiftformat", "$FILE"],
+  extensions: [".swift"],
+  async enabled() {
+    return which("swiftformat") !== null
+  },
+}
