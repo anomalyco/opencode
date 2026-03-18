@@ -18,6 +18,7 @@ import { iife } from "@/util/iife"
 import { Global } from "../global"
 import path from "path"
 import { Filesystem } from "../util/filesystem"
+import { sanitizeJsonSurrogates } from "../util/sanitize-surrogates"
 
 // Direct imports for bundled providers
 import { createAmazonBedrock, type AmazonBedrockProviderSettings } from "@ai-sdk/amazon-bedrock"
@@ -1165,6 +1166,12 @@ export namespace Provider {
             }
             opts.body = JSON.stringify(body)
           }
+        }
+
+        // Sanitize JSON-escaped lone surrogates that may exist in previously
+        // stored session data. See: https://github.com/anomalyco/opencode/issues/14630
+        if (typeof opts.body === "string") {
+          opts.body = sanitizeJsonSurrogates(opts.body)
         }
 
         const res = await fetchFn(input, {
