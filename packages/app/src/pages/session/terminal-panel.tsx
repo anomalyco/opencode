@@ -18,8 +18,10 @@ import { terminalTabLabel } from "@/pages/session/terminal-label"
 import { createSizing, focusTerminalById } from "@/pages/session/helpers"
 import { getTerminalHandoff, setTerminalHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
+import { terminalProbe } from "@/testing/terminal"
 
 export function TerminalPanel() {
+  const delays = [120, 240]
   const layout = useLayout()
   const terminal = useTerminal()
   const language = useLanguage()
@@ -79,16 +81,20 @@ export function TerminalPanel() {
   )
 
   const focus = (id: string) => {
+    const probe = terminalProbe(id)
+    probe.focus(delays.length + 1)
     focusTerminalById(id)
 
     const frame = requestAnimationFrame(() => {
+      probe.step()
       if (!opened()) return
       if (terminal.active() !== id) return
       focusTerminalById(id)
     })
 
-    const timers = [120, 240].map((ms) =>
+    const timers = delays.map((ms) =>
       window.setTimeout(() => {
+        probe.step()
         if (!opened()) return
         if (terminal.active() !== id) return
         focusTerminalById(id)
@@ -96,6 +102,7 @@ export function TerminalPanel() {
     )
 
     return () => {
+      probe.focus(0)
       cancelAnimationFrame(frame)
       for (const timer of timers) clearTimeout(timer)
     }
