@@ -52,6 +52,7 @@ import { IconButton } from "./icon-button"
 import { TextShimmer } from "./text-shimmer"
 import { AnimatedCountList } from "./tool-count-summary"
 import { ToolStatusTitle } from "./tool-status-title"
+import { ToolFile } from "./tool-file"
 import { animate } from "motion"
 import { useLocation } from "@solidjs/router"
 import { attached, inline, kind } from "./message-file"
@@ -1200,29 +1201,11 @@ function ToolFileAccordion(props: {
         <StickyAccordionHeader>
           <Accordion.Trigger>
             <div data-slot="apply-patch-trigger-content">
-              <div data-slot="apply-patch-file-info">
-                <FileIcon node={{ path: props.path, type: "file" }} />
-                <div data-slot="apply-patch-file-name-container">
-                  <Show when={props.path.includes("/")}>
-                    <span data-slot="apply-patch-directory">{`\u202A${getDirectory(props.path)}\u202C`}</span>
-                  </Show>
-                  <Show
-                    when={props.onPathClick}
-                    fallback={<span data-slot="apply-patch-filename">{getFilename(props.path)}</span>}
-                  >
-                    <button
-                      type="button"
-                      data-slot="apply-patch-filename"
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        props.onPathClick?.()
-                      }}
-                    >
-                      {getFilename(props.path)}
-                    </button>
-                  </Show>
-                </div>
-              </div>
+              <ToolFile
+                path={props.path}
+                dir={props.path.includes("/") ? getDirectory(props.path) : undefined}
+                onClick={props.onPathClick}
+              />
               <div data-slot="apply-patch-trigger-actions">
                 {props.actions}
                 <Icon name="chevron-grabber-vertical" size="small" />
@@ -2010,24 +1993,11 @@ ToolRegistry.register({
                           <StickyAccordionHeader>
                             <Accordion.Trigger>
                               <div data-slot="apply-patch-trigger-content">
-                                <div data-slot="apply-patch-file-info">
-                                  <FileIcon node={{ path: file.relativePath, type: "file" }} />
-                                  <div data-slot="apply-patch-file-name-container">
-                                    <Show when={file.relativePath.includes("/")}>
-                                      <span data-slot="apply-patch-directory">{`\u202A${getDirectory(file.relativePath)}\u202C`}</span>
-                                    </Show>
-                                    <button
-                                      type="button"
-                                      data-slot="apply-patch-filename"
-                                      onClick={(event) => {
-                                        event.stopPropagation()
-                                        openProjectFile(file.relativePath, data.directory, data.openFilePath)
-                                      }}
-                                    >
-                                      {getFilename(file.relativePath)}
-                                    </button>
-                                  </div>
-                                </div>
+                                <ToolFile
+                                  path={file.relativePath}
+                                  dir={file.relativePath.includes("/") ? getDirectory(file.relativePath) : undefined}
+                                  onClick={() => openProjectFile(file.relativePath, data.directory, data.openFilePath)}
+                                />
                                 <div data-slot="apply-patch-trigger-actions">
                                   <Switch>
                                     <Match when={file.type === "add"}>
