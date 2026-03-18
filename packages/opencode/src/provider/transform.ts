@@ -71,6 +71,19 @@ export namespace ProviderTransform {
         .filter((msg): msg is ModelMessage => msg !== undefined && msg.content !== "")
     }
 
+    // Anthropic rejects conversations ending with an assistant message
+    // ("This model does not support assistant message prefill").
+    // Drop trailing assistant messages so the conversation ends with a user or tool turn.
+    if (
+      model.api.npm === "@ai-sdk/anthropic" ||
+      model.api.npm === "@ai-sdk/google-vertex/anthropic" ||
+      model.api.npm === "@ai-sdk/amazon-bedrock"
+    ) {
+      while (msgs.length > 0 && msgs[msgs.length - 1].role === "assistant") {
+        msgs = msgs.slice(0, -1)
+      }
+    }
+
     if (model.api.id.includes("claude")) {
       return msgs.map((msg) => {
         if ((msg.role === "assistant" || msg.role === "tool") && Array.isArray(msg.content)) {
