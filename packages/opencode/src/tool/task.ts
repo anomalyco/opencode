@@ -10,7 +10,7 @@ import { SessionPrompt } from "../session/prompt"
 import { iife } from "@/util/iife"
 import { defer } from "@/util/defer"
 import { Config } from "../config/config"
-import { PermissionNext } from "@/permission/next"
+import { PermissionNext } from "@/permission"
 
 const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
