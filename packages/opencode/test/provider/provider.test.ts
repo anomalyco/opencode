@@ -452,6 +452,83 @@ test("provider with baseURL from config", async () => {
   })
 })
 
+test("custom model preserves configured input limit", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            custom: {
+              name: "Custom Provider",
+              npm: "@ai-sdk/openai-compatible",
+              env: [],
+              options: {
+                apiKey: "test-key",
+              },
+              models: {
+                sample: {
+                  name: "Sample",
+                  tool_call: true,
+                  limit: {
+                    context: 128_000,
+                    input: 64_000,
+                    output: 4096,
+                  },
+                },
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await Provider.list()
+      const model = providers["custom"].models["sample"]
+      expect(model.limit.input).toBe(64_000)
+    },
+  })
+})
+
+test("model override can replace input limit", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            openai: {
+              options: {
+                apiKey: "test-key",
+              },
+              models: {
+                "gpt-5.4": {
+                  limit: {
+                    input: 922_000,
+                  },
+                },
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await Provider.list()
+      const model = providers["openai"].models["gpt-5.4"]
+      expect(model.limit.input).toBe(922_000)
+    },
+  })
+})
+
 test("model cost defaults to zero when not specified", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
