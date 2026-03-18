@@ -204,16 +204,7 @@ export namespace File {
     "x3f",
   ])
 
-  const previewableBinaryExtensions = new Set([
-    "pdf",
-    "mp3",
-    "wav",
-    "ogg",
-    "m4a",
-    "aac",
-    "flac",
-    "opus",
-  ])
+  const previewableBinaryExtensions = new Set(["pdf", "mp3", "wav", "ogg", "m4a", "aac", "flac", "opus"])
 
   function isImageByExtension(filepath: string): boolean {
     const ext = path.extname(filepath).toLowerCase().slice(1)
@@ -482,7 +473,9 @@ export namespace File {
       const bunFile = Bun.file(full)
       if (await bunFile.exists()) {
         const buffer = await bunFile.arrayBuffer().catch((error) => {
-          throw new Error(`Failed to read previewable binary file "${file}": ${error instanceof Error ? error.message : String(error)}`)
+          throw new Error(
+            `Failed to read previewable binary file "${file}": ${error instanceof Error ? error.message : String(error)}`,
+          )
         })
         const content = Buffer.from(buffer).toString("base64")
         const mimeType = getPreviewableBinaryMimeType(file)
@@ -583,6 +576,10 @@ export namespace File {
       }
       return a.name.localeCompare(b.name)
     })
+  }
+
+  export async function mkdir(absolutePath: string) {
+    await fs.promises.mkdir(absolutePath, { recursive: true })
   }
 
   export async function search(input: { query: string; limit?: number; dirs?: boolean; type?: "file" | "directory" }) {

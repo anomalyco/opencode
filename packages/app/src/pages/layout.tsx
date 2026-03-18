@@ -52,6 +52,8 @@ import { ConstrainDragXAxis } from "@/utils/solid-dnd"
 import { navStart } from "@/utils/perf"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { DialogEditProject } from "@/components/dialog-edit-project"
+import { DialogCreateProject } from "@/components/dialog-create-project"
+import { DialogAddProject } from "@/components/dialog-add-project"
 import { Titlebar } from "@/components/titlebar"
 import { useServer } from "@/context/server"
 import { useLanguage, type Locale } from "@/context/language"
@@ -1182,18 +1184,26 @@ export default function Layout(props: ParentProps) {
       }
     }
 
-    if (platform.openDirectoryPickerDialog && server.isLocal()) {
-      const result = await platform.openDirectoryPickerDialog?.({
-        title: language.t("command.project.open"),
-        multiple: true,
-      })
-      resolve(result)
-    } else {
-      dialog.show(
-        () => <DialogSelectDirectory multiple={true} onSelect={resolve} />,
-        () => resolve(null),
-      )
+    function openExisting() {
+      if (platform.openDirectoryPickerDialog && server.isLocal()) {
+        platform
+          .openDirectoryPickerDialog?.({
+            title: language.t("command.project.open"),
+            multiple: true,
+          })
+          .then(resolve)
+      } else {
+        dialog.show(
+          () => <DialogSelectDirectory multiple={true} onSelect={resolve} />,
+          () => resolve(null),
+        )
+      }
     }
+
+    dialog.show(
+      () => <DialogAddProject onResolve={resolve} openExisting={openExisting} />,
+      () => resolve(null),
+    )
   }
 
   const deleteWorkspace = async (root: string, directory: string) => {
