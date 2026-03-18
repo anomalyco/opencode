@@ -2,7 +2,7 @@ import { $ } from "bun"
 import { afterEach, describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { Deferred, Effect, Fiber, Option } from "effect"
+import { Deferred, Effect, Option } from "effect"
 import { tmpdir } from "../fixture/fixture"
 import { watcherConfigLayer, withServices } from "../fixture/instance"
 import { FileWatcher } from "../../src/file/watcher"
@@ -25,6 +25,7 @@ function withWatcher<E>(directory: string, body: Effect.Effect<void, E>) {
     directory,
     FileWatcher.layer,
     async (rt) => {
+      await rt.runPromise(FileWatcher.Service.use(() => Effect.void))
       await Effect.runPromise(ready(directory))
       await Effect.runPromise(body)
     },
@@ -53,26 +54,23 @@ function listen(directory: string, check: (evt: WatcherEvent) => boolean, hit: (
   return cleanup
 }
 
-function wait(directory: string, check: (evt: WatcherEvent) => boolean) {
-  return Effect.callback<WatcherEvent>((resume) => {
-    const cleanup = listen(directory, check, (evt) => {
-      cleanup()
-      resume(Effect.succeed(evt))
-    })
-    return Effect.sync(cleanup)
-  }).pipe(Effect.timeout("5 seconds"))
-}
-
 function nextUpdate<E>(directory: string, check: (evt: WatcherEvent) => boolean, trigger: Effect.Effect<void, E>) {
-  return Effect.acquireUseRelease(
-    wait(directory, check).pipe(Effect.forkChild({ startImmediately: true })),
-    (fiber) =>
-      Effect.gen(function* () {
-        yield* trigger
-        return yield* Fiber.join(fiber)
-      }),
-    Fiber.interrupt,
-  )
+  return Effect.gen(function* () {
+    const deferred = yield* Deferred.make<WatcherEvent>()
+    return yield* Effect.acquireUseRelease(
+      Effect.sync(() =>
+        listen(directory, check, (evt) => {
+          Deferred.doneUnsafe(deferred, Effect.succeed(evt))
+        }),
+      ),
+      () =>
+        Effect.gen(function* () {
+          yield* trigger
+          return yield* Deferred.await(deferred).pipe(Effect.timeout("5 seconds"))
+        }),
+      (cleanup) => Effect.sync(cleanup),
+    )
+  })
 }
 
 /** Effect that asserts no matching event arrives within `ms`. */
@@ -88,7 +86,7 @@ function noUpdate<E>(
     yield* Effect.acquireUseRelease(
       Effect.sync(() =>
         listen(directory, check, (evt) => {
-          Effect.runSync(Deferred.succeed(deferred, evt))
+          Deferred.doneUnsafe(deferred, Effect.succeed(evt))
         }),
       ),
       () =>
