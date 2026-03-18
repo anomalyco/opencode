@@ -48,6 +48,7 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string, 
     for (const prompt of method.prompts) {
       if (prompt.when) {
         const value = inputs[prompt.when.key]
+        if (value === undefined) continue
         const matches = prompt.when.op === "eq" ? value === prompt.when.value : value !== prompt.when.value
         if (!matches) continue
       }
