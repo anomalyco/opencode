@@ -8,6 +8,7 @@ import { SettingsGeneral } from "./settings-general"
 import { SettingsKeybinds } from "./settings-keybinds"
 import { SettingsProviders } from "./settings-providers"
 import { SettingsModels } from "./settings-models"
+import { SettingsPermissions } from "./settings-permissions"
 
 export const DialogSettings: Component = () => {
   const language = useLanguage()
@@ -41,6 +42,10 @@ export const DialogSettings: Component = () => {
                       <Icon name="providers" />
                       {language.t("settings.providers.title")}
                     </Tabs.Trigger>
+                    <Tabs.Trigger value="permissions">
+                      <Icon name="chevron-double-right" />
+                      {language.t("settings.permissions.title")}
+                    </Tabs.Trigger>
                     <Tabs.Trigger value="models">
                       <Icon name="models" />
                       {language.t("settings.models.title")}
@@ -63,6 +68,9 @@ export const DialogSettings: Component = () => {
         </Tabs.Content>
         <Tabs.Content value="providers" class="no-scrollbar">
           <SettingsProviders />
+        </Tabs.Content>
+        <Tabs.Content value="permissions" class="no-scrollbar">
+          <SettingsPermissions />
         </Tabs.Content>
         <Tabs.Content value="models" class="no-scrollbar">
           <SettingsModels />

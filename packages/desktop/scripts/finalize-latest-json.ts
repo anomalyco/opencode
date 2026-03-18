@@ -20,6 +20,9 @@ if (!repo) throw new Error("GH_REPO is required")
 const releaseId = process.env.OPENCODE_RELEASE
 if (!releaseId) throw new Error("OPENCODE_RELEASE is required")
 
+const version = process.env.OPENCODE_VERSION
+if (!releaseId) throw new Error("OPENCODE_VERSION is required")
+
 const token = process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN
 if (!token) throw new Error("GH_TOKEN or GITHUB_TOKEN is required")
 
@@ -39,7 +42,6 @@ if (!releaseRes.ok) {
 type Asset = {
   name: string
   url: string
-  browser_download_url: string
 }
 
 type Release = {
@@ -89,7 +91,7 @@ const entries: Record<string, { url: string; signature: string }> = {}
 const add = (key: string, asset: Asset, signature: string) => {
   if (entries[key]) return
   entries[key] = {
-    url: asset.browser_download_url,
+    url: `https://github.com/${repo}/releases/download/v${version}/${asset.name}`,
     signature,
   }
 }
@@ -99,6 +101,7 @@ const targets = [
   { key: "linux-x86_64-rpm", asset: "opencode-desktop-linux-x86_64.rpm" },
   { key: "linux-aarch64-deb", asset: "opencode-desktop-linux-arm64.deb" },
   { key: "linux-aarch64-rpm", asset: "opencode-desktop-linux-aarch64.rpm" },
+  { key: "windows-aarch64-nsis", asset: "opencode-desktop-windows-arm64.exe" },
   { key: "windows-x86_64-nsis", asset: "opencode-desktop-windows-x64.exe" },
   { key: "darwin-x86_64-app", asset: "opencode-desktop-darwin-x64.app.tar.gz" },
   {
@@ -127,6 +130,7 @@ const alias = (key: string, source: string) => {
 
 alias("linux-x86_64", "linux-x86_64-deb")
 alias("linux-aarch64", "linux-aarch64-deb")
+alias("windows-aarch64", "windows-aarch64-nsis")
 alias("windows-x86_64", "windows-x86_64-nsis")
 alias("darwin-x86_64", "darwin-x86_64-app")
 alias("darwin-aarch64", "darwin-aarch64-app")

@@ -1,8 +1,10 @@
 import { Select } from "@opencode-ai/ui/select"
+import { Switch } from "@opencode-ai/ui/switch"
 import { showToast } from "@opencode-ai/ui/toast"
 import { Component, For, createMemo, type JSX } from "solid-js"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
+import { usePermission } from "@/context/permission"
 
 type PermissionAction = "allow" | "ask" | "deny"
 
@@ -133,6 +135,7 @@ function getRuleDefault(value: unknown): PermissionAction | undefined {
 export const SettingsPermissions: Component = () => {
   const globalSync = useGlobalSync()
   const language = useLanguage()
+  const perms = usePermission()
 
   const actions = createMemo(
     (): Array<{ value: PermissionAction; label: string }> =>
@@ -142,16 +145,16 @@ export const SettingsPermissions: Component = () => {
       })),
   )
 
-  const permission = createMemo(() => {
+  const rules = createMemo(() => {
     return toMap(globalSync.data.config.permission)
   })
 
   const actionFor = (id: string): PermissionAction => {
-    const value = permission()[id]
+    const value = rules()[id]
     const direct = getRuleDefault(value)
     if (direct) return direct
 
-    const wildcard = getRuleDefault(permission()["*"])
+    const wildcard = getRuleDefault(rules()["*"])
     if (wildcard) return wildcard
 
     return "allow"
@@ -185,6 +188,20 @@ export const SettingsPermissions: Component = () => {
       </div>
 
       <div class="flex flex-col gap-6 px-4 py-6 sm:p-8 sm:pt-6 max-w-[720px]">
+        <div class="flex flex-col gap-2">
+          <h3 class="text-14-medium text-text-strong">{language.t("command.permissions.autoaccept.enable")}</h3>
+          <div class="bg-surface-raised-base px-4 rounded-lg">
+            <SettingsRow
+              title={language.t("command.permissions.autoaccept.enable")}
+              description={language.t("toast.permissions.autoaccept.on.description")}
+            >
+              <div data-action="settings-permissions-autoaccept">
+                <Switch checked={perms.isAutoAcceptingGlobal()} onChange={() => perms.toggleAutoAcceptGlobal()} />
+              </div>
+            </SettingsRow>
+          </div>
+        </div>
+
         <div class="flex flex-col gap-2">
           <h3 class="text-14-medium text-text-strong">{language.t("settings.permissions.section.tools")}</h3>
           <div class="border border-border-weak-base rounded-lg overflow-hidden">

@@ -3,6 +3,7 @@ import { buffer } from "node:stream/consumers"
 
 export namespace Process {
   export type Stdio = "inherit" | "pipe" | "ignore"
+  export type Shell = boolean | string
 
   export interface Options {
     cwd?: string
@@ -10,6 +11,7 @@ export namespace Process {
     stdin?: Stdio
     stdout?: Stdio
     stderr?: Stdio
+    shell?: Shell
     abort?: AbortSignal
     kill?: NodeJS.Signals | number
     timeout?: number
@@ -23,6 +25,10 @@ export namespace Process {
     code: number
     stdout: Buffer
     stderr: Buffer
+  }
+
+  export interface TextResult extends Result {
+    text: string
   }
 
   export class RunFailedError extends Error {
@@ -56,6 +62,8 @@ export namespace Process {
       cwd: opts.cwd,
       env: opts.env === null ? {} : opts.env ? { ...process.env, ...opts.env } : undefined,
       stdio: [opts.stdin ?? "ignore", opts.stdout ?? "ignore", opts.stderr ?? "ignore"],
+      shell: opts.shell,
+      windowsHide: process.platform === "win32",
     })
 
     let closed = false
@@ -114,13 +122,33 @@ export namespace Process {
 
     if (!proc.stdout || !proc.stderr) throw new Error("Process output not available")
 
-    const [code, stdout, stderr] = await Promise.all([proc.exited, buffer(proc.stdout), buffer(proc.stderr)])
-    const out = {
-      code,
-      stdout,
-      stderr,
-    }
+    const out = await Promise.all([proc.exited, buffer(proc.stdout), buffer(proc.stderr)])
+      .then(([code, stdout, stderr]) => ({
+        code,
+        stdout,
+        stderr,
+      }))
+      .catch((err: unknown) => {
+        if (!opts.nothrow) throw err
+        return {
+          code: 1,
+          stdout: Buffer.alloc(0),
+          stderr: Buffer.from(err instanceof Error ? err.message : String(err)),
+        }
+      })
     if (out.code === 0 || opts.nothrow) return out
     throw new RunFailedError(cmd, out.code, out.stdout, out.stderr)
+  }
+
+  export async function text(cmd: string[], opts: RunOptions = {}): Promise<TextResult> {
+    const out = await run(cmd, opts)
+    return {
+      ...out,
+      text: out.stdout.toString(),
+    }
+  }
+
+  export async function lines(cmd: string[], opts: RunOptions = {}): Promise<string[]> {
+    return (await text(cmd, opts)).text.split(/\r?\n/).filter(Boolean)
   }
 }
