@@ -7,7 +7,7 @@ import { MessageV2 } from "../session/message-v2"
 import { Agent } from "../agent/agent"
 import { SessionPrompt } from "../session/prompt"
 import { Tab } from "../tab"
-import { PermissionNext } from "@/permission/next"
+import { PermissionNext } from "@/permission"
 
 const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
