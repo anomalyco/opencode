@@ -9,7 +9,6 @@
     "jsx": "preserve",
     "jsxImportSource": "solid-js",
     "allowJs": true,
-    "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "strict": true,
     "isolatedModules": true,

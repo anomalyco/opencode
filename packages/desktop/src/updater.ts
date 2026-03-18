@@ -3,8 +3,8 @@ import { relaunch } from "@tauri-apps/plugin-process"
 import { ask, message } from "@tauri-apps/plugin-dialog"
 import { type as ostype } from "@tauri-apps/plugin-os"
 
-import { initI18n, t } from "./i18n/index.ts"
-import { commands } from "./bindings.ts"
+import { initI18n, t } from "./i18n"
+import { commands } from "./bindings"
 
 export const UPDATER_ENABLED = window.__OPENCODE__?.updaterEnabled ?? false
 

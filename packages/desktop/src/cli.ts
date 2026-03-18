@@ -1,7 +1,7 @@
 import { message } from "@tauri-apps/plugin-dialog"
 
-import { initI18n, t } from "./i18n/index.ts"
-import { commands } from "./bindings.ts"
+import { initI18n, t } from "./i18n"
+import { commands } from "./bindings"
 
 function installError(error: unknown) {
   const text = String(error)
