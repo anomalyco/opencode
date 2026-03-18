@@ -108,8 +108,8 @@
   --surface-raised-base: rgba(0, 0, 0, 0.031);
   --surface-float-base: #161616;
   --surface-float-base-hover: #1c1c1c;
-  --surface-raised-base-hover: rgba(0, 0, 0, 0.051);
-  --surface-raised-base-active: rgba(0, 0, 0, 0.09);
+  --surface-raised-base-hover: rgba(3, 76, 255, 0.12);
+  --surface-raised-base-active: rgba(3, 76, 255, 0.18);
   --surface-raised-strong: #fcfcfc;
   --surface-raised-strong-hover: #ffffff;
   --surface-raised-stronger: #ffffff;
@@ -368,8 +368,8 @@
     --surface-raised-base: rgba(255, 255, 255, 0.059);
     --surface-float-base: #161616;
     --surface-float-base-hover: #1c1c1c;
-    --surface-raised-base-hover: rgba(255, 255, 255, 0.078);
-    --surface-raised-base-active: rgba(255, 255, 255, 0.102);
+    --surface-raised-base-hover: rgba(3, 76, 255, 0.18);
+    --surface-raised-base-active: rgba(3, 76, 255, 0.25);
     --surface-raised-strong: rgba(255, 255, 255, 0.078);
     --surface-raised-strong-hover: rgba(255, 255, 255, 0.129);
     --surface-raised-stronger: rgba(255, 255, 255, 0.129);

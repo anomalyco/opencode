@@ -2,6 +2,7 @@ export const dict = {
   "desktop.menu.checkForUpdates": "Check for Updates...",
   "desktop.menu.installCli": "Install CLI...",
   "desktop.menu.reloadWebview": "Reload Webview",
+  "desktop.menu.reloadBackend": "Reload Backend",
   "desktop.menu.restart": "Restart",
   "desktop.menu.app": "OpenCode",
   "desktop.menu.file": "File",
@@ -57,6 +58,8 @@ export const dict = {
   "desktop.loading.status.migrating": "Migrating your database",
   "desktop.loading.status.waiting": "This may take a couple of minutes",
   "desktop.loading.progressAria": "Database migration progress",
+  "desktop.loading.reload.title": "Reloading backend",
+  "desktop.loading.reload.message": "Restarting the local backend and refreshing its state.",
 
   "desktop.server.local": "Local Server",
 }

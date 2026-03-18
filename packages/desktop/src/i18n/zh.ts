@@ -2,6 +2,7 @@ export const dict = {
   "desktop.menu.checkForUpdates": "检查更新...",
   "desktop.menu.installCli": "安装 CLI...",
   "desktop.menu.reloadWebview": "重新加载 Webview",
+  "desktop.menu.reloadBackend": "重载后端",
   "desktop.menu.restart": "重启",
 
   "desktop.dialog.chooseFolder": "选择文件夹",
@@ -56,5 +57,7 @@ export const dict = {
   "desktop.loading.status.migrating": "正在迁移您的数据库",
   "desktop.loading.status.waiting": "这可能需要几分钟",
   "desktop.loading.progressAria": "数据库迁移进度",
+  "desktop.loading.reload.title": "正在重载后端",
+  "desktop.loading.reload.message": "正在重启本地后端并刷新其状态。",
   "desktop.server.local": "本地服务器",
 }

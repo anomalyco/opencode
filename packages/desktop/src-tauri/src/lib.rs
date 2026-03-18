@@ -64,6 +64,9 @@ struct InitState {
 
 struct ServerState {
     child: Arc<Mutex<Option<CommandChild>>>,
+    hostname: String,
+    port: u32,
+    password: Arc<Mutex<String>>,
 }
 
 /// Resolves with sidecar credentials as soon as the sidecar is spawned (before health check).
@@ -117,6 +120,49 @@ fn kill_sidecar(app: AppHandle) {
     let _ = server_state.kill();
 
     tracing::info!("Killed server");
+}
+
+#[tauri::command]
+#[specta::specta]
+async fn reload_sidecar(app: AppHandle) -> Result<(), String> {
+    let handle = app.clone();
+    let Some(server_state) = handle.try_state::<ServerState>() else {
+        return Err("Server not running".to_string());
+    };
+
+    let hostname = server_state.hostname.clone();
+    let port = server_state.port;
+    let password = server_state
+        .password
+        .lock()
+        .map_err(|_| "Failed to acquire server password".to_string())?
+        .clone();
+
+    if let Some(child) = server_state
+        .child
+        .lock()
+        .map_err(|_| "Failed to acquire server state".to_string())?
+        .take()
+    {
+        let _ = child.kill();
+    }
+
+    let (child, health_check) = server::spawn_local_server(app, hostname, port, password);
+
+    {
+        let mut state = server_state
+            .child
+            .lock()
+            .map_err(|_| "Failed to acquire server state".to_string())?;
+        *state = Some(child);
+    }
+
+    match timeout(Duration::from_secs(30), health_check.0).await {
+        Ok(Ok(Ok(()))) => Ok(()),
+        Ok(Ok(Err(err))) => Err(err),
+        Ok(Err(err)) => Err(err.to_string()),
+        Err(_) => Err("Timed out waiting for backend to restart".to_string()),
+    }
 }
 
 #[tauri::command]
@@ -643,6 +689,7 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         // Then register them (separated by a comma)
         .commands(tauri_specta::collect_commands![
             kill_sidecar,
+            reload_sidecar,
             cli::install_cli,
             await_initialization,
             server::get_default_server_url,
@@ -714,11 +761,14 @@ async fn initialize(app: AppHandle) {
     let _ = ready_tx.send(ServerReadyData {
         url: url.clone(),
         username: Some("opencode".to_string()),
-        password: Some(password),
+        password: Some(password.clone()),
     });
     app.manage(SidecarReady(ready_rx.shared()));
     app.manage(ServerState {
         child: Arc::new(Mutex::new(Some(child))),
+        hostname: hostname.to_string(),
+        port,
+        password: Arc::new(Mutex::new(password.clone())),
     });
 
     let loading_window_complete = event_once_fut::<LoadingWindowComplete>(&app);

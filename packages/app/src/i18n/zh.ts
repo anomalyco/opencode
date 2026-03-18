@@ -41,6 +41,8 @@ export const dict = {
   "command.provider.connect": "连接提供商",
 
   "command.server.switch": "切换服务器",
+  "command.server.reloadBackend": "重载后端",
+  "command.server.reloadBackend.description": "重启本地后端，并重新加载配置、技能和 hooks",
 
   "command.settings.open": "打开设置",
 
@@ -598,6 +600,8 @@ export const dict = {
   "common.closeTab": "关闭标签页",
   "common.dismiss": "忽略",
   "common.requestFailed": "请求失败",
+  "toast.server.reloadBackend.success.title": "后端已重载",
+  "toast.server.reloadBackend.success.description": "本地后端已成功重启。",
   "common.moreOptions": "更多选项",
   "common.learnMore": "了解更多",
   "common.rename": "重命名",

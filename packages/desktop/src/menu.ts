@@ -34,6 +34,10 @@ export async function createMenu(trigger: (id: string) => void) {
             text: t("desktop.menu.reloadWebview"),
           }),
           await MenuItem.new({
+            action: () => trigger("server.reloadBackend"),
+            text: t("desktop.menu.reloadBackend"),
+          }),
+          await MenuItem.new({
             action: async () => {
               await commands.killSidecar().catch(() => undefined)
               await relaunch().catch(() => undefined)

@@ -49,6 +49,9 @@ export type Platform = {
   /** Restart the app  */
   restart(): Promise<void>
 
+  /** Reload the local backend without relaunching the app (desktop only) */
+  reloadBackend?(): Promise<void>
+
   /** Navigate back in history */
   back(): void
 

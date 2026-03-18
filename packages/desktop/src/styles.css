@@ -5,3 +5,166 @@ button#decorum-tb-close,
 div[data-tauri-decorum-tb] {
   height: calc(var(--spacing) * 10) !important;
 }
+
+.desktop-busy {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at top, color-mix(in srgb, var(--color-primary) 14%, transparent), transparent 42%),
+    color-mix(in srgb, var(--color-background-base) 74%, rgba(10, 14, 20, 0.22));
+  backdrop-filter: blur(12px) saturate(1.1);
+  pointer-events: all;
+}
+
+.desktop-busy-card {
+  position: relative;
+  width: min(360px, calc(100vw - 48px));
+  padding: 28px 24px;
+  border: 1px solid color-mix(in srgb, var(--color-border) 75%, transparent);
+  border-radius: 24px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-surface-base) 92%, white 8%),
+    var(--color-surface-base)
+  );
+  box-shadow:
+    0 18px 48px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.desktop-busy-stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 96px;
+  height: 96px;
+  margin: 0 auto 20px;
+}
+
+.desktop-busy-orbit {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  border-radius: 999px;
+  overflow: visible;
+  filter: drop-shadow(0 0 18px color-mix(in srgb, var(--color-primary) 16%, transparent));
+}
+
+.desktop-busy-orbit-track,
+.desktop-busy-orbit-arc,
+.desktop-busy-rotor {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+}
+
+.desktop-busy-orbit-track {
+  border: 1.5px solid color-mix(in srgb, var(--color-border) 82%, transparent);
+  opacity: 0.55;
+}
+
+.desktop-busy-orbit-arc {
+  border: 2px solid transparent;
+  border-top-color: var(--color-primary);
+  border-right-color: color-mix(in srgb, var(--color-primary) 30%, transparent);
+  animation: desktop-busy-spin 1s linear infinite;
+  z-index: 1;
+}
+
+.desktop-busy-rotor {
+  position: absolute;
+  inset: 0;
+  animation: desktop-busy-spin 2.2s linear infinite;
+  z-index: 2;
+}
+
+.desktop-busy-rotor-b {
+  animation-duration: 1.7s;
+  animation-direction: reverse;
+}
+
+.desktop-busy-rotor-c {
+  animation-duration: 2.9s;
+}
+
+.desktop-busy-dot {
+  position: absolute;
+  top: -4px;
+  left: 50%;
+  border-radius: 999px;
+  transform: translateX(-50%);
+  animation: desktop-busy-pulse 1.2s ease-in-out infinite;
+  box-shadow: 0 0 12px currentColor;
+}
+
+.desktop-busy-dot-a {
+  width: 11px;
+  height: 11px;
+  background: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.desktop-busy-dot-b {
+  width: 9px;
+  height: 9px;
+  background: var(--color-warning-base);
+  color: var(--color-warning-base);
+  animation-delay: 0.2s;
+}
+
+.desktop-busy-dot-c {
+  width: 8px;
+  height: 8px;
+  background: var(--color-text-muted);
+  color: var(--color-text-muted);
+  animation-delay: 0.4s;
+}
+
+.desktop-busy-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: center;
+}
+
+.desktop-busy-title {
+  color: var(--color-text-strong);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.desktop-busy-text {
+  color: var(--color-text-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+@keyframes desktop-busy-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes desktop-busy-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: translateX(-50%) scale(0.9);
+  }
+
+  50% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1.15);
+  }
+}

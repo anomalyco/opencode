@@ -1103,6 +1103,35 @@ export default function Layout(props: ParentProps) {
         onSelect: () => openServer(),
       },
       {
+        id: "server.reloadBackend",
+        title: language.t("command.server.reloadBackend"),
+        description: language.t("command.server.reloadBackend.description"),
+        keywords: kw("command.server.reloadBackend", "command.server.reloadBackend.description"),
+        category: language.t("command.category.server"),
+        disabled: !platform.reloadBackend,
+        onSelect: async () => {
+          if (!platform.reloadBackend) return
+          await platform
+            .reloadBackend()
+            .then(() => {
+              showToast({
+                variant: "success",
+                title: language.t("toast.server.reloadBackend.success.title"),
+                description: language.t("toast.server.reloadBackend.success.description"),
+                duration: 1800,
+              })
+            })
+            .catch((err: unknown) => {
+              showToast({
+                variant: "error",
+                title: language.t("common.requestFailed"),
+                description: err instanceof Error ? err.message : String(err),
+                duration: 2200,
+              })
+            })
+        },
+      },
+      {
         id: "settings.open",
         title: language.t("command.settings.open"),
         keywords: kw("command.settings.open"),

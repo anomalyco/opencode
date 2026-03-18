@@ -6,6 +6,7 @@ import * as __TAURI_EVENT from "@tauri-apps/api/event";
 /** Commands */
 export const commands = {
 	killSidecar: () => __TAURI_INVOKE<void>("kill_sidecar"),
+	reloadSidecar: () => __TAURI_INVOKE<null>("reload_sidecar"),
 	installCli: () => __TAURI_INVOKE<string>("install_cli"),
 	awaitInitialization: (events: Channel) => __TAURI_INVOKE<ServerReadyData>("await_initialization", { events }),
 	getDefaultServerUrl: () => __TAURI_INVOKE<string | null>("get_default_server_url"),

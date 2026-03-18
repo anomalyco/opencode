@@ -23,7 +23,7 @@ import { relaunch } from "@tauri-apps/plugin-process"
 import { open as shellOpen } from "@tauri-apps/plugin-shell"
 import { Store } from "@tauri-apps/plugin-store"
 import { check, type Update } from "@tauri-apps/plugin-updater"
-import { createResource, onCleanup, onMount, Show } from "solid-js"
+import { createResource, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { render } from "solid-js/web"
 import pkg from "../package.json"
 import { initI18n, t } from "./i18n"
@@ -43,6 +43,13 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
 void initI18n()
 
 let update: Update | null = null
+const [busy, setBusy] = createSignal(false)
+
+const reload = async () => {
+  if (busy()) return
+  setBusy(true)
+  await commands.reloadSidecar().finally(() => setBusy(false))
+}
 
 const deepLinkEvent = "opencode:deep-link"
 
@@ -402,6 +409,10 @@ const createPlatform = (): Platform => {
       await relaunch()
     },
 
+    reloadBackend: async () => {
+      await reload()
+    },
+
     notify: async (title, description, href) => {
       const granted = await isPermissionGranted().catch(() => false)
       const permission = granted ? "granted" : await requestPermission().catch(() => "denied")
@@ -583,12 +594,39 @@ render(() => {
         <Show when={!defaultServer.loading && !sidecar.loading}>
           {(_) => {
             return (
-              <AppInterface
-                defaultServer={defaultServer.latest ?? ServerConnection.Key.make("sidecar")}
-                servers={servers()}
-              >
-                <Inner />
-              </AppInterface>
+              <>
+                <AppInterface
+                  defaultServer={defaultServer.latest ?? ServerConnection.Key.make("sidecar")}
+                  servers={servers()}
+                >
+                  <Inner />
+                </AppInterface>
+                <Show when={busy()}>
+                  <div class="desktop-busy" aria-live="polite" aria-busy="true">
+                    <div class="desktop-busy-card">
+                      <div class="desktop-busy-stage" aria-hidden="true">
+                        <div class="desktop-busy-orbit">
+                          <div class="desktop-busy-orbit-track" />
+                          <div class="desktop-busy-orbit-arc" />
+                          <div class="desktop-busy-rotor desktop-busy-rotor-a">
+                            <div class="desktop-busy-dot desktop-busy-dot-a" />
+                          </div>
+                          <div class="desktop-busy-rotor desktop-busy-rotor-b">
+                            <div class="desktop-busy-dot desktop-busy-dot-b" />
+                          </div>
+                          <div class="desktop-busy-rotor desktop-busy-rotor-c">
+                            <div class="desktop-busy-dot desktop-busy-dot-c" />
+                          </div>
+                        </div>
+                      </div>
+                      <div class="desktop-busy-copy">
+                        <div class="desktop-busy-title">{t("desktop.loading.reload.title")}</div>
+                        <div class="desktop-busy-text">{t("desktop.loading.reload.message")}</div>
+                      </div>
+                    </div>
+                  </div>
+                </Show>
+              </>
             )
           }}
         </Show>
