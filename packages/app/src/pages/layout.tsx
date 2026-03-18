@@ -2,6 +2,7 @@ import {
   batch,
   createEffect,
   createMemo,
+  createResource,
   For,
   on,
   onCleanup,
@@ -275,16 +276,6 @@ export default function Layout(props: ParentProps) {
   createEffect(() => {
     if (!layout.sidebar.opened()) return
     setHoverProject(undefined)
-  })
-
-  const autoselecting = createMemo(() => {
-    if (params.dir) return false
-    if (!state.autoselect) return false
-    if (!pageReady()) return true
-    if (!layoutReady()) return true
-    const list = layout.projects.list()
-    if (list.length > 0) return true
-    return !!server.projects.last()
   })
 
   createEffect(() => {
@@ -572,33 +563,22 @@ export default function Layout(props: ParentProps) {
     return projects.find((p) => p.worktree === root)
   })
 
-  createEffect(
-    on(
-      () => ({ ready: pageReady(), layoutReady: layoutReady(), dir: params.dir, list: layout.projects.list() }),
-      (value) => {
-        if (!value.ready) return
-        if (!value.layoutReady) return
-        if (!state.autoselect) return
-        if (value.dir) return
+  const [autoselecting] = createResource(async () => {
+    await ready.promise
+    await layout.ready.promise
 
-        const last = server.projects.last()
+    const list = layout.projects.list()
+    const last = server.projects.last()
 
-        if (value.list.length === 0) {
-          if (!last) return
-          setState("autoselect", false)
-          openProject(last, false)
-          navigateToProject(last)
-          return
-        }
-
-        const next = value.list.find((project) => project.worktree === last) ?? value.list[0]
-        if (!next) return
-        setState("autoselect", false)
-        openProject(next.worktree, false)
-        navigateToProject(next.worktree)
-      },
-    ),
-  )
+    if (list.length === 0) {
+      if (!last) return
+      await openProject(last, true)
+    } else {
+      const next = list.find((project) => project.worktree === last) ?? list[0]
+      if (!next) return
+      await openProject(next.worktree, true)
+    }
+  })
 
   const workspaceName = (directory: string, projectId?: string, branch?: string) => {
     const key = workspaceKey(directory)
@@ -1311,7 +1291,7 @@ export default function Layout(props: ParentProps) {
 
   function openProject(directory: string, navigate = true) {
     layout.projects.open(directory)
-    if (navigate) navigateToProject(directory)
+    if (navigate) return navigateToProject(directory)
   }
 
   const handleDeepLinks = (urls: string[]) => {
@@ -2381,7 +2361,8 @@ export default function Layout(props: ParentProps) {
                   "size-full overflow-x-hidden flex flex-col items-start contain-strict border-t border-border-weak-base bg-background-base xl:border-l xl:rounded-tl-[12px]": true,
                 }}
               >
-                <Show when={!autoselecting()} fallback={<div class="size-full" />}>
+                <Show when={!autoselecting.loading} fallback={<div class="size-full" />}>
+                  slkdjflkj
                   {props.children}
                 </Show>
               </main>
