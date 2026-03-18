@@ -406,9 +406,13 @@ export namespace Provider {
     const sdk = await getSDK(provider.info)
 
     try {
-      const language = provider.getModel
-        ? await provider.getModel(sdk, modelID)
-        : sdk.languageModel(modelID)
+      // Check apiType to determine which API endpoint to use
+      const language =
+        provider.info.apiType === "chat-completions"
+          ? sdk.languageModel(modelID)
+          : provider.getModel
+            ? await provider.getModel(sdk, modelID)
+            : sdk.languageModel(modelID)
       log.info("found", { providerID, modelID })
       s.models.set(key, {
         info,
