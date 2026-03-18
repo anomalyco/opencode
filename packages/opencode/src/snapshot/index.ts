@@ -9,20 +9,6 @@ import { Config } from "../config/config"
 import { Global } from "../global"
 import { Log } from "../util/log"
 
-const log = Log.create({ service: "snapshot" })
-const PRUNE = "7.days"
-
-// Common git config flags shared across snapshot operations
-const GIT_CORE = ["-c", "core.longpaths=true", "-c", "core.symlinks=true"]
-const GIT_CFG = ["-c", "core.autocrlf=false", ...GIT_CORE]
-const GIT_CFG_QUOTE = [...GIT_CFG, "-c", "core.quotepath=false"]
-
-interface GitResult {
-  readonly code: ChildProcessSpawner.ExitCode
-  readonly text: string
-  readonly stderr: string
-}
-
 export namespace Snapshot {
   export const Patch = z.object({
     hash: z.string(),
@@ -44,43 +30,47 @@ export namespace Snapshot {
     })
   export type FileDiff = z.infer<typeof FileDiff>
 
-  // Promise facade — existing callers use these
-  export function init() {
-    void runPromiseInstance(SnapshotService.use((s) => s.init()))
-  }
-
   export async function cleanup() {
-    return runPromiseInstance(SnapshotService.use((s) => s.cleanup()))
+    return runPromiseInstance(Service.use((svc) => svc.cleanup()))
   }
 
   export async function track() {
-    return runPromiseInstance(SnapshotService.use((s) => s.track()))
+    return runPromiseInstance(Service.use((svc) => svc.track()))
   }
 
   export async function patch(hash: string) {
-    return runPromiseInstance(SnapshotService.use((s) => s.patch(hash)))
+    return runPromiseInstance(Service.use((svc) => svc.patch(hash)))
   }
 
   export async function restore(snapshot: string) {
-    return runPromiseInstance(SnapshotService.use((s) => s.restore(snapshot)))
+    return runPromiseInstance(Service.use((svc) => svc.restore(snapshot)))
   }
 
   export async function revert(patches: Patch[]) {
-    return runPromiseInstance(SnapshotService.use((s) => s.revert(patches)))
+    return runPromiseInstance(Service.use((svc) => svc.revert(patches)))
   }
 
   export async function diff(hash: string) {
-    return runPromiseInstance(SnapshotService.use((s) => s.diff(hash)))
+    return runPromiseInstance(Service.use((svc) => svc.diff(hash)))
   }
 
   export async function diffFull(from: string, to: string) {
-    return runPromiseInstance(SnapshotService.use((s) => s.diffFull(from, to)))
+    return runPromiseInstance(Service.use((svc) => svc.diffFull(from, to)))
   }
-}
 
-export namespace SnapshotService {
-  export interface Service {
-    readonly init: () => Effect.Effect<void>
+  const log = Log.create({ service: "snapshot" })
+  const prune = "7.days"
+  const core = ["-c", "core.longpaths=true", "-c", "core.symlinks=true"]
+  const cfg = ["-c", "core.autocrlf=false", ...core]
+  const quote = [...cfg, "-c", "core.quotepath=false"]
+
+  interface GitResult {
+    readonly code: ChildProcessSpawner.ExitCode
+    readonly text: string
+    readonly stderr: string
+  }
+
+  export interface Interface {
     readonly cleanup: () => Effect.Effect<void>
     readonly track: () => Effect.Effect<string | undefined>
     readonly patch: (hash: string) => Effect.Effect<Snapshot.Patch>
@@ -89,99 +79,92 @@ export namespace SnapshotService {
     readonly diff: (hash: string) => Effect.Effect<string>
     readonly diffFull: (from: string, to: string) => Effect.Effect<Snapshot.FileDiff[]>
   }
-}
 
-export class SnapshotService extends ServiceMap.Service<SnapshotService, SnapshotService.Service>()(
-  "@opencode/Snapshot",
-) {
-  static readonly layer = Layer.effect(
-    SnapshotService,
+  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Snapshot") {}
+
+  export const layer: Layer.Layer<
+    Service,
+    never,
+    InstanceContext | FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner
+  > = Layer.effect(
+    Service,
     Effect.gen(function* () {
       const ctx = yield* InstanceContext
-      const fileSystem = yield* FileSystem.FileSystem
+      const fs = yield* FileSystem.FileSystem
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
-      const { directory, worktree, project } = ctx
-      const isGit = project.vcs === "git"
-      const snapshotGit = path.join(Global.Path.data, "snapshot", project.id)
+      const directory = ctx.directory
+      const worktree = ctx.worktree
+      const project = ctx.project
+      const gitdir = path.join(Global.Path.data, "snapshot", project.id)
 
-      const gitArgs = (cmd: string[]) => ["--git-dir", snapshotGit, "--work-tree", worktree, ...cmd]
+      const args = (cmd: string[]) => ["--git-dir", gitdir, "--work-tree", worktree, ...cmd]
 
-      // Run git with nothrow semantics — always returns a result, never fails
-      const git = (args: string[], opts?: { cwd?: string; env?: Record<string, string> }): Effect.Effect<GitResult> =>
-        Effect.gen(function* () {
-          const command = ChildProcess.make("git", args, {
+      const git = Effect.fnUntraced(
+        function* (cmd: string[], opts?: { cwd?: string; env?: Record<string, string> }) {
+          const proc = ChildProcess.make("git", cmd, {
             cwd: opts?.cwd,
             env: opts?.env,
             extendEnv: true,
           })
-          const handle = yield* spawner.spawn(command)
+          const handle = yield* spawner.spawn(proc)
           const [text, stderr] = yield* Effect.all(
             [Stream.mkString(Stream.decodeText(handle.stdout)), Stream.mkString(Stream.decodeText(handle.stderr))],
             { concurrency: 2 },
           )
           const code = yield* handle.exitCode
-          return { code, text, stderr }
-        }).pipe(
-          Effect.scoped,
-          Effect.catch((err) =>
-            Effect.succeed({
-              code: ChildProcessSpawner.ExitCode(1),
-              text: "",
-              stderr: String(err),
-            }),
-          ),
-        )
+          return { code, text, stderr } satisfies GitResult
+        },
+        Effect.scoped,
+        Effect.catch((err) =>
+          Effect.succeed({
+            code: ChildProcessSpawner.ExitCode(1),
+            text: "",
+            stderr: String(err),
+          }),
+        ),
+      )
 
-      // FileSystem helpers — orDie converts PlatformError to defects
-      const exists = (p: string) => fileSystem.exists(p).pipe(Effect.orDie)
-      const mkdir = (p: string) => fileSystem.makeDirectory(p, { recursive: true }).pipe(Effect.orDie)
-      const writeFile = (p: string, content: string) => fileSystem.writeFileString(p, content).pipe(Effect.orDie)
-      const readFile = (p: string) => fileSystem.readFileString(p).pipe(Effect.catch(() => Effect.succeed("")))
-      const removeFile = (p: string) => fileSystem.remove(p).pipe(Effect.catch(() => Effect.void))
+      const exists = (file: string) => fs.exists(file).pipe(Effect.orDie)
+      const mkdir = (dir: string) => fs.makeDirectory(dir, { recursive: true }).pipe(Effect.orDie)
+      const write = (file: string, text: string) => fs.writeFileString(file, text).pipe(Effect.orDie)
+      const read = (file: string) => fs.readFileString(file).pipe(Effect.catch(() => Effect.succeed("")))
+      const remove = (file: string) => fs.remove(file).pipe(Effect.catch(() => Effect.void))
 
-      // --- internal Effect helpers ---
-
-      const isEnabled = Effect.gen(function* () {
-        if (!isGit) return false
-        const cfg = yield* Effect.promise(() => Config.get())
-        return cfg.snapshot !== false
+      const enabled = Effect.fnUntraced(function* () {
+        if (project.vcs !== "git") return false
+        return (yield* Effect.promise(() => Config.get())).snapshot !== false
       })
 
-      const excludesPath = Effect.gen(function* () {
+      const excludes = Effect.fnUntraced(function* () {
         const result = yield* git(["rev-parse", "--path-format=absolute", "--git-path", "info/exclude"], {
           cwd: worktree,
         })
         const file = result.text.trim()
-        if (!file) return undefined
-        if (!(yield* exists(file))) return undefined
+        if (!file) return
+        if (!(yield* exists(file))) return
         return file
       })
 
-      const syncExclude = Effect.gen(function* () {
-        const file = yield* excludesPath
-        const target = path.join(snapshotGit, "info", "exclude")
-        yield* mkdir(path.join(snapshotGit, "info"))
+      const sync = Effect.fnUntraced(function* () {
+        const file = yield* excludes()
+        const target = path.join(gitdir, "info", "exclude")
+        yield* mkdir(path.join(gitdir, "info"))
         if (!file) {
-          yield* writeFile(target, "")
+          yield* write(target, "")
           return
         }
-        const text = yield* readFile(file)
-        yield* writeFile(target, text)
+        yield* write(target, yield* read(file))
       })
 
-      const add = Effect.gen(function* () {
-        yield* syncExclude
-        yield* git([...GIT_CFG, ...gitArgs(["add", "."])], { cwd: directory })
+      const add = Effect.fnUntraced(function* () {
+        yield* sync()
+        yield* git([...cfg, ...args(["add", "."])], { cwd: directory })
       })
 
-      // --- service methods ---
-
-      const cleanup = Effect.fn("SnapshotService.cleanup")(function* () {
-        if (!(yield* isEnabled)) return
-        if (!(yield* exists(snapshotGit))) return
-        const result = yield* git(gitArgs(["gc", `--prune=${PRUNE}`]), {
-          cwd: directory,
-        })
+      const cleanup = Effect.fn("Snapshot.cleanup")(function* () {
+        if (!(yield* enabled())) return
+        if (!(yield* exists(gitdir))) return
+        const result = yield* git(args(["gc", `--prune=${prune}`]), { cwd: directory })
         if (result.code !== 0) {
           log.warn("cleanup failed", {
             exitCode: result.code,
@@ -189,58 +172,55 @@ export class SnapshotService extends ServiceMap.Service<SnapshotService, Snapsho
           })
           return
         }
-        log.info("cleanup", { prune: PRUNE })
+        log.info("cleanup", { prune })
       })
 
-      const track = Effect.fn("SnapshotService.track")(function* () {
-        if (!(yield* isEnabled)) return undefined
-        const existed = yield* exists(snapshotGit)
-        yield* mkdir(snapshotGit)
+      const track = Effect.fn("Snapshot.track")(function* () {
+        if (!(yield* enabled())) return
+        const existed = yield* exists(gitdir)
+        yield* mkdir(gitdir)
         if (!existed) {
           yield* git(["init"], {
-            env: { GIT_DIR: snapshotGit, GIT_WORK_TREE: worktree },
+            env: { GIT_DIR: gitdir, GIT_WORK_TREE: worktree },
           })
-          yield* git(["--git-dir", snapshotGit, "config", "core.autocrlf", "false"])
-          yield* git(["--git-dir", snapshotGit, "config", "core.longpaths", "true"])
-          yield* git(["--git-dir", snapshotGit, "config", "core.symlinks", "true"])
-          yield* git(["--git-dir", snapshotGit, "config", "core.fsmonitor", "false"])
+          yield* git(["--git-dir", gitdir, "config", "core.autocrlf", "false"])
+          yield* git(["--git-dir", gitdir, "config", "core.longpaths", "true"])
+          yield* git(["--git-dir", gitdir, "config", "core.symlinks", "true"])
+          yield* git(["--git-dir", gitdir, "config", "core.fsmonitor", "false"])
           log.info("initialized")
         }
-        yield* add
-        const result = yield* git(gitArgs(["write-tree"]), { cwd: directory })
+        yield* add()
+        const result = yield* git(args(["write-tree"]), { cwd: directory })
         const hash = result.text.trim()
-        log.info("tracking", { hash, cwd: directory, git: snapshotGit })
+        log.info("tracking", { hash, cwd: directory, git: gitdir })
         return hash
       })
 
-      const patch = Effect.fn("SnapshotService.patch")(function* (hash: string) {
-        yield* add
-        const result = yield* git(
-          [...GIT_CFG_QUOTE, ...gitArgs(["diff", "--no-ext-diff", "--name-only", hash, "--", "."])],
-          { cwd: directory },
-        )
-
+      const patch = Effect.fn("Snapshot.patch")(function* (hash: string) {
+        yield* add()
+        const result = yield* git([...quote, ...args(["diff", "--no-ext-diff", "--name-only", hash, "--", "."])], {
+          cwd: directory,
+        })
         if (result.code !== 0) {
           log.warn("failed to get diff", { hash, exitCode: result.code })
-          return { hash, files: [] } as Snapshot.Patch
+          return { hash, files: [] }
         }
-
         return {
           hash,
           files: result.text
             .trim()
             .split("\n")
-            .map((x: string) => x.trim())
+            .map((x) => x.trim())
             .filter(Boolean)
-            .map((x: string) => path.join(worktree, x).replaceAll("\\", "/")),
-        } as Snapshot.Patch
+            .map((x) => path.join(worktree, x).replaceAll("\\", "/")),
+        }
       })
 
-      const restore = Effect.fn("SnapshotService.restore")(function* (snapshot: string) {
+      const restore = Effect.fn("Snapshot.restore")(function* (snapshot: string) {
         log.info("restore", { commit: snapshot })
-        const result = yield* git([...GIT_CORE, ...gitArgs(["read-tree", snapshot])], { cwd: worktree })
+        const result = yield* git([...core, ...args(["read-tree", snapshot])], { cwd: worktree })
         if (result.code === 0) {
-          const checkout = yield* git([...GIT_CORE, ...gitArgs(["checkout-index", "-a", "-f"])], { cwd: worktree })
+          const checkout = yield* git([...core, ...args(["checkout-index", "-a", "-f"])], { cwd: worktree })
           if (checkout.code === 0) return
           log.error("failed to restore snapshot", {
             snapshot,
@@ -256,38 +236,33 @@ export class SnapshotService extends ServiceMap.Service<SnapshotService, Snapsho
         })
       })
 
-      const revert = Effect.fn("SnapshotService.revert")(function* (patches: Snapshot.Patch[]) {
+      const revert = Effect.fn("Snapshot.revert")(function* (patches: Snapshot.Patch[]) {
         const seen = new Set<string>()
         for (const item of patches) {
           for (const file of item.files) {
             if (seen.has(file)) continue
+            seen.add(file)
             log.info("reverting", { file, hash: item.hash })
-            const result = yield* git([...GIT_CORE, ...gitArgs(["checkout", item.hash, "--", file])], {
-              cwd: worktree,
-            })
+            const result = yield* git([...core, ...args(["checkout", item.hash, "--", file])], { cwd: worktree })
             if (result.code !== 0) {
-              const relativePath = path.relative(worktree, file)
-              const checkTree = yield* git([...GIT_CORE, ...gitArgs(["ls-tree", item.hash, "--", relativePath])], {
-                cwd: worktree,
-              })
-              if (checkTree.code === 0 && checkTree.text.trim()) {
+              const rel = path.relative(worktree, file)
+              const tree = yield* git([...core, ...args(["ls-tree", item.hash, "--", rel])], { cwd: worktree })
+              if (tree.code === 0 && tree.text.trim()) {
                 log.info("file existed in snapshot but checkout failed, keeping", { file })
               } else {
                 log.info("file did not exist in snapshot, deleting", { file })
-                yield* removeFile(file)
+                yield* remove(file)
               }
             }
-            seen.add(file)
           }
         }
       })
 
-      const diff = Effect.fn("SnapshotService.diff")(function* (hash: string) {
-        yield* add
-        const result = yield* git([...GIT_CFG_QUOTE, ...gitArgs(["diff", "--no-ext-diff", hash, "--", "."])], {
+      const diff = Effect.fn("Snapshot.diff")(function* (hash: string) {
+        yield* add()
+        const result = yield* git([...quote, ...args(["diff", "--no-ext-diff", hash, "--", "."])], {
           cwd: worktree,
         })
-
         if (result.code !== 0) {
           log.warn("failed to get diff", {
             hash,
@@ -296,19 +271,15 @@ export class SnapshotService extends ServiceMap.Service<SnapshotService, Snapsho
           })
           return ""
         }
-
         return result.text.trim()
       })
 
-      const diffFull = Effect.fn("SnapshotService.diffFull")(function* (from: string, to: string) {
+      const diffFull = Effect.fn("Snapshot.diffFull")(function* (from: string, to: string) {
         const result: Snapshot.FileDiff[] = []
         const status = new Map<string, "added" | "deleted" | "modified">()
 
         const statuses = yield* git(
-          [
-            ...GIT_CFG_QUOTE,
-            ...gitArgs(["diff", "--no-ext-diff", "--name-status", "--no-renames", from, to, "--", "."]),
-          ],
+          [...quote, ...args(["diff", "--no-ext-diff", "--name-status", "--no-renames", from, to, "--", "."])],
           { cwd: directory },
         )
 
@@ -316,64 +287,60 @@ export class SnapshotService extends ServiceMap.Service<SnapshotService, Snapsho
           if (!line) continue
           const [code, file] = line.split("\t")
           if (!code || !file) continue
-          const kind = code.startsWith("A") ? "added" : code.startsWith("D") ? "deleted" : "modified"
-          status.set(file, kind)
+          status.set(file, code.startsWith("A") ? "added" : code.startsWith("D") ? "deleted" : "modified")
         }
 
         const numstat = yield* git(
-          [...GIT_CFG_QUOTE, ...gitArgs(["diff", "--no-ext-diff", "--no-renames", "--numstat", from, to, "--", "."])],
-          { cwd: directory },
+          [...quote, ...args(["diff", "--no-ext-diff", "--no-renames", "--numstat", from, to, "--", "."])],
+          {
+            cwd: directory,
+          },
         )
 
         for (const line of numstat.text.trim().split("\n")) {
           if (!line) continue
-          const [additions, deletions, file] = line.split("\t")
-          const isBinaryFile = additions === "-" && deletions === "-"
-          const [before, after] = isBinaryFile
+          const [adds, dels, file] = line.split("\t")
+          if (!file) continue
+          const binary = adds === "-" && dels === "-"
+          const [before, after] = binary
             ? ["", ""]
             : yield* Effect.all(
                 [
-                  git([...GIT_CFG, ...gitArgs(["show", `${from}:${file}`])]).pipe(Effect.map((r) => r.text)),
-                  git([...GIT_CFG, ...gitArgs(["show", `${to}:${file}`])]).pipe(Effect.map((r) => r.text)),
+                  git([...cfg, ...args(["show", `${from}:${file}`])]).pipe(Effect.map((item) => item.text)),
+                  git([...cfg, ...args(["show", `${to}:${file}`])]).pipe(Effect.map((item) => item.text)),
                 ],
                 { concurrency: 2 },
               )
-          const added = isBinaryFile ? 0 : parseInt(additions!)
-          const deleted = isBinaryFile ? 0 : parseInt(deletions!)
+          const additions = binary ? 0 : parseInt(adds)
+          const deletions = binary ? 0 : parseInt(dels)
           result.push({
-            file: file!,
+            file,
             before,
             after,
-            additions: Number.isFinite(added) ? added : 0,
-            deletions: Number.isFinite(deleted) ? deleted : 0,
-            status: status.get(file!) ?? "modified",
+            additions: Number.isFinite(additions) ? additions : 0,
+            deletions: Number.isFinite(deletions) ? deletions : 0,
+            status: status.get(file) ?? "modified",
           })
         }
+
         return result
       })
 
-      // Start hourly cleanup fiber — scoped to instance lifetime
       yield* cleanup().pipe(
         Effect.catchCause((cause) => {
           log.error("cleanup loop failed", { cause: Cause.pretty(cause) })
           return Effect.void
         }),
         Effect.repeat(Schedule.spaced(Duration.hours(1))),
+        Effect.delay(Duration.minutes(1)),
         Effect.forkScoped,
       )
 
-      return SnapshotService.of({
-        init: Effect.fn("SnapshotService.init")(function* () {}),
-        cleanup,
-        track,
-        patch,
-        restore,
-        revert,
-        diff,
-        diffFull,
-      })
+      return Service.of({ cleanup, track, patch, restore, revert, diff, diffFull })
     }),
-  ).pipe(
+  )
+
+  export const defaultLayer = layer.pipe(
     Layer.provide(NodeChildProcessSpawner.layer),
     Layer.provide(NodeFileSystem.layer),
     Layer.provide(NodePath.layer),
