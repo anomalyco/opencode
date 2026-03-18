@@ -740,9 +740,9 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Expand edit tool parts",
   "settings.general.row.editToolPartsExpanded.description":
     "Show edit, write, and patch tool parts expanded by default in the timeline",
-  "settings.general.row.assistantCopyFormat.title": "Assistant message copy",
+  "settings.general.row.assistantCopyFormat.title": "Message copy",
   "settings.general.row.assistantCopyFormat.description":
-    "Desktop only. Sets the default format for the assistant response Copy button.",
+    "Sets the default format for the message Copy button.",
   "settings.general.row.assistantCopyFormat.option.plain": "Plain text",
   "settings.general.row.assistantCopyFormat.option.rich": "Rich text (default)",
   "settings.general.row.assistantCopyFormat.option.ask": "Ask each time",
