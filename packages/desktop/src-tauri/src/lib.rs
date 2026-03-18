@@ -131,21 +131,19 @@ async fn await_initialization(
 #[tauri::command]
 #[specta::specta]
 fn check_app_exists(app_name: &str) -> bool {
+    #[cfg(target_os = "windows")]
     {
-        #[cfg(target_os = "windows")]
-        {
-            os::windows::check_windows_app(app_name)
-        }
+        os::windows::check_windows_app(app_name)
+    }
 
-        #[cfg(target_os = "macos")]
-        {
-            check_macos_app(app_name)
-        }
+    #[cfg(target_os = "macos")]
+    {
+        check_macos_app(app_name)
+    }
 
-        #[cfg(target_os = "linux")]
-        {
-            check_linux_app(app_name)
-        }
+    #[cfg(target_os = "linux")]
+    {
+        check_linux_app(app_name)
     }
 }
 

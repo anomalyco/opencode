@@ -175,7 +175,11 @@ export function SessionHeader() {
     finder: true,
   })
 
-  const apps = createMemo(() => (os() === "macos" ? MAC_APPS : os() === "windows" ? WINDOWS_APPS : LINUX_APPS))
+  const apps = createMemo(() => {
+    if (os() === "macos") return MAC_APPS
+    if (os() === "windows") return WINDOWS_APPS
+    return LINUX_APPS
+  })
 
   const fileManager = createMemo(() => {
     if (os() === "macos") return { label: "session.header.open.finder", icon: "finder" as const }

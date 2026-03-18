@@ -3,7 +3,9 @@ import { existsSync, readFileSync, readdirSync } from "node:fs"
 import { dirname, extname, join } from "node:path"
 
 export function checkAppExists(appName: string): boolean {
-  return process.platform === "win32" ? true : process.platform === "linux" ? true : checkMacosApp(appName)
+  if (process.platform === "win32") return true
+  if (process.platform === "linux") return true
+  return checkMacosApp(appName)
 }
 
 export function resolveAppPath(appName: string): string | null {
