@@ -6,7 +6,6 @@ import z from "zod"
 
 import * as Formatter from "./formatter"
 import { Config } from "../config/config"
-import { mergeDeep } from "remeda"
 import { Instance } from "../project/instance"
 import { Process } from "../util/process"
 import { InstanceContext } from "@/effect/instance-context"
@@ -63,16 +62,12 @@ export class FormatService extends ServiceMap.Service<FormatService, FormatServi
             delete formatters[name]
             continue
           }
-          const result = mergeDeep(formatters[name] ?? {}, {
-            command: [],
-            extensions: [],
-            ...item,
-          }) as Formatter.Info
+          const { disabled: _, ...overrides } = item
+          const base = formatters[name] ?? { command: [] as string[], extensions: [] as string[] }
+          const result = Object.assign({}, base, overrides, { name, enabled: async () => true }) as Formatter.Info
 
           if (result.command.length === 0) continue
 
-          result.enabled = async () => true
-          result.name = name
           formatters[name] = result
         }
       } else {
