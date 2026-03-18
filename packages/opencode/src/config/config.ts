@@ -414,7 +414,10 @@ export namespace Config {
         result[config.name] = parsed.data
         continue
       }
-      throw new InvalidError({ path: item, issues: parsed.error.issues }, { cause: parsed.error })
+      throw new InvalidError(
+        { path: item, issues: parsed.error.issues, tree: z.treeifyError(parsed.error) },
+        { cause: parsed.error },
+      )
     }
     return result
   }
@@ -453,7 +456,10 @@ export namespace Config {
         result[config.name] = parsed.data
         continue
       }
-      throw new InvalidError({ path: item, issues: parsed.error.issues }, { cause: parsed.error })
+      throw new InvalidError(
+        { path: item, issues: parsed.error.issues, tree: z.treeifyError(parsed.error) },
+        { cause: parsed.error },
+      )
     }
     return result
   }
@@ -1325,6 +1331,7 @@ export namespace Config {
     throw new InvalidError({
       path: source,
       issues: parsed.error.issues,
+      tree: z.treeifyError(parsed.error),
     })
   }
   export const { JsonError, InvalidError } = ConfigPaths
@@ -1415,6 +1422,7 @@ export namespace Config {
     throw new InvalidError({
       path: filepath,
       issues: parsed.error.issues,
+      tree: z.treeifyError(parsed.error),
     })
   }
 

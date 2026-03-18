@@ -59,6 +59,7 @@ export namespace ConfigPaths {
     z.object({
       path: z.string(),
       issues: z.custom<z.core.$ZodIssue[]>().optional(),
+      tree: z.custom<{ errors: string[]; properties?: Record<string, unknown> }>().optional(),
       message: z.string().optional(),
     }),
   )

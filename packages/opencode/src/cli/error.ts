@@ -4,6 +4,22 @@ import { MCP } from "../mcp"
 import { Provider } from "../provider/provider"
 import { UI } from "./ui"
 
+function formatTree(tree: { errors: string[]; properties?: Record<string, unknown> }, path = ""): string[] {
+  const lines: string[] = []
+  if (tree.errors) {
+    for (const err of tree.errors) {
+      lines.push("↳ " + (path || "(root)") + ": " + err)
+    }
+  }
+  if (tree.properties) {
+    for (const [key, sub] of Object.entries(tree.properties)) {
+      const subPath = path ? path + "." + key : key
+      lines.push(...formatTree(sub as { errors: string[]; properties?: Record<string, unknown> }, subPath))
+    }
+  }
+  return lines
+}
+
 export function FormatError(input: unknown) {
   if (MCP.Failed.isInstance(input))
     return `MCP server "${input.data.name}" failed. Note, opencode does not support MCP authentication yet.`
@@ -30,12 +46,15 @@ export function FormatError(input: unknown) {
   if (ConfigMarkdown.FrontmatterError.isInstance(input)) {
     return input.data.message
   }
-  if (Config.InvalidError.isInstance(input))
-    return [
+  if (Config.InvalidError.isInstance(input)) {
+    const header =
       `Configuration is invalid${input.data.path && input.data.path !== "config" ? ` at ${input.data.path}` : ""}` +
-        (input.data.message ? `: ${input.data.message}` : ""),
-      ...(input.data.issues?.map((issue) => "↳ " + issue.message + " " + issue.path.join(".")) ?? []),
-    ].join("\n")
+      (input.data.message ? `: ${input.data.message}` : "")
+    const details = input.data.tree
+      ? formatTree(input.data.tree)
+      : (input.data.issues?.map((issue) => "↳ " + issue.message + " " + issue.path.join(".")) ?? [])
+    return [header, ...details].join("\n")
+  }
 
   if (UI.CancelledError.isInstance(input)) return ""
 }
