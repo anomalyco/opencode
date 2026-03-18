@@ -608,7 +608,7 @@ export namespace Server {
     const app = createApp(opts)
     const args = {
       hostname: opts.hostname,
-      idleTimeout: 0,
+      idleTimeout: 120,
       fetch: app.fetch,
       websocket: websocket,
     } as const
