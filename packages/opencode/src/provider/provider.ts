@@ -43,12 +43,8 @@ import { createVercel } from "@ai-sdk/vercel"
 import {
   createGitLab,
   VERSION as GITLAB_PROVIDER_VERSION,
-  GitLabModelDiscovery,
-  GitLabModelConfigRegistry,
-  GitLabProjectDetector,
-  MODEL_MAPPINGS,
   isWorkflowModel,
-  type GitLabProject,
+  discoverWorkflowModels,
 } from "gitlab-ai-provider"
 import { fromNodeProviderChain } from "@aws-sdk/credential-providers"
 import { GoogleAuth } from "google-auth-library"
@@ -154,8 +150,6 @@ export namespace Provider {
   function useLanguageModel(sdk: any) {
     return sdk.responses === undefined && sdk.chat === undefined
   }
-
-  const gitlabModelConfigRegistry = new GitLabModelConfigRegistry()
 
   const CUSTOM_LOADERS: Record<string, CustomLoader> = {
     async anthropic() {
@@ -583,80 +577,37 @@ export namespace Provider {
             const getHeaders = (): Record<string, string> =>
               auth?.type === "api" ? { "PRIVATE-TOKEN": token } : { Authorization: `Bearer ${token}` }
 
-            const discovery = new GitLabModelDiscovery({
-              instanceUrl,
-              getHeaders,
-            })
+            log.info("gitlab model discovery starting", { instanceUrl })
+            const result = await discoverWorkflowModels(
+              { instanceUrl, getHeaders },
+              { workingDirectory: process.cwd() },
+            )
 
-            const detector = new GitLabProjectDetector({
-              instanceUrl,
-              getHeaders,
-            })
-            let project: GitLabProject | null = null
-            try {
-              project = await detector.detectProject(process.cwd())
-            } catch (e) {
-              log.info("gitlab project detection failed", { error: e, cwd: process.cwd() })
-            }
-
-            const namespaceId = project?.namespaceId
-            if (!namespaceId) {
-              log.info("gitlab model discovery skipped: no namespaceId", {
-                project: project ? { id: project.id, path: project.pathWithNamespace } : null,
-                cwd: process.cwd(),
+            if (!result.models.length) {
+              log.info("gitlab model discovery skipped: no models found", {
+                project: result.project ? { id: result.project.id, path: result.project.pathWithNamespace } : null,
               })
               return {}
             }
 
-            log.info("gitlab model discovery starting", { namespaceId, instanceUrl })
-            const [discovered, modelConfigs] = await Promise.all([
-              discovery.discover(`gid://gitlab/Group/${namespaceId}`),
-              gitlabModelConfigRegistry.getConfigs(),
-            ])
-            log.info("gitlab model discovery result", {
-              selectableModels: discovered.selectableModels?.length ?? 0,
-              defaultModel: discovered.defaultModel?.ref ?? null,
-              pinnedModel: discovered.pinnedModel?.ref ?? null,
-            })
             const models: Record<string, Model> = {}
-
-            // Build reverse map: discovery ref → duo-workflow-* model ID
-            const refToModelID = new Map<string, string>()
-            for (const [modelID, mapping] of Object.entries(MODEL_MAPPINGS)) {
-              if (mapping.provider === "workflow" && modelID !== "duo-workflow" && modelID !== "duo-workflow-default") {
-                refToModelID.set(mapping.model, modelID)
-              }
-            }
-
-            // If a model is pinned by admin, only that model is available
-            const allModels = discovered.pinnedModel
-              ? [discovered.pinnedModel]
-              : [...(discovered.selectableModels ?? []), ...(discovered.defaultModel ? [discovered.defaultModel] : [])]
-
-            const seen = new Set<string>()
-            for (const model of allModels) {
-              if (!model.ref || seen.has(model.ref)) continue
-              seen.add(model.ref)
-
-              // Use static mapping if available, otherwise generate an ID from the ref
-              const workflowModelID = refToModelID.get(model.ref) ?? `duo-workflow-${model.ref.replace(/[/_]/g, "-")}`
-              const limits = modelConfigs.get(model.ref)
-              if (!input.models[workflowModelID]) {
-                models[workflowModelID] = {
-                  id: ModelID.make(workflowModelID),
+            for (const m of result.models) {
+              if (!input.models[m.id]) {
+                models[m.id] = {
+                  id: ModelID.make(m.id),
                   providerID: ProviderID.make("gitlab"),
-                  name: `Agent Platform (${model.name})`,
+                  name: `Agent Platform (${m.name})`,
                   family: "",
                   api: {
-                    id: workflowModelID,
+                    id: m.id,
                     url: instanceUrl,
                     npm: "gitlab-ai-provider",
                   },
                   status: "active",
                   headers: {},
-                  options: { workflowRef: model.ref },
+                  options: { workflowRef: m.ref },
                   cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
-                  limit: { context: limits?.context ?? 200000, output: limits?.output ?? 64000 },
+                  limit: { context: m.context, output: m.output },
                   capabilities: {
                     temperature: false,
                     reasoning: true,
