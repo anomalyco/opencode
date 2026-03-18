@@ -2362,7 +2362,6 @@ export default function Layout(props: ParentProps) {
                 }}
               >
                 <Show when={!autoselecting.loading} fallback={<div class="size-full" />}>
-                  slkdjflkj
                   {props.children}
                 </Show>
               </main>
