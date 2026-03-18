@@ -49,7 +49,7 @@ type Inline = {
   description?: string
 }
 
-export async function parseSchema(input: string) {
+export async function parseSchema(input: string): Promise<unknown> {
   const json = (() => {
     try {
       return JSON.parse(input)
@@ -689,7 +689,7 @@ export const RunCommand = cmd({
           variant: args.variant,
           format: {
             type: "json_schema",
-            schema,
+            schema: schema as Record<string, unknown>,
           },
           parts: [...files, { type: "text", text: message }],
         })
