@@ -1337,12 +1337,20 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           let structured: unknown | undefined
           let step = 0
           const session = yield* sessions.get(sessionID)
+          // filterCompactedLazy scans message info without loading parts to find
+          // the compaction boundary, then hydrates parts only for messages after
+          // it. For a 7K-message session with compaction at message #100, this
+          // loads ~100 messages' parts instead of all 7K.
+          let msgs = yield* Effect.promise(() => MessageV2.filterCompactedLazy(sessionID))
+          let needsFullReload = false
 
           while (true) {
+            if (needsFullReload) {
+              msgs = yield* Effect.promise(() => MessageV2.filterCompactedLazy(sessionID))
+              needsFullReload = false
+            }
             yield* status.set(sessionID, { type: "busy" })
             log.info("loop", { step, sessionID })
-
-            let msgs = yield* Effect.promise(() => MessageV2.filterCompacted(MessageV2.stream(sessionID)))
 
             let lastUser: MessageV2.User | undefined
             let lastAssistant: MessageV2.Assistant | undefined
@@ -1382,6 +1390,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
             if (task?.type === "subtask") {
               yield* handleSubtask({ task, model, lastUser, sessionID, session, msgs })
+              needsFullReload = true
               continue
             }
 
@@ -1394,6 +1403,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 overflow: task.overflow,
               })
               if (result === "stop") break
+              needsFullReload = true
               continue
             }
 
@@ -1403,6 +1413,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               (yield* compaction.isOverflow({ tokens: lastFinished.tokens, model }))
             ) {
               yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
+              needsFullReload = true
               continue
             }
 
@@ -1486,12 +1497,30 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
                 yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
+                // Context-window windowing: only convert messages that fit in the
+                // LLM context window to ModelMessage format. This avoids creating
+                // ~300MB of wrapper objects for messages the provider will discard.
+                const budget = (model.limit.input || model.limit.context || 200_000) * 4 // chars
+                let used = 0
+                let windowStart = msgs.length
+                for (let i = msgs.length - 1; i >= 0; i--) {
+                  for (const part of msgs[i].parts) {
+                    if (part.type === "text") used += part.text.length
+                    else if (part.type === "tool" && part.state.status === "completed")
+                      used += (part.state.output?.length ?? 0) + JSON.stringify(part.state.input).length
+                    else if (part.type === "reasoning") used += part.text.length
+                  }
+                  if (used > budget) break
+                  windowStart = i
+                }
+                const window = windowStart > 0 ? msgs.slice(windowStart) : msgs
+
                 const [skills, env, instructions, modelMsgs] = yield* Effect.promise(() =>
                   Promise.all([
                     SystemPrompt.skills(agent),
                     SystemPrompt.environment(model),
                     InstructionPrompt.system(),
-                    MessageV2.toModelMessages(msgs, model),
+                    MessageV2.toModelMessages(window, model),
                   ]),
                 )
                 const system = [...env, ...(skills ? [skills] : []), ...instructions]
@@ -1537,6 +1566,17 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                     auto: true,
                     overflow: !handle.message.finish,
                   })
+                  needsFullReload = true
+                } else {
+                  // Normal tool-call continuation: fetch the latest page to pick up
+                  // new assistant messages and tool results, then merge with the
+                  // cached history to avoid reloading the entire conversation.
+                  const fresh = yield* Effect.promise(() => MessageV2.page({ sessionID, limit: 200 }))
+                  const existing = new Map(msgs.map((m) => [m.info.id, m]))
+                  for (const msg of fresh.items) existing.set(msg.info.id, msg)
+                  msgs = Array.from(existing.values()).sort((a, b) =>
+                    a.info.id < b.info.id ? -1 : a.info.id > b.info.id ? 1 : 0,
+                  )
                 }
                 return "continue" as const
               }),
