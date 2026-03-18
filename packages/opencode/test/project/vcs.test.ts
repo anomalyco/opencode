@@ -62,6 +62,50 @@ function nextBranchUpdate(directory: string, timeout = 10_000) {
   })
 }
 
+async function remote(dir: string, github?: boolean) {
+  const root = path.join(dir, "remote")
+  const repo = path.join(root, "repo.git")
+  await fs.mkdir(root, { recursive: true })
+  await $`git init --bare ${repo}`.quiet()
+  if (!github) {
+    await $`git remote add origin ${repo}`.cwd(dir).quiet()
+    return repo
+  }
+
+  const url = "git@github.com:test/repo.git"
+  await $`git remote add origin ${url}`.cwd(dir).quiet()
+  await $`git remote set-url --push origin ${repo}`.cwd(dir).quiet()
+  return repo
+}
+
+async function seed(dir: string) {
+  await Bun.write(path.join(dir, "a.txt"), "old-a\n")
+  await Bun.write(path.join(dir, "b.txt"), "old-b\n")
+  await $`git add a.txt b.txt`.cwd(dir).quiet()
+  await $`git commit -m seed`.cwd(dir).quiet()
+}
+
+async function stage(dir: string) {
+  await Bun.write(path.join(dir, "a.txt"), "new-a\n")
+  await Bun.write(path.join(dir, "b.txt"), "new-b\n")
+  await $`git add a.txt`.cwd(dir).quiet()
+}
+
+async function withGh(dir: string, body: string, run: () => Promise<void>) {
+  const bin = path.join(dir, "bin")
+  const file = path.join(bin, "gh")
+  await fs.mkdir(bin, { recursive: true })
+  await Bun.write(file, body)
+  await fs.chmod(file, 0o755)
+  const prev = process.env.PATH
+  process.env.PATH = `${bin}:${prev ?? ""}`
+  try {
+    await run()
+  } finally {
+    process.env.PATH = prev
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -119,5 +163,126 @@ describeVcs("Vcs", () => {
       const current = await rt.runPromise(Vcs.Service.use((s) => s.branch()))
       expect(current).toBe(branch)
     })
+  })
+})
+
+describe("Vcs.commit", () => {
+  afterEach(() => Instance.disposeAll())
+
+  test("commits staged changes without including unstaged files", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await seed(tmp.path)
+    await stage(tmp.path)
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: () => Vcs.commit({ message: "staged only", includeUnstaged: false, action: "commit" }),
+    })
+
+    expect(await $`git show HEAD:a.txt`.cwd(tmp.path).text()).toBe("new-a\n")
+    expect(await $`git show HEAD:b.txt`.cwd(tmp.path).text()).toBe("old-b\n")
+    expect(await $`git status --short`.cwd(tmp.path).text()).toContain(" M b.txt")
+  })
+
+  test("commits staged and unstaged changes when requested", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await seed(tmp.path)
+    await stage(tmp.path)
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: () => Vcs.commit({ message: "all changes", includeUnstaged: true, action: "commit" }),
+    })
+
+    expect(await $`git show HEAD:a.txt`.cwd(tmp.path).text()).toBe("new-a\n")
+    expect(await $`git show HEAD:b.txt`.cwd(tmp.path).text()).toBe("new-b\n")
+    expect(await $`git status --short`.cwd(tmp.path).text()).toBe("")
+  })
+
+  test("pushes after commit when action is push", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await seed(tmp.path)
+    await stage(tmp.path)
+    const repo = await remote(tmp.path)
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: () => Vcs.commit({ message: "push changes", includeUnstaged: true, action: "push" }),
+    })
+
+    expect((await $`git --git-dir=${repo} log -1 --format=%s`.text()).trim()).toBe("push changes")
+  })
+
+  test("creates a PR after push when action is pr", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await seed(tmp.path)
+    await stage(tmp.path)
+    const repo = await remote(tmp.path, true)
+
+    await withGh(
+      tmp.path,
+      `#!/bin/sh
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  exit 0
+fi
+if [ "$1" = "pr" ] && [ "$2" = "view" ]; then
+  exit 1
+fi
+if [ "$1" = "pr" ] && [ "$2" = "create" ]; then
+  printf '%s\n' 'https://github.com/test/repo/pull/1'
+  exit 0
+fi
+exit 1
+`,
+      async () => {
+        const result = await Instance.provide({
+          directory: tmp.path,
+          fn: () => Vcs.commit({ message: "open pr", includeUnstaged: true, action: "pr" }),
+        })
+
+        expect(result.url).toBe("https://github.com/test/repo/pull/1")
+        expect((await $`git --git-dir=${repo} log -1 --format=%s`.text()).trim()).toBe("open pr")
+      },
+    )
+  })
+
+  test("fails when staged-only commit has no staged changes", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await seed(tmp.path)
+    await Bun.write(path.join(tmp.path, "b.txt"), "new-b\n")
+
+    const err = await Instance.provide({
+      directory: tmp.path,
+      fn: () => Vcs.commit({ message: "staged only", includeUnstaged: false, action: "commit" }),
+    }).catch((err) => err)
+
+    expect(err).toBeInstanceOf(Vcs.CommitFailedError)
+    expect(err.data.message).toBe("No staged changes to commit")
+  })
+
+  test("fails PR creation when GitHub CLI is not authenticated", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await seed(tmp.path)
+    await stage(tmp.path)
+    await remote(tmp.path, true)
+
+    await withGh(
+      tmp.path,
+      `#!/bin/sh
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  exit 1
+fi
+exit 1
+`,
+      async () => {
+        const err = await Instance.provide({
+          directory: tmp.path,
+          fn: () => Vcs.commit({ message: "open pr", includeUnstaged: true, action: "pr" }),
+        }).catch((err) => err)
+
+        expect(err).toBeInstanceOf(Vcs.CommitFailedError)
+        expect(err.data.message).toBe("GitHub CLI is not authenticated")
+      },
+    )
   })
 })

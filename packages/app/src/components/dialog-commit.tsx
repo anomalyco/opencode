@@ -90,34 +90,35 @@ export function CommitDialog() {
 
   const ready = createMemo(() => store.staged + (store.includeUnstaged ? store.unstaged : 0) > 0)
 
+  const note = (id: "commit" | "push" | "pr") => {
+    if (id === "commit") return undefined
+    if (!store.hasRemote) return language.t("commit.dialog.hint.remote")
+    if (id === "push") return undefined
+    if (!store.githubAvailable) return language.t("commit.dialog.hint.github")
+    if (!store.githubAuthenticated) return language.t("commit.dialog.hint.auth")
+  }
+
   const options = createMemo(() => {
-    const pushDisabled = !store.branch || !store.hasRemote
-    const prDisabled = !store.branch || !store.hasRemote || !store.githubAvailable || !store.githubAuthenticated
     return [
       {
         id: "commit" as const,
         label: language.t("commit.dialog.action.commit"),
         disabled: false,
+        note: note("commit"),
       },
       {
         id: "push" as const,
         label: language.t("commit.dialog.action.push"),
-        disabled: pushDisabled,
+        disabled: !store.branch || !!note("push"),
+        note: note("push"),
       },
       {
         id: "pr" as const,
         label: language.t("commit.dialog.action.pr"),
-        disabled: prDisabled,
+        disabled: !store.branch || !!note("pr"),
+        note: note("pr"),
       },
     ]
-  })
-
-  const hint = createMemo(() => {
-    if (store.action === "push" && !store.hasRemote) return language.t("commit.dialog.hint.remote")
-    if (store.action !== "pr") return undefined
-    if (!store.hasRemote) return language.t("commit.dialog.hint.remote")
-    if (!store.githubAvailable) return language.t("commit.dialog.hint.github")
-    if (!store.githubAuthenticated) return language.t("commit.dialog.hint.auth")
   })
 
   const submit = async () => {
@@ -226,7 +227,12 @@ export function CommitDialog() {
                       disabled={item.disabled}
                       onClick={() => setStore("action", item.id)}
                     >
-                      <span class="text-14-medium">{item.label}</span>
+                      <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+                        <span class="text-14-medium">{item.label}</span>
+                        <Show when={item.note}>
+                          <span class="text-12-regular text-text-weak">{item.note}</span>
+                        </Show>
+                      </div>
                       <Show when={store.action === item.id}>
                         <Icon name="check-small" size="small" class="text-icon-strong shrink-0" />
                       </Show>
@@ -235,10 +241,6 @@ export function CommitDialog() {
                 </For>
               </div>
             </div>
-
-            <Show when={hint()}>
-              <p class="text-12-regular text-text-weak">{hint()}</p>
-            </Show>
 
             <Show when={store.error}>
               <div class="flex items-start gap-2 rounded-md border border-border-critical-base bg-surface-critical-weak px-3 py-2.5">
