@@ -11,6 +11,24 @@ import { Log } from "../util/log"
 
 const log = Log.create({ service: "snapshot" })
 const PRUNE = "7.days"
+const GIT_ADD_TIMEOUT = Duration.seconds(15)
+
+const LARGE_FILE_EXTENSIONS = [
+  ".zip", ".tar", ".gz", ".tgz", ".bz2", ".xz", ".7z", ".rar",
+  ".iso", ".img", ".dmg",
+  ".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm",
+  ".mp3", ".wav", ".flac", ".aac", ".ogg", ".wma",
+  ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff", ".psd", ".raw",
+  ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
+  ".bin", ".dat", ".db", ".sqlite", ".sqlite3",
+  ".so", ".dylib", ".dll", ".exe", ".o", ".a",
+  ".whl", ".egg", ".jar", ".war",
+  ".pack", ".idx",
+  ".parquet", ".arrow", ".feather", ".h5", ".hdf5",
+  ".onnx", ".pt", ".pth", ".safetensors", ".gguf",
+]
+
+const LARGE_DIR_THRESHOLD = 100 * 1024 * 1024 // 100MB
 
 // Common git config flags shared across snapshot operations
 const GIT_CORE = ["-c", "core.longpaths=true", "-c", "core.symlinks=true"]
@@ -169,9 +187,106 @@ export class SnapshotService extends ServiceMap.Service<SnapshotService, Snapsho
         yield* writeFile(target, text)
       })
 
+      let excludesFallbackGenerated = false
+
+      const generateLargeFileExcludes = Effect.gen(function* () {
+        if (excludesFallbackGenerated) return
+        excludesFallbackGenerated = true
+        const target = path.join(snapshotGit, "info", "exclude")
+        yield* mkdir(path.join(snapshotGit, "info"))
+
+        const rules: string[] = [
+          "# Auto-generated: exclude large files and binary formats from snapshots",
+        ]
+
+        // Exclude known large/binary file extensions
+        for (const ext of LARGE_FILE_EXTENSIONS) {
+          rules.push(`*${ext}`)
+        }
+
+        // Copy project .gitignore rules if they exist
+        const gitignoreText = yield* readFile(path.join(worktree, ".gitignore"))
+        if (gitignoreText) {
+          rules.push("", "# From project .gitignore")
+          rules.push(gitignoreText)
+        }
+
+        // Also copy the project's git exclude file
+        const file = yield* excludesPath
+        if (file) {
+          const text = yield* readFile(file)
+          if (text) {
+            rules.push("", "# From project git exclude")
+            rules.push(text)
+          }
+        }
+
+        // Scan top-level directories for large ones
+        const scanDir = (dir: string, maxDepth: number): Effect.Effect<number> =>
+          Effect.gen(function* () {
+            let total = 0
+            if (maxDepth <= 0) return total
+            const dirExists = yield* exists(dir)
+            if (!dirExists) return total
+            const entries = yield* fileSystem.readDirectory(dir).pipe(Effect.orDie)
+            for (const entry of entries) {
+              if (entry.startsWith(".")) continue
+              const fullPath = path.join(dir, entry)
+              const stat = yield* fileSystem.stat(fullPath).pipe(
+                Effect.catch(() => Effect.succeed(undefined)),
+              )
+              if (!stat) continue
+              if (stat.type === "File") {
+                total += stat.size
+              } else if (stat.type === "Directory") {
+                total += yield* scanDir(fullPath, maxDepth - 1)
+              }
+              if (total > LARGE_DIR_THRESHOLD) return total
+            }
+            return total
+          })
+
+        const worktreeExists = yield* exists(worktree)
+        if (worktreeExists) {
+          const entries = yield* fileSystem.readDirectory(worktree).pipe(Effect.orDie)
+          for (const entry of entries) {
+            if (entry.startsWith(".")) continue
+            const fullPath = path.join(worktree, entry)
+            const stat = yield* fileSystem.stat(fullPath).pipe(
+              Effect.catch(() => Effect.succeed(undefined)),
+            )
+            if (!stat || stat.type !== "Directory") continue
+            const size = yield* scanDir(fullPath, 3)
+            if (size > LARGE_DIR_THRESHOLD) {
+              rules.push(`${entry}/`)
+              log.info("excluding large directory from snapshots", {
+                dir: entry,
+                sizeMB: Math.round(size / 1024 / 1024),
+              })
+            }
+          }
+        }
+
+        yield* writeFile(target, rules.join("\n") + "\n")
+        log.info("generated snapshot exclude file for large worktree", { rules: rules.length })
+      })
+
       const add = Effect.gen(function* () {
         yield* syncExclude
-        yield* git([...GIT_CFG, ...gitArgs(["add", "."])], { cwd: directory })
+        // Run git add with a timeout — if it takes too long, the worktree likely
+        // contains large non-code files. Generate exclude rules and retry.
+        const timedOut = yield* git([...GIT_CFG, ...gitArgs(["add", "."])], { cwd: directory }).pipe(
+          Effect.timeout(GIT_ADD_TIMEOUT),
+          Effect.as(false),
+          Effect.catchTag("TimeoutError", () => Effect.succeed(true)),
+        )
+        if (timedOut) {
+          log.warn("git add timed out, scanning for large files to exclude", {
+            timeoutMs: Duration.toMillis(GIT_ADD_TIMEOUT),
+          })
+          yield* generateLargeFileExcludes
+          yield* git([...GIT_CFG, ...gitArgs(["add", "."])], { cwd: directory })
+        }
       })
 
       // --- service methods ---
