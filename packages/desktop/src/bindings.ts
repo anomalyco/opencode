@@ -41,7 +41,6 @@ export type ServerReadyData = {
 		url: string,
 		username: string | null,
 		password: string | null,
-		is_sidecar: boolean,
 	};
 
 export type SqliteMigrationProgress = { type: "InProgress"; value: number } | { type: "Done" };

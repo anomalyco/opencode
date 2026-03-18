@@ -20,12 +20,13 @@ import path from "path"
 import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
 import z from "zod"
 import { Plugin } from "../plugin"
+import { ProviderID, type ModelID } from "../provider/schema"
 import { WebSearchTool } from "./websearch"
 import { CodeSearchTool } from "./codesearch"
 import { Flag } from "@/flag/flag"
 import { Log } from "@/util/log"
 import { LspTool } from "./lsp"
-import { Truncate } from "./truncation"
+import { Truncate } from "./truncate"
 
 import { ApplyPatchTool } from "./apply_patch"
 import { Glob } from "../util/glob"
@@ -130,8 +131,8 @@ export namespace ToolRegistry {
 
   export async function tools(
     model: {
-      providerID: string
-      modelID: string
+      providerID: ProviderID
+      modelID: ModelID
     },
     agent?: Agent.Info,
   ) {
@@ -141,7 +142,7 @@ export namespace ToolRegistry {
         .filter((t) => {
           // Enable websearch/codesearch for zen users OR via enable flag
           if (t.id === "codesearch" || t.id === "websearch") {
-            return model.providerID === "opencode" || Flag.OPENCODE_ENABLE_EXA
+            return model.providerID === ProviderID.opencode || Flag.OPENCODE_ENABLE_EXA
           }
 
           // use apply tool in same format as codex

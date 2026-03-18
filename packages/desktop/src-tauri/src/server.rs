@@ -9,9 +9,7 @@ use tokio::time::timeout;
 use crate::{
     cli,
     cli::CommandChild,
-    constants::{
-        DEFAULT_CLONE_DIRECTORY_KEY, DEFAULT_SERVER_URL_KEY, SETTINGS_STORE, WSL_ENABLED_KEY,
-    },
+    constants::{DEFAULT_SERVER_URL_KEY, SETTINGS_STORE, WSL_ENABLED_KEY},
     windows::MainWindow,
 };
 
@@ -81,66 +79,6 @@ pub fn set_wsl_config(app: AppHandle, config: WslConfig) -> Result<(), String> {
         .map_err(|e| format!("Failed to open settings store: {}", e))?;
 
     store.set(WSL_ENABLED_KEY, serde_json::Value::Bool(config.enabled));
-
-    store
-        .save()
-        .map_err(|e| format!("Failed to save settings: {}", e))?;
-
-    Ok(())
-}
-
-fn clone_directory_default(app: &AppHandle) -> Result<String, String> {
-    let home = app
-        .path()
-        .home_dir()
-        .map_err(|e| format!("Failed to resolve home directory: {e}"))?;
-
-    #[cfg(target_os = "linux")]
-    {
-        return Ok(home.join("code").to_string_lossy().to_string());
-    }
-
-    #[cfg(not(target_os = "linux"))]
-    {
-        Ok(home
-            .join("Documents")
-            .join("code")
-            .to_string_lossy()
-            .to_string())
-    }
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn get_default_clone_directory(app: AppHandle) -> Result<String, String> {
-    let store = app
-        .store(SETTINGS_STORE)
-        .map_err(|e| format!("Failed to open settings store: {}", e))?;
-    let configured = store
-        .get(DEFAULT_CLONE_DIRECTORY_KEY)
-        .and_then(|v| v.as_str().map(str::to_string))
-        .filter(|v| !v.trim().is_empty());
-    if let Some(configured) = configured {
-        return Ok(configured);
-    }
-    clone_directory_default(&app)
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn set_default_clone_directory(app: AppHandle, directory: Option<String>) -> Result<(), String> {
-    let store = app
-        .store(SETTINGS_STORE)
-        .map_err(|e| format!("Failed to open settings store: {}", e))?;
-
-    if let Some(directory) = directory
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty())
-    {
-        store.set(DEFAULT_CLONE_DIRECTORY_KEY, serde_json::Value::String(directory));
-    } else {
-        store.delete(DEFAULT_CLONE_DIRECTORY_KEY);
-    }
 
     store
         .save()

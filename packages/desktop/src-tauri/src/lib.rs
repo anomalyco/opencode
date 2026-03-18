@@ -1,4 +1,6 @@
 mod cli;
+mod clone;
+mod clone_settings;
 mod constants;
 #[cfg(target_os = "linux")]
 pub mod linux_display;
@@ -18,6 +20,7 @@ use futures::{
 };
 use std::{
     env,
+    future::Future,
     net::TcpListener,
     path::PathBuf,
     process::Command,
@@ -35,9 +38,7 @@ use tokio::{
 
 use crate::cli::{sqlite_migration::SqliteMigrationProgress, sync_cli};
 use crate::constants::*;
-use crate::server::{get_default_clone_directory, get_saved_server_url};
-#[cfg(target_os = "windows")]
-use crate::server::get_wsl_config;
+use crate::server::get_saved_server_url;
 use crate::windows::{LoadingWindow, MainWindow};
 
 #[derive(Clone, serde::Serialize, specta::Type, Debug)]
@@ -316,185 +317,6 @@ fn wsl_path(path: String, mode: Option<WslPathMode>) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
-#[cfg(target_os = "windows")]
-fn shell_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "'\"'\"'"))
-}
-
-fn repo_name(url: &str) -> String {
-    let trimmed = url.trim().trim_end_matches('/');
-    if trimmed.is_empty() {
-        return "repository".to_string();
-    }
-
-    let tail = trimmed.rsplit(['/', ':']).next().unwrap_or("repository");
-    let name = tail.strip_suffix(".git").unwrap_or(tail).trim();
-    if name.is_empty() {
-        return "repository".to_string();
-    }
-
-    name.to_string()
-}
-
-fn clone_with_git(url: &str, target: &str) -> Result<(), String> {
-    tracing::info!(%url, %target, "Running git clone");
-    let output = Command::new("git")
-        .args(["clone", "--", url, target])
-        .output()
-        .map_err(|e| format!("Failed to run git clone: {e}"))?;
-
-    if output.status.success() {
-        tracing::info!(%target, "git clone completed");
-        return Ok(());
-    }
-
-    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    if !stderr.is_empty() {
-        tracing::warn!(%url, %target, stderr = %stderr, "git clone failed");
-        return Err(stderr);
-    }
-
-    tracing::warn!(%url, %target, "git clone failed without stderr");
-    Err("git clone failed".to_string())
-}
-
-#[cfg(target_os = "windows")]
-fn wsl_run(command: &str) -> Result<std::process::Output, String> {
-    Command::new("wsl")
-        .args(["-e", "sh", "-lc", command])
-        .output()
-        .map_err(|e| format!("Failed to run WSL command: {e}"))
-}
-
-#[cfg(target_os = "windows")]
-fn clone_with_wsl(url: &str, base: Option<&str>) -> Result<String, String> {
-    let root = if let Some(base) = base.filter(|v| !v.trim().is_empty()) {
-        base.trim().to_string()
-    } else {
-        let output = wsl_run("printf %s \"$HOME\"")?;
-        if !output.status.success() {
-            return Err("Failed to resolve WSL home directory".to_string());
-        }
-        let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if value.is_empty() {
-            return Err("Failed to resolve WSL home directory".to_string());
-        }
-        value
-    };
-
-    let mkdir = format!("mkdir -p {}", shell_quote(&root));
-    let mkdir_output = wsl_run(&mkdir)?;
-    if !mkdir_output.status.success() {
-        return Err("Failed to create clone destination directory".to_string());
-    }
-
-    let name = repo_name(url);
-    let mut index = 1usize;
-    let target = loop {
-        let candidate = if index == 1 {
-            format!("{root}/{name}")
-        } else {
-            format!("{root}/{name}-{index}")
-        };
-
-        let cmd = format!("[ -d {} ]", shell_quote(&candidate));
-        let output = wsl_run(&cmd)?;
-        if !output.status.success() {
-            break candidate;
-        }
-
-        index += 1;
-    };
-
-    let cmd = format!("git clone -- {} {}", shell_quote(url), shell_quote(&target));
-    let output = wsl_run(&cmd)?;
-    if output.status.success() {
-        return Ok(target);
-    }
-
-    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    if !stderr.is_empty() {
-        return Err(stderr);
-    }
-
-    Err("git clone failed".to_string())
-}
-
-#[tauri::command]
-#[specta::specta]
-fn clone_git_repository(app: AppHandle, url: String, directory: Option<String>) -> Result<String, String> {
-    let url = url.trim().to_string();
-    if url.is_empty() {
-        return Err("Repository URL cannot be empty".to_string());
-    }
-
-    tracing::info!(%url, ?directory, "clone_git_repository requested");
-
-    #[cfg(target_os = "windows")]
-    {
-        if get_wsl_config(app.clone()).is_ok_and(|v| v.enabled) {
-            return clone_with_wsl(&url, directory.as_deref());
-        }
-    }
-
-    let name = repo_name(&url);
-    let target = if let Some(directory) = directory.filter(|v| !v.trim().is_empty()) {
-        let path = PathBuf::from(directory.trim());
-        if path.exists() {
-            std::fs::create_dir_all(&path)
-                .map_err(|e| format!("Failed to create clone destination directory: {e}"))?;
-
-            let mut index = 1usize;
-            loop {
-                let candidate = if index == 1 {
-                    path.join(&name)
-                } else {
-                    path.join(format!("{name}-{index}"))
-                };
-
-                if !candidate.exists() {
-                    break candidate;
-                }
-
-                index += 1;
-            }
-        } else {
-            if let Some(parent) = path.parent() {
-                if !parent.as_os_str().is_empty() {
-                    std::fs::create_dir_all(parent)
-                        .map_err(|e| format!("Failed to create clone destination directory: {e}"))?;
-                }
-            }
-            path
-        }
-    } else {
-        let root = PathBuf::from(get_default_clone_directory(app.clone())?);
-        std::fs::create_dir_all(&root)
-            .map_err(|e| format!("Failed to create clone destination directory: {e}"))?;
-
-        let mut index = 1usize;
-        loop {
-            let candidate = if index == 1 {
-                root.join(&name)
-            } else {
-                root.join(format!("{name}-{index}"))
-            };
-
-            if !candidate.exists() {
-                break candidate;
-            }
-
-            index += 1;
-        }
-    };
-
-    let target = target.to_string_lossy().to_string();
-    tracing::info!(%target, "Selected clone destination");
-    clone_with_git(&url, &target)?;
-    tracing::info!(%target, "clone_git_repository succeeded");
-    Ok(target)
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = make_specta_builder();
@@ -583,9 +405,9 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             markdown::parse_markdown_command,
             check_app_exists,
             wsl_path,
-            clone_git_repository,
-            server::get_default_clone_directory,
-            server::set_default_clone_directory,
+            clone::clone_git_repository,
+            clone_settings::get_default_clone_directory,
+            clone_settings::set_default_clone_directory,
             resolve_app_path,
             open_path
         ])
@@ -610,26 +432,6 @@ fn export_types(builder: &tauri_specta::Builder<tauri::Wry>) {
 fn test_export_types() {
     let builder = make_specta_builder();
     export_types(&builder);
-}
-
-#[cfg(test)]
-#[test]
-fn test_clone_with_git_real_repository() {
-    let root = std::env::temp_dir().join(format!(
-        "opencode-desktop-clone-test-{}",
-        uuid::Uuid::new_v4()
-    ));
-    std::fs::create_dir_all(&root).expect("failed to create temporary clone directory");
-
-    let target = root.join("opencode");
-    let target_str = target.to_string_lossy().to_string();
-    let result = clone_with_git("https://github.com/anomalyco/opencode.git", &target_str);
-    result.expect("failed to clone https://github.com/anomalyco/opencode.git");
-    assert!(target.join(".git").exists(), "expected cloned repository to contain .git");
-
-    if let Err(error) = std::fs::remove_dir_all(&root) {
-        tracing::warn!(path = %root.display(), %error, "failed to remove clone test directory");
-    }
 }
 
 #[derive(tauri_specta::Event, serde::Deserialize, specta::Type)]
