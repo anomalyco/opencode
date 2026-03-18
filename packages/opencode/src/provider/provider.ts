@@ -40,7 +40,16 @@ import { createGateway } from "@ai-sdk/gateway"
 import { createTogetherAI } from "@ai-sdk/togetherai"
 import { createPerplexity } from "@ai-sdk/perplexity"
 import { createVercel } from "@ai-sdk/vercel"
-import { createGitLab, VERSION as GITLAB_PROVIDER_VERSION } from "@gitlab/gitlab-ai-provider"
+import {
+  createGitLab,
+  VERSION as GITLAB_PROVIDER_VERSION,
+  GitLabModelDiscovery,
+  GitLabModelConfigRegistry,
+  GitLabProjectDetector,
+  MODEL_MAPPINGS,
+  isWorkflowModel,
+  type GitLabProject,
+} from "gitlab-ai-provider"
 import { fromNodeProviderChain } from "@aws-sdk/credential-providers"
 import { GoogleAuth } from "google-auth-library"
 import { ProviderTransform } from "./transform"
@@ -126,23 +135,27 @@ export namespace Provider {
     "@ai-sdk/togetherai": createTogetherAI,
     "@ai-sdk/perplexity": createPerplexity,
     "@ai-sdk/vercel": createVercel,
-    "@gitlab/gitlab-ai-provider": createGitLab,
+    "gitlab-ai-provider": createGitLab,
     // @ts-ignore (TODO: kill this code so we dont have to maintain it)
     "@ai-sdk/github-copilot": createGitHubCopilotOpenAICompatible,
   }
 
   type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
   type CustomVarsLoader = (options: Record<string, any>) => Record<string, string>
+  type CustomDiscoverModels = () => Promise<Record<string, Model>>
   type CustomLoader = (provider: Info) => Promise<{
     autoload: boolean
     getModel?: CustomModelLoader
     vars?: CustomVarsLoader
     options?: Record<string, any>
+    discoverModels?: CustomDiscoverModels
   }>
 
   function useLanguageModel(sdk: any) {
     return sdk.responses === undefined && sdk.chat === undefined
   }
+
+  const gitlabModelConfigRegistry = new GitLabModelConfigRegistry()
 
   const CUSTOM_LOADERS: Record<string, CustomLoader> = {
     async anthropic() {
@@ -527,27 +540,147 @@ export namespace Provider {
         ...(providerConfig?.options?.aiGatewayHeaders || {}),
       }
 
+      const featureFlags = {
+        duo_agent_platform_agentic_chat: true,
+        duo_agent_platform: true,
+        ...(providerConfig?.options?.featureFlags || {}),
+      }
+
       return {
         autoload: !!apiKey,
         options: {
           instanceUrl,
           apiKey,
           aiGatewayHeaders,
-          featureFlags: {
-            duo_agent_platform_agentic_chat: true,
-            duo_agent_platform: true,
-            ...(providerConfig?.options?.featureFlags || {}),
-          },
+          featureFlags,
         },
-        async getModel(sdk: ReturnType<typeof createGitLab>, modelID: string) {
+        async getModel(sdk: ReturnType<typeof createGitLab>, modelID: string, options?: Record<string, any>) {
+          if (modelID.startsWith("duo-workflow-")) {
+            const workflowRef = options?.workflowRef as string | undefined
+            // Use the static mapping if it exists, otherwise use duo-workflow with selectedModelRef
+            const sdkModelID = isWorkflowModel(modelID) ? modelID : "duo-workflow"
+            const model = sdk.workflowChat(sdkModelID, {
+              featureFlags,
+            })
+            if (workflowRef) {
+              model.selectedModelRef = workflowRef
+            }
+            return model
+          }
           return sdk.agenticChat(modelID, {
             aiGatewayHeaders,
-            featureFlags: {
-              duo_agent_platform_agentic_chat: true,
-              duo_agent_platform: true,
-              ...(providerConfig?.options?.featureFlags || {}),
-            },
+            featureFlags,
           })
+        },
+        async discoverModels(): Promise<Record<string, Model>> {
+          if (!apiKey) {
+            log.info("gitlab model discovery skipped: no apiKey")
+            return {}
+          }
+
+          try {
+            const token = apiKey
+            const getHeaders = (): Record<string, string> =>
+              auth?.type === "api" ? { "PRIVATE-TOKEN": token } : { Authorization: `Bearer ${token}` }
+
+            const discovery = new GitLabModelDiscovery({
+              instanceUrl,
+              getHeaders,
+            })
+
+            const detector = new GitLabProjectDetector({
+              instanceUrl,
+              getHeaders,
+            })
+            let project: GitLabProject | null = null
+            try {
+              project = await detector.detectProject(process.cwd())
+            } catch (e) {
+              log.info("gitlab project detection failed", { error: e, cwd: process.cwd() })
+            }
+
+            const namespaceId = project?.namespaceId
+            if (!namespaceId) {
+              log.info("gitlab model discovery skipped: no namespaceId", {
+                project: project ? { id: project.id, path: project.pathWithNamespace } : null,
+                cwd: process.cwd(),
+              })
+              return {}
+            }
+
+            log.info("gitlab model discovery starting", { namespaceId, instanceUrl })
+            const [discovered, modelConfigs] = await Promise.all([
+              discovery.discover(`gid://gitlab/Group/${namespaceId}`),
+              gitlabModelConfigRegistry.getConfigs(),
+            ])
+            log.info("gitlab model discovery result", {
+              selectableModels: discovered.selectableModels?.length ?? 0,
+              defaultModel: discovered.defaultModel?.ref ?? null,
+              pinnedModel: discovered.pinnedModel?.ref ?? null,
+            })
+            const models: Record<string, Model> = {}
+
+            // Build reverse map: discovery ref → duo-workflow-* model ID
+            const refToModelID = new Map<string, string>()
+            for (const [modelID, mapping] of Object.entries(MODEL_MAPPINGS)) {
+              if (mapping.provider === "workflow" && modelID !== "duo-workflow" && modelID !== "duo-workflow-default") {
+                refToModelID.set(mapping.model, modelID)
+              }
+            }
+
+            // If a model is pinned by admin, only that model is available
+            const allModels = discovered.pinnedModel
+              ? [discovered.pinnedModel]
+              : [...(discovered.selectableModels ?? []), ...(discovered.defaultModel ? [discovered.defaultModel] : [])]
+
+            const seen = new Set<string>()
+            for (const model of allModels) {
+              if (!model.ref || seen.has(model.ref)) continue
+              seen.add(model.ref)
+
+              // Use static mapping if available, otherwise generate an ID from the ref
+              const workflowModelID = refToModelID.get(model.ref) ?? `duo-workflow-${model.ref.replace(/[/_]/g, "-")}`
+              const limits = modelConfigs.get(model.ref)
+              if (!input.models[workflowModelID]) {
+                models[workflowModelID] = {
+                  id: ModelID.make(workflowModelID),
+                  providerID: ProviderID.make("gitlab"),
+                  name: `Agent Platform (${model.name})`,
+                  family: "",
+                  api: {
+                    id: workflowModelID,
+                    url: instanceUrl,
+                    npm: "gitlab-ai-provider",
+                  },
+                  status: "active",
+                  headers: {},
+                  options: { workflowRef: model.ref },
+                  cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+                  limit: { context: limits?.context ?? 200000, output: limits?.output ?? 64000 },
+                  capabilities: {
+                    temperature: false,
+                    reasoning: true,
+                    attachment: true,
+                    toolcall: true,
+                    input: { text: true, audio: false, image: true, video: false, pdf: true },
+                    output: { text: true, audio: false, image: false, video: false, pdf: false },
+                    interleaved: false,
+                  },
+                  release_date: "",
+                  variants: {},
+                }
+              }
+            }
+
+            log.info("gitlab model discovery complete", {
+              count: Object.keys(models).length,
+              models: Object.keys(models),
+            })
+            return models
+          } catch (e) {
+            log.warn("gitlab model discovery failed", { error: e })
+            return {}
+          }
         },
       }
     },
@@ -847,6 +980,9 @@ export namespace Provider {
     const varsLoaders: {
       [providerID: string]: CustomVarsLoader
     } = {}
+    const discoveryLoaders: {
+      [providerID: string]: CustomDiscoverModels
+    } = {}
     const sdk = new Map<string, SDK>()
 
     log.info("init")
@@ -1003,6 +1139,7 @@ export namespace Provider {
       if (result && (result.autoload || providers[providerID])) {
         if (result.getModel) modelLoaders[providerID] = result.getModel
         if (result.vars) varsLoaders[providerID] = result.vars
+        if (result.discoverModels) discoveryLoaders[providerID] = result.discoverModels
         const opts = result.options ?? {}
         const patch: Partial<Info> = providers[providerID] ? { options: opts } : { source: "custom", options: opts }
         mergeProvider(providerID, patch)
@@ -1070,11 +1207,53 @@ export namespace Provider {
       sdk,
       modelLoaders,
       varsLoaders,
+      discoveryLoaders,
     }
   })
 
   export async function list() {
     return state().then((state) => state.providers)
+  }
+
+  const discoveryCache = new Map<string, Promise<void>>()
+
+  export async function discoverModels(providerID: ProviderID): Promise<void> {
+    log.debug("discoverModels called", { providerID })
+    const cached = discoveryCache.get(providerID)
+    if (cached) {
+      log.debug("discoverModels returning cached", { providerID })
+      return cached
+    }
+
+    const promise = (async () => {
+      const s = await state()
+      const loader = s.discoveryLoaders[providerID]
+      if (!loader) {
+        log.debug("discoverModels no loader", { providerID, loaders: Object.keys(s.discoveryLoaders) })
+        return
+      }
+
+      const provider = s.providers[providerID]
+      if (!provider) {
+        log.debug("discoverModels no provider", { providerID })
+        return
+      }
+
+      const discovered = await loader()
+      log.debug("discoverModels discovered", { providerID, count: Object.keys(discovered).length })
+      for (const [modelID, model] of Object.entries(discovered)) {
+        if (!provider.models[modelID]) {
+          provider.models[modelID] = model
+        }
+      }
+    })()
+
+    promise.catch(() => {
+      discoveryCache.delete(providerID)
+    })
+
+    discoveryCache.set(providerID, promise)
+    return promise
   }
 
   async function getSDK(model: Model) {
@@ -1244,7 +1423,7 @@ export namespace Provider {
 
     try {
       const language = s.modelLoaders[model.providerID]
-        ? await s.modelLoaders[model.providerID](sdk, model.api.id, provider.options)
+        ? await s.modelLoaders[model.providerID](sdk, model.api.id, { ...provider.options, ...model.options })
         : sdk.languageModel(model.api.id)
       s.models.set(key, language)
       return language

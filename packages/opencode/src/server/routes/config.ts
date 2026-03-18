@@ -83,6 +83,14 @@ export const ConfigRoutes = lazy(() =>
       async (c) => {
         using _ = log.time("providers")
         const providers = await Provider.list().then((x) => mapValues(x, (item) => item))
+        // Trigger lazy model discovery for connected providers
+        await Promise.all(
+          Object.keys(providers).map((id) =>
+            Provider.discoverModels(id as any).catch((e) => {
+              log.warn("config.providers discovery error", { id, error: e })
+            }),
+          ),
+        )
         return c.json({
           providers: Object.values(providers),
           default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),

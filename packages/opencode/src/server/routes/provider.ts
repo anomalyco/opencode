@@ -9,6 +9,9 @@ import { ProviderID } from "../../provider/schema"
 import { mapValues } from "remeda"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
+import { Log } from "../../util/log"
+
+const log = Log.create({ service: "server" })
 
 export const ProviderRoutes = lazy(() =>
   new Hono()
@@ -49,6 +52,14 @@ export const ProviderRoutes = lazy(() =>
         }
 
         const connected = await Provider.list()
+        // Trigger lazy model discovery for connected providers
+        await Promise.all(
+          Object.keys(connected).map((id) =>
+            Provider.discoverModels(id as any).catch((e) => {
+              log.warn("provider discovery error", { id, error: e })
+            }),
+          ),
+        )
         const providers = Object.assign(
           mapValues(filteredProviders, (x) => Provider.fromModelsDevProvider(x)),
           connected,
