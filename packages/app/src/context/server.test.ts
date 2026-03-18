@@ -83,7 +83,7 @@ describe("ServerConnection.key", () => {
       type: "http",
       http: { url: "http://192.168.1.100:4096" },
     }
-    expect(ServerConnection.key(conn)).toBe("http://192.168.1.100:4096")
+    expect(ServerConnection.key(conn) as string).toBe("http://192.168.1.100:4096")
   })
 
   test("generates key for sidecar base connection", () => {
@@ -92,7 +92,7 @@ describe("ServerConnection.key", () => {
       variant: "base",
       http: { url: "http://localhost:4096" },
     }
-    expect(ServerConnection.key(conn)).toBe("sidecar")
+    expect(ServerConnection.key(conn) as string).toBe("sidecar")
   })
 
   test("generates key for sidecar WSL connection", () => {
@@ -102,7 +102,7 @@ describe("ServerConnection.key", () => {
       distro: "Ubuntu-22.04",
       http: { url: "http://localhost:4096" },
     }
-    expect(ServerConnection.key(conn)).toBe("wsl:Ubuntu-22.04")
+    expect(ServerConnection.key(conn) as string).toBe("wsl:Ubuntu-22.04")
   })
 
   test("generates key for SSH connection", () => {
@@ -111,7 +111,7 @@ describe("ServerConnection.key", () => {
       host: "remote.example.com",
       http: { url: "http://localhost:4097" },
     }
-    expect(ServerConnection.key(conn)).toBe("ssh:remote.example.com")
+    expect(ServerConnection.key(conn) as string).toBe("ssh:remote.example.com")
   })
 })
 
