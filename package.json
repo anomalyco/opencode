@@ -7,6 +7,7 @@
   "packageManager": "bun@1.3.8",
   "scripts": {
     "dev": "bun run --cwd packages/opencode --conditions=browser src/index.ts",
+    "dev:server": "bun run --cwd packages/opencode --conditions=browser src/index.ts serve --port 4096",
     "dev:desktop": "bun --cwd packages/desktop tauri dev",
     "dev:web": "bun --cwd packages/app dev",
     "opencode:serve": "bun run --cwd packages/opencode src/index.ts serve --port 4096",
