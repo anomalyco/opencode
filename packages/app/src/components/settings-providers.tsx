@@ -4,7 +4,7 @@ import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Tag } from "@opencode-ai/ui/tag"
 import { showToast } from "@opencode-ai/ui/toast"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
-import { createMemo, type Component, For, Show } from "solid-js"
+import { createMemo, createSignal, onMount, type Component, For, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
@@ -33,6 +33,17 @@ export const SettingsProviders: Component = () => {
   const globalSDK = useGlobalSDK()
   const globalSync = useGlobalSync()
   const providers = useProviders()
+
+  const [identity, setIdentity] = createSignal<Record<string, string>>({})
+
+  onMount(async () => {
+    try {
+      const response = await fetch("/auth/identity")
+      if (response.ok) {
+        setIdentity(await response.json())
+      }
+    } catch {}
+  })
 
   const connected = createMemo(() => {
     return providers
@@ -153,6 +164,11 @@ export const SettingsProviders: Component = () => {
                       <ProviderIcon id={item.id} class="size-5 shrink-0 icon-strong-base" />
                       <span class="text-14-medium text-text-strong truncate">{item.name}</span>
                       <Tag>{type(item)}</Tag>
+                      <Show when={identity()[item.id]}>
+                        {(email) => (
+                          <span class="text-12-regular text-text-weak truncate">{email()}</span>
+                        )}
+                      </Show>
                     </div>
                     <Show
                       when={canDisconnect(item)}

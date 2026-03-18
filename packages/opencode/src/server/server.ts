@@ -192,6 +192,34 @@ export namespace Server {
           return c.json(true)
         },
       )
+      .get(
+        "/auth/identity",
+        describeRoute({
+          summary: "Get provider identities",
+          description: "Get the email or username associated with each authenticated provider.",
+          operationId: "auth.identity",
+          responses: {
+            200: {
+              description: "Map of provider IDs to identity strings",
+              content: {
+                "application/json": {
+                  schema: resolver(z.record(z.string(), z.string())),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          const all = await Auth.all()
+          const identity: Record<string, string> = {}
+          for (const [providerID, info] of Object.entries(all)) {
+            if (info.type === "oauth" && "email" in info && info.email) {
+              identity[providerID] = info.email
+            }
+          }
+          return c.json(identity)
+        },
+      )
       .use(async (c, next) => {
         if (c.req.path === "/log") return next()
         const rawWorkspaceID = c.req.query("workspace") || c.req.header("x-opencode-workspace")

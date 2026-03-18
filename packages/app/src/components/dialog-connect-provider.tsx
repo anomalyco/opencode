@@ -181,11 +181,24 @@ export function DialogConnectProvider(props: { provider: string }) {
   async function complete() {
     await globalSDK.client.global.dispose()
     dialog.close()
+
+    // Fetch identity to show which account was connected
+    let email: string | undefined
+    try {
+      const response = await fetch("/auth/identity")
+      if (response.ok) {
+        const identities = (await response.json()) as Record<string, string>
+        email = identities[props.provider]
+      }
+    } catch {}
+
     showToast({
       variant: "success",
       icon: "circle-check",
       title: language.t("provider.connect.toast.connected.title", { provider: provider().name }),
-      description: language.t("provider.connect.toast.connected.description", { provider: provider().name }),
+      description: email
+        ? language.t("provider.connect.toast.connected.description", { provider: provider().name }) + ` (${email})`
+        : language.t("provider.connect.toast.connected.description", { provider: provider().name }),
     })
   }
 

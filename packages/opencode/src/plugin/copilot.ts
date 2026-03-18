@@ -253,6 +253,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
                       expires: number
                       provider?: string
                       enterpriseUrl?: string
+                      email?: string
                     } = {
                       type: "success",
                       refresh: data.access_token,
@@ -263,6 +264,24 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
                     if (deploymentType === "enterprise") {
                       result.enterpriseUrl = domain
                     }
+
+                    // Fetch GitHub user identity (best-effort)
+                    try {
+                      const apiBase = domain === "github.com"
+                        ? "https://api.github.com"
+                        : `https://${domain}/api/v3`
+                      const userResponse = await fetch(`${apiBase}/user`, {
+                        headers: {
+                          Authorization: `Bearer ${data.access_token}`,
+                          Accept: "application/json",
+                          "User-Agent": `opencode/${Installation.VERSION}`,
+                        },
+                      })
+                      if (userResponse.ok) {
+                        const user = (await userResponse.json()) as { login?: string; email?: string }
+                        result.email = user.login ?? user.email
+                      }
+                    } catch {}
 
                     return result
                   }

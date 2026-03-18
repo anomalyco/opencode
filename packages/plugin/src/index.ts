@@ -123,6 +123,7 @@ export type AuthOuathResult = { url: string; instructions: string } & (
         | ({
             type: "success"
             provider?: string
+            email?: string
           } & (
             | {
                 refresh: string
@@ -143,6 +144,7 @@ export type AuthOuathResult = { url: string; instructions: string } & (
         | ({
             type: "success"
             provider?: string
+            email?: string
           } & (
             | {
                 refresh: string

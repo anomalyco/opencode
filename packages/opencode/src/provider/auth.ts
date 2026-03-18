@@ -205,6 +205,7 @@ export namespace ProviderAuth {
             refresh: result.refresh,
             expires: result.expires,
             ...(result.accountId ? { accountId: result.accountId } : {}),
+            ...(result.email ? { email: result.email } : {}),
           })
         }
       })
