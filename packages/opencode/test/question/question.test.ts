@@ -1,9 +1,13 @@
-import { test, expect } from "bun:test"
+import { afterEach, test, expect } from "bun:test"
 import { Question } from "../../src/question"
 import { Instance } from "../../src/project/instance"
 import { QuestionID } from "../../src/question/schema"
 import { tmpdir } from "../fixture/fixture"
 import { SessionID } from "../../src/session/schema"
+
+afterEach(async () => {
+  await Instance.disposeAll()
+})
 
 /** Reject all pending questions so dangling Deferred fibers don't hang the test. */
 async function rejectAll() {
