@@ -591,6 +591,25 @@ export namespace Server {
   /** @deprecated do not use this dumb shit */
   export let url: URL
 
+  /**
+   * Normalizes a hostname for safe interpolation into an HTTP URL authority.
+   *
+   * - Trims surrounding whitespace.
+   * - Removes IPv6 brackets if already present so we can normalize once.
+   * - Escapes stray `%` as `%25` to avoid invalid percent-encoding in URL parsing.
+   * - Re-wraps values containing `:` in `[]` so IPv6 literals are valid in `host:port`.
+   *
+   * @param hostname Hostname or IP literal (IPv4/IPv6), optionally already bracketed.
+   * @returns A normalized host string suitable for `http://${host}:${port}` construction.
+   */
+  function host(hostname: string) {
+    const raw = hostname.trim()
+    const inner = raw.startsWith("[") && raw.endsWith("]") ? raw.slice(1, -1) : raw
+    const safe = inner.replace(/%(?!25)/g, "%25")
+    if (!safe.includes(":")) return safe
+    return `[${safe}]`
+  }
+
   export function listen(opts: {
     port: number
     hostname: string
@@ -598,7 +617,7 @@ export namespace Server {
     mdnsDomain?: string
     cors?: string[]
   }) {
-    url = new URL(`http://${opts.hostname}:${opts.port}`)
+    url = new URL(`http://${host(opts.hostname)}:${opts.port}`)
     const app = createApp(opts)
     const args = {
       hostname: opts.hostname,
@@ -615,6 +634,8 @@ export namespace Server {
     }
     const server = opts.port === 0 ? (tryServe(4096) ?? tryServe(0)) : tryServe(opts.port)
     if (!server) throw new Error(`Failed to start server on port ${opts.port}`)
+
+    url.port = String(server.port)
 
     const shouldPublishMDNS =
       opts.mdns &&
