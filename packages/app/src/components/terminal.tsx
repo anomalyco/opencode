@@ -513,8 +513,10 @@ export const Terminal = (props: TerminalProps) => {
         url.searchParams.set("directory", sdk.directory)
         url.searchParams.set("cursor", String(seek))
         url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
-        url.username = server.current?.http.username ?? "opencode"
-        url.password = server.current?.http.password ?? ""
+        if (server.current?.http.password) {
+          url.username = server.current.http.username ?? "opencode"
+          url.password = server.current.http.password
+        }
 
         const socket = new WebSocket(url)
         socket.binaryType = "arraybuffer"
