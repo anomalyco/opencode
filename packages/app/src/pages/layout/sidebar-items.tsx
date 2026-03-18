@@ -324,11 +324,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
     >
       <Show
         when={hoverEnabled()}
-        fallback={
-          <Tooltip placement={props.mobile ? "bottom" : "right"} value={props.session.title} gutter={10}>
-            {item}
-          </Tooltip>
-        }
+        fallback={item}
       >
         <SessionHoverPreview
           mobile={props.mobile}
@@ -362,7 +358,6 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
           "group-focus-within/session:opacity-100 group-focus-within/session:pointer-events-auto": true,
         }}
       >
-        <Tooltip value={isPinned() ? language.t("common.unpin") || "Unpin" : language.t("common.pin") || "Pin"} placement="top">
           <IconButton
             icon={isPinned() ? "pin-filled" : "pin"}
             variant="ghost"
@@ -374,8 +369,6 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
               toggleSessionPinned(props.session.id)
             }}
           />
-        </Tooltip>
-        <Tooltip value={language.t("common.archive")} placement="top">
           <IconButton
             icon="archive"
             variant="ghost"
@@ -387,8 +380,6 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
               void props.archiveSession(props.session)
             }}
           />
-        </Tooltip>
-        <Tooltip value={language.t("common.delete")} placement="top">
           <IconButton
             icon="trash"
             variant="ghost"
@@ -400,7 +391,6 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
               void props.deleteSession(props.session)
             }}
           />
-        </Tooltip>
       </div>
     </div>
   )
