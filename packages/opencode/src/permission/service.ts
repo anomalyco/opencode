@@ -11,121 +11,128 @@ import { Deferred, Effect, Layer, Schema, ServiceMap } from "effect"
 import z from "zod"
 import { PermissionID } from "./schema"
 
-const log = Log.create({ service: "permission" })
+export namespace PermissionEffect {
+  const log = Log.create({ service: "permission" })
 
-export const Action = z.enum(["allow", "deny", "ask"]).meta({
-  ref: "PermissionAction",
-})
-export type Action = z.infer<typeof Action>
-
-export const Rule = z
-  .object({
-    permission: z.string(),
-    pattern: z.string(),
-    action: Action,
+  export const Action = z.enum(["allow", "deny", "ask"]).meta({
+    ref: "PermissionAction",
   })
-  .meta({
-    ref: "PermissionRule",
+  export type Action = z.infer<typeof Action>
+
+  export const Rule = z
+    .object({
+      permission: z.string(),
+      pattern: z.string(),
+      action: Action,
+    })
+    .meta({
+      ref: "PermissionRule",
+    })
+  export type Rule = z.infer<typeof Rule>
+
+  export const Ruleset = Rule.array().meta({
+    ref: "PermissionRuleset",
   })
-export type Rule = z.infer<typeof Rule>
+  export type Ruleset = z.infer<typeof Ruleset>
 
-export const Ruleset = Rule.array().meta({
-  ref: "PermissionRuleset",
-})
-export type Ruleset = z.infer<typeof Ruleset>
-
-export const Request = z
-  .object({
-    id: PermissionID.zod,
-    sessionID: SessionID.zod,
-    permission: z.string(),
-    patterns: z.string().array(),
-    metadata: z.record(z.string(), z.any()),
-    always: z.string().array(),
-    tool: z
-      .object({
-        messageID: MessageID.zod,
-        callID: z.string(),
-      })
-      .optional(),
-  })
-  .meta({
-    ref: "PermissionRequest",
-  })
-export type Request = z.infer<typeof Request>
-
-export const Reply = z.enum(["once", "always", "reject"])
-export type Reply = z.infer<typeof Reply>
-
-export const Approval = z.object({
-  projectID: ProjectID.zod,
-  patterns: z.string().array(),
-})
-
-export const Event = {
-  Asked: BusEvent.define("permission.asked", Request),
-  Replied: BusEvent.define(
-    "permission.replied",
-    z.object({
+  export const Request = z
+    .object({
+      id: PermissionID.zod,
       sessionID: SessionID.zod,
-      requestID: PermissionID.zod,
-      reply: Reply,
-    }),
-  ),
-}
+      permission: z.string(),
+      patterns: z.string().array(),
+      metadata: z.record(z.string(), z.any()),
+      always: z.string().array(),
+      tool: z
+        .object({
+          messageID: MessageID.zod,
+          callID: z.string(),
+        })
+        .optional(),
+    })
+    .meta({
+      ref: "PermissionRequest",
+    })
+  export type Request = z.infer<typeof Request>
 
-export class RejectedError extends Schema.TaggedErrorClass<RejectedError>()("PermissionRejectedError", {}) {
-  override get message() {
-    return "The user rejected permission to use this specific tool call."
+  export const Reply = z.enum(["once", "always", "reject"])
+  export type Reply = z.infer<typeof Reply>
+
+  export const Approval = z.object({
+    projectID: ProjectID.zod,
+    patterns: z.string().array(),
+  })
+
+  export const Event = {
+    Asked: BusEvent.define("permission.asked", Request),
+    Replied: BusEvent.define(
+      "permission.replied",
+      z.object({
+        sessionID: SessionID.zod,
+        requestID: PermissionID.zod,
+        reply: Reply,
+      }),
+    ),
   }
-}
 
-export class CorrectedError extends Schema.TaggedErrorClass<CorrectedError>()("PermissionCorrectedError", {
-  feedback: Schema.String,
-}) {
-  override get message() {
-    return `The user rejected permission to use this specific tool call with the following feedback: ${this.feedback}`
+  export class RejectedError extends Schema.TaggedErrorClass<RejectedError>()("PermissionRejectedError", {}) {
+    override get message() {
+      return "The user rejected permission to use this specific tool call."
+    }
   }
-}
 
-export class DeniedError extends Schema.TaggedErrorClass<DeniedError>()("PermissionDeniedError", {
-  ruleset: Schema.Any,
-}) {
-  override get message() {
-    return `The user has specified a rule which prevents you from using this specific tool call. Here are some of the relevant rules ${JSON.stringify(this.ruleset)}`
+  export class CorrectedError extends Schema.TaggedErrorClass<CorrectedError>()("PermissionCorrectedError", {
+    feedback: Schema.String,
+  }) {
+    override get message() {
+      return `The user rejected permission to use this specific tool call with the following feedback: ${this.feedback}`
+    }
   }
-}
 
-export type PermissionError = DeniedError | RejectedError | CorrectedError
+  export class DeniedError extends Schema.TaggedErrorClass<DeniedError>()("PermissionDeniedError", {
+    ruleset: Schema.Any,
+  }) {
+    override get message() {
+      return `The user has specified a rule which prevents you from using this specific tool call. Here are some of the relevant rules ${JSON.stringify(this.ruleset)}`
+    }
+  }
 
-interface PendingEntry {
-  info: Request
-  deferred: Deferred.Deferred<void, RejectedError | CorrectedError>
-}
+  export type Error = DeniedError | RejectedError | CorrectedError
 
-export const AskInput = Request.partial({ id: true }).extend({
-  ruleset: Ruleset,
-})
+  export const AskInput = Request.partial({ id: true }).extend({
+    ruleset: Ruleset,
+  })
 
-export const ReplyInput = z.object({
-  requestID: PermissionID.zod,
-  reply: Reply,
-  message: z.string().optional(),
-})
+  export const ReplyInput = z.object({
+    requestID: PermissionID.zod,
+    reply: Reply,
+    message: z.string().optional(),
+  })
 
-export declare namespace PermissionService {
   export interface Api {
-    readonly ask: (input: z.infer<typeof AskInput>) => Effect.Effect<void, PermissionError>
+    readonly ask: (input: z.infer<typeof AskInput>) => Effect.Effect<void, Error>
     readonly reply: (input: z.infer<typeof ReplyInput>) => Effect.Effect<void>
     readonly list: () => Effect.Effect<Request[]>
   }
-}
 
-export class PermissionService extends ServiceMap.Service<PermissionService, PermissionService.Api>()(
-  "@opencode/PermissionNext",
-) {
-  static readonly layer = Layer.effect(
-    PermissionService,
+  interface PendingEntry {
+    info: Request
+    deferred: Deferred.Deferred<void, RejectedError | CorrectedError>
+  }
+
+  export function evaluate(permission: string, pattern: string, ...rulesets: Ruleset[]): Rule {
+    const rules = rulesets.flat()
+    log.info("evaluate", { permission, pattern, ruleset: rules })
+    const match = rules.findLast(
+      (rule) => Wildcard.match(permission, rule.permission) && Wildcard.match(pattern, rule.pattern),
+    )
+    return match ?? { action: "ask", permission, pattern: "*" }
+  }
+
+  export class Service extends ServiceMap.Service<Service, Api>()("@opencode/PermissionNext") {}
+
+  export const layer = Layer.effect(
+    Service,
     Effect.gen(function* () {
       const { project } = yield* InstanceContext
       const row = Database.use((db) =>
@@ -225,27 +232,13 @@ export class PermissionService extends ServiceMap.Service<PermissionService, Per
           })
           yield* Deferred.succeed(item.deferred, undefined)
         }
-
-        // TODO: we don't save the permission ruleset to disk yet until there's
-        // UI to manage it
-        // db().insert(PermissionTable).values({ projectID: Instance.project.id, data: s.approved })
-        //   .onConflictDoUpdate({ target: PermissionTable.projectID, set: { data: s.approved } }).run()
       })
 
       const list = Effect.fn("PermissionService.list")(function* () {
         return Array.from(pending.values(), (item) => item.info)
       })
 
-      return PermissionService.of({ ask, reply, list })
+      return Service.of({ ask, reply, list })
     }),
   )
-}
-
-export function evaluate(permission: string, pattern: string, ...rulesets: Ruleset[]): Rule {
-  const merged = rulesets.flat()
-  log.info("evaluate", { permission, pattern, ruleset: merged })
-  const match = merged.findLast(
-    (rule) => Wildcard.match(permission, rule.permission) && Wildcard.match(pattern, rule.pattern),
-  )
-  return match ?? { action: "ask", permission, pattern: "*" }
 }
