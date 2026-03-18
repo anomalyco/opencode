@@ -32,6 +32,12 @@ export const { use: useTabs, provider: TabProvider } = createSimpleContext({
         if (info.label !== existing.label) state.rename(info.id, info.label)
         if (info.sessionID && info.sessionID !== existing.sessionID) state.updateSessionID(info.id, info.sessionID)
         if (info.directory && info.directory !== existing.directory) state.updateDirectory(info.id, info.directory)
+        const routeChanged =
+          info.route.type !== existing.route.type ||
+          (info.route.type === "session" &&
+            existing.route.type === "session" &&
+            info.route.sessionID !== existing.route.sessionID)
+        if (routeChanged) state.updateRoute(info.id, info.route)
         return
       }
       if (pending > 0) return

@@ -1,5 +1,5 @@
 import { createSignal, batch, type Accessor } from "solid-js"
-import { createStore, produce, unwrap } from "solid-js/store"
+import { createStore, produce, reconcile } from "solid-js/store"
 
 export type Route = { type: "home" } | { type: "session"; sessionID: string }
 
@@ -92,10 +92,11 @@ export function createTabState(opts?: { position?: "top" | "bottom" }) {
       const tab = tabs.find((t) => t.id === id)
       if (!tab) return
       const current = activeID()
-      if (current === id) return
       batch(() => {
-        setPreviousID(current)
-        setActiveID(id)
+        if (current !== id) {
+          setPreviousID(current)
+          setActiveID(id)
+        }
         if (navigator) navigator(tab.route)
       })
     },
@@ -120,12 +121,9 @@ export function createTabState(opts?: { position?: "top" | "bottom" }) {
       )
     },
     updateRoute(id, route) {
-      setTabs(
-        (t) => t.id === id,
-        produce((t) => {
-          t.route = structuredClone(unwrap(route))
-        }),
-      )
+      const idx = tabs.findIndex((t) => t.id === id)
+      if (idx === -1) return
+      setTabs(idx, "route", reconcile(route))
     },
     updateSessionID(id, sessionID) {
       setTabs(
@@ -153,13 +151,21 @@ export function createTabState(opts?: { position?: "top" | "bottom" }) {
     },
     load(state) {
       batch(() => {
-        setTabs(state.tabs)
+        setTabs(reconcile(state.tabs, { key: "id" }))
         setActiveID(state.activeID)
         setPreviousID(state.previousID)
         setPositionRaw(state.position)
-        const active = state.tabs.find((t) => t.id === state.activeID)
-        if (active && navigator) navigator(active.route)
+        for (const tab of state.tabs) {
+          const match = tab.id.match(/^tab_(\d+)$/)
+          if (match) {
+            const n = parseInt(match[1], 10) + 1
+            if (n > nextID) nextID = n
+          }
+        }
       })
+      // Navigate AFTER batch — all tab state effects have settled
+      const active = state.tabs.find((t) => t.id === state.activeID)
+      if (active && navigator) navigator(active.route)
     },
   }
   return result
