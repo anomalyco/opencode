@@ -87,10 +87,10 @@ Configure modes in your `opencode.json` config file:
 
 You can also define modes using markdown files. Place them in:
 
-- Global: `~/.config/opencode/mode/`
-- Project: `.opencode/mode/`
+- Global: `~/.config/opencode/modes/`
+- Project: `.opencode/modes/`
 
-```markdown title="~/.config/opencode/mode/review.md"
+```markdown title="~/.config/opencode/modes/review.md"
 ---
 model: anthropic/claude-sonnet-4-20250514
 temperature: 0.1
@@ -268,9 +268,9 @@ You can create your own custom modes by adding them to the configuration. Here a
 
 ### Using markdown files
 
-Create mode files in `.opencode/mode/` for project-specific modes or `~/.config/opencode/mode/` for global modes:
+Create mode files in `.opencode/modes/` for project-specific modes or `~/.config/opencode/modes/` for global modes:
 
-```markdown title=".opencode/mode/debug.md"
+```markdown title=".opencode/modes/debug.md"
 ---
 temperature: 0.1
 tools:
@@ -294,7 +294,7 @@ Focus on:
 Do not make any changes to files. Only investigate and report.
 ```
 
-```markdown title="~/.config/opencode/mode/refactor.md"
+```markdown title="~/.config/opencode/modes/refactor.md"
 ---
 model: anthropic/claude-sonnet-4-20250514
 temperature: 0.2

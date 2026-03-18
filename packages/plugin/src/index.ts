@@ -12,10 +12,10 @@ import type {
   Config,
 } from "@opencode-ai/sdk"
 
-import type { BunShell } from "./shell"
-import { type ToolDefinition } from "./tool"
+import type { BunShell } from "./shell.js"
+import { type ToolDefinition } from "./tool.js"
 
-export * from "./tool"
+export * from "./tool.js"
 
 export type ProviderContext = {
   source: "env" | "config" | "custom" | "api"
@@ -34,6 +34,12 @@ export type PluginInput = {
 
 export type Plugin = (input: PluginInput) => Promise<Hooks>
 
+type Rule = {
+  key: string
+  op: "eq" | "neq"
+  value: string
+}
+
 export type AuthHook = {
   provider: string
   loader?: (auth: () => Promise<Auth>, provider: Provider) => Promise<Record<string, any>>
@@ -48,7 +54,9 @@ export type AuthHook = {
               message: string
               placeholder?: string
               validate?: (value: string) => string | undefined
+              /** @deprecated Use `when` instead */
               condition?: (inputs: Record<string, string>) => boolean
+              when?: Rule
             }
           | {
               type: "select"
@@ -59,7 +67,9 @@ export type AuthHook = {
                 value: string
                 hint?: string
               }>
+              /** @deprecated Use `when` instead */
               condition?: (inputs: Record<string, string>) => boolean
+              when?: Rule
             }
         >
         authorize(inputs?: Record<string, string>): Promise<AuthOuathResult>
@@ -74,7 +84,9 @@ export type AuthHook = {
               message: string
               placeholder?: string
               validate?: (value: string) => string | undefined
+              /** @deprecated Use `when` instead */
               condition?: (inputs: Record<string, string>) => boolean
+              when?: Rule
             }
           | {
               type: "select"
@@ -85,7 +97,9 @@ export type AuthHook = {
                 value: string
                 hint?: string
               }>
+              /** @deprecated Use `when` instead */
               condition?: (inputs: Record<string, string>) => boolean
+              when?: Rule
             }
         >
         authorize?(inputs?: Record<string, string>): Promise<
@@ -172,13 +186,25 @@ export interface Hooks {
     input: { sessionID: string; agent: string; model: Model; provider: ProviderContext; message: UserMessage },
     output: { temperature: number; topP: number; topK: number; options: Record<string, any> },
   ) => Promise<void>
+  "chat.headers"?: (
+    input: { sessionID: string; agent: string; model: Model; provider: ProviderContext; message: UserMessage },
+    output: { headers: Record<string, string> },
+  ) => Promise<void>
   "permission.ask"?: (input: Permission, output: { status: "ask" | "deny" | "allow" }) => Promise<void>
+  "command.execute.before"?: (
+    input: { command: string; sessionID: string; arguments: string },
+    output: { parts: Part[] },
+  ) => Promise<void>
   "tool.execute.before"?: (
     input: { tool: string; sessionID: string; callID: string },
     output: { args: any },
   ) => Promise<void>
+  "shell.env"?: (
+    input: { cwd: string; sessionID?: string; callID?: string },
+    output: { env: Record<string, string> },
+  ) => Promise<void>
   "tool.execute.after"?: (
-    input: { tool: string; sessionID: string; callID: string },
+    input: { tool: string; sessionID: string; callID: string; args: any },
     output: {
       title: string
       output: string
@@ -195,7 +221,7 @@ export interface Hooks {
     },
   ) => Promise<void>
   "experimental.chat.system.transform"?: (
-    input: { sessionID: string },
+    input: { sessionID?: string; model: Model },
     output: {
       system: string[]
     },
@@ -215,4 +241,8 @@ export interface Hooks {
     input: { sessionID: string; messageID: string; partID: string },
     output: { text: string },
   ) => Promise<void>
+  /**
+   * Modify tool definitions (description and parameters) sent to LLM
+   */
+  "tool.definition"?: (input: { toolID: string }, output: { description: string; parameters: any }) => Promise<void>
 }

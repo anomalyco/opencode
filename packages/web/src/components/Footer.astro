@@ -1,0 +1,125 @@
+---
+import config from "virtual:starlight/user-config"
+import LanguageSelect from "@astrojs/starlight/components/LanguageSelect.astro"
+import { Icon } from "@astrojs/starlight/components"
+
+const { lang, editUrl, lastUpdated, entry } = Astro.locals.starlightRoute
+const template = entry.data.template
+const issueLink = Astro.locals.t("app.footer.issueLink", "Found a bug? Open an issue")
+const discordLink = Astro.locals.t("app.footer.discordLink", "Join our Discord community")
+
+const github = config.social?.find((item) => item.icon === "github")
+const discord = config.social?.find((item) => item.icon === "discord")
+---
+
+{
+  template === "doc" && (
+    <footer class="doc">
+      <div class="meta sl-flex">
+        <div>
+          {
+            editUrl && (
+              <a href={editUrl} target="_blank" rel="noopener noreferrer" class="sl-flex">
+                <Icon name="pencil" size="1em" />
+                {Astro.locals.t("page.editLink")}
+              </a>
+            )
+          }
+          {
+            github && (
+              <a href={`${github.href}/issues/new`} target="_blank" rel="noopener noreferrer" class="sl-flex">
+                <Icon name={github.icon} size="1em" />
+                {issueLink}
+              </a>
+            )
+          }
+          {
+            discord && (
+              <a href={discord.href} target="_blank" rel="noopener noreferrer" class="sl-flex">
+                <Icon name={discord.icon} size="1em" />
+                {discordLink}
+              </a>
+            )
+          }
+          <LanguageSelect />
+        </div>
+        <div>
+          <p>&copy; <a target="_blank" rel="noopener noreferrer" href="https://anoma.ly">Anomaly</a></p>
+          <p title={Astro.locals.t("page.lastUpdated")}>
+            {Astro.locals.t("page.lastUpdated")} {" "}
+            {
+              lastUpdated ? (
+                <time datetime={lastUpdated.toISOString()}>
+                  {lastUpdated.toLocaleDateString(lang, { dateStyle: "medium", timeZone: "UTC" })}
+                </time>
+              ) : (
+                "-"
+              )
+            }
+          </p>
+        </div>
+      </div>
+    </footer>
+  )
+}
+
+<style>
+  footer.doc {
+    margin-top: 3rem;
+    border-top: 1px solid var(--sl-color-border);
+  }
+
+  .meta {
+    gap: 0.75rem 3rem;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    margin-block: 3rem 1.5rem;
+    font-size: var(--sl-text-sm);
+  }
+
+  @media (min-width: 30rem) {
+    .meta {
+      flex-direction: row;
+    }
+  }
+
+  .doc a,
+  .doc p {
+    padding-block: 0.125rem;
+  }
+
+  .doc a {
+    gap: 0.4375rem;
+    align-items: center;
+    text-decoration: none;
+    color: var(--sl-color-text);
+    font-size: var(--sl-text-sm);
+  }
+
+  .doc a svg {
+    opacity: 0.85;
+  }
+
+  .doc p {
+    color: var(--sl-color-text-dimmed);
+  }
+
+  .doc :global(starlight-lang-select) {
+    display: inline-flex;
+    margin-top: 0.5rem;
+  }
+
+  .doc :global(starlight-lang-select select) {
+    min-width: 15em;
+  }
+
+  @media (min-width: 30rem) {
+    .doc p {
+      text-align: right;
+    }
+  }
+
+  .doc p a {
+    color: var(--sl-color-text-dimmed);
+  }
+</style>

@@ -1,0 +1,222 @@
+---
+title: "Habilidades do Agente"
+description: "Defina comportamentos reutilizáveis via definições de SKILL.md"
+---
+
+As habilidades do agente permitem que o opencode descubra instruções reutilizáveis do seu repositório ou diretório pessoal.
+As habilidades são carregadas sob demanda através da ferramenta nativa `skill`—os agentes veem as habilidades disponíveis e podem carregar o conteúdo completo quando necessário.
+
+---
+
+## Colocar arquivos
+
+Crie uma pasta por nome de habilidade e coloque um `SKILL.md` dentro dela.
+O opencode pesquisa nesses locais:
+
+- Configuração do projeto: `.opencode/skills/<name>/SKILL.md`
+- Configuração global: `~/.config/opencode/skills/<name>/SKILL.md`
+- Projeto compatível com Claude: `.claude/skills/<name>/SKILL.md`
+- Global compatível com Claude: `~/.claude/skills/<name>/SKILL.md`
+- Projeto compatível com agente: `.agents/skills/<name>/SKILL.md`
+- Global compatível com agente: `~/.agents/skills/<name>/SKILL.md`
+
+---
+
+## Entender a descoberta
+
+Para caminhos locais do projeto, o opencode sobe a partir do seu diretório de trabalho atual até alcançar a árvore de trabalho do git.
+Ele carrega qualquer `skills/*/SKILL.md` correspondente em `.opencode/` e qualquer `.claude/skills/*/SKILL.md` ou `.agents/skills/*/SKILL.md` ao longo do caminho.
+
+As definições globais também são carregadas de `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` e `~/.agents/skills/*/SKILL.md`.
+
+---
+
+## Escrever frontmatter
+
+Cada `SKILL.md` deve começar com frontmatter YAML.
+Somente estes campos são reconhecidos:
+
+- `name` (obrigatório)
+- `description` (obrigatório)
+- `license` (opcional)
+- `compatibility` (opcional)
+- `metadata` (opcional, mapa de string para string)
+
+Campos de frontmatter desconhecidos são ignorados.
+
+---
+
+## Validar nomes
+
+`name` deve:
+
+- Ter de 1 a 64 caracteres
+- Ser alfanumérico em minúsculas com separadores de hífen simples
+- Não começar ou terminar com `-`
+- Não conter `--` consecutivos
+- Combinar com o nome do diretório que contém `SKILL.md`
+
+Regex equivalente:
+
+```text
+^[a-z0-9]+(-[a-z0-9]+)*$
+```
+
+---
+
+## Seguir regras de comprimento
+
+`description` deve ter de 1 a 1024 caracteres.
+Mantenha-a específica o suficiente para que o agente escolha corretamente.
+
+---
+
+## Usar um exemplo
+
+Crie `.opencode/skills/git-release/SKILL.md` assim:
+
+```markdown
+---
+name: git-release
+description: Create consistent releases and changelogs
+license: MIT
+compatibility: opencode
+metadata:
+  audience: maintainers
+  workflow: github
+---
+
+## What I do
+
+- Draft release notes from merged PRs
+- Propose a version bump
+- Provide a copy-pasteable `gh release create` command
+
+## When to use me
+
+Use this when you are preparing a tagged release.
+Ask clarifying questions if the target versioning scheme is unclear.
+```
+
+---
+
+## Reconhecer descrição da ferramenta
+
+O opencode lista as habilidades disponíveis na descrição da ferramenta `skill`.
+Cada entrada inclui o nome e a descrição da habilidade:
+
+```xml
+<available_skills>
+  <skill>
+    <name>git-release</name>
+    <description>Create consistent releases and changelogs</description>
+  </skill>
+</available_skills>
+```
+
+O agente carrega uma habilidade chamando a ferramenta:
+
+```
+skill({ name: "git-release" })
+```
+
+---
+
+## Configurar permissões
+
+Controle quais habilidades os agentes podem acessar usando permissões baseadas em padrões em `opencode.json`:
+
+```json
+{
+  "permission": {
+    "skill": {
+      "*": "allow",
+      "pr-review": "allow",
+      "internal-*": "deny",
+      "experimental-*": "ask"
+    }
+  }
+}
+```
+
+| Permissão | Comportamento                                       |
+| --------- | --------------------------------------------------- |
+| `allow`   | Habilidade carrega imediatamente                    |
+| `deny`    | Habilidade oculta do agente, acesso rejeitado       |
+| `ask`     | Usuário solicitado para aprovação antes de carregar |
+
+Padrões suportam curingas: `internal-*` corresponde a `internal-docs`, `internal-tools`, etc.
+
+---
+
+## Substituir por agente
+
+Dê a agentes específicos permissões diferentes das configurações globais padrão.
+
+**Para agentes personalizados** (no frontmatter do agente):
+
+```yaml
+---
+permission:
+  skill:
+    "documents-*": "allow"
+---
+```
+
+**Para agentes embutidos** (em `opencode.json`):
+
+```json
+{
+  "agent": {
+    "plan": {
+      "permission": {
+        "skill": {
+          "internal-*": "allow"
+        }
+      }
+    }
+  }
+}
+```
+
+---
+
+## Desativar a ferramenta de habilidades
+
+Desative completamente as habilidades para agentes que não devem usá-las:
+
+**Para agentes personalizados**:
+
+```yaml
+---
+tools:
+  skill: false
+---
+```
+
+**Para agentes embutidos**:
+
+```json
+{
+  "agent": {
+    "plan": {
+      "tools": {
+        "skill": false
+      }
+    }
+  }
+}
+```
+
+Quando desativado, a seção `<available_skills>` é omitida completamente.
+
+---
+
+## Solucionar problemas de carregamento
+
+Se uma habilidade não aparecer:
+
+1. Verifique se `SKILL.md` está escrito em letras maiúsculas
+2. Verifique se o frontmatter inclui `name` e `description`
+3. Certifique-se de que os nomes das habilidades sejam únicos em todos os locais
+4. Verifique as permissões—habilidades com `deny` estão ocultas dos agentes

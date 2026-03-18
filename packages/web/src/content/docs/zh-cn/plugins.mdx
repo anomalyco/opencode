@@ -1,0 +1,388 @@
+---
+title: 插件
+description: 编写自己的插件来扩展 OpenCode。
+---
+
+插件允许你通过挂钩各种事件和自定义行为来扩展 OpenCode。你可以创建插件来添加新功能、集成外部服务，或修改 OpenCode 的默认行为。
+
+如需了解示例，请查看社区创建的[插件](/docs/ecosystem#plugins)。
+
+---
+
+## 使用插件
+
+有两种方式加载插件。
+
+---
+
+### 从本地文件加载
+
+将 JavaScript 或 TypeScript 文件放置在插件目录中。
+
+- `.opencode/plugins/` - 项目级插件
+- `~/.config/opencode/plugins/` - 全局插件
+
+这些目录中的文件会在启动时自动加载。
+
+---
+
+### 从 npm 加载
+
+在配置文件中指定 npm 包。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
+}
+```
+
+支持常规和带作用域的 npm 包。
+
+浏览[生态系统](/docs/ecosystem#plugins)中的可用插件。
+
+---
+
+### 插件的安装方式
+
+**npm 插件**在启动时使用 Bun 自动安装。包及其依赖项会缓存在 `~/.cache/opencode/node_modules/` 中。
+
+**本地插件**直接从插件目录加载。如果需要使用外部包，你必须在配置目录中创建 `package.json`（参见[依赖项](#dependencies)），或者将插件发布到 npm 并[将其添加到配置中](/docs/config#plugins)。
+
+---
+
+### 加载顺序
+
+插件从所有来源加载，所有钩子按顺序执行。加载顺序为：
+
+1. 全局配置 (`~/.config/opencode/opencode.json`)
+2. 项目配置 (`opencode.json`)
+3. 全局插件目录 (`~/.config/opencode/plugins/`)
+4. 项目插件目录 (`.opencode/plugins/`)
+
+名称和版本相同的重复 npm 包只会加载一次。但本地插件和名称相似的 npm 插件会分别独立加载。
+
+---
+
+## 创建插件
+
+插件是一个 **JavaScript/TypeScript 模块**，它导出一个或多个插件函数。每个函数接收一个上下文对象，并返回一个钩子对象。
+
+---
+
+### 依赖项
+
+本地插件和自定义工具可以使用外部 npm 包。在配置目录中添加一个 `package.json`，列出所需的依赖项。
+
+```json title=".opencode/package.json"
+{
+  "dependencies": {
+    "shescape": "^2.1.0"
+  }
+}
+```
+
+OpenCode 会在启动时运行 `bun install` 来安装这些依赖项。之后你的插件和工具就可以导入它们了。
+
+```ts title=".opencode/plugins/my-plugin.ts"
+import { escape } from "shescape"
+
+export const MyPlugin = async (ctx) => {
+  return {
+    "tool.execute.before": async (input, output) => {
+      if (input.tool === "bash") {
+        output.args.command = escape(output.args.command)
+      }
+    },
+  }
+}
+```
+
+---
+
+### 基本结构
+
+```js title=".opencode/plugins/example.js"
+export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
+  console.log("Plugin initialized!")
+
+  return {
+    // Hook implementations go here
+  }
+}
+```
+
+插件函数接收以下参数：
+
+- `project`：当前项目信息。
+- `directory`：当前工作目录。
+- `worktree`：git 工作树路径。
+- `client`：用于与 AI 交互的 OpenCode SDK 客户端。
+- `$`：Bun 的 [Shell API](https://bun.com/docs/runtime/shell)，用于执行命令。
+
+---
+
+### TypeScript 支持
+
+对于 TypeScript 插件，你可以从插件包中导入类型：
+
+```ts title="my-plugin.ts" {1}
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
+  return {
+    // Type-safe hook implementations
+  }
+}
+```
+
+---
+
+### 事件
+
+插件可以订阅事件，如下方示例部分所示。以下是所有可用事件的列表。
+
+#### 命令事件
+
+- `command.executed`
+
+#### 文件事件
+
+- `file.edited`
+- `file.watcher.updated`
+
+#### 安装事件
+
+- `installation.updated`
+
+#### LSP 事件
+
+- `lsp.client.diagnostics`
+- `lsp.updated`
+
+#### 消息事件
+
+- `message.part.removed`
+- `message.part.updated`
+- `message.removed`
+- `message.updated`
+
+#### 权限事件
+
+- `permission.asked`
+- `permission.replied`
+
+#### 服务器事件
+
+- `server.connected`
+
+#### 会话事件
+
+- `session.created`
+- `session.compacted`
+- `session.deleted`
+- `session.diff`
+- `session.error`
+- `session.idle`
+- `session.status`
+- `session.updated`
+
+#### 待办事项事件
+
+- `todo.updated`
+
+#### Shell 事件
+
+- `shell.env`
+
+#### 工具事件
+
+- `tool.execute.after`
+- `tool.execute.before`
+
+#### TUI 事件
+
+- `tui.prompt.append`
+- `tui.command.execute`
+- `tui.toast.show`
+
+---
+
+## 示例
+
+以下是一些可用于扩展 OpenCode 的插件示例。
+
+---
+
+### 发送通知
+
+在特定事件发生时发送通知：
+
+```js title=".opencode/plugins/notification.js"
+export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
+  return {
+    event: async ({ event }) => {
+      // Send notification on session completion
+      if (event.type === "session.idle") {
+        await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
+      }
+    },
+  }
+}
+```
+
+这里使用 `osascript` 在 macOS 上运行 AppleScript 来发送通知。
+
+:::note
+如果你使用 OpenCode 桌面应用，它可以在响应就绪或会话出错时自动发送系统通知。
+:::
+
+---
+
+### .env 保护
+
+阻止 OpenCode 读取 `.env` 文件：
+
+```javascript title=".opencode/plugins/env-protection.js"
+export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
+  return {
+    "tool.execute.before": async (input, output) => {
+      if (input.tool === "read" && output.args.filePath.includes(".env")) {
+        throw new Error("Do not read .env files")
+      }
+    },
+  }
+}
+```
+
+---
+
+### 注入环境变量
+
+将环境变量注入所有 Shell 执行（AI 工具和用户终端）：
+
+```javascript title=".opencode/plugins/inject-env.js"
+export const InjectEnvPlugin = async () => {
+  return {
+    "shell.env": async (input, output) => {
+      output.env.MY_API_KEY = "secret"
+      output.env.PROJECT_ROOT = input.cwd
+    },
+  }
+}
+```
+
+---
+
+### 自定义工具
+
+插件还可以为 OpenCode 添加自定义工具：
+
+```ts title=".opencode/plugins/custom-tools.ts"
+import { type Plugin, tool } from "@opencode-ai/plugin"
+
+export const CustomToolsPlugin: Plugin = async (ctx) => {
+  return {
+    tool: {
+      mytool: tool({
+        description: "This is a custom tool",
+        args: {
+          foo: tool.schema.string(),
+        },
+        async execute(args, context) {
+          const { directory, worktree } = context
+          return `Hello ${args.foo} from ${directory} (worktree: ${worktree})`
+        },
+      }),
+    },
+  }
+}
+```
+
+`tool` 辅助函数用于创建 OpenCode 可调用的自定义工具。它接受一个 Zod schema 函数，并返回一个工具定义，包含：
+
+- `description`：工具的功能描述
+- `args`：工具参数的 Zod schema
+- `execute`：工具被调用时执行的函数
+
+你的自定义工具将与内置工具一起在 OpenCode 中可用。
+
+:::note
+如果插件工具与内置工具使用相同的名称，则优先使用插件工具。
+:::
+
+---
+
+### 日志记录
+
+使用 `client.app.log()` 代替 `console.log` 进行结构化日志记录：
+
+```ts title=".opencode/plugins/my-plugin.ts"
+export const MyPlugin = async ({ client }) => {
+  await client.app.log({
+    body: {
+      service: "my-plugin",
+      level: "info",
+      message: "Plugin initialized",
+      extra: { foo: "bar" },
+    },
+  })
+}
+```
+
+日志级别：`debug`、`info`、`warn`、`error`。详情请参阅 [SDK 文档](https://opencode.ai/docs/sdk)。
+
+---
+
+### 压缩钩子
+
+自定义会话压缩时包含的上下文：
+
+```ts title=".opencode/plugins/compaction.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const CompactionPlugin: Plugin = async (ctx) => {
+  return {
+    "experimental.session.compacting": async (input, output) => {
+      // Inject additional context into the compaction prompt
+      output.context.push(`
+## Custom Context
+
+Include any state that should persist across compaction:
+- Current task status
+- Important decisions made
+- Files being actively worked on
+`)
+    },
+  }
+}
+```
+
+`experimental.session.compacting` 钩子在 LLM 生成续接摘要之前触发。使用它来注入默认压缩提示词可能遗漏的领域特定上下文。
+
+你还可以通过设置 `output.prompt` 来完全替换压缩提示词：
+
+```ts title=".opencode/plugins/custom-compaction.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const CustomCompactionPlugin: Plugin = async (ctx) => {
+  return {
+    "experimental.session.compacting": async (input, output) => {
+      // Replace the entire compaction prompt
+      output.prompt = `
+You are generating a continuation prompt for a multi-agent swarm session.
+
+Summarize:
+1. The current task and its status
+2. Which files are being modified and by whom
+3. Any blockers or dependencies between agents
+4. The next steps to complete the work
+
+Format as a structured prompt that a new agent can use to resume work.
+`
+    },
+  }
+}
+```
+
+当设置了 `output.prompt` 时，它会完全替换默认的压缩提示词。在这种情况下，`output.context` 数组将被忽略。

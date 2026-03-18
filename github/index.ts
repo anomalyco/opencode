@@ -8,6 +8,7 @@ import type { Context as GitHubContext } from "@actions/github/lib/context"
 import type { IssueCommentEvent, PullRequestReviewCommentEvent } from "@octokit/webhooks-types"
 import { createOpencodeClient } from "@opencode-ai/sdk"
 import { spawn } from "node:child_process"
+import { setTimeout as sleep } from "node:timers/promises"
 
 type GitHubAuthor = {
   login: string
@@ -275,13 +276,13 @@ async function assertOpencodeConnected() {
         body: {
           service: "github-workflow",
           level: "info",
-          message: "Prepare to react to Github Workflow event",
+          message: "Prepare to react to GitHub Workflow event",
         },
       })
       connected = true
       break
     } catch (e) {}
-    await Bun.sleep(300)
+    await sleep(300)
   } while (retry++ < 30)
 
   if (!connected) {

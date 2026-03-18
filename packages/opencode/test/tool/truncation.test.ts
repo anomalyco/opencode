@@ -1,15 +1,20 @@
-import { describe, test, expect, afterAll } from "bun:test"
-import { Truncate } from "../../src/tool/truncation"
+import { describe, test, expect } from "bun:test"
+import { NodeFileSystem } from "@effect/platform-node"
+import { Effect, FileSystem, Layer } from "effect"
+import { Truncate } from "../../src/tool/truncate"
+import { TruncateEffect } from "../../src/tool/truncate-effect"
 import { Identifier } from "../../src/id/id"
-import fs from "fs/promises"
+import { Filesystem } from "../../src/util/filesystem"
 import path from "path"
+import { testEffect } from "../lib/effect"
+import { writeFileStringScoped } from "../lib/filesystem"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
 
 describe("Truncate", () => {
   describe("output", () => {
     test("truncates large json file by bytes", async () => {
-      const content = await Bun.file(path.join(FIXTURES_DIR, "models-api.json")).text()
+      const content = await Filesystem.readText(path.join(FIXTURES_DIR, "models-api.json"))
       const result = await Truncate.output(content)
 
       expect(result.truncated).toBe(true)
@@ -69,7 +74,7 @@ describe("Truncate", () => {
     })
 
     test("large single-line file truncates with byte message", async () => {
-      const content = await Bun.file(path.join(FIXTURES_DIR, "models-api.json")).text()
+      const content = await Filesystem.readText(path.join(FIXTURES_DIR, "models-api.json"))
       const result = await Truncate.output(content)
 
       expect(result.truncated).toBe(true)
@@ -88,7 +93,7 @@ describe("Truncate", () => {
       expect(result.outputPath).toBeDefined()
       expect(result.outputPath).toContain("tool_")
 
-      const written = await Bun.file(result.outputPath).text()
+      const written = await Filesystem.readText(result.outputPath!)
       expect(written).toBe(lines)
     })
 
@@ -124,36 +129,24 @@ describe("Truncate", () => {
 
   describe("cleanup", () => {
     const DAY_MS = 24 * 60 * 60 * 1000
-    let oldFile: string
-    let recentFile: string
+    const it = testEffect(Layer.mergeAll(TruncateEffect.defaultLayer, NodeFileSystem.layer))
 
-    afterAll(async () => {
-      await fs.unlink(oldFile).catch(() => {})
-      await fs.unlink(recentFile).catch(() => {})
-    })
+    it.effect("deletes files older than 7 days and preserves recent files", () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem
 
-    test("deletes files older than 7 days and preserves recent files", async () => {
-      await fs.mkdir(Truncate.DIR, { recursive: true })
+        yield* fs.makeDirectory(Truncate.DIR, { recursive: true })
 
-      // Create an old file (10 days ago)
-      const oldTimestamp = Date.now() - 10 * DAY_MS
-      const oldId = Identifier.create("tool", false, oldTimestamp)
-      oldFile = path.join(Truncate.DIR, oldId)
-      await Bun.write(Bun.file(oldFile), "old content")
+        const old = path.join(Truncate.DIR, Identifier.create("tool", false, Date.now() - 10 * DAY_MS))
+        const recent = path.join(Truncate.DIR, Identifier.create("tool", false, Date.now() - 3 * DAY_MS))
 
-      // Create a recent file (3 days ago)
-      const recentTimestamp = Date.now() - 3 * DAY_MS
-      const recentId = Identifier.create("tool", false, recentTimestamp)
-      recentFile = path.join(Truncate.DIR, recentId)
-      await Bun.write(Bun.file(recentFile), "recent content")
+        yield* writeFileStringScoped(old, "old content")
+        yield* writeFileStringScoped(recent, "recent content")
+        yield* TruncateEffect.Service.use((s) => s.cleanup())
 
-      await Truncate.cleanup()
-
-      // Old file should be deleted
-      expect(await Bun.file(oldFile).exists()).toBe(false)
-
-      // Recent file should still exist
-      expect(await Bun.file(recentFile).exists()).toBe(true)
-    })
+        expect(yield* fs.exists(old)).toBe(false)
+        expect(yield* fs.exists(recent)).toBe(true)
+      }),
+    )
   })
 })

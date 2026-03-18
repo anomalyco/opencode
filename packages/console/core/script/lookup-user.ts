@@ -1,8 +1,9 @@
 import { Database, and, eq, sql } from "../src/drizzle/index.js"
 import { AuthTable } from "../src/schema/auth.sql.js"
 import { UserTable } from "../src/schema/user.sql.js"
-import { BillingTable, PaymentTable, SubscriptionTable, UsageTable } from "../src/schema/billing.sql.js"
+import { BillingTable, PaymentTable, SubscriptionTable, BlackPlans, UsageTable } from "../src/schema/billing.sql.js"
 import { WorkspaceTable } from "../src/schema/workspace.sql.js"
+import { KeyTable } from "../src/schema/key.sql.js"
 import { BlackData } from "../src/black.js"
 import { centsToMicroCents } from "../src/util/price.js"
 import { getWeekBounds } from "../src/util/date.js"
@@ -10,13 +11,46 @@ import { getWeekBounds } from "../src/util/date.js"
 // get input from command line
 const identifier = process.argv[2]
 if (!identifier) {
-  console.error("Usage: bun lookup-user.ts <email|workspaceID>")
+  console.error("Usage: bun lookup-user.ts <email|workspaceID|apiKey>")
   process.exit(1)
 }
 
+// loop up by workspace ID
 if (identifier.startsWith("wrk_")) {
   await printWorkspace(identifier)
-} else {
+}
+// lookup by API key ID
+else if (identifier.startsWith("key_")) {
+  const key = await Database.use((tx) =>
+    tx
+      .select()
+      .from(KeyTable)
+      .where(eq(KeyTable.id, identifier))
+      .then((rows) => rows[0]),
+  )
+  if (!key) {
+    console.error("API key not found")
+    process.exit(1)
+  }
+  await printWorkspace(key.workspaceID)
+}
+// lookup by API key value
+else if (identifier.startsWith("sk-")) {
+  const key = await Database.use((tx) =>
+    tx
+      .select()
+      .from(KeyTable)
+      .where(eq(KeyTable.key, identifier))
+      .then((rows) => rows[0]),
+  )
+  if (!key) {
+    console.error("API key not found")
+    process.exit(1)
+  }
+  await printWorkspace(key.workspaceID)
+}
+// lookup by email
+else {
   const authData = await Database.use(async (tx) =>
     tx.select().from(AuthTable).where(eq(AuthTable.subject, identifier)),
   )
@@ -55,8 +89,9 @@ if (identifier.startsWith("wrk_")) {
       ),
   )
 
-  // Get all payments for these workspaces
-  await Promise.all(users.map((u: { workspaceID: string }) => printWorkspace(u.workspaceID)))
+  for (const user of users) {
+    await printWorkspace(user.workspaceID)
+  }
 }
 
 async function printWorkspace(workspaceID: string) {
@@ -85,8 +120,10 @@ async function printWorkspace(workspaceID: string) {
         timeFixedUpdated: SubscriptionTable.timeFixedUpdated,
         timeRollingUpdated: SubscriptionTable.timeRollingUpdated,
         timeSubscriptionCreated: SubscriptionTable.timeCreated,
+        subscription: BillingTable.subscription,
       })
       .from(UserTable)
+      .innerJoin(BillingTable, eq(BillingTable.workspaceID, workspace.id))
       .leftJoin(AuthTable, and(eq(UserTable.accountID, AuthTable.accountID), eq(AuthTable.provider, "email")))
       .leftJoin(SubscriptionTable, eq(SubscriptionTable.userID, UserTable.id))
       .where(eq(UserTable.workspaceID, workspace.id))
@@ -113,16 +150,34 @@ async function printWorkspace(workspaceID: string) {
       .select({
         balance: BillingTable.balance,
         customerID: BillingTable.customerID,
+        reload: BillingTable.reload,
         subscriptionID: BillingTable.subscriptionID,
-        subscriptionCouponID: BillingTable.subscriptionCouponID,
+        subscription: {
+          plan: BillingTable.subscriptionPlan,
+          booked: BillingTable.timeSubscriptionBooked,
+          enrichment: BillingTable.subscription,
+        },
+        timeSubscriptionSelected: BillingTable.timeSubscriptionSelected,
       })
       .from(BillingTable)
       .where(eq(BillingTable.workspaceID, workspace.id))
       .then(
         (rows) =>
           rows.map((row) => ({
-            ...row,
             balance: `$${(row.balance / 100000000).toFixed(2)}`,
+            reload: row.reload ? "yes" : "no",
+            customerID: row.customerID,
+            subscriptionID: row.subscriptionID,
+            subscription: row.subscriptionID
+              ? [
+                  `Black ${row.subscription.enrichment!.plan}`,
+                  row.subscription.enrichment!.seats > 1 ? `X ${row.subscription.enrichment!.seats} seats` : "",
+                  row.subscription.enrichment!.coupon ? `(coupon: ${row.subscription.enrichment!.coupon})` : "",
+                  `(ref: ${row.subscriptionID})`,
+                ].join(" ")
+              : row.subscription.booked
+                ? `Waitlist ${row.subscription.plan} plan${row.timeSubscriptionSelected ? " (selected)" : ""}`
+                : undefined,
           }))[0],
       ),
   )
@@ -133,6 +188,7 @@ async function printWorkspace(workspaceID: string) {
         amount: PaymentTable.amount,
         paymentID: PaymentTable.paymentID,
         invoiceID: PaymentTable.invoiceID,
+        customerID: PaymentTable.customerID,
         timeCreated: PaymentTable.timeCreated,
         timeRefunded: PaymentTable.timeRefunded,
       })
@@ -206,17 +262,20 @@ function formatRetryTime(seconds: number) {
 }
 
 function getSubscriptionStatus(row: {
+  subscription: {
+    plan: (typeof BlackPlans)[number]
+  } | null
   timeSubscriptionCreated: Date | null
   fixedUsage: number | null
   rollingUsage: number | null
   timeFixedUpdated: Date | null
   timeRollingUpdated: Date | null
 }) {
-  if (!row.timeSubscriptionCreated) {
+  if (!row.timeSubscriptionCreated || !row.subscription) {
     return { weekly: null, rolling: null, rateLimited: null, retryIn: null }
   }
 
-  const black = BlackData.get()
+  const black = BlackData.getLimits({ plan: row.subscription.plan })
   const now = new Date()
   const week = getWeekBounds(now)
 

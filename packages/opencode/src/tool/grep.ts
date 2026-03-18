@@ -1,6 +1,9 @@
 import z from "zod"
+import { text } from "node:stream/consumers"
 import { Tool } from "./tool"
+import { Filesystem } from "../util/filesystem"
 import { Ripgrep } from "../file/ripgrep"
+import { Process } from "../util/process"
 
 import DESCRIPTION from "./grep.txt"
 import { Instance } from "../project/instance"
@@ -37,22 +40,30 @@ export const GrepTool = Tool.define("grep", {
     await assertExternalDirectory(ctx, searchPath, { kind: "directory" })
 
     const rgPath = await Ripgrep.filepath()
-    const args = ["-nH", "--hidden", "--follow", "--field-match-separator=|", "--regexp", params.pattern]
+    const args = ["-nH", "--hidden", "--no-messages", "--field-match-separator=|", "--regexp", params.pattern]
     if (params.include) {
       args.push("--glob", params.include)
     }
     args.push(searchPath)
 
-    const proc = Bun.spawn([rgPath, ...args], {
+    const proc = Process.spawn([rgPath, ...args], {
       stdout: "pipe",
       stderr: "pipe",
+      abort: ctx.abort,
     })
 
-    const output = await new Response(proc.stdout).text()
-    const errorOutput = await new Response(proc.stderr).text()
+    if (!proc.stdout || !proc.stderr) {
+      throw new Error("Process output not available")
+    }
+
+    const output = await text(proc.stdout)
+    const errorOutput = await text(proc.stderr)
     const exitCode = await proc.exited
 
-    if (exitCode === 1) {
+    // Exit codes: 0 = matches found, 1 = no matches, 2 = errors (but may still have matches)
+    // With --no-messages, we suppress error output but still get exit code 2 for broken symlinks etc.
+    // Only fail if exit code is 2 AND no output was produced
+    if (exitCode === 1 || (exitCode === 2 && !output.trim())) {
       return {
         title: params.pattern,
         metadata: { matches: 0, truncated: false },
@@ -60,9 +71,11 @@ export const GrepTool = Tool.define("grep", {
       }
     }
 
-    if (exitCode !== 0) {
+    if (exitCode !== 0 && exitCode !== 2) {
       throw new Error(`ripgrep failed: ${errorOutput}`)
     }
+
+    const hasErrors = exitCode === 2
 
     // Handle both Unix (\n) and Windows (\r\n) line endings
     const lines = output.trim().split(/\r?\n/)
@@ -77,8 +90,7 @@ export const GrepTool = Tool.define("grep", {
       const lineNum = parseInt(lineNumStr, 10)
       const lineText = lineTextParts.join("|")
 
-      const file = Bun.file(filePath)
-      const stats = await file.stat().catch(() => null)
+      const stats = Filesystem.stat(filePath)
       if (!stats) continue
 
       matches.push({
@@ -103,7 +115,8 @@ export const GrepTool = Tool.define("grep", {
       }
     }
 
-    const outputLines = [`Found ${finalMatches.length} matches`]
+    const totalMatches = matches.length
+    const outputLines = [`Found ${totalMatches} matches${truncated ? ` (showing first ${limit})` : ""}`]
 
     let currentFile = ""
     for (const match of finalMatches) {
@@ -121,13 +134,20 @@ export const GrepTool = Tool.define("grep", {
 
     if (truncated) {
       outputLines.push("")
-      outputLines.push("(Results are truncated. Consider using a more specific path or pattern.)")
+      outputLines.push(
+        `(Results truncated: showing ${limit} of ${totalMatches} matches (${totalMatches - limit} hidden). Consider using a more specific path or pattern.)`,
+      )
+    }
+
+    if (hasErrors) {
+      outputLines.push("")
+      outputLines.push("(Some paths were inaccessible and skipped)")
     }
 
     return {
       title: params.pattern,
       metadata: {
-        matches: finalMatches.length,
+        matches: totalMatches,
         truncated,
       },
       output: outputLines.join("\n"),

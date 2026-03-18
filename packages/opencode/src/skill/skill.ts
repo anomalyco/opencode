@@ -1,20 +1,35 @@
+import os from "os"
+import path from "path"
+import { pathToFileURL } from "url"
 import z from "zod"
-import { Config } from "../config/config"
-import { Instance } from "../project/instance"
+import { Effect, Layer, ServiceMap } from "effect"
 import { NamedError } from "@opencode-ai/util/error"
-import { ConfigMarkdown } from "../config/markdown"
-import { Log } from "../util/log"
-import { Global } from "@/global"
-import { Filesystem } from "@/util/filesystem"
-import { exists } from "fs/promises"
+import type { Agent } from "@/agent/agent"
+import { Bus } from "@/bus"
+import { InstanceContext } from "@/effect/instance-context"
+import { runPromiseInstance } from "@/effect/runtime"
 import { Flag } from "@/flag/flag"
+import { Global } from "@/global"
+import { PermissionNext } from "@/permission"
+import { Filesystem } from "@/util/filesystem"
+import { Config } from "../config/config"
+import { ConfigMarkdown } from "../config/markdown"
+import { Glob } from "../util/glob"
+import { Log } from "../util/log"
+import { Discovery } from "./discovery"
 
 export namespace Skill {
   const log = Log.create({ service: "skill" })
+  const EXTERNAL_DIRS = [".claude", ".agents"]
+  const EXTERNAL_SKILL_PATTERN = "skills/**/SKILL.md"
+  const OPENCODE_SKILL_PATTERN = "{skill,skills}/**/SKILL.md"
+  const SKILL_PATTERN = "**/SKILL.md"
+
   export const Info = z.object({
     name: z.string(),
     description: z.string(),
     location: z.string(),
+    content: z.string(),
   })
   export type Info = z.infer<typeof Info>
 
@@ -36,92 +51,205 @@ export namespace Skill {
     }),
   )
 
-  const OPENCODE_SKILL_GLOB = new Bun.Glob("{skill,skills}/**/SKILL.md")
-  const CLAUDE_SKILL_GLOB = new Bun.Glob("skills/**/SKILL.md")
+  type State = {
+    skills: Record<string, Info>
+    dirs: Set<string>
+    task?: Promise<void>
+  }
 
-  export const state = Instance.state(async () => {
-    const skills: Record<string, Info> = {}
+  type Cache = State & {
+    ensure: () => Promise<void>
+  }
 
-    const addSkill = async (match: string) => {
-      const md = await ConfigMarkdown.parse(match)
-      if (!md) {
-        return
-      }
+  export interface Interface {
+    readonly get: (name: string) => Effect.Effect<Info | undefined>
+    readonly all: () => Effect.Effect<Info[]>
+    readonly dirs: () => Effect.Effect<string[]>
+    readonly available: (agent?: Agent.Info) => Effect.Effect<Info[]>
+  }
 
-      const parsed = Info.pick({ name: true, description: true }).safeParse(md.data)
-      if (!parsed.success) return
+  const add = async (state: State, match: string) => {
+    const md = await ConfigMarkdown.parse(match).catch(async (err) => {
+      const message = ConfigMarkdown.FrontmatterError.isInstance(err)
+        ? err.data.message
+        : `Failed to parse skill ${match}`
+      const { Session } = await import("@/session")
+      Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
+      log.error("failed to load skill", { skill: match, err })
+      return undefined
+    })
 
-      // Warn on duplicate skill names
-      if (skills[parsed.data.name]) {
-        log.warn("duplicate skill name", {
-          name: parsed.data.name,
-          existing: skills[parsed.data.name].location,
-          duplicate: match,
-        })
-      }
+    if (!md) return
 
-      skills[parsed.data.name] = {
+    const parsed = Info.pick({ name: true, description: true }).safeParse(md.data)
+    if (!parsed.success) return
+
+    if (state.skills[parsed.data.name]) {
+      log.warn("duplicate skill name", {
         name: parsed.data.name,
-        description: parsed.data.description,
-        location: match,
-      }
+        existing: state.skills[parsed.data.name].location,
+        duplicate: match,
+      })
     }
 
-    // Scan .claude/skills/ directories (project-level)
-    const claudeDirs = await Array.fromAsync(
-      Filesystem.up({
-        targets: [".claude"],
-        start: Instance.directory,
-        stop: Instance.worktree,
-      }),
-    )
-    // Also include global ~/.claude/skills/
-    const globalClaude = `${Global.Path.home}/.claude`
-    if (await exists(globalClaude)) {
-      claudeDirs.push(globalClaude)
+    state.dirs.add(path.dirname(match))
+    state.skills[parsed.data.name] = {
+      name: parsed.data.name,
+      description: parsed.data.description,
+      location: match,
+      content: md.content,
+    }
+  }
+
+  const scan = async (state: State, root: string, pattern: string, opts?: { dot?: boolean; scope?: string }) => {
+    return Glob.scan(pattern, {
+      cwd: root,
+      absolute: true,
+      include: "file",
+      symlink: true,
+      dot: opts?.dot,
+    })
+      .then((matches) => Promise.all(matches.map((match) => add(state, match))))
+      .catch((error) => {
+        if (!opts?.scope) throw error
+        log.error(`failed to scan ${opts.scope} skills`, { dir: root, error })
+      })
+  }
+
+  // TODO: Migrate to Effect
+  const create = (instance: InstanceContext.Shape, discovery: Discovery.Interface): Cache => {
+    const state: State = {
+      skills: {},
+      dirs: new Set<string>(),
     }
 
-    if (!Flag.OPENCODE_DISABLE_CLAUDE_CODE_SKILLS) {
-      for (const dir of claudeDirs) {
-        const matches = await Array.fromAsync(
-          CLAUDE_SKILL_GLOB.scan({
-            cwd: dir,
-            absolute: true,
-            onlyFiles: true,
-            followSymlinks: true,
-            dot: true,
-          }),
-        ).catch((error) => {
-          log.error("failed .claude directory scan for skills", { dir, error })
-          return []
-        })
+    const load = async () => {
+      if (!Flag.OPENCODE_DISABLE_EXTERNAL_SKILLS) {
+        for (const dir of EXTERNAL_DIRS) {
+          const root = path.join(Global.Path.home, dir)
+          if (!(await Filesystem.isDir(root))) continue
+          await scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "global" })
+        }
 
-        for (const match of matches) {
-          await addSkill(match)
+        for await (const root of Filesystem.up({
+          targets: EXTERNAL_DIRS,
+          start: instance.directory,
+          stop: instance.project.worktree,
+        })) {
+          await scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "project" })
         }
       }
-    }
 
-    // Scan .opencode/skill/ directories
-    for (const dir of await Config.directories()) {
-      for await (const match of OPENCODE_SKILL_GLOB.scan({
-        cwd: dir,
-        absolute: true,
-        onlyFiles: true,
-        followSymlinks: true,
-      })) {
-        await addSkill(match)
+      for (const dir of await Config.directories()) {
+        await scan(state, dir, OPENCODE_SKILL_PATTERN)
       }
+
+      const cfg = await Config.get()
+      for (const item of cfg.skills?.paths ?? []) {
+        const expanded = item.startsWith("~/") ? path.join(os.homedir(), item.slice(2)) : item
+        const dir = path.isAbsolute(expanded) ? expanded : path.join(instance.directory, expanded)
+        if (!(await Filesystem.isDir(dir))) {
+          log.warn("skill path not found", { path: dir })
+          continue
+        }
+
+        await scan(state, dir, SKILL_PATTERN)
+      }
+
+      for (const url of cfg.skills?.urls ?? []) {
+        for (const dir of await Effect.runPromise(discovery.pull(url))) {
+          state.dirs.add(dir)
+          await scan(state, dir, SKILL_PATTERN)
+        }
+      }
+
+      log.info("init", { count: Object.keys(state.skills).length })
     }
 
-    return skills
-  })
+    const ensure = () => {
+      if (state.task) return state.task
+      state.task = load().catch((err) => {
+        state.task = undefined
+        throw err
+      })
+      return state.task
+    }
+
+    return { ...state, ensure }
+  }
+
+  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Skill") {}
+
+  export const layer: Layer.Layer<Service, never, InstanceContext | Discovery.Service> = Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      const instance = yield* InstanceContext
+      const discovery = yield* Discovery.Service
+      const state = create(instance, discovery)
+
+      const get = Effect.fn("Skill.get")(function* (name: string) {
+        yield* Effect.promise(() => state.ensure())
+        return state.skills[name]
+      })
+
+      const all = Effect.fn("Skill.all")(function* () {
+        yield* Effect.promise(() => state.ensure())
+        return Object.values(state.skills)
+      })
+
+      const dirs = Effect.fn("Skill.dirs")(function* () {
+        yield* Effect.promise(() => state.ensure())
+        return Array.from(state.dirs)
+      })
+
+      const available = Effect.fn("Skill.available")(function* (agent?: Agent.Info) {
+        yield* Effect.promise(() => state.ensure())
+        const list = Object.values(state.skills)
+        if (!agent) return list
+        return list.filter((skill) => PermissionNext.evaluate("skill", skill.name, agent.permission).action !== "deny")
+      })
+
+      return Service.of({ get, all, dirs, available })
+    }),
+  )
+
+  export const defaultLayer: Layer.Layer<Service, never, InstanceContext> = layer.pipe(
+    Layer.provide(Discovery.defaultLayer),
+  )
 
   export async function get(name: string) {
-    return state().then((x) => x[name])
+    return runPromiseInstance(Service.use((skill) => skill.get(name)))
   }
 
   export async function all() {
-    return state().then((x) => Object.values(x))
+    return runPromiseInstance(Service.use((skill) => skill.all()))
+  }
+
+  export async function dirs() {
+    return runPromiseInstance(Service.use((skill) => skill.dirs()))
+  }
+
+  export async function available(agent?: Agent.Info) {
+    return runPromiseInstance(Service.use((skill) => skill.available(agent)))
+  }
+
+  export function fmt(list: Info[], opts: { verbose: boolean }) {
+    if (list.length === 0) return "No skills are currently available."
+
+    if (opts.verbose) {
+      return [
+        "<available_skills>",
+        ...list.flatMap((skill) => [
+          "  <skill>",
+          `    <name>${skill.name}</name>`,
+          `    <description>${skill.description}</description>`,
+          `    <location>${pathToFileURL(skill.location).href}</location>`,
+          "  </skill>",
+        ]),
+        "</available_skills>",
+      ].join("\n")
+    }
+
+    return ["## Available Skills", ...list.map((skill) => `- **${skill.name}**: ${skill.description}`)].join("\n")
   }
 }

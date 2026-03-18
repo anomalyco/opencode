@@ -1,5 +1,6 @@
 import type { NamedError } from "@opencode-ai/util/error"
 import { MessageV2 } from "./message-v2"
+import { iife } from "@/util/iife"
 
 export namespace SessionRetry {
   export const RETRY_INITIAL_DELAY = 2000
@@ -58,33 +59,43 @@ export namespace SessionRetry {
   }
 
   export function retryable(error: ReturnType<NamedError["toObject"]>) {
+    // context overflow errors should not be retried
+    if (MessageV2.ContextOverflowError.isInstance(error)) return undefined
     if (MessageV2.APIError.isInstance(error)) {
       if (!error.data.isRetryable) return undefined
+      if (error.data.responseBody?.includes("FreeUsageLimitError"))
+        return `Free usage exceeded, add credits https://opencode.ai/zen`
       return error.data.message.includes("Overloaded") ? "Provider is overloaded" : error.data.message
     }
 
-    if (typeof error.data?.message === "string") {
+    const json = iife(() => {
       try {
-        const json = JSON.parse(error.data.message)
-        if (json.type === "error" && json.error?.type === "too_many_requests") {
-          return "Too Many Requests"
+        if (typeof error.data?.message === "string") {
+          const parsed = JSON.parse(error.data.message)
+          return parsed
         }
-        if (json.code.includes("exhausted") || json.code.includes("unavailable")) {
-          return "Provider is overloaded"
-        }
-        if (json.type === "error" && json.error?.code?.includes("rate_limit")) {
-          return "Rate Limited"
-        }
-        if (
-          json.error?.message?.includes("no_kv_space") ||
-          (json.type === "error" && json.error?.type === "server_error") ||
-          !!json.error
-        ) {
-          return "Provider Server Error"
-        }
-      } catch {}
-    }
 
-    return undefined
+        return JSON.parse(error.data.message)
+      } catch {
+        return undefined
+      }
+    })
+    try {
+      if (!json || typeof json !== "object") return undefined
+      const code = typeof json.code === "string" ? json.code : ""
+
+      if (json.type === "error" && json.error?.type === "too_many_requests") {
+        return "Too Many Requests"
+      }
+      if (code.includes("exhausted") || code.includes("unavailable")) {
+        return "Provider is overloaded"
+      }
+      if (json.type === "error" && json.error?.code?.includes("rate_limit")) {
+        return "Rate Limited"
+      }
+      return JSON.stringify(json)
+    } catch {
+      return undefined
+    }
   }
 }

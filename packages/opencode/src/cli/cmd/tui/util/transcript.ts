@@ -80,17 +80,17 @@ export function formatPart(part: Part, options: TranscriptOptions): string {
   }
 
   if (part.type === "tool") {
-    let result = `\`\`\`\nTool: ${part.tool}\n`
+    let result = `**Tool: ${part.tool}**\n`
     if (options.toolDetails && part.state.input) {
-      result += `\n**Input:**\n\`\`\`json\n${JSON.stringify(part.state.input, null, 2)}\n\`\`\``
+      result += `\n**Input:**\n\`\`\`json\n${JSON.stringify(part.state.input, null, 2)}\n\`\`\`\n`
     }
     if (options.toolDetails && part.state.status === "completed" && part.state.output) {
-      result += `\n**Output:**\n\`\`\`\n${part.state.output}\n\`\`\``
+      result += `\n**Output:**\n\`\`\`\n${part.state.output}\n\`\`\`\n`
     }
     if (options.toolDetails && part.state.status === "error" && part.state.error) {
-      result += `\n**Error:**\n\`\`\`\n${part.state.error}\n\`\`\``
+      result += `\n**Error:**\n\`\`\`\n${part.state.error}\n\`\`\`\n`
     }
-    result += `\n\`\`\`\n\n`
+    result += `\n`
     return result
   }
 
