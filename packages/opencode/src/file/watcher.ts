@@ -54,7 +54,7 @@ export namespace FileWatcher {
   function protecteds(dir: string) {
     return Protected.paths().filter((item) => {
       const rel = path.relative(dir, item)
-      return !rel.startsWith("..") && !path.isAbsolute(rel)
+      return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel)
     })
   }
 

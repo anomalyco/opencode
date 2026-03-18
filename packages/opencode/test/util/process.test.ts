@@ -109,4 +109,20 @@ describe("util.process", () => {
 
     expect(await proc.exited).toBe(0)
   })
+
+  test("rejects missing commands without leaking unhandled errors", async () => {
+    await using tmp = await tmpdir()
+    const cmd = path.join(tmp.path, "missing" + (process.platform === "win32" ? ".cmd" : ""))
+    const err = await Process.spawn([cmd], {
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
+    }).exited.catch((err) => err)
+
+    expect(err).toBeInstanceOf(Error)
+    if (!(err instanceof Error)) throw err
+    expect(err).toMatchObject({
+      code: "ENOENT",
+    })
+  })
 })
