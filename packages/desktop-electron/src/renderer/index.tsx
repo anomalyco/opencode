@@ -219,9 +219,7 @@ const createPlatform = (): Platform => {
 
     webviewZoom,
 
-    checkAppExists: async (appName: string) => {
-      return window.api.checkAppExists(appName)
-    },
+    checkAppExists: async (appName: string) => window.api.checkAppExists(appName),
 
     async readClipboardImage() {
       const image = await window.api.readClipboardImage().catch(() => null)

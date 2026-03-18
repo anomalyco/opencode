@@ -28,6 +28,7 @@ import { StatusPopover } from "../status-popover"
 const OPEN_APPS = [
   "vscode",
   "cursor",
+  "github-desktop",
   "zed",
   "textmate",
   "antigravity",
@@ -53,6 +54,12 @@ const MAC_APPS = [
     openWith: "Visual Studio Code",
   },
   { id: "cursor", label: "session.header.open.app.cursor", icon: "cursor", openWith: "Cursor" },
+  {
+    id: "github-desktop",
+    label: "session.header.open.app.githubDesktop",
+    icon: "github-desktop",
+    openWith: "GitHub Desktop",
+  },
   { id: "zed", label: "session.header.open.app.zed", icon: "zed", openWith: "Zed" },
   { id: "textmate", label: "session.header.open.app.textmate", icon: "textmate", openWith: "TextMate" },
   {
@@ -83,6 +90,12 @@ const MAC_APPS = [
 const WINDOWS_APPS = [
   { id: "vscode", label: "session.header.open.app.vscode", icon: "vscode", openWith: "code" },
   { id: "cursor", label: "session.header.open.app.cursor", icon: "cursor", openWith: "cursor" },
+  {
+    id: "github-desktop",
+    label: "session.header.open.app.githubDesktop",
+    icon: "github-desktop",
+    openWith: "GitHub Desktop",
+  },
   { id: "zed", label: "session.header.open.app.zed", icon: "zed", openWith: "zed" },
   {
     id: "powershell",
@@ -101,6 +114,12 @@ const WINDOWS_APPS = [
 const LINUX_APPS = [
   { id: "vscode", label: "session.header.open.app.vscode", icon: "vscode", openWith: "code" },
   { id: "cursor", label: "session.header.open.app.cursor", icon: "cursor", openWith: "cursor" },
+  {
+    id: "github-desktop",
+    label: "session.header.open.app.githubDesktop",
+    icon: "github-desktop",
+    openWith: "github-desktop",
+  },
   { id: "zed", label: "session.header.open.app.zed", icon: "zed", openWith: "zed" },
   {
     id: "sublime-text",
@@ -156,11 +175,7 @@ export function SessionHeader() {
     finder: true,
   })
 
-  const apps = createMemo(() => {
-    if (os() === "macos") return MAC_APPS
-    if (os() === "windows") return WINDOWS_APPS
-    return LINUX_APPS
-  })
+  const apps = createMemo(() => (os() === "macos" ? MAC_APPS : os() === "windows" ? WINDOWS_APPS : LINUX_APPS))
 
   const fileManager = createMemo(() => {
     if (os() === "macos") return { label: "session.header.open.finder", icon: "finder" as const }

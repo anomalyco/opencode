@@ -8,6 +8,7 @@ import cursor from "../assets/icons/app/cursor.svg"
 import fileExplorer from "../assets/icons/app/file-explorer.svg"
 import finder from "../assets/icons/app/finder.png"
 import ghostty from "../assets/icons/app/ghostty.svg"
+import githubDesktop from "../assets/icons/app/github-desktop.svg"
 import iterm2 from "../assets/icons/app/iterm2.svg"
 import powershell from "../assets/icons/app/powershell.svg"
 import terminal from "../assets/icons/app/terminal.png"
@@ -22,6 +23,7 @@ import sublimetext from "../assets/icons/app/sublimetext.svg"
 const icons = {
   vscode,
   cursor,
+  "github-desktop": githubDesktop,
   zed,
   "file-explorer": fileExplorer,
   finder,

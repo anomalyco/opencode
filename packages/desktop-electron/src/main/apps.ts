@@ -3,9 +3,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs"
 import { dirname, extname, join } from "node:path"
 
 export function checkAppExists(appName: string): boolean {
-  if (process.platform === "win32") return true
-  if (process.platform === "linux") return true
-  return checkMacosApp(appName)
+  return process.platform === "win32" ? true : process.platform === "linux" ? true : checkMacosApp(appName)
 }
 
 export function resolveAppPath(appName: string): string | null {
@@ -32,20 +30,34 @@ export function wslPath(path: string, mode: "windows" | "linux" | null): string 
   }
 }
 
+function aliases(appName: string) {
+  const trimmed = appName.trim()
+  if (!trimmed) return []
+
+  return [trimmed, trimmed.replaceAll(" ", ""), trimmed.replaceAll(" ", "-"), trimmed.replaceAll(" ", "_")].filter(
+    (name, index, list) => list.findIndex((item) => item.toLowerCase() === name.toLowerCase()) === index,
+  )
+}
+
 function checkMacosApp(appName: string) {
-  const locations = [`/Applications/${appName}.app`, `/System/Applications/${appName}.app`]
+  const names = aliases(appName)
+  if (!names.length) return false
+
+  const locs = names.flatMap((name) => [`/Applications/${name}.app`, `/System/Applications/${name}.app`])
 
   const home = process.env.HOME
-  if (home) locations.push(`${home}/Applications/${appName}.app`)
+  if (home) locs.push(...names.map((name) => `${home}/Applications/${name}.app`))
 
-  if (locations.some((location) => existsSync(location))) return true
+  if (locs.some((path) => existsSync(path))) return true
 
-  try {
-    execFileSync("which", [appName])
-    return true
-  } catch {
-    return false
-  }
+  return names.some((name) => {
+    try {
+      execFileSync("which", [name])
+      return true
+    } catch {
+      return false
+    }
+  })
 }
 
 function resolveWindowsAppPath(appName: string): string | null {

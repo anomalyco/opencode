@@ -131,19 +131,21 @@ async fn await_initialization(
 #[tauri::command]
 #[specta::specta]
 fn check_app_exists(app_name: &str) -> bool {
-    #[cfg(target_os = "windows")]
     {
-        os::windows::check_windows_app(app_name)
-    }
+        #[cfg(target_os = "windows")]
+        {
+            os::windows::check_windows_app(app_name)
+        }
 
-    #[cfg(target_os = "macos")]
-    {
-        check_macos_app(app_name)
-    }
+        #[cfg(target_os = "macos")]
+        {
+            check_macos_app(app_name)
+        }
 
-    #[cfg(target_os = "linux")]
-    {
-        check_linux_app(app_name)
+        #[cfg(target_os = "linux")]
+        {
+            check_linux_app(app_name)
+        }
     }
 }
 
@@ -187,35 +189,90 @@ fn open_path(_app: AppHandle, path: String, app_name: Option<String>) -> Result<
             .map_err(|e| format!("Failed to open path: {e}"));
     }
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(app_name) = app_name {
+            return Command::new("open")
+                .args(["-a", &app_name, &path])
+                .output()
+                .map_err(|e| format!("Failed to run open: {e}"))
+                .and_then(|output| {
+                    if output.status.success() {
+                        return Ok(());
+                    }
+
+                    Err(format!(
+                        "Failed to open path: {}",
+                        String::from_utf8_lossy(&output.stderr).trim()
+                    ))
+                });
+        }
+
+        return tauri_plugin_opener::open_path(path, Option::<&str>::None)
+            .map_err(|e| format!("Failed to open path: {e}"));
+    }
+
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
     tauri_plugin_opener::open_path(path, app_name.as_deref())
         .map_err(|e| format!("Failed to open path: {e}"))
 }
 
 #[cfg(target_os = "macos")]
 fn check_macos_app(app_name: &str) -> bool {
-    // Check common installation locations
-    let mut app_locations = vec![
-        format!("/Applications/{}.app", app_name),
-        format!("/System/Applications/{}.app", app_name),
-    ];
+    fn names(app_name: &str) -> Vec<String> {
+        let trimmed = app_name.trim();
+        if trimmed.is_empty() {
+            return vec![];
+        }
 
-    if let Ok(home) = std::env::var("HOME") {
-        app_locations.push(format!("{}/Applications/{}.app", home, app_name));
+        let mut list = vec![trimmed.to_string()];
+        let mut push = |value: String| {
+            let value = value.trim().to_string();
+            if value.is_empty() || list.iter().any(|item| item.eq_ignore_ascii_case(&value)) {
+                return;
+            }
+            list.push(value);
+        };
+
+        push(trimmed.replace(' ', ""));
+        push(trimmed.replace(' ', "-"));
+        push(trimmed.replace(' ', "_"));
+
+        list
     }
 
-    for location in app_locations {
-        if std::path::Path::new(&location).exists() {
+    let names = names(app_name);
+
+    // Check common installation locations
+    let mut app_locations = names
+        .iter()
+        .flat_map(|name| {
+            [
+                format!("/Applications/{}.app", name),
+                format!("/System/Applications/{}.app", name),
+            ]
+        })
+        .collect::<Vec<_>>();
+
+    if let Ok(home) = std::env::var("HOME") {
+        app_locations.extend(names.iter().map(|name| format!("{}/Applications/{}.app", home, name)));
+    }
+
+    for location in &app_locations {
+        if std::path::Path::new(location).exists() {
             return true;
         }
     }
 
     // Also check if command exists in PATH
-    Command::new("which")
-        .arg(app_name)
-        .output()
-        .map(|output| output.status.success())
-        .unwrap_or(false)
+    let out = names.iter().any(|name| {
+        Command::new("which")
+            .arg(name)
+            .output()
+            .map(|output| output.status.success())
+            .unwrap_or(false)
+    });
+    out
 }
 
 #[derive(serde::Serialize, serde::Deserialize, specta::Type)]
