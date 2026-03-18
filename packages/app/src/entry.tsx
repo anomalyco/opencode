@@ -123,6 +123,11 @@ const platform: Platform = {
     return stored ? ServerConnection.Key.make(stored) : null
   },
   setDefaultServer: writeDefaultServerUrl,
+  readAttachmentFromPath: async (path) => {
+    const reader = window.__OPENCODE__?.readAttachmentFromPath
+    if (!reader) return null
+    return Promise.resolve(reader(path)).catch(() => null)
+  },
 }
 
 if (root instanceof HTMLElement) {

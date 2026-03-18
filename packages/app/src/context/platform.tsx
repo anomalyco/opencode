@@ -8,6 +8,7 @@ type OpenDirectoryPickerOptions = { title?: string; multiple?: boolean }
 type OpenFilePickerOptions = { title?: string; multiple?: boolean }
 type SaveFilePickerOptions = { title?: string; defaultPath?: string }
 type UpdateInfo = { updateAvailable: boolean; version?: string }
+type PathAttachment = { filename: string; mime: string; dataUrl: string }
 
 export type Platform = {
   /** Platform discriminator */
@@ -87,6 +88,9 @@ export type Platform = {
 
   /** Read image from clipboard (desktop only) */
   readClipboardImage?(): Promise<File | null>
+
+  /** Read a media attachment from a local path (desktop only) */
+  readAttachmentFromPath?(path: string): Promise<PathAttachment | null>
 }
 
 export type DisplayBackend = "auto" | "wayland"

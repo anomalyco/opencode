@@ -77,6 +77,12 @@ declare global {
       updaterEnabled?: boolean
       deepLinks?: string[]
       wsl?: boolean
+      readAttachmentFromPath?: (
+        path: string,
+      ) =>
+        | Promise<{ filename: string; mime: string; dataUrl: string } | null>
+        | { filename: string; mime: string; dataUrl: string }
+        | null
     }
     api?: {
       setTitlebar?: (theme: { mode: "light" | "dark" }) => Promise<void>

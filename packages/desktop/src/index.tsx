@@ -374,6 +374,10 @@ const createPlatform = (): Platform => {
       return commands.checkAppExists(appName)
     },
 
+    async readAttachmentFromPath(path: string) {
+      return commands.readPathAttachment(path).catch(() => null)
+    },
+
     async readClipboardImage() {
       const image = await readImage().catch(() => null)
       if (!image) return null

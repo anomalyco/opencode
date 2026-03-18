@@ -17,6 +17,11 @@ export const commands = {
 	parseMarkdownCommand: (markdown: string) => __TAURI_INVOKE<string>("parse_markdown_command", { markdown }),
 	checkAppExists: (appName: string) => __TAURI_INVOKE<boolean>("check_app_exists", { appName }),
 	wslPath: (path: string, mode: "windows" | "linux" | null) => __TAURI_INVOKE<string>("wsl_path", { path, mode }),
+	readPathAttachment: (path: string) => __TAURI_INVOKE<{
+	filename: string,
+	mime: string,
+	dataUrl: string,
+} | null>("read_path_attachment", { path }),
 	resolveAppPath: (appName: string) => __TAURI_INVOKE<string | null>("resolve_app_path", { appName }),
 	openPath: (path: string, appName: string | null) => __TAURI_INVOKE<null>("open_path", { path, appName }),
 };
@@ -33,6 +38,12 @@ export type InitStep = { phase: "server_waiting" } | { phase: "sqlite_waiting" }
 export type LinuxDisplayBackend = "wayland" | "auto";
 
 export type LoadingWindowComplete = null;
+
+export type PathAttachment = {
+		filename: string,
+		mime: string,
+		dataUrl: string,
+	};
 
 export type ServerReadyData = {
 		url: string,

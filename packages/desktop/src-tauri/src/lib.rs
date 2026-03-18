@@ -11,6 +11,7 @@ mod server;
 mod window_customizer;
 mod windows;
 
+use base64::{Engine, engine::general_purpose::STANDARD};
 use crate::cli::CommandChild;
 use futures::{FutureExt, TryFutureExt};
 use std::{
@@ -55,6 +56,26 @@ enum InitStep {
 enum WslPathMode {
     Windows,
     Linux,
+}
+
+#[derive(Clone, serde::Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+struct PathAttachment {
+    filename: String,
+    mime: String,
+    data_url: String,
+}
+
+fn path_attachment_mime(path: &str) -> Option<&'static str> {
+    let ext = std::path::Path::new(path).extension()?.to_str()?.to_ascii_lowercase();
+    match ext.as_str() {
+        "png" => Some("image/png"),
+        "jpg" | "jpeg" => Some("image/jpeg"),
+        "gif" => Some("image/gif"),
+        "webp" => Some("image/webp"),
+        "pdf" => Some("application/pdf"),
+        _ => None,
+    }
 }
 
 struct InitState {
@@ -298,6 +319,29 @@ fn wsl_path(path: String, mode: Option<WslPathMode>) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
+#[tauri::command]
+#[specta::specta]
+fn read_path_attachment(path: String) -> Result<Option<PathAttachment>, String> {
+    let Some(mime) = path_attachment_mime(&path) else {
+        return Ok(None);
+    };
+
+    let name = std::path::Path::new(&path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| path.clone());
+
+    let bytes = std::fs::read(&path).map_err(|e| format!("Failed to read file: {e}"))?;
+    let data_url = format!("data:{mime};base64,{}", STANDARD.encode(bytes));
+
+    Ok(Some(PathAttachment {
+        filename: name,
+        mime: mime.to_string(),
+        data_url,
+    }))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = make_specta_builder();
@@ -386,6 +430,7 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             markdown::parse_markdown_command,
             check_app_exists,
             wsl_path,
+            read_path_attachment,
             resolve_app_path,
             open_path
         ])

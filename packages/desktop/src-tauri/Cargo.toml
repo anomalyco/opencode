@@ -53,6 +53,7 @@ tracing-appender = "0.2"
 chrono = "0.4"
 tokio-stream = { version = "0.1.18", features = ["sync"] }
 process-wrap = { version = "9.0.3", features = ["tokio1"] }
+base64 = "0.22.1"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_System_Threading", "Win32_System_Registry"] }

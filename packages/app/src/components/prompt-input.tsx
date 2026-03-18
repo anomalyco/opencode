@@ -980,6 +980,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return true
   }
 
+  const pickDesktopFiles = async () => {
+    const result = await platform.openFilePickerDialog?.({
+      title: language.t("prompt.action.attachFile"),
+      multiple: true,
+    })
+    if (!result) return
+    for (const path of Array.from(new Set(Array.isArray(result) ? result : [result]))) {
+      await addPath(path)
+    }
+  }
   const addToHistory = (prompt: Prompt, mode: "normal" | "shell") => {
     const currentHistory = mode === "shell" ? shellHistory : history
     const setCurrentHistory = mode === "shell" ? setShellHistory : setHistory
@@ -1043,7 +1053,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return true
   }
 
-  const { addAttachment, removeAttachment, handlePaste } = createPromptAttachments({
+  const { addAttachment, addPath, removeImageAttachment, handlePaste } = createPromptAttachments({
     editor: () => editorRef,
     isDialogActive: () => !!dialog.active,
     setDraggingType: (type) => setStore("draggingType", type),
@@ -1053,6 +1063,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     },
     addPart,
     readClipboardImage: platform.readClipboardImage,
+    readAttachmentFromPath: platform.readAttachmentFromPath,
   })
 
   const variants = createMemo(() => ["default", ...local.model.variant.list()])
@@ -1293,7 +1304,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           onOpen={(attachment) =>
             dialog.show(() => <ImagePreview src={attachment.dataUrl} alt={attachment.filename} />)
           }
-          onRemove={removeAttachment}
+          onRemove={removeImageAttachment}
           removeLabel={language.t("prompt.attachment.remove")}
         />
         <div

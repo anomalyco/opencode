@@ -3097,6 +3097,7 @@ dependencies = [
 name = "opencode-desktop"
 version = "0.0.0"
 dependencies = [
+ "base64 0.22.1",
  "chrono",
  "comrak",
  "dirs",
