@@ -2,7 +2,6 @@ import type { Agent } from "../agent/agent"
 import { runtime } from "@/effect/runtime"
 import { TruncateEffect as S } from "./truncate-effect"
 
-
 export namespace Truncate {
   export const MAX_LINES = S.MAX_LINES
   export const MAX_BYTES = S.MAX_BYTES

@@ -83,10 +83,7 @@ it.effect("orgsByAccount groups orgs per account", () =>
       [AccountID.make("user-1"), [OrgID.make("org-1")]],
       [AccountID.make("user-2"), [OrgID.make("org-2"), OrgID.make("org-3")]],
     ])
-    expect(seen).toEqual([
-      "GET https://one.example.com/api/orgs",
-      "GET https://two.example.com/api/orgs",
-    ])
+    expect(seen).toEqual(["GET https://one.example.com/api/orgs", "GET https://two.example.com/api/orgs"])
   }),
 )
 
