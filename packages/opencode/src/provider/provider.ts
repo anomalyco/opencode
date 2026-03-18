@@ -946,6 +946,73 @@ export namespace Provider {
         )
         parsed.models[modelID] = parsedModel
       }
+
+      if (provider.discover) {
+        const npm = provider.npm ?? modelsDev[providerID]?.npm ?? "@ai-sdk/openai-compatible"
+        const baseURL = provider.options?.baseURL ?? provider.api ?? modelsDev[providerID]?.api
+        if ((npm === "@ai-sdk/openai-compatible" || npm === "@ai-sdk/openai" || npm === "openai") && baseURL) {
+          try {
+            const url = new URL(baseURL.replace(/\/$/, "") + "/models")
+            let apiKey = provider.options?.apiKey
+            if (!apiKey) {
+              const envVars = provider.env ?? existing?.env ?? []
+              for (const e of envVars) {
+                const val = Env.get(e)
+                if (val) {
+                  apiKey = val
+                  break
+                }
+              }
+            }
+            if (!apiKey) {
+              const auth = await Auth.get(providerID)
+              if (auth && auth.type === "api") apiKey = auth.key
+            }
+
+            const res = await fetch(url.href, {
+              headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+              signal: AbortSignal.timeout(5000),
+            })
+            if (res.ok) {
+              const data = (await res.json()) as { data: any[] }
+              if (data && Array.isArray(data.data)) {
+                for (const m of data.data) {
+                  if (!m.id) continue
+                  const modelID = m.id
+                  if (!parsed.models[modelID]) {
+                    parsed.models[modelID] = {
+                      id: ModelID.make(modelID),
+                      name: modelID,
+                      providerID: ProviderID.make(providerID),
+                      api: { id: modelID, npm, url: baseURL },
+                      status: "active",
+                      capabilities: {
+                        temperature: true,
+                        reasoning: false,
+                        attachment: false,
+                        toolcall: true,
+                        input: { text: true, audio: false, image: false, video: false, pdf: false },
+                        output: { text: true, audio: false, image: false, video: false, pdf: false },
+                        interleaved: false,
+                      },
+                      limit: { context: 128000, output: 4096 },
+                      cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+                      options: {},
+                      variants: {},
+                      headers: {},
+                      family: "",
+                      release_date: "",
+                    }
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            log.warn("failed to discover models", { providerID, error: e })
+          }
+        }
+      }
+
       database[providerID] = parsed
     }
 

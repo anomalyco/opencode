@@ -977,6 +977,7 @@ export namespace Config {
 
   export const Provider = ModelsDev.Provider.partial()
     .extend({
+      discover: z.boolean().optional().describe("Auto-discover models from this provider (default: false)"),
       whitelist: z.array(z.string()).optional(),
       blacklist: z.array(z.string()).optional(),
       models: z
