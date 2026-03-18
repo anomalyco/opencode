@@ -55,8 +55,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const { params, tabs, view } = useSessionLayout()
 
   type DictKey = keyof typeof enDict
-  const kw = (...keys: DictKey[]) =>
-    language.locale() === "en" ? undefined : keys.map((k) => enDict[k]).join(" ")
+  const kw = (...keys: DictKey[]) => (language.locale() === "en" ? undefined : keys.map((k) => enDict[k]).join(" "))
 
   const info = () => {
     const id = params.id
@@ -271,7 +270,11 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         keywords: kw("command.file.open"),
         keybind: "mod+p",
         slash: "open",
-        onSelect: () => dialog.show(() => <DialogSelectFile mode="files" onOpenFile={showAllFiles} />),
+        onSelect: () =>
+          dialog.show(() => <DialogSelectFile mode="files" onOpenFile={showAllFiles} />, undefined, {
+            modal: false,
+            preventScroll: false,
+          }),
       }),
       fileCommand({
         id: "command.palette",
@@ -279,7 +282,11 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         description: language.t("palette.search.commands"),
         keywords: kw("command.palette"),
         keybind: "mod+shift+p",
-        onSelect: () => dialog.show(() => <DialogSelectFile mode="commands" />),
+        onSelect: () =>
+          dialog.show(() => <DialogSelectFile mode="commands" />, undefined, {
+            modal: false,
+            preventScroll: false,
+          }),
       }),
       projectCommand({
         id: "project.copyPath",

@@ -15,6 +15,11 @@ import { Dialog as Kobalte } from "@kobalte/core/dialog"
 
 type DialogElement = () => JSX.Element
 
+type DialogOptions = {
+  modal?: boolean
+  preventScroll?: boolean
+}
+
 type Active = {
   id: string
   node: JSX.Element
@@ -72,7 +77,7 @@ function init() {
     onCleanup(() => window.removeEventListener("keydown", onKeyDown, true))
   })
 
-  const show = (element: DialogElement, owner: Owner, onClose?: () => void) => {
+  const show = (element: DialogElement, owner: Owner, onClose?: () => void, opts?: DialogOptions) => {
     // Immediately dispose any existing dialog when showing a new one
     const current = active()
     if (current) {
@@ -97,7 +102,8 @@ function init() {
         setClosing = setClosingSignal
         return (
           <Kobalte
-            modal
+            modal={opts?.modal ?? true}
+            preventScroll={opts?.preventScroll}
             open={!closing()}
             onOpenChange={(open: boolean) => {
               if (open) return
@@ -152,9 +158,9 @@ export function useDialog() {
     get active() {
       return ctx.active
     },
-    show(element: DialogElement, onClose?: () => void) {
+    show(element: DialogElement, onClose?: () => void, opts?: DialogOptions) {
       const base = ctx.active?.owner ?? owner
-      ctx.show(element, base, onClose)
+      ctx.show(element, base, onClose, opts)
     },
     close() {
       ctx.close()

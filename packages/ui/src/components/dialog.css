@@ -47,7 +47,7 @@
 
       padding: 12px;
       border-radius: var(--radius-xl);
-      background: hsl(from var(--surface-raised-stronger-non-alpha) h s l / 0.70);
+      background: hsl(from var(--surface-raised-stronger-non-alpha) h s l / 0.7);
       background-clip: padding-box;
       backdrop-filter: blur(20px) saturate(180%);
       -webkit-backdrop-filter: blur(20px) saturate(180%);
