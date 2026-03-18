@@ -98,6 +98,7 @@ export namespace Process {
         reject(error)
       })
     })
+    void exited.catch(() => undefined)
 
     if (opts.abort) {
       opts.abort.addEventListener("abort", abort, { once: true })

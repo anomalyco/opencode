@@ -51,6 +51,13 @@ export namespace FileWatcher {
     if (process.platform === "linux") return "inotify"
   }
 
+  function protecteds(dir: string) {
+    return Protected.paths().filter((item) => {
+      const rel = path.relative(dir, item)
+      return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel)
+    })
+  }
+
   export const hasNativeBinding = () => !!watcher()
 
   export class Service extends ServiceMap.Service<Service, {}>()("@opencode/FileWatcher") {}
@@ -105,7 +112,7 @@ export namespace FileWatcher {
       const cfgIgnores = cfg.watcher?.ignore ?? []
 
       if (yield* Flag.OPENCODE_EXPERIMENTAL_FILEWATCHER) {
-        yield* subscribe(instance.directory, [...FileIgnore.PATTERNS, ...cfgIgnores, ...Protected.paths()])
+        yield* subscribe(instance.directory, [...FileIgnore.PATTERNS, ...cfgIgnores, ...protecteds(instance.directory)])
       }
 
       if (instance.project.vcs === "git") {
