@@ -1,6 +1,6 @@
 import { describe, expect, test, beforeEach } from "bun:test"
 import { createRoot } from "solid-js"
-import { createTabState, resetTabID } from "../../../../src/cli/cmd/tui/context/tab-state"
+import { createTabState, resetTabID, type Route } from "../../../../src/cli/cmd/tui/context/tab-state"
 
 describe("createTabState", () => {
   beforeEach(() => {
@@ -250,7 +250,7 @@ describe("createTabState", () => {
       })
     })
 
-    test("activate same tab is no-op for history", () => {
+    test("activate same tab does not change history", () => {
       createRoot((dispose) => {
         const state = createTabState()
         const firstID = state.tabs()[0].id
@@ -258,6 +258,19 @@ describe("createTabState", () => {
         const prevBefore = state.previousID()
         state.activate(state.active().id)
         expect(state.previousID()).toBe(prevBefore)
+        dispose()
+      })
+    })
+
+    test("activate already-active tab still calls navigator", () => {
+      createRoot((dispose) => {
+        const state = createTabState()
+        const secondID = state.add({ sessionID: "ses_1" })
+        const navigated: Route[] = []
+        state._setNavigator((r) => navigated.push(r))
+        state.activate(secondID)
+        expect(navigated).toHaveLength(1)
+        expect(navigated[0]).toEqual({ type: "session", sessionID: "ses_1" })
         dispose()
       })
     })
@@ -308,6 +321,20 @@ describe("createTabState", () => {
         state.updateRoute(id, { type: "session", sessionID: "ses_abc" })
         state.updateRoute(id, { type: "home" })
         expect(state.tabs()[0].route).toEqual({ type: "home" })
+        dispose()
+      })
+    })
+
+    test("session-to-home replacement removes stale sessionID from route", () => {
+      createRoot((dispose) => {
+        const state = createTabState()
+        const id = state.tabs()[0].id
+        state.updateRoute(id, { type: "session", sessionID: "ses_abc" })
+        expect(state.tabs()[0].route).toEqual({ type: "session", sessionID: "ses_abc" })
+        state.updateRoute(id, { type: "home" })
+        const route = state.tabs()[0].route as Record<string, unknown>
+        expect(route.type).toBe("home")
+        expect(route.sessionID).toBeUndefined()
         dispose()
       })
     })
@@ -368,6 +395,106 @@ describe("createTabState", () => {
     })
   })
 
+  // These tests exercise the inline route-to-tab sync logic from app.tsx.
+  // The logic mirrors the createEffect in App():
+  //   1. Read route type/sessionID (tracked in production)
+  //   2. Early return if route matches tab
+  //   3. updateRoute
+  //   4. updateSessionID (before session lookup — the key fix)
+  //   5. session lookup + rename (optional)
+  describe("route-to-tab sync logic", () => {
+    function syncRoute(
+      route: Route,
+      tabState: ReturnType<typeof createTabState>,
+      findSession?: (id: string) => { displayName?: string; slug: string } | undefined,
+    ) {
+      const type = route.type
+      const sessionID = type === "session" ? route.sessionID : undefined
+      const tab = tabState.active()
+      if (type === tab.route.type && (tab.route.type !== "session" || sessionID === tab.route.sessionID)) return
+      tabState.updateRoute(tab.id, route)
+      if (type === "session" && sessionID) {
+        if (tab.sessionID !== sessionID) tabState.updateSessionID(tab.id, sessionID)
+        const session = findSession?.(sessionID)
+        if (session) {
+          if (tab.label === "Untitled") tabState.rename(tab.id, session.displayName ?? session.slug)
+        }
+      }
+    }
+
+    test("syncs sessionID even when session not yet in sync store", () => {
+      createRoot((dispose) => {
+        const state = createTabState()
+        syncRoute({ type: "session", sessionID: "ses_new" }, state, () => undefined)
+        expect(state.active().sessionID).toBe("ses_new")
+        expect(state.active().route).toEqual({ type: "session", sessionID: "ses_new" })
+        dispose()
+      })
+    })
+
+    test("renames tab when session is found", () => {
+      createRoot((dispose) => {
+        const state = createTabState()
+        syncRoute({ type: "session", sessionID: "ses_abc" }, state, () => ({
+          displayName: "My Chat",
+          slug: "my-chat",
+        }))
+        expect(state.active().sessionID).toBe("ses_abc")
+        expect(state.active().label).toBe("My Chat")
+        dispose()
+      })
+    })
+
+    test("uses slug when displayName is undefined", () => {
+      createRoot((dispose) => {
+        const state = createTabState()
+        syncRoute({ type: "session", sessionID: "ses_abc" }, state, () => ({ slug: "my-chat" }))
+        expect(state.active().label).toBe("my-chat")
+        dispose()
+      })
+    })
+
+    test("no-op when route matches tab", () => {
+      createRoot((dispose) => {
+        const state = createTabState()
+        const tabID = state.tabs()[0].id
+        state.updateRoute(tabID, { type: "session", sessionID: "ses_abc" })
+        state.updateSessionID(tabID, "ses_abc")
+        const before = { ...state.active() }
+        syncRoute({ type: "session", sessionID: "ses_abc" }, state)
+        expect(state.active().sessionID).toBe(before.sessionID)
+        expect(state.active().route).toEqual(before.route)
+        dispose()
+      })
+    })
+
+    test("does not rename when label is not Untitled", () => {
+      createRoot((dispose) => {
+        const state = createTabState()
+        state.rename(state.tabs()[0].id, "Custom Name")
+        syncRoute({ type: "session", sessionID: "ses_abc" }, state, () => ({
+          displayName: "My Chat",
+          slug: "my-chat",
+        }))
+        expect(state.active().label).toBe("Custom Name")
+        dispose()
+      })
+    })
+
+    test("does not update sessionID when already matching", () => {
+      createRoot((dispose) => {
+        const state = createTabState()
+        const tabID = state.tabs()[0].id
+        state.updateSessionID(tabID, "ses_abc")
+        state.updateRoute(tabID, { type: "home" })
+        // Route changed to session with same sessionID — route updates but sessionID unchanged
+        syncRoute({ type: "session", sessionID: "ses_abc" }, state)
+        expect(state.active().sessionID).toBe("ses_abc")
+        dispose()
+      })
+    })
+  })
+
   describe("load", () => {
     test("replaces all state from server data", () => {
       createRoot((dispose) => {
@@ -385,6 +512,69 @@ describe("createTabState", () => {
         expect(state.active().id).toBe("srv_2")
         expect(state.previousID()).toBe("srv_1")
         expect(state.position()).toBe("top")
+        dispose()
+      })
+    })
+
+    test("syncs nextID to prevent collisions with server tab IDs", () => {
+      createRoot((dispose) => {
+        const state = createTabState()
+        state.load({
+          tabs: [
+            { id: "tab_1", sessionID: null, label: "Tab 1", route: { type: "home" } },
+            { id: "tab_2", sessionID: "ses_1", label: "Tab 2", route: { type: "session", sessionID: "ses_1" } },
+            { id: "tab_3", sessionID: "ses_2", label: "Tab 3", route: { type: "session", sessionID: "ses_2" } },
+          ],
+          activeID: "tab_1",
+          previousID: null,
+          position: "bottom",
+        })
+        const newID = state.add()
+        expect(newID).toBe("tab_4")
+        expect(state.tabs().filter((t) => t.id === "tab_2")).toHaveLength(1)
+        expect(state.tabs().filter((t) => t.id === "tab_3")).toHaveLength(1)
+        dispose()
+      })
+    })
+
+    test("nextID handles non-tab-prefixed IDs gracefully", () => {
+      createRoot((dispose) => {
+        const state = createTabState()
+        state.load({
+          tabs: [
+            { id: "srv_1", sessionID: null, label: "Server Tab", route: { type: "home" } },
+            { id: "tab_5", sessionID: null, label: "Tab 5", route: { type: "home" } },
+          ],
+          activeID: "srv_1",
+          previousID: null,
+          position: "bottom",
+        })
+        const newID = state.add()
+        expect(newID).toBe("tab_6")
+        dispose()
+      })
+    })
+
+    test("multiple loads keep nextID in sync", () => {
+      createRoot((dispose) => {
+        const state = createTabState()
+        state.load({
+          tabs: [{ id: "tab_3", sessionID: null, label: "Tab", route: { type: "home" } }],
+          activeID: "tab_3",
+          previousID: null,
+          position: "bottom",
+        })
+        state.load({
+          tabs: [
+            { id: "tab_3", sessionID: null, label: "Tab", route: { type: "home" } },
+            { id: "tab_7", sessionID: null, label: "Tab 7", route: { type: "home" } },
+          ],
+          activeID: "tab_3",
+          previousID: null,
+          position: "bottom",
+        })
+        const newID = state.add()
+        expect(newID).toBe("tab_8")
         dispose()
       })
     })
