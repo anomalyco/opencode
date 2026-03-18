@@ -15,7 +15,6 @@ import { Link } from "@/components/link"
 import { useLanguage } from "@/context/language"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
-import { usePlatform } from "@/context/platform"
 import { DialogSelectModel } from "./dialog-select-model"
 import { DialogSelectProvider } from "./dialog-select-provider"
 
@@ -23,7 +22,6 @@ export function DialogConnectProvider(props: { provider: string }) {
   const dialog = useDialog()
   const globalSync = useGlobalSync()
   const globalSDK = useGlobalSDK()
-  const platform = usePlatform()
   const language = useLanguage()
 
   const alive = { value: true }
@@ -240,7 +238,7 @@ export function DialogConnectProvider(props: { provider: string }) {
           }}
         </For>
         <Button class="w-auto" type="submit" size="large" variant="primary">
-          {language.t("common.submit")}
+          {language.t("common.continue")}
         </Button>
       </form>
     )
@@ -384,7 +382,7 @@ export function DialogConnectProvider(props: { provider: string }) {
             error={formStore.error}
           />
           <Button class="w-auto" type="submit" size="large" variant="primary">
-            {language.t("common.submit")}
+            {language.t("common.continue")}
           </Button>
         </form>
       </div>
@@ -395,12 +393,6 @@ export function DialogConnectProvider(props: { provider: string }) {
     const [formStore, setFormStore] = createStore({
       value: "",
       error: undefined as string | undefined,
-    })
-
-    onMount(() => {
-      if (store.authorization?.method === "code" && store.authorization?.url) {
-        platform.openLink(store.authorization.url)
-      }
     })
 
     async function handleSubmit(e: SubmitEvent) {
@@ -451,7 +443,7 @@ export function DialogConnectProvider(props: { provider: string }) {
             error={formStore.error}
           />
           <Button class="w-auto" type="submit" size="large" variant="primary">
-            {language.t("common.submit")}
+            {language.t("common.continue")}
           </Button>
         </form>
       </div>
@@ -469,10 +461,6 @@ export function DialogConnectProvider(props: { provider: string }) {
 
     onMount(() => {
       void (async () => {
-        if (store.authorization?.url) {
-          platform.openLink(store.authorization.url)
-        }
-
         const result = await globalSDK.client.provider.oauth
           .callback({
             providerID: props.provider,

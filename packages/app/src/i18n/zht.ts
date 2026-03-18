@@ -220,6 +220,7 @@ export const dict = {
   "common.cancel": "取消",
   "common.connect": "連線",
   "common.disconnect": "中斷連線",
+  "common.continue": "提交",
   "common.submit": "提交",
   "common.save": "儲存",
   "common.saving": "儲存中...",
