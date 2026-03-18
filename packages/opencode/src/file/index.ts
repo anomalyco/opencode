@@ -418,6 +418,8 @@ export namespace File {
               }
             }
             cache = next
+          } catch {
+            // Directory may have been removed (instance disposed); leave cache as-is.
           } finally {
             task = undefined
           }
