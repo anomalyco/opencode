@@ -288,7 +288,8 @@
 
           &[data-active="true"] {
             border-radius: var(--radius-md);
-            background: var(--surface-raised-base-hover);
+            background: var(--surface-interactive-base);
+            color: var(--text-strong);
             [data-slot="list-item-active-icon"] {
               display: inline-flex;
             }
