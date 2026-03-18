@@ -4,6 +4,7 @@ import type { Project } from "@/project/project"
 export declare namespace InstanceContext {
   export interface Shape {
     readonly directory: string
+    readonly worktree: string
     readonly project: Project.Info
   }
 }
