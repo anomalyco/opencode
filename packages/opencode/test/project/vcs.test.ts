@@ -93,10 +93,17 @@ async function stage(dir: string) {
 
 async function withGh(dir: string, body: string, run: () => Promise<void>) {
   const bin = path.join(dir, "bin")
+  const js = path.join(bin, "gh.js")
   await fs.mkdir(bin, { recursive: true })
   const win = process.platform === "win32"
   const file = path.join(bin, win ? "gh.cmd" : "gh")
-  await Bun.write(file, win ? body.replaceAll("\n", "\r\n") : body)
+  await Bun.write(js, body)
+  const cmd = win
+    ? `@echo off\r\n"${process.execPath}" "${js}" %*\r\n`
+    : `#!/bin/sh
+exec "${process.execPath}" "${js}" "$@"
+`
+  await Bun.write(file, cmd)
   if (!win) await fs.chmod(file, 0o755)
   const prev = process.env.PATH
   process.env.PATH = `${bin}${path.delimiter}${prev ?? ""}`
@@ -222,28 +229,14 @@ describe("Vcs.commit", () => {
 
     await withGh(
       tmp.path,
-      process.platform === "win32"
-        ? `@echo off
-if "%1"=="auth" if "%2"=="status" exit /b 0
-if "%1"=="pr" if "%2"=="view" exit /b 1
-if "%1"=="pr" if "%2"=="create" (
-  echo https://github.com/test/repo/pull/1
-  exit /b 0
-)
-exit /b 1
-`
-        : `#!/bin/sh
-if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  exit 0
-fi
-if [ "$1" = "pr" ] && [ "$2" = "view" ]; then
-  exit 1
-fi
-if [ "$1" = "pr" ] && [ "$2" = "create" ]; then
-  printf '%s\n' 'https://github.com/test/repo/pull/1'
-  exit 0
-fi
-exit 1
+      `const args = process.argv.slice(2)
+if (args[0] === "auth" && args[1] === "status") process.exit(0)
+if (args[0] === "pr" && args[1] === "view") process.exit(1)
+if (args[0] === "pr" && args[1] === "create") {
+  process.stdout.write("https://github.com/test/repo/pull/1\\n")
+  process.exit(0)
+}
+process.exit(1)
 `,
       async () => {
         const result = await Instance.provide({
@@ -279,16 +272,7 @@ exit 1
 
     await withGh(
       tmp.path,
-      process.platform === "win32"
-        ? `@echo off
-if "%1"=="auth" if "%2"=="status" exit /b 1
-exit /b 1
-`
-        : `#!/bin/sh
-if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
-  exit 1
-fi
-exit 1
+      `process.exit(1)
 `,
       async () => {
         const err = await Instance.provide({
