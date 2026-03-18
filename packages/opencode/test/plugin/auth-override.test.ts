@@ -4,6 +4,7 @@ import fs from "fs/promises"
 import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { ProviderAuth } from "../../src/provider/auth"
+import { ProviderID } from "../../src/provider/schema"
 
 describe("plugin.auth-override", () => {
   test("user plugin overrides built-in github-copilot auth", async () => {
@@ -34,7 +35,7 @@ describe("plugin.auth-override", () => {
       directory: tmp.path,
       fn: async () => {
         const methods = await ProviderAuth.methods()
-        const copilot = methods["github-copilot"]
+        const copilot = methods[ProviderID.make("github-copilot")]
         expect(copilot).toBeDefined()
         expect(copilot.length).toBe(1)
         expect(copilot[0].label).toBe("Test Override Auth")
