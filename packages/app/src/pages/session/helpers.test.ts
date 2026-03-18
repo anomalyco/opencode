@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test"
-import { combineCommandSections, createOpenPreviewFile, createOpenReviewFile, focusTerminalById, getTabReorderIndex } from "./helpers"
+import {
+  combineCommandSections,
+  createOpenPreviewFile,
+  createOpenReviewFile,
+  focusTerminalById,
+  getTabReorderIndex,
+  isPreviewablePath,
+} from "./helpers"
 
 describe("createOpenReviewFile", () => {
   test("opens and loads selected review file", () => {
@@ -83,5 +90,19 @@ describe("getTabReorderIndex", () => {
 
   test("returns undefined for unknown droppable id", () => {
     expect(getTabReorderIndex(["a", "b", "c"], "a", "missing")).toBeUndefined()
+  })
+})
+
+describe("isPreviewablePath", () => {
+  test("matches previewable extensions", () => {
+    expect(isPreviewablePath("reports/result.html")).toBe(true)
+    expect(isPreviewablePath("assets/chart.PNG")).toBe(true)
+    expect(isPreviewablePath("audio/voice.m4a")).toBe(true)
+    expect(isPreviewablePath("docs/report.pdf")).toBe(true)
+  })
+
+  test("ignores non-previewable paths", () => {
+    expect(isPreviewablePath("src/app.ts")).toBe(false)
+    expect(isPreviewablePath("README")).toBe(false)
   })
 })

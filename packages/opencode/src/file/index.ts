@@ -204,6 +204,17 @@ export namespace File {
     "x3f",
   ])
 
+  const previewableBinaryExtensions = new Set([
+    "pdf",
+    "mp3",
+    "wav",
+    "ogg",
+    "m4a",
+    "aac",
+    "flac",
+    "opus",
+  ])
+
   function isImageByExtension(filepath: string): boolean {
     const ext = path.extname(filepath).toLowerCase().slice(1)
     return imageExtensions.has(ext)
@@ -230,6 +241,26 @@ export namespace File {
       heif: "image/heif",
     }
     return mimeTypes[ext] || "image/" + ext
+  }
+
+  function isPreviewableBinaryByExtension(filepath: string): boolean {
+    const ext = path.extname(filepath).toLowerCase().slice(1)
+    return previewableBinaryExtensions.has(ext)
+  }
+
+  function getPreviewableBinaryMimeType(filepath: string): string {
+    const ext = path.extname(filepath).toLowerCase().slice(1)
+    const mimeTypes: Record<string, string> = {
+      pdf: "application/pdf",
+      mp3: "audio/mpeg",
+      wav: "audio/wav",
+      ogg: "audio/ogg",
+      m4a: "audio/mp4",
+      aac: "audio/aac",
+      flac: "audio/flac",
+      opus: "audio/opus",
+    }
+    return mimeTypes[ext] || "application/octet-stream"
   }
 
   function isBinaryByExtension(filepath: string): boolean {
@@ -445,6 +476,17 @@ export namespace File {
         return { type: "text", content, mimeType, encoding: "base64" }
       }
       return { type: "text", content: "" }
+    }
+
+    if (isPreviewableBinaryByExtension(file)) {
+      const bunFile = Bun.file(full)
+      if (await bunFile.exists()) {
+        const buffer = await bunFile.arrayBuffer().catch(() => new ArrayBuffer(0))
+        const content = Buffer.from(buffer).toString("base64")
+        const mimeType = getPreviewableBinaryMimeType(file)
+        return { type: "binary", content, mimeType, encoding: "base64" }
+      }
+      return { type: "binary", content: "" }
     }
 
     if (isBinaryByExtension(file)) {

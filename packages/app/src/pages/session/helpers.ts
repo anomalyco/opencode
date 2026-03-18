@@ -1,5 +1,33 @@
 import type { CommandOption } from "@/context/command"
 
+const previewExtensions = new Set([
+  "html",
+  "htm",
+  "pdf",
+  "svg",
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "webp",
+  "bmp",
+  "avif",
+  "ico",
+  "mp3",
+  "wav",
+  "ogg",
+  "m4a",
+  "aac",
+  "flac",
+  "opus",
+])
+
+export const isPreviewablePath = (path: string) => {
+  const idx = path.lastIndexOf(".")
+  if (idx === -1) return false
+  return previewExtensions.has(path.slice(idx + 1).toLowerCase())
+}
+
 export const focusTerminalById = (id: string) => {
   const wrapper = document.getElementById(`terminal-wrapper-${id}`)
   const terminal = wrapper?.querySelector('[data-component="terminal"]')

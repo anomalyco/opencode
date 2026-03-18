@@ -5,35 +5,16 @@ import { createEffect, createMemo, on, onCleanup, Match, Show, Switch } from "so
 import { useFile } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
-
-const htmlExtensions = new Set(["html", "htm"])
-const audioExtensions = new Set(["mp3", "wav", "ogg", "m4a", "aac", "flac", "opus"])
-const PRINT_MESSAGE = "opencode:preview-print"
-const PRINT_DONE_MESSAGE = "opencode:preview-print-done"
-
-function getExtension(path: string) {
-  const idx = path.lastIndexOf(".")
-  if (idx === -1) return ""
-  return path.slice(idx + 1).toLowerCase()
-}
-
-function normalizeMimeType(type: string | undefined) {
-  if (!type) return
-
-  const mime = type.split(";", 1)[0]?.trim().toLowerCase()
-  if (!mime) return
-  if (mime === "audio/x-aac") return "audio/aac"
-  if (mime === "audio/x-m4a") return "audio/mp4"
-  return mime
-}
-
-function printable(input: string) {
-  const style = `<style>@page{margin:12mm}html,body{background:#fff}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style>`
-  const script = `<script>(function(){var done=false;function finish(){if(done)return;done=true;parent.postMessage({type:"${PRINT_DONE_MESSAGE}"},"*")}window.addEventListener("message",function(event){if(event.data?.type!=="${PRINT_MESSAGE}")return;var cleanup=function(){window.removeEventListener("afterprint",cleanup);finish()};window.addEventListener("afterprint",cleanup);window.focus();setTimeout(function(){window.print();setTimeout(finish,1000)},50)})})()</script>`
-  if (input.includes("</head>")) return input.replace("</head>", `${style}${script}</head>`)
-  if (input.includes("</body>")) return input.replace("</body>", `${script}</body>`)
-  return `${style}${script}${input}`
-}
+import {
+  PRINT_DONE_MESSAGE,
+  PRINT_MESSAGE,
+  audioExtensions,
+  getExtension,
+  htmlExtensions,
+  normalizeMimeType,
+  pdfExtensions,
+  printable,
+} from "./preview-tab-helper"
 
 export function SessionPreviewTab(props: {
   path: () => string | undefined
@@ -82,6 +63,16 @@ export function SessionPreviewTab(props: {
     return audioExtensions.has(getExtension(path))
   })
 
+  const isPdf = createMemo(() => {
+    const path = props.path()
+    const value = content()
+    if (value?.encoding !== "base64") return false
+    const mime = normalizeMimeType(value.mimeType)
+    if (mime === "application/pdf") return true
+    if (!path) return false
+    return pdfExtensions.has(getExtension(path))
+  })
+
   const htmlSrc = createMemo(() => {
     if (!isHtml()) return
     const value = content()
@@ -107,6 +98,14 @@ export function SessionPreviewTab(props: {
 
   const audioDataUrl = createMemo(() => {
     if (!isAudio()) return
+    const value = content()
+    const mime = normalizeMimeType(value?.mimeType)
+    if (!value?.content || !mime) return
+    return `data:${mime};base64,${value.content}`
+  })
+
+  const pdfDataUrl = createMemo(() => {
+    if (!isPdf()) return
     const value = content()
     const mime = normalizeMimeType(value?.mimeType)
     if (!value?.content || !mime) return
@@ -272,6 +271,18 @@ export function SessionPreviewTab(props: {
             {(src) => (
               <div class="px-6 pb-6 flex justify-center">
                 <audio controls src={src()} class="w-full max-w-[560px]" />
+              </div>
+            )}
+          </Match>
+          <Match when={pdfDataUrl()}>
+            {(src) => (
+              <div class="h-full px-6 pb-6">
+                <embed
+                  src={src()}
+                  type="application/pdf"
+                  class="w-full h-full min-h-96 rounded-lg border border-border-weak-base bg-white"
+                  onLoad={() => requestAnimationFrame(restoreScroll)}
+                />
               </div>
             )}
           </Match>
