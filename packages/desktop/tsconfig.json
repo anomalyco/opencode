@@ -19,5 +19,6 @@
     "types": ["vite/client"]
   },
   "references": [{ "path": "../app" }, { "path": "../sdk/js" }],
-  "include": ["src", "package.json"]
+  "include": ["src", "package.json"],
+  "exclude": ["src/**/*.test.ts"]
 }
