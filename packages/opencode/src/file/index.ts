@@ -481,7 +481,9 @@ export namespace File {
     if (isPreviewableBinaryByExtension(file)) {
       const bunFile = Bun.file(full)
       if (await bunFile.exists()) {
-        const buffer = await bunFile.arrayBuffer().catch(() => new ArrayBuffer(0))
+        const buffer = await bunFile.arrayBuffer().catch((error) => {
+          throw new Error(`Failed to read previewable binary file "${file}": ${error instanceof Error ? error.message : String(error)}`)
+        })
         const content = Buffer.from(buffer).toString("base64")
         const mimeType = getPreviewableBinaryMimeType(file)
         return { type: "binary", content, mimeType, encoding: "base64" }

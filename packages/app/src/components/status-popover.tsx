@@ -17,6 +17,27 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { ServerRow } from "@/components/server/server-row"
 import { checkServerHealth, type ServerHealth } from "@/utils/server-health"
 
+function getPluginName(plugin: string): string {
+  if (plugin.startsWith("file://")) {
+    try {
+      const pathname = new URL(plugin).pathname
+      const name = pathname.split("/").pop() ?? pathname
+      return name.includes(".") ? name.split(".")[0]! : name
+    } catch {
+      return plugin
+    }
+  }
+  const lastAt = plugin.lastIndexOf("@")
+  return lastAt > 0 ? plugin.substring(0, lastAt) : plugin
+}
+
+function isPennylaneConfigured(plugins: string[]): boolean {
+  return plugins.some((p) => {
+    const name = getPluginName(p)
+    return name === "pennylane" || p.toLowerCase().includes("pennylane")
+  })
+}
+
 export function StatusPopover() {
   const sync = useSync()
   const sdk = useSDK()
@@ -30,6 +51,7 @@ export function StatusPopover() {
     status: {} as Record<string, ServerHealth | undefined>,
     loading: null as string | null,
     defaultServerUrl: undefined as string | undefined,
+    pennylaneHealth: undefined as { healthy: boolean; error?: string } | undefined,
   })
   const fetcher = platform.fetch ?? globalThis.fetch
 
@@ -77,6 +99,35 @@ export function StatusPopover() {
     onCleanup(() => clearInterval(interval))
   })
 
+  const plugins = createMemo(() => sync.data.config.plugin ?? [])
+  const pennylaneFromServer = createMemo(
+    () =>
+      store.pennylaneHealth !== undefined && store.pennylaneHealth.error !== "not configured",
+  )
+  const pennylaneConfigured = createMemo(
+    () => isPennylaneConfigured(plugins()) || pennylaneFromServer(),
+  )
+  const pluginCount = createMemo(() => {
+    const list = plugins().length
+    const hasPennylaneInList = plugins().some((p) => getPluginName(p) === "pennylane")
+    return list + (pennylaneFromServer() && !hasPennylaneInList ? 1 : 0)
+  })
+
+  async function refreshPennylaneHealth() {
+    try {
+      const result = await sdk.client.plugin.pennylane.health()
+      setStore("pennylaneHealth", result.data ?? undefined)
+    } catch {
+      setStore("pennylaneHealth", { healthy: false, error: "request failed" })
+    }
+  }
+
+  createEffect(() => {
+    refreshPennylaneHealth()
+    const interval = setInterval(refreshPennylaneHealth, 10_000)
+    onCleanup(() => clearInterval(interval))
+  })
+
   const mcpItems = createMemo(() =>
     Object.entries(sync.data.mcp ?? {})
       .map(([name, status]) => ({ name, status: status.status }))
@@ -107,13 +158,26 @@ export function StatusPopover() {
 
   const lspItems = createMemo(() => sync.data.lsp ?? [])
   const lspCount = createMemo(() => lspItems().length)
-  const plugins = createMemo(() => sync.data.config.plugin ?? [])
-  const pluginCount = createMemo(() => plugins().length)
+
+  const pluginsWithDisplay = createMemo(() => {
+    const items = plugins().map((spec) => ({
+      spec,
+      name: getPluginName(spec),
+      isPennylane: getPluginName(spec) === "pennylane" || spec.toLowerCase().includes("pennylane"),
+    }))
+    const hasPennylaneInList = items.some((i) => i.isPennylane)
+    if (pennylaneFromServer() && !hasPennylaneInList) {
+      return [{ spec: "pennylane", name: "pennylane", isPennylane: true }, ...items]
+    }
+    return items
+  })
 
   const overallHealthy = createMemo(() => {
     const serverHealthy = server.healthy() === true
     const anyMcpIssue = mcpItems().some((m) => m.status !== "connected" && m.status !== "disabled")
-    return serverHealthy && !anyMcpIssue
+    const pennylaneIssue =
+      pennylaneConfigured() && store.pennylaneHealth !== undefined && store.pennylaneHealth.healthy === false
+    return serverHealthy && !anyMcpIssue && !pennylaneIssue
   })
 
   const serverCount = createMemo(() => sortedServers().length)
@@ -333,7 +397,7 @@ export function StatusPopover() {
             <div class="flex flex-col px-2 pb-2">
               <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
                 <Show
-                  when={plugins().length > 0}
+                  when={pluginsWithDisplay().length > 0}
                   fallback={
                     <div class="text-14-regular text-text-base text-center my-auto">
                       {(() => {
@@ -352,13 +416,39 @@ export function StatusPopover() {
                     </div>
                   }
                 >
-                  <For each={plugins()}>
-                    {(plugin) => (
-                      <div class="flex items-center gap-2 w-full px-2 py-1">
-                        <div class="size-1.5 rounded-full shrink-0 bg-icon-success-base" />
-                        <span class="text-14-regular text-text-base truncate">{plugin}</span>
-                      </div>
-                    )}
+                  <For each={pluginsWithDisplay()}>
+                    {(item) => {
+                      const statusDot = () => {
+                        if (!item.isPennylane) return "bg-icon-success-base"
+                        const health = store.pennylaneHealth
+                        if (health === undefined) return "bg-border-weak-base"
+                        return health.healthy ? "bg-icon-success-base" : "bg-icon-critical-base"
+                      }
+                      const statusLabel = () => {
+                        if (!item.isPennylane) return null
+                        const health = store.pennylaneHealth
+                        if (health === undefined) return null
+                        return health.healthy
+                          ? language.t("status.pennylane.connected")
+                          : language.t("status.pennylane.disconnected")
+                      }
+                      return (
+                        <div class="flex items-center gap-2 w-full px-2 py-1">
+                          <div
+                            classList={{
+                              "size-1.5 rounded-full shrink-0": true,
+                              [statusDot()]: true,
+                            }}
+                          />
+                          <span class="text-14-regular text-text-base truncate flex-1">
+                            {item.name}
+                            {statusLabel() && (
+                              <span class="text-12-regular text-text-weak ml-1">({statusLabel()})</span>
+                            )}
+                          </span>
+                        </div>
+                      )
+                    }}
                   </For>
                 </Show>
               </div>

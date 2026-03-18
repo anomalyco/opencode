@@ -2673,6 +2673,27 @@ export type ConfigProvidersResponses = {
 
 export type ConfigProvidersResponse = ConfigProvidersResponses[keyof ConfigProvidersResponses]
 
+export type PluginPennylaneHealthData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/plugin/pennylane/health"
+}
+
+export type PluginPennylaneHealthResponses = {
+  /**
+   * Pennylane health status
+   */
+  200: {
+    healthy: boolean
+    error?: string
+  }
+}
+
+export type PluginPennylaneHealthResponse = PluginPennylaneHealthResponses[keyof PluginPennylaneHealthResponses]
+
 export type ToolIdsData = {
   body?: never
   path?: never

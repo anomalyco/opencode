@@ -530,6 +530,9 @@ export const dict = {
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "Plugins",
   "status.popover.action.manageServers": "Manage servers",
+  "status.pennylane.connected": "Connected",
+  "status.pennylane.disconnected": "Disconnected",
+  "status.pennylane.notConfigured": "Not configured",
 
   "session.share.popover.title": "Publish on web",
   "session.share.popover.description.shared":
@@ -772,6 +775,7 @@ export const dict = {
   "settings.permissions.tool.doom_loop.title": "Doom Loop",
   "settings.permissions.tool.doom_loop.description": "Detect repeated tool calls with identical input",
 
+  "session.revert.success": "Reverted to this point",
   "session.delete.failed.title": "Failed to delete session",
   "session.delete.title": "Delete session",
   "session.delete.confirm": 'Delete session "{{name}}"?',

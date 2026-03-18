@@ -11,6 +11,13 @@ import { useLayout } from "@/context/layout"
 import { useFile, type SelectedLineRange } from "@/context/file"
 import { useComments } from "@/context/comments"
 import { useLanguage } from "@/context/language"
+import {
+  audioExtensions,
+  getExtension,
+  htmlExtensions,
+  normalizeMimeType,
+  pdfExtensions,
+} from "./preview-tab-helper"
 
 export function FileTabContent(props: {
   tab: string
@@ -41,20 +48,25 @@ export function FileTabContent(props: {
     if (!p) return
     return props.file.get(p)
   })
-  const contents = createMemo(() => state()?.content?.content ?? "")
+  const content = createMemo(() => state()?.content)
+  const contents = createMemo(() => content()?.content ?? "")
   const cacheKey = createMemo(() => checksum(contents()))
+  const isHtml = createMemo(() => {
+    const p = path()
+    const mime = normalizeMimeType(content()?.mimeType)
+    if (mime === "text/html") return true
+    if (!p) return false
+    return htmlExtensions.has(getExtension(p))
+  })
   const isImage = createMemo(() => {
-    const c = state()?.content
+    const c = content()
     return c?.encoding === "base64" && c?.mimeType?.startsWith("image/") && c?.mimeType !== "image/svg+xml"
   })
-  const isSvg = createMemo(() => {
-    const c = state()?.content
-    return c?.mimeType === "image/svg+xml"
-  })
-  const isBinary = createMemo(() => state()?.content?.type === "binary")
+  const isSvg = createMemo(() => content()?.mimeType === "image/svg+xml")
+  const isBinary = createMemo(() => content()?.type === "binary")
   const svgContent = createMemo(() => {
     if (!isSvg()) return
-    const c = state()?.content
+    const c = content()
     if (!c) return
     if (c.encoding !== "base64") return c.content
     return decode64(c.content)
@@ -62,7 +74,7 @@ export function FileTabContent(props: {
 
   const svgDecodeFailed = createMemo(() => {
     if (!isSvg()) return false
-    const c = state()?.content
+    const c = content()
     if (!c) return false
     if (c.encoding !== "base64") return false
     return svgContent() === undefined
@@ -81,15 +93,53 @@ export function FileTabContent(props: {
   })
   const svgPreviewUrl = createMemo(() => {
     if (!isSvg()) return
-    const c = state()?.content
+    const c = content()
     if (!c) return
     if (c.encoding === "base64") return `data:image/svg+xml;base64,${c.content}`
     return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(c.content)}`
   })
   const imageDataUrl = createMemo(() => {
     if (!isImage()) return
-    const c = state()?.content
+    const c = content()
     return `data:${c?.mimeType};base64,${c?.content}`
+  })
+  const isAudio = createMemo(() => {
+    const p = path()
+    const c = content()
+    if (c?.encoding !== "base64") return false
+    const mime = normalizeMimeType(c.mimeType)
+    if (mime?.startsWith("audio/")) return true
+    if (!p) return false
+    return audioExtensions.has(getExtension(p))
+  })
+  const isPdf = createMemo(() => {
+    const p = path()
+    const c = content()
+    if (c?.encoding !== "base64") return false
+    const mime = normalizeMimeType(c.mimeType)
+    if (mime === "application/pdf") return true
+    if (!p) return false
+    return pdfExtensions.has(getExtension(p))
+  })
+  const htmlSrc = createMemo(() => {
+    if (!isHtml()) return
+    const c = content()
+    if (c?.type !== "text") return
+    return c.content
+  })
+  const audioDataUrl = createMemo(() => {
+    if (!isAudio()) return
+    const c = content()
+    const mime = normalizeMimeType(c?.mimeType)
+    if (!c?.content || !mime) return
+    return `data:${mime};base64,${c.content}`
+  })
+  const pdfDataUrl = createMemo(() => {
+    if (!isPdf()) return
+    const c = content()
+    const mime = normalizeMimeType(c?.mimeType)
+    if (!c?.content || !mime) return
+    return `data:${mime};base64,${c.content}`
   })
   const selectedLines = createMemo(() => {
     const p = path()
@@ -364,6 +414,13 @@ export function FileTabContent(props: {
     cancelAnimationFrame(scrollFrame)
   })
 
+  const empty = (message: string) => (
+    <div class="h-full px-6 pb-30 flex flex-col items-center justify-center text-center gap-6">
+      <Mark class="w-14 opacity-10" />
+      <div class="text-14-regular text-text-weak max-w-56">{message}</div>
+    </div>
+  )
+
   const renderCode = (source: string, wrapperClass: string) => (
     <div
       ref={(el) => {
@@ -476,6 +533,19 @@ export function FileTabContent(props: {
       onScroll={handleScroll}
     >
       <Switch>
+        <Match when={state()?.loaded && htmlSrc()}>
+          {(src) => (
+            <div class="h-full px-6 pb-6">
+              <iframe
+                srcdoc={src()}
+                sandbox="allow-scripts"
+                title={path()}
+                class="w-full h-full min-h-96 rounded-lg border border-border-weak-base bg-white"
+                onLoad={() => requestAnimationFrame(restoreScroll)}
+              />
+            </div>
+          )}
+        </Match>
         <Match when={state()?.loaded && isImage()}>
           <div class="px-6 py-4 pb-40">
             <img
@@ -486,15 +556,31 @@ export function FileTabContent(props: {
             />
           </div>
         </Match>
-        <Match when={state()?.loaded && isSvg()}>
-          <div class="flex flex-col gap-4 px-6 py-4">
-            {renderCode(svgContent() ?? "", "")}
-            <Show when={svgPreviewUrl()}>
-              <div class="flex justify-center pb-40">
-                <img src={svgPreviewUrl()} alt={path()} class="max-w-full max-h-96" />
-              </div>
-            </Show>
-          </div>
+        <Match when={state()?.loaded && svgPreviewUrl()}>
+          {(src) => (
+            <div class="flex justify-center px-6 py-4 pb-40">
+              <img src={src()} alt={path()} class="max-w-full max-h-96" onLoad={() => requestAnimationFrame(restoreScroll)} />
+            </div>
+          )}
+        </Match>
+        <Match when={state()?.loaded && audioDataUrl()}>
+          {(src) => (
+            <div class="px-6 pb-6 flex justify-center">
+              <audio controls src={src()} class="w-full max-w-[560px]" />
+            </div>
+          )}
+        </Match>
+        <Match when={state()?.loaded && pdfDataUrl()}>
+          {(src) => (
+            <div class="h-full px-6 pb-6">
+              <embed
+                src={src()}
+                type="application/pdf"
+                class="w-full h-full min-h-96 rounded-lg border border-border-weak-base bg-white"
+                onLoad={() => requestAnimationFrame(restoreScroll)}
+              />
+            </div>
+          )}
         </Match>
         <Match when={state()?.loaded && isBinary()}>
           <div class="h-full px-6 pb-42 flex flex-col items-center justify-center text-center gap-6">
@@ -505,7 +591,7 @@ export function FileTabContent(props: {
             </div>
           </div>
         </Match>
-        <Match when={state()?.loaded}>{renderCode(contents(), "pb-40")}</Match>
+        <Match when={state()?.loaded}>{empty(props.language.t("session.preview.unsupported"))}</Match>
         <Match when={state()?.loading}>
           <div class="px-6 py-4 text-text-weak">{props.language.t("common.loading")}...</div>
         </Match>

@@ -84,6 +84,29 @@ describe("File.read path traversal protection", () => {
       },
     })
   })
+
+  test("returns base64 content for previewable pdf files", async () => {
+    const pdfBytes = Buffer.from(
+      "%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Count 1 /Kids [3 0 R] >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Contents 4 0 R >>\nendobj\n4 0 obj\n<< /Length 44 >>\nstream\nBT /F1 12 Tf 72 120 Td (Hello PDF) Tj ET\nendstream\nendobj\nxref\n0 5\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \n0000000202 00000 n \ntrailer\n<< /Root 1 0 R /Size 5 >>\nstartxref\n295\n%%EOF\n",
+    )
+
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "sample.pdf"), pdfBytes)
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const result = await File.read("sample.pdf")
+        expect(result.type).toBe("binary")
+        expect(result.encoding).toBe("base64")
+        expect(result.mimeType).toBe("application/pdf")
+        expect(Buffer.from(result.content, "base64")).toEqual(pdfBytes)
+      },
+    })
+  })
 })
 
 describe("File.list path traversal protection", () => {

@@ -3,14 +3,24 @@ import { fileURLToPath } from "bun"
 import { useTheme } from "../context/theme"
 import { useDialog } from "@tui/ui/dialog"
 import { useSync } from "@tui/context/sync"
-import { For, Match, Switch, Show, createMemo } from "solid-js"
+import { useSDK } from "@tui/context/sdk"
+import { For, Match, Switch, Show, createMemo, createSignal, onMount } from "solid-js"
 
 export type DialogStatusProps = {}
 
+function isPennylaneConfigured(plugins: { name: string }[]): boolean {
+  return plugins.some((p) => p.name === "pennylane")
+}
+
 export function DialogStatus() {
   const sync = useSync()
+  const sdk = useSDK()
   const { theme } = useTheme()
   const dialog = useDialog()
+
+  const [pennylaneHealth, setPennylaneHealth] = createSignal<
+    { healthy: boolean; error?: string } | undefined
+  >(undefined)
 
   const enabledFormatters = createMemo(() => sync.data.formatter.filter((f) => f.enabled))
 
@@ -37,6 +47,16 @@ export function DialogStatus() {
       return { name, version }
     })
     return result.toSorted((a, b) => a.name.localeCompare(b.name))
+  })
+
+  const pennylaneConfigured = createMemo(() => isPennylaneConfigured(plugins()))
+
+  onMount(() => {
+    if (!pennylaneConfigured()) return
+    sdk.client.plugin.pennylane
+      .health()
+      .then((result) => setPennylaneHealth(result.data ?? undefined))
+      .catch(() => setPennylaneHealth({ healthy: false, error: "request failed" }))
   })
 
   return (
@@ -148,7 +168,12 @@ export function DialogStatus() {
                 <text
                   flexShrink={0}
                   style={{
-                    fg: theme.success,
+                    fg:
+                      item.name === "pennylane" && pennylaneHealth()
+                        ? pennylaneHealth()!.healthy
+                          ? theme.success
+                          : theme.error
+                        : theme.success,
                   }}
                 >
                   •
@@ -156,6 +181,12 @@ export function DialogStatus() {
                 <text wrapMode="word" fg={theme.text}>
                   <b>{item.name}</b>
                   {item.version && <span style={{ fg: theme.textMuted }}> @{item.version}</span>}
+                  {item.name === "pennylane" && pennylaneHealth() && (
+                    <span style={{ fg: theme.textMuted }}>
+                      {" "}
+                      ({pennylaneHealth()!.healthy ? "Connected" : pennylaneHealth()!.error ?? "Disconnected"})
+                    </span>
+                  )}
                 </text>
               </box>
             )}

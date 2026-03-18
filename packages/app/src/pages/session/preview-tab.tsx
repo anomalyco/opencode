@@ -1,7 +1,7 @@
 import { Button } from "@opencode-ai/ui/button"
 import { Mark } from "@opencode-ai/ui/logo"
 import { getFilename } from "@opencode-ai/util/path"
-import { createEffect, createMemo, on, onCleanup, Match, Show, Switch } from "solid-js"
+import { createEffect, createMemo, createSignal, on, onCleanup, Match, Show, Switch } from "solid-js"
 import { useFile } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
@@ -9,6 +9,7 @@ import {
   PRINT_DONE_MESSAGE,
   PRINT_MESSAGE,
   audioExtensions,
+  blobUrlFromBase64,
   getExtension,
   htmlExtensions,
   normalizeMimeType,
@@ -26,6 +27,7 @@ export function SessionPreviewTab(props: {
   let scroll: HTMLDivElement | undefined
   let frame: number | undefined
   let pending: { x: number; y: number } | undefined
+  const [pdfObjectUrl, setPdfObjectUrl] = createSignal<string | undefined>()
 
   const state = createMemo(() => {
     const path = props.path()
@@ -104,12 +106,10 @@ export function SessionPreviewTab(props: {
     return `data:${mime};base64,${value.content}`
   })
 
-  const pdfDataUrl = createMemo(() => {
+  const pdfMimeType = createMemo(() => {
     if (!isPdf()) return
     const value = content()
-    const mime = normalizeMimeType(value?.mimeType)
-    if (!value?.content || !mime) return
-    return `data:${mime};base64,${value.content}`
+    return normalizeMimeType(value?.mimeType) ?? "application/pdf"
   })
 
   const restoreScroll = () => {
@@ -153,6 +153,24 @@ export function SessionPreviewTab(props: {
     ),
   )
 
+  createEffect(() => {
+    const value = content()
+    const mime = pdfMimeType()
+
+    if (!isPdf() || !value?.content || !mime) {
+      setPdfObjectUrl(undefined)
+      return
+    }
+
+    const url = blobUrlFromBase64(value.content, mime)
+    setPdfObjectUrl(url)
+
+    onCleanup(() => {
+      if (!url) return
+      URL.revokeObjectURL(url)
+    })
+  })
+
   onCleanup(() => {
     if (frame === undefined) return
     cancelAnimationFrame(frame)
@@ -195,6 +213,22 @@ export function SessionPreviewTab(props: {
     window.addEventListener("message", done)
     iframe.onload = () => iframe.contentWindow?.postMessage({ type: PRINT_MESSAGE }, "*")
     document.body.append(iframe)
+  }
+
+  const downloadPdf = () => {
+    const url = pdfObjectUrl()
+    if (!url) return
+
+    const link = document.createElement("a")
+    link.href = url
+    link.download = filename().toLowerCase().endsWith(".pdf") ? filename() : `${filename()}.pdf`
+    link.click()
+  }
+
+  const openPdf = () => {
+    const url = pdfObjectUrl()
+    if (!url) return
+    window.open(url, "_blank", "noopener,noreferrer")
   }
 
   return (
@@ -274,17 +308,40 @@ export function SessionPreviewTab(props: {
               </div>
             )}
           </Match>
-          <Match when={pdfDataUrl()}>
-            {(src) => (
-              <div class="h-full px-6 pb-6">
-                <embed
-                  src={src()}
-                  type="application/pdf"
-                  class="w-full h-full min-h-96 rounded-lg border border-border-weak-base bg-white"
-                  onLoad={() => requestAnimationFrame(restoreScroll)}
-                />
+          <Match when={isPdf()}>
+            <div class="h-full px-6 pb-6">
+              <div class="flex min-h-96 h-full justify-center">
+                <div class="w-full max-w-[960px] flex flex-col gap-4">
+                  <Show
+                    when={pdfObjectUrl()}
+                    fallback={
+                      <div class="px-4 py-3 rounded-lg border border-border-weak-base text-text-weak bg-background">
+                        {props.language.t("session.preview.deletedUnavailable")}
+                      </div>
+                    }
+                  >
+                    {(src) => (
+                      <>
+                        <iframe
+                          src={src()}
+                          title={filename()}
+                          class="w-full min-h-[70vh] rounded-lg border border-border-weak-base bg-white"
+                          onLoad={() => requestAnimationFrame(restoreScroll)}
+                        />
+                        <div class="flex items-center gap-2">
+                          <Button size="small" variant="secondary" onClick={openPdf}>
+                            Open PDF
+                          </Button>
+                          <Button size="small" variant="ghost" onClick={downloadPdf}>
+                            Download PDF
+                          </Button>
+                        </div>
+                      </>
+                    )}
+                  </Show>
+                </div>
               </div>
-            )}
+            </div>
           </Match>
           <Match when={state()?.loaded}>{empty(props.language.t("session.preview.unsupported"))}</Match>
           <Match when={true}>{empty(props.language.t("session.preview.empty"))}</Match>

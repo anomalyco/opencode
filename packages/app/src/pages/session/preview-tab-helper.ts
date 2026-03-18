@@ -28,3 +28,23 @@ export function printable(input: string): string {
   if (input.includes("</body>")) return input.replace("</body>", `${script}</body>`)
   return `${style}${script}${input}`
 }
+
+export function base64ToBytes(input: string): Uint8Array | undefined {
+  try {
+    const binary = atob(input)
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i)
+    }
+    return bytes
+  } catch {
+    return
+  }
+}
+
+export function blobUrlFromBase64(input: string, mimeType: string): string | undefined {
+  const bytes = base64ToBytes(input)
+  if (!bytes) return
+  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
+  return URL.createObjectURL(new Blob([buffer], { type: mimeType }))
+}

@@ -69,6 +69,7 @@ import type {
   PermissionRespondErrors,
   PermissionRespondResponses,
   PermissionRuleset,
+  PluginPennylaneHealthResponses,
   ProjectCurrentResponses,
   ProjectListResponses,
   ProjectUpdateErrors,
@@ -715,6 +716,34 @@ export class Config2 extends HeyApiClient {
       ...options,
       ...params,
     })
+  }
+}
+
+export class Pennylane extends HeyApiClient {
+  /**
+   * Get Pennylane health
+   *
+   * Check Pennylane API/CLI connection status. Returns healthy only when the Pennylane plugin is configured and the health check succeeds.
+   */
+  public health<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<PluginPennylaneHealthResponses, unknown, ThrowOnError>({
+      url: "/plugin/pennylane/health",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Plugin extends HeyApiClient {
+  private _pennylane?: Pennylane
+  get pennylane(): Pennylane {
+    return (this._pennylane ??= new Pennylane({ client: this.client }))
   }
 }
 
@@ -3209,6 +3238,11 @@ export class OpencodeClient extends HeyApiClient {
   private _config?: Config2
   get config(): Config2 {
     return (this._config ??= new Config2({ client: this.client }))
+  }
+
+  private _plugin?: Plugin
+  get plugin(): Plugin {
+    return (this._plugin ??= new Plugin({ client: this.client }))
   }
 
   private _tool?: Tool

@@ -9,6 +9,8 @@
     "dev": "bun run --cwd packages/opencode --conditions=browser src/index.ts",
     "dev:desktop": "bun --cwd packages/desktop tauri dev",
     "dev:web": "bun --cwd packages/app dev",
+    "opencode:serve": "bun run --cwd packages/opencode src/index.ts serve --port 4096",
+    "opencode:web": "bun run --cwd packages/opencode src/index.ts web --port 4096",
     "typecheck": "bun turbo typecheck",
     "prepare": "husky",
     "random": "echo 'Random script'",
