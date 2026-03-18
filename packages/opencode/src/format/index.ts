@@ -110,10 +110,11 @@ export class FormatService extends ServiceMap.Service<FormatService, FormatServi
           for (const item of await getFormatter(ext)) {
             log.info("running", { command: item.command })
             try {
+              const cwd = (await item.cwd?.(file)) ?? instance.directory
               const proc = Process.spawn(
                 item.command.map((x) => x.replace("$FILE", file)),
                 {
-                  cwd: instance.directory,
+                  cwd,
                   env: { ...process.env, ...item.environment },
                   stdout: "ignore",
                   stderr: "ignore",

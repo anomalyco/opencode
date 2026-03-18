@@ -1,4 +1,5 @@
 import { text } from "node:stream/consumers"
+import path from "path"
 import { BunProc } from "../bun"
 import { Instance } from "../project/instance"
 import { Filesystem } from "../util/filesystem"
@@ -12,6 +13,7 @@ export interface Info {
   environment?: Record<string, string>
   extensions: string[]
   enabled(): Promise<boolean>
+  cwd?(file: string): Promise<string | undefined>
 }
 
 export const gofmt: Info = {
@@ -29,6 +31,14 @@ export const mix: Info = {
   extensions: [".ex", ".exs", ".eex", ".heex", ".leex", ".neex", ".sface"],
   async enabled() {
     return which("mix") !== null
+  },
+  async cwd(file: string) {
+    const dir = path.dirname(file)
+    for (const target of [".formatter.exs", "mix.exs"]) {
+      const found = await Filesystem.findUp(target, dir, Instance.worktree)
+      if (found.length > 0) return path.dirname(found[0])
+    }
+    return undefined
   },
 }
 
