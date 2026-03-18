@@ -2,12 +2,14 @@ import { describe, expect, test } from "bun:test"
 import { convertToOpenAIResponsesInput } from "@/provider/sdk/openai-compatible/src/responses/convert-to-openai-responses-input"
 import { MessageV2 } from "@/session/message-v2"
 import type { Provider } from "@/provider/provider"
+import { ModelID, ProviderID } from "@/provider/schema"
+import { MessageID, PartID, SessionID } from "@/session/schema"
 
-const sessionID = "session"
+const sessionID = SessionID.make("session")
 
 const model: Provider.Model = {
-  id: "test-model",
-  providerID: "test",
+  id: ModelID.make("test-model"),
+  providerID: ProviderID.make("test"),
   api: {
     id: "test-model",
     url: "https://example.com",
@@ -56,12 +58,12 @@ const model: Provider.Model = {
 
 function userInfo(id: string): MessageV2.User {
   return {
-    id,
+    id: MessageID.make(id),
     sessionID,
     role: "user",
     time: { created: 0 },
     agent: "user",
-    model: { providerID: "test", modelID: "test" },
+    model: { providerID: ProviderID.make("test"), modelID: ModelID.make("test") },
     tools: {},
     mode: "",
   } as unknown as MessageV2.User
@@ -69,11 +71,11 @@ function userInfo(id: string): MessageV2.User {
 
 function assistantInfo(id: string, parentID: string): MessageV2.Assistant {
   return {
-    id,
+    id: MessageID.make(id),
     sessionID,
     role: "assistant",
     time: { created: 0 },
-    parentID,
+    parentID: MessageID.make(parentID),
     modelID: model.api.id,
     providerID: model.providerID,
     mode: "",
@@ -91,9 +93,9 @@ function assistantInfo(id: string, parentID: string): MessageV2.Assistant {
 
 function basePart(messageID: string, id: string) {
   return {
-    id,
+    id: PartID.make(id),
     sessionID,
-    messageID,
+    messageID: MessageID.make(messageID),
   }
 }
 
