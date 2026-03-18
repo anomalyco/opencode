@@ -2,8 +2,8 @@ import { useMarked } from "../context/marked"
 import { useI18n } from "../context/i18n"
 import DOMPurify from "dompurify"
 import morphdom from "morphdom"
-import { checksum } from "@opencode-ai/core/util/encode"
-import { ComponentProps, createEffect, createResource, createSignal, onCleanup, splitProps } from "solid-js"
+import { checksum } from "@opencode-ai/util/encode"
+import { ComponentProps, createEffect, createMemo, createResource, createSignal, onCleanup, splitProps } from "solid-js"
 import { isServer } from "solid-js/web"
 import { stream } from "./markdown-stream"
 
@@ -196,7 +196,16 @@ function decorate(root: HTMLDivElement, labels: CopyLabels) {
   markCodeLinks(root)
 }
 
-function setupCodeCopy(root: HTMLDivElement, getLabels: () => CopyLabels) {
+function labelsEqual(root: HTMLDivElement, labels: CopyLabels) {
+  return root.dataset.copyLabel === labels.copy && root.dataset.copiedLabel === labels.copied
+}
+
+function setLabels(root: HTMLDivElement, labels: CopyLabels) {
+  root.dataset.copyLabel = labels.copy
+  root.dataset.copiedLabel = labels.copied
+}
+
+function setupCodeCopy(root: HTMLDivElement, labels: CopyLabels) {
   const timeouts = new Map<HTMLButtonElement, ReturnType<typeof setTimeout>>()
 
   const updateLabel = (button: HTMLButtonElement) => {
@@ -378,6 +387,10 @@ export function Markdown(
   const marked = useMarked()
   const i18n = useI18n()
   const [root, setRoot] = createSignal<HTMLDivElement>()
+  const labels = createMemo(() => ({
+    copy: i18n.t("ui.message.copy"),
+    copied: i18n.t("ui.message.copied"),
+  }))
   const [html] = createResource(
     () => ({
       text: local.text,
@@ -418,12 +431,26 @@ export function Markdown(
 
   createEffect(() => {
     const container = root()
-    const content = local.text ? (html.latest ?? html() ?? "") : ""
+    const content = html()
+    const next = labels()
     if (!container) return
     if (isServer) return
 
     if (!content) {
       container.innerHTML = ""
+      delete container.dataset.html
+      return
+    }
+
+    if (container.dataset.html === content && labelsEqual(container, next)) return
+
+    if (container.dataset.html === content) {
+      if (copySetupTimer) clearTimeout(copySetupTimer)
+      copySetupTimer = setTimeout(() => {
+        if (copyCleanup) copyCleanup()
+        copyCleanup = setupCodeCopy(container, next)
+        setLabels(container, next)
+      }, 150)
       return
     }
 
@@ -452,11 +479,14 @@ export function Markdown(
       },
     })
 
-    if (!copyCleanup)
-      copyCleanup = setupCodeCopy(container, () => ({
-        copy: i18n.t("ui.message.copy"),
-        copied: i18n.t("ui.message.copied"),
-      }))
+    container.dataset.html = content
+
+    if (copySetupTimer) clearTimeout(copySetupTimer)
+    copySetupTimer = setTimeout(() => {
+      if (copyCleanup) copyCleanup()
+      copyCleanup = setupCodeCopy(container, next)
+      setLabels(container, next)
+    }, 150)
   })
 
   onCleanup(() => {

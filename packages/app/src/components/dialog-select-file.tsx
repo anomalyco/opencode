@@ -320,6 +320,7 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
     setGrouped(query.length > 0)
 
     if (commandsOnly()) {
+      if (!query) return commandEntries.picks()
       return commandEntries.list()
     }
 

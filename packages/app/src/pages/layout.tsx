@@ -144,8 +144,7 @@ export default function Layout(props: ParentProps) {
   const theme = useTheme()
   const language = useLanguage()
   type DictKey = keyof typeof enDict
-  const kw = (...keys: DictKey[]) =>
-    language.locale() === "en" ? undefined : keys.map((k) => enDict[k]).join(" ")
+  const kw = (...keys: DictKey[]) => (language.locale() === "en" ? undefined : keys.map((k) => enDict[k]).join(" "))
   const initialDirectory = decode64(params.dir)
   const location = useLocation()
   const route = createMemo(() => {
@@ -1155,7 +1154,10 @@ export default function Layout(props: ParentProps) {
         keybind: "mod+t",
         disabled: layout.projects.list().length === 0,
         onSelect: () => {
-          dialog.show(() => <DialogSwitchProject onSelect={navigateToProject} />)
+          dialog.show(() => <DialogSwitchProject onSelect={navigateToProject} />, undefined, {
+            modal: false,
+            preventScroll: false,
+          })
         },
       },
       {
@@ -1677,7 +1679,8 @@ export default function Layout(props: ParentProps) {
     const dragDropEventName = "opencode:drag-drop"
 
     const handler = async (event: Event) => {
-      const detail = (event as CustomEvent<{ type: string; paths: string[]; position: { x: number; y: number } }>).detail
+      const detail = (event as CustomEvent<{ type: string; paths: string[]; position: { x: number; y: number } }>)
+        .detail
       if (!detail) return
 
       if (detail.type === "enter") {

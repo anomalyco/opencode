@@ -7,6 +7,7 @@ export interface ResizeHandleProps extends Omit<JSX.HTMLAttributes<HTMLDivElemen
   min: number
   max: number
   onResize: (size: number) => void
+  onResizeEnd?: (size: number) => void
   onCollapse?: () => void
   collapseThreshold?: number
 }
@@ -19,6 +20,7 @@ export function ResizeHandle(props: ResizeHandleProps) {
     "min",
     "max",
     "onResize",
+    "onResizeEnd",
     "onCollapse",
     "collapseThreshold",
     "class",
@@ -30,7 +32,9 @@ export function ResizeHandle(props: ResizeHandleProps) {
     const edge = local.edge ?? (local.direction === "vertical" ? "start" : "end")
     const start = local.direction === "horizontal" ? e.clientX : e.clientY
     const startSize = local.size
+    const step = 4
     let current = startSize
+    let sent = startSize
     let rafId: number | null = null
 
     document.body.style.userSelect = "none"
@@ -48,6 +52,7 @@ export function ResizeHandle(props: ResizeHandleProps) {
             : pos - start
       current = startSize + delta
       const clamped = Math.min(local.max, Math.max(local.min, current))
+      const snapped = Math.round(clamped / step) * step
 
       // Throttle resize updates using requestAnimationFrame
       if (rafId !== null) {
@@ -55,7 +60,9 @@ export function ResizeHandle(props: ResizeHandleProps) {
       }
       rafId = requestAnimationFrame(() => {
         rafId = null
-        local.onResize(clamped)
+        if (snapped === sent) return
+        sent = snapped
+        local.onResize(snapped)
       })
     }
 
@@ -73,7 +80,9 @@ export function ResizeHandle(props: ResizeHandleProps) {
 
       // Ensure final resize is applied
       const clamped = Math.min(local.max, Math.max(local.min, current))
-      local.onResize(clamped)
+      const snapped = Math.round(clamped / step) * step
+      local.onResize(snapped)
+      local.onResizeEnd?.(snapped)
 
       const threshold = local.collapseThreshold ?? 0
       if (local.onCollapse && threshold > 0 && current < threshold) {
