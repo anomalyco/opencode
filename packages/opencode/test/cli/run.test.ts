@@ -32,8 +32,8 @@ describe("run.parseSchema", () => {
     })
   })
 
-  test("rejects non-object schema", async () => {
-    await expect(parseSchema("[]")).rejects.toThrow("Schema must be a JSON object")
+  test("leaves schema shape validation to sdk", async () => {
+    await expect(parseSchema("[]")).resolves.toEqual([])
   })
 
   test("rejects invalid input", async () => {

@@ -59,9 +59,6 @@ export async function parseSchema(input: string) {
   })()
 
   if (json !== undefined) {
-    if (!json || typeof json !== "object" || Array.isArray(json)) {
-      throw new Error("Schema must be a JSON object")
-    }
     return json as Record<string, unknown>
   }
 
@@ -79,9 +76,6 @@ export async function parseSchema(input: string) {
       throw new Error(`Invalid JSON schema in file: ${input}`)
     }
   })()
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("Schema must be a JSON object")
-  }
   return value as Record<string, unknown>
 }
 
