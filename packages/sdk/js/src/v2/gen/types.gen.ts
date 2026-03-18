@@ -4323,6 +4323,30 @@ export type FileMkdirResponses = {
 
 export type FileMkdirResponse = FileMkdirResponses[keyof FileMkdirResponses]
 
+export type FileWriteData = {
+  body?: {
+    path: string
+    content: string
+    encoding?: "base64" | "text"
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/file/write"
+}
+
+export type FileWriteResponses = {
+  /**
+   * File written
+   */
+  200: {
+    path: string
+  }
+}
+
+export type FileWriteResponse = FileWriteResponses[keyof FileWriteResponses]
+
 export type McpStatusData = {
   body?: never
   path?: never

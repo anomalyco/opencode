@@ -1,4 +1,4 @@
-import { For, Match, Show, Switch, createMemo, onCleanup, type JSX, type ValidComponent } from "solid-js"
+import { For, Match, Show, Switch, createMemo, createSignal, onCleanup, type JSX, type ValidComponent } from "solid-js"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
@@ -20,6 +20,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useFile, type SelectedLineRange } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
+import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 
 export function SessionSidePanel(props: {
@@ -71,6 +72,26 @@ export function SessionSidePanel(props: {
   activeDiff?: string
   focusReviewDiff: (path: string) => void
 }) {
+  const sdk = useSDK()
+  const [uploading, setUploading] = createSignal(false)
+  let uploadInput: HTMLInputElement | undefined
+
+  async function handleUpload(e: Event) {
+    const input = e.target as HTMLInputElement
+    if (!input.files || input.files.length === 0) return
+    setUploading(true)
+    for (const file of input.files) {
+      const buffer = await file.arrayBuffer()
+      const bytes = new Uint8Array(buffer)
+      let str = ""
+      for (let i = 0; i < bytes.byteLength; i++) str += String.fromCharCode(bytes[i])
+      await sdk.client.file.write({ path: file.name, content: btoa(str), encoding: "base64" })
+    }
+    setUploading(false)
+    input.value = ""
+    void props.file.tree.refresh("")
+  }
+
   return (
     <Show when={props.open}>
       <aside
@@ -297,7 +318,23 @@ export function SessionSidePanel(props: {
                     )}
                   </Tabs.Trigger>
                   <Tabs.Trigger value="all" class="flex-1" classes={{ button: "w-full" }}>
-                    {props.language.t("session.files.all")}
+                    <span class="flex items-center gap-1">
+                      {props.language.t("session.files.all")}
+                      <Tooltip value={props.language.t("session.files.upload")} placement="bottom">
+                        <IconButton
+                          icon="cloud-upload"
+                          variant="ghost"
+                          iconSize="small"
+                          class="h-4 w-4"
+                          disabled={uploading()}
+                          onClick={(e: MouseEvent) => {
+                            e.stopPropagation()
+                            uploadInput?.click()
+                          }}
+                          aria-label={props.language.t("session.files.upload")}
+                        />
+                      </Tooltip>
+                    </span>
                   </Tabs.Trigger>
                 </Tabs.List>
                 <Tabs.Content value="changes" class="bg-background-base px-3 py-0">
@@ -349,6 +386,7 @@ export function SessionSidePanel(props: {
               onResize={props.layout.fileTree.resize}
               onCollapse={props.layout.fileTree.close}
             />
+            <input ref={uploadInput} type="file" multiple class="hidden" onChange={handleUpload} />
           </div>
         </Show>
       </aside>

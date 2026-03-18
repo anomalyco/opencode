@@ -507,6 +507,7 @@ export const dict = {
 
   "session.files.selectToOpen": "Select a file to open",
   "session.files.all": "All files",
+  "session.files.upload": "Upload files",
   "session.files.binaryContent": "Binary file (content cannot be displayed)",
   "session.preview.empty": "Select a file to preview",
   "session.preview.unsupported": "Preview is not available for this file type",

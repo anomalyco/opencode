@@ -582,6 +582,18 @@ export namespace File {
     await fs.promises.mkdir(absolutePath, { recursive: true })
   }
 
+  export async function write(file: string, content: string, encoding: "base64" | "text" = "text") {
+    const full = path.join(Instance.directory, file)
+    if (!Instance.containsPath(full)) {
+      throw new Error(`Access denied: path escapes project directory`)
+    }
+    if (encoding === "base64") {
+      await Bun.write(full, Buffer.from(content, "base64"))
+    } else {
+      await Bun.write(full, content)
+    }
+  }
+
   export async function search(input: { query: string; limit?: number; dirs?: boolean; type?: "file" | "directory" }) {
     const query = input.query.trim()
     const limit = input.limit ?? 100

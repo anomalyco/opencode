@@ -222,5 +222,36 @@ export const FileRoutes = lazy(() =>
         await File.mkdir(path)
         return c.json({ path })
       },
+    )
+    .post(
+      "/file/write",
+      describeRoute({
+        summary: "Write file",
+        description: "Write content to a file at the specified path, relative to the project directory.",
+        operationId: "file.write",
+        responses: {
+          200: {
+            description: "File written",
+            content: {
+              "application/json": {
+                schema: resolver(z.object({ path: z.string() })),
+              },
+            },
+          },
+        },
+      }),
+      validator(
+        "json",
+        z.object({
+          path: z.string(),
+          content: z.string(),
+          encoding: z.enum(["base64", "text"]).optional(),
+        }),
+      ),
+      async (c) => {
+        const { path, content, encoding } = c.req.valid("json")
+        await File.write(path, content, encoding)
+        return c.json({ path })
+      },
     ),
 )
