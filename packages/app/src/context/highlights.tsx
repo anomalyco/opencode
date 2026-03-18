@@ -1,4 +1,4 @@
-import { createEffect, createSignal, onCleanup } from "solid-js"
+import { createEffect, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -119,14 +119,22 @@ function sliceHighlights(input: { releases: ParsedRelease[]; current?: string; p
   const highlights = releases.slice(start, end).flatMap((release) => release.highlights)
   const seen = new Set<string>()
   const unique = highlights.filter((highlight) => {
-    const key = [highlight.title, highlight.description, highlight.media?.type ?? "", highlight.media?.src ?? ""].join(
-      "\n",
-    )
+    const key = dedupeKey(highlight)
     if (seen.has(key)) return false
     seen.add(key)
     return true
   })
   return unique.slice(0, 5)
+}
+
+function dedupeKey(highlight: Highlight) {
+  return [highlight.title, highlight.description, highlight.media?.type ?? "", highlight.media?.src ?? ""].join("\n")
+}
+
+function loadReleaseHighlights(value: unknown, current?: string, previous?: string) {
+  const releases = parseChangelog(value)
+  if (!releases?.length) return []
+  return sliceHighlights({ releases, current, previous })
 }
 
 export const { use: useHighlights, provider: HighlightsProvider } = createSimpleContext({
@@ -138,14 +146,59 @@ export const { use: useHighlights, provider: HighlightsProvider } = createSimple
     const settings = useSettings()
     const [store, setStore, _, ready] = persisted("highlights.v1", createStore<Store>({ version: undefined }))
 
-    const [from, setFrom] = createSignal<string | undefined>(undefined)
-    const [to, setTo] = createSignal<string | undefined>(undefined)
-    const [timer, setTimer] = createSignal<ReturnType<typeof setTimeout> | undefined>(undefined)
+    const [range, setRange] = createStore({
+      from: undefined as string | undefined,
+      to: undefined as string | undefined,
+    })
     const state = { started: false }
+    let timer: ReturnType<typeof setTimeout> | undefined
+
+    const clearTimer = () => {
+      if (timer === undefined) return
+      clearTimeout(timer)
+      timer = undefined
+    }
 
     const markSeen = () => {
       if (!platform.version) return
       setStore("version", platform.version)
+    }
+
+    const start = (previous: string) => {
+      if (!settings.general.releaseNotes()) {
+        markSeen()
+        return
+      }
+
+      const fetcher = platform.fetch ?? fetch
+      const controller = new AbortController()
+      onCleanup(() => {
+        controller.abort()
+        clearTimer()
+      })
+
+      fetcher(CHANGELOG_URL, {
+        signal: controller.signal,
+        headers: { Accept: "application/json" },
+      })
+        .then((response) => (response.ok ? (response.json() as Promise<unknown>) : undefined))
+        .then((json) => {
+          if (!json) return
+          const highlights = loadReleaseHighlights(json, platform.version, previous)
+          if (controller.signal.aborted) return
+
+          if (highlights.length === 0) {
+            markSeen()
+            return
+          }
+
+          timer = setTimeout(() => {
+            timer = undefined
+            markSeen()
+            dialog.show(() => <DialogReleaseNotes highlights={highlights} />)
+          }, 500)
+        })
+        .catch(() => undefined)
     }
 
     createEffect(() => {
@@ -163,59 +216,14 @@ export const { use: useHighlights, provider: HighlightsProvider } = createSimple
 
       if (previous === platform.version) return
 
-      setFrom(previous)
-      setTo(platform.version)
-
-      if (!settings.general.releaseNotes()) {
-        markSeen()
-        return
-      }
-
-      const fetcher = platform.fetch ?? fetch
-      const controller = new AbortController()
-      onCleanup(() => {
-        controller.abort()
-        const id = timer()
-        if (id === undefined) return
-        clearTimeout(id)
-      })
-
-      fetcher(CHANGELOG_URL, {
-        signal: controller.signal,
-        headers: { Accept: "application/json" },
-      })
-        .then((response) => (response.ok ? (response.json() as Promise<unknown>) : undefined))
-        .then((json) => {
-          if (!json) return
-          const releases = parseChangelog(json)
-          if (!releases) return
-          if (releases.length === 0) return
-          const highlights = sliceHighlights({
-            releases,
-            current: platform.version,
-            previous,
-          })
-
-          if (controller.signal.aborted) return
-
-          if (highlights.length === 0) {
-            markSeen()
-            return
-          }
-
-          const timer = setTimeout(() => {
-            markSeen()
-            dialog.show(() => <DialogReleaseNotes highlights={highlights} />)
-          }, 500)
-          setTimer(timer)
-        })
-        .catch(() => undefined)
+      setRange({ from: previous, to: platform.version })
+      start(previous)
     })
 
     return {
       ready,
-      from,
-      to,
+      from: () => range.from,
+      to: () => range.to,
       get last() {
         return store.version
       },

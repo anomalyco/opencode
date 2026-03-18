@@ -1,14 +1,9 @@
 import { Database, and, eq, sql } from "../src/drizzle/index.js"
 import { AuthTable } from "../src/schema/auth.sql.js"
 import { UserTable } from "../src/schema/user.sql.js"
-import {
-  BillingTable,
-  PaymentTable,
-  SubscriptionTable,
-  SubscriptionPlan,
-  UsageTable,
-} from "../src/schema/billing.sql.js"
+import { BillingTable, PaymentTable, SubscriptionTable, BlackPlans, UsageTable } from "../src/schema/billing.sql.js"
 import { WorkspaceTable } from "../src/schema/workspace.sql.js"
+import { KeyTable } from "../src/schema/key.sql.js"
 import { BlackData } from "../src/black.js"
 import { centsToMicroCents } from "../src/util/price.js"
 import { getWeekBounds } from "../src/util/date.js"
@@ -16,13 +11,46 @@ import { getWeekBounds } from "../src/util/date.js"
 // get input from command line
 const identifier = process.argv[2]
 if (!identifier) {
-  console.error("Usage: bun lookup-user.ts <email|workspaceID>")
+  console.error("Usage: bun lookup-user.ts <email|workspaceID|apiKey>")
   process.exit(1)
 }
 
+// loop up by workspace ID
 if (identifier.startsWith("wrk_")) {
   await printWorkspace(identifier)
-} else {
+}
+// lookup by API key ID
+else if (identifier.startsWith("key_")) {
+  const key = await Database.use((tx) =>
+    tx
+      .select()
+      .from(KeyTable)
+      .where(eq(KeyTable.id, identifier))
+      .then((rows) => rows[0]),
+  )
+  if (!key) {
+    console.error("API key not found")
+    process.exit(1)
+  }
+  await printWorkspace(key.workspaceID)
+}
+// lookup by API key value
+else if (identifier.startsWith("sk-")) {
+  const key = await Database.use((tx) =>
+    tx
+      .select()
+      .from(KeyTable)
+      .where(eq(KeyTable.key, identifier))
+      .then((rows) => rows[0]),
+  )
+  if (!key) {
+    console.error("API key not found")
+    process.exit(1)
+  }
+  await printWorkspace(key.workspaceID)
+}
+// lookup by email
+else {
   const authData = await Database.use(async (tx) =>
     tx.select().from(AuthTable).where(eq(AuthTable.subject, identifier)),
   )
@@ -235,7 +263,7 @@ function formatRetryTime(seconds: number) {
 
 function getSubscriptionStatus(row: {
   subscription: {
-    plan: (typeof SubscriptionPlan)[number]
+    plan: (typeof BlackPlans)[number]
   } | null
   timeSubscriptionCreated: Date | null
   fixedUsage: number | null

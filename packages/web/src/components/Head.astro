@@ -1,10 +1,9 @@
 ---
 import { Base64 } from "js-base64";
-import type { Props } from '@astrojs/starlight/props'
 import Default from '@astrojs/starlight/components/Head.astro'
 import config from '../../config.mjs'
 
-const base = import.meta.env.BASE_URL.slice(1)
+const base = import.meta.env.BASE_URL.replace(/^\//, "").replace(/\/$/, "")
 
 const slug = Astro.url.pathname.replace(/^\//, "").replace(/\/$/, "");
 const {
@@ -12,7 +11,12 @@ const {
     data: { title , description },
   },
 } = Astro.locals.starlightRoute;
-const isDocs = slug.startsWith("docs")
+const isDocs = base === "" ? true : slug === base || slug.startsWith(`${base}/`)
+const t = Astro.locals.t as (key: string) => string
+const titleSuffix = t("app.head.titleSuffix")
+const shareSlug = base === "" ? "s" : `${base}/s`
+const isShare = slug === shareSlug || slug.startsWith(`${shareSlug}/`)
+const isHome = slug === "" || slug === base
 
 let encodedTitle = '';
 let ogImage = `${config.url}/social-share.png`;
@@ -38,13 +42,13 @@ if (isDocs) {
 }
 ---
 
-{ slug === "" && (
-<title>{title} | AI coding agent built for the terminal</title>
+{ isHome && (
+<title>{title} | {titleSuffix}</title>
 )}
 
 <Default {...Astro.props}><slot /></Default>
 
-{ (!slug.startsWith(`${base}/s`)) && (
+{ !isShare && (
   <meta property="og:image" content={ogImage} />
   <meta property="twitter:image" content={ogImage} />
 )}

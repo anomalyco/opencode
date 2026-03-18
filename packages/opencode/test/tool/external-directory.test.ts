@@ -3,11 +3,12 @@ import path from "path"
 import type { Tool } from "../../src/tool/tool"
 import { Instance } from "../../src/project/instance"
 import { assertExternalDirectory } from "../../src/tool/external-directory"
-import type { PermissionNext } from "../../src/permission/next"
+import type { PermissionNext } from "../../src/permission"
+import { SessionID, MessageID } from "../../src/session/schema"
 
 const baseCtx: Omit<Tool.Context, "ask"> = {
-  sessionID: "test",
-  messageID: "",
+  sessionID: SessionID.make("ses_test"),
+  messageID: MessageID.make(""),
   callID: "",
   agent: "build",
   abort: AbortSignal.any([]),
@@ -65,7 +66,7 @@ describe("tool.assertExternalDirectory", () => {
 
     const directory = "/tmp/project"
     const target = "/tmp/outside/file.txt"
-    const expected = path.join(path.dirname(target), "*")
+    const expected = path.join(path.dirname(target), "*").replaceAll("\\", "/")
 
     await Instance.provide({
       directory,
@@ -91,7 +92,7 @@ describe("tool.assertExternalDirectory", () => {
 
     const directory = "/tmp/project"
     const target = "/tmp/outside"
-    const expected = path.join(target, "*")
+    const expected = path.join(target, "*").replaceAll("\\", "/")
 
     await Instance.provide({
       directory,

@@ -6,14 +6,18 @@ import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
 import { NoSuchModelError, type Provider as SDK } from "ai"
 import { Log } from "../util/log"
 import { BunProc } from "../bun"
+import { Hash } from "../util/hash"
 import { Plugin } from "../plugin"
-import { ModelsDev } from "./models"
 import { NamedError } from "@opencode-ai/util/error"
+import { ModelsDev } from "./models"
 import { Auth } from "../auth"
 import { Env } from "../env"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
 import { iife } from "@/util/iife"
+import { Global } from "../global"
+import path from "path"
+import { Filesystem } from "../util/filesystem"
 
 // Direct imports for bundled providers
 import { createAmazonBedrock, type AmazonBedrockProviderSettings } from "@ai-sdk/amazon-bedrock"
@@ -37,22 +41,69 @@ import { createTogetherAI } from "@ai-sdk/togetherai"
 import { createPerplexity } from "@ai-sdk/perplexity"
 import { createVercel } from "@ai-sdk/vercel"
 import { createGitLab, VERSION as GITLAB_PROVIDER_VERSION } from "@gitlab/gitlab-ai-provider"
+import { fromNodeProviderChain } from "@aws-sdk/credential-providers"
+import { GoogleAuth } from "google-auth-library"
 import { ProviderTransform } from "./transform"
 import { Installation } from "../installation"
+import { ModelID, ProviderID } from "./schema"
+
+const DEFAULT_CHUNK_TIMEOUT = 300_000
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
 
-  function isGpt5OrLater(modelID: string): boolean {
+  function shouldUseCopilotResponsesApi(modelID: string): boolean {
     const match = /^gpt-(\d+)/.exec(modelID)
-    if (!match) {
-      return false
-    }
-    return Number(match[1]) >= 5
+    if (!match) return false
+    return Number(match[1]) >= 5 && !modelID.startsWith("gpt-5-mini")
   }
 
-  function shouldUseCopilotResponsesApi(modelID: string): boolean {
-    return isGpt5OrLater(modelID) && !modelID.startsWith("gpt-5-mini")
+  function wrapSSE(res: Response, ms: number, ctl: AbortController) {
+    if (typeof ms !== "number" || ms <= 0) return res
+    if (!res.body) return res
+    if (!res.headers.get("content-type")?.includes("text/event-stream")) return res
+
+    const reader = res.body.getReader()
+    const body = new ReadableStream<Uint8Array>({
+      async pull(ctrl) {
+        const part = await new Promise<Awaited<ReturnType<typeof reader.read>>>((resolve, reject) => {
+          const id = setTimeout(() => {
+            const err = new Error("SSE read timed out")
+            ctl.abort(err)
+            void reader.cancel(err)
+            reject(err)
+          }, ms)
+
+          reader.read().then(
+            (part) => {
+              clearTimeout(id)
+              resolve(part)
+            },
+            (err) => {
+              clearTimeout(id)
+              reject(err)
+            },
+          )
+        })
+
+        if (part.done) {
+          ctrl.close()
+          return
+        }
+
+        ctrl.enqueue(part.value)
+      },
+      async cancel(reason) {
+        ctl.abort(reason)
+        await reader.cancel(reason)
+      },
+    })
+
+    return new Response(body, {
+      headers: new Headers(res.headers),
+      status: res.status,
+      statusText: res.statusText,
+    })
   }
 
   const BUNDLED_PROVIDERS: Record<string, (options: any) => SDK> = {
@@ -81,11 +132,17 @@ export namespace Provider {
   }
 
   type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
+  type CustomVarsLoader = (options: Record<string, any>) => Record<string, string>
   type CustomLoader = (provider: Info) => Promise<{
     autoload: boolean
     getModel?: CustomModelLoader
+    vars?: CustomVarsLoader
     options?: Record<string, any>
   }>
+
+  function useLanguageModel(sdk: any) {
+    return sdk.responses === undefined && sdk.chat === undefined
+  }
 
   const CUSTOM_LOADERS: Record<string, CustomLoader> = {
     async anthropic() {
@@ -134,26 +191,23 @@ export namespace Provider {
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
-          if (sdk.responses === undefined && sdk.chat === undefined) return sdk.languageModel(modelID)
+          if (useLanguageModel(sdk)) return sdk.languageModel(modelID)
           return shouldUseCopilotResponsesApi(modelID) ? sdk.responses(modelID) : sdk.chat(modelID)
         },
         options: {},
       }
     },
-    "github-copilot-enterprise": async () => {
-      return {
-        autoload: false,
-        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
-          if (sdk.responses === undefined && sdk.chat === undefined) return sdk.languageModel(modelID)
-          return shouldUseCopilotResponsesApi(modelID) ? sdk.responses(modelID) : sdk.chat(modelID)
-        },
-        options: {},
-      }
-    },
-    azure: async () => {
+    azure: async (provider) => {
+      const resource = iife(() => {
+        const name = provider.options?.resourceName
+        if (typeof name === "string" && name.trim() !== "") return name
+        return Env.get("AZURE_RESOURCE_NAME")
+      })
+
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
+          if (useLanguageModel(sdk)) return sdk.languageModel(modelID)
           if (options?.["useCompletionUrls"]) {
             return sdk.chat(modelID)
           } else {
@@ -161,6 +215,11 @@ export namespace Provider {
           }
         },
         options: {},
+        vars(_options) {
+          return {
+            ...(resource && { AZURE_RESOURCE_NAME: resource }),
+          }
+        },
       }
     },
     "azure-cognitive-services": async () => {
@@ -168,6 +227,7 @@ export namespace Provider {
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
+          if (useLanguageModel(sdk)) return sdk.languageModel(modelID)
           if (options?.["useCompletionUrls"]) {
             return sdk.chat(modelID)
           } else {
@@ -211,7 +271,12 @@ export namespace Provider {
 
       const awsWebIdentityTokenFile = Env.get("AWS_WEB_IDENTITY_TOKEN_FILE")
 
-      if (!profile && !awsAccessKeyId && !awsBearerToken && !awsWebIdentityTokenFile) return { autoload: false }
+      const containerCreds = Boolean(
+        process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI || process.env.AWS_CONTAINER_CREDENTIALS_FULL_URI,
+      )
+
+      if (!profile && !awsAccessKeyId && !awsBearerToken && !awsWebIdentityTokenFile && !containerCreds)
+        return { autoload: false }
 
       const providerOptions: AmazonBedrockProviderSettings = {
         region: defaultRegion,
@@ -220,8 +285,6 @@ export namespace Provider {
       // Only use credential chain if no bearer token exists
       // Bearer token takes precedence over credential chain (profiles, access keys, IAM roles, web identity tokens)
       if (!awsBearerToken) {
-        const { fromNodeProviderChain } = await import(await BunProc.install("@aws-sdk/credential-providers"))
-
         // Build credential provider options (only pass profile if specified)
         const credentialProviderOptions = profile ? { profile } : {}
 
@@ -346,16 +409,46 @@ export namespace Provider {
         },
       }
     },
-    "google-vertex": async () => {
-      const project = Env.get("GOOGLE_CLOUD_PROJECT") ?? Env.get("GCP_PROJECT") ?? Env.get("GCLOUD_PROJECT")
-      const location = Env.get("GOOGLE_CLOUD_LOCATION") ?? Env.get("VERTEX_LOCATION") ?? "us-east5"
+    "google-vertex": async (provider) => {
+      const project =
+        provider.options?.project ??
+        Env.get("GOOGLE_CLOUD_PROJECT") ??
+        Env.get("GCP_PROJECT") ??
+        Env.get("GCLOUD_PROJECT")
+
+      const location = String(
+        provider.options?.location ??
+          Env.get("GOOGLE_VERTEX_LOCATION") ??
+          Env.get("GOOGLE_CLOUD_LOCATION") ??
+          Env.get("VERTEX_LOCATION") ??
+          "us-central1",
+      )
+
       const autoload = Boolean(project)
       if (!autoload) return { autoload: false }
       return {
         autoload: true,
+        vars(_options: Record<string, any>) {
+          const endpoint = location === "global" ? "aiplatform.googleapis.com" : `${location}-aiplatform.googleapis.com`
+          return {
+            ...(project && { GOOGLE_VERTEX_PROJECT: project }),
+            GOOGLE_VERTEX_LOCATION: location,
+            GOOGLE_VERTEX_ENDPOINT: endpoint,
+          }
+        },
         options: {
           project,
           location,
+          fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+            const auth = new GoogleAuth()
+            const client = await auth.getApplicationDefault()
+            const token = await client.credential.getAccessToken()
+
+            const headers = new Headers(init?.headers)
+            headers.set("Authorization", `Bearer ${token.token}`)
+
+            return fetch(input, { ...init, headers })
+          },
         },
         async getModel(sdk: any, modelID: string) {
           const id = String(modelID).trim()
@@ -430,6 +523,7 @@ export namespace Provider {
 
       const aiGatewayHeaders = {
         "User-Agent": `opencode/${Installation.VERSION} gitlab-ai-provider/${GITLAB_PROVIDER_VERSION} (${os.platform()} ${os.release()}; ${os.arch()})`,
+        "anthropic-beta": "context-1m-2025-08-07",
         ...(providerConfig?.options?.aiGatewayHeaders || {}),
       }
 
@@ -473,10 +567,14 @@ export namespace Provider {
         autoload: !!apiKey,
         options: {
           apiKey,
-          baseURL: `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/v1`,
         },
         async getModel(sdk: any, modelID: string) {
           return sdk.languageModel(modelID)
+        },
+        vars(_options) {
+          return {
+            CLOUDFLARE_ACCOUNT_ID: accountId,
+          }
         },
       }
     },
@@ -506,7 +604,28 @@ export namespace Provider {
       const { createAiGateway } = await import("ai-gateway-provider")
       const { createUnified } = await import("ai-gateway-provider/providers/unified")
 
-      const aigateway = createAiGateway({ accountId, gateway, apiKey: apiToken })
+      const metadata = iife(() => {
+        if (input.options?.metadata) return input.options.metadata
+        try {
+          return JSON.parse(input.options?.headers?.["cf-aig-metadata"])
+        } catch {
+          return undefined
+        }
+      })
+      const opts = {
+        metadata,
+        cacheTtl: input.options?.cacheTtl,
+        cacheKey: input.options?.cacheKey,
+        skipCache: input.options?.skipCache,
+        collectLog: input.options?.collectLog,
+      }
+
+      const aigateway = createAiGateway({
+        accountId,
+        gateway,
+        apiKey: apiToken,
+        ...(Object.values(opts).some((v) => v !== undefined) ? { options: opts } : {}),
+      })
       const unified = createUnified()
 
       return {
@@ -528,12 +647,23 @@ export namespace Provider {
         },
       }
     },
+    kilo: async () => {
+      return {
+        autoload: false,
+        options: {
+          headers: {
+            "HTTP-Referer": "https://opencode.ai/",
+            "X-Title": "opencode",
+          },
+        },
+      }
+    },
   }
 
   export const Model = z
     .object({
-      id: z.string(),
-      providerID: z.string(),
+      id: ModelID.zod,
+      providerID: ProviderID.zod,
       api: z.object({
         id: z.string(),
         url: z.string(),
@@ -603,7 +733,7 @@ export namespace Provider {
 
   export const Info = z
     .object({
-      id: z.string(),
+      id: ProviderID.zod,
       name: z.string(),
       source: z.enum(["env", "config", "custom", "api"]),
       env: z.string().array(),
@@ -618,13 +748,13 @@ export namespace Provider {
 
   function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model): Model {
     const m: Model = {
-      id: model.id,
-      providerID: provider.id,
+      id: ModelID.make(model.id),
+      providerID: ProviderID.make(provider.id),
       name: model.name,
       family: model.family,
       api: {
         id: model.id,
-        url: provider.api!,
+        url: model.provider?.api ?? provider.api!,
         npm: model.provider?.npm ?? provider.npm ?? "@ai-sdk/openai-compatible",
       },
       status: model.status ?? "active",
@@ -685,7 +815,7 @@ export namespace Provider {
 
   export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
     return {
-      id: provider.id,
+      id: ProviderID.make(provider.id),
       source: "custom",
       name: provider.name,
       env: provider.env ?? [],
@@ -703,7 +833,7 @@ export namespace Provider {
     const disabled = new Set(config.disabled_providers ?? [])
     const enabled = config.enabled_providers ? new Set(config.enabled_providers) : null
 
-    function isProviderAllowed(providerID: string): boolean {
+    function isProviderAllowed(providerID: ProviderID): boolean {
       if (enabled && !enabled.has(providerID)) return false
       if (disabled.has(providerID)) return false
       return true
@@ -714,27 +844,16 @@ export namespace Provider {
     const modelLoaders: {
       [providerID: string]: CustomModelLoader
     } = {}
-    const sdk = new Map<number, SDK>()
+    const varsLoaders: {
+      [providerID: string]: CustomVarsLoader
+    } = {}
+    const sdk = new Map<string, SDK>()
 
     log.info("init")
 
     const configProviders = Object.entries(config.provider ?? {})
 
-    // Add GitHub Copilot Enterprise provider that inherits from GitHub Copilot
-    if (database["github-copilot"]) {
-      const githubCopilot = database["github-copilot"]
-      database["github-copilot-enterprise"] = {
-        ...githubCopilot,
-        id: "github-copilot-enterprise",
-        name: "GitHub Copilot Enterprise",
-        models: mapValues(githubCopilot.models, (model) => ({
-          ...model,
-          providerID: "github-copilot-enterprise",
-        })),
-      }
-    }
-
-    function mergeProvider(providerID: string, provider: Partial<Info>) {
+    function mergeProvider(providerID: ProviderID, provider: Partial<Info>) {
       const existing = providers[providerID]
       if (existing) {
         // @ts-expect-error
@@ -751,7 +870,7 @@ export namespace Provider {
     for (const [providerID, provider] of configProviders) {
       const existing = database[providerID]
       const parsed: Info = {
-        id: providerID,
+        id: ProviderID.make(providerID),
         name: provider.name ?? existing?.name ?? providerID,
         env: provider.env ?? existing?.env ?? [],
         options: mergeDeep(existing?.options ?? {}, provider.options ?? {}),
@@ -767,7 +886,7 @@ export namespace Provider {
           return existingModel?.name ?? modelID
         })
         const parsedModel: Model = {
-          id: modelID,
+          id: ModelID.make(modelID),
           api: {
             id: model.id ?? existingModel?.api.id ?? modelID,
             npm:
@@ -776,11 +895,11 @@ export namespace Provider {
               existingModel?.api.npm ??
               modelsDev[providerID]?.npm ??
               "@ai-sdk/openai-compatible",
-            url: provider?.api ?? existingModel?.api.url ?? modelsDev[providerID]?.api,
+            url: model.provider?.api ?? provider?.api ?? existingModel?.api.url ?? modelsDev[providerID]?.api,
           },
           status: model.status ?? existingModel?.status ?? "active",
           name,
-          providerID,
+          providerID: ProviderID.make(providerID),
           capabilities: {
             temperature: model.temperature ?? existingModel?.capabilities.temperature ?? false,
             reasoning: model.reasoning ?? existingModel?.capabilities.reasoning ?? false,
@@ -832,7 +951,8 @@ export namespace Provider {
 
     // load env
     const env = Env.all()
-    for (const [providerID, provider] of Object.entries(database)) {
+    for (const [id, provider] of Object.entries(database)) {
+      const providerID = ProviderID.make(id)
       if (disabled.has(providerID)) continue
       const apiKey = provider.env.map((item) => env[item]).find(Boolean)
       if (!apiKey) continue
@@ -843,7 +963,8 @@ export namespace Provider {
     }
 
     // load apikeys
-    for (const [providerID, provider] of Object.entries(await Auth.all())) {
+    for (const [id, provider] of Object.entries(await Auth.all())) {
+      const providerID = ProviderID.make(id)
       if (disabled.has(providerID)) continue
       if (provider.type === "api") {
         mergeProvider(providerID, {
@@ -855,52 +976,23 @@ export namespace Provider {
 
     for (const plugin of await Plugin.list()) {
       if (!plugin.auth) continue
-      const providerID = plugin.auth.provider
+      const providerID = ProviderID.make(plugin.auth.provider)
       if (disabled.has(providerID)) continue
 
-      // For github-copilot plugin, check if auth exists for either github-copilot or github-copilot-enterprise
-      let hasAuth = false
       const auth = await Auth.get(providerID)
-      if (auth) hasAuth = true
-
-      // Special handling for github-copilot: also check for enterprise auth
-      if (providerID === "github-copilot" && !hasAuth) {
-        const enterpriseAuth = await Auth.get("github-copilot-enterprise")
-        if (enterpriseAuth) hasAuth = true
-      }
-
-      if (!hasAuth) continue
+      if (!auth) continue
       if (!plugin.auth.loader) continue
 
-      // Load for the main provider if auth exists
       if (auth) {
         const options = await plugin.auth.loader(() => Auth.get(providerID) as any, database[plugin.auth.provider])
         const opts = options ?? {}
         const patch: Partial<Info> = providers[providerID] ? { options: opts } : { source: "custom", options: opts }
         mergeProvider(providerID, patch)
       }
-
-      // If this is github-copilot plugin, also register for github-copilot-enterprise if auth exists
-      if (providerID === "github-copilot") {
-        const enterpriseProviderID = "github-copilot-enterprise"
-        if (!disabled.has(enterpriseProviderID)) {
-          const enterpriseAuth = await Auth.get(enterpriseProviderID)
-          if (enterpriseAuth) {
-            const enterpriseOptions = await plugin.auth.loader(
-              () => Auth.get(enterpriseProviderID) as any,
-              database[enterpriseProviderID],
-            )
-            const opts = enterpriseOptions ?? {}
-            const patch: Partial<Info> = providers[enterpriseProviderID]
-              ? { options: opts }
-              : { source: "custom", options: opts }
-            mergeProvider(enterpriseProviderID, patch)
-          }
-        }
-      }
     }
 
-    for (const [providerID, fn] of Object.entries(CUSTOM_LOADERS)) {
+    for (const [id, fn] of Object.entries(CUSTOM_LOADERS)) {
+      const providerID = ProviderID.make(id)
       if (disabled.has(providerID)) continue
       const data = database[providerID]
       if (!data) {
@@ -910,6 +1002,7 @@ export namespace Provider {
       const result = await fn(data)
       if (result && (result.autoload || providers[providerID])) {
         if (result.getModel) modelLoaders[providerID] = result.getModel
+        if (result.vars) varsLoaders[providerID] = result.vars
         const opts = result.options ?? {}
         const patch: Partial<Info> = providers[providerID] ? { options: opts } : { source: "custom", options: opts }
         mergeProvider(providerID, patch)
@@ -917,7 +1010,8 @@ export namespace Provider {
     }
 
     // load config
-    for (const [providerID, provider] of configProviders) {
+    for (const [id, provider] of configProviders) {
+      const providerID = ProviderID.make(id)
       const partial: Partial<Info> = { source: "config" }
       if (provider.env) partial.env = provider.env
       if (provider.name) partial.name = provider.name
@@ -925,7 +1019,8 @@ export namespace Provider {
       mergeProvider(providerID, partial)
     }
 
-    for (const [providerID, provider] of Object.entries(providers)) {
+    for (const [id, provider] of Object.entries(providers)) {
+      const providerID = ProviderID.make(id)
       if (!isProviderAllowed(providerID)) {
         delete providers[providerID]
         continue
@@ -935,7 +1030,10 @@ export namespace Provider {
 
       for (const [modelID, model] of Object.entries(provider.models)) {
         model.api.id = model.api.id ?? model.id ?? modelID
-        if (modelID === "gpt-5-chat-latest" || (providerID === "openrouter" && modelID === "openai/gpt-5-chat"))
+        if (
+          modelID === "gpt-5-chat-latest" ||
+          (providerID === ProviderID.openrouter && modelID === "openai/gpt-5-chat")
+        )
           delete provider.models[modelID]
         if (model.status === "alpha" && !Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS) delete provider.models[modelID]
         if (model.status === "deprecated") delete provider.models[modelID]
@@ -971,6 +1069,7 @@ export namespace Provider {
       providers,
       sdk,
       modelLoaders,
+      varsLoaders,
     }
   })
 
@@ -987,11 +1086,39 @@ export namespace Provider {
       const provider = s.providers[model.providerID]
       const options = { ...provider.options }
 
+      if (model.providerID === "google-vertex" && !model.api.npm.includes("@ai-sdk/openai-compatible")) {
+        delete options.fetch
+      }
+
       if (model.api.npm.includes("@ai-sdk/openai-compatible") && options["includeUsage"] !== false) {
         options["includeUsage"] = true
       }
 
-      if (!options["baseURL"]) options["baseURL"] = model.api.url
+      const baseURL = iife(() => {
+        let url =
+          typeof options["baseURL"] === "string" && options["baseURL"] !== "" ? options["baseURL"] : model.api.url
+        if (!url) return
+
+        // some models/providers have variable urls, ex: "https://${AZURE_RESOURCE_NAME}.services.ai.azure.com/anthropic/v1"
+        // We track this in models.dev, and then when we are resolving the baseURL
+        // we need to string replace that literal: "${AZURE_RESOURCE_NAME}"
+        const loader = s.varsLoaders[model.providerID]
+        if (loader) {
+          const vars = loader(options)
+          for (const [key, value] of Object.entries(vars)) {
+            const field = "${" + key + "}"
+            url = url.replaceAll(field, value)
+          }
+        }
+
+        url = url.replace(/\$\{([^}]+)\}/g, (item, key) => {
+          const val = Env.get(String(key))
+          return val ?? item
+        })
+        return url
+      })
+
+      if (baseURL !== undefined) options["baseURL"] = baseURL
       if (options["apiKey"] === undefined && provider.key) options["apiKey"] = provider.key
       if (model.headers)
         options["headers"] = {
@@ -999,26 +1126,28 @@ export namespace Provider {
           ...model.headers,
         }
 
-      const key = Bun.hash.xxHash32(JSON.stringify({ providerID: model.providerID, npm: model.api.npm, options }))
+      const key = Hash.fast(JSON.stringify({ providerID: model.providerID, npm: model.api.npm, options }))
       const existing = s.sdk.get(key)
       if (existing) return existing
 
       const customFetch = options["fetch"]
+      const chunkTimeout = options["chunkTimeout"] || DEFAULT_CHUNK_TIMEOUT
+      delete options["chunkTimeout"]
 
       options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
         // Preserve custom fetch if it exists, wrap it with timeout logic
         const fetchFn = customFetch ?? fetch
         const opts = init ?? {}
+        const chunkAbortCtl = typeof chunkTimeout === "number" && chunkTimeout > 0 ? new AbortController() : undefined
+        const signals: AbortSignal[] = []
 
-        if (options["timeout"] !== undefined && options["timeout"] !== null) {
-          const signals: AbortSignal[] = []
-          if (opts.signal) signals.push(opts.signal)
-          if (options["timeout"] !== false) signals.push(AbortSignal.timeout(options["timeout"]))
+        if (opts.signal) signals.push(opts.signal)
+        if (chunkAbortCtl) signals.push(chunkAbortCtl.signal)
+        if (options["timeout"] !== undefined && options["timeout"] !== null && options["timeout"] !== false)
+          signals.push(AbortSignal.timeout(options["timeout"]))
 
-          const combined = signals.length > 1 ? AbortSignal.any(signals) : signals[0]
-
-          opts.signal = combined
-        }
+        const combined = signals.length === 0 ? null : signals.length === 1 ? signals[0] : AbortSignal.any(signals)
+        if (combined) opts.signal = combined
 
         // Strip openai itemId metadata following what codex does
         // Codex uses #[serde(skip_serializing)] on id fields for all item types:
@@ -1038,11 +1167,14 @@ export namespace Provider {
           }
         }
 
-        return fetchFn(input, {
+        const res = await fetchFn(input, {
           ...opts,
           // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
           timeout: false,
         })
+
+        if (!chunkAbortCtl) return res
+        return wrapSSE(res, chunkTimeout, chunkAbortCtl)
       }
 
       const bundledFn = BUNDLED_PROVIDERS[model.api.npm]
@@ -1078,11 +1210,11 @@ export namespace Provider {
     }
   }
 
-  export async function getProvider(providerID: string) {
+  export async function getProvider(providerID: ProviderID) {
     return state().then((s) => s.providers[providerID])
   }
 
-  export async function getModel(providerID: string, modelID: string) {
+  export async function getModel(providerID: ProviderID, modelID: ModelID) {
     const s = await state()
     const provider = s.providers[providerID]
     if (!provider) {
@@ -1129,7 +1261,7 @@ export namespace Provider {
     }
   }
 
-  export async function closest(providerID: string, query: string[]) {
+  export async function closest(providerID: ProviderID, query: string[]) {
     const s = await state()
     const provider = s.providers[providerID]
     if (!provider) return undefined
@@ -1144,7 +1276,7 @@ export namespace Provider {
     }
   }
 
-  export async function getSmallModel(providerID: string) {
+  export async function getSmallModel(providerID: ProviderID) {
     const cfg = await Config.get()
 
     if (cfg.small_model) {
@@ -1171,23 +1303,41 @@ export namespace Provider {
         priority = ["gpt-5-mini", "claude-haiku-4.5", ...priority]
       }
       for (const item of priority) {
-        for (const model of Object.keys(provider.models)) {
-          if (model.includes(item)) return getModel(providerID, model)
+        if (providerID === ProviderID.amazonBedrock) {
+          const crossRegionPrefixes = ["global.", "us.", "eu."]
+          const candidates = Object.keys(provider.models).filter((m) => m.includes(item))
+
+          // Model selection priority:
+          // 1. global. prefix (works everywhere)
+          // 2. User's region prefix (us., eu.)
+          // 3. Unprefixed model
+          const globalMatch = candidates.find((m) => m.startsWith("global."))
+          if (globalMatch) return getModel(providerID, ModelID.make(globalMatch))
+
+          const region = provider.options?.region
+          if (region) {
+            const regionPrefix = region.split("-")[0]
+            if (regionPrefix === "us" || regionPrefix === "eu") {
+              const regionalMatch = candidates.find((m) => m.startsWith(`${regionPrefix}.`))
+              if (regionalMatch) return getModel(providerID, ModelID.make(regionalMatch))
+            }
+          }
+
+          const unprefixed = candidates.find((m) => !crossRegionPrefixes.some((p) => m.startsWith(p)))
+          if (unprefixed) return getModel(providerID, ModelID.make(unprefixed))
+        } else {
+          for (const model of Object.keys(provider.models)) {
+            if (model.includes(item)) return getModel(providerID, ModelID.make(model))
+          }
         }
       }
-    }
-
-    // Check if opencode provider is available before using it
-    const opencodeProvider = await state().then((state) => state.providers["opencode"])
-    if (opencodeProvider && opencodeProvider.models["gpt-5-nano"]) {
-      return getModel("opencode", "gpt-5-nano")
     }
 
     return undefined
   }
 
   const priority = ["gpt-5", "claude-sonnet-4", "big-pickle", "gemini-3-pro"]
-  export function sort(models: Model[]) {
+  export function sort<T extends { id: string }>(models: T[]) {
     return sortBy(
       models,
       [(model) => priority.findIndex((filter) => model.id.includes(filter)), "desc"],
@@ -1200,9 +1350,20 @@ export namespace Provider {
     const cfg = await Config.get()
     if (cfg.model) return parseModel(cfg.model)
 
-    const provider = await list()
-      .then((val) => Object.values(val))
-      .then((x) => x.find((p) => !cfg.provider || Object.keys(cfg.provider).includes(p.id)))
+    const providers = await list()
+    const recent = (await Filesystem.readJson<{ recent?: { providerID: ProviderID; modelID: ModelID }[] }>(
+      path.join(Global.Path.state, "model.json"),
+    )
+      .then((x) => (Array.isArray(x.recent) ? x.recent : []))
+      .catch(() => [])) as { providerID: ProviderID; modelID: ModelID }[]
+    for (const entry of recent) {
+      const provider = providers[entry.providerID]
+      if (!provider) continue
+      if (!provider.models[entry.modelID]) continue
+      return { providerID: entry.providerID, modelID: entry.modelID }
+    }
+
+    const provider = Object.values(providers).find((p) => !cfg.provider || Object.keys(cfg.provider).includes(p.id))
     if (!provider) throw new Error("no providers found")
     const [model] = sort(Object.values(provider.models))
     if (!model) throw new Error("no models found")
@@ -1215,16 +1376,16 @@ export namespace Provider {
   export function parseModel(model: string) {
     const [providerID, ...rest] = model.split("/")
     return {
-      providerID: providerID,
-      modelID: rest.join("/"),
+      providerID: ProviderID.make(providerID),
+      modelID: ModelID.make(rest.join("/")),
     }
   }
 
   export const ModelNotFoundError = NamedError.create(
     "ProviderModelNotFoundError",
     z.object({
-      providerID: z.string(),
-      modelID: z.string(),
+      providerID: ProviderID.zod,
+      modelID: ModelID.zod,
       suggestions: z.array(z.string()).optional(),
     }),
   )
@@ -1232,7 +1393,7 @@ export namespace Provider {
   export const InitError = NamedError.create(
     "ProviderInitError",
     z.object({
-      providerID: z.string(),
+      providerID: ProviderID.zod,
     }),
   )
 }

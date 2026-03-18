@@ -1,0 +1,384 @@
+---
+title: Plugins
+description: Schreiben Sie Ihre eigenen Plugins, um OpenCode zu erweitern.
+---
+
+Mit Plugins können Sie OpenCode erweitern, indem Sie verschiedene Ereignisse einbinden und das Verhalten anpassen. Sie können Plugins erstellen, um neue Funktionen hinzuzufügen, externe Dienste zu integrieren oder das Standardverhalten von OpenCode zu ändern.
+
+Beispiele finden Sie im von der Community erstellten [plugins](/docs/ecosystem#plugins).
+
+---
+
+## Plugins verwenden
+
+Es gibt zwei Möglichkeiten, Plugins zu laden.
+
+---
+
+### Aus lokalen Dateien
+
+Platzieren Sie JavaScript- oder TypeScript-Dateien im Plugin-Verzeichnis.
+
+- `.opencode/plugins/` – Plugins auf Projektebene
+- `~/.config/opencode/plugins/` – Globale Plugins
+
+Dateien in diesen Verzeichnissen werden beim Start automatisch geladen.
+
+---
+
+### Von npm
+
+Geben Sie npm-Pakete in Ihrer Konfigurationsdatei an.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
+}
+```
+
+Es werden sowohl reguläre als auch bereichsbezogene NPM-Pakete unterstützt.
+
+Durchsuchen Sie die verfügbaren Plugins im [ecosystem](/docs/ecosystem#plugins).
+
+---
+
+### Plugin-Installation
+
+**NPM-Plugins** werden beim Start automatisch mit Bun installiert. Pakete und ihre Abhängigkeiten werden in `~/.cache/opencode/node_modules/` zwischengespeichert.
+
+**Lokale Plugins** werden direkt aus dem Plugin-Verzeichnis geladen. Um externe Pakete zu verwenden, müssen Sie ein `package.json` in Ihrem Konfigurationsverzeichnis erstellen (siehe [Dependencies](#dependencies)) oder das Plugin auf npm und [add it to your config](/docs/config#plugins) veröffentlichen.
+
+---
+
+### Ladereihenfolge
+
+Plugins werden aus allen Quellen geladen und alle Hooks werden nacheinander ausgeführt. Die Ladereihenfolge lautet:
+
+1. Globale Konfiguration (`~/.config/opencode/opencode.json`)
+2. Projektkonfiguration (`opencode.json`)
+3. Globales Plugin-Verzeichnis (`~/.config/opencode/plugins/`)
+4. Projekt-Plugin-Verzeichnis (`.opencode/plugins/`)
+
+Doppelte npm-Pakete mit demselben Namen und derselben Version werden einmal geladen. Allerdings werden ein lokales Plugin und ein NPM-Plugin mit ähnlichen Namen beide separat geladen.
+
+---
+
+## Plugins erstellen
+
+Ein Plugin ist ein **JavaScript/TypeScript-Modul**, das eine oder mehrere Plugin-Funktionen exportiert. Jede Funktion empfängt ein Kontextobjekt und gibt ein Hooks-Objekt zurück.
+
+---
+
+### Abhängigkeiten
+
+Lokale Plugins und benutzerdefinierte Tools können externe npm-Pakete verwenden. Fügen Sie Ihrem Konfigurationsverzeichnis ein `package.json` mit den benötigten Abhängigkeiten hinzu.
+
+```json title=".opencode/package.json"
+{
+  "dependencies": {
+    "shescape": "^2.1.0"
+  }
+}
+```
+
+OpenCode führt beim Start `bun install` aus, um diese zu installieren. Ihre Plugins und Tools können sie dann importieren.
+
+```ts title=".opencode/plugins/my-plugin.ts"
+import { escape } from "shescape"
+
+export const MyPlugin = async (ctx) => {
+  return {
+    "tool.execute.before": async (input, output) => {
+      if (input.tool === "bash") {
+        output.args.command = escape(output.args.command)
+      }
+    },
+  }
+}
+```
+
+---
+
+### Grundstruktur
+
+```js title=".opencode/plugins/example.js"
+export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
+  console.log("Plugin initialized!")
+
+  return {
+    // Hook implementations go here
+  }
+}
+```
+
+Die Plugin-Funktion erhält:
+
+- `project`: Die aktuellen Projektinformationen.
+- `directory`: Das aktuelle Arbeitsverzeichnis.
+- `worktree`: Der Git-Worktree-Pfad.
+- `client`: Ein OpenCode-SDK-Client für die Interaktion mit AI.
+- `$`: Buns [shell API](https://bun.com/docs/runtime/shell) zum Ausführen von Befehlen.
+
+---
+
+### TypeScript-Unterstützung
+
+Für TypeScript-Plugins können Sie Typen aus dem Plugin-Paket importieren:
+
+```ts title="my-plugin.ts" {1}
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
+  return {
+    // Type-safe hook implementations
+  }
+}
+```
+
+---
+
+### Ereignisse
+
+Plugins können Ereignisse abonnieren, wie unten im Abschnitt „Beispiele“ gezeigt. Hier finden Sie eine Liste der verschiedenen verfügbaren Veranstaltungen.
+
+#### Befehlsereignisse
+
+- `command.executed`
+
+#### Dateiereignisse
+
+- `file.edited`
+- `file.watcher.updated`
+
+#### Installationsereignisse
+
+- `installation.updated`
+
+#### LSP-Ereignisse
+
+- `lsp.client.diagnostics`
+- `lsp.updated`
+
+#### Nachrichtenereignisse
+
+- `message.part.removed`
+- `message.part.updated`
+- `message.removed`
+- `message.updated`
+
+#### Berechtigungsereignisse
+
+- `permission.asked`
+- `permission.replied`
+
+#### Serverereignisse
+
+- `server.connected`
+
+#### Sitzungsereignisse
+
+- `session.created`
+- `session.compacted`
+- `session.deleted`
+- `session.diff`
+- `session.error`
+- `session.idle`
+- `session.status`
+- `session.updated`
+
+#### Todo-Ereignisse
+
+- `todo.updated`
+
+#### Shell-Ereignisse
+
+- `shell.env`
+
+#### Tool-Ereignisse
+
+- `tool.execute.after`
+- `tool.execute.before`
+
+#### TUI-Ereignisse
+
+- `tui.prompt.append`
+- `tui.command.execute`
+- `tui.toast.show`
+
+---
+
+## Beispiele
+
+Hier sind einige Beispiele für Plugins, mit denen Sie OpenCode erweitern können.
+
+---
+
+### Benachrichtigungen senden
+
+Senden Sie Benachrichtigungen, wenn bestimmte Ereignisse eintreten:
+
+```js title=".opencode/plugins/notification.js"
+export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
+  return {
+    event: async ({ event }) => {
+      // Send notification on session completion
+      if (event.type === "session.idle") {
+        await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
+      }
+    },
+  }
+}
+```
+
+Wir verwenden `osascript`, um AppleScript unter macOS auszuführen. Hier verwenden wir es zum Versenden von Benachrichtigungen.
+
+:::note
+Wenn Sie die OpenCode-Desktop-App verwenden, kann diese automatisch Systembenachrichtigungen senden, wenn eine Antwort bereit ist oder wenn in einer Sitzung ein Fehler auftritt.
+:::
+
+---
+
+### .env-Schutz
+
+Verhindern Sie, dass OpenCode `.env`-Dateien liest:
+
+```javascript title=".opencode/plugins/env-protection.js"
+export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
+  return {
+    "tool.execute.before": async (input, output) => {
+      if (input.tool === "read" && output.args.filePath.includes(".env")) {
+        throw new Error("Do not read .env files")
+      }
+    },
+  }
+}
+```
+
+---
+
+### Umgebungsvariablen einfügen
+
+Fügen Sie Umgebungsvariablen in alle Shell-Ausführungen ein (AI-Tools und Benutzerterminals):
+
+```javascript title=".opencode/plugins/inject-env.js"
+export const InjectEnvPlugin = async () => {
+  return {
+    "shell.env": async (input, output) => {
+      output.env.MY_API_KEY = "secret"
+      output.env.PROJECT_ROOT = input.cwd
+    },
+  }
+}
+```
+
+---
+
+### Benutzerdefinierte Tools
+
+Plugins können OpenCode auch benutzerdefinierte Tools hinzufügen:
+
+```ts title=".opencode/plugins/custom-tools.ts"
+import { type Plugin, tool } from "@opencode-ai/plugin"
+
+export const CustomToolsPlugin: Plugin = async (ctx) => {
+  return {
+    tool: {
+      mytool: tool({
+        description: "This is a custom tool",
+        args: {
+          foo: tool.schema.string(),
+        },
+        async execute(args, context) {
+          const { directory, worktree } = context
+          return `Hello ${args.foo} from ${directory} (worktree: ${worktree})`
+        },
+      }),
+    },
+  }
+}
+```
+
+Der `tool`-Helfer erstellt ein benutzerdefiniertes Tool, das OpenCode aufrufen kann. Es verwendet eine Zod-Schemafunktion und gibt eine Tooldefinition zurück mit:
+
+- `description`: Was das Tool macht
+- `args`: Zod-Schema für die Argumente des Tools
+- `execute`: Funktion, die ausgeführt wird, wenn das Tool aufgerufen wird
+
+Ihre benutzerdefinierten Tools stehen neben den integrierten Tools für OpenCode zur Verfügung.
+
+---
+
+### Protokollierung
+
+Verwenden Sie `client.app.log()` anstelle von `console.log` für die strukturierte Protokollierung:
+
+```ts title=".opencode/plugins/my-plugin.ts"
+export const MyPlugin = async ({ client }) => {
+  await client.app.log({
+    body: {
+      service: "my-plugin",
+      level: "info",
+      message: "Plugin initialized",
+      extra: { foo: "bar" },
+    },
+  })
+}
+```
+
+Ebenen: `debug`, `info`, `warn`, `error`. Weitere Informationen finden Sie unter [SDK documentation](https://opencode.ai/docs/sdk).
+
+---
+
+### Compaction-Hooks
+
+Passen Sie den Kontext an, der beim Komprimieren einer Sitzung einbezogen wird:
+
+```ts title=".opencode/plugins/compaction.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const CompactionPlugin: Plugin = async (ctx) => {
+  return {
+    "experimental.session.compacting": async (input, output) => {
+      // Inject additional context into the compaction prompt
+      output.context.push(`
+## Custom Context
+
+Include any state that should persist across compaction:
+- Current task status
+- Important decisions made
+- Files being actively worked on
+`)
+    },
+  }
+}
+```
+
+Der Hook `experimental.session.compacting` wird ausgelöst, bevor der Hook LLM eine Fortsetzungszusammenfassung generiert. Verwenden Sie es, um domänenspezifischen Kontext einzufügen, der der standardmäßigen Komprimierungsaufforderung entgehen würde.
+
+Sie können die Komprimierungsaufforderung auch vollständig ersetzen, indem Sie `output.prompt` festlegen:
+
+```ts title=".opencode/plugins/custom-compaction.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const CustomCompactionPlugin: Plugin = async (ctx) => {
+  return {
+    "experimental.session.compacting": async (input, output) => {
+      // Replace the entire compaction prompt
+      output.prompt = `
+You are generating a continuation prompt for a multi-agent swarm session.
+
+Summarize:
+1. The current task and its status
+2. Which files are being modified and by whom
+3. Any blockers or dependencies between agents
+4. The next steps to complete the work
+
+Format as a structured prompt that a new agent can use to resume work.
+`
+    },
+  }
+}
+```
+
+Wenn `output.prompt` festgelegt ist, ersetzt es die standardmäßige Komprimierungsaufforderung vollständig. Das Array `output.context` wird in diesem Fall ignoriert.

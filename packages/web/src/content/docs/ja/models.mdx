@@ -1,0 +1,221 @@
+---
+title: モデル
+description: LLM プロバイダーとモデルを構成します。
+---
+
+OpenCode は [AI SDK](https://ai-sdk.dev/) および [Models.dev](https://models.dev) を使用して **75 以上の LLM プロバイダー** をサポートし、ローカルモデルの実行をサポートします。
+
+---
+
+## プロバイダー
+
+最も一般的なプロバイダーはデフォルトでプリロードされています。 `/connect` コマンドを使用してプロバイダーの資格情報を追加した場合は、OpenCode を開始するときにそれらの資格情報を使用できるようになります。
+
+[プロバイダー](/docs/providers).
+
+---
+
+## モデルの選択
+
+プロバイダーを構成したら、次のように入力して必要なモデルを選択できます。
+
+```bash frame="none"
+/models
+```
+
+---
+
+## 推奨モデル
+
+たくさんのモデルがあり、毎週のように新しいモデルが登場します。
+
+:::tip
+当社が推奨するモデルのいずれかの使用を検討してください。
+:::
+しかし、コード生成とツール呼び出しの両方に優れたものはほんのわずかしかありません。
+
+ここでは、OpenCode で適切に動作するいくつかのモデルを順不同で示します。 (これは完全なリストではなく、必ずしも最新であるとは限りません):
+
+- GPT5.2
+- GPT 5.1 Codex
+- Claude Opus 4.5
+- Claude Sonnet 4.5
+- MiniMax M2.1
+- Gemini 3 Pro
+
+---
+
+## デフォルトの設定
+
+これらのいずれかをデフォルトのモデルとして設定するには、`model` キーを OpenCode の設定に追加します。
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "lmstudio/google/gemma-3n-e4b"
+}
+```
+
+ここでの完全な ID は `provider_id/model_id` です。たとえば、[OpenCode Zen](/docs/zen) を使用している場合、GPT 5.1 Codex には `opencode/gpt-5.1-codex` を使用します。
+
+[カスタムプロバイダー](/docs/providers#custom) を構成している場合、`provider_id` は構成の `provider` 部分のキーであり、`model_id` は `provider.models` のキーです。
+
+---
+
+## モデルの設定
+
+config を通じてモデルのオプションをグローバルに設定できます。
+
+```jsonc title="opencode.jsonc" {7-12,19-24}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "openai": {
+      "models": {
+        "gpt-5": {
+          "options": {
+            "reasoningEffort": "high",
+            "textVerbosity": "low",
+            "reasoningSummary": "auto",
+            "include": ["reasoning.encrypted_content"],
+          },
+        },
+      },
+    },
+    "anthropic": {
+      "models": {
+        "claude-sonnet-4-5-20250929": {
+          "options": {
+            "thinking": {
+              "type": "enabled",
+              "budgetTokens": 16000,
+            },
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+ここでは、2 つの組み込みモデル (`gpt-5` プロバイダー経由でアクセスする場合は `openai`、`claude-sonnet-4-20250514` プロバイダー経由でアクセスする場合は `anthropic`) のグローバル設定を構成しています。
+組み込みプロバイダーとモデル名は、[Models.dev](https://models.dev) で確認できます。
+
+使用しているエージェントに対してこれらのオプションを構成することもできます。ここでエージェント設定はグローバルオプションをオーバーライドします。 [詳細はこちら](/docs/agents/#additional)。
+
+組み込みバリアントを拡張するカスタムバリアントを定義することもできます。バリアントを使用すると、重複したエントリを作成せずに、同じモデルに対して異なる設定を構成できます。
+
+```jsonc title="opencode.jsonc" {6-21}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "opencode": {
+      "models": {
+        "gpt-5": {
+          "variants": {
+            "high": {
+              "reasoningEffort": "high",
+              "textVerbosity": "low",
+              "reasoningSummary": "auto",
+            },
+            "low": {
+              "reasoningEffort": "low",
+              "textVerbosity": "low",
+              "reasoningSummary": "auto",
+            },
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+---
+
+## バリアント
+
+多くのモデルは、異なる構成の複数のバリアントをサポートしています。 OpenCode には、一般的なプロバイダーのデフォルトのバリアントが組み込まれています。
+
+### 組み込みバリアント
+
+OpenCode には、多くのプロバイダーのデフォルトのバリアントが付属しています。
+
+**Anthropic**:
+
+- `high` - 高度な思考予算 (デフォルト)
+- `max` - 最大の思考予算
+
+**OpenAI**:
+
+モデルによって異なりますが、おおよそ次のとおりです。
+
+- `none` - 理由はありません
+- `minimal` - 最小限の推論努力
+- `low` - 推論の労力が少ない
+- `medium` - 中程度の推論努力
+- `high` - 高い推論努力
+- `xhigh` - 非常に高い推論努力
+
+**Google**:
+
+- `low` - 労力/トークン予算の削減
+- `high` - より高い労力/トークン予算
+
+:::tip
+このリストは包括的なものではありません。他の多くのプロバイダーにもデフォルトが組み込まれています。
+:::
+
+### カスタムバリアント
+
+既存のバリアントをオーバーライドすることも、独自のバリアントを追加することもできます。
+
+```jsonc title="opencode.jsonc" {7-18}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "openai": {
+      "models": {
+        "gpt-5": {
+          "variants": {
+            "thinking": {
+              "reasoningEffort": "high",
+              "textVerbosity": "low",
+            },
+            "fast": {
+              "disabled": true,
+            },
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+### バリアントの切り替え
+
+キーバインド `variant_cycle` を使用すると、バリアントをすばやく切り替えることができます。 [詳細はこちら](/docs/keybinds)。
+
+---
+
+## モデルのロード
+
+OpenCode が起動すると、次の優先順位でモデルがチェックされます。
+
+1. `--model` または `-m` コマンドラインフラグ。形式は構成ファイルと同じです: `provider_id/model_id`。
+
+2. OpenCode 構成内のモデルのリスト。
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "model": "anthropic/claude-sonnet-4-20250514"
+   }
+   ```
+
+ここでの形式は `provider/model` です。
+
+3. 最後に使用されたモデル。
+
+4. 内部優先順位に基づく最初のモデル。

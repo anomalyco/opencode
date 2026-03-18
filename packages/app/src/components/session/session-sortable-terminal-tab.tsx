@@ -1,13 +1,15 @@
 import type { JSX } from "solid-js"
-import { Show } from "solid-js"
+import { Show, createEffect, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSortable } from "@thisbeyond/solid-dnd"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Icon } from "@opencode-ai/ui/icon"
+import { isDefaultTitle as isDefaultTerminalTitle } from "@/context/terminal-title"
 import { useTerminal, type LocalPTY } from "@/context/terminal"
 import { useLanguage } from "@/context/language"
+import { focusTerminalById } from "@/pages/session/helpers"
 
 export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () => void }): JSX.Element {
   const terminal = useTerminal()
@@ -20,15 +22,13 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () =>
     menuPosition: { x: 0, y: 0 },
     blurEnabled: false,
   })
+  let input: HTMLInputElement | undefined
+  let blurFrame: number | undefined
 
   const isDefaultTitle = () => {
     const number = props.terminal.titleNumber
     if (!Number.isFinite(number) || number <= 0) return false
-    const match = props.terminal.title.match(/^Terminal (\d+)$/)
-    if (!match) return false
-    const parsed = Number(match[1])
-    if (!Number.isFinite(parsed) || parsed <= 0) return false
-    return parsed === number
+    return isDefaultTerminalTitle(props.terminal.title, number)
   }
 
   const label = () => {
@@ -51,21 +51,8 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () =>
 
   const focus = () => {
     if (store.editing) return
-
-    if (document.activeElement instanceof HTMLElement) {
-      document.activeElement.blur()
-    }
-    const wrapper = document.getElementById(`terminal-wrapper-${props.terminal.id}`)
-    const element = wrapper?.querySelector('[data-component="terminal"]') as HTMLElement
-    if (!element) return
-
-    const textarea = element.querySelector("textarea") as HTMLTextAreaElement
-    if (textarea) {
-      textarea.focus()
-      return
-    }
-    element.focus()
-    element.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true }))
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
+    focusTerminalById(props.terminal.id)
   }
 
   const edit = (e?: Event) => {
@@ -77,13 +64,6 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () =>
     setStore("blurEnabled", false)
     setStore("title", props.terminal.title)
     setStore("editing", true)
-    setTimeout(() => {
-      const input = document.getElementById(`terminal-title-input-${props.terminal.id}`) as HTMLInputElement
-      if (!input) return
-      input.focus()
-      input.select()
-      setTimeout(() => setStore("blurEnabled", true), 100)
-    }, 10)
   }
 
   const save = () => {
@@ -114,9 +94,25 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () =>
     setStore("menuOpen", true)
   }
 
+  createEffect(() => {
+    if (!store.editing) return
+    if (!input) return
+    input.focus()
+    input.select()
+    if (blurFrame !== undefined) cancelAnimationFrame(blurFrame)
+    blurFrame = requestAnimationFrame(() => {
+      blurFrame = undefined
+      setStore("blurEnabled", true)
+    })
+  })
+
+  onCleanup(() => {
+    if (blurFrame === undefined) return
+    cancelAnimationFrame(blurFrame)
+  })
+
   return (
     <div
-      // @ts-ignore
       use:sortable
       class="outline-none focus:outline-none focus-visible:outline-none"
       classList={{
@@ -153,7 +149,7 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () =>
         <Show when={store.editing}>
           <div class="absolute inset-0 flex items-center px-3 bg-muted z-10 pointer-events-auto">
             <input
-              id={`terminal-title-input-${props.terminal.id}`}
+              ref={input}
               type="text"
               value={store.title}
               onInput={(e) => setStore("title", e.currentTarget.value)}

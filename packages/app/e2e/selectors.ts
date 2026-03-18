@@ -1,7 +1,21 @@
 export const promptSelector = '[data-component="prompt-input"]'
-export const terminalSelector = '[data-component="terminal"]'
+export const terminalPanelSelector = '#terminal-panel[aria-hidden="false"]'
+export const terminalSelector = `${terminalPanelSelector} [data-component="terminal"]`
+export const sessionComposerDockSelector = '[data-component="session-prompt-dock"]'
+export const questionDockSelector = '[data-component="dock-prompt"][data-kind="question"]'
+export const permissionDockSelector = '[data-component="dock-prompt"][data-kind="permission"]'
+export const permissionRejectSelector = `${permissionDockSelector} [data-slot="permission-footer-actions"] [data-component="button"]:nth-child(1)`
+export const permissionAllowAlwaysSelector = `${permissionDockSelector} [data-slot="permission-footer-actions"] [data-component="button"]:nth-child(2)`
+export const permissionAllowOnceSelector = `${permissionDockSelector} [data-slot="permission-footer-actions"] [data-component="button"]:nth-child(3)`
+export const sessionTodoDockSelector = '[data-component="session-todo-dock"]'
+export const sessionTodoToggleSelector = '[data-action="session-todo-toggle"]'
+export const sessionTodoToggleButtonSelector = '[data-action="session-todo-toggle-button"]'
+export const sessionTodoListSelector = '[data-slot="session-todo-list"]'
 
 export const modelVariantCycleSelector = '[data-action="model-variant-cycle"]'
+export const promptAgentSelector = '[data-component="prompt-agent-control"]'
+export const promptModelSelector = '[data-component="prompt-model-control"]'
+export const promptVariantSelector = '[data-component="prompt-variant-control"]'
 export const settingsLanguageSelectSelector = '[data-action="settings-language"]'
 export const settingsColorSchemeSelector = '[data-action="settings-color-scheme"]'
 export const settingsThemeSelector = '[data-action="settings-theme"]'
@@ -20,12 +34,13 @@ export const sidebarNavSelector = '[data-component="sidebar-nav-desktop"]'
 export const projectSwitchSelector = (slug: string) =>
   `${sidebarNavSelector} [data-action="project-switch"][data-project="${slug}"]`
 
-export const projectCloseHoverSelector = (slug: string) => `[data-action="project-close-hover"][data-project="${slug}"]`
-
 export const projectMenuTriggerSelector = (slug: string) =>
   `${sidebarNavSelector} [data-action="project-menu"][data-project="${slug}"]`
 
 export const projectCloseMenuSelector = (slug: string) => `[data-action="project-close-menu"][data-project="${slug}"]`
+
+export const projectClearNotificationsSelector = (slug: string) =>
+  `[data-action="project-clear-notifications"][data-project="${slug}"]`
 
 export const projectWorkspacesToggleSelector = (slug: string) =>
   `[data-action="project-workspaces-toggle"][data-project="${slug}"]`
@@ -47,6 +62,9 @@ export const workspaceItemSelector = (slug: string) =>
 
 export const workspaceMenuTriggerSelector = (slug: string) =>
   `${sidebarNavSelector} [data-action="workspace-menu"][data-workspace="${slug}"]`
+
+export const workspaceNewSessionSelector = (slug: string) =>
+  `${sidebarNavSelector} [data-action="workspace-new-session"][data-workspace="${slug}"]`
 
 export const listItemSelector = '[data-slot="list-item"]'
 

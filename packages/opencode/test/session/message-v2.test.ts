@@ -1,11 +1,15 @@
 import { describe, expect, test } from "bun:test"
+import { APICallError } from "ai"
 import { MessageV2 } from "../../src/session/message-v2"
 import type { Provider } from "../../src/provider/provider"
+import { ModelID, ProviderID } from "../../src/provider/schema"
+import { SessionID, MessageID, PartID } from "../../src/session/schema"
 
-const sessionID = "session"
+const sessionID = SessionID.make("session")
+const providerID = ProviderID.make("test")
 const model: Provider.Model = {
-  id: "test-model",
-  providerID: "test",
+  id: ModelID.make("test-model"),
+  providerID,
   api: {
     id: "test-model",
     url: "https://example.com",
@@ -59,7 +63,7 @@ function userInfo(id: string): MessageV2.User {
     role: "user",
     time: { created: 0 },
     agent: "user",
-    model: { providerID: "test", modelID: "test" },
+    model: { providerID, modelID: ModelID.make("test") },
     tools: {},
     mode: "",
   } as unknown as MessageV2.User
@@ -96,9 +100,9 @@ function assistantInfo(
 
 function basePart(messageID: string, id: string) {
   return {
-    id,
+    id: PartID.make(id),
     sessionID,
-    messageID,
+    messageID: MessageID.make(messageID),
   }
 }
 
@@ -782,5 +786,133 @@ describe("session.message-v2.toModelMessage", () => {
         ],
       },
     ])
+  })
+})
+
+describe("session.message-v2.fromError", () => {
+  test("serializes context_length_exceeded as ContextOverflowError", () => {
+    const input = {
+      type: "error",
+      error: {
+        code: "context_length_exceeded",
+      },
+    }
+    const result = MessageV2.fromError(input, { providerID })
+
+    expect(result).toStrictEqual({
+      name: "ContextOverflowError",
+      data: {
+        message: "Input exceeds context window of this model",
+        responseBody: JSON.stringify(input),
+      },
+    })
+  })
+
+  test("serializes response error codes", () => {
+    const cases = [
+      {
+        code: "insufficient_quota",
+        message: "Quota exceeded. Check your plan and billing details.",
+      },
+      {
+        code: "usage_not_included",
+        message: "To use Codex with your ChatGPT plan, upgrade to Plus: https://chatgpt.com/explore/plus.",
+      },
+      {
+        code: "invalid_prompt",
+        message: "Invalid prompt from test",
+      },
+    ]
+
+    cases.forEach((item) => {
+      const input = {
+        type: "error",
+        error: {
+          code: item.code,
+          message: item.code === "invalid_prompt" ? item.message : undefined,
+        },
+      }
+      const result = MessageV2.fromError(input, { providerID })
+
+      expect(result).toStrictEqual({
+        name: "APIError",
+        data: {
+          message: item.message,
+          isRetryable: false,
+          responseBody: JSON.stringify(input),
+        },
+      })
+    })
+  })
+
+  test("detects context overflow from APICallError provider messages", () => {
+    const cases = [
+      "prompt is too long: 213462 tokens > 200000 maximum",
+      "Your input exceeds the context window of this model",
+      "The input token count (1196265) exceeds the maximum number of tokens allowed (1048575)",
+      "Please reduce the length of the messages or completion",
+      "400 status code (no body)",
+      "413 status code (no body)",
+    ]
+
+    cases.forEach((message) => {
+      const error = new APICallError({
+        message,
+        url: "https://example.com",
+        requestBodyValues: {},
+        statusCode: 400,
+        responseHeaders: { "content-type": "application/json" },
+        isRetryable: false,
+      })
+      const result = MessageV2.fromError(error, { providerID })
+      expect(MessageV2.ContextOverflowError.isInstance(result)).toBe(true)
+    })
+  })
+
+  test("detects context overflow from context_length_exceeded code in response body", () => {
+    const error = new APICallError({
+      message: "Request failed",
+      url: "https://example.com",
+      requestBodyValues: {},
+      statusCode: 422,
+      responseHeaders: { "content-type": "application/json" },
+      responseBody: JSON.stringify({
+        error: {
+          message: "Some message",
+          type: "invalid_request_error",
+          code: "context_length_exceeded",
+        },
+      }),
+      isRetryable: false,
+    })
+    const result = MessageV2.fromError(error, { providerID })
+    expect(MessageV2.ContextOverflowError.isInstance(result)).toBe(true)
+  })
+
+  test("does not classify 429 no body as context overflow", () => {
+    const result = MessageV2.fromError(
+      new APICallError({
+        message: "429 status code (no body)",
+        url: "https://example.com",
+        requestBodyValues: {},
+        statusCode: 429,
+        responseHeaders: { "content-type": "application/json" },
+        isRetryable: false,
+      }),
+      { providerID },
+    )
+    expect(MessageV2.ContextOverflowError.isInstance(result)).toBe(false)
+    expect(MessageV2.APIError.isInstance(result)).toBe(true)
+  })
+
+  test("serializes unknown inputs", () => {
+    const result = MessageV2.fromError(123, { providerID })
+
+    expect(result).toStrictEqual({
+      name: "UnknownError",
+      data: {
+        message: "123",
+      },
+    })
   })
 })

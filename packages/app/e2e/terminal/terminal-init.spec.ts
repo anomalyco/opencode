@@ -1,4 +1,5 @@
 import { test, expect } from "../fixtures"
+import { waitTerminalFocusIdle, waitTerminalReady } from "../actions"
 import { promptSelector, terminalSelector } from "../selectors"
 import { terminalToggleKey } from "../utils"
 
@@ -6,14 +7,14 @@ test("smoke terminal mounts and can create a second tab", async ({ page, gotoSes
   await gotoSession()
 
   const terminals = page.locator(terminalSelector)
+  const tabs = page.locator('#terminal-panel [data-slot="tabs-trigger"]')
   const opened = await terminals.first().isVisible()
 
   if (!opened) {
     await page.keyboard.press(terminalToggleKey)
   }
 
-  await expect(terminals.first()).toBeVisible()
-  await expect(terminals.first().locator("textarea")).toHaveCount(1)
+  await waitTerminalFocusIdle(page, { term: terminals.first() })
   await expect(terminals).toHaveCount(1)
 
   // Ghostty captures a lot of keybinds when focused; move focus back
@@ -21,6 +22,7 @@ test("smoke terminal mounts and can create a second tab", async ({ page, gotoSes
   await page.locator(promptSelector).click()
   await page.keyboard.press("Control+Alt+T")
 
-  await expect(terminals).toHaveCount(2)
-  await expect(terminals.nth(1).locator("textarea")).toHaveCount(1)
+  await expect(tabs).toHaveCount(2)
+  await expect(terminals).toHaveCount(1)
+  await waitTerminalReady(page, { term: terminals.first() })
 })

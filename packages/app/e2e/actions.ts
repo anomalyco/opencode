@@ -3,22 +3,24 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { execSync } from "node:child_process"
-import { modKey, serverUrl } from "./utils"
+import { terminalAttr, type E2EWindow } from "../src/testing/terminal"
+import { createSdk, modKey, resolveDirectory, serverUrl } from "./utils"
 import {
-  sessionItemSelector,
   dropdownMenuTriggerSelector,
   dropdownMenuContentSelector,
   projectMenuTriggerSelector,
+  projectCloseMenuSelector,
   projectWorkspacesToggleSelector,
   titlebarRightSelector,
   popoverBodySelector,
   listItemSelector,
   listItemKeySelector,
   listItemKeyStartsWithSelector,
+  promptSelector,
+  terminalSelector,
   workspaceItemSelector,
   workspaceMenuTriggerSelector,
 } from "./selectors"
-import type { createSdk } from "./utils"
 
 export async function defocus(page: Page) {
   await page
@@ -27,6 +29,138 @@ export async function defocus(page: Page) {
       if (el instanceof HTMLElement) el.blur()
     })
     .catch(() => undefined)
+}
+
+async function terminalID(term: Locator) {
+  const id = await term.getAttribute(terminalAttr)
+  if (id) return id
+  throw new Error(`Active terminal missing ${terminalAttr}`)
+}
+
+export async function terminalConnects(page: Page, input?: { term?: Locator }) {
+  const term = input?.term ?? page.locator(terminalSelector).first()
+  const id = await terminalID(term)
+  return page.evaluate((id) => {
+    return (window as E2EWindow).__opencode_e2e?.terminal?.terminals?.[id]?.connects ?? 0
+  }, id)
+}
+
+export async function disconnectTerminal(page: Page, input?: { term?: Locator }) {
+  const term = input?.term ?? page.locator(terminalSelector).first()
+  const id = await terminalID(term)
+  await page.evaluate((id) => {
+    ;(window as E2EWindow).__opencode_e2e?.terminal?.controls?.[id]?.disconnect?.()
+  }, id)
+}
+
+async function terminalReady(page: Page, term?: Locator) {
+  const next = term ?? page.locator(terminalSelector).first()
+  const id = await terminalID(next)
+  return page.evaluate((id) => {
+    const state = (window as E2EWindow).__opencode_e2e?.terminal?.terminals?.[id]
+    return !!state?.connected && (state.settled ?? 0) > 0
+  }, id)
+}
+
+async function terminalFocusIdle(page: Page, term?: Locator) {
+  const next = term ?? page.locator(terminalSelector).first()
+  const id = await terminalID(next)
+  return page.evaluate((id) => {
+    const state = (window as E2EWindow).__opencode_e2e?.terminal?.terminals?.[id]
+    return (state?.focusing ?? 0) === 0
+  }, id)
+}
+
+async function terminalHas(page: Page, input: { term?: Locator; token: string }) {
+  const next = input.term ?? page.locator(terminalSelector).first()
+  const id = await terminalID(next)
+  return page.evaluate(
+    (input) => {
+      const state = (window as E2EWindow).__opencode_e2e?.terminal?.terminals?.[input.id]
+      return state?.rendered.includes(input.token) ?? false
+    },
+    { id, token: input.token },
+  )
+}
+
+async function promptSlashActive(page: Page, id: string) {
+  return page.evaluate((id) => {
+    const state = (window as E2EWindow).__opencode_e2e?.prompt?.current
+    if (state?.popover !== "slash") return false
+    if (!state.slash.ids.includes(id)) return false
+    return state.slash.active === id
+  }, id)
+}
+
+async function promptSlashSelects(page: Page) {
+  return page.evaluate(() => {
+    return (window as E2EWindow).__opencode_e2e?.prompt?.current?.selects ?? 0
+  })
+}
+
+async function promptSlashSelected(page: Page, input: { id: string; count: number }) {
+  return page.evaluate((input) => {
+    const state = (window as E2EWindow).__opencode_e2e?.prompt?.current
+    if (!state) return false
+    return state.selected === input.id && state.selects >= input.count
+  }, input)
+}
+
+export async function waitTerminalReady(page: Page, input?: { term?: Locator; timeout?: number }) {
+  const term = input?.term ?? page.locator(terminalSelector).first()
+  const timeout = input?.timeout ?? 10_000
+  await expect(term).toBeVisible()
+  await expect(term.locator("textarea")).toHaveCount(1)
+  await expect.poll(() => terminalReady(page, term), { timeout }).toBe(true)
+}
+
+export async function waitTerminalFocusIdle(page: Page, input?: { term?: Locator; timeout?: number }) {
+  const term = input?.term ?? page.locator(terminalSelector).first()
+  const timeout = input?.timeout ?? 10_000
+  await waitTerminalReady(page, { term, timeout })
+  await expect.poll(() => terminalFocusIdle(page, term), { timeout }).toBe(true)
+}
+
+export async function showPromptSlash(
+  page: Page,
+  input: { id: string; text: string; prompt?: Locator; timeout?: number },
+) {
+  const prompt = input.prompt ?? page.locator(promptSelector)
+  const timeout = input.timeout ?? 10_000
+  await expect
+    .poll(
+      async () => {
+        await prompt.click().catch(() => false)
+        await prompt.fill(input.text).catch(() => false)
+        return promptSlashActive(page, input.id).catch(() => false)
+      },
+      { timeout },
+    )
+    .toBe(true)
+}
+
+export async function runPromptSlash(
+  page: Page,
+  input: { id: string; text: string; prompt?: Locator; timeout?: number },
+) {
+  const prompt = input.prompt ?? page.locator(promptSelector)
+  const timeout = input.timeout ?? 10_000
+  const count = await promptSlashSelects(page)
+  await showPromptSlash(page, input)
+  await prompt.press("Enter")
+  await expect.poll(() => promptSlashSelected(page, { id: input.id, count: count + 1 }), { timeout }).toBe(true)
+}
+
+export async function runTerminal(page: Page, input: { cmd: string; token: string; term?: Locator; timeout?: number }) {
+  const term = input.term ?? page.locator(terminalSelector).first()
+  const timeout = input.timeout ?? 10_000
+  await waitTerminalReady(page, { term, timeout })
+  const textarea = term.locator("textarea")
+  await term.click()
+  await expect(textarea).toBeFocused()
+  await page.keyboard.type(input.cmd)
+  await page.keyboard.press("Enter")
+  await expect.poll(() => terminalHas(page, { term, token: input.token }), { timeout }).toBe(true)
 }
 
 export async function openPalette(page: Page) {
@@ -61,9 +195,9 @@ export async function closeDialog(page: Page, dialog: Locator) {
 }
 
 export async function isSidebarClosed(page: Page) {
-  const main = page.locator("main")
-  const classes = (await main.getAttribute("class")) ?? ""
-  return classes.includes("xl:border-l")
+  const button = page.getByRole("button", { name: /toggle sidebar/i }).first()
+  await expect(button).toBeVisible()
+  return (await button.getAttribute("aria-expanded")) !== "true"
 }
 
 export async function toggleSidebar(page: Page) {
@@ -75,48 +209,34 @@ export async function openSidebar(page: Page) {
   if (!(await isSidebarClosed(page))) return
 
   const button = page.getByRole("button", { name: /toggle sidebar/i }).first()
-  const visible = await button
-    .isVisible()
-    .then((x) => x)
-    .catch(() => false)
+  await button.click()
 
-  if (visible) await button.click()
-  if (!visible) await toggleSidebar(page)
-
-  const main = page.locator("main")
-  const opened = await expect(main)
-    .not.toHaveClass(/xl:border-l/, { timeout: 1500 })
+  const opened = await expect(button)
+    .toHaveAttribute("aria-expanded", "true", { timeout: 1500 })
     .then(() => true)
     .catch(() => false)
 
   if (opened) return
 
   await toggleSidebar(page)
-  await expect(main).not.toHaveClass(/xl:border-l/)
+  await expect(button).toHaveAttribute("aria-expanded", "true")
 }
 
 export async function closeSidebar(page: Page) {
   if (await isSidebarClosed(page)) return
 
   const button = page.getByRole("button", { name: /toggle sidebar/i }).first()
-  const visible = await button
-    .isVisible()
-    .then((x) => x)
-    .catch(() => false)
+  await button.click()
 
-  if (visible) await button.click()
-  if (!visible) await toggleSidebar(page)
-
-  const main = page.locator("main")
-  const closed = await expect(main)
-    .toHaveClass(/xl:border-l/, { timeout: 1500 })
+  const closed = await expect(button)
+    .toHaveAttribute("aria-expanded", "false", { timeout: 1500 })
     .then(() => true)
     .catch(() => false)
 
   if (closed) return
 
   await toggleSidebar(page)
-  await expect(main).toHaveClass(/xl:border-l/)
+  await expect(button).toHaveAttribute("aria-expanded", "false")
 }
 
 export async function openSettings(page: Page) {
@@ -197,17 +317,48 @@ export async function createTestProject() {
   await fs.writeFile(path.join(root, "README.md"), "# e2e\n")
 
   execSync("git init", { cwd: root, stdio: "ignore" })
+  execSync("git config core.fsmonitor false", { cwd: root, stdio: "ignore" })
   execSync("git add -A", { cwd: root, stdio: "ignore" })
   execSync('git -c user.name="e2e" -c user.email="e2e@example.com" commit -m "init" --allow-empty', {
     cwd: root,
     stdio: "ignore",
   })
 
-  return root
+  return resolveDirectory(root)
 }
 
 export async function cleanupTestProject(directory: string) {
-  await fs.rm(directory, { recursive: true, force: true }).catch(() => undefined)
+  try {
+    execSync("git fsmonitor--daemon stop", { cwd: directory, stdio: "ignore" })
+  } catch {}
+  await fs.rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }).catch(() => undefined)
+}
+
+export function slugFromUrl(url: string) {
+  return /\/([^/]+)\/session(?:[/?#]|$)/.exec(url)?.[1] ?? ""
+}
+
+export async function waitSlug(page: Page, skip: string[] = []) {
+  let prev = ""
+  let next = ""
+  await expect
+    .poll(
+      () => {
+        const slug = slugFromUrl(page.url())
+        if (!slug) return ""
+        if (skip.includes(slug)) return ""
+        if (slug !== prev) {
+          prev = slug
+          next = ""
+          return ""
+        }
+        next = slug
+        return slug
+      },
+      { timeout: 45_000 },
+    )
+    .not.toBe("")
+  return next
 }
 
 export function sessionIDFromUrl(url: string) {
@@ -216,7 +367,7 @@ export function sessionIDFromUrl(url: string) {
 }
 
 export async function hoverSessionItem(page: Page, sessionID: string) {
-  const sessionEl = page.locator(sessionItemSelector(sessionID)).first()
+  const sessionEl = page.locator(`[data-session-id="${sessionID}"]`).last()
   await expect(sessionEl).toBeVisible()
   await sessionEl.hover()
   return sessionEl
@@ -225,7 +376,7 @@ export async function hoverSessionItem(page: Page, sessionID: string) {
 export async function openSessionMoreMenu(page: Page, sessionID: string) {
   await expect(page).toHaveURL(new RegExp(`/session/${sessionID}(?:[/?#]|$)`))
 
-  const scroller = page.locator(".session-scroller").first()
+  const scroller = page.locator(".scroll-view__viewport").first()
   await expect(scroller).toBeVisible()
   await expect(scroller.getByRole("heading", { level: 1 }).first()).toBeVisible({ timeout: 30_000 })
 
@@ -317,6 +468,57 @@ export async function clickListItem(
   return item
 }
 
+async function status(sdk: ReturnType<typeof createSdk>, sessionID: string) {
+  const data = await sdk.session
+    .status()
+    .then((x) => x.data ?? {})
+    .catch(() => undefined)
+  return data?.[sessionID]
+}
+
+async function stable(sdk: ReturnType<typeof createSdk>, sessionID: string, timeout = 10_000) {
+  let prev = ""
+  await expect
+    .poll(
+      async () => {
+        const info = await sdk.session
+          .get({ sessionID })
+          .then((x) => x.data)
+          .catch(() => undefined)
+        if (!info) return true
+        const next = `${info.title}:${info.time.updated ?? info.time.created}`
+        if (next !== prev) {
+          prev = next
+          return false
+        }
+        return true
+      },
+      { timeout },
+    )
+    .toBe(true)
+}
+
+export async function waitSessionIdle(sdk: ReturnType<typeof createSdk>, sessionID: string, timeout = 30_000) {
+  await expect.poll(() => status(sdk, sessionID).then((x) => !x || x.type === "idle"), { timeout }).toBe(true)
+}
+
+export async function cleanupSession(input: {
+  sessionID: string
+  directory?: string
+  sdk?: ReturnType<typeof createSdk>
+}) {
+  const sdk = input.sdk ?? (input.directory ? createSdk(input.directory) : undefined)
+  if (!sdk) throw new Error("cleanupSession requires sdk or directory")
+  await waitSessionIdle(sdk, input.sessionID, 5_000).catch(() => undefined)
+  const current = await status(sdk, input.sessionID).catch(() => undefined)
+  if (current && current.type !== "idle") {
+    await sdk.session.abort({ sessionID: input.sessionID }).catch(() => undefined)
+    await waitSessionIdle(sdk, input.sessionID).catch(() => undefined)
+  }
+  await stable(sdk, input.sessionID).catch(() => undefined)
+  await sdk.session.delete({ sessionID: input.sessionID }).catch(() => undefined)
+}
+
 export async function withSession<T>(
   sdk: ReturnType<typeof createSdk>,
   title: string,
@@ -328,8 +530,223 @@ export async function withSession<T>(
   try {
     return await callback(session)
   } finally {
-    await sdk.session.delete({ sessionID: session.id }).catch(() => undefined)
+    await cleanupSession({ sdk, sessionID: session.id })
   }
+}
+
+const seedSystem = [
+  "You are seeding deterministic e2e UI state.",
+  "Follow the user's instruction exactly.",
+  "When asked to call a tool, call exactly that tool exactly once with the exact JSON input.",
+  "Do not call any extra tools.",
+].join(" ")
+
+const wait = async <T>(input: { probe: () => Promise<T | undefined>; timeout?: number }) => {
+  const timeout = input.timeout ?? 30_000
+  const end = Date.now() + timeout
+  while (Date.now() < end) {
+    const value = await input.probe()
+    if (value !== undefined) return value
+    await new Promise((resolve) => setTimeout(resolve, 250))
+  }
+}
+
+const seed = async <T>(input: {
+  sessionID: string
+  prompt: string
+  sdk: ReturnType<typeof createSdk>
+  probe: () => Promise<T | undefined>
+  timeout?: number
+  attempts?: number
+}) => {
+  for (let i = 0; i < (input.attempts ?? 2); i++) {
+    await input.sdk.session.promptAsync({
+      sessionID: input.sessionID,
+      agent: "build",
+      system: seedSystem,
+      parts: [{ type: "text", text: input.prompt }],
+    })
+    const value = await wait({ probe: input.probe, timeout: input.timeout })
+    if (value !== undefined) return value
+  }
+}
+
+export async function seedSessionQuestion(
+  sdk: ReturnType<typeof createSdk>,
+  input: {
+    sessionID: string
+    questions: Array<{
+      header: string
+      question: string
+      options: Array<{ label: string; description: string }>
+      multiple?: boolean
+      custom?: boolean
+    }>
+  },
+) {
+  const first = input.questions[0]
+  if (!first) throw new Error("Question seed requires at least one question")
+
+  const text = [
+    "Your only valid response is one question tool call.",
+    `Use this JSON input: ${JSON.stringify({ questions: input.questions })}`,
+    "Do not output plain text.",
+    "After calling the tool, wait for the user response.",
+  ].join("\n")
+
+  const result = await seed({
+    sdk,
+    sessionID: input.sessionID,
+    prompt: text,
+    timeout: 30_000,
+    probe: async () => {
+      const list = await sdk.question.list().then((x) => x.data ?? [])
+      return list.find((item) => item.sessionID === input.sessionID && item.questions[0]?.header === first.header)
+    },
+  })
+
+  if (!result) throw new Error("Timed out seeding question request")
+  return { id: result.id }
+}
+
+export async function seedSessionPermission(
+  sdk: ReturnType<typeof createSdk>,
+  input: {
+    sessionID: string
+    permission: string
+    patterns: string[]
+    description?: string
+  },
+) {
+  const text = [
+    "Your only valid response is one bash tool call.",
+    `Use this JSON input: ${JSON.stringify({
+      command: input.patterns[0] ? `ls ${JSON.stringify(input.patterns[0])}` : "pwd",
+      workdir: "/",
+      description: input.description ?? `seed ${input.permission} permission request`,
+    })}`,
+    "Do not output plain text.",
+  ].join("\n")
+
+  const result = await seed({
+    sdk,
+    sessionID: input.sessionID,
+    prompt: text,
+    timeout: 30_000,
+    probe: async () => {
+      const list = await sdk.permission.list().then((x) => x.data ?? [])
+      return list.find((item) => item.sessionID === input.sessionID)
+    },
+  })
+
+  if (!result) throw new Error("Timed out seeding permission request")
+  return { id: result.id }
+}
+
+export async function seedSessionTask(
+  sdk: ReturnType<typeof createSdk>,
+  input: {
+    sessionID: string
+    description: string
+    prompt: string
+    subagentType?: string
+  },
+) {
+  const text = [
+    "Your only valid response is one task tool call.",
+    `Use this JSON input: ${JSON.stringify({
+      description: input.description,
+      prompt: input.prompt,
+      subagent_type: input.subagentType ?? "general",
+    })}`,
+    "Do not output plain text.",
+    "Wait for the task to start and return the child session id.",
+  ].join("\n")
+
+  const result = await seed({
+    sdk,
+    sessionID: input.sessionID,
+    prompt: text,
+    timeout: 90_000,
+    probe: async () => {
+      const messages = await sdk.session.messages({ sessionID: input.sessionID, limit: 50 }).then((x) => x.data ?? [])
+      const part = messages
+        .flatMap((message) => message.parts)
+        .find((part) => {
+          if (part.type !== "tool" || part.tool !== "task") return false
+          if (!("state" in part) || !part.state || typeof part.state !== "object") return false
+          if (!("input" in part.state) || !part.state.input || typeof part.state.input !== "object") return false
+          if (!("description" in part.state.input) || part.state.input.description !== input.description) return false
+          if (!("metadata" in part.state) || !part.state.metadata || typeof part.state.metadata !== "object")
+            return false
+          if (!("sessionId" in part.state.metadata)) return false
+          return typeof part.state.metadata.sessionId === "string" && part.state.metadata.sessionId.length > 0
+        })
+
+      if (!part || !("state" in part) || !part.state || typeof part.state !== "object") return
+      if (!("metadata" in part.state) || !part.state.metadata || typeof part.state.metadata !== "object") return
+      if (!("sessionId" in part.state.metadata)) return
+      const id = part.state.metadata.sessionId
+      if (typeof id !== "string" || !id) return
+      const child = await sdk.session
+        .get({ sessionID: id })
+        .then((x) => x.data)
+        .catch(() => undefined)
+      if (!child?.id) return
+      return { sessionID: id }
+    },
+  })
+
+  if (!result) throw new Error("Timed out seeding task tool")
+  return result
+}
+
+export async function seedSessionTodos(
+  sdk: ReturnType<typeof createSdk>,
+  input: {
+    sessionID: string
+    todos: Array<{ content: string; status: string; priority: string }>
+  },
+) {
+  const text = [
+    "Your only valid response is one todowrite tool call.",
+    `Use this JSON input: ${JSON.stringify({ todos: input.todos })}`,
+    "Do not output plain text.",
+  ].join("\n")
+  const target = JSON.stringify(input.todos)
+
+  const result = await seed({
+    sdk,
+    sessionID: input.sessionID,
+    prompt: text,
+    timeout: 30_000,
+    probe: async () => {
+      const todos = await sdk.session.todo({ sessionID: input.sessionID }).then((x) => x.data ?? [])
+      if (JSON.stringify(todos) !== target) return
+      return true
+    },
+  })
+
+  if (!result) throw new Error("Timed out seeding todos")
+  return true
+}
+
+export async function clearSessionDockSeed(sdk: ReturnType<typeof createSdk>, sessionID: string) {
+  const [questions, permissions] = await Promise.all([
+    sdk.question.list().then((x) => x.data ?? []),
+    sdk.permission.list().then((x) => x.data ?? []),
+  ])
+
+  await Promise.all([
+    ...questions
+      .filter((item) => item.sessionID === sessionID)
+      .map((item) => sdk.question.reject({ requestID: item.id }).catch(() => undefined)),
+    ...permissions
+      .filter((item) => item.sessionID === sessionID)
+      .map((item) => sdk.permission.reply({ requestID: item.id, reply: "reject" }).catch(() => undefined)),
+  ])
+
+  return true
 }
 
 export async function openStatusPopover(page: Page) {
@@ -358,32 +775,42 @@ export async function openProjectMenu(page: Page, projectSlug: string) {
   const trigger = page.locator(projectMenuTriggerSelector(projectSlug)).first()
   await expect(trigger).toHaveCount(1)
 
+  const menu = page
+    .locator(dropdownMenuContentSelector)
+    .filter({ has: page.locator(projectCloseMenuSelector(projectSlug)) })
+    .first()
+  const close = menu.locator(projectCloseMenuSelector(projectSlug)).first()
+
+  const clicked = await trigger
+    .click({ timeout: 1500 })
+    .then(() => true)
+    .catch(() => false)
+
+  if (clicked) {
+    const opened = await menu
+      .waitFor({ state: "visible", timeout: 1500 })
+      .then(() => true)
+      .catch(() => false)
+    if (opened) {
+      await expect(close).toBeVisible()
+      return menu
+    }
+  }
+
   await trigger.focus()
   await page.keyboard.press("Enter")
 
-  const menu = page.locator(dropdownMenuContentSelector).first()
   const opened = await menu
     .waitFor({ state: "visible", timeout: 1500 })
     .then(() => true)
     .catch(() => false)
 
   if (opened) {
-    const viewport = page.viewportSize()
-    const x = viewport ? Math.max(viewport.width - 5, 0) : 1200
-    const y = viewport ? Math.max(viewport.height - 5, 0) : 800
-    await page.mouse.move(x, y)
+    await expect(close).toBeVisible()
     return menu
   }
 
-  await trigger.click({ force: true })
-
-  await expect(menu).toBeVisible()
-
-  const viewport = page.viewportSize()
-  const x = viewport ? Math.max(viewport.width - 5, 0) : 1200
-  const y = viewport ? Math.max(viewport.height - 5, 0) : 800
-  await page.mouse.move(x, y)
-  return menu
+  throw new Error(`Failed to open project menu: ${projectSlug}`)
 }
 
 export async function setWorkspacesEnabled(page: Page, projectSlug: string, enabled: boolean) {
@@ -396,11 +823,18 @@ export async function setWorkspacesEnabled(page: Page, projectSlug: string, enab
 
   if (current === enabled) return
 
-  await openProjectMenu(page, projectSlug)
+  const flip = async (timeout?: number) => {
+    const menu = await openProjectMenu(page, projectSlug)
+    const toggle = menu.locator(projectWorkspacesToggleSelector(projectSlug)).first()
+    await expect(toggle).toBeVisible()
+    return toggle.click({ force: true, timeout })
+  }
 
-  const toggle = page.locator(projectWorkspacesToggleSelector(projectSlug)).first()
-  await expect(toggle).toBeVisible()
-  await toggle.click({ force: true })
+  const flipped = await flip(1500)
+    .then(() => true)
+    .catch(() => false)
+
+  if (!flipped) await flip()
 
   const expected = enabled ? "New workspace" : "New session"
   await expect(page.getByRole("button", { name: expected }).first()).toBeVisible()

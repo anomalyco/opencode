@@ -9,6 +9,8 @@ import {
   settingsNotificationsPermissionsSelector,
   settingsReleaseNotesSelector,
   settingsSoundsAgentSelector,
+  settingsSoundsErrorsSelector,
+  settingsSoundsPermissionsSelector,
   settingsThemeSelector,
   settingsUpdatesStartupSelector,
 } from "../selectors"
@@ -81,16 +83,23 @@ test("changing theme persists in localStorage", async ({ page, gotoSession }) =>
   const select = dialog.locator(settingsThemeSelector)
   await expect(select).toBeVisible()
 
+  const currentThemeId = await page.evaluate(() => {
+    return document.documentElement.getAttribute("data-theme")
+  })
+  const currentTheme = (await select.locator('[data-slot="select-select-trigger-value"]').textContent())?.trim() ?? ""
+
   await select.locator('[data-slot="select-select-trigger"]').click()
 
   const items = page.locator('[data-slot="select-select-item"]')
   const count = await items.count()
   expect(count).toBeGreaterThan(1)
 
-  const firstTheme = await items.nth(1).locator('[data-slot="select-select-item-label"]').textContent()
-  expect(firstTheme).toBeTruthy()
+  const nextTheme = (await items.locator('[data-slot="select-select-item-label"]').allTextContents())
+    .map((x) => x.trim())
+    .find((x) => x && x !== currentTheme)
+  expect(nextTheme).toBeTruthy()
 
-  await items.nth(1).click()
+  await items.filter({ hasText: nextTheme! }).first().click()
 
   await page.keyboard.press("Escape")
 
@@ -99,12 +108,48 @@ test("changing theme persists in localStorage", async ({ page, gotoSession }) =>
   })
 
   expect(storedThemeId).not.toBeNull()
-  expect(storedThemeId).not.toBe("oc-1")
+  expect(storedThemeId).not.toBe(currentThemeId)
 
   const dataTheme = await page.evaluate(() => {
     return document.documentElement.getAttribute("data-theme")
   })
   expect(dataTheme).toBe(storedThemeId)
+})
+
+test("legacy oc-1 theme migrates to oc-2", async ({ page, gotoSession }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("opencode-theme-id", "oc-1")
+    localStorage.setItem("opencode-theme-css-light", "--background-base:#fff;")
+    localStorage.setItem("opencode-theme-css-dark", "--background-base:#000;")
+  })
+
+  await gotoSession()
+
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "oc-2")
+
+  await expect
+    .poll(async () => {
+      return await page.evaluate(() => {
+        return localStorage.getItem("opencode-theme-id")
+      })
+    })
+    .toBe("oc-2")
+
+  await expect
+    .poll(async () => {
+      return await page.evaluate(() => {
+        return localStorage.getItem("opencode-theme-css-light")
+      })
+    })
+    .toBeNull()
+
+  await expect
+    .poll(async () => {
+      return await page.evaluate(() => {
+        return localStorage.getItem("opencode-theme-css-dark")
+      })
+    })
+    .toBeNull()
 })
 
 test("changing font persists in localStorage and updates CSS variable", async ({ page, gotoSession }) => {
@@ -137,6 +182,105 @@ test("changing font persists in localStorage and updates CSS variable", async ({
     return getComputedStyle(document.documentElement).getPropertyValue("--font-family-mono")
   })
   expect(newFontFamily).not.toBe(initialFontFamily)
+})
+
+test("color scheme and font rehydrate after reload", async ({ page, gotoSession }) => {
+  await gotoSession()
+
+  const dialog = await openSettings(page)
+
+  const colorSchemeSelect = dialog.locator(settingsColorSchemeSelector)
+  await expect(colorSchemeSelect).toBeVisible()
+  await colorSchemeSelect.locator('[data-slot="select-select-trigger"]').click()
+  await page.locator('[data-slot="select-select-item"]').filter({ hasText: "Dark" }).click()
+  await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "dark")
+
+  const fontSelect = dialog.locator(settingsFontSelector)
+  await expect(fontSelect).toBeVisible()
+
+  const initialFontFamily = await page.evaluate(() => {
+    return getComputedStyle(document.documentElement).getPropertyValue("--font-family-mono").trim()
+  })
+
+  const initialSettings = await page.evaluate((key) => {
+    const raw = localStorage.getItem(key)
+    return raw ? JSON.parse(raw) : null
+  }, settingsKey)
+
+  const currentFont =
+    (await fontSelect.locator('[data-slot="select-select-trigger-value"]').textContent())?.trim() ?? ""
+  await fontSelect.locator('[data-slot="select-select-trigger"]').click()
+
+  const fontItems = page.locator('[data-slot="select-select-item"]')
+  expect(await fontItems.count()).toBeGreaterThan(1)
+
+  if (currentFont) {
+    await fontItems.filter({ hasNotText: currentFont }).first().click()
+  }
+  if (!currentFont) {
+    await fontItems.nth(1).click()
+  }
+
+  await expect
+    .poll(async () => {
+      return await page.evaluate((key) => {
+        const raw = localStorage.getItem(key)
+        return raw ? JSON.parse(raw) : null
+      }, settingsKey)
+    })
+    .toMatchObject({
+      appearance: {
+        font: expect.any(String),
+      },
+    })
+
+  const updatedSettings = await page.evaluate((key) => {
+    const raw = localStorage.getItem(key)
+    return raw ? JSON.parse(raw) : null
+  }, settingsKey)
+
+  const updatedFontFamily = await page.evaluate(() => {
+    return getComputedStyle(document.documentElement).getPropertyValue("--font-family-mono").trim()
+  })
+  expect(updatedFontFamily).not.toBe(initialFontFamily)
+  expect(updatedSettings?.appearance?.font).not.toBe(initialSettings?.appearance?.font)
+
+  await closeDialog(page, dialog)
+  await page.reload()
+
+  await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "dark")
+
+  await expect
+    .poll(async () => {
+      return await page.evaluate((key) => {
+        const raw = localStorage.getItem(key)
+        return raw ? JSON.parse(raw) : null
+      }, settingsKey)
+    })
+    .toMatchObject({
+      appearance: {
+        font: updatedSettings?.appearance?.font,
+      },
+    })
+
+  const rehydratedSettings = await page.evaluate((key) => {
+    const raw = localStorage.getItem(key)
+    return raw ? JSON.parse(raw) : null
+  }, settingsKey)
+
+  await expect
+    .poll(async () => {
+      return await page.evaluate(() => {
+        return getComputedStyle(document.documentElement).getPropertyValue("--font-family-mono").trim()
+      })
+    })
+    .not.toBe(initialFontFamily)
+
+  const rehydratedFontFamily = await page.evaluate(() => {
+    return getComputedStyle(document.documentElement).getPropertyValue("--font-family-mono").trim()
+  })
+  expect(rehydratedFontFamily).not.toBe(initialFontFamily)
+  expect(rehydratedSettings?.appearance?.font).toBe(updatedSettings?.appearance?.font)
 })
 
 test("toggling notification agent switch updates localStorage", async ({ page, gotoSession }) => {
@@ -232,6 +376,89 @@ test("changing sound agent selection persists in localStorage", async ({ page, g
   }, settingsKey)
 
   expect(stored?.sounds?.agent).not.toBe("staplebops-01")
+})
+
+test("selecting none disables agent sound", async ({ page, gotoSession }) => {
+  await gotoSession()
+
+  const dialog = await openSettings(page)
+  const select = dialog.locator(settingsSoundsAgentSelector)
+  const trigger = select.locator('[data-slot="select-select-trigger"]')
+  await expect(select).toBeVisible()
+  await expect(trigger).toBeEnabled()
+
+  await trigger.click()
+  const items = page.locator('[data-slot="select-select-item"]')
+  await expect(items.first()).toBeVisible()
+  await items.first().click()
+
+  const stored = await page.evaluate((key) => {
+    const raw = localStorage.getItem(key)
+    return raw ? JSON.parse(raw) : null
+  }, settingsKey)
+
+  expect(stored?.sounds?.agentEnabled).toBe(false)
+})
+
+test("changing permissions and errors sounds updates localStorage", async ({ page, gotoSession }) => {
+  await gotoSession()
+
+  const dialog = await openSettings(page)
+  const permissionsSelect = dialog.locator(settingsSoundsPermissionsSelector)
+  const errorsSelect = dialog.locator(settingsSoundsErrorsSelector)
+  await expect(permissionsSelect).toBeVisible()
+  await expect(errorsSelect).toBeVisible()
+
+  const initial = await page.evaluate((key) => {
+    const raw = localStorage.getItem(key)
+    return raw ? JSON.parse(raw) : null
+  }, settingsKey)
+
+  const permissionsCurrent =
+    (await permissionsSelect.locator('[data-slot="select-select-trigger-value"]').textContent())?.trim() ?? ""
+  await permissionsSelect.locator('[data-slot="select-select-trigger"]').click()
+  const permissionItems = page.locator('[data-slot="select-select-item"]')
+  expect(await permissionItems.count()).toBeGreaterThan(1)
+  if (permissionsCurrent) {
+    await permissionItems.filter({ hasNotText: permissionsCurrent }).first().click()
+  }
+  if (!permissionsCurrent) {
+    await permissionItems.nth(1).click()
+  }
+
+  const errorsCurrent =
+    (await errorsSelect.locator('[data-slot="select-select-trigger-value"]').textContent())?.trim() ?? ""
+  await errorsSelect.locator('[data-slot="select-select-trigger"]').click()
+  const errorItems = page.locator('[data-slot="select-select-item"]')
+  expect(await errorItems.count()).toBeGreaterThan(1)
+  if (errorsCurrent) {
+    await errorItems.filter({ hasNotText: errorsCurrent }).first().click()
+  }
+  if (!errorsCurrent) {
+    await errorItems.nth(1).click()
+  }
+
+  await expect
+    .poll(async () => {
+      return await page.evaluate((key) => {
+        const raw = localStorage.getItem(key)
+        return raw ? JSON.parse(raw) : null
+      }, settingsKey)
+    })
+    .toMatchObject({
+      sounds: {
+        permissions: expect.any(String),
+        errors: expect.any(String),
+      },
+    })
+
+  const stored = await page.evaluate((key) => {
+    const raw = localStorage.getItem(key)
+    return raw ? JSON.parse(raw) : null
+  }, settingsKey)
+
+  expect(stored?.sounds?.permissions).not.toBe(initial?.sounds?.permissions)
+  expect(stored?.sounds?.errors).not.toBe(initial?.sounds?.errors)
 })
 
 test("toggling updates startup switch updates localStorage", async ({ page, gotoSession }) => {

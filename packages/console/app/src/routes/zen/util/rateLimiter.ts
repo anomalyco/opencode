@@ -1,42 +1,73 @@
 import { Database, eq, and, sql, inArray } from "@opencode-ai/console-core/drizzle/index.js"
 import { IpRateLimitTable } from "@opencode-ai/console-core/schema/ip.sql.js"
-import { RateLimitError } from "./error"
+import { FreeUsageLimitError } from "./error"
 import { logger } from "./logger"
-import { ZenData } from "@opencode-ai/console-core/model.js"
+import { i18n } from "~/i18n"
+import { localeFromRequest } from "~/lib/language"
+import { Subscription } from "@opencode-ai/console-core/subscription.js"
 
-export function createRateLimiter(limit: ZenData.RateLimit | undefined, rawIp: string, headers: Headers) {
-  if (!limit) return
+export function createRateLimiter(
+  modelId: string,
+  allowAnonymous: boolean | undefined,
+  rateLimit: number | undefined,
+  rawIp: string,
+  request: Request,
+) {
+  if (!allowAnonymous) return
+  const dict = i18n(localeFromRequest(request))
 
-  const limitValue = limit.checkHeader && !headers.get(limit.checkHeader) ? limit.fallbackValue! : limit.value
+  const limits = Subscription.getFreeLimits()
+  const headerExists = request.headers.has(limits.checkHeader)
+  const dailyLimit = !headerExists ? limits.fallbackValue : (rateLimit ?? limits.dailyRequests)
+  const isDefaultModel = headerExists && !rateLimit
 
   const ip = !rawIp.length ? "unknown" : rawIp
   const now = Date.now()
-  const intervals =
-    limit.period === "day"
-      ? [buildYYYYMMDD(now)]
-      : [buildYYYYMMDDHH(now), buildYYYYMMDDHH(now - 3_600_000), buildYYYYMMDDHH(now - 7_200_000)]
+  const lifetimeInterval = ""
+  const dailyInterval = rateLimit ? `${buildYYYYMMDD(now)}${modelId.substring(0, 2)}` : buildYYYYMMDD(now)
+
+  let _isNew: boolean
 
   return {
+    check: async () => {
+      const rows = await Database.use((tx) =>
+        tx
+          .select({ interval: IpRateLimitTable.interval, count: IpRateLimitTable.count })
+          .from(IpRateLimitTable)
+          .where(
+            and(
+              eq(IpRateLimitTable.ip, ip),
+              isDefaultModel
+                ? inArray(IpRateLimitTable.interval, [lifetimeInterval, dailyInterval])
+                : inArray(IpRateLimitTable.interval, [dailyInterval]),
+            ),
+          ),
+      )
+      const lifetimeCount = rows.find((r) => r.interval === lifetimeInterval)?.count ?? 0
+      const dailyCount = rows.find((r) => r.interval === dailyInterval)?.count ?? 0
+      logger.debug(`rate limit lifetime: ${lifetimeCount}, daily: ${dailyCount}`)
+
+      _isNew = isDefaultModel && lifetimeCount < dailyLimit * 7
+
+      if ((_isNew && dailyCount >= dailyLimit * 2) || (!_isNew && dailyCount >= dailyLimit))
+        throw new FreeUsageLimitError(dict["zen.api.error.rateLimitExceeded"], getRetryAfterDay(now))
+    },
     track: async () => {
       await Database.use((tx) =>
         tx
           .insert(IpRateLimitTable)
-          .values({ ip, interval: intervals[0], count: 1 })
+          .values([
+            { ip, interval: dailyInterval, count: 1 },
+            ...(_isNew ? [{ ip, interval: lifetimeInterval, count: 1 }] : []),
+          ])
           .onDuplicateKeyUpdate({ set: { count: sql`${IpRateLimitTable.count} + 1` } }),
       )
     },
-    check: async () => {
-      const rows = await Database.use((tx) =>
-        tx
-          .select({ count: IpRateLimitTable.count })
-          .from(IpRateLimitTable)
-          .where(and(eq(IpRateLimitTable.ip, ip), inArray(IpRateLimitTable.interval, intervals))),
-      )
-      const total = rows.reduce((sum, r) => sum + r.count, 0)
-      logger.debug(`rate limit total: ${total}`)
-      if (total >= limitValue) throw new RateLimitError(`Rate limit exceeded. Please try again later.`)
-    },
   }
+}
+
+export function getRetryAfterDay(now: number) {
+  return Math.ceil((86_400_000 - (now % 86_400_000)) / 1000)
 }
 
 function buildYYYYMMDD(timestamp: number) {
@@ -44,11 +75,4 @@ function buildYYYYMMDD(timestamp: number) {
     .toISOString()
     .replace(/[^0-9]/g, "")
     .substring(0, 8)
-}
-
-function buildYYYYMMDDHH(timestamp: number) {
-  return new Date(timestamp)
-    .toISOString()
-    .replace(/[^0-9]/g, "")
-    .substring(0, 10)
 }

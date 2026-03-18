@@ -1,0 +1,5 @@
+github-policies:
+  runners:
+    allowed_groups:
+      - "GitHub Actions"
+      - "blacksmith runners 01kbd5v56sg8tz7rea39b7ygpt"

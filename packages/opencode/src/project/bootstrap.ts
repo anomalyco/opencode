@@ -1,31 +1,26 @@
 import { Plugin } from "../plugin"
-import { Share } from "../share/share"
 import { Format } from "../format"
 import { LSP } from "../lsp"
-import { FileWatcher } from "../file/watcher"
+import { FileWatcherService } from "../file/watcher"
 import { File } from "../file"
 import { Project } from "./project"
 import { Bus } from "../bus"
 import { Command } from "../command"
 import { Instance } from "./instance"
-import { Vcs } from "./vcs"
+import { VcsService } from "./vcs"
 import { Log } from "@/util/log"
 import { ShareNext } from "@/share/share-next"
-import { Snapshot } from "../snapshot"
-import { Truncate } from "../tool/truncation"
+import { runPromiseInstance } from "@/effect/runtime"
 
 export async function InstanceBootstrap() {
   Log.Default.info("bootstrapping", { directory: Instance.directory })
   await Plugin.init()
-  Share.init()
   ShareNext.init()
-  Format.init()
+  await Format.init()
   await LSP.init()
-  FileWatcher.init()
+  await runPromiseInstance(FileWatcherService.use((service) => service.init()))
   File.init()
-  Vcs.init()
-  Snapshot.init()
-  Truncate.init()
+  await runPromiseInstance(VcsService.use((s) => s.init()))
 
   Bus.subscribe(Command.Event.Executed, async (payload) => {
     if (payload.properties.name === Command.Default.INIT) {

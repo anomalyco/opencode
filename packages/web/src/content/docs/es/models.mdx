@@ -1,0 +1,223 @@
+---
+title: Modelos
+description: Configuración de un proveedor y modelo LLM.
+---
+
+OpenCode usa el [AI SDK](https://ai-sdk.dev/) y [Models.dev](https://models.dev) para admitir **75+ proveedores LLM** y admite la ejecución de modelos locales.
+
+---
+
+## Proveedores
+
+Los proveedores más populares están precargados de forma predeterminada. Si agregó las credenciales de un proveedor mediante el comando `/connect`, estarán disponibles cuando inicie OpenCode.
+
+Obtenga más información sobre [proveedores](/docs/providers).
+
+---
+
+## Seleccionar un modelo
+
+Una vez que hayas configurado tu proveedor podrás seleccionar el modelo que desees escribiendo:
+
+```bash frame="none"
+/models
+```
+
+---
+
+## Modelos recomendados
+
+Hay muchos modelos disponibles y cada semana salen nuevos modelos.
+
+:::tip
+Considere utilizar uno de los modelos que recomendamos.
+:::
+
+Sin embargo, sólo unos pocos de ellos son buenos tanto para generar código como para llamar a herramientas.
+
+Aqui tienes varios modelos que funcionan bien con OpenCode, sin orden particular. (Esta no es una lista exhaustiva ni necesariamente actualizada):
+
+- GPT 5.2
+- GPT 5.1 Codex
+- Claude Opus 4.5
+- Claude Sonnet 4.5
+- Minimax M2.1
+- Gemini 3 Pro
+
+---
+
+## Establecer un valor predeterminado
+
+Para configurar uno de estos como modelo predeterminado, puedes definir la clave `model` en tu
+configuracion de OpenCode.
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "lmstudio/google/gemma-3n-e4b"
+}
+```
+
+Aquí el ID completo es `provider_id/model_id`. Por ejemplo, si usa [OpenCode Zen](/docs/zen), usaría `opencode/gpt-5.1-codex` para GPT 5.1 Codex.
+
+Si ha configurado un [proveedor personalizado](/docs/providers#custom), `provider_id` es la clave de la parte `provider` de su configuración y `model_id` es la clave de `provider.models`.
+
+---
+
+## Configurar modelos
+
+Puede configurar globalmente las opciones de un modelo a través de la configuración.
+
+```jsonc title="opencode.jsonc" {7-12,19-24}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "openai": {
+      "models": {
+        "gpt-5": {
+          "options": {
+            "reasoningEffort": "high",
+            "textVerbosity": "low",
+            "reasoningSummary": "auto",
+            "include": ["reasoning.encrypted_content"],
+          },
+        },
+      },
+    },
+    "anthropic": {
+      "models": {
+        "claude-sonnet-4-5-20250929": {
+          "options": {
+            "thinking": {
+              "type": "enabled",
+              "budgetTokens": 16000,
+            },
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+Aquí estamos configurando ajustes globales para dos modelos integrados: `gpt-5` cuando se accede a través del proveedor `openai` y `claude-sonnet-4-20250514` cuando se accede a través del proveedor `anthropic`.
+Los nombres de modelo y proveedor integrados se pueden encontrar en [Models.dev](https://models.dev).
+
+También puede configurar estas opciones para cualquier agente que esté utilizando. La configuración del agente anula cualquier opción global aquí. [Más información](/docs/agents/#additional).
+
+También puede definir variantes personalizadas que amplíen las integradas. Las variantes le permiten configurar diferentes ajustes para el mismo modelo sin crear entradas duplicadas:
+
+```jsonc title="opencode.jsonc" {6-21}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "opencode": {
+      "models": {
+        "gpt-5": {
+          "variants": {
+            "high": {
+              "reasoningEffort": "high",
+              "textVerbosity": "low",
+              "reasoningSummary": "auto",
+            },
+            "low": {
+              "reasoningEffort": "low",
+              "textVerbosity": "low",
+              "reasoningSummary": "auto",
+            },
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+---
+
+## Variantes
+
+Muchos modelos admiten múltiples variantes con diferentes configuraciones. OpenCode se envía con variantes predeterminadas integradas para proveedores populares.
+
+### Variantes integradas
+
+OpenCode se envía con variantes predeterminadas para muchos proveedores:
+
+**Anthropic**:
+
+- `high` - Presupuesto de pensamiento alto (predeterminado)
+- `max` - Presupuesto de pensamiento máximo
+
+**OpenAI**:
+
+Varía según el modelo, pero aproximadamente:
+
+- `none` - Sin razonamiento
+- `minimal` - Mínimo esfuerzo de razonamiento
+- `low` - Bajo esfuerzo de razonamiento
+- `medium` - Esfuerzo de razonamiento medio
+- `high` - Alto esfuerzo de razonamiento
+- `xhigh` - Esfuerzo de razonamiento extra alto
+
+**Google**:
+
+- `low` - Menor esfuerzo/presupuesto simbólico
+- `high` - Mayor esfuerzo/presupuesto simbólico
+
+:::tip
+Esta lista no es exhaustiva. Muchos otros proveedores también tienen valores predeterminados integrados.
+:::
+
+### Variantes personalizadas
+
+Puede anular las variantes existentes o agregar las suyas propias:
+
+```jsonc title="opencode.jsonc" {7-18}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "openai": {
+      "models": {
+        "gpt-5": {
+          "variants": {
+            "thinking": {
+              "reasoningEffort": "high",
+              "textVerbosity": "low",
+            },
+            "fast": {
+              "disabled": true,
+            },
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+### Alternar variantes
+
+Utilice la combinación de teclas `variant_cycle` para cambiar rápidamente entre variantes. [Más información](/docs/keybinds).
+
+---
+
+## Carga de modelos
+
+Cuando se inicia OpenCode, busca modelos en el siguiente orden de prioridad:
+
+1. El indicador de línea de comando `--model` o `-m`. El formato es el mismo que en el archivo de configuración: `provider_id/model_id`.
+
+2. La lista de modelos en la configuración OpenCode.
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "model": "anthropic/claude-sonnet-4-20250514"
+   }
+   ```
+
+   El formato aquí es `provider/model`.
+
+3. El último modelo utilizado.
+
+4. El primer modelo que utiliza una prioridad interna.

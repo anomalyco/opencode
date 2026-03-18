@@ -12,6 +12,6 @@
 
   &:focus {
     outline: none;
-    box-shadow: 0 0 0 1px var(--border-interactive-focus);
+    box-shadow: var(--inline-input-shadow, 0 0 0 1px var(--border-interactive-focus));
   }
 }
