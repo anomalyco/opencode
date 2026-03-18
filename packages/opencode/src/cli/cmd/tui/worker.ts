@@ -44,6 +44,11 @@ const eventStream = {
   abort: undefined as AbortController | undefined,
 }
 
+const state = {
+  directory: process.cwd(),
+  workspaceID: undefined as string | undefined,
+}
+
 const startEventStream = (input: { directory: string; workspaceID?: string }) => {
   if (eventStream.abort) eventStream.abort.abort()
   const abort = new AbortController()
@@ -96,7 +101,7 @@ const startEventStream = (input: { directory: string; workspaceID?: string }) =>
   })
 }
 
-startEventStream({ directory: process.cwd() })
+startEventStream({ directory: state.directory })
 
 export const rpc = {
   async fetch(input: { url: string; method: string; headers: Record<string, string>; body?: string }) {
@@ -136,8 +141,14 @@ export const rpc = {
     Config.global.reset()
     await Instance.disposeAll()
   },
+  async setDirectory(input: { directory: string }) {
+    state.directory = input.directory
+    state.workspaceID = undefined
+    startEventStream({ directory: state.directory })
+  },
   async setWorkspace(input: { workspaceID?: string }) {
-    startEventStream({ directory: process.cwd(), workspaceID: input.workspaceID })
+    state.workspaceID = input.workspaceID
+    startEventStream({ directory: state.directory, workspaceID: state.workspaceID })
   },
   async shutdown() {
     Log.Default.info("worker shutting down")

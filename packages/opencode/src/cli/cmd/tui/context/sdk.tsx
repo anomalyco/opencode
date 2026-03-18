@@ -5,6 +5,7 @@ import { batch, onCleanup, onMount } from "solid-js"
 
 export type EventSource = {
   on: (handler: (event: Event) => void) => () => void
+  setDirectory?: (directory: string) => void
   setWorkspace?: (workspaceID?: string) => void
 }
 
@@ -18,6 +19,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     events?: EventSource
   }) => {
     const abort = new AbortController()
+    let directory = props.directory
     let workspaceID: string | undefined
     let sse: AbortController | undefined
 
@@ -25,7 +27,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       return createOpencodeClient({
         baseUrl: props.url,
         signal: abort.signal,
-        directory: props.directory,
+        directory,
         fetch: props.fetch,
         headers: props.headers,
         experimental_workspaceID: workspaceID,
@@ -109,9 +111,19 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       get client() {
         return sdk
       },
-      directory: props.directory,
+      get directory() {
+        return directory
+      },
       event: emitter,
       fetch: props.fetch ?? fetch,
+      setDirectory(next: string) {
+        if (directory === next) return
+        directory = next
+        workspaceID = undefined
+        sdk = createSDK()
+        props.events?.setDirectory?.(next)
+        if (!props.events) startSSE()
+      },
       setWorkspace(next?: string) {
         if (workspaceID === next) return
         workspaceID = next

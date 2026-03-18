@@ -19,6 +19,7 @@ import { DialogThemeList } from "@tui/component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogAgent } from "@tui/component/dialog-agent"
+import { DialogChangeDirectory } from "@tui/component/dialog-change-directory"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
 import { DialogWorkspaceList } from "@tui/component/dialog-workspace-list"
 import { KeybindProvider } from "@tui/context/keybind"
@@ -370,6 +371,18 @@ function App() {
       },
       onSelect: () => {
         dialog.replace(() => <DialogSessionList />)
+      },
+    },
+    {
+      title: "Change directory",
+      value: "directory.change",
+      category: "Workspace",
+      slash: {
+        name: "changedirectory",
+        aliases: ["cd"],
+      },
+      onSelect: () => {
+        dialog.replace(() => <DialogChangeDirectory />)
       },
     },
     ...(Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
