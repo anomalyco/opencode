@@ -1,3 +1,4 @@
+import { NodeFileSystem } from "@effect/platform-node"
 import { dirname, join, relative, resolve as pathResolve } from "path"
 import { realpathSync } from "fs"
 import { lookup } from "mime-types"
@@ -148,6 +149,8 @@ export namespace AppFileSystem {
       })
     }),
   )
+
+  export const defaultLayer = layer.pipe(Layer.provide(NodeFileSystem.layer))
 
   // Pure helpers that don't need Effect (path manipulation, sync operations)
   export function mimeType(p: string): string {
