@@ -90,6 +90,7 @@ import {
   type WorkspaceSidebarContext,
 } from "./layout/sidebar-workspace"
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
+import { GridToggleItem } from "./layout/sidebar-items"
 import { SidebarContent } from "./layout/sidebar-shell"
 
 export default function Layout(props: ParentProps) {
@@ -2118,7 +2119,7 @@ export default function Layout(props: ParentProps) {
                 when={workspacesEnabled()}
                 fallback={
                   <>
-                    <div class="shrink-0 py-4">
+                    <div class="shrink-0 py-4 flex flex-col gap-2">
                       <Button
                         size="large"
                         icon="new-session"
@@ -2131,6 +2132,7 @@ export default function Layout(props: ParentProps) {
                       >
                         {language.t("command.session.new")}
                       </Button>
+                      <GridToggleItem mobile={panelProps.mobile} sidebarExpanded={() => true} />
                     </div>
                     <div class="flex-1 min-h-0">
                       <LocalWorkspace
@@ -2145,7 +2147,7 @@ export default function Layout(props: ParentProps) {
                 }
               >
                 <>
-                  <div class="shrink-0 py-4">
+                  <div class="shrink-0 py-4 flex flex-col gap-2">
                     <Button
                       size="large"
                       icon="plus-small"
@@ -2158,6 +2160,7 @@ export default function Layout(props: ParentProps) {
                     >
                       {language.t("workspace.new")}
                     </Button>
+                    <GridToggleItem mobile={panelProps.mobile} sidebarExpanded={() => true} />
                   </div>
                   <div class="relative flex-1 min-h-0">
                     <DragDropProvider
