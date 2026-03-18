@@ -1,12 +1,12 @@
 import { expect } from "bun:test"
-import { Duration, Effect, Layer, Option, Ref, Schema } from "effect"
+import { Duration, Effect, Layer, Option, Schema } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 
 import { AccountRepo } from "../../src/account/repo"
 import { AccountService } from "../../src/account/service"
 import { AccessToken, AccountID, DeviceCode, Login, Org, OrgID, RefreshToken, UserCode } from "../../src/account/schema"
 import { Database } from "../../src/storage/db"
-import { testEffect } from "../fixture/effect"
+import { testEffect } from "../lib/effect"
 
 const truncate = Layer.effectDiscard(
   Effect.sync(() => {
@@ -34,8 +34,7 @@ const encodeOrg = Schema.encodeSync(Org)
 
 const org = (id: string, name: string) => encodeOrg(new Org({ id: OrgID.make(id), name }))
 
-it.effect(
-  "orgsByAccount groups orgs per account",
+it.effect("orgsByAccount groups orgs per account", () =>
   Effect.gen(function* () {
     yield* AccountRepo.use((r) =>
       r.persistAccount({
@@ -61,10 +60,10 @@ it.effect(
       }),
     )
 
-    const seen = yield* Ref.make<string[]>([])
+    const seen: Array<string> = []
     const client = HttpClient.make((req) =>
       Effect.gen(function* () {
-        yield* Ref.update(seen, (xs) => [...xs, `${req.method} ${req.url}`])
+        seen.push(`${req.method} ${req.url}`)
 
         if (req.url === "https://one.example.com/api/orgs") {
           return json(req, [org("org-1", "One")])
@@ -84,15 +83,11 @@ it.effect(
       [AccountID.make("user-1"), [OrgID.make("org-1")]],
       [AccountID.make("user-2"), [OrgID.make("org-2"), OrgID.make("org-3")]],
     ])
-    expect(yield* Ref.get(seen)).toEqual([
-      "GET https://one.example.com/api/orgs",
-      "GET https://two.example.com/api/orgs",
-    ])
+    expect(seen).toEqual(["GET https://one.example.com/api/orgs", "GET https://two.example.com/api/orgs"])
   }),
 )
 
-it.effect(
-  "token refresh persists the new token",
+it.effect("token refresh persists the new token", () =>
   Effect.gen(function* () {
     const id = AccountID.make("user-1")
 
@@ -133,8 +128,7 @@ it.effect(
   }),
 )
 
-it.effect(
-  "config sends the selected org header",
+it.effect("config sends the selected org header", () =>
   Effect.gen(function* () {
     const id = AccountID.make("user-1")
 
@@ -150,13 +144,11 @@ it.effect(
       }),
     )
 
-    const seen = yield* Ref.make<{ auth?: string; org?: string }>({})
+    const seen: { auth?: string; org?: string } = {}
     const client = HttpClient.make((req) =>
       Effect.gen(function* () {
-        yield* Ref.set(seen, {
-          auth: req.headers.authorization,
-          org: req.headers["x-org-id"],
-        })
+        seen.auth = req.headers.authorization
+        seen.org = req.headers["x-org-id"]
 
         if (req.url === "https://one.example.com/api/config") {
           return json(req, { config: { theme: "light", seats: 5 } })
@@ -169,15 +161,14 @@ it.effect(
     const cfg = yield* AccountService.use((s) => s.config(id, OrgID.make("org-9"))).pipe(Effect.provide(live(client)))
 
     expect(Option.getOrThrow(cfg)).toEqual({ theme: "light", seats: 5 })
-    expect(yield* Ref.get(seen)).toEqual({
+    expect(seen).toEqual({
       auth: "Bearer at_1",
       org: "org-9",
     })
   }),
 )
 
-it.effect(
-  "poll stores the account and first org on success",
+it.effect("poll stores the account and first org on success", () =>
   Effect.gen(function* () {
     const login = new Login({
       code: DeviceCode.make("device-code"),
