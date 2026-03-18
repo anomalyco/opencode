@@ -93,12 +93,13 @@ async function stage(dir: string) {
 
 async function withGh(dir: string, body: string, run: () => Promise<void>) {
   const bin = path.join(dir, "bin")
-  const file = path.join(bin, "gh")
   await fs.mkdir(bin, { recursive: true })
-  await Bun.write(file, body)
-  await fs.chmod(file, 0o755)
+  const win = process.platform === "win32"
+  const file = path.join(bin, win ? "gh.cmd" : "gh")
+  await Bun.write(file, win ? body.replaceAll("\n", "\r\n") : body)
+  if (!win) await fs.chmod(file, 0o755)
   const prev = process.env.PATH
-  process.env.PATH = `${bin}:${prev ?? ""}`
+  process.env.PATH = `${bin}${path.delimiter}${prev ?? ""}`
   try {
     await run()
   } finally {
@@ -221,7 +222,17 @@ describe("Vcs.commit", () => {
 
     await withGh(
       tmp.path,
-      `#!/bin/sh
+      process.platform === "win32"
+        ? `@echo off
+if "%1"=="auth" if "%2"=="status" exit /b 0
+if "%1"=="pr" if "%2"=="view" exit /b 1
+if "%1"=="pr" if "%2"=="create" (
+  echo https://github.com/test/repo/pull/1
+  exit /b 0
+)
+exit /b 1
+`
+        : `#!/bin/sh
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   exit 0
 fi
@@ -268,7 +279,12 @@ exit 1
 
     await withGh(
       tmp.path,
-      `#!/bin/sh
+      process.platform === "win32"
+        ? `@echo off
+if "%1"=="auth" if "%2"=="status" exit /b 1
+exit /b 1
+`
+        : `#!/bin/sh
 if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   exit 1
 fi
