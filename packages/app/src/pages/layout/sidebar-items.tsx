@@ -153,7 +153,6 @@ const SessionRow = (props: {
         onSave={(next) => props.renameSession(props.session, next)}
         class="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate"
         displayClass="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate"
-        stopPropagation
         openOnDblClick
       />
     </div>
