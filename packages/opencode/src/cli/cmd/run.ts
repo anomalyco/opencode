@@ -49,13 +49,6 @@ type Inline = {
   description?: string
 }
 
-function object(input: unknown) {
-  if (!input || typeof input !== "object" || Array.isArray(input)) {
-    throw new Error("Schema must be a JSON object")
-  }
-  return input as Record<string, unknown>
-}
-
 export async function parseSchema(input: string) {
   const json = (() => {
     try {
@@ -66,7 +59,10 @@ export async function parseSchema(input: string) {
   })()
 
   if (json !== undefined) {
-    return object(json)
+    if (!json || typeof json !== "object" || Array.isArray(json)) {
+      throw new Error("Schema must be a JSON object")
+    }
+    return json as Record<string, unknown>
   }
 
   const file = path.resolve(process.cwd(), input)
@@ -76,11 +72,17 @@ export async function parseSchema(input: string) {
   const text = await Filesystem.readText(file).catch(() => {
     throw new Error(`Failed to read schema file: ${input}`)
   })
-  try {
-    return object(JSON.parse(text))
-  } catch {
-    throw new Error(`Invalid JSON schema in file: ${input}`)
+  const value = (() => {
+    try {
+      return JSON.parse(text)
+    } catch {
+      throw new Error(`Invalid JSON schema in file: ${input}`)
+    }
+  })()
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Schema must be a JSON object")
   }
+  return value as Record<string, unknown>
 }
 
 function inline(info: Inline) {
@@ -301,7 +303,6 @@ export const RunCommand = cmd({
         describe: "format: default (formatted) or json (raw JSON events)",
       })
       .option("output-schema", {
-        alias: ["json-schema"],
         type: "string",
         describe: "JSON schema as inline JSON or path to a JSON file",
       })
