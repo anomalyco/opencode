@@ -242,7 +242,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
           if (!key) return
           const current = store.projects[key] ?? []
           if (current.find((x) => x.worktree === directory)) return
-          setStore("projects", key, [{ worktree: directory, expanded: true }, ...current])
+          setStore("projects", key, [...current, { worktree: directory, expanded: true }])
         },
         close(directory: string) {
           const key = origin()
