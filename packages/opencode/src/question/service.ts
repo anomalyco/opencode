@@ -2,7 +2,6 @@ import { Deferred, Effect, Layer, Schema, ServiceMap } from "effect"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { SessionID, MessageID } from "@/session/schema"
-import { InstanceState } from "@/util/instance-state"
 import { Log } from "@/util/log"
 import z from "zod"
 import { QuestionID } from "./schema"
@@ -104,18 +103,13 @@ export class QuestionService extends ServiceMap.Service<QuestionService, Questio
   static readonly layer = Layer.effect(
     QuestionService,
     Effect.gen(function* () {
-      const instanceState = yield* InstanceState.make<Map<QuestionID, PendingEntry>>(() =>
-        Effect.succeed(new Map<QuestionID, PendingEntry>()),
-      )
-
-      const getPending = InstanceState.get(instanceState)
+      const pending = new Map<QuestionID, PendingEntry>()
 
       const ask = Effect.fn("QuestionService.ask")(function* (input: {
         sessionID: SessionID
         questions: Info[]
         tool?: { messageID: MessageID; callID: string }
       }) {
-        const pending = yield* getPending
         const id = QuestionID.ascending()
         log.info("asking", { id, questions: input.questions.length })
 
@@ -138,7 +132,6 @@ export class QuestionService extends ServiceMap.Service<QuestionService, Questio
       })
 
       const reply = Effect.fn("QuestionService.reply")(function* (input: { requestID: QuestionID; answers: Answer[] }) {
-        const pending = yield* getPending
         const existing = pending.get(input.requestID)
         if (!existing) {
           log.warn("reply for unknown request", { requestID: input.requestID })
@@ -155,7 +148,6 @@ export class QuestionService extends ServiceMap.Service<QuestionService, Questio
       })
 
       const reject = Effect.fn("QuestionService.reject")(function* (requestID: QuestionID) {
-        const pending = yield* getPending
         const existing = pending.get(requestID)
         if (!existing) {
           log.warn("reject for unknown request", { requestID })
@@ -171,7 +163,6 @@ export class QuestionService extends ServiceMap.Service<QuestionService, Questio
       })
 
       const list = Effect.fn("QuestionService.list")(function* () {
-        const pending = yield* getPending
         return Array.from(pending.values(), (x) => x.info)
       })
 

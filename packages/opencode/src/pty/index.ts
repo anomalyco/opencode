@@ -167,40 +167,44 @@ export namespace Pty {
       subscribers: new Map(),
     }
     state().set(id, session)
-    ptyProcess.onData((chunk) => {
-      session.cursor += chunk.length
+    ptyProcess.onData(
+      Instance.bind((chunk) => {
+        session.cursor += chunk.length
 
-      for (const [key, ws] of session.subscribers.entries()) {
-        if (ws.readyState !== 1) {
-          session.subscribers.delete(key)
-          continue
+        for (const [key, ws] of session.subscribers.entries()) {
+          if (ws.readyState !== 1) {
+            session.subscribers.delete(key)
+            continue
+          }
+
+          if (ws.data !== key) {
+            session.subscribers.delete(key)
+            continue
+          }
+
+          try {
+            ws.send(chunk)
+          } catch {
+            session.subscribers.delete(key)
+          }
         }
 
-        if (ws.data !== key) {
-          session.subscribers.delete(key)
-          continue
-        }
-
-        try {
-          ws.send(chunk)
-        } catch {
-          session.subscribers.delete(key)
-        }
-      }
-
-      session.buffer += chunk
-      if (session.buffer.length <= BUFFER_LIMIT) return
-      const excess = session.buffer.length - BUFFER_LIMIT
-      session.buffer = session.buffer.slice(excess)
-      session.bufferCursor += excess
-    })
-    ptyProcess.onExit(({ exitCode }) => {
-      if (session.info.status === "exited") return
-      log.info("session exited", { id, exitCode })
-      session.info.status = "exited"
-      Bus.publish(Event.Exited, { id, exitCode })
-      remove(id)
-    })
+        session.buffer += chunk
+        if (session.buffer.length <= BUFFER_LIMIT) return
+        const excess = session.buffer.length - BUFFER_LIMIT
+        session.buffer = session.buffer.slice(excess)
+        session.bufferCursor += excess
+      }),
+    )
+    ptyProcess.onExit(
+      Instance.bind(({ exitCode }) => {
+        if (session.info.status === "exited") return
+        log.info("session exited", { id, exitCode })
+        session.info.status = "exited"
+        Bus.publish(Event.Exited, { id, exitCode })
+        remove(id)
+      }),
+    )
     Bus.publish(Event.Created, { info })
     return info
   }

@@ -11,7 +11,7 @@ import PROMPT_CODEX from "./prompt/codex_header.txt"
 import PROMPT_TRINITY from "./prompt/trinity.txt"
 import type { Provider } from "@/provider/provider"
 import type { Agent } from "@/agent/agent"
-import { PermissionNext } from "@/permission/next"
+import { PermissionNext } from "@/permission"
 import { Skill } from "@/skill"
 
 export namespace SystemPrompt {

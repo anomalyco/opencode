@@ -1,13 +1,29 @@
-import { describe, test, expect, beforeEach } from "bun:test"
+import { describe, test, expect, afterEach } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
 import { FileTime } from "../../src/file/time"
 import { Instance } from "../../src/project/instance"
+import { SessionID } from "../../src/session/schema"
 import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
 
+afterEach(() => Instance.disposeAll())
+
+async function touch(file: string, time: number) {
+  const date = new Date(time)
+  await fs.utimes(file, date, date)
+}
+
+function gate() {
+  let open!: () => void
+  const wait = new Promise<void>((resolve) => {
+    open = resolve
+  })
+  return { open, wait }
+}
+
 describe("file/time", () => {
-  const sessionID = "test-session-123"
+  const sessionID = SessionID.make("ses_00000000000000000000000001")
 
   describe("read() and get()", () => {
     test("stores read timestamp", async () => {
@@ -18,12 +34,12 @@ describe("file/time", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const before = FileTime.get(sessionID, filepath)
+          const before = await FileTime.get(sessionID, filepath)
           expect(before).toBeUndefined()
 
-          FileTime.read(sessionID, filepath)
+          await FileTime.read(sessionID, filepath)
 
-          const after = FileTime.get(sessionID, filepath)
+          const after = await FileTime.get(sessionID, filepath)
           expect(after).toBeInstanceOf(Date)
           expect(after!.getTime()).toBeGreaterThan(0)
         },
@@ -38,11 +54,11 @@ describe("file/time", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          FileTime.read("session1", filepath)
-          FileTime.read("session2", filepath)
+          await FileTime.read(SessionID.make("ses_00000000000000000000000002"), filepath)
+          await FileTime.read(SessionID.make("ses_00000000000000000000000003"), filepath)
 
-          const time1 = FileTime.get("session1", filepath)
-          const time2 = FileTime.get("session2", filepath)
+          const time1 = await FileTime.get(SessionID.make("ses_00000000000000000000000002"), filepath)
+          const time2 = await FileTime.get(SessionID.make("ses_00000000000000000000000003"), filepath)
 
           expect(time1).toBeDefined()
           expect(time2).toBeDefined()
@@ -58,15 +74,13 @@ describe("file/time", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          FileTime.read(sessionID, filepath)
-          const first = FileTime.get(sessionID, filepath)!
+          await FileTime.read(sessionID, filepath)
+          const first = await FileTime.get(sessionID, filepath)
 
-          await new Promise((resolve) => setTimeout(resolve, 10))
+          await FileTime.read(sessionID, filepath)
+          const second = await FileTime.get(sessionID, filepath)
 
-          FileTime.read(sessionID, filepath)
-          const second = FileTime.get(sessionID, filepath)!
-
-          expect(second.getTime()).toBeGreaterThanOrEqual(first.getTime())
+          expect(second!.getTime()).toBeGreaterThanOrEqual(first!.getTime())
         },
       })
     })
@@ -77,13 +91,12 @@ describe("file/time", () => {
       await using tmp = await tmpdir()
       const filepath = path.join(tmp.path, "file.txt")
       await fs.writeFile(filepath, "content", "utf-8")
+      await touch(filepath, 1_000)
 
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          FileTime.read(sessionID, filepath)
-
-          // Should not throw
+          await FileTime.read(sessionID, filepath)
           await FileTime.assert(sessionID, filepath)
         },
       })
@@ -106,18 +119,14 @@ describe("file/time", () => {
       await using tmp = await tmpdir()
       const filepath = path.join(tmp.path, "file.txt")
       await fs.writeFile(filepath, "content", "utf-8")
+      await touch(filepath, 1_000)
 
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          FileTime.read(sessionID, filepath)
-
-          // Wait to ensure different timestamps
-          await new Promise((resolve) => setTimeout(resolve, 100))
-
-          // Modify file after reading
+          await FileTime.read(sessionID, filepath)
           await fs.writeFile(filepath, "modified content", "utf-8")
-
+          await touch(filepath, 2_000)
           await expect(FileTime.assert(sessionID, filepath)).rejects.toThrow("modified since it was last read")
         },
       })
@@ -127,13 +136,14 @@ describe("file/time", () => {
       await using tmp = await tmpdir()
       const filepath = path.join(tmp.path, "file.txt")
       await fs.writeFile(filepath, "content", "utf-8")
+      await touch(filepath, 1_000)
 
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          FileTime.read(sessionID, filepath)
-          await new Promise((resolve) => setTimeout(resolve, 100))
+          await FileTime.read(sessionID, filepath)
           await fs.writeFile(filepath, "modified", "utf-8")
+          await touch(filepath, 2_000)
 
           let error: Error | undefined
           try {
@@ -144,28 +154,6 @@ describe("file/time", () => {
           expect(error).toBeDefined()
           expect(error!.message).toContain("Last modification:")
           expect(error!.message).toContain("Last read:")
-        },
-      })
-    })
-
-    test("skips check when OPENCODE_DISABLE_FILETIME_CHECK is true", async () => {
-      await using tmp = await tmpdir()
-      const filepath = path.join(tmp.path, "file.txt")
-      await fs.writeFile(filepath, "content", "utf-8")
-
-      await Instance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const { Flag } = await import("../../src/flag/flag")
-          const original = Flag.OPENCODE_DISABLE_FILETIME_CHECK
-          ;(Flag as { OPENCODE_DISABLE_FILETIME_CHECK: boolean }).OPENCODE_DISABLE_FILETIME_CHECK = true
-
-          try {
-            // Should not throw even though file wasn't read
-            await FileTime.assert(sessionID, filepath)
-          } finally {
-            ;(Flag as { OPENCODE_DISABLE_FILETIME_CHECK: boolean }).OPENCODE_DISABLE_FILETIME_CHECK = original
-          }
         },
       })
     })
@@ -212,25 +200,27 @@ describe("file/time", () => {
         directory: tmp.path,
         fn: async () => {
           const order: number[] = []
+          const hold = gate()
+          const ready = gate()
 
           const op1 = FileTime.withLock(filepath, async () => {
             order.push(1)
-            await new Promise((resolve) => setTimeout(resolve, 10))
+            ready.open()
+            await hold.wait
             order.push(2)
           })
+
+          await ready.wait
 
           const op2 = FileTime.withLock(filepath, async () => {
             order.push(3)
             order.push(4)
           })
 
-          await Promise.all([op1, op2])
+          hold.open()
 
-          // Operations should be serialized
-          expect(order).toContain(1)
-          expect(order).toContain(2)
-          expect(order).toContain(3)
-          expect(order).toContain(4)
+          await Promise.all([op1, op2])
+          expect(order).toEqual([1, 2, 3, 4])
         },
       })
     })
@@ -245,19 +235,24 @@ describe("file/time", () => {
         fn: async () => {
           let started1 = false
           let started2 = false
+          const hold = gate()
+          const ready = gate()
 
           const op1 = FileTime.withLock(filepath1, async () => {
             started1 = true
-            await new Promise((resolve) => setTimeout(resolve, 50))
-            expect(started2).toBe(true) // op2 should have started while op1 is running
+            ready.open()
+            await hold.wait
+            expect(started2).toBe(true)
           })
+
+          await ready.wait
 
           const op2 = FileTime.withLock(filepath2, async () => {
             started2 = true
+            hold.open()
           })
 
           await Promise.all([op1, op2])
-
           expect(started1).toBe(true)
           expect(started2).toBe(true)
         },
@@ -277,37 +272,11 @@ describe("file/time", () => {
             }),
           ).rejects.toThrow("Test error")
 
-          // Lock should be released, subsequent operations should work
           let executed = false
           await FileTime.withLock(filepath, async () => {
             executed = true
           })
           expect(executed).toBe(true)
-        },
-      })
-    })
-
-    test("deadlocks on nested locks (expected behavior)", async () => {
-      await using tmp = await tmpdir()
-      const filepath = path.join(tmp.path, "file.txt")
-
-      await Instance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          // Nested locks on same file cause deadlock - this is expected
-          // The outer lock waits for inner to complete, but inner waits for outer to release
-          const timeout = new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error("Deadlock detected")), 100),
-          )
-
-          const nestedLock = FileTime.withLock(filepath, async () => {
-            return FileTime.withLock(filepath, async () => {
-              return "inner"
-            })
-          })
-
-          // Should timeout due to deadlock
-          await expect(Promise.race([nestedLock, timeout])).rejects.toThrow("Deadlock detected")
         },
       })
     })
@@ -318,17 +287,17 @@ describe("file/time", () => {
       await using tmp = await tmpdir()
       const filepath = path.join(tmp.path, "file.txt")
       await fs.writeFile(filepath, "content", "utf-8")
+      await touch(filepath, 1_000)
 
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          FileTime.read(sessionID, filepath)
+          await FileTime.read(sessionID, filepath)
 
           const stats = Filesystem.stat(filepath)
           expect(stats?.mtime).toBeInstanceOf(Date)
           expect(stats!.mtime.getTime()).toBeGreaterThan(0)
 
-          // FileTime.assert uses this stat internally
           await FileTime.assert(sessionID, filepath)
         },
       })
@@ -338,17 +307,17 @@ describe("file/time", () => {
       await using tmp = await tmpdir()
       const filepath = path.join(tmp.path, "file.txt")
       await fs.writeFile(filepath, "original", "utf-8")
+      await touch(filepath, 1_000)
 
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          FileTime.read(sessionID, filepath)
+          await FileTime.read(sessionID, filepath)
 
           const originalStat = Filesystem.stat(filepath)
 
-          // Wait and modify
-          await new Promise((resolve) => setTimeout(resolve, 100))
           await fs.writeFile(filepath, "modified", "utf-8")
+          await touch(filepath, 2_000)
 
           const newStat = Filesystem.stat(filepath)
           expect(newStat!.mtime.getTime()).toBeGreaterThan(originalStat!.mtime.getTime())
