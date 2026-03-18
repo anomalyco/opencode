@@ -3,7 +3,6 @@ import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Switch } from "@opencode-ai/ui/switch"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Select } from "@opencode-ai/ui/select"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { type Component, For, Show, createMemo } from "solid-js"
 import { useLanguage } from "@/context/language"
@@ -11,12 +10,6 @@ import { useModels } from "@/context/models"
 import { popularProviders } from "@/hooks/use-providers"
 
 type ModelItem = ReturnType<ReturnType<typeof useModels>["list"]>[number]
-type Option = {
-  id: string
-  label: string
-  key: { providerID: string; modelID: string }
-}
-
 const ListLoadingState: Component<{ label: string }> = (props) => {
   return (
     <div class="flex flex-col items-center justify-center py-12 text-center">
@@ -39,33 +32,6 @@ const ListEmptyState: Component<{ message: string; filter: string }> = (props) =
 export const SettingsModels: Component = () => {
   const language = useLanguage()
   const models = useModels()
-
-  const id = (key: { providerID: string; modelID: string }) => `${key.providerID}:${key.modelID}`
-
-  const all = createMemo<Option[]>(() =>
-    models
-      .list()
-      .map((item) => ({
-        id: id({ providerID: item.provider.id, modelID: item.id }),
-        label: `${item.provider.name} / ${item.name}`,
-        key: { providerID: item.provider.id, modelID: item.id },
-      }))
-      .sort((a, b) => a.label.localeCompare(b.label)),
-  )
-
-  const enabled = createMemo(() => all().filter((item) => models.visible(item.key)))
-
-  const current = (slot: "a" | "b") => {
-    const key = models.quick.get(slot)
-    if (!key) return
-    return all().find((item) => item.id === id(key))
-  }
-
-  const options = (slot: "a" | "b") => {
-    const other = models.quick.get(slot === "a" ? "b" : "a")
-    if (!other) return enabled()
-    return enabled().filter((item) => item.id !== id(other))
-  }
 
   const list = useFilteredList<ModelItem>({
     items: (_filter) => models.list(),
@@ -117,59 +83,6 @@ export const SettingsModels: Component = () => {
       </div>
 
       <div class="flex flex-col gap-8 max-w-[720px]">
-        <div class="flex flex-col gap-1">
-          <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.models.quick.title")}</h3>
-          <div class="bg-surface-raised-base px-4 rounded-lg">
-            <div class="flex flex-wrap items-center justify-between gap-4 py-3 border-b border-border-weak-base">
-              <div class="flex flex-col gap-0.5 min-w-0">
-                <span class="text-14-medium text-text-strong">{language.t("settings.models.quick.first.title")}</span>
-                <span class="text-12-regular text-text-weak">
-                  {language.t("settings.models.quick.first.description")}
-                </span>
-              </div>
-              <div class="flex items-center gap-2 flex-shrink-0">
-                <Select
-                  options={options("a")}
-                  current={current("a")}
-                  value={(item) => item.id}
-                  label={(item) => item.label}
-                  onSelect={(item) => models.quick.set("a", item?.key)}
-                  variant="secondary"
-                  size="small"
-                  triggerVariant="settings"
-                  triggerStyle={{ "min-width": "260px" }}
-                />
-                <Show when={models.quick.get("a")}>
-                  <IconButton icon="circle-x" variant="ghost" onClick={() => models.quick.set("a", undefined)} />
-                </Show>
-              </div>
-            </div>
-            <div class="flex flex-wrap items-center justify-between gap-4 py-3">
-              <div class="flex flex-col gap-0.5 min-w-0">
-                <span class="text-14-medium text-text-strong">{language.t("settings.models.quick.second.title")}</span>
-                <span class="text-12-regular text-text-weak">
-                  {language.t("settings.models.quick.second.description")}
-                </span>
-              </div>
-              <div class="flex items-center gap-2 flex-shrink-0">
-                <Select
-                  options={options("b")}
-                  current={current("b")}
-                  value={(item) => item.id}
-                  label={(item) => item.label}
-                  onSelect={(item) => models.quick.set("b", item?.key)}
-                  variant="secondary"
-                  size="small"
-                  triggerVariant="settings"
-                  triggerStyle={{ "min-width": "260px" }}
-                />
-                <Show when={models.quick.get("b")}>
-                  <IconButton icon="circle-x" variant="ghost" onClick={() => models.quick.set("b", undefined)} />
-                </Show>
-              </div>
-            </div>
-          </div>
-        </div>
         <Show
           when={!list.grouped.loading}
           fallback={
@@ -191,28 +104,36 @@ export const SettingsModels: Component = () => {
                     <For each={group.items}>
                       {(item) => {
                         const key = { providerID: item.provider.id, modelID: item.id }
+                        const visible = () => models.visible(key)
                         return (
                           <div class="flex flex-wrap items-center justify-between gap-4 py-3 border-b border-border-weak-base last:border-none">
                             <div class="min-w-0">
                               <span class="text-14-regular text-text-strong truncate block">{item.name}</span>
                             </div>
                             <div class="flex items-center gap-2 flex-shrink-0">
-                              <IconButton
-                                icon="circle-check"
-                                variant="ghost"
-                                size="small"
-                                aria-label={language.t(
-                                  models.favorite.has(key) ? "dialog.model.unfavorite" : "dialog.model.favorite",
-                                )}
-                                classList={{
-                                  "opacity-100": models.favorite.has(key),
-                                  "opacity-30": !models.favorite.has(key),
-                                }}
-                                onClick={() => models.favorite.toggle(key)}
-                              />
+                              <Show when={visible()}>
+                                <button
+                                  type="button"
+                                  title={language.t(
+                                    models.favorite.has(key) ? "dialog.model.unfavorite" : "dialog.model.favorite",
+                                  )}
+                                  aria-label={language.t(
+                                    models.favorite.has(key) ? "dialog.model.unfavorite" : "dialog.model.favorite",
+                                  )}
+                                  class="shrink-0 text-14-medium text-text-weak transition-opacity hover:text-text-strong"
+                                  classList={{
+                                    "opacity-100": models.favorite.has(key),
+                                    "opacity-30": !models.favorite.has(key),
+                                  }}
+                                  onClick={() => models.favorite.toggle(key)}
+                                >
+                                  {models.favorite.has(key) ? "♥" : "♡"}
+                                </button>
+                              </Show>
                               <Switch
-                                checked={models.visible(key)}
+                                checked={visible()}
                                 onChange={(checked) => {
+                                  if (!checked && models.favorite.has(key)) models.favorite.toggle(key)
                                   models.setVisibility(key, checked)
                                 }}
                                 hideLabel
