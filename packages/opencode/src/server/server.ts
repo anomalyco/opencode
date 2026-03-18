@@ -566,8 +566,15 @@ export namespace Server {
         })
         response.headers.set(
           "Content-Security-Policy",
-          "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:",
+          "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data: https://opencode.ai",
         )
+        // Hashed asset paths are immutable; cache them aggressively.
+        // Everything else (index.html, manifests) gets a short revalidation window.
+        if (/^\/assets\//.test(path) && /\.[a-f0-9]{8,}\./.test(path)) {
+          response.headers.set("Cache-Control", "public, max-age=31536000, immutable")
+        } else if (!response.headers.has("Cache-Control")) {
+          response.headers.set("Cache-Control", "public, max-age=300")
+        }
         return response
       })
   }
