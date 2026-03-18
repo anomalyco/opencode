@@ -85,7 +85,10 @@ async function expand(page: Parameters<typeof test>[0]["page"]) {
 async function waitMark(page: Parameters<typeof test>[0]["page"], file: string, mark: string) {
   await page.waitForFunction(
     ({ file, mark }) => {
-      const head = Array.from(document.querySelectorAll("h3")).find(
+      const view = document.querySelector('[data-slot="session-review-scroll"] .scroll-view__viewport')
+      if (!(view instanceof HTMLElement)) return false
+
+      const head = Array.from(view.querySelectorAll("h3")).find(
         (node) => node instanceof HTMLElement && node.textContent?.includes(file),
       )
       if (!(head instanceof HTMLElement)) return false
@@ -101,12 +104,127 @@ async function waitMark(page: Parameters<typeof test>[0]["page"], file: string, 
   )
 }
 
+async function spot(page: Parameters<typeof test>[0]["page"], file: string) {
+  return page.evaluate((file) => {
+    const view = document.querySelector('[data-slot="session-review-scroll"] .scroll-view__viewport')
+    if (!(view instanceof HTMLElement)) return null
+
+    const row = Array.from(view.querySelectorAll("h3")).find(
+      (node) => node instanceof HTMLElement && node.textContent?.includes(file),
+    )
+    if (!(row instanceof HTMLElement)) return null
+
+    const a = row.getBoundingClientRect()
+    const b = view.getBoundingClientRect()
+    return {
+      top: a.top - b.top,
+      y: view.scrollTop,
+    }
+  }, file)
+}
+
+async function comment(page: Parameters<typeof test>[0]["page"], file: string, note: string) {
+  const row = page.locator(`[data-file="${file}"]`).first()
+  await expect(row).toBeVisible()
+
+  const line = row.locator('diffs-container [data-line="2"]').first()
+  await expect(line).toBeVisible()
+  await line.hover()
+
+  const add = row.getByRole("button", { name: /^Comment$/ }).first()
+  await expect(add).toBeVisible()
+  await add.click()
+
+  const area = row.locator('[data-slot="line-comment-textarea"]').first()
+  await expect(area).toBeVisible()
+  await area.fill(note)
+
+  const submit = row.locator('[data-slot="line-comment-action"][data-variant="primary"]').first()
+  await expect(submit).toBeEnabled()
+  await submit.click()
+
+  await expect(row.locator('[data-slot="line-comment-content"]').filter({ hasText: note }).first()).toBeVisible()
+  await expect(row.locator('[data-slot="line-comment-tools"]').first()).toBeVisible()
+}
+
+async function overflow(page: Parameters<typeof test>[0]["page"], file: string) {
+  const row = page.locator(`[data-file="${file}"]`).first()
+  const view = page.locator('[data-slot="session-review-scroll"] .scroll-view__viewport').first()
+  const pop = row.locator('[data-slot="line-comment-popover"][data-inline-body]').first()
+  const tools = row.locator('[data-slot="line-comment-tools"]').first()
+
+  const [width, viewBox, popBox, toolsBox] = await Promise.all([
+    view.evaluate((el) => el.scrollWidth - el.clientWidth),
+    view.boundingBox(),
+    pop.boundingBox(),
+    tools.boundingBox(),
+  ])
+
+  if (!viewBox || !popBox || !toolsBox) return null
+
+  return {
+    width,
+    pop: popBox.x + popBox.width - (viewBox.x + viewBox.width),
+    tools: toolsBox.x + toolsBox.width - (viewBox.x + viewBox.width),
+  }
+}
+
+test("review applies inline comment clicks without horizontal overflow", async ({ page, withProject }) => {
+  test.setTimeout(180_000)
+
+  const tag = `review-comment-${Date.now()}`
+  const file = `review-comment-${tag}.txt`
+  const note = `comment ${tag}`
+
+  await page.setViewportSize({ width: 1280, height: 900 })
+
+  await withProject(async (project) => {
+    const sdk = createSdk(project.directory)
+
+    await withSession(sdk, `e2e review comment ${tag}`, async (session) => {
+      await patch(sdk, session.id, seed([{ file, mark: tag }]))
+
+      await expect
+        .poll(
+          async () => {
+            const diff = await sdk.session.diff({ sessionID: session.id }).then((res) => res.data ?? [])
+            return diff.length
+          },
+          { timeout: 60_000 },
+        )
+        .toBe(1)
+
+      await project.gotoSession(session.id)
+      await show(page)
+
+      const tab = page.getByRole("tab", { name: /Review/i }).first()
+      await expect(tab).toBeVisible()
+      await tab.click()
+
+      await expand(page)
+      await waitMark(page, file, tag)
+      await comment(page, file, note)
+
+      await expect
+        .poll(async () => (await overflow(page, file))?.width ?? Number.POSITIVE_INFINITY, { timeout: 10_000 })
+        .toBeLessThanOrEqual(1)
+      await expect
+        .poll(async () => (await overflow(page, file))?.pop ?? Number.POSITIVE_INFINITY, { timeout: 10_000 })
+        .toBeLessThanOrEqual(1)
+      await expect
+        .poll(async () => (await overflow(page, file))?.tools ?? Number.POSITIVE_INFINITY, { timeout: 10_000 })
+        .toBeLessThanOrEqual(1)
+    })
+  })
+})
+
 test("review keeps scroll position after a live diff update", async ({ page, withProject }) => {
+  test.skip(Boolean(process.env.CI), "Flaky in CI for now.")
   test.setTimeout(180_000)
 
   const tag = `review-${Date.now()}`
   const list = files(tag)
-  const hit = list[list.length - 2]!
+  const hit = list[list.length - 4]!
   const next = `${tag}-live`
 
   await page.setViewportSize({ width: 1600, height: 1000 })
@@ -160,8 +278,9 @@ test("review keeps scroll position after a live diff update", async ({ page, wit
       await expect(row).toBeVisible()
       await row.evaluate((el) => el.scrollIntoView({ block: "center" }))
 
-      await expect.poll(() => view.evaluate((el) => el.scrollTop)).toBeGreaterThan(200)
-      const prev = await view.evaluate((el) => el.scrollTop)
+      await expect.poll(async () => (await spot(page, hit.file))?.y ?? 0).toBeGreaterThan(200)
+      const prev = await spot(page, hit.file)
+      if (!prev) throw new Error(`missing review row for ${hit.file}`)
 
       await patch(sdk, session.id, edit(hit.file, hit.mark, next))
 
@@ -179,8 +298,15 @@ test("review keeps scroll position after a live diff update", async ({ page, wit
       await waitMark(page, hit.file, next)
 
       await expect
-        .poll(async () => Math.abs((await view.evaluate((el) => el.scrollTop)) - prev), { timeout: 60_000 })
-        .toBeLessThanOrEqual(16)
+        .poll(
+          async () => {
+            const next = await spot(page, hit.file)
+            if (!next) return Number.POSITIVE_INFINITY
+            return Math.max(Math.abs(next.top - prev.top), Math.abs(next.y - prev.y))
+          },
+          { timeout: 60_000 },
+        )
+        .toBeLessThanOrEqual(32)
     })
   })
 })

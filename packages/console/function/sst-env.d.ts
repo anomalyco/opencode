@@ -95,6 +95,18 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
+    "SALESFORCE_CLIENT_ID": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "SALESFORCE_CLIENT_SECRET": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "SALESFORCE_INSTANCE_URL": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "STRIPE_PUBLISHABLE_KEY": {
       "type": "sst.sst.Secret"
       "value": string
@@ -131,6 +143,7 @@ declare module "sst" {
       "value": string
     }
     "ZEN_LITE_PRICE": {
+      "firstMonth50Coupon": string
       "price": string
       "product": string
       "type": "sst.sst.Linkable"

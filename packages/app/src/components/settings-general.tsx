@@ -12,6 +12,7 @@ import { usePlatform } from "@/context/platform"
 import { type AssistantCopyFormat, useSettings, monoFontFamily } from "@/context/settings"
 import { playSound, SOUND_OPTIONS } from "@/utils/sound"
 import { Link } from "./link"
+import { SettingsList } from "./settings-list"
 
 let demoSoundState = {
   cleanup: undefined as (() => void) | undefined,
@@ -113,6 +114,11 @@ export const SettingsGeneral: Component = () => {
     { value: "dark", label: language.t("theme.scheme.dark") },
   ])
 
+  const followupOptions = createMemo((): { value: "queue" | "steer"; label: string }[] => [
+    { value: "queue", label: language.t("settings.general.row.followup.option.queue") },
+    { value: "steer", label: language.t("settings.general.row.followup.option.steer") },
+  ])
+
   const languageOptions = createMemo(() =>
     language.locales.map((locale) => ({
       value: locale,
@@ -176,11 +182,9 @@ export const SettingsGeneral: Component = () => {
     triggerVariant: "settings" as const,
   })
 
-  const AppearanceSection = () => (
+  const GeneralSection = () => (
     <div class="flex flex-col gap-1">
-      <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.appearance")}</h3>
-
-      <div class="bg-surface-raised-base px-4 rounded-lg">
+      <SettingsList>
         <SettingsRow
           title={language.t("settings.general.row.language.title")}
           description={language.t("settings.general.row.language.description")}
@@ -199,8 +203,70 @@ export const SettingsGeneral: Component = () => {
         </SettingsRow>
 
         <SettingsRow
-          title={language.t("settings.general.row.appearance.title")}
-          description={language.t("settings.general.row.appearance.description")}
+          title={language.t("settings.general.row.reasoningSummaries.title")}
+          description={language.t("settings.general.row.reasoningSummaries.description")}
+        >
+          <div data-action="settings-feed-reasoning-summaries">
+            <Switch
+              checked={settings.general.showReasoningSummaries()}
+              onChange={(checked) => settings.general.setShowReasoningSummaries(checked)}
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.shellToolPartsExpanded.title")}
+          description={language.t("settings.general.row.shellToolPartsExpanded.description")}
+        >
+          <div data-action="settings-feed-shell-tool-parts-expanded">
+            <Switch
+              checked={settings.general.shellToolPartsExpanded()}
+              onChange={(checked) => settings.general.setShellToolPartsExpanded(checked)}
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.editToolPartsExpanded.title")}
+          description={language.t("settings.general.row.editToolPartsExpanded.description")}
+        >
+          <div data-action="settings-feed-edit-tool-parts-expanded">
+            <Switch
+              checked={settings.general.editToolPartsExpanded()}
+              onChange={(checked) => settings.general.setEditToolPartsExpanded(checked)}
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.followup.title")}
+          description={language.t("settings.general.row.followup.description")}
+        >
+          <Select
+            data-action="settings-followup"
+            options={followupOptions()}
+            current={followupOptions().find((o) => o.value === settings.general.followup())}
+            value={(o) => o.value}
+            label={(o) => o.label}
+            onSelect={(option) => option && settings.general.setFollowup(option.value)}
+            variant="secondary"
+            size="small"
+            triggerVariant="settings"
+            triggerStyle={{ "min-width": "180px" }}
+          />
+        </SettingsRow>
+      </SettingsList>
+    </div>
+  )
+
+  const AppearanceSection = () => (
+    <div class="flex flex-col gap-1">
+      <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.appearance")}</h3>
+
+      <SettingsList>
+        <SettingsRow
+          title={language.t("settings.general.row.colorScheme.title")}
+          description={language.t("settings.general.row.colorScheme.description")}
         >
           <Select
             data-action="settings-color-scheme"
@@ -217,6 +283,7 @@ export const SettingsGeneral: Component = () => {
             variant="secondary"
             size="small"
             triggerVariant="settings"
+            triggerStyle={{ "min-width": "220px" }}
           />
         </SettingsRow>
 
@@ -273,7 +340,7 @@ export const SettingsGeneral: Component = () => {
             )}
           </Select>
         </SettingsRow>
-      </div>
+      </SettingsList>
     </div>
   )
 
@@ -281,7 +348,7 @@ export const SettingsGeneral: Component = () => {
     <div class="flex flex-col gap-1">
       <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.feed")}</h3>
 
-      <div class="bg-surface-raised-base px-4 rounded-lg">
+      <SettingsList>
         <Show when={platform.platform === "desktop"}>
           <SettingsRow
             title={language.t("settings.general.row.assistantCopyFormat.title")}
@@ -337,7 +404,7 @@ export const SettingsGeneral: Component = () => {
             />
           </div>
         </SettingsRow>
-      </div>
+      </SettingsList>
     </div>
   )
 
@@ -345,7 +412,7 @@ export const SettingsGeneral: Component = () => {
     <div class="flex flex-col gap-1">
       <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.notifications")}</h3>
 
-      <div class="bg-surface-raised-base px-4 rounded-lg">
+      <SettingsList>
         <SettingsRow
           title={language.t("settings.general.notifications.agent.title")}
           description={language.t("settings.general.notifications.agent.description")}
@@ -381,7 +448,7 @@ export const SettingsGeneral: Component = () => {
             />
           </div>
         </SettingsRow>
-      </div>
+      </SettingsList>
     </div>
   )
 
@@ -389,7 +456,7 @@ export const SettingsGeneral: Component = () => {
     <div class="flex flex-col gap-1">
       <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.sounds")}</h3>
 
-      <div class="bg-surface-raised-base px-4 rounded-lg">
+      <SettingsList>
         <SettingsRow
           title={language.t("settings.general.sounds.agent.title")}
           description={language.t("settings.general.sounds.agent.description")}
@@ -434,7 +501,7 @@ export const SettingsGeneral: Component = () => {
             )}
           />
         </SettingsRow>
-      </div>
+      </SettingsList>
     </div>
   )
 
@@ -442,7 +509,7 @@ export const SettingsGeneral: Component = () => {
     <div class="flex flex-col gap-1">
       <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.updates")}</h3>
 
-      <div class="bg-surface-raised-base px-4 rounded-lg">
+      <SettingsList>
         <SettingsRow
           title={language.t("settings.updates.row.startup.title")}
           description={language.t("settings.updates.row.startup.description")}
@@ -478,7 +545,7 @@ export const SettingsGeneral: Component = () => {
               : language.t("settings.updates.action.checkNow")}
           </Button>
         </SettingsRow>
-      </div>
+      </SettingsList>
     </div>
   )
 
@@ -491,9 +558,11 @@ export const SettingsGeneral: Component = () => {
       </div>
 
       <div class="flex flex-col gap-8 w-full">
-        <AppearanceSection />
+        <GeneralSection />
 
         <FeedSection />
+
+        <AppearanceSection />
 
         <NotificationsSection />
 
@@ -508,7 +577,7 @@ export const SettingsGeneral: Component = () => {
               <div class="flex flex-col gap-1">
                 <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.desktop.section.wsl")}</h3>
 
-                <div class="bg-surface-raised-base px-4 rounded-lg">
+                <SettingsList>
                   <SettingsRow
                     title={language.t("settings.desktop.wsl.title")}
                     description={language.t("settings.desktop.wsl.description")}
@@ -521,7 +590,7 @@ export const SettingsGeneral: Component = () => {
                       />
                     </div>
                   </SettingsRow>
-                </div>
+                </SettingsList>
               </div>
             )
           }}
@@ -541,7 +610,7 @@ export const SettingsGeneral: Component = () => {
               <div class="flex flex-col gap-1">
                 <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.display")}</h3>
 
-                <div class="bg-surface-raised-base px-4 rounded-lg">
+                <SettingsList>
                   <SettingsRow
                     title={
                       <div class="flex items-center gap-2">
@@ -559,7 +628,7 @@ export const SettingsGeneral: Component = () => {
                       <Switch checked={value() === "wayland"} onChange={onChange} />
                     </div>
                   </SettingsRow>
-                </div>
+                </SettingsList>
               </div>
             )
           }}
@@ -577,12 +646,12 @@ interface SettingsRowProps {
 
 const SettingsRow: Component<SettingsRowProps> = (props) => {
   return (
-    <div class="flex items-center gap-4 py-3 border-b border-border-weak-base last:border-none">
-      <div class="flex flex-col gap-0.5 min-w-0 flex-1">
+    <div class="flex flex-wrap items-center gap-4 py-3 border-b border-border-weak-base last:border-none sm:flex-nowrap">
+      <div class="flex min-w-0 flex-1 flex-col gap-0.5">
         <span class="text-14-medium text-text-strong">{props.title}</span>
         <span class="text-12-regular text-text-weak">{props.description}</span>
       </div>
-      <div class="flex-shrink-0">{props.children}</div>
+      <div class="flex w-full justify-end sm:w-auto sm:shrink-0">{props.children}</div>
     </div>
   )
 }
