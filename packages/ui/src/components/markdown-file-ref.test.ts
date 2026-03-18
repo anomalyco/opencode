@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { parseCodeFileRef } from "./markdown-file-ref"
+import { parseCodeFileRef, splitCodeText } from "./markdown-file-ref"
 
 describe("parseCodeFileRef", () => {
   test("parses relative path with line and trims punctuation", () => {
@@ -45,5 +45,19 @@ describe("parseCodeFileRef", () => {
 
   test("ignores non-path text", () => {
     expect(parseCodeFileRef("hello-world", "")).toBeUndefined()
+  })
+})
+
+describe("splitCodeText", () => {
+  test("splits plain text file refs", () => {
+    expect(splitCodeText("See src/app.ts:42 for details", "")).toEqual([
+      { text: "See " },
+      { text: "src/app.ts:42", file: { path: "src/app.ts", line: 42 } },
+      { text: " for details" },
+    ])
+  })
+
+  test("keeps plain text without refs intact", () => {
+    expect(splitCodeText("hello world", "")).toEqual([{ text: "hello world" }])
   })
 })

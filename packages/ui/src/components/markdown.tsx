@@ -1,7 +1,7 @@
 import { useMarked } from "../context/marked"
 import { useI18n } from "../context/i18n"
 import { useData } from "../context/data"
-import { parseCodeFileRef, type FileRef } from "./markdown-file-ref"
+import { parseCodeFileRef, splitCodeText, type FileRef } from "./markdown-file-ref"
 import DOMPurify from "dompurify"
 import morphdom from "morphdom"
 import { checksum } from "@opencode-ai/util/encode"
@@ -106,6 +106,16 @@ function createCopyButton(labels: CopyLabels) {
   return button
 }
 
+function createFileButton(file: FileRef, text: string) {
+  const button = document.createElement("button")
+  button.type = "button"
+  button.className = "file-link"
+  button.setAttribute("data-file-path", file.path)
+  if (file.line) button.setAttribute("data-file-line", String(file.line))
+  button.textContent = text
+  return button
+}
+
 function setCopyState(button: HTMLButtonElement, labels: CopyLabels, copied: boolean) {
   if (copied) {
     button.setAttribute("data-copied", "true")
@@ -175,13 +185,38 @@ function markCodeLinks(root: HTMLDivElement, directory: string, openable: boolea
     const file = parseCodeFileRef(code.textContent ?? "", directory)
     if (!file) continue
 
-    const button = document.createElement("button")
-    button.type = "button"
-    button.className = "file-link"
-    button.setAttribute("data-file-path", file.path)
-    if (file.line) button.setAttribute("data-file-line", String(file.line))
+    const button = createFileButton(file, "")
     code.parentNode?.replaceChild(button, code)
     button.appendChild(code)
+  }
+}
+
+function markTextLinks(root: HTMLDivElement, directory: string, openable: boolean) {
+  if (!openable) return
+  const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  const list: Text[] = []
+  let node = walk.nextNode()
+  while (node) {
+    if (node instanceof Text) list.push(node)
+    node = walk.nextNode()
+  }
+
+  for (const item of list) {
+    const parent = item.parentElement
+    const text = item.textContent ?? ""
+    if (!parent || !text.trim()) continue
+    if (parent.closest("pre, code, a, button")) continue
+    const parts = splitCodeText(text, directory)
+    if (!parts.some((part) => part.file)) continue
+    const frag = document.createDocumentFragment()
+    for (const part of parts) {
+      if (!part.file) {
+        frag.appendChild(document.createTextNode(part.text))
+        continue
+      }
+      frag.appendChild(createFileButton(part.file, part.text))
+    }
+    item.parentNode?.replaceChild(frag, item)
   }
 }
 
@@ -191,6 +226,7 @@ function decorate(root: HTMLDivElement, labels: CopyLabels, directory: string, o
     ensureCodeWrapper(block, labels)
   }
   markCodeLinks(root, directory, openable)
+  markTextLinks(root, directory, openable)
 }
 
 function setupCodeCopy(root: HTMLDivElement, labels: CopyLabels, onFileOpen?: (input: FileRef) => void) {

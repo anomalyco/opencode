@@ -279,6 +279,18 @@
   cursor: pointer;
 }
 
+[data-component="markdown"] button.file-link:focus-visible {
+  outline: 1px solid var(--border-interactive-base);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+[data-component="markdown"] button.file-link:hover,
+[data-component="markdown"] button.file-link:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 [data-component="markdown"] button.file-link:hover > code {
   text-decoration: underline;
   text-underline-offset: 2px;

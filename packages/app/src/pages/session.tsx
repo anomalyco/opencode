@@ -914,7 +914,15 @@ export default function Page() {
     tabForPath: file.tab,
     openTab: tabs().open,
     setActive: tabs().setActive,
+    getFile: file.get,
     setSelectedLines: file.setSelectedLines,
+    onLineError: ({ path, line, max }) => {
+      showToast({
+        variant: "default",
+        title: "Line unavailable",
+        description: `${path}:${line} is out of range, opened line ${max} instead.`,
+      })
+    },
     loadFile: file.load,
   })
 

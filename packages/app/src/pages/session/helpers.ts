@@ -100,8 +100,18 @@ export const createOpenReviewFile = (input: {
   setActive: (tab: string) => void
   openReviewPanel: () => void
   setSelectedLines: (path: string, range: { start: number; end: number } | null) => void
+  getFile: (path: string) => { content?: { content?: unknown } } | undefined
+  onLineError?: (input: { path: string; line: number; max: number }) => void
   loadFile: (path: string) => any | Promise<void>
 }) => {
+  const lines = (value: unknown) => {
+    if (typeof value === "string") return Math.max(1, value.split("\n").length - (value.endsWith("\n") ? 1 : 0))
+    if (Array.isArray(value)) return Math.max(1, value.length)
+    if (value == null) return 0
+    const text = String(value)
+    return Math.max(1, text.split("\n").length - (text.endsWith("\n") ? 1 : 0))
+  }
+
   return (path: string, line?: number) => {
     const tab = input.tabForPath(path)
     batch(() => {
@@ -109,9 +119,12 @@ export const createOpenReviewFile = (input: {
       input.openReviewPanel()
       const maybePromise = input.loadFile(path)
       const openTab = () => {
+        const max = lines(input.getFile(path)?.content?.content)
+        const next = typeof line === "number" && max > 0 ? Math.max(1, Math.min(line, max)) : undefined
+        if (typeof line === "number" && max > 0 && next !== line) input.onLineError?.({ path, line, max })
         input.openTab(tab)
         input.setActive(tab)
-        input.setSelectedLines(path, line ? { start: line, end: line } : null)
+        input.setSelectedLines(path, next ? { start: next, end: next } : null)
       }
       if (maybePromise instanceof Promise) maybePromise.then(openTab)
       else openTab()

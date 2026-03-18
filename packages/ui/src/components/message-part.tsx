@@ -56,6 +56,7 @@ import { ToolFile } from "./tool-file"
 import { animate } from "motion"
 import { useLocation } from "@solidjs/router"
 import { attached, inline, kind } from "./message-file"
+import { splitCodeText, type FileRef } from "./markdown-file-ref"
 
 function ShellSubmessage(props: { text: string; animate?: boolean }) {
   let widthRef: HTMLSpanElement | undefined
@@ -214,12 +215,31 @@ function getDirectory(path: string | undefined) {
 function openProjectFile(
   path: string | undefined,
   directory: string,
-  openFilePath?: (input: { path: string }) => void,
+  openFilePath?: (input: FileRef) => void,
+  line?: number,
 ) {
   if (!path) return
   const file = relativizeProjectPath(path, directory).replace(/^\//, "")
   if (!file) return
-  openFilePath?.({ path: file })
+  openFilePath?.({ path: file, line })
+}
+
+function LinkText(props: { text: string }) {
+  const data = useData()
+  const parts = createMemo(() => splitCodeText(props.text, data.directory))
+
+  return (
+    <For each={parts()}>
+      {(part) => {
+        if (!part.file || !data.openFilePath) return part.text
+        return (
+          <button type="button" class="file-link" onClick={() => data.openFilePath?.(part.file!)}>
+            {part.text}
+          </button>
+        )
+      }}
+    </For>
+  )
 }
 
 import type { IconProps } from "./icon"
@@ -1761,7 +1781,9 @@ ToolRegistry.register({
           </div>
           <div data-slot="bash-scroll" data-scrollable>
             <pre data-slot="bash-pre">
-              <code>{text()}</code>
+              <code>
+                <LinkText text={text()} />
+              </code>
             </pre>
           </div>
         </div>

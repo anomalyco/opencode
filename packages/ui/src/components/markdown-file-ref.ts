@@ -3,6 +3,11 @@ export type FileRef = {
   line?: number
 }
 
+export type FileText = {
+  text: string
+  file?: FileRef
+}
+
 function looksLikePath(path: string) {
   if (!path) return false
   if (path.startsWith("./") || path.startsWith("../") || path.startsWith("/")) return true
@@ -55,4 +60,17 @@ export function parseCodeFileRef(text: string, directory: string): FileRef | und
   const path = normalizeProjectPath(value, directory)
   if (!path) return
   return { path, line: lineFromUrlHash ?? lineFromHash ?? lineFromSuffix }
+}
+
+export function splitCodeText(text: string, directory: string): FileText[] {
+  return (text.match(/\s+|[^\s]+/g) ?? []).reduce<FileText[]>((list, item) => {
+    const file = parseCodeFileRef(item, directory)
+    if (file) return [...list, { text: item, file }]
+    const last = list.at(-1)
+    if (last && !last.file) {
+      last.text += item
+      return list
+    }
+    return [...list, { text: item }]
+  }, [])
 }
