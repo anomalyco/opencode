@@ -188,9 +188,17 @@ export function DialogConnectProvider(props: { provider: string }) {
         return true
       }),
     )
+    const valid = createMemo(() =>
+      visible().every((prompt) => {
+        const value = formStore.value[prompt.key] ?? ""
+        if (prompt.type === "text") return value.trim().length > 0
+        return value.length > 0
+      }),
+    )
 
     async function handleSubmit(e: SubmitEvent) {
       e.preventDefault()
+      if (!valid()) return
       if (store.methodIndex === undefined) return
       await selectMethod(store.methodIndex, formStore.value)
     }
@@ -224,10 +232,7 @@ export function DialogConnectProvider(props: { provider: string }) {
                   }}
                 >
                   {(option) => (
-                    <div class="w-full flex items-center gap-x-2">
-                      <div class="w-4 h-2 rounded-[1px] bg-input-base shadow-xs-border-base flex items-center justify-center">
-                        <div class="w-2.5 h-0.5 ml-0 bg-icon-strong-base hidden" data-slot="list-item-extra-icon" />
-                      </div>
+                    <div class="w-full flex items-center gap-x-2.5">
                       <span>{option.label}</span>
                       <span class="text-14-regular text-text-weak">{option.hint}</span>
                     </div>
@@ -237,7 +242,7 @@ export function DialogConnectProvider(props: { provider: string }) {
             )
           }}
         </For>
-        <Button class="w-auto" type="submit" size="large" variant="primary">
+        <Button class="w-auto" type="submit" size="large" variant="primary" disabled={!valid()}>
           {language.t("common.continue")}
         </Button>
       </form>
