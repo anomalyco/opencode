@@ -53,3 +53,9 @@ export async function writeClipboardPayload(input: { text: string; html?: string
     }),
   ])
 }
+
+export async function writeMarkdownClipboard(input: { text: string; html?: string }) {
+  if (!input.text) return
+  const html = serializeMarkdownClipboardHTML(input.html ?? "")
+  await writeClipboardPayload({ text: input.text, html: html || undefined })
+}

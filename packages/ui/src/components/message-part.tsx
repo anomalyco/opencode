@@ -55,7 +55,8 @@ import { AnimatedCountList } from "./tool-count-summary"
 import { ToolStatusTitle } from "./tool-status-title"
 import { animate } from "motion"
 import { useLocation } from "@solidjs/router"
-import { MarkdownCopyMode, serializeMarkdownClipboardHTML, writeClipboardPayload } from "./markdown-copy"
+import type { MarkdownCopyMode } from "./markdown-copy"
+import { TextPartCopyControl } from "./text-part-copy-control"
 import { attached, inline, kind } from "./message-file"
 
 function ShellSubmessage(props: { text: string; animate?: boolean }) {
@@ -1379,37 +1380,6 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   })
   const copyMode = createMemo<MarkdownCopyMode>(() => props.assistantCopyMode ?? "plain")
   let root: HTMLDivElement | undefined
-  const [copied, setCopied] = createSignal(false)
-  const copyLabel = createMemo(() => {
-    if (copyMode() === "rich") return i18n.t("ui.message.copyResponseRich")
-    return i18n.t("ui.message.copyResponse")
-  })
-
-  const handleRichCopy = async () => {
-    const text = displayText()
-    if (!text) return
-    const markdown = root?.querySelector('[data-slot="text-part-body"] [data-component="markdown"]')
-    if (!(markdown instanceof HTMLDivElement)) {
-      await navigator.clipboard.writeText(text)
-      return
-    }
-    const wrap = document.createElement("div")
-    wrap.innerHTML = markdown.innerHTML
-    for (const item of wrap.querySelectorAll('[data-slot="markdown-copy-button"]')) {
-      item.remove()
-    }
-    const html = serializeMarkdownClipboardHTML(wrap.innerHTML)
-    await writeClipboardPayload({ text, html: html || undefined })
-  }
-
-  const copy = async (mode: "plain" | "rich") => {
-    const text = displayText()
-    if (!text) return
-    if (mode === "rich") await handleRichCopy()
-    if (mode === "plain") await navigator.clipboard.writeText(text)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
 
   return (
     <Show when={throttledText()}>
@@ -1418,49 +1388,13 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
           <Markdown text={throttledText()} cacheKey={part().id} />
         </div>
         <Show when={showCopy()}>
-          <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
-            <Show when={copyMode() !== "ask"}>
-              <Tooltip value={copied() ? i18n.t("ui.message.copied") : copyLabel()} placement="top" gutter={4}>
-                <IconButton
-                  icon={copied() ? "check" : "copy"}
-                  size="normal"
-                  variant="ghost"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => copy(copyMode() === "rich" ? "rich" : "plain")}
-                  aria-label={copied() ? i18n.t("ui.message.copied") : copyLabel()}
-                />
-              </Tooltip>
-            </Show>
-            <Show when={copyMode() === "ask"}>
-              <DropdownMenu gutter={4} placement="bottom-start">
-                <Tooltip value={i18n.t("ui.message.copyOptions")} placement="top" gutter={4}>
-                  <DropdownMenu.Trigger
-                    as={IconButton}
-                    icon="copy"
-                    size="normal"
-                    variant="ghost"
-                    onMouseDown={(e: MouseEvent) => e.preventDefault()}
-                    aria-label={i18n.t("ui.message.copyOptions")}
-                  />
-                </Tooltip>
-                <DropdownMenu.Portal>
-                  <DropdownMenu.Content>
-                    <DropdownMenu.Item onSelect={() => void copy("plain")}>
-                      <DropdownMenu.ItemLabel>{i18n.t("ui.message.copyResponsePlain")}</DropdownMenu.ItemLabel>
-                    </DropdownMenu.Item>
-                    <DropdownMenu.Item onSelect={() => void copy("rich")}>
-                      <DropdownMenu.ItemLabel>{i18n.t("ui.message.copyResponseRich")}</DropdownMenu.ItemLabel>
-                    </DropdownMenu.Item>
-                  </DropdownMenu.Content>
-                </DropdownMenu.Portal>
-              </DropdownMenu>
-            </Show>
-            <Show when={meta()}>
-              <span data-slot="text-part-meta" class="text-12-regular text-text-weak cursor-default">
-                {meta()}
-              </span>
-            </Show>
-          </div>
+          <TextPartCopyControl
+            root={root}
+            displayText={displayText}
+            interrupted={interrupted()}
+            copyMode={copyMode()}
+            meta={meta()}
+          />
         </Show>
       </div>
     </Show>

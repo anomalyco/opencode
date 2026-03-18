@@ -4,6 +4,7 @@ import {
   markdownClipboardMonoFont,
   serializeMarkdownClipboardHTML,
   writeClipboardPayload,
+  writeMarkdownClipboard,
 } from "./markdown-copy"
 
 describe("markdown clipboard html", () => {
@@ -86,6 +87,39 @@ describe("markdown clipboard payload", () => {
     await writeClipboardPayload({ text: "plain" })
 
     expect(textWrites).toEqual(["plain"])
+
+    Object.defineProperty(globalThis, "navigator", { value: originalNavigator, configurable: true })
+    Object.defineProperty(globalThis, "ClipboardItem", { value: originalClipboardItem, configurable: true })
+  })
+
+  test("serializes markdown html before writing clipboard payload", async () => {
+    const originalNavigator = globalThis.navigator
+    const originalClipboardItem = globalThis.ClipboardItem
+
+    const writes: unknown[][] = []
+    class FakeClipboardItem {
+      constructor(public data: Record<string, Blob>) {}
+    }
+
+    Object.defineProperty(globalThis, "navigator", {
+      value: {
+        clipboard: {
+          write: async (items: unknown[]) => {
+            writes.push(items)
+          },
+          writeText: async () => {},
+        },
+      },
+      configurable: true,
+    })
+    Object.defineProperty(globalThis, "ClipboardItem", { value: FakeClipboardItem, configurable: true })
+
+    await writeMarkdownClipboard({ text: "hello", html: "<pre><code>echo test</code></pre>" })
+
+    const item = writes[0]?.[0] as FakeClipboardItem
+    expect(await item.data["text/plain"]?.text()).toBe("hello")
+    expect(await item.data["text/html"]?.text()).toContain(`<div style="font-family: ${markdownClipboardFont};">`)
+    expect(await item.data["text/html"]?.text()).toContain("<pre><code>echo test</code></pre>")
 
     Object.defineProperty(globalThis, "navigator", { value: originalNavigator, configurable: true })
     Object.defineProperty(globalThis, "ClipboardItem", { value: originalClipboardItem, configurable: true })
