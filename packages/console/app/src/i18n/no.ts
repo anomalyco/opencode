@@ -251,7 +251,7 @@ export const dict = {
 
   "go.title": "OpenCode Go | Rimelige kodemodeller for alle",
   "go.meta.description":
-    "Go starter på $5 for den første måneden, deretter $10/måned, med sjenerøse 5-timers forespørselsgrenser for GLM-5, Kimi K2.5 og MiniMax M2.5.",
+    "Go starter på $5 for den første måneden, deretter $10/måned, med sjenerøse 5-timers forespørselsgrenser for GLM-5, Kimi K2.5, MiniMax M2.5 og MiniMax M2.7.",
   "go.hero.title": "Rimelige kodemodeller for alle",
   "go.hero.body":
     "Go bringer agent-koding til programmerere over hele verden. Med rause grenser og pålitelig tilgang til de mest kapable åpen kildekode-modellene, kan du bygge med kraftige agenter uten å bekymre deg for kostnader eller tilgjengelighet.",
@@ -299,7 +299,7 @@ export const dict = {
   "go.problem.item1": "Rimelig abonnementspris",
   "go.problem.item2": "Rause grenser og pålitelig tilgang",
   "go.problem.item3": "Bygget for så mange programmerere som mulig",
-  "go.problem.item4": "Inkluderer GLM-5, Kimi K2.5 og MiniMax M2.5",
+  "go.problem.item4": "Inkluderer GLM-5, Kimi K2.5, MiniMax M2.5 og MiniMax M2.7",
   "go.how.title": "Hvordan Go fungerer",
   "go.how.body":
     "Go starter på $5 for den første måneden, deretter $10/måned. Du kan bruke det med OpenCode eller hvilken som helst agent.",
@@ -322,10 +322,10 @@ export const dict = {
   "go.faq.a1":
     "Go er et rimelig abonnement som gir deg pålitelig tilgang til kapable åpen kildekode-modeller for agent-koding.",
   "go.faq.q2": "Hvilke modeller inkluderer Go?",
-  "go.faq.a2": "Go inkluderer GLM-5, Kimi K2.5 og MiniMax M2.5, med rause grenser og pålitelig tilgang.",
+  "go.faq.a2": "Go inkluderer GLM-5, Kimi K2.5, MiniMax M2.5 og MiniMax M2.7, med rause grenser og pålitelig tilgang.",
   "go.faq.q3": "Er Go det samme som Zen?",
   "go.faq.a3":
-    "Nei. Zen er betaling etter bruk, mens Go starter på $5 for den første måneden, deretter $10/måned, med sjenerøse grenser og pålitelig tilgang til åpen kildekode-modellene GLM-5, Kimi K2.5 og MiniMax M2.5.",
+    "Nei. Zen er betaling etter bruk, mens Go starter på $5 for den første måneden, deretter $10/måned, med sjenerøse grenser og pålitelig tilgang til åpen kildekode-modellene GLM-5, Kimi K2.5, MiniMax M2.5 og MiniMax M2.7.",
   "go.faq.q4": "Hva koster Go?",
   "go.faq.a4.p1.beforePricing": "Go koster",
   "go.faq.a4.p1.pricingLink": "$5 første måned",
@@ -350,7 +350,7 @@ export const dict = {
 
   "go.faq.q9": "Hva er forskjellen mellom gratis modeller og Go?",
   "go.faq.a9":
-    "Gratis modeller inkluderer Big Pickle pluss kampanjemodeller tilgjengelig på det tidspunktet, med en kvote på 200 forespørsler/dag. Go inkluderer GLM-5, Kimi K2.5 og MiniMax M2.5 med høyere kvoter håndhevet over rullerende vinduer (5 timer, ukentlig og månedlig), omtrent tilsvarende $12 per 5 timer, $30 per uke og $60 per måned (faktiske forespørselsantall varierer etter modell og bruk).",
+    "Gratis modeller inkluderer Big Pickle pluss kampanjemodeller tilgjengelig på det tidspunktet, med en kvote på 200 forespørsler/dag. Go inkluderer GLM-5, Kimi K2.5, MiniMax M2.5 og MiniMax M2.7 med høyere kvoter håndhevet over rullerende vinduer (5 timer, ukentlig og månedlig), omtrent tilsvarende $12 per 5 timer, $30 per uke og $60 per måned (faktiske forespørselsantall varierer etter modell og bruk).",
 
   "zen.api.error.rateLimitExceeded": "Rate limit overskredet. Vennligst prøv igjen senere.",
   "zen.api.error.modelNotSupported": "Modell {{model}} støttes ikke",
@@ -695,8 +695,12 @@ export const dict = {
   "enterprise.form.name.placeholder": "Jeff Bezos",
   "enterprise.form.role.label": "Rolle",
   "enterprise.form.role.placeholder": "Styreleder",
+  "enterprise.form.company.label": "Selskap",
+  "enterprise.form.company.placeholder": "Acme Inc",
   "enterprise.form.email.label": "Bedrifts-e-post",
   "enterprise.form.email.placeholder": "jeff@amazon.com",
+  "enterprise.form.phone.label": "Telefonnummer",
+  "enterprise.form.phone.placeholder": "+1 234 567 8900",
   "enterprise.form.message.label": "Hvilket problem prøver dere å løse?",
   "enterprise.form.message.placeholder": "Vi trenger hjelp med...",
   "enterprise.form.send": "Send",
