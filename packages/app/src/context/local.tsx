@@ -119,6 +119,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       setStore("current", items[0]?.name)
     })
 
+    createEffect(() => {
+      if (!id()) setStore("draft", undefined)
+    })
+
     const scope = createMemo<State | undefined>(() => {
       const session = id()
       if (!session) return store.draft

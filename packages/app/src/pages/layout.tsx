@@ -564,6 +564,8 @@ export default function Layout(props: ParentProps) {
   })
 
   const [autoselecting] = createResource(async () => {
+    if (!state.autoselect) return
+
     await ready.promise
     await layout.ready.promise
 
