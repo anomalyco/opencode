@@ -12,3 +12,7 @@ export const runtime = ManagedRuntime.make(
 export function runPromiseInstance<A, E>(effect: Effect.Effect<A, E, InstanceServices>) {
   return runtime.runPromise(effect.pipe(Effect.provide(Instances.get(Instance.directory))))
 }
+
+export function disposeRuntime() {
+  return runtime.dispose()
+}
