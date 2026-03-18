@@ -147,11 +147,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       const sidebar = value.sidebar
       const migratedSidebar = (() => {
         if (!isRecord(sidebar)) return sidebar
-        if (typeof sidebar.workspaces !== "boolean") return sidebar
+        if (typeof sidebar.workspaces !== "boolean") return { ...sidebar, gridMode: sidebar.gridMode ?? false }
         return {
           ...sidebar,
           workspaces: {},
           workspacesDefault: sidebar.workspaces,
+          gridMode: sidebar.gridMode ?? false,
         }
       })()
 
@@ -233,6 +234,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           width: DEFAULT_PANEL_WIDTH,
           workspaces: {} as Record<string, boolean>,
           workspacesDefault: false,
+          gridMode: false,
         },
         terminal: {
           height: DEFAULT_TERMINAL_HEIGHT,
@@ -594,6 +596,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         toggle() {
           setStore("sidebar", "opened", (x) => !x)
+        },
+        gridMode: createMemo(() => store.sidebar.gridMode ?? false),
+        toggleGridMode() {
+          setStore("sidebar", "gridMode", (x) => !x)
         },
         width: createMemo(() => store.sidebar.width),
         resize(width: number) {

@@ -8,7 +8,7 @@ import { Spinner } from "@opencode-ai/ui/spinner"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { getFilename } from "@opencode-ai/util/path"
-import { A, useNavigate, useParams } from "@solidjs/router"
+import { A, useNavigate, useParams, useSearchParams } from "@solidjs/router"
 import { type Accessor, createMemo, For, type JSX, Match, onCleanup, Show, Switch } from "solid-js"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
@@ -101,7 +101,13 @@ const SessionRow = (props: {
   warmPress: () => void
   warmFocus: () => void
   cancelHoverPrefetch: () => void
-}): JSX.Element => (
+}): JSX.Element => {
+  const layout = useLayout()
+  const [searchParams] = useSearchParams<{ grid?: string }>()
+  const params = useParams()
+  const navigate = useNavigate()
+
+  return (
   <A
     href={`/${props.slug}/session/${props.session.id}`}
     class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none transition-[padding] ${props.mobile ? "pr-7" : ""} group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7 ${props.dense ? "py-0.5" : "py-1"}`}
@@ -109,10 +115,21 @@ const SessionRow = (props: {
     onPointerEnter={props.warmHover}
     onPointerLeave={props.cancelHoverPrefetch}
     onFocus={props.warmFocus}
-    onClick={() => {
+    onClick={(e) => {
       props.setHoverSession(undefined)
-      if (props.sidebarOpened()) return
-      props.clearHoverProjectSoon()
+      if (!props.sidebarOpened()) {
+        props.clearHoverProjectSoon()
+      }
+      
+      if (layout.sidebar.gridMode()) {
+        e.preventDefault()
+        const existing = searchParams.grid ? searchParams.grid.split(",") : (params.id ? [params.id] : [])
+        if (!existing.includes(props.session.id)) {
+          existing.push(props.session.id)
+        }
+        const toKeep = existing.slice(-9)
+        navigate(`/${props.slug}/session/${params.id ?? props.session.id}?grid=${toKeep.join(",")}`)
+      }
     }}
   >
     <div class="flex items-center gap-1 w-full">
@@ -140,7 +157,8 @@ const SessionRow = (props: {
       </span>
     </div>
   </A>
-)
+  )
+}
 
 const SessionHoverPreview = (props: {
   mobile?: boolean
@@ -395,6 +413,54 @@ export const NewSessionItem = (props: {
 
   return (
     <div class="group/session relative w-full rounded-md cursor-default transition-colors pl-2 pr-3 hover:bg-surface-raised-base-hover [&:has(:focus-visible)]:bg-surface-raised-base-hover has-[.active]:bg-surface-base-active">
+      <Show
+        when={!tooltip()}
+        fallback={
+          <Tooltip placement={props.mobile ? "bottom" : "right"} value={label} gutter={10}>
+            {item}
+          </Tooltip>
+        }
+      >
+        {item}
+      </Show>
+    </div>
+  )
+}
+
+export const GridToggleItem = (props: {
+  mobile?: boolean
+  dense?: boolean
+  sidebarExpanded: Accessor<boolean>
+}): JSX.Element => {
+  const layout = useLayout()
+  const language = useLanguage()
+  const active = createMemo(() => layout.sidebar.gridMode())
+  
+  const label = "Grid Mode"
+  const tooltip = () => props.mobile || !props.sidebarExpanded()
+  const item = (
+    <button
+      class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none ${props.dense ? "py-0.5" : "py-1"}`}
+      onClick={(e) => {
+        layout.sidebar.toggleGridMode()
+      }}
+    >
+      <div class="flex items-center gap-1 w-full">
+        <div class="shrink-0 size-6 flex items-center justify-center">
+          <Icon name="expand" size="small" class={active() ? "text-icon-brand-base" : "text-icon-weak"} />
+        </div>
+        <span class={`text-14-regular grow-1 min-w-0 overflow-hidden text-ellipsis truncate ${active() ? "text-icon-brand-base font-medium" : "text-text-strong"}`}>
+          {label}
+        </span>
+        <Show when={active()}>
+          <span class="text-[10px] uppercase font-bold text-icon-brand-base bg-surface-brand-base px-1.5 py-0.5 rounded-full mr-1">ON</span>
+        </Show>
+      </div>
+    </button>
+  )
+
+  return (
+    <div class={`group/session relative w-full rounded-md cursor-default transition-colors pl-2 pr-3 hover:bg-surface-raised-base-hover [&:has(:focus-visible)]:bg-surface-raised-base-hover ${active() ? "bg-surface-raised-base" : ""}`}>
       <Show
         when={!tooltip()}
         fallback={

@@ -2,6 +2,7 @@ import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { batch, createEffect, createMemo, createRoot, on, onCleanup } from "solid-js"
 import { useParams } from "@solidjs/router"
+import { useSessionParams } from "@/hooks/use-session-params"
 import { useSDK } from "./sdk"
 import type { Platform } from "./platform"
 import { defaultTitle, titleNumber } from "./terminal-title"
@@ -334,7 +335,7 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
   gate: false,
   init: () => {
     const sdk = useSDK()
-    const params = useParams()
+    const params = useSessionParams()
     const cache = new Map<string, TerminalCacheEntry>()
 
     caches.add(cache)

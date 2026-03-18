@@ -16,7 +16,7 @@ import { type Session } from "@opencode-ai/sdk/v2/client"
 import { type LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
-import { NewSessionItem, SessionItem, SessionSkeleton } from "./sidebar-items"
+import { NewSessionItem, GridToggleItem, SessionItem, SessionSkeleton } from "./sidebar-items"
 import { childMapByParent, sortedRootSessions } from "./helpers"
 
 type InlineEditorComponent = (props: {

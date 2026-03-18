@@ -6,6 +6,7 @@ import { Persist, persisted } from "@/utils/persist"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "./global-sync"
 import { useParams } from "@solidjs/router"
+import { useSessionParams } from "@/hooks/use-session-params"
 import { decode64 } from "@/utils/base64"
 import {
   acceptKey,
@@ -47,7 +48,7 @@ function hasPermissionPromptRules(permission: unknown) {
 export const { use: usePermission, provider: PermissionProvider } = createSimpleContext({
   name: "Permission",
   init: () => {
-    const params = useParams()
+    const params = useSessionParams()
     const globalSDK = useGlobalSDK()
     const globalSync = useGlobalSync()
 

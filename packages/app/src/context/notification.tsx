@@ -1,6 +1,7 @@
 import { createStore, reconcile } from "solid-js/store"
 import { batch, createEffect, createMemo, onCleanup } from "solid-js"
 import { useParams } from "@solidjs/router"
+import { useSessionParams } from "@/hooks/use-session-params"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useGlobalSDK } from "./global-sdk"
 import { useGlobalSync } from "./global-sync"
@@ -108,7 +109,7 @@ function buildNotificationIndex(list: Notification[]) {
 export const { use: useNotification, provider: NotificationProvider } = createSimpleContext({
   name: "Notification",
   init: () => {
-    const params = useParams()
+    const params = useSessionParams()
     const globalSDK = useGlobalSDK()
     const globalSync = useGlobalSync()
     const platform = usePlatform()

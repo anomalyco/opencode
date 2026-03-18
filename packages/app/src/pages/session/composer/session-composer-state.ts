@@ -2,6 +2,7 @@ import { createEffect, createMemo, on, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { PermissionRequest, QuestionRequest, Todo } from "@opencode-ai/sdk/v2"
 import { useParams } from "@solidjs/router"
+import { useSessionParams } from "@/hooks/use-session-params"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
@@ -25,7 +26,7 @@ export const todoState = (input: {
 const idle = { type: "idle" as const }
 
 export function createSessionComposerState(options?: { closeMs?: number | (() => number) }) {
-  const params = useParams()
+  const params = useSessionParams()
   const sdk = useSDK()
   const sync = useSync()
   const globalSync = useGlobalSync()

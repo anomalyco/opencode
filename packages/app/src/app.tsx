@@ -8,7 +8,7 @@ import { Font } from "@opencode-ai/ui/font"
 import { Splash } from "@opencode-ai/ui/logo"
 import { ThemeProvider } from "@opencode-ai/ui/theme"
 import { MetaProvider } from "@solidjs/meta"
-import { type BaseRouterProps, Navigate, Route, Router } from "@solidjs/router"
+import { type BaseRouterProps, Navigate, Route, Router, useSearchParams } from "@solidjs/router"
 import { type Duration, Effect } from "effect"
 import {
   type Component,
@@ -56,13 +56,24 @@ const HomeRoute = () => (
   </Suspense>
 )
 
-const SessionRoute = () => (
-  <SessionProviders>
-    <Suspense fallback={<Loading />}>
-      <Session />
-    </Suspense>
-  </SessionProviders>
-)
+import { SessionGrid } from "./pages/session-grid"
+
+const SessionRoute = () => {
+  const [searchParams] = useSearchParams<{ grid?: string }>()
+  const gridIds = createMemo(() => searchParams.grid ? searchParams.grid.split(",") : [])
+
+  return (
+    <Show when={gridIds().length > 1} fallback={
+      <SessionProviders>
+        <Suspense fallback={<Loading />}>
+          <Session />
+        </Suspense>
+      </SessionProviders>
+    }>
+      <SessionGrid ids={gridIds()} />
+    </Show>
+  )
+}
 
 const SessionIndexRoute = () => <Navigate href="session" />
 

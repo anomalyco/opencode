@@ -3,6 +3,7 @@ import { createStore, produce, reconcile } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useParams } from "@solidjs/router"
+import { useSessionParams } from "@/hooks/use-session-params"
 import { getFilename } from "@opencode-ai/util/path"
 import { useSDK } from "./sdk"
 import { useSync } from "./sync"
@@ -55,7 +56,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
   init: () => {
     const sdk = useSDK()
     useSync()
-    const params = useParams()
+    const params = useSessionParams()
     const language = useLanguage()
     const layout = useLayout()
 

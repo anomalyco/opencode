@@ -3,6 +3,7 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { Binary } from "@opencode-ai/util/binary"
 import { useNavigate, useParams } from "@solidjs/router"
+import { useSessionParams } from "@/hooks/use-session-params"
 import type { Accessor } from "solid-js"
 import type { FileSelection } from "@/context/file"
 import { useGlobalSync } from "@/context/global-sync"
@@ -206,7 +207,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
   const prompt = usePrompt()
   const layout = useLayout()
   const language = useLanguage()
-  const params = useParams()
+  const params = useSessionParams()
 
   const errorMessage = (err: unknown) => {
     if (err && typeof err === "object" && "data" in err) {
