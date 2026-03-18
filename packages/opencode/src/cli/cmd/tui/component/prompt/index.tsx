@@ -1060,6 +1060,15 @@ export function Prompt(props: PromptProps) {
           />
         </box>
         <box flexDirection="row" justifyContent="space-between">
+          <Show when={status().type === "idle" && sync.data.vcs?.branch}>
+            <box marginLeft={1} flexDirection="row">
+              <text>
+                <span style={{ fg: theme.secondary }}>git:(</span>
+                <span style={{ fg: theme.error }}>{sync.data.vcs?.branch}</span>
+                <span style={{ fg: theme.secondary }}>)</span>
+              </text>
+            </box>
+          </Show>
           <Show when={status().type !== "idle"} fallback={<text />}>
             <box
               flexDirection="row"
