@@ -42,6 +42,7 @@ import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { TuiConfigProvider } from "./context/tui-config"
 import { TuiConfig } from "@/config/tui"
 import { TabProvider, useTabs } from "./context/tabs"
+
 import { TabBar } from "./component/tab-bar"
 import { DialogNewTab } from "./component/dialog-new-tab"
 import { DialogConfirm } from "./ui/dialog-confirm"
@@ -234,9 +235,21 @@ function App() {
     }
   })
 
+  // Sync active tab's stored route → global route (forward direction)
+  // Reactive counterpart to navigator() calls in load()/activate().
+  createEffect(() => {
+    const tab = tabs.active()
+    const tabRoute = tab.route
+    const tabRouteType = tabRoute.type
+    const tabSessionID = tabRouteType === "session" ? tabRoute.sessionID : undefined
+    const currentType = untrack(() => route.data.type)
+    const currentSessionID = untrack(() => (route.data.type === "session" ? route.data.sessionID : undefined))
+    if (tabRouteType === currentType && (tabRouteType !== "session" || tabSessionID === currentSessionID)) return
+    route.navigate(tabRoute)
+  })
+
   // When route changes (e.g. session created, dialog nav), update the active tab's stored route
   createEffect(() => {
-    // Track only route properties — reading through the store proxy establishes subscriptions
     const type = route.data.type
     const sessionID = type === "session" ? route.data.sessionID : undefined
 
@@ -245,10 +258,10 @@ function App() {
     untrack(() => {
       tabs.updateRoute(tab.id, route.data)
       if (type === "session" && sessionID) {
+        if (tab.sessionID !== sessionID) tabs.updateSessionID(tab.id, sessionID)
         const session = sync.data.session.find((s) => s.id === sessionID)
         if (session) {
           if (tab.label === "Untitled") tabs.rename(tab.id, session.displayName ?? session.slug)
-          if (tab.sessionID !== sessionID) tabs.updateSessionID(tab.id, sessionID)
         }
       }
     })
