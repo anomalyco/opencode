@@ -86,23 +86,6 @@ export function createDialogProviderOptions() {
               inputs,
             })
             if (result.error) {
-              // const msg =
-              // const msg kk=
-              //   typeof result.error === "object" &&
-              //   result.error &&
-              //   "data" in result.error &&
-              //   typeof result.error.data === "object" &&
-              //   result.error.data &&
-              //   "message" in result.error.data &&
-              //   typeof result.error.data.message === "string"
-              //     ? result.error.data.message
-              //     : typeof result.error === "object" &&
-              //         result.error &&
-              //         "message" in result.error &&
-              //         typeof result.error.message === "string"
-              //       ? result.error.message
-              //       : "Failed to authorize"
-              //
               toast.show({
                 variant: "error",
                 message: JSON.stringify(result.error),

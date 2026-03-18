@@ -115,24 +115,12 @@ export const ProviderRoutes = lazy(() =>
       async (c) => {
         const providerID = c.req.valid("param").providerID
         const { method, inputs } = c.req.valid("json")
-        return ProviderAuth.authorize({
+        const result = await ProviderAuth.authorize({
           providerID,
           method,
           inputs,
         })
-          .then((result) => c.json(result))
-          .catch((error) => {
-            if (ProviderAuth.ValidationFailed.isInstance(error)) {
-              return c.json(
-                {
-                  field: error.data.field,
-                  message: error.data.message,
-                },
-                400,
-              )
-            }
-            throw error
-          })
+        return c.json(result)
       },
     )
     .post(

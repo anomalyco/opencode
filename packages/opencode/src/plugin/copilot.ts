@@ -170,6 +170,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
               placeholder: "company.ghe.com or https://company.ghe.com",
               when: { key: "deploymentType", op: "eq", value: "enterprise" },
               validate: (value) => {
+                return "Testing validation error"
                 if (!value) return "URL or domain is required"
                 try {
                   const url = value.includes("://") ? new URL(value) : new URL(`https://${value}`)
