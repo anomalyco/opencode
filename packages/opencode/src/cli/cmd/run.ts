@@ -497,7 +497,7 @@ export const RunCommand = cmd({
         return false
       }
 
-      let events: Awaited<ReturnType<typeof sdk.event.subscribe>>
+      const events = await sdk.event.subscribe()
       let error: string | undefined
 
       async function loop() {
@@ -685,10 +685,8 @@ export const RunCommand = cmd({
       }
       await share(sdk, sessionID)
 
-      const model = args.model ? Provider.parseModel(args.model) : undefined
-      const parts = [...files, { type: "text", text: message }]
-
       if (schema) {
+        const model = args.model ? Provider.parseModel(args.model) : undefined
         const result = await sdk.session.prompt({
           sessionID,
           agent,
@@ -698,7 +696,7 @@ export const RunCommand = cmd({
             type: "json_schema",
             schema,
           },
-          parts,
+          parts: [...files, { type: "text", text: message }],
         })
         const info = result.data?.info
         if (!info || info.role !== "assistant") {
@@ -719,8 +717,6 @@ export const RunCommand = cmd({
         return
       }
 
-      events = await sdk.event.subscribe()
-
       loop().catch((e) => {
         console.error(e)
         process.exit(1)
@@ -736,12 +732,13 @@ export const RunCommand = cmd({
           variant: args.variant,
         })
       } else {
+        const model = args.model ? Provider.parseModel(args.model) : undefined
         await sdk.session.prompt({
           sessionID,
           agent,
           model,
           variant: args.variant,
-          parts,
+          parts: [...files, { type: "text", text: message }],
         })
       }
     }
