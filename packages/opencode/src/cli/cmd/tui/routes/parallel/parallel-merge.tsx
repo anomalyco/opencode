@@ -8,6 +8,7 @@ import { Spinner } from "@tui/component/spinner"
 
 type MergeStatus = "clean" | "resolved" | "failed" | "pending" | "merging"
 
+/** Displays merge progress for parallel execution workers with real-time SSE updates */
 export function ParallelMerge(props: { plan: Plan }) {
   // Test 3: ESC fix validation comment
   const { theme } = useTheme()
