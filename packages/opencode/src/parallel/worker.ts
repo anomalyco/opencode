@@ -1,7 +1,7 @@
 import { Worktree } from "../worktree"
 import { Session } from "../session"
 import { Instance } from "../project/instance"
-import { InstanceBootstrap, ParallelBootstrap } from "../project/bootstrap"
+import { ParallelBootstrap } from "../project/bootstrap"
 import { PlanStore } from "./plan"
 import { Config } from "@/config/config"
 import { Log } from "@/util/log"
@@ -94,11 +94,16 @@ export namespace WorkerManager {
     const info = await Worktree.makeWorktreeInfo(`parallel-${plan.id.slice(0, 12)}-${subtask.id.slice(0, 20)}`)
     const bootstrap = await Worktree.createFromInfo(info, undefined, ParallelBootstrap)
 
-    // Start worktree initialization
+    // Register listener BEFORE starting bootstrap to avoid race condition.
+    // bootstrap() emits Event.Ready synchronously before returning,
+    // so a listener registered after would miss the event entirely.
+    const readyPromise = waitForWorktreeReady(info.directory, 30_000)
+
+    // Start worktree initialization (emits Event.Ready when done)
     await bootstrap()
 
-    // Wait for worktree to be ready (with timeout)
-    const worktreeResult = await waitForWorktreeReady(info.directory, 30_000)
+    // Wait for the ready event (may already be resolved)
+    const worktreeResult = await readyPromise
     if (!worktreeResult.ready) {
       throw new Error(`Worktree failed to become ready: ${worktreeResult.error}`)
     }
@@ -487,7 +492,7 @@ export namespace WorkerManager {
           try {
             const idle = await Instance.provide({
               directory: worker.worktreeDir,
-              init: InstanceBootstrap,
+              init: ParallelBootstrap,
               fn: async () => {
                 const status = SessionStatus.get(SessionID.make(sessionID))
                 return status.type === "idle"
