@@ -263,18 +263,28 @@ export function SessionHeader() {
       .catch((err: unknown) => showRequestError(language, err))
   }
 
+  const routerParams = useParams()
+
   const centerMount = createMemo(() => {
     if (layout.sidebar.gridMode()) {
       // In grid mode, only mount to title bar if we are the actively focused session
+<<<<<<< HEAD
       const id = sync.data.session.length > 0 ? sync.data.session[0].id : undefined
       if (params.id !== id) return null
+=======
+      if (routerParams.id !== params.id) return null
+>>>>>>> ffb98dc47 (fix(app): add missing useParams import to session-header)
     }
     return document.getElementById("opencode-titlebar-center")
   })
   const rightMount = createMemo(() => {
     if (layout.sidebar.gridMode()) {
+<<<<<<< HEAD
       const id = sync.data.session.length > 0 ? sync.data.session[0].id : undefined
       if (params.id !== id) return null
+=======
+      if (routerParams.id !== params.id) return null
+>>>>>>> ffb98dc47 (fix(app): add missing useParams import to session-header)
     }
     return document.getElementById("opencode-titlebar-right")
   })
