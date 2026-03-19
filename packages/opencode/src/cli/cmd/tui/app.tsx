@@ -544,21 +544,21 @@ function App() {
         dialog.clear()
         try {
           const { PlanStore } = await import("@/parallel/plan")
-          const plans = await PlanStore.list()
+          const plans = (await PlanStore.list()).sort((a, b) => b.time.created - a.time.created)
           const back = parent()
-          const active = plans.find(
+          const run = plans.find(
             (p) =>
-              p.status === "running" || p.status === "spawning" || p.status === "merging" || p.status === "proposed",
+              p.status === "approved" || p.status === "spawning" || p.status === "running" || p.status === "merging",
           )
-          if (active) {
-            route.navigate({ type: "parallel", planID: active.id, returnTo: back })
-          } else if (plans.length > 0) {
-            route.navigate({ type: "parallel", planID: plans[0].id, returnTo: back })
+          const prep = plans.find((p) => p.status === "draft" || p.status === "proposed")
+          const plan = run ?? prep
+          if (plan) {
+            route.navigate({ type: "parallel", planID: plan.id, returnTo: back })
           } else {
-            toast.show({ message: "No parallel plans found", variant: "info" })
+            toast.show({ message: "No active parallel plans", variant: "info" })
           }
         } catch {
-          toast.show({ message: "No parallel plans found", variant: "info" })
+          toast.show({ message: "No active parallel plans", variant: "info" })
         }
       },
     },
