@@ -133,6 +133,8 @@ import type {
   SessionSummarizeResponses,
   SessionTodoErrors,
   SessionTodoResponses,
+  SessionTodoUpdateErrors,
+  SessionTodoUpdateResponses,
   SessionUnrevertErrors,
   SessionUnrevertResponses,
   SessionUnshareErrors,
@@ -141,6 +143,7 @@ import type {
   SessionUpdateResponses,
   SubtaskPartInput,
   TextPartInput,
+  Todo,
   ToolIdsErrors,
   ToolIdsResponses,
   ToolListErrors,
@@ -1178,6 +1181,43 @@ export class Session extends HeyApiClient {
       url: "/session/{sessionID}/todo",
       ...options,
       ...params,
+    })
+  }
+
+  /**
+   * Update session todos
+   *
+   * Update the todo list for a specific session. This triggers a todo.updated event that refreshes the TUI sidebar.
+   */
+  public todoUpdate<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      todos?: Array<Todo>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "todos" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionTodoUpdateResponses, SessionTodoUpdateErrors, ThrowOnError>({
+      url: "/session/{sessionID}/todo",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 
