@@ -50,6 +50,21 @@ import { lazy } from "@/util/lazy"
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
 
+function web(path: string, method: string) {
+  if (method !== "GET" && method !== "HEAD") return false
+  if (
+    path === "/" ||
+    path === "/index.html" ||
+    path === "/site.webmanifest" ||
+    path === "/favicon.ico" ||
+    path === "/robots.txt" ||
+    path === "/oc-theme-preload.js"
+  )
+    return true
+  if (path.startsWith("/assets/")) return true
+  return false
+}
+
 export namespace Server {
   const log = Log.create({ service: "server" })
 
@@ -81,6 +96,7 @@ export namespace Server {
         // Allow CORS preflight requests to succeed without auth.
         // Browser clients sending Authorization headers will preflight with OPTIONS.
         if (c.req.method === "OPTIONS") return next()
+        if (web(c.req.path, c.req.method)) return next()
         const password = Flag.OPENCODE_SERVER_PASSWORD
         if (!password) return next()
         const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
