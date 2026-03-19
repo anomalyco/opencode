@@ -1553,8 +1553,8 @@ test("bedrock custom opus 4.6 model is not auto-split", async () => {
     directory: tmp.path,
     fn: async () => {
       const providers = await Provider.list()
-      const base = providers["amazon-bedrock"].models["anthropic.claude-opus-4-6-v1:0"]
-      const extended = providers["amazon-bedrock"].models["anthropic.claude-opus-4-6-v1:0-1m"]
+      const base = providers[ProviderID.amazonBedrock].models["anthropic.claude-opus-4-6-v1:0"]
+      const extended = providers[ProviderID.amazonBedrock].models["anthropic.claude-opus-4-6-v1:0-1m"]
 
       expect(base).toBeDefined()
       expect(extended).toBeUndefined()
