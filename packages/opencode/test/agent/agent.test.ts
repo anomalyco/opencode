@@ -3,7 +3,7 @@ import path from "path"
 import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Agent } from "../../src/agent/agent"
-import { PermissionNext } from "../../src/permission/next"
+import { PermissionNext } from "../../src/permission"
 
 // Helper to evaluate permission for a tool with wildcard pattern
 function evalPerm(agent: Agent.Info | undefined, permission: string): PermissionNext.Action | undefined {
@@ -76,7 +76,7 @@ test("explore agent denies edit and write", async () => {
 })
 
 test("explore agent asks for external directories and allows Truncate.GLOB", async () => {
-  const { Truncate } = await import("../../src/tool/truncation")
+  const { Truncate } = await import("../../src/tool/truncate")
   await using tmp = await tmpdir()
   await Instance.provide({
     directory: tmp.path,
@@ -137,8 +137,8 @@ test("custom agent from config creates new agent", async () => {
     fn: async () => {
       const custom = await Agent.get("my_custom_agent")
       expect(custom).toBeDefined()
-      expect(custom?.model?.providerID).toBe("openai")
-      expect(custom?.model?.modelID).toBe("gpt-4")
+      expect(String(custom?.model?.providerID)).toBe("openai")
+      expect(String(custom?.model?.modelID)).toBe("gpt-4")
       expect(custom?.description).toBe("My custom agent")
       expect(custom?.temperature).toBe(0.5)
       expect(custom?.topP).toBe(0.9)
@@ -166,8 +166,8 @@ test("custom agent config overrides native agent properties", async () => {
     fn: async () => {
       const build = await Agent.get("build")
       expect(build).toBeDefined()
-      expect(build?.model?.providerID).toBe("anthropic")
-      expect(build?.model?.modelID).toBe("claude-3")
+      expect(String(build?.model?.providerID)).toBe("anthropic")
+      expect(String(build?.model?.modelID)).toBe("claude-3")
       expect(build?.description).toBe("Custom build agent")
       expect(build?.temperature).toBe(0.7)
       expect(build?.color).toBe("#FF0000")
@@ -463,7 +463,7 @@ test("legacy tools config maps write/edit/patch/multiedit to edit permission", a
 })
 
 test("Truncate.GLOB is allowed even when user denies external_directory globally", async () => {
-  const { Truncate } = await import("../../src/tool/truncation")
+  const { Truncate } = await import("../../src/tool/truncate")
   await using tmp = await tmpdir({
     config: {
       permission: {
@@ -483,7 +483,7 @@ test("Truncate.GLOB is allowed even when user denies external_directory globally
 })
 
 test("Truncate.GLOB is allowed even when user denies external_directory per-agent", async () => {
-  const { Truncate } = await import("../../src/tool/truncation")
+  const { Truncate } = await import("../../src/tool/truncate")
   await using tmp = await tmpdir({
     config: {
       agent: {
@@ -507,7 +507,7 @@ test("Truncate.GLOB is allowed even when user denies external_directory per-agen
 })
 
 test("explicit Truncate.GLOB deny is respected", async () => {
-  const { Truncate } = await import("../../src/tool/truncation")
+  const { Truncate } = await import("../../src/tool/truncate")
   await using tmp = await tmpdir({
     config: {
       permission: {
