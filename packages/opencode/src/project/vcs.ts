@@ -44,7 +44,7 @@ export namespace Vcs {
       if (instance.project.vcs === "git") {
         const getCurrentBranch = async () => {
           const result = await git(["rev-parse", "--abbrev-ref", "HEAD"], {
-            cwd: instance.project.worktree,
+            cwd: instance.directory,
           })
           if (result.exitCode !== 0) return undefined
           const text = result.text().trim()

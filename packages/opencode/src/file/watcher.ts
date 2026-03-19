@@ -118,10 +118,10 @@ export namespace FileWatcher {
       if (instance.project.vcs === "git") {
         const result = yield* Effect.promise(() =>
           git(["rev-parse", "--git-dir"], {
-            cwd: instance.project.worktree,
+            cwd: instance.directory,
           }),
         )
-        const vcsDir = result.exitCode === 0 ? path.resolve(instance.project.worktree, result.text().trim()) : undefined
+        const vcsDir = result.exitCode === 0 ? path.resolve(instance.directory, result.text().trim()) : undefined
         if (vcsDir && !cfgIgnores.includes(".git") && !cfgIgnores.includes(vcsDir)) {
           const ignore = (yield* Effect.promise(() => readdir(vcsDir).catch(() => []))).filter(
             (entry) => entry !== "HEAD",
