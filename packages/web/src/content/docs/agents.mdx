@@ -301,6 +301,19 @@ If this is not set, the agent will continue to iterate until the model chooses t
 
 When the limit is reached, the agent receives a special system prompt instructing it to respond with a summarization of its work and recommended remaining tasks.
 
+If you want the session to end immediately after the last allowed step instead of producing that text-only wrap-up, set `stopOnMaxSteps` to `true`.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "build": {
+      "steps": 3,
+      "stopOnMaxSteps": true
+    }
+  }
+}
+```
+
 :::caution
 The legacy `maxSteps` field is deprecated. Use `steps` instead.
 :::

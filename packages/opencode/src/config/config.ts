@@ -718,6 +718,10 @@ export namespace Config {
         .positive()
         .optional()
         .describe("Maximum number of agentic iterations before forcing text-only response"),
+      stopOnMaxSteps: z
+        .boolean()
+        .optional()
+        .describe("End the session immediately after the final allowed step instead of forcing a text-only response"),
       maxSteps: z.number().int().positive().optional().describe("@deprecated Use 'steps' field instead."),
       permission: Permission.optional(),
     })
@@ -735,6 +739,7 @@ export namespace Config {
         "hidden",
         "color",
         "steps",
+        "stopOnMaxSteps",
         "maxSteps",
         "options",
         "permission",
@@ -768,6 +773,7 @@ export namespace Config {
         options?: Record<string, unknown>
         permission?: Permission
         steps?: number
+        stopOnMaxSteps?: boolean
       }
     })
     .meta({

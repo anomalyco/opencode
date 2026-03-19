@@ -1,14 +1,25 @@
 import path from "path"
-import { describe, expect, test } from "bun:test"
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test"
 import { fileURLToPath } from "url"
 import { Instance } from "../../src/project/instance"
 import { Session } from "../../src/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { SessionPrompt } from "../../src/session/prompt"
+import * as LLMModule from "../../src/session/llm"
 import { Log } from "../../src/util/log"
 import { tmpdir } from "../fixture/fixture"
 
 Log.init({ print: false })
+
+type MockStreamInput = Parameters<typeof LLMModule.LLM.stream>[0]
+
+const usage = {
+  inputTokens: 10,
+  outputTokens: 4,
+  totalTokens: 14,
+  reasoningTokens: 0,
+  cachedInputTokens: 0,
+}
 
 describe("session.prompt missing file", () => {
   test("does not fail the prompt when a file part is missing", async () => {
@@ -105,6 +116,133 @@ describe("session.prompt missing file", () => {
       },
     })
   })
+})
+
+describe("session.prompt max steps", () => {
+  let streamSpy: ReturnType<typeof spyOn>
+  let previousOpenAIKey: string | undefined
+
+  function hasWrapUpPrompt(input: MockStreamInput) {
+    return input.messages.some(
+      (message: MockStreamInput["messages"][number]) =>
+        message.role === "assistant" &&
+        typeof message.content === "string" &&
+        message.content.includes("Tools are disabled until next user input"),
+    )
+  }
+
+  beforeEach(() => {
+    previousOpenAIKey = process.env.OPENAI_API_KEY
+    process.env.OPENAI_API_KEY = "test-openai-key"
+    streamSpy = spyOn(LLMModule.LLM, "stream")
+  })
+
+  afterEach(() => {
+    streamSpy.mockRestore()
+    if (previousOpenAIKey === undefined) delete process.env.OPENAI_API_KEY
+    else process.env.OPENAI_API_KEY = previousOpenAIKey
+  })
+
+  test("injects the max-steps wrap-up prompt by default", async () => {
+    streamSpy.mockImplementationOnce(async (input: MockStreamInput) => {
+      expect(hasWrapUpPrompt(input)).toBe(true)
+
+      return ({
+        fullStream: (async function* () {
+          yield { type: "start-step" as const }
+          yield { type: "text-start" as const }
+          yield { type: "text-delta" as const, text: "Wrapped up." }
+          yield { type: "text-end" as const }
+          yield {
+            type: "finish-step" as const,
+            finishReason: "stop",
+            usage,
+            providerMetadata: {},
+          }
+        })(),
+      } as unknown) as Awaited<ReturnType<typeof LLMModule.LLM.stream>>
+    })
+
+    await using tmp = await tmpdir({
+      git: true,
+      config: {
+        agent: {
+          build: {
+            model: "openai/gpt-5.2",
+            steps: 1,
+          },
+        },
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({ title: "Max steps default" })
+        const result = await SessionPrompt.prompt({
+          sessionID: session.id,
+          agent: "build",
+          parts: [{ type: "text", text: "Do one step and stop." }],
+        })
+
+        expect(streamSpy).toHaveBeenCalledTimes(1)
+        expect(result.info.role).toBe("assistant")
+        if (result.info.role === "assistant") {
+          expect(result.info.finish).toBe("stop")
+        }
+      },
+    })
+  })
+
+  test("stops immediately at the step limit when stopOnMaxSteps is enabled", async () => {
+    streamSpy.mockImplementation(async (input: MockStreamInput) => {
+      expect(hasWrapUpPrompt(input)).toBe(false)
+
+      return ({
+        fullStream: (async function* () {
+          yield { type: "start-step" as const }
+          yield {
+            type: "finish-step" as const,
+            finishReason: "tool-calls",
+            usage,
+            providerMetadata: {},
+          }
+        })(),
+      } as unknown) as Awaited<ReturnType<typeof LLMModule.LLM.stream>>
+    })
+
+    await using tmp = await tmpdir({
+      git: true,
+      config: {
+        agent: {
+          build: {
+            model: "openai/gpt-5.2",
+            steps: 1,
+            stopOnMaxSteps: true,
+          },
+        },
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({ title: "Max steps hard stop" })
+        const result = await SessionPrompt.prompt({
+          sessionID: session.id,
+          agent: "build",
+          parts: [{ type: "text", text: "Do one step and hard stop." }],
+        })
+
+        expect(streamSpy).toHaveBeenCalledTimes(1)
+        expect(result.info.role).toBe("assistant")
+        if (result.info.role === "assistant") {
+          expect(result.info.finish).toBe("step-limit")
+        }
+        expect(result.parts.some((part) => part.type === "step-finish")).toBe(true)
+      },
+    })
+  }, 10000)
 })
 
 describe("session.prompt special characters", () => {
