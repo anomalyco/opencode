@@ -34,6 +34,7 @@ import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
+import { DialogOptimize } from "../../ui/dialog-optimize"
 
 export type PromptProps = {
   sessionID?: string
@@ -127,6 +128,7 @@ export function Prompt(props: PromptProps) {
     extmarkToPartIndex: Map<number, number>
     interrupt: number
     placeholder: number
+    optimizing: boolean
   }>({
     placeholder: Math.floor(Math.random() * PLACEHOLDERS.length),
     prompt: {
@@ -136,6 +138,7 @@ export function Prompt(props: PromptProps) {
     mode: "normal",
     extmarkToPartIndex: new Map(),
     interrupt: 0,
+    optimizing: false,
   })
 
   createEffect(
@@ -471,7 +474,105 @@ export function Prompt(props: PromptProps) {
     )
   }
 
+  const handleOptimize = async (dialogCtx: any) => {
+    if (!store.prompt.input || store.optimizing) return
+    const originalPrompt = store.prompt.input
+
+    setStore("optimizing", true)
+
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 30000)
+
+    try {
+      const apiUrl = `${sdk.url}/tui/optimize-prompt`
+
+      const res = await sdk.fetch(apiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: store.prompt.input,
+          sessionID: props.sessionID,
+        }),
+        signal: controller.signal,
+      })
+
+      const result = await res.json()
+
+      if (res.status === 429) {
+        const retryAfter = result.retryAfter
+        const message = retryAfter 
+          ? `Rate limit exceeded. Please try again in ${Math.ceil(parseInt(retryAfter) / 60)} minutes.`
+          : "Rate limit exceeded. Please try again later."
+        toast.show({
+          variant: "warning",
+          message,
+        })
+        return
+      }
+
+      if (!res.ok) {
+        toast.show({
+          variant: "error",
+          message: result?.error || `Server error: ${res.status}`,
+        })
+        return
+      }
+
+      if (result?.error) {
+        toast.show({
+          variant: "warning",
+          message: result.error,
+        })
+        return
+      }
+
+      if (result?.optimized) {
+        const confirmed = await DialogOptimize.show(dialogCtx, {
+          original: originalPrompt,
+          optimized: result.optimized,
+        })
+        if (confirmed !== null) {
+          if (!input || input.isDestroyed) {
+            return
+          }
+          input.setText(confirmed)
+          setStore("prompt", { input: confirmed, parts: [] })
+          input.gotoBufferEnd()
+          toast.show({
+            variant: "success",
+            message: "Prompt optimized",
+          })
+        }
+      } else {
+        toast.show({
+          variant: "warning",
+          message: "No optimization result returned",
+        })
+      }
+    } catch (err) {
+      let message = "Unknown error"
+      if (err instanceof Error) {
+        message = err.name === "AbortError" ? "Request timed out (30s)" : err.message
+      }
+      toast.show({
+        variant: "error",
+        message: `Optimize failed: ${message.slice(0, 100)}`,
+      })
+    } finally {
+      clearTimeout(timeout)
+      setStore("optimizing", false)
+    }
+  }
+
   command.register(() => [
+    {
+      title: "Optimize prompt",
+      value: "prompt.optimize",
+      category: "Prompt",
+      enabled: !!store.prompt.input && !store.optimizing,
+      slash: { name: "optimize" },
+      onSelect: handleOptimize,
+    },
     {
       title: "Stash prompt",
       value: "prompt.stash",
@@ -869,6 +970,12 @@ export function Prompt(props: PromptProps) {
                   }
                   // If no image, let the default paste behavior continue
                 }
+                // Ctrl+O to optimize prompt
+                if (e.name === "o" && e.ctrl && !e.shift && store.prompt.input !== "" && !store.optimizing) {
+                  e.preventDefault()
+                  handleOptimize(dialog)
+                  return
+                }
                 if (keybind.match("input_clear", e) && store.prompt.input !== "") {
                   input.clear()
                   input.extmarks.clear()
@@ -1155,6 +1262,11 @@ export function Prompt(props: PromptProps) {
                   <text fg={theme.text}>
                     {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
                   </text>
+                  <box onMouseUp={() => !store.optimizing && handleOptimize(dialog)}>
+                    <text fg={store.optimizing ? theme.textMuted : theme.primary}>
+                      {store.optimizing ? "⏳ optimizing..." : "✨ optimize"}
+                    </text>
+                  </box>
                 </Match>
                 <Match when={store.mode === "shell"}>
                   <text fg={theme.text}>

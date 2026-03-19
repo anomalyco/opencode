@@ -341,10 +341,16 @@ export function Session() {
     if (next >= sessions.length) next = 0
     if (next < 0) next = sessions.length - 1
     if (sessions[next]) {
+      // Clear message history when switching sessions
+      for (const child of scroll.getChildren()) {
+        scroll.remove(child.id)
+      }
       navigate({
         type: "session",
         sessionID: sessions[next].id,
       })
+      // Reset scroll position
+      scroll.scrollTo(0)
     }
   }
 
