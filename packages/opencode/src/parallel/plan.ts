@@ -1,4 +1,4 @@
-import { Database, NotFoundError, eq, and } from "../storage/db"
+import { Database, NotFoundError, eq, and, sql } from "../storage/db"
 import { PlanTable } from "./plan.sql"
 import { Bus } from "@/bus"
 import { ParallelEvent } from "./events"
@@ -9,8 +9,36 @@ import { PlanID as PlanIDSchema, SubtaskID as SubtaskIDSchema, Plan as PlanSchem
 import { SessionID } from "@/session/schema"
 import { ProjectID } from "@/project/schema"
 import { fn } from "@/util/fn"
+import { lazy } from "@/util/lazy"
 
 type PlanRow = typeof PlanTable.$inferSelect
+
+// Prepared statements for common queries
+const prepared = lazy(() => {
+  const db = Database.use((db) => db)
+  return {
+    getByID: db
+      .select()
+      .from(PlanTable)
+      .where(eq(PlanTable.id, sql.placeholder("id")))
+      .prepare(),
+    listAll: db.select().from(PlanTable).orderBy(PlanTable.time_created).prepare(),
+    listByProject: db
+      .select()
+      .from(PlanTable)
+      .where(eq(PlanTable.project_id, sql.placeholder("project_id")))
+      .orderBy(PlanTable.time_created)
+      .prepare(),
+    listByProjectAndStatus: db
+      .select()
+      .from(PlanTable)
+      .where(
+        and(eq(PlanTable.project_id, sql.placeholder("project_id")), eq(PlanTable.status, sql.placeholder("status"))),
+      )
+      .orderBy(PlanTable.time_created)
+      .prepare(),
+  }
+})
 
 function fromRow(row: PlanRow): Plan {
   return {
@@ -84,13 +112,27 @@ export namespace PlanStore {
   )
 
   export const get = fn(PlanIDSchema.zod, async (id: PlanID): Promise<Plan> => {
-    const row = Database.use((db) => db.select().from(PlanTable).where(eq(PlanTable.id, id)).get())
+    const stmt = prepared().getByID
+    const row = stmt.get({ id })
     if (!row) throw new NotFoundError({ message: `Plan not found: ${id}` })
     return fromRow(row)
   })
 
   export async function list(): Promise<Plan[]> {
-    const rows = Database.use((db) => db.select().from(PlanTable).orderBy(PlanTable.time_created).all())
+    const stmt = prepared().listAll
+    const rows = stmt.all()
+    return rows.map(fromRow)
+  }
+
+  export async function listByProject(projectID: ProjectID): Promise<Plan[]> {
+    const stmt = prepared().listByProject
+    const rows = stmt.all({ project_id: projectID })
+    return rows.map(fromRow)
+  }
+
+  export async function listByProjectAndStatus(projectID: ProjectID, status: PlanStatus): Promise<Plan[]> {
+    const stmt = prepared().listByProjectAndStatus
+    const rows = stmt.all({ project_id: projectID, status })
     return rows.map(fromRow)
   }
 

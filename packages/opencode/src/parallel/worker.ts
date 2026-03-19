@@ -49,6 +49,7 @@ export namespace WorkerManager {
   export async function spawnAll(plan: Plan, abort: AbortSignal): Promise<void> {
     const cfg = await Config.get()
     const maxWorkers = cfg.parallel?.max_workers
+    const spawnStartTime = Date.now()
     log.info("spawning workers", {
       planID: plan.id,
       count: plan.subtasks.length,
@@ -125,7 +126,7 @@ export namespace WorkerManager {
       throw new Error("All workers failed to spawn")
     }
 
-    log.info("workers spawned", { planID: plan.id })
+    log.info("workers spawned", { planID: plan.id, durationMs: Date.now() - spawnStartTime })
   }
 
   export async function waitAll(planID: PlanID, abort: AbortSignal): Promise<void> {
@@ -138,6 +139,7 @@ export namespace WorkerManager {
       return
     }
 
+    const waitStartTime = Date.now()
     log.info("waiting for workers", { planID, count: running.length })
 
     const defaultTimeoutMs = 30 * 60 * 1000 // 30 minutes
@@ -159,8 +161,36 @@ export namespace WorkerManager {
     }
 
     const pending = new Set(sessionToWorker.keys())
+    const debounceMs = 50
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null
+    const pendingUpdates = new Map<
+      SubtaskID,
+      {
+        status: "done" | "failed"
+        diffStat?: ReturnType<typeof collectDiffStat> extends Promise<infer T> ? T : never
+        error?: string
+      }
+    >()
 
     await new Promise<void>((resolve) => {
+      // Debounced batch update handler
+      const processBatch = async () => {
+        if (pendingUpdates.size === 0) return
+
+        const updates = Array.from(pendingUpdates.entries())
+        pendingUpdates.clear()
+
+        await Promise.all(
+          updates.map(async ([subtaskID, update]) => {
+            if (update.status === "done") {
+              await updateWorker(planID, subtaskID, { status: "done", diffStat: update.diffStat })
+            } else {
+              await updateWorker(planID, subtaskID, { status: "failed", error: update.error })
+            }
+          }),
+        )
+      }
+
       // Listen to GlobalBus for session.idle events from any instance
       const handler = async (event: { directory?: string; payload: any }) => {
         if (abort.aborted) {
@@ -193,13 +223,29 @@ export namespace WorkerManager {
         try {
           // Collect diff stats
           const diffStat = await collectDiffStat(worker.worktreeDir)
-          await updateWorker(planID, worker.subtaskID, { status: "done", diffStat })
+          pendingUpdates.set(worker.subtaskID, { status: "done", diffStat })
+
+          if (debounceTimer) clearTimeout(debounceTimer)
+          debounceTimer = setTimeout(() => {
+            debounceTimer = null
+            processBatch()
+          }, debounceMs)
         } catch (e) {
           const error = e instanceof Error ? e.message : "Worker completion handling failed"
-          await updateWorker(planID, worker.subtaskID, { status: "failed", error })
+          pendingUpdates.set(worker.subtaskID, { status: "failed", error })
+
+          if (debounceTimer) clearTimeout(debounceTimer)
+          debounceTimer = setTimeout(() => {
+            debounceTimer = null
+            processBatch()
+          }, debounceMs)
         }
 
         if (pending.size === 0) {
+          if (debounceTimer) {
+            clearTimeout(debounceTimer)
+            await processBatch()
+          }
           cleanup()
           resolve()
         }
@@ -208,14 +254,16 @@ export namespace WorkerManager {
       const cleanup = () => {
         GlobalBus.off("event", handler)
         if (fallbackTimer) clearInterval(fallbackTimer)
+        if (debounceTimer) clearTimeout(debounceTimer)
         startTimes.clear()
       }
 
       GlobalBus.on("event", handler)
 
-      // Fallback poll every 10s in case we missed an event (e.g., session was already idle before we subscribed)
+      // Fallback poll every 5s in case we missed an event (e.g., session was already idle before we subscribed)
       const fallbackTimer = setInterval(async () => {
         if (abort.aborted || pending.size === 0) {
+          await processBatch()
           cleanup()
           resolve()
           return
@@ -266,15 +314,20 @@ export namespace WorkerManager {
         }
 
         if (pending.size === 0) {
+          await processBatch()
           cleanup()
           resolve()
         }
-      }, 10_000)
+      }, 5_000)
 
       // Handle abort
       abort.addEventListener(
         "abort",
-        () => {
+        async () => {
+          if (debounceTimer) {
+            clearTimeout(debounceTimer)
+            await processBatch()
+          }
           cleanup()
           resolve()
         },
@@ -282,7 +335,7 @@ export namespace WorkerManager {
       )
     })
 
-    log.info("all workers complete", { planID })
+    log.info("all workers complete", { planID, durationMs: Date.now() - waitStartTime })
   }
 
   async function collectDiffStat(
