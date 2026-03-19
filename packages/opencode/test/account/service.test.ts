@@ -52,7 +52,7 @@ const deviceTokenClient = (body: unknown, status = 400) =>
   )
 
 const poll = (body: unknown, status = 400) =>
-  AccountEffect.Service.use((s) => s.poll(login())).pipe(Effect.provide(live(deviceTokenClient(body, status))))
+  Account.Service.use((s) => s.poll(login())).pipe(Effect.provide(live(deviceTokenClient(body, status))))
 
 it.effect("orgsByAccount groups orgs per account", () =>
   Effect.gen(function* () {
