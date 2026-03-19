@@ -8,6 +8,7 @@ import type { AssistantMessage } from "@opencode-ai/sdk/v2"
 import { Global } from "@/global"
 import { Installation } from "@/installation"
 import { useKeybind } from "../../context/keybind"
+
 import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
@@ -303,10 +304,17 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
               </box>
             </box>
           </Show>
-          <text>
-            <span style={{ fg: theme.textMuted }}>{directory().split("/").slice(0, -1).join("/")}/</span>
-            <span style={{ fg: theme.text }}>{directory().split("/").at(-1)}</span>
-          </text>
+          <box>
+            <text>
+              <span style={{ fg: theme.textMuted }}>{directory().split("/").slice(0, -1).join("/")}/</span>
+              <span style={{ fg: theme.text }}>{directory().split("/").at(-1)?.split(":")[0]}</span>
+            </text>
+            <Show when={sync.data.vcs?.branch}>
+              <text fg={theme.textMuted}>
+                 {sync.data.vcs!.branch}
+              </text>
+            </Show>
+          </box>
           <text fg={theme.textMuted}>
             <span style={{ fg: theme.success }}>•</span> <b>Open</b>
             <span style={{ fg: theme.text }}>
