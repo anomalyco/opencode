@@ -3,7 +3,7 @@ title: Plugin
 description: Scrivi plugin per estendere OpenCode.
 ---
 
-I plugin ti permettono di estendere OpenCode agganciandoti a vari eventi e personalizzando il comportamento. Puoi creare plugin per aggiungere nuove funzionalita', integrare servizi esterni o modificare il comportamento predefinito di OpenCode.
+I plugin ti permettono di estendere OpenCode agganciandoti a vari eventi e personalizzando il comportamento. Puoi creare plugin per aggiungere nuove funzionalità, integrare servizi esterni o modificare il comportamento predefinito di OpenCode.
 
 Per esempi, dai un'occhiata ai [plugin](/docs/ecosystem#plugins) creati dalla community.
 
@@ -53,7 +53,7 @@ I **plugin locali** vengono caricati direttamente dalla directory dei plugin. Pe
 
 ### Ordine di caricamento
 
-I plugin vengono caricati da tutte le sorgenti e tutti gli hook vengono eseguiti in sequenza. L'ordine di caricamento e':
+I plugin vengono caricati da tutte le sorgenti e tutti gli hook vengono eseguiti in sequenza. L'ordine di caricamento è:
 
 1. Config globale (`~/.config/opencode/opencode.json`)
 2. Config di progetto (`opencode.json`)
@@ -66,7 +66,7 @@ I pacchetti npm duplicati con lo stesso nome e versione vengono caricati una sol
 
 ## Creare un plugin
 
-Un plugin e' un **modulo JavaScript/TypeScript** che esporta una o piu' funzioni di plugin. Ogni funzione riceve un oggetto di contesto e restituisce un oggetto di hook.
+Un plugin è un **modulo JavaScript/TypeScript** che esporta una o più funzioni di plugin. Ogni funzione riceve un oggetto di contesto e restituisce un oggetto di hook.
 
 ---
 
@@ -234,7 +234,7 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
 Stiamo usando `osascript` per eseguire AppleScript su macOS. Qui lo usiamo per inviare notifiche.
 
 :::note
-Se usi l'app desktop di OpenCode, puo' inviare automaticamente notifiche di sistema quando una risposta e' pronta o quando una sessione va in errore.
+Se usi l'app desktop di OpenCode, può inviare automaticamente notifiche di sistema quando una risposta è pronta o quando una sessione va in errore.
 :::
 
 ---
@@ -299,13 +299,17 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 }
 ```
 
-L'helper `tool` crea uno strumento personalizzato che opencode puo' chiamare. Accetta una funzione di schema Zod e restituisce una definizione di tool con:
+L'helper `tool` crea uno strumento personalizzato che opencode può chiamare. Accetta una funzione di schema Zod e restituisce una definizione di tool con:
 
 - `description`: cosa fa lo strumento
 - `args`: schema Zod per gli argomenti dello strumento
 - `execute`: funzione eseguita quando lo strumento viene chiamato
 
 I tuoi strumenti personalizzati saranno disponibili in opencode insieme agli strumenti integrati.
+
+:::note
+Se uno strumento di un plugin usa lo stesso nome di uno strumento integrato, lo strumento del plugin ha la precedenza.
+:::
 
 ---
 
@@ -381,4 +385,4 @@ Format as a structured prompt that a new agent can use to resume work.
 }
 ```
 
-Quando `output.prompt` e' impostato, sostituisce completamente il prompt di compaction predefinito. In questo caso l'array `output.context` viene ignorato.
+Quando `output.prompt` è impostato, sostituisce completamente il prompt di compaction predefinito. In questo caso l'array `output.context` viene ignorato.
