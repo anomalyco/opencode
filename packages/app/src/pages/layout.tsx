@@ -2135,7 +2135,7 @@ export default function Layout(props: ParentProps) {
                       >
                         {language.t("command.session.new")}
                       </Button>
-                      <GridToggleItem mobile={panelProps.mobile} sidebarExpanded={() => true} clearHoverProjectSoon={clearSidebarHoverState} />
+                      <GridToggleItem mobile={panelProps.mobile} sidebarExpanded={() => true} />
                     </div>
                     <div class="flex-1 min-h-0">
                       <LocalWorkspace
@@ -2163,7 +2163,7 @@ export default function Layout(props: ParentProps) {
                     >
                       {language.t("workspace.new")}
                     </Button>
-                    <GridToggleItem mobile={panelProps.mobile} sidebarExpanded={() => true} clearHoverProjectSoon={clearSidebarHoverState} />
+                    <GridToggleItem mobile={panelProps.mobile} sidebarExpanded={() => true} />
                   </div>
                   <div class="relative flex-1 min-h-0">
                     <DragDropProvider

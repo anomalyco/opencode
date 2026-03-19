@@ -1,4 +1,4 @@
-import { For, createSignal, createMemo, Suspense } from "solid-js"
+import { For, Show, createSignal, createMemo, Suspense, createEffect } from "solid-js"
 import { useSearchParams, useParams, useNavigate } from "@solidjs/router"
 import { SessionParamsProvider } from "@/hooks/use-session-params"
 import { TerminalProvider } from "@/context/terminal"
@@ -11,9 +11,17 @@ export function SessionGrid(props: { ids: string[] }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const params = useParams()
   const navigate = useNavigate()
-  const [dragIdx, setDragIdx] = createSignal<number | null>(null)
+  
+  const [dragId, setDragId] = createSignal<string | null>(null)
+  const [localIds, setLocalIds] = createSignal<string[]>([])
 
-  const count = createMemo(() => props.ids.length)
+  createEffect(() => {
+    if (!dragId()) {
+      setLocalIds(props.ids)
+    }
+  })
+
+  const count = createMemo(() => localIds().length)
 
   const getGridClass = () => {
     const c = count()
@@ -48,49 +56,72 @@ export function SessionGrid(props: { ids: string[] }) {
     }
   }
 
-  const swapTiles = (from: number, to: number) => {
-    if (from === to) return
-    const next = [...props.ids]
-    const item = next.splice(from, 1)[0]
-    next.splice(to, 0, item)
-    const newFocusedId = params.id ? next.find((_, i) => i === from) ?? next[0] : undefined
-    const navUrl = newFocusedId
-      ? `/${params.dir}/session/${newFocusedId}?grid=${next.join(",")}`
-      : `/${params.dir}/session?grid=${next.join(",")}`
-    navigate(navUrl)
+  const moveTile = (hoverId: string) => {
+    const dragging = dragId()
+    if (!dragging || dragging === hoverId) return
+
+    setLocalIds((prev) => {
+      const from = prev.indexOf(dragging)
+      const to = prev.indexOf(hoverId)
+      if (from === -1 || to === -1 || from === to) return prev
+
+      const next = [...prev]
+      const [item] = next.splice(from, 1)
+      next.splice(to, 0, item)
+      return next
+    })
+  }
+
+  const commitDrag = () => {
+    const dragging = dragId()
+    if (!dragging) return
+    setDragId(null)
+    
+    const currentLocal = localIds()
+    if (currentLocal.join(",") !== props.ids.join(",")) {
+      const newFocusedId = params.id ? currentLocal.find((id) => id === params.id) ?? currentLocal[0] : undefined
+      const navUrl = newFocusedId
+        ? `/${params.dir}/session/${newFocusedId}?grid=${currentLocal.join(",")}`
+        : `/${params.dir}/session?grid=${currentLocal.join(",")}`
+      navigate(navUrl, { replace: true })
+    }
   }
 
   return (
     <div class={`grid gap-2 w-full h-full p-2 bg-background-base ${getGridClass()}`}>
-      <For each={props.ids}>
+      <For each={localIds()}>
         {(id, index) => (
           <div
             draggable={true}
-            class={`relative flex flex-col min-h-0 min-w-0 border rounded-lg overflow-hidden shadow-sm transition-all cursor-grab select-none
+            class={`relative flex flex-col min-h-0 min-w-0 border rounded-lg overflow-hidden shadow-sm transition-all duration-200 ease-in-out cursor-grab select-none
               ${id === params.id ? "ring-2 ring-blue-500 z-10" : "border-border-base hover:border-border-strong"}
-              ${dragIdx() === index() ? "opacity-50" : ""}
+              ${dragId() === id ? "opacity-50 scale-[0.98] z-50 shadow-xl" : ""}
               ${count() === 5 && index() === 4 ? "col-start-3 row-start-1 row-span-2" : ""}
             `}
             onDragStart={(e) => {
-              setDragIdx(index())
+              setDragId(id)
               e.dataTransfer!.effectAllowed = "move"
             }}
             onDragOver={(e) => {
               e.preventDefault()
               e.dataTransfer!.dropEffect = "move"
+              moveTile(id)
             }}
             onDrop={(e) => {
               e.preventDefault()
-              if (dragIdx() !== null && dragIdx() !== index()) {
-                swapTiles(dragIdx()!, index()!)
-              }
-              setDragIdx(null)
+              commitDrag()
             }}
-            onDragEnd={() => setDragIdx(null)}
+            onDragEnd={() => {
+              commitDrag()
+            }}
             onClick={(e) => {
               if (id !== params.id) focusSession(id)
             }}
           >
+            <Show when={dragId() !== null}>
+              <div class="absolute inset-0 z-50 cursor-grabbing" />
+            </Show>
+
             <div class="absolute top-2 right-2 z-50 opacity-0 hover:opacity-100 transition-opacity">
               <button
                 class="bg-surface-base text-text-strong rounded px-2 py-1 text-xs border border-border-base shadow-sm hover:bg-surface-raised-base"

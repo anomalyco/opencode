@@ -456,7 +456,6 @@ export const GridToggleItem = (props: {
   mobile?: boolean
   dense?: boolean
   sidebarExpanded: Accessor<boolean>
-  clearHoverProjectSoon?: () => void
 }): JSX.Element => {
   const layout = useLayout()
   const language = useLanguage()
@@ -469,10 +468,6 @@ export const GridToggleItem = (props: {
       class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none ${props.dense ? "py-0.5" : "py-1"}`}
       onClick={(e) => {
         layout.sidebar.toggleGridMode()
-        if (layout.sidebar.gridMode()) {
-           layout.sidebar.close()
-           props.clearHoverProjectSoon?.()
-        }
       }}
     >
       <div class="flex items-center gap-1 w-full">
