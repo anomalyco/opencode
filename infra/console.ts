@@ -148,6 +148,7 @@ const ZEN_MODELS = [
 ]
 const STRIPE_SECRET_KEY = new sst.Secret("STRIPE_SECRET_KEY")
 const STRIPE_PUBLISHABLE_KEY = new sst.Secret("STRIPE_PUBLISHABLE_KEY")
+const NUMERAL_INTERNAL_TOKEN = new sst.Secret("NUMERAL_INTERNAL_TOKEN")
 const AUTH_API_URL = new sst.Linkable("AUTH_API_URL", {
   properties: { value: auth.url.apply((url) => url!) },
 })
@@ -185,6 +186,7 @@ new sst.cloudflare.x.SolidStart("Console", {
     AUTH_API_URL,
     STRIPE_WEBHOOK_SECRET,
     STRIPE_SECRET_KEY,
+    NUMERAL_INTERNAL_TOKEN,
     EMAILOCTOPUS_API_KEY,
     AWS_SES_ACCESS_KEY_ID,
     AWS_SES_SECRET_ACCESS_KEY,
