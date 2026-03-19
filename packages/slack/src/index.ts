@@ -50,12 +50,14 @@ async function handleToolUpdate(part: ToolPart, channel: string, thread: string)
     .catch(() => {})
 }
 
-app.use(async ({ next, context }) => {
+app.use(async (args: { next: () => Promise<void>; context: Record<string, unknown> }) => {
+  const { next, context } = args
   console.log("📡 Raw Slack event:", JSON.stringify(context, null, 2))
   await next()
 })
 
-app.message(async ({ message, say }) => {
+app.message(async (args: { message: { subtype?: string; channel: string; ts: string; text?: string }; say: (opts: { text: string; thread_ts?: string }) => Promise<unknown> }) => {
+  const { message, say } = args
   console.log("📨 Received message event:", JSON.stringify(message, null, 2))
 
   if (message.subtype || !("text" in message) || !message.text) {
@@ -135,7 +137,8 @@ app.message(async ({ message, say }) => {
   await say({ text: responseText, thread_ts: thread })
 })
 
-app.command("/test", async ({ command, ack, say }) => {
+app.command("/test", async (args: { command: Record<string, unknown>; ack: () => Promise<void>; say: (text: string) => Promise<unknown> }) => {
+  const { command, ack, say } = args
   await ack()
   console.log("🧪 Test command received:", JSON.stringify(command, null, 2))
   await say("🤖 Bot is working! I can hear you loud and clear.")
