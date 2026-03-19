@@ -599,12 +599,7 @@ export default function Page() {
     const list: ChangeMode[] = []
     const git = sync.project?.vcs === "git"
     if (git) list.push("git")
-    if (
-      git &&
-      sync.data.vcs?.branch &&
-      sync.data.vcs?.default_branch &&
-      sync.data.vcs.branch !== sync.data.vcs.default_branch
-    ) {
+    if (git && sync.data.vcs?.branch && sync.data.vcs?.default_branch && sync.data.vcs.branch !== sync.data.vcs.default_branch) {
       list.push("branch")
     }
     list.push("session", "turn")
@@ -966,9 +961,7 @@ export default function Page() {
 
   const mobileChanges = createMemo(() => !isDesktop() && store.mobileTab === "changes")
   const wantsReview = createMemo(() =>
-    isDesktop()
-      ? desktopFileTreeOpen() || (desktopReviewOpen() && activeTab() === "review")
-      : store.mobileTab === "changes",
+    isDesktop() ? desktopFileTreeOpen() || (desktopReviewOpen() && activeTab() === "review") : store.mobileTab === "changes",
   )
 
   createEffect(() => {
