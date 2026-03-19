@@ -126,9 +126,23 @@ const SessionRow = (props: {
         const existing = searchParams.grid ? searchParams.grid.split(",") : (params.id ? [params.id] : [])
         if (!existing.includes(props.session.id)) {
           existing.push(props.session.id)
+          const toKeep = existing.slice(-9)
+          navigate(`/${props.slug}/session/${params.id ?? props.session.id}?grid=${toKeep.join(",")}`)
+        } else {
+          // If already in grid, remove it
+          const next = existing.filter(x => x !== props.session.id)
+          if (next.length <= 1) {
+            if (next.length === 1) {
+              navigate(`/${props.slug}/session/${next[0]}`)
+            } else {
+              navigate(`/${props.slug}/session`)
+            }
+          } else if (props.session.id === params.id) {
+            navigate(`/${props.slug}/session/${next[0]}?grid=${next.join(",")}`)
+          } else {
+            navigate(`/${props.slug}/session/${params.id}?grid=${next.join(",")}`)
+          }
         }
-        const toKeep = existing.slice(-9)
-        navigate(`/${props.slug}/session/${params.id ?? props.session.id}?grid=${toKeep.join(",")}`)
       }
     }}
   >
@@ -205,6 +219,7 @@ const SessionHoverPreview = (props: {
 )
 
 export const SessionItem = (props: SessionItemProps): JSX.Element => {
+  const [searchParams] = useSearchParams<{ grid?: string }>()
   const params = useParams()
   const navigate = useNavigate()
   const layout = useLayout()
@@ -246,7 +261,13 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   const hoverReady = createMemo(() => hoverMessages() !== undefined)
   const hoverAllowed = createMemo(() => !props.mobile && props.sidebarExpanded())
   const hoverEnabled = createMemo(() => (props.popover ?? true) && hoverAllowed())
-  const isActive = createMemo(() => props.session.id === params.id)
+  const isActive = createMemo(() => {
+    if (layout.sidebar.gridMode()) {
+      const gridIds = searchParams.grid ? searchParams.grid.split(",") : (params.id ? [params.id] : [])
+      return gridIds.includes(props.session.id)
+    }
+    return props.session.id === params.id
+  })
 
   const warm = (span: number, priority: "high" | "low") => {
     const nav = props.navList?.()

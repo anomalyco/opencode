@@ -1,3 +1,4 @@
+import { useLayout } from "@/context/layout"
 import "@/index.css"
 import { I18nProvider } from "@opencode-ai/ui/context"
 import { DialogProvider } from "@opencode-ai/ui/context/dialog"
@@ -12,6 +13,7 @@ import { type BaseRouterProps, Navigate, Route, Router, useSearchParams } from "
 import { type Duration, Effect } from "effect"
 import {
   type Component,
+  createEffect,
   createMemo,
   createResource,
   createSignal,
@@ -59,11 +61,18 @@ const HomeRoute = () => (
 import { SessionGrid } from "./pages/session-grid"
 
 const SessionRoute = () => {
-  const [searchParams] = useSearchParams<{ grid?: string }>()
+  const [searchParams, setSearchParams] = useSearchParams<{ grid?: string }>()
+  const layout = useLayout()
   const gridIds = createMemo(() => searchParams.grid ? searchParams.grid.split(",") : [])
 
+  createEffect(() => {
+    if (!layout.sidebar.gridMode() && searchParams.grid) {
+      setSearchParams({ grid: undefined })
+    }
+  })
+
   return (
-    <Show when={gridIds().length > 1} fallback={
+    <Show when={layout.sidebar.gridMode() && gridIds().length > 1} fallback={
       <SessionProviders>
         <Suspense fallback={<Loading />}>
           <Session />

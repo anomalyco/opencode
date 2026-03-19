@@ -1,4 +1,5 @@
 import { AppIcon } from "@opencode-ai/ui/app-icon"
+import { useNavigate, useLocation, useParams, useSearchParams } from "@solidjs/router"
 import { Button } from "@opencode-ai/ui/button"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -262,8 +263,21 @@ export function SessionHeader() {
       .catch((err: unknown) => showRequestError(language, err))
   }
 
-  const centerMount = createMemo(() => document.getElementById("opencode-titlebar-center"))
-  const rightMount = createMemo(() => document.getElementById("opencode-titlebar-right"))
+  const centerMount = createMemo(() => {
+    if (layout.sidebar.gridMode()) {
+      // In grid mode, only mount to title bar if we are the actively focused session
+      const id = sync.data.session.length > 0 ? sync.data.session[0].id : undefined
+      if (params.id !== id) return null
+    }
+    return document.getElementById("opencode-titlebar-center")
+  })
+  const rightMount = createMemo(() => {
+    if (layout.sidebar.gridMode()) {
+      const id = sync.data.session.length > 0 ? sync.data.session[0].id : undefined
+      if (params.id !== id) return null
+    }
+    return document.getElementById("opencode-titlebar-right")
+  })
 
   return (
     <>
