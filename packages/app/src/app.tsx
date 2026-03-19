@@ -72,7 +72,7 @@ const SessionRoute = () => {
   })
 
   return (
-    <Show when={layout.sidebar.gridMode() && gridIds().length > 1} fallback={
+    <Show when={layout.sidebar.gridMode() && (gridIds().length > 1 || (gridIds().length === 1 && gridIds()[0] === ""))} fallback={
       <SessionProviders>
         <Suspense fallback={<Loading />}>
           <Session />

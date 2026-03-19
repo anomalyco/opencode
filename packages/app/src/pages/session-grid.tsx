@@ -58,7 +58,7 @@ export function SessionGrid(props: { ids: string[] }) {
 
   const gridDims = createMemo(() => {
     const c = count()
-    if (c === 1) return { cols: 1, rows: 1 }
+    if (c <= 1) return { cols: 1, rows: 1 }
     if (c === 2) return { cols: 2, rows: 1 }
     if (c === 3) return { cols: 3, rows: 1 }
     if (c === 4) return { cols: 2, rows: 2 }
