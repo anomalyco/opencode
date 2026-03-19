@@ -19,12 +19,12 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () =>
     editing: false,
     title: props.terminal.title,
     menuOpen: false,
-    pendingRename: false,
     menuPosition: { x: 0, y: 0 },
     blurEnabled: false,
   })
   let input: HTMLInputElement | undefined
   let blurFrame: number | undefined
+  let editRequested = false
 
   const isDefaultTitle = () => {
     const number = props.terminal.titleNumber
@@ -170,13 +170,13 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () =>
                 top: `${store.menuPosition.y}px`,
               }}
               onCloseAutoFocus={(e) => {
-                if (!store.pendingRename) return
+                if (!editRequested) return
                 e.preventDefault()
-                setStore("pendingRename", false)
+                editRequested = false
                 requestAnimationFrame(() => edit())
               }}
             >
-              <DropdownMenu.Item onSelect={() => setStore("pendingRename", true)}>
+              <DropdownMenu.Item onSelect={() => (editRequested = true)}>
                 <Icon name="edit" class="w-4 h-4 mr-2" />
                 {language.t("common.rename")}
               </DropdownMenu.Item>
