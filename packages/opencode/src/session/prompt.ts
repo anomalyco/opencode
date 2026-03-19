@@ -82,6 +82,15 @@ export namespace SessionPrompt {
     },
     async (current) => {
       for (const item of Object.values(current)) {
+        // Reject all pending callbacks to prevent callers from hanging
+        const cancelError = new DOMException("Session cancelled", "AbortError")
+        for (const callback of item.callbacks) {
+          try {
+            callback.reject(cancelError)
+          } catch (e) {
+            log.error("failed to reject callback during dispose", { error: e })
+          }
+        }
         item.abort.abort()
       }
     },
@@ -264,6 +273,15 @@ export namespace SessionPrompt {
     if (!match) {
       SessionStatus.set(sessionID, { type: "idle" })
       return
+    }
+    // Reject all pending callbacks to prevent callers from hanging
+    const cancelError = new DOMException("Session cancelled", "AbortError")
+    for (const callback of match.callbacks) {
+      try {
+        callback.reject(cancelError)
+      } catch (e) {
+        log.error("failed to reject callback during cancel", { error: e, sessionID })
+      }
     }
     match.abort.abort()
     delete s[sessionID]
