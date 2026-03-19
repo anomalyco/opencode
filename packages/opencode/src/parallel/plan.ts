@@ -164,7 +164,8 @@ export namespace PlanStore {
       }
 
       const worker = plan.workers[workerIndex]
-      if (input.status !== undefined) {
+      // Skip validation if already in target state (idempotent update)
+      if (input.status !== undefined && worker.status !== input.status) {
         validateWorkerTransition(worker.status, input.status)
       }
 

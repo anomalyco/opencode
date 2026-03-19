@@ -303,7 +303,7 @@ describe("Parallel E2E", () => {
 
       const abandoned = await Recovery.abandon(plan.id)
       expect(abandoned.status).toBe("failed")
-      expect(abandoned.workers[0].error).toBe("Abandoned by user")
+      expect(abandoned.workers[0].error).toBe("Abandoned by user - plan cleanup requested")
 
       // Worktree cleaned up
       expect(
