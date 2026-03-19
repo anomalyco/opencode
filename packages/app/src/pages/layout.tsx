@@ -567,6 +567,7 @@ export default function Layout(props: ParentProps) {
   const [autoselecting] = createResource(async () => {
     await ready.promise
     await layout.ready.promise
+    if (!untrack(() => state.autoselect)) return
 
     const list = layout.projects.list()
     const last = server.projects.last()
