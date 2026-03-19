@@ -191,24 +191,6 @@ export function SessionGrid(props: { ids: string[] }) {
     }
   }
 
-  const removeSessionFromGrid = (id: string) => {
-    const next = props.ids.filter(x => x !== id)
-    if (next.length <= 1) {
-      setSearchParams({ grid: undefined })
-      if (next.length === 1) {
-        const url = next[0] ? `/${params.dir}/session/${next[0]}` : `/${params.dir}/session`
-        navigate(url)
-      } else {
-        navigate(`/${params.dir}/session`)
-      }
-    } else if (id === (params.id ?? "")) {
-      const url = next[0] ? `/${params.dir}/session/${next[0]}?grid=${next.join(",")}` : `/${params.dir}/session?grid=${next.join(",")}`
-      navigate(url)
-    } else {
-      setSearchParams({ grid: next.join(",") })
-    }
-  }
-
   const moveTile = (hoverId: string, e: DragEvent) => {
     const dragging = dragId()
     if (!dragging || dragging === hoverId) return
