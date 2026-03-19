@@ -12,7 +12,7 @@ export namespace Decomposition {
 
   export const SYSTEM_PROMPT = `You are a task decomposition agent for a parallel coding system.
 
-Given a user's task, break it down into independent subtasks that can be executed in parallel by separate coding agents. Each agent will work in an isolated git worktree branched from the same HEAD.
+Given a user's task, break it down into subtasks that can be executed in parallel by separate coding agents. Each agent will work in an isolated git worktree branched from the same HEAD.
 
 Rules:
 1. Each subtask MUST touch a different set of files where possible. File overlap causes merge conflicts.
@@ -21,7 +21,9 @@ Rules:
 4. Include a clear fileScope listing which files/directories the subtask should modify.
 5. If a task cannot be meaningfully parallelized (e.g., a single-file bug fix), return exactly ONE subtask.
 6. Subtask descriptions should be detailed enough for an agent to execute without ambiguity.
-7. Dependencies between subtasks are NOT supported in v1 — all subtasks run simultaneously.
+7. Use the dependencies field to specify when one subtask must complete before another can start. Reference dependencies by the 0-based index of the subtask they depend on (e.g., 0, 1, 2).
+8. Avoid circular dependencies - the dependency graph must be acyclic.
+9. If subtasks are truly independent, leave dependencies empty.
 
 Output format: a JSON object with a "subtasks" array.`
 
@@ -29,6 +31,11 @@ Output format: a JSON object with a "subtasks" array.`
     title: z.string().describe("Short label for the subtask, e.g., 'Add login form'"),
     description: z.string().describe("Full instructions for the worker agent"),
     fileScope: z.array(z.string()).describe("Files/directories this subtask should modify"),
+    dependencies: z
+      .array(z.number())
+      .describe(
+        "0-based indices of subtasks that must complete before this one (leave empty for independent subtasks)",
+      ),
   })
 
   const OutputSchema = z.object({
@@ -204,6 +211,130 @@ Output format: a JSON object with a "subtasks" array.`
     return lines.join("\n")
   }
 
+  export interface DependencyError {
+    type: "circular" | "invalid" | "self"
+    subtaskIndex: number
+    details: string
+  }
+
+  export function validateDependencies(subtasks: { dependencies: number[] }[]): DependencyError | undefined {
+    const n = subtasks.length
+
+    for (let i = 0; i < n; i++) {
+      for (const dep of subtasks[i].dependencies) {
+        if (dep < 0 || dep >= n) {
+          return {
+            type: "invalid",
+            subtaskIndex: i,
+            details: `Dependency ${dep} out of range (valid: 0-${n - 1})`,
+          }
+        }
+        if (dep === i) {
+          return {
+            type: "self",
+            subtaskIndex: i,
+            details: `Subtask ${i} depends on itself`,
+          }
+        }
+      }
+    }
+
+    // Detect cycles using DFS
+    const visited = new Set<number>()
+    const recStack = new Set<number>()
+
+    function hasCycle(node: number): boolean {
+      visited.add(node)
+      recStack.add(node)
+
+      for (const dep of subtasks[node].dependencies) {
+        if (!visited.has(dep)) {
+          if (hasCycle(dep)) return true
+        } else if (recStack.has(dep)) {
+          return true
+        }
+      }
+
+      recStack.delete(node)
+      return false
+    }
+
+    for (let i = 0; i < n; i++) {
+      if (!visited.has(i)) {
+        if (hasCycle(i)) {
+          return {
+            type: "circular",
+            subtaskIndex: i,
+            details: `Circular dependency detected involving subtask ${i}`,
+          }
+        }
+      }
+    }
+
+    return undefined
+  }
+
+  export function topologicalSort<T extends { dependencies: number[] }>(
+    subtasks: T[],
+  ): { order: number[]; levels: number[] } {
+    const n = subtasks.length
+    const inDegree = new Array(n).fill(0)
+    const adj = Array.from({ length: n }, () => [] as number[])
+
+    for (let i = 0; i < n; i++) {
+      for (const dep of subtasks[i].dependencies) {
+        adj[dep].push(i)
+        inDegree[i]++
+      }
+    }
+
+    const queue: number[] = []
+    const levels = new Array(n).fill(0)
+
+    for (let i = 0; i < n; i++) {
+      if (inDegree[i] === 0) {
+        queue.push(i)
+        levels[i] = 0
+      }
+    }
+
+    const order: number[] = []
+
+    while (queue.length > 0) {
+      const u = queue.shift()!
+      order.push(u)
+
+      for (const v of adj[u]) {
+        inDegree[v]--
+        if (inDegree[v] === 0) {
+          queue.push(v)
+          levels[v] = levels[u] + 1
+        }
+      }
+    }
+
+    if (order.length !== n) {
+      throw new Error("Cycle detected in dependency graph")
+    }
+
+    return { order, levels }
+  }
+
+  export function assignSubtaskIDs<
+    T extends { title: string; description: string; fileScope: string[]; dependencies: number[] },
+  >(subtasks: T[]): Subtask[] {
+    const n = subtasks.length
+    const ids = Array.from({ length: n }, () => SubtaskID.ascending())
+
+    return subtasks.map((st, i) => ({
+      id: ids[i],
+      title: st.title,
+      description: st.description,
+      fileScope: st.fileScope,
+      dependencies: st.dependencies.map((depIdx) => ids[depIdx]),
+    }))
+  }
+
   export async function decompose(input: {
     task: string
     model: ModelRef
@@ -230,13 +361,13 @@ Output format: a JSON object with a "subtasks" array.`
       schema: OutputSchema,
     })
 
-    const subtasks: Subtask[] = result.object.subtasks.map((st) => ({
-      id: SubtaskID.ascending(),
-      title: st.title,
-      description: st.description,
-      fileScope: st.fileScope,
-      dependencies: [],
-    }))
+    const depError = validateDependencies(result.object.subtasks)
+    if (depError) {
+      log.error("dependency validation failed", depError)
+      throw new Error(`Invalid dependencies: ${depError.type} - ${depError.details}`)
+    }
+
+    const subtasks = assignSubtaskIDs(result.object.subtasks)
 
     log.info("decomposition complete", { count: subtasks.length })
     return subtasks
