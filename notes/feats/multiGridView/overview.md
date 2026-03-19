@@ -40,6 +40,8 @@ Power users frequently juggle multiple contexts (e.g. looking at a chat with bac
 ### 5. Glitch Resolution
 - **Tooltip DOM Error**: Fixed a SolidJS `HierarchyRequestError` that fired when collapsing the sidebar by refactoring how the `<Tooltip>` components swap DOM nodes with their fallbacks.
 - **Title Bar Jumble**: Fixed a bug where multiple tiled sessions were all simultaneously trying to use React Portals to render their `<SessionHeader>` action buttons (like "Open in Cursor") into the global top `<Titlebar>`. Now, only the actively focused session (matching `params.id`) mounts to the header.
+- **searchParams Runtime Crash & Build Failure**: Resolved a `ReferenceError: searchParams is not defined` crash that occurred when clicking sessions in the sidebar with grid mode active. This required properly initializing `useSearchParams` within the `SessionRow` and `SessionItem` components, as well as fixing a missing `useParams` import in `session-header.tsx` that was silently failing the build and preventing the fix from loading.
+- **Sidebar Grid Selection Highlighting**: Fixed an issue where secondary sessions in the grid were not highlighted in the sidebar. Since Solid Router's default `.active` class only applies to exact URL path matches (ignoring `?grid=` query parameters), we implemented a custom `isActive` computation that manually applies the `active` CSS class to all currently tiled sessions in the `SessionRow` component.
 
 ## Next Steps / Future Polish
 - Implementing draggable/resizable splitters between the grid tiles (potentially migrating from native CSS Grid to a dedicated split-pane library like `allotment`).
