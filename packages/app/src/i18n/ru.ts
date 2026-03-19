@@ -853,7 +853,6 @@ export const dict = {
   "workspace.reset.archived.none": "Активные сессии не будут архивированы.",
   "workspace.reset.archived.one": "1 сессия будет архивирована.",
   "workspace.reset.archived.many": "{{count}} сессий будет архивировано.",
-  "workspace.reset.note": "Рабочее пространство будет сброшено в соответствие с веткой по умолчанию.",
   "settings.archive.title": "Архивированные сессии",
   "settings.archive.description": "Восстановите архивированные сессии, чтобы они отображались на боковой панели.",
   "settings.archive.none": "Нет архивированных сессий.",
