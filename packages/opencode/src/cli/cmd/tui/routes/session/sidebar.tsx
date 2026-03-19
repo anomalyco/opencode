@@ -312,14 +312,6 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
               </box>
             </box>
           </Show>
-          <Show when={sync.data.vcs?.branch}>
-            <box>
-              <text fg={theme.text}>
-                <b>Git</b>
-              </text>
-              <text fg={theme.textMuted}> {sync.data.vcs!.branch}</text>
-            </box>
-          </Show>
           <text>
             <span style={{ fg: theme.textMuted }}>{directory().split("/").slice(0, -1).join("/")}/</span>
             <span style={{ fg: theme.text }}>{directory().split("/").at(-1)?.split(":")[0]}</span>
