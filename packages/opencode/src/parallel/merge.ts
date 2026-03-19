@@ -1,3 +1,6 @@
+import path from "path"
+import z from "zod"
+import { generateObject } from "ai"
 import { git } from "../util/git"
 import { Instance } from "../project/instance"
 import { PlanStore } from "./plan"
@@ -5,10 +8,8 @@ import { Bus } from "@/bus"
 import { ParallelEvent } from "./events"
 import { Log } from "@/util/log"
 import { Worktree } from "../worktree"
-import { generateObject } from "ai"
 import { Provider } from "@/provider/provider"
-import z from "zod"
-import type { PlanID } from "./schema"
+import type { PlanID, ModelRef } from "./schema"
 
 export namespace MergePipeline {
   const log = Log.create({ service: "merge" })
@@ -50,12 +51,16 @@ export namespace MergePipeline {
 
       if (result === "failed") {
         allSuccess = false
-        await PlanStore.updateWorker(planID, worker.subtaskID, {
+        await PlanStore.updateWorker({
+          id: planID,
+          subtaskID: worker.subtaskID,
           status: "conflict",
           error: "Merge conflict could not be resolved",
         })
       } else {
-        await PlanStore.updateWorker(planID, worker.subtaskID, {
+        await PlanStore.updateWorker({
+          id: planID,
+          subtaskID: worker.subtaskID,
           status: "merged",
         })
       }
@@ -119,9 +124,10 @@ export namespace MergePipeline {
     theirsContent: string
     globalTask: string
     subtaskDescription: string
-    model: { id: string; providerID: string }
+    model: ModelRef
   }): Promise<string> {
-    const language = await Provider.getLanguage(input.model)
+    const fullModel = await Provider.getModel(input.model.providerID, input.model.modelID)
+    const language = await Provider.getLanguage(fullModel)
 
     const result = await generateObject({
       model: language,
@@ -146,8 +152,6 @@ export namespace MergePipeline {
     return outputText(result.stdout)
   }
 }
-
-import path from "path"
 
 function outputText(input: Uint8Array | undefined): string {
   if (!input?.length) return ""

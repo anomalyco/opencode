@@ -1,4 +1,15 @@
-import type { PlanStatus, WorkerStatus } from "./schema"
+import z from "zod"
+import { NamedError } from "@opencode-ai/util/error"
+import type { PlanStatus, WorkerStatus, WorkerState } from "./schema"
+
+export const InvalidTransitionError = NamedError.create(
+  "InvalidTransitionError",
+  z.object({
+    from: z.string(),
+    to: z.string(),
+    message: z.string(),
+  }),
+)
 
 export const VALID_PLAN_TRANSITIONS: Record<PlanStatus, PlanStatus[]> = {
   draft: ["proposed", "failed"],
@@ -22,21 +33,41 @@ export const VALID_WORKER_TRANSITIONS: Record<WorkerStatus, WorkerStatus[]> = {
 }
 
 export function canTransition(from: PlanStatus, to: PlanStatus): boolean {
-  return VALID_PLAN_TRANSITIONS[from]?.includes(to) ?? false
+  return VALID_PLAN_TRANSITIONS[from].includes(to)
 }
 
 export function canTransitionWorker(from: WorkerStatus, to: WorkerStatus): boolean {
-  return VALID_WORKER_TRANSITIONS[from]?.includes(to) ?? false
+  return VALID_WORKER_TRANSITIONS[from].includes(to)
 }
 
 export function validateTransition(from: PlanStatus, to: PlanStatus): void {
   if (!canTransition(from, to)) {
-    throw new Error(`Invalid transition: ${from} -> ${to}`)
+    throw new InvalidTransitionError({
+      from,
+      to,
+      message: `Invalid plan transition: ${from} -> ${to}`,
+    })
   }
 }
 
 export function validateWorkerTransition(from: WorkerStatus, to: WorkerStatus): void {
   if (!canTransitionWorker(from, to)) {
-    throw new Error(`Invalid worker transition: ${from} -> ${to}`)
+    throw new InvalidTransitionError({
+      from,
+      to,
+      message: `Invalid worker transition: ${from} -> ${to}`,
+    })
   }
+}
+
+export function isPlanTerminal(status: PlanStatus): boolean {
+  return status === "done" || status === "failed"
+}
+
+export function isWorkerTerminal(status: WorkerStatus): boolean {
+  return status === "merged" || status === "failed" || status === "conflict"
+}
+
+export function allWorkersTerminal(workers: WorkerState[]): boolean {
+  return workers.every((w) => isWorkerTerminal(w.status))
 }

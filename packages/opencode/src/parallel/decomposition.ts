@@ -2,7 +2,8 @@ import z from "zod"
 import { generateObject } from "ai"
 import { Provider } from "@/provider/provider"
 import { Log } from "@/util/log"
-import { SubtaskID, Subtask } from "./schema"
+import { SubtaskID } from "./schema"
+import type { Subtask, ModelRef } from "./schema"
 
 export namespace Decomposition {
   const log = Log.create({ service: "decomposition" })
@@ -34,12 +35,13 @@ Output format: a JSON object with a "subtasks" array.`
 
   export async function decompose(input: {
     task: string
-    model: { id: string; providerID: string }
+    model: ModelRef
     codebaseContext?: string
   }): Promise<Subtask[]> {
     log.info("decomposing task", { task: input.task.slice(0, 100) })
 
-    const language = await Provider.getLanguage(input.model)
+    const fullModel = await Provider.getModel(input.model.providerID, input.model.modelID)
+    const language = await Provider.getLanguage(fullModel)
 
     const userContent = input.codebaseContext
       ? `## Task\n${input.task}\n\n## Codebase Context\n${input.codebaseContext}`
@@ -57,7 +59,7 @@ Output format: a JSON object with a "subtasks" array.`
       schema: OutputSchema,
     })
 
-    const subtasks: Subtask[] = result.object.subtasks.map((st, index) => ({
+    const subtasks: Subtask[] = result.object.subtasks.map((st) => ({
       id: SubtaskID.ascending(),
       title: st.title,
       description: st.description,

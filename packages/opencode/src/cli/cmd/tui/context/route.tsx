@@ -14,7 +14,12 @@ export type SessionRoute = {
   initialPrompt?: PromptInfo
 }
 
-export type Route = HomeRoute | SessionRoute
+export type ParallelRoute = {
+  type: "parallel"
+  planID: string
+}
+
+export type Route = HomeRoute | SessionRoute | ParallelRoute
 
 export const { use: useRoute, provider: RouteProvider } = createSimpleContext({
   name: "Route",

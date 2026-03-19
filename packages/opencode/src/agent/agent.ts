@@ -149,6 +149,77 @@ export namespace Agent {
           }),
           user,
         ),
+        options: {},
+        mode: "subagent",
+        native: true,
+      },
+ orchestrator: {
+        name: "orchestrator",
+        description: "Orchestrator agent for parallel task decomposition. Break down tasks into subtasks and create execution plans.",
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            "*": "deny",
+            grep: "allow",
+            glob: "allow",
+            list: "allow",
+            bash: "allow",
+            read: "allow",
+            external_directory: {
+              "*": "ask",
+              ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
+            },
+          }),
+          user,
+        ),
+        options: {},
+        mode: "subagent",
+        native: true,
+        prompt: `You are a task decomposition agent for a parallel coding system.
+
+Your role is to decompose complex tasks into independent subtasks that can be executed in parallel by separate coding agents.
+
+Rules for1. Each subtask MUST touch a different set of files where possible. File overlap causes merge conflicts.
+2. Each subtask must be self-contained — the worker agent receives ONLY the global task description and its specific subtask, nothing else.
+3. Each subtask should be small enough for a single agent session (under ~500 lines changed).
+4. Include a clear fileScope listing which files/directories the subtask should modify.
+5. If a task cannot be meaningfully parallelized (e.g., a single-file bug fix), return exactly ONE subtask.
+6. Subtask descriptions should be detailed enough for an agent to execute without ambiguity.
+7. Dependencies between subtasks are NOT supported in v1 — all subtasks run simultaneously
+
+Output format: a JSON object with a "subtasks" array.`,
+      },
+      explore: {
+        name: "explore",
+        description: `Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. "src/components/**/*.tsx"), search code for keywords (eg. "API endpoints"), or answer questions about the codebase (eg. "how do API endpoints work?"). When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "very thorough" for comprehensive analysis across multiple locations and naming conventions.`,
+        prompt: PROMPT_EXPLORE,
+        options: {},
+        mode: "subagent",
+        native: true,
+      },
+          }),
+          user,
+        ),
+        options: {},
+        mode: "subagent",
+        native: true,
+        prompt: `You are the task decomposition agent for a parallel coding system.
+
+Your role is to decompose complex tasks into independent subtasks that can be executed in parallel by separate coding agents.
+
+Rules for1. Each subtask MUST touch a different set of files where possible. File overlap causes merge conflicts.
+2. Each subtask must be self-contained — the worker agent receives ONLY the global task description and its specific subtask, nothing else.
+3. Each subtask should be small enough for a single agent session (under ~500 lines changed).
+4. Include a clear fileScope listing which files/directories the subtask should modify.
+5. If a task cannot be meaningfully parallelized (e.g., a single-file bug fix), return exactly ONE subtask.
+6. Subtask descriptions should be detailed enough for an agent to execute without ambiguity.
+7. Dependencies between subtasks are NOT supported in v1 — all subtasks run simultaneously.
+
+Output format: a JSON object with a "subtasks" array.`,
+      },
+          }),
+          user,
+        ),
         description: `Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. "src/components/**/*.tsx"), search code for keywords (eg. "API endpoints"), or answer questions about the codebase (eg. "how do API endpoints work?"). When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "very thorough" for comprehensive analysis across multiple locations and naming conventions.`,
         prompt: PROMPT_EXPLORE,
         options: {},

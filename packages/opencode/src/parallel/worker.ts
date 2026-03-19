@@ -2,12 +2,12 @@ import { Worktree } from "../worktree"
 import { Session } from "../session"
 import { Instance } from "../project/instance"
 import { InstanceBootstrap } from "../project/bootstrap"
-import { Bus } from "@/bus"
-import { ParallelEvent } from "./events"
 import { PlanStore } from "./plan"
 import { Log } from "@/util/log"
-import type { Plan, PlanID, SubtaskID, Subtask } from "./schema"
+import { GlobalBus } from "@/bus/global"
 import { SessionStatus } from "../session/status"
+import { git } from "../util/git"
+import type { Plan, PlanID, SubtaskID, Subtask, WorkerState } from "./schema"
 
 export namespace WorkerManager {
   const log = Log.create({ service: "worker" })
@@ -50,14 +50,14 @@ export namespace WorkerManager {
           directory: info.directory,
           init: InstanceBootstrap,
           fn: async () => {
-            const prompt = buildWorkerPrompt(plan.task, subtask)
+            const promptText = buildWorkerPrompt(plan.task, subtask)
             const { SessionPrompt } = await import("../session/prompt")
-            await SessionPrompt.append({
+            await SessionPrompt.prompt({
               sessionID: session.id,
               parts: [
                 {
-                  type: "text",
-                  text: prompt,
+                  type: "text" as const,
+                  text: promptText,
                 },
               ],
             })
@@ -99,49 +99,142 @@ export namespace WorkerManager {
 
     log.info("waiting for workers", { planID, count: running.length })
 
-    await Promise.allSettled(running.map((worker) => waitForWorker(planID, worker, abort)))
+    // Build a map of sessionID -> worker for fast lookup
+    const sessionToWorker = new Map<string, { subtaskID: SubtaskID; worktreeDir: string }>()
+    for (const worker of running) {
+      if (worker.sessionID && worker.worktreeDir) {
+        sessionToWorker.set(worker.sessionID, {
+          subtaskID: worker.subtaskID,
+          worktreeDir: worker.worktreeDir,
+        })
+      }
+    }
 
-    log.info("all workers complete", { planID })
-  }
+    const pending = new Set(sessionToWorker.keys())
 
-  async function waitForWorker(
-    planID: PlanID,
-    worker: { subtaskID: SubtaskID; sessionID?: string; worktreeDir?: string },
-    abort: AbortSignal,
-  ): Promise<void> {
-    if (!worker.sessionID || !worker.worktreeDir) return
-
-    return new Promise<void>((resolve) => {
-      const checkInterval = setInterval(async () => {
+    await new Promise<void>((resolve) => {
+      // Listen to GlobalBus for session.idle events from any instance
+      const handler = async (event: { directory?: string; payload: any }) => {
         if (abort.aborted) {
-          clearInterval(checkInterval)
+          cleanup()
           resolve()
           return
         }
 
+        const { payload } = event
+        if (payload.type !== "session.idle" && payload.type !== "session.status") return
+
+        // session.status events have { sessionID, status: { type } }
+        // session.idle events have { sessionID }
+        const sessionID = payload.properties?.sessionID
+        if (!sessionID || !pending.has(sessionID)) return
+
+        const isIdle =
+          payload.type === "session.idle" ||
+          (payload.type === "session.status" && payload.properties?.status?.type === "idle")
+
+        if (!isIdle) return
+
+        const worker = sessionToWorker.get(sessionID)
+        if (!worker) return
+
+        pending.delete(sessionID)
+        log.info("worker completed", { planID, subtaskID: worker.subtaskID })
+
         try {
-          await Instance.provide({
-            directory: worker.worktreeDir!,
-            init: InstanceBootstrap,
-            fn: async () => {
-              const status = SessionStatus.get(worker.sessionID!)
-              if (status.type === "idle") {
-                await updateWorker(planID, worker.subtaskID, { status: "done" })
-                clearInterval(checkInterval)
-                resolve()
-              }
-            },
-          })
-        } catch {
-          await updateWorker(planID, worker.subtaskID, {
-            status: "failed",
-            error: "Worker session errored",
-          })
-          clearInterval(checkInterval)
+          // Collect diff stats
+          const diffStat = await collectDiffStat(worker.worktreeDir)
+          await updateWorker(planID, worker.subtaskID, { status: "done", diffStat })
+        } catch (e) {
+          const error = e instanceof Error ? e.message : "Worker completion handling failed"
+          await updateWorker(planID, worker.subtaskID, { status: "failed", error })
+        }
+
+        if (pending.size === 0) {
+          cleanup()
           resolve()
         }
-      }, 2000)
+      }
+
+      const cleanup = () => {
+        GlobalBus.off("event", handler)
+        if (fallbackTimer) clearInterval(fallbackTimer)
+      }
+
+      GlobalBus.on("event", handler)
+
+      // Fallback poll every 10s in case we missed an event (e.g., session was already idle before we subscribed)
+      const fallbackTimer = setInterval(async () => {
+        if (abort.aborted || pending.size === 0) {
+          cleanup()
+          resolve()
+          return
+        }
+
+        for (const sessionID of [...pending]) {
+          const worker = sessionToWorker.get(sessionID)
+          if (!worker) continue
+
+          try {
+            const idle = await Instance.provide({
+              directory: worker.worktreeDir,
+              init: InstanceBootstrap,
+              fn: async () => {
+                const status = SessionStatus.get(sessionID)
+                return status.type === "idle"
+              },
+            })
+
+            if (idle) {
+              pending.delete(sessionID)
+              const diffStat = await collectDiffStat(worker.worktreeDir)
+              await updateWorker(planID, worker.subtaskID, { status: "done", diffStat })
+            }
+          } catch {
+            pending.delete(sessionID)
+            await updateWorker(planID, worker.subtaskID, {
+              status: "failed",
+              error: "Worker session errored",
+            })
+          }
+        }
+
+        if (pending.size === 0) {
+          cleanup()
+          resolve()
+        }
+      }, 10_000)
+
+      // Handle abort
+      abort.addEventListener(
+        "abort",
+        () => {
+          cleanup()
+          resolve()
+        },
+        { once: true },
+      )
     })
+
+    log.info("all workers complete", { planID })
+  }
+
+  async function collectDiffStat(
+    worktreeDir: string,
+  ): Promise<{ additions: number; deletions: number; files: number } | undefined> {
+    try {
+      const stat = await git(["diff", "--stat", "HEAD"], { cwd: worktreeDir })
+      const output = outputText(stat.stdout)
+      const lines = output.split("\n")
+      const lastLine = lines[lines.length - 1] ?? ""
+      const files = parseInt(lastLine.match(/(\d+) file/)?.[1] ?? "0")
+      const additions = parseInt(lastLine.match(/(\d+) insertion/)?.[1] ?? "0")
+      const deletions = parseInt(lastLine.match(/(\d+) deletion/)?.[1] ?? "0")
+      if (files === 0 && additions === 0 && deletions === 0) return undefined
+      return { additions, deletions, files }
+    } catch {
+      return undefined
+    }
   }
 
   function buildWorkerPrompt(globalTask: string, subtask: Subtask): string {
@@ -177,11 +270,15 @@ ${subtask.fileScope.map((f) => `- ${f}`).join("\n")}
       worktreeName?: string
       worktreeDir?: string
       branch?: string
+      diffStat?: { additions: number; deletions: number; files: number }
     },
   ) {
-    await PlanStore.updateWorker(planID, subtaskID, update)
-    const plan = await PlanStore.get(planID)
-    const worker = plan.workers.find((w) => w.subtaskID === subtaskID)!
-    Bus.publish(ParallelEvent.WorkerUpdated, { planID, worker })
+    // PlanStore.updateWorker already publishes both PlanUpdated and WorkerUpdated events
+    await PlanStore.updateWorker({ id: planID, subtaskID, ...update })
   }
+}
+
+function outputText(input: Uint8Array | undefined): string {
+  if (!input?.length) return ""
+  return new TextDecoder().decode(input).trim()
 }
