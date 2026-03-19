@@ -928,3 +928,33 @@ describe("session.message-v2.fromError", () => {
     })
   })
 })
+
+describe("isMedia", () => {
+  test("identifies image types", () => {
+    expect(MessageV2.isMedia("image/png")).toBe(true)
+    expect(MessageV2.isMedia("image/jpeg")).toBe(true)
+    expect(MessageV2.isMedia("image/svg+xml")).toBe(true)
+  })
+
+  test("identifies pdf", () => {
+    expect(MessageV2.isMedia("application/pdf")).toBe(true)
+  })
+
+  test("identifies video types", () => {
+    expect(MessageV2.isMedia("video/mp4")).toBe(true)
+    expect(MessageV2.isMedia("video/webm")).toBe(true)
+    expect(MessageV2.isMedia("video/mp2t")).toBe(true)
+  })
+
+  test("identifies audio types", () => {
+    expect(MessageV2.isMedia("audio/mpeg")).toBe(true)
+    expect(MessageV2.isMedia("audio/wav")).toBe(true)
+    expect(MessageV2.isMedia("audio/ogg")).toBe(true)
+  })
+
+  test("rejects non-media types", () => {
+    expect(MessageV2.isMedia("text/plain")).toBe(false)
+    expect(MessageV2.isMedia("application/json")).toBe(false)
+    expect(MessageV2.isMedia("application/octet-stream")).toBe(false)
+  })
+})

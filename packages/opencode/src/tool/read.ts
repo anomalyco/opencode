@@ -141,8 +141,34 @@ export const ReadTool = Tool.define("read", {
       }
     }
 
-    const isBinary = await isBinaryFile(filepath, Number(stat.size))
-    if (isBinary) throw new Error(`Cannot read binary file: ${filepath}`)
+    const binary = await isBinaryFile(filepath, Number(stat.size))
+    const isVideo = mime.startsWith("video/") && binary
+    const isAudio = mime.startsWith("audio/") && binary
+    if (isVideo || isAudio) {
+      if (Number(stat.size) > 20 * 1024 * 1024)
+        throw new Error(
+          `File too large for media attachment (${Math.round(Number(stat.size) / 1024 / 1024)}MB). Maximum is 20MB: ${filepath}`,
+        )
+      const msg = `${isVideo ? "Video" : "Audio"} read successfully`
+      return {
+        title,
+        output: msg,
+        metadata: {
+          preview: msg,
+          truncated: false,
+          loaded: instructions.map((i) => i.filepath),
+        },
+        attachments: [
+          {
+            type: "file",
+            mime,
+            url: `data:${mime};base64,${Buffer.from(await Filesystem.readBytes(filepath)).toString("base64")}`,
+          },
+        ],
+      }
+    }
+
+    if (binary) throw new Error(`Cannot read binary file: ${filepath}`)
 
     const stream = createReadStream(filepath, { encoding: "utf8" })
     const rl = createInterface({
