@@ -1,5 +1,5 @@
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
-import { base64Encode, checksum } from "@opencode-ai/util/encode"
+import { base64Decode, base64Encode, checksum } from "@opencode-ai/util/encode"
 
 export const serverHost = process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"
 export const serverPort = process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"
@@ -46,6 +46,10 @@ export async function getWorktree() {
 
 export function dirSlug(directory: string) {
   return base64Encode(directory)
+}
+
+export function dirDecode(slug: string) {
+  return base64Decode(slug)
 }
 
 export function dirPath(directory: string) {

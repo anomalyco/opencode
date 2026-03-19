@@ -1,4 +1,3 @@
-import { base64Decode } from "@opencode-ai/util/encode"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -18,7 +17,7 @@ import {
   waitSlug,
 } from "../actions"
 import { dropdownMenuContentSelector, inlineInputSelector, workspaceItemSelector } from "../selectors"
-import { createSdk, dirSlug } from "../utils"
+import { createSdk, dirDecode, dirSlug } from "../utils"
 
 async function setupWorkspaceTest(page: Page, project: { slug: string }) {
   const rootSlug = project.slug
@@ -28,7 +27,7 @@ async function setupWorkspaceTest(page: Page, project: { slug: string }) {
 
   await page.getByRole("button", { name: "New workspace" }).first().click()
   const slug = await waitSlug(page, [rootSlug])
-  const dir = base64Decode(slug)
+  const dir = dirDecode(slug)
 
   await openSidebar(page)
 
@@ -80,7 +79,7 @@ test("can create a workspace", async ({ page, withProject }) => {
 
     await page.getByRole("button", { name: "New workspace" }).first().click()
     const workspaceSlug = await waitSlug(page, [slug])
-    const workspaceDir = base64Decode(workspaceSlug)
+    const workspaceDir = dirDecode(workspaceSlug)
 
     await openSidebar(page)
 
@@ -119,7 +118,7 @@ test("non-git projects keep workspace mode disabled", async ({ page, withProject
 
       await expect.poll(() => slugFromUrl(page.url()), { timeout: 30_000 }).not.toBe("")
 
-      const activeDir = base64Decode(slugFromUrl(page.url()))
+      const activeDir = dirDecode(slugFromUrl(page.url()))
       expect(path.basename(activeDir)).toContain("opencode-e2e-project-nongit-")
 
       await openSidebar(page)
@@ -256,7 +255,7 @@ test("can delete a workspace", async ({ page, withProject }) => {
     await clickMenuItem(menu, /^Delete$/i, { force: true })
     await confirmDialog(page, /^Delete workspace$/i)
 
-    await expect.poll(() => base64Decode(slugFromUrl(page.url()))).toBe(project.directory)
+    await expect.poll(() => dirDecode(slugFromUrl(page.url()))).toBe(project.directory)
 
     await expect
       .poll(
@@ -332,7 +331,7 @@ test("can reorder workspaces by drag and drop", async ({ page, withProject }) =>
         const prev = slugFromUrl(page.url())
         await page.getByRole("button", { name: "New workspace" }).first().click()
         const slug = await waitSlug(page, [rootSlug, prev])
-        const dir = base64Decode(slug)
+        const dir = dirDecode(slug)
         workspaces.push({ slug, directory: dir })
 
         await openSidebar(page)
