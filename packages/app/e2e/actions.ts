@@ -366,7 +366,24 @@ export async function resolveSlug(slug: string) {
   const directory = base64Decode(slug)
   if (!directory) throw new Error(`Failed to decode workspace slug: ${slug}`)
   const resolved = await resolveDirectory(directory)
-  return { directory: resolved, slug: base64Encode(resolved) }
+  return { directory: resolved, slug: base64Encode(resolved), raw: slug }
+}
+
+export async function waitDir(page: Page, directory: string) {
+  const target = await resolveDirectory(directory)
+  await expect
+    .poll(
+      async () => {
+        const slug = slugFromUrl(page.url())
+        if (!slug) return ""
+        return resolveSlug(slug)
+          .then((item) => item.directory)
+          .catch(() => "")
+      },
+      { timeout: 45_000 },
+    )
+    .toBe(target)
+  return { directory: target, slug: base64Encode(target) }
 }
 
 export function sessionIDFromUrl(url: string) {

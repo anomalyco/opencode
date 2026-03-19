@@ -15,6 +15,7 @@ import {
   resolveSlug,
   setWorkspacesEnabled,
   slugFromUrl,
+  waitDir,
   waitSlug,
 } from "../actions"
 import { dropdownMenuContentSelector, inlineInputSelector, workspaceItemSelector } from "../selectors"
@@ -28,7 +29,7 @@ async function setupWorkspaceTest(page: Page, project: { slug: string }) {
 
   await page.getByRole("button", { name: "New workspace" }).first().click()
   const next = await resolveSlug(await waitSlug(page, [rootSlug]))
-  await expect(page).toHaveURL(new RegExp(`/${next.slug}/session(?:[/?#]|$)`))
+  await waitDir(page, next.directory)
 
   await openSidebar(page)
 
@@ -80,7 +81,7 @@ test("can create a workspace", async ({ page, withProject }) => {
 
     await page.getByRole("button", { name: "New workspace" }).first().click()
     const next = await resolveSlug(await waitSlug(page, [slug]))
-    await expect(page).toHaveURL(new RegExp(`/${next.slug}/session(?:[/?#]|$)`))
+    await waitDir(page, next.directory)
 
     await openSidebar(page)
 
@@ -119,7 +120,7 @@ test("non-git projects keep workspace mode disabled", async ({ page, withProject
 
       await expect.poll(() => slugFromUrl(page.url()), { timeout: 30_000 }).not.toBe("")
 
-      const activeDir = base64Decode(slugFromUrl(page.url()))
+      const activeDir = await resolveSlug(slugFromUrl(page.url())).then((item) => item.directory)
       expect(path.basename(activeDir)).toContain("opencode-e2e-project-nongit-")
 
       await openSidebar(page)
@@ -332,7 +333,7 @@ test("can reorder workspaces by drag and drop", async ({ page, withProject }) =>
         const prev = slugFromUrl(page.url())
         await page.getByRole("button", { name: "New workspace" }).first().click()
         const next = await resolveSlug(await waitSlug(page, [rootSlug, prev]))
-        await expect(page).toHaveURL(new RegExp(`/${next.slug}/session(?:[/?#]|$)`))
+        await waitDir(page, next.directory)
         workspaces.push(next)
 
         await openSidebar(page)
