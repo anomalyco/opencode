@@ -68,6 +68,7 @@ describe("project.initGit endpoint", () => {
         },
       })
     } finally {
+      await Instance.disposeAll()
       reloadSpy.mockRestore()
       GlobalBus.off("event", fn)
     }
@@ -112,6 +113,7 @@ describe("project.initGit endpoint", () => {
         worktree: tmp.path,
       })
     } finally {
+      await Instance.disposeAll()
       reloadSpy.mockRestore()
       GlobalBus.off("event", fn)
     }

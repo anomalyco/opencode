@@ -150,8 +150,7 @@ export namespace Provider {
         autoload: false,
         options: {
           headers: {
-            "anthropic-beta":
-              "claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
+            "anthropic-beta": "interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
           },
         },
       }
@@ -839,7 +838,7 @@ export namespace Provider {
       return true
     }
 
-    const providers: { [providerID: string]: Info } = {}
+    const providers: Record<ProviderID, Info> = {} as Record<ProviderID, Info>
     const languages = new Map<string, LanguageModelV2>()
     const modelLoaders: {
       [providerID: string]: CustomModelLoader

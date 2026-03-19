@@ -1,6 +1,6 @@
 import { Effect, Layer, ManagedRuntime } from "effect"
-import { AccountService } from "@/account/service"
-import { AuthService } from "@/auth/service"
+import { AccountEffect } from "@/account/effect"
+import { AuthEffect } from "@/auth/effect"
 import { Instances } from "@/effect/instances"
 import type { InstanceServices } from "@/effect/instances"
 import { TruncateEffect } from "@/tool/truncate-effect"
@@ -8,10 +8,10 @@ import { Instance } from "@/project/instance"
 
 export const runtime = ManagedRuntime.make(
   Layer.mergeAll(
-    AccountService.defaultLayer, //
+    AccountEffect.defaultLayer, //
     TruncateEffect.defaultLayer,
     Instances.layer,
-  ).pipe(Layer.provideMerge(AuthService.defaultLayer)),
+  ).pipe(Layer.provideMerge(AuthEffect.layer)),
 )
 
 export function runPromiseInstance<A, E>(effect: Effect.Effect<A, E, InstanceServices>) {
