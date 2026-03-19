@@ -1,15 +1,16 @@
-import { BusEvent } from "@/bus/bus-event"
+import { Effect, Layer, ServiceMap } from "effect"
 import { Bus } from "@/bus"
-import path from "path"
-import z from "zod"
-import { Log } from "@/util/log"
-import { Instance } from "./instance"
+import { BusEvent } from "@/bus/bus-event"
+import { InstanceContext } from "@/effect/instance-context"
 import { FileWatcher } from "@/file/watcher"
+import { Log } from "@/util/log"
 import { git } from "@/util/git"
-
-const log = Log.create({ service: "vcs" })
+import { Instance } from "./instance"
+import z from "zod"
 
 export namespace Vcs {
+  const log = Log.create({ service: "vcs" })
+
   export const Event = {
     BranchUpdated: BusEvent.define(
       "vcs.branch.updated",
@@ -28,49 +29,55 @@ export namespace Vcs {
     })
   export type Info = z.infer<typeof Info>
 
-  async function currentBranch() {
-    const result = await git(["rev-parse", "--abbrev-ref", "HEAD"], {
-      cwd: Instance.worktree,
-    })
-    if (result.exitCode !== 0) return
-    const text = result.text().trim()
-    if (!text) return
-    return text
+  export interface Interface {
+    readonly branch: () => Effect.Effect<string | undefined>
   }
 
-  const state = Instance.state(
-    async () => {
-      if (Instance.project.vcs !== "git") {
-        return { branch: async () => undefined, unsubscribe: undefined }
-      }
-      let current = await currentBranch()
-      log.info("initialized", { branch: current })
+  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Vcs") {}
 
-      const unsubscribe = Bus.subscribe(FileWatcher.Event.Updated, async (evt) => {
-        if (!evt.properties.file.endsWith("HEAD")) return
-        const next = await currentBranch()
-        if (next !== current) {
-          log.info("branch changed", { from: current, to: next })
-          current = next
-          Bus.publish(Event.BranchUpdated, { branch: next })
+  export const layer = Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      const instance = yield* InstanceContext
+      let currentBranch: string | undefined
+
+      if (instance.project.vcs === "git") {
+        const getCurrentBranch = async () => {
+          const result = await git(["rev-parse", "--abbrev-ref", "HEAD"], {
+            cwd: instance.project.worktree,
+          })
+          if (result.exitCode !== 0) return undefined
+          const text = result.text().trim()
+          return text || undefined
         }
-      })
 
-      return {
-        branch: async () => current,
-        unsubscribe,
+        currentBranch = yield* Effect.promise(() => getCurrentBranch())
+        log.info("initialized", { branch: currentBranch })
+
+        yield* Effect.acquireRelease(
+          Effect.sync(() =>
+            Bus.subscribe(
+              FileWatcher.Event.Updated,
+              Instance.bind(async (evt) => {
+                if (!evt.properties.file.endsWith("HEAD")) return
+                const next = await getCurrentBranch()
+                if (next !== currentBranch) {
+                  log.info("branch changed", { from: currentBranch, to: next })
+                  currentBranch = next
+                  Bus.publish(Event.BranchUpdated, { branch: next })
+                }
+              }),
+            ),
+          ),
+          (unsubscribe) => Effect.sync(unsubscribe),
+        )
       }
-    },
-    async (state) => {
-      state.unsubscribe?.()
-    },
+
+      return Service.of({
+        branch: Effect.fn("Vcs.branch")(function* () {
+          return currentBranch
+        }),
+      })
+    }),
   )
-
-  export async function init() {
-    return state()
-  }
-
-  export async function branch() {
-    return await state().then((s) => s.branch())
-  }
 }

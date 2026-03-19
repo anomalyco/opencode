@@ -253,7 +253,7 @@ export const dict = {
 
   "go.title": "OpenCode Go | Herkes için düşük maliyetli kodlama modelleri",
   "go.meta.description":
-    "Go ilk ay $5, sonrasında ayda 10$ fiyatıyla başlar; GLM-5, Kimi K2.5 ve MiniMax M2.5 için cömert 5 saatlik istek limitleri sunar.",
+    "Go ilk ay $5, sonrasında ayda 10$ fiyatıyla başlar; GLM-5, Kimi K2.5, MiniMax M2.5 ve MiniMax M2.7 için cömert 5 saatlik istek limitleri sunar.",
   "go.hero.title": "Herkes için düşük maliyetli kodlama modelleri",
   "go.hero.body":
     "Go, dünya çapındaki programcılara ajan tabanlı kodlama getiriyor. En yetenekli açık kaynaklı modellere cömert limitler ve güvenilir erişim sunarak, maliyet veya erişilebilirlik konusunda endişelenmeden güçlü ajanlarla geliştirme yapmanızı sağlar.",
@@ -302,7 +302,7 @@ export const dict = {
   "go.problem.item1": "Düşük maliyetli abonelik fiyatlandırması",
   "go.problem.item2": "Cömert limitler ve güvenilir erişim",
   "go.problem.item3": "Mümkün olduğunca çok programcı için geliştirildi",
-  "go.problem.item4": "GLM-5, Kimi K2.5 ve MiniMax M2.5 içerir",
+  "go.problem.item4": "GLM-5, Kimi K2.5, MiniMax M2.5 ve MiniMax M2.7 içerir",
   "go.how.title": "Go nasıl çalışır?",
   "go.how.body":
     "Go ilk ay $5, sonrasında ayda 10$ fiyatıyla başlar. OpenCode veya herhangi bir ajanla kullanabilirsiniz.",
@@ -325,10 +325,11 @@ export const dict = {
   "go.faq.a1":
     "Go, ajan tabanlı kodlama için yetenekli açık kaynaklı modellere güvenilir erişim sağlayan düşük maliyetli bir aboneliktir.",
   "go.faq.q2": "Go hangi modelleri içerir?",
-  "go.faq.a2": "Go, cömert limitler ve güvenilir erişim ile GLM-5, Kimi K2.5 ve MiniMax M2.5 modellerini içerir.",
+  "go.faq.a2":
+    "Go, cömert limitler ve güvenilir erişim ile GLM-5, Kimi K2.5, MiniMax M2.5 ve MiniMax M2.7 modellerini içerir.",
   "go.faq.q3": "Go, Zen ile aynı mı?",
   "go.faq.a3":
-    "Hayır. Zen kullandıkça öde modelidir, Go ise ilk ay $5, sonrasında ayda 10$ fiyatıyla başlar; GLM-5, Kimi K2.5 ve MiniMax M2.5 açık kaynak modellerine cömert limitler ve güvenilir erişim sunar.",
+    "Hayır. Zen kullandıkça öde modelidir, Go ise ilk ay $5, sonrasında ayda 10$ fiyatıyla başlar; GLM-5, Kimi K2.5, MiniMax M2.5 ve MiniMax M2.7 açık kaynak modellerine cömert limitler ve güvenilir erişim sunar.",
   "go.faq.q4": "Go ne kadar?",
   "go.faq.a4.p1.beforePricing": "Go'nun maliyeti",
   "go.faq.a4.p1.pricingLink": "İlk ay $5",
@@ -353,7 +354,7 @@ export const dict = {
 
   "go.faq.q9": "Ücretsiz modeller ve Go arasındaki fark nedir?",
   "go.faq.a9":
-    "Ücretsiz modeller, günlük 200 istek kotası ile Big Pickle ve o sırada mevcut olan promosyonel modelleri içerir. Go ise GLM-5, Kimi K2.5 ve MiniMax M2.5 modellerini; yuvarlanan pencereler (5 saatlik, haftalık ve aylık) üzerinden uygulanan daha yüksek istek kotalarıyla içerir. Bu kotalar kabaca her 5 saatte 12$, haftada 30$ ve ayda 60$ değerine eşdeğerdir (gerçek istek sayıları modele ve kullanıma göre değişir).",
+    "Ücretsiz modeller, günlük 200 istek kotası ile Big Pickle ve o sırada mevcut olan promosyonel modelleri içerir. Go ise GLM-5, Kimi K2.5, MiniMax M2.5 ve MiniMax M2.7 modellerini; yuvarlanan pencereler (5 saatlik, haftalık ve aylık) üzerinden uygulanan daha yüksek istek kotalarıyla içerir. Bu kotalar kabaca her 5 saatte 12$, haftada 30$ ve ayda 60$ değerine eşdeğerdir (gerçek istek sayıları modele ve kullanıma göre değişir).",
 
   "zen.api.error.rateLimitExceeded": "İstek limiti aşıldı. Lütfen daha sonra tekrar deneyin.",
   "zen.api.error.modelNotSupported": "{{model}} modeli desteklenmiyor",
@@ -700,8 +701,12 @@ export const dict = {
   "enterprise.form.name.placeholder": "Jeff Bezos",
   "enterprise.form.role.label": "Rol",
   "enterprise.form.role.placeholder": "Yönetim Kurulu Başkanı",
+  "enterprise.form.company.label": "Şirket",
+  "enterprise.form.company.placeholder": "Acme Inc",
   "enterprise.form.email.label": "Şirket e-postası",
   "enterprise.form.email.placeholder": "jeff@amazon.com",
+  "enterprise.form.phone.label": "Telefon numarası",
+  "enterprise.form.phone.placeholder": "+1 234 567 8900",
   "enterprise.form.message.label": "Hangi problemi çözmeye çalışıyorsunuz?",
   "enterprise.form.message.placeholder": "Şu konuda yardıma ihtiyacımız var...",
   "enterprise.form.send": "Gönder",

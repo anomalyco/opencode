@@ -2,7 +2,7 @@ import { sqliteTable, text, integer, index, primaryKey } from "drizzle-orm/sqlit
 import { ProjectTable } from "../project/project.sql"
 import type { MessageV2 } from "./message-v2"
 import type { Snapshot } from "../snapshot"
-import type { PermissionNext } from "../permission/next"
+import type { PermissionNext } from "../permission"
 import type { ProjectID } from "../project/schema"
 import type { SessionID, MessageID, PartID } from "./schema"
 import type { WorkspaceID } from "../control-plane/schema"
