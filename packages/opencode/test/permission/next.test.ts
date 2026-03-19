@@ -1,13 +1,19 @@
-import { test, expect } from "bun:test"
+import { afterEach, test, expect } from "bun:test"
 import os from "os"
+import { Effect } from "effect"
 import { Bus } from "../../src/bus"
 import { runtime } from "../../src/effect/runtime"
-import { PermissionNext } from "../../src/permission/next"
-import * as S from "../../src/permission/service"
+import { Instances } from "../../src/effect/instances"
+import { PermissionNext } from "../../src/permission"
+import { PermissionNext as S } from "../../src/permission"
 import { PermissionID } from "../../src/permission/schema"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import { MessageID, SessionID } from "../../src/session/schema"
+
+afterEach(async () => {
+  await Instance.disposeAll()
+})
 
 async function rejectAll(message?: string) {
   for (const req of await PermissionNext.list()) {
@@ -389,9 +395,9 @@ test("disabled - disables tool when denied", () => {
   expect(result.has("read")).toBe(false)
 })
 
-test("disabled - disables edit/write/patch/multiedit when edit denied", () => {
+test("disabled - disables edit/write/apply_patch/multiedit when edit denied", () => {
   const result = PermissionNext.disabled(
-    ["edit", "write", "patch", "multiedit", "bash"],
+    ["edit", "write", "apply_patch", "multiedit", "bash"],
     [
       { permission: "*", pattern: "*", action: "allow" },
       { permission: "edit", pattern: "*", action: "deny" },
@@ -399,7 +405,7 @@ test("disabled - disables edit/write/patch/multiedit when edit denied", () => {
   )
   expect(result.has("edit")).toBe(true)
   expect(result.has("write")).toBe(true)
-  expect(result.has("patch")).toBe(true)
+  expect(result.has("apply_patch")).toBe(true)
   expect(result.has("multiedit")).toBe(true)
   expect(result.has("bash")).toBe(false)
 })
@@ -971,7 +977,7 @@ test("ask - should deny even when an earlier pattern is ask", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const ask = PermissionNext.ask({
+      const err = await PermissionNext.ask({
         sessionID: SessionID.make("session_test"),
         permission: "bash",
         patterns: ["echo hello", "rm -rf /"],
@@ -981,24 +987,12 @@ test("ask - should deny even when an earlier pattern is ask", async () => {
           { permission: "bash", pattern: "echo *", action: "ask" },
           { permission: "bash", pattern: "rm *", action: "deny" },
         ],
-      })
+      }).then(
+        () => undefined,
+        (err) => err,
+      )
 
-      const out = await Promise.race([
-        ask.then(
-          () => ({ ok: true as const, err: undefined }),
-          (err) => ({ ok: false as const, err }),
-        ),
-        Bun.sleep(100).then(() => "timeout" as const),
-      ])
-
-      if (out === "timeout") {
-        await rejectAll()
-        await ask.catch(() => {})
-        throw new Error("ask timed out instead of denying immediately")
-      }
-
-      expect(out.ok).toBe(false)
-      expect(out.err).toBeInstanceOf(PermissionNext.DeniedError)
+      expect(err).toBeInstanceOf(PermissionNext.DeniedError)
       expect(await PermissionNext.list()).toHaveLength(0)
     },
   })
@@ -1011,7 +1005,7 @@ test("ask - abort should clear pending request", async () => {
     fn: async () => {
       const ctl = new AbortController()
       const ask = runtime.runPromise(
-        S.PermissionService.use((svc) =>
+        S.Service.use((svc) =>
           svc.ask({
             sessionID: SessionID.make("session_test"),
             permission: "bash",
@@ -1020,7 +1014,7 @@ test("ask - abort should clear pending request", async () => {
             always: [],
             ruleset: [{ permission: "bash", pattern: "*", action: "ask" }],
           }),
-        ),
+        ).pipe(Effect.provide(Instances.get(Instance.directory))),
         { signal: ctl.signal },
       )
 
