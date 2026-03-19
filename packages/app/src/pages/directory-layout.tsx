@@ -1,8 +1,8 @@
 import { DataProvider } from "@opencode-ai/ui/context"
 import { showToast } from "@opencode-ai/ui/toast"
 import { base64Encode } from "@opencode-ai/util/encode"
-import { Navigate, useLocation, useNavigate, useParams } from "@solidjs/router"
-import { createMemo, createResource, Match, type ParentProps, Switch } from "solid-js"
+import { useLocation, useNavigate, useParams } from "@solidjs/router"
+import { createMemo, createResource, type ParentProps, Show } from "solid-js"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useLanguage } from "@/context/language"
 import { LocalProvider } from "@/context/local"
@@ -32,6 +32,7 @@ export default function Layout(props: ParentProps) {
   const location = useLocation()
   const language = useLanguage()
   const globalSDK = useGlobalSDK()
+  const navigate = useNavigate()
   let invalid = ""
 
   const [resolved] = createResource(
@@ -49,7 +50,8 @@ export default function Layout(props: ParentProps) {
           title: language.t("common.requestFailed"),
           description: language.t("directory.error.invalidUrl"),
         })
-        return { type: "redirect" as const, href: "/" }
+        navigate("/", { replace: true })
+        return
       }
 
       return await globalSDK
@@ -61,42 +63,26 @@ export default function Layout(props: ParentProps) {
         .then((x) => {
           const next = x.data?.directory ?? directory
           invalid = ""
-          if (next === directory) return { type: "resolved" as const, resolved: next }
+          if (next === directory) return next
           const path = pathname.slice(b64Dir.length + 1)
-          return { type: "redirect" as const, href: `/${base64Encode(next)}${path}${location.search}${location.hash}` }
+          navigate(`/${base64Encode(next)}${path}${location.search}${location.hash}`, { replace: true })
         })
         .catch(() => {
           invalid = ""
-          return { type: "resolved" as const, resolved: directory }
+          return directory
         })
     },
   )
 
   return (
-    <Switch>
-      <Match
-        when={(() => {
-          const r = resolved()
-          if (r?.type === "redirect") return r.href
-        })()}
-      >
-        {(href) => <Navigate href={href()} />}
-      </Match>
-      <Match
-        when={(() => {
-          const r = resolved()
-          if (r?.type === "resolved") return r.resolved
-        })()}
-        keyed
-      >
-        {(resolved) => (
-          <SDKProvider directory={() => resolved}>
-            <SyncProvider>
-              <DirectoryDataProvider directory={resolved}>{props.children}</DirectoryDataProvider>
-            </SyncProvider>
-          </SDKProvider>
-        )}
-      </Match>
-    </Switch>
+    <Show when={resolved()} keyed>
+      {(resolved) => (
+        <SDKProvider directory={() => resolved}>
+          <SyncProvider>
+            <DirectoryDataProvider directory={resolved}>{props.children}</DirectoryDataProvider>
+          </SyncProvider>
+        </SDKProvider>
+      )}
+    </Show>
   )
 }
