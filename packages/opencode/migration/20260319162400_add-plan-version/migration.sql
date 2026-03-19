@@ -1,0 +1,1 @@
+ALTER TABLE `plan` ADD `version` integer DEFAULT 0 NOT NULL;

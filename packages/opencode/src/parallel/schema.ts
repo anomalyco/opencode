@@ -46,10 +46,29 @@ export const Subtask = z.object({
 })
 export type Subtask = z.infer<typeof Subtask>
 
-export const PlanStatus = z.enum(["draft", "proposed", "approved", "spawning", "running", "merging", "done", "failed"])
+export const PlanStatus = z.enum([
+  "draft",
+  "proposed",
+  "approved",
+  "spawning",
+  "running",
+  "merging",
+  "cancelled",
+  "done",
+  "failed",
+])
 export type PlanStatus = z.infer<typeof PlanStatus>
 
-export const WorkerStatus = z.enum(["pending", "spawning", "running", "done", "failed", "merged", "conflict"])
+export const WorkerStatus = z.enum([
+  "pending",
+  "spawning",
+  "running",
+  "stopping",
+  "done",
+  "failed",
+  "merged",
+  "conflict",
+])
 export type WorkerStatus = z.infer<typeof WorkerStatus>
 
 export const WorkerState = z.object({
@@ -80,6 +99,7 @@ export const Plan = z.object({
   workerModel: ModelRef,
   subtasks: z.array(Subtask),
   workers: z.array(WorkerState),
+  version: z.number().default(0),
   time: z.object({
     created: z.number(),
     approved: z.number().optional(),

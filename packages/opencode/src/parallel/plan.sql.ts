@@ -23,6 +23,7 @@ export const PlanTable = sqliteTable(
     worker_model: text({ mode: "json" }).notNull().$type<ModelRef>(),
     subtasks: text({ mode: "json" }).notNull().$type<Subtask[]>(),
     workers: text({ mode: "json" }).notNull().$type<WorkerState[]>(),
+    version: integer().notNull().default(0),
     ...Timestamps,
     time_approved: integer(),
     time_completed: integer(),

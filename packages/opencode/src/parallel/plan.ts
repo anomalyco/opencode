@@ -1,8 +1,9 @@
-import { Database, NotFoundError, eq } from "../storage/db"
+import { Database, NotFoundError, eq, and } from "../storage/db"
 import { PlanTable } from "./plan.sql"
 import { Bus } from "@/bus"
 import { ParallelEvent } from "./events"
 import { validateTransition, validateWorkerTransition } from "./transitions"
+import { ConflictError } from "./errors"
 import type { Plan, PlanID, SubtaskID, WorkerState, PlanStatus, WorkerStatus, Subtask, ModelRef } from "./schema"
 import { PlanID as PlanIDSchema, SubtaskID as SubtaskIDSchema, Plan as PlanSchema } from "./schema"
 import { SessionID } from "@/session/schema"
@@ -22,6 +23,7 @@ function fromRow(row: PlanRow): Plan {
     workerModel: row.worker_model,
     subtasks: row.subtasks,
     workers: row.workers,
+    version: row.version,
     time: {
       created: row.time_created,
       approved: row.time_approved ?? undefined,
@@ -41,6 +43,7 @@ function toRow(plan: Plan) {
     worker_model: plan.workerModel,
     subtasks: plan.subtasks,
     workers: plan.workers,
+    version: plan.version,
     time_created: plan.time.created,
     time_approved: plan.time.approved ?? null,
     time_completed: plan.time.completed ?? null,
@@ -67,6 +70,7 @@ export namespace PlanStore {
         workerModel: input.workerModel,
         subtasks: [],
         workers: [],
+        version: 0,
         time: {
           created: Date.now(),
         },
@@ -118,8 +122,13 @@ export namespace PlanStore {
       }
 
       return Database.use((db) => {
-        const row = db.update(PlanTable).set(updates).where(eq(PlanTable.id, input.id)).returning().get()
-        if (!row) throw new NotFoundError({ message: `Plan not found: ${input.id}` })
+        const row = db
+          .update(PlanTable)
+          .set({ ...updates, version: existing.version + 1 })
+          .where(and(eq(PlanTable.id, input.id), eq(PlanTable.version, existing.version)))
+          .returning()
+          .get()
+        if (!row) throw new ConflictError({ message: `Plan was modified concurrently: ${input.id}` })
         const plan = fromRow(row)
         Database.effect(() => Bus.publish(ParallelEvent.PlanUpdated, { plan }))
         return plan
