@@ -121,3 +121,8 @@
     animation-delay: 3s;
   }
 }
+
+@utility text-icon-warning-base {
+  color: var(--color-icon-warning-base);
+  font-weight: 600 !important;
+}

@@ -320,8 +320,12 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
     >
       <Show when={isActive()}>
         <div
-          class="absolute left-0.5 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-full"
-          style={{ "background-color": tint() ?? "var(--icon-interactive-base)" }}
+          class="absolute top-1/2 -translate-y-1/2 w-[4px] rounded-full"
+          style={{
+            "background-color": tint() ?? "var(--icon-interactive-base)",
+            "height": "calc(var(--spacing) * 7)",
+            "left": "calc(var(--spacing) * 1)"
+          }}
         />
       </Show>
       <Show
