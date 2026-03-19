@@ -11,11 +11,19 @@ import { Link } from "@/components/link"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
-import { type FormState, headerRow, modelRow, validateCustomProvider } from "./dialog-custom-provider-form"
+import {
+  type FormState,
+  headerRow,
+  modelRow,
+  nextBlacklist,
+  validateCustomProvider,
+  visibleModels,
+} from "./dialog-custom-provider-form"
 import { DialogSelectProvider } from "./dialog-select-provider"
 
 type Props = {
   back?: "providers" | "close"
+  providerID?: string
 }
 
 export function DialogCustomProvider(props: Props) {
@@ -23,14 +31,33 @@ export function DialogCustomProvider(props: Props) {
   const globalSync = useGlobalSync()
   const globalSDK = useGlobalSDK()
   const language = useLanguage()
+  const edit = () => (props.providerID ? globalSync.data.config.provider?.[props.providerID] : undefined)
+  const seed = () => {
+    const id = props.providerID ?? ""
+    const cfg = edit()
+    const provider = props.providerID ? globalSync.data.provider.all.find((x) => x.id === props.providerID) : undefined
+    const models = visibleModels({ models: cfg?.models ?? {}, blacklist: cfg?.blacklist ?? [] }).map(([mid, model]) =>
+      modelRow({ id: mid, name: model?.name ?? mid }),
+    )
+    const headers = Object.entries(cfg?.options?.headers ?? {}).map(([key, value]) => headerRow({ key, value }))
+    return {
+      providerID: id,
+      name: cfg?.name ?? provider?.name ?? "",
+      baseURL: typeof cfg?.options?.baseURL === "string" ? cfg.options.baseURL : "",
+      apiKey: "",
+      models: models.length ? models : [modelRow()],
+      headers: headers.length ? headers : [headerRow()],
+    }
+  }
+  const init = seed()
 
   const [form, setForm] = createStore<FormState>({
-    providerID: "",
-    name: "",
-    baseURL: "",
-    apiKey: "",
-    models: [modelRow()],
-    headers: [headerRow()],
+    providerID: init.providerID,
+    name: init.name,
+    baseURL: init.baseURL,
+    apiKey: init.apiKey,
+    models: init.models,
+    headers: init.headers,
     saving: false,
     err: {},
   })
@@ -107,6 +134,7 @@ export function DialogCustomProvider(props: Props) {
       t: language.t,
       disabledProviders: globalSync.data.config.disabled_providers ?? [],
       existingProviderIDs: new Set(globalSync.data.provider.all.map((p) => p.id)),
+      editProviderID: props.providerID,
     })
     batch(() => {
       setForm("err", output.err)
@@ -140,7 +168,22 @@ export function DialogCustomProvider(props: Props) {
 
     auth
       .then(() =>
-        globalSync.updateConfig({ provider: { [result.providerID]: result.config }, disabled_providers: nextDisabled }),
+        globalSync.updateConfig(
+          props.providerID
+            ? {
+                provider: {
+                  [result.providerID]: {
+                    ...result.config,
+                    blacklist: nextBlacklist({
+                      prevModels: Object.keys(edit()?.models ?? {}),
+                      prevBlacklist: edit()?.blacklist ?? [],
+                      nextModels: Object.keys(result.config.models ?? {}),
+                    }),
+                  },
+                },
+              }
+            : { provider: { [result.providerID]: result.config }, disabled_providers: nextDisabled },
+        ),
       )
       .then(() => {
         dialog.close()
@@ -196,6 +239,7 @@ export function DialogCustomProvider(props: Props) {
               description={language.t("provider.custom.field.providerID.description")}
               value={form.providerID}
               onChange={(v) => setField("providerID", v)}
+              disabled={!!props.providerID}
               validationState={form.err.providerID ? "invalid" : undefined}
               error={form.err.providerID}
             />

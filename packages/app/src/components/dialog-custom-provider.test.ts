@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { validateCustomProvider } from "./dialog-custom-provider-form"
+import { nextBlacklist, validateCustomProvider, visibleModels } from "./dialog-custom-provider-form"
 
 const t = (key: string) => key
 
@@ -78,5 +78,49 @@ describe("validateCustomProvider", () => {
       key: "provider.custom.error.duplicate",
       value: undefined,
     })
+  })
+
+  test("allows editing existing provider id", () => {
+    const result = validateCustomProvider({
+      form: {
+        providerID: "custom-provider",
+        name: "Provider",
+        baseURL: "https://api.example.com",
+        apiKey: "",
+        models: [{ row: "m0", id: "model-a", name: "Model A", err: {} }],
+        headers: [{ row: "h0", key: "", value: "", err: {} }],
+        saving: false,
+        err: {},
+      },
+      t,
+      disabledProviders: [],
+      existingProviderIDs: new Set(["custom-provider"]),
+      editProviderID: "custom-provider",
+    })
+
+    expect(result.result?.providerID).toBe("custom-provider")
+    expect(result.err.providerID).toBeUndefined()
+  })
+
+  test("adds removed models to blacklist in edit mode", () => {
+    const out = nextBlacklist({
+      prevModels: ["a", "b", "c"],
+      prevBlacklist: ["z", "b"],
+      nextModels: ["a", "z"],
+    })
+
+    expect(out).toEqual(["b", "c"])
+  })
+
+  test("hides blacklisted models from edit form seed", () => {
+    const out = visibleModels({
+      models: {
+        a: { name: "A" },
+        b: { name: "B" },
+      },
+      blacklist: ["b"],
+    })
+
+    expect(out).toEqual([["a", { name: "A" }]])
   })
 })

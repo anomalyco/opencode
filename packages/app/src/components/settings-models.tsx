@@ -3,12 +3,16 @@ import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Switch } from "@opencode-ai/ui/switch"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
+import { Button } from "@opencode-ai/ui/button"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { type Component, For, Show } from "solid-js"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
+import { useGlobalSync } from "@/context/global-sync"
 import { useModels } from "@/context/models"
 import { popularProviders } from "@/hooks/use-providers"
 import { SettingsList } from "./settings-list"
+import { DialogCustomProvider } from "./dialog-custom-provider"
 
 type ModelItem = ReturnType<ReturnType<typeof useModels>["list"]>[number]
 
@@ -33,7 +37,10 @@ const ListEmptyState: Component<{ message: string; filter: string }> = (props) =
 
 export const SettingsModels: Component = () => {
   const language = useLanguage()
+  const dialog = useDialog()
+  const globalSync = useGlobalSync()
   const models = useModels()
+  const custom = (id: string) => globalSync.data.config.provider?.[id]?.npm === "@ai-sdk/openai-compatible"
 
   const list = useFilteredList<ModelItem>({
     items: (_filter) => models.list(),
@@ -100,6 +107,18 @@ export const SettingsModels: Component = () => {
                   <div class="flex items-center gap-2 pb-2">
                     <ProviderIcon id={group.category} class="size-5 shrink-0 icon-strong-base" />
                     <span class="text-14-medium text-text-strong">{group.items[0].provider.name}</span>
+                    <div class="flex-1" />
+                    <Show when={custom(group.category)}>
+                      <Button
+                        size="small"
+                        variant="ghost"
+                        onClick={() => {
+                          dialog.show(() => <DialogCustomProvider back="close" providerID={group.category} />)
+                        }}
+                      >
+                        {language.t("common.edit")}
+                      </Button>
+                    </Show>
                   </div>
                   <SettingsList>
                     <For each={group.items}>

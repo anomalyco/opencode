@@ -47,6 +47,18 @@ type ValidateArgs = {
   t: Translator
   disabledProviders: string[]
   existingProviderIDs: Set<string>
+  editProviderID?: string
+}
+
+type BlacklistArgs = {
+  prevModels: string[]
+  prevBlacklist: string[]
+  nextModels: string[]
+}
+
+type VisibleArgs = {
+  models: Record<string, { name?: string } | undefined>
+  blacklist: string[]
 }
 
 export function validateCustomProvider(input: ValidateArgs) {
@@ -74,7 +86,7 @@ export function validateCustomProvider(input: ValidateArgs) {
   const disabled = input.disabledProviders.includes(providerID)
   const existsError = idError
     ? undefined
-    : input.existingProviderIDs.has(providerID) && !disabled
+    : input.existingProviderIDs.has(providerID) && !disabled && input.editProviderID !== providerID
       ? input.t("provider.custom.error.providerID.exists")
       : undefined
 
@@ -151,9 +163,31 @@ export function validateCustomProvider(input: ValidateArgs) {
   }
 }
 
+export function nextBlacklist(input: BlacklistArgs) {
+  const next = new Set(input.nextModels)
+  const removed = input.prevModels.filter((id) => !next.has(id))
+  const kept = input.prevBlacklist.filter((id) => !next.has(id))
+  return Array.from(new Set([...kept, ...removed])).sort((a, b) => a.localeCompare(b))
+}
+
+export function visibleModels(input: VisibleArgs) {
+  const blocked = new Set(input.blacklist)
+  return Object.entries(input.models).filter(([id]) => !blocked.has(id))
+}
+
 let row = 0
 
 const nextRow = () => `row-${row++}`
 
-export const modelRow = (): ModelRow => ({ row: nextRow(), id: "", name: "", err: {} })
-export const headerRow = (): HeaderRow => ({ row: nextRow(), key: "", value: "", err: {} })
+export const modelRow = (input?: Partial<Pick<ModelRow, "id" | "name">>): ModelRow => ({
+  row: nextRow(),
+  id: input?.id ?? "",
+  name: input?.name ?? "",
+  err: {},
+})
+export const headerRow = (input?: Partial<Pick<HeaderRow, "key" | "value">>): HeaderRow => ({
+  row: nextRow(),
+  key: input?.key ?? "",
+  value: input?.value ?? "",
+  err: {},
+})
