@@ -412,11 +412,18 @@ export const NewSessionItem = (props: {
 }): JSX.Element => {
   const layout = useLayout()
   const language = useLanguage()
+  const [searchParams] = useSearchParams<{ grid?: string }>()
   const label = language.t("command.session.new")
   const tooltip = () => props.mobile || !props.sidebarExpanded()
+  const getHref = () => {
+    if (layout.sidebar.gridMode() && searchParams.grid) {
+      return `/${props.slug}/session?grid=${searchParams.grid},`
+    }
+    return `/${props.slug}/session`
+  }
   const item = () => (
     <A
-      href={`/${props.slug}/session`}
+      href={getHref()}
       end
       class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none ${props.dense ? "py-0.5" : "py-1"}`}
       onClick={() => {

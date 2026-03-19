@@ -374,7 +374,18 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         if (shouldAutoAccept) permission.enableAutoAccept(session.id, sessionDirectory)
         local.session.promote(sessionDirectory, session.id)
         layout.handoff.setTabs(base64Encode(sessionDirectory), session.id)
-        navigate(`/${base64Encode(sessionDirectory)}/session/${session.id}`)
+        
+        const grid = new URLSearchParams(window.location.search).get("grid")
+        if (grid) {
+          // If we were part of a grid, preserve the grid array and replace the "new" slot with our real ID
+          const gridArray = grid.split(",")
+          const newIdx = gridArray.indexOf("")
+          if (newIdx !== -1) gridArray[newIdx] = session.id
+          else gridArray.push(session.id)
+          navigate(`/${base64Encode(sessionDirectory)}/session/${session.id}?grid=${gridArray.join(",")}`, { replace: true })
+        } else {
+          navigate(`/${base64Encode(sessionDirectory)}/session/${session.id}`, { replace: true })
+        }
       }
     }
     if (!session) {

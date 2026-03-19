@@ -1,6 +1,8 @@
 import { useFilteredList } from "@opencode-ai/ui/hooks"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
-import { createEffect, on, Component, Show, onCleanup, createMemo, createSignal } from "solid-js"
+import { createEffect, on, Component, Show, onCleanup, Switch, Match, createMemo, createSignal } from "solid-js"
+import { useParams } from "@solidjs/router"
+import { useSessionParams } from "@/hooks/use-session-params"
 import { createStore } from "solid-js/store"
 import { useLocal } from "@/context/local"
 import { selectionFromLines, type SelectedLineRange, useFile } from "@/context/file"
@@ -101,6 +103,8 @@ const EXAMPLES = [
 const NON_EMPTY_TEXT = /[^\s\u200B]/
 
 export const PromptInput: Component<PromptInputProps> = (props) => {
+  const routerParams = useParams<{ dir?: string; id?: string }>()
+  const sessionParams = useSessionParams()
   const sdk = useSDK()
   const sync = useSync()
   const local = useLocal()
@@ -119,6 +123,22 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   let fileInputRef: HTMLInputElement | undefined
   let scrollRef!: HTMLDivElement
   let slashPopoverRef!: HTMLDivElement
+
+  createEffect(
+    on(
+      () => routerParams.id && sessionParams.id && routerParams.id === sessionParams.id,
+      (isActive) => {
+        if (isActive) {
+          requestAnimationFrame(() => {
+            if (!dialog.active && editorRef && document.activeElement !== editorRef) {
+              editorRef.focus()
+              setCursorPosition(editorRef, prompt.cursor() ?? promptLength(prompt.current()))
+            }
+          })
+        }
+      }
+    )
+  )
 
   const mirror = { input: false }
   const inset = 56
