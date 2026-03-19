@@ -1,8 +1,9 @@
-import { NodeFileSystem, NodePath } from "@effect/platform-node"
-import { Cause, Duration, Effect, FileSystem, Layer, Schedule, ServiceMap } from "effect"
+import { NodePath } from "@effect/platform-node"
+import { Cause, Duration, Effect, Layer, Schedule, ServiceMap } from "effect"
 import path from "path"
 import type { Agent } from "../agent/agent"
-import { PermissionEffect } from "../permission/service"
+import { AppFileSystem } from "@/filesystem"
+import { PermissionNext } from "../permission"
 import { Identifier } from "../id/id"
 import { Log } from "../util/log"
 import { ToolID } from "./schema"
@@ -27,10 +28,10 @@ export namespace TruncateEffect {
 
   function hasTaskTool(agent?: Agent.Info) {
     if (!agent?.permission) return false
-    return PermissionEffect.evaluate("task", "*", agent.permission).action !== "deny"
+    return PermissionNext.evaluate("task", "*", agent.permission).action !== "deny"
   }
 
-  export interface Api {
+  export interface Interface {
     readonly cleanup: () => Effect.Effect<void>
     /**
      * Returns output unchanged when it fits within the limits, otherwise writes the full text
@@ -39,14 +40,14 @@ export namespace TruncateEffect {
     readonly output: (text: string, options?: Options, agent?: Agent.Info) => Effect.Effect<Result>
   }
 
-  export class Service extends ServiceMap.Service<Service, Api>()("@opencode/Truncate") {}
+  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Truncate") {}
 
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem
+      const fs = yield* AppFileSystem.Service
 
-      const cleanup = Effect.fn("TruncateEffect.cleanup")(function* () {
+      const cleanup = Effect.fn("Truncate.cleanup")(function* () {
         const cutoff = Identifier.timestamp(Identifier.create("tool", false, Date.now() - Duration.toMillis(RETENTION)))
         const entries = yield* fs.readDirectory(TRUNCATION_DIR).pipe(
           Effect.map((all) => all.filter((name) => name.startsWith("tool_"))),
@@ -58,11 +59,7 @@ export namespace TruncateEffect {
         }
       })
 
-      const output = Effect.fn("TruncateEffect.output")(function* (
-        text: string,
-        options: Options = {},
-        agent?: Agent.Info,
-      ) {
+      const output = Effect.fn("Truncate.output")(function* (text: string, options: Options = {}, agent?: Agent.Info) {
         const maxLines = options.maxLines ?? MAX_LINES
         const maxBytes = options.maxBytes ?? MAX_BYTES
         const direction = options.direction ?? "head"
@@ -105,7 +102,7 @@ export namespace TruncateEffect {
         const preview = out.join("\n")
         const file = path.join(TRUNCATION_DIR, ToolID.ascending())
 
-        yield* fs.makeDirectory(TRUNCATION_DIR, { recursive: true }).pipe(Effect.orDie)
+        yield* fs.ensureDir(TRUNCATION_DIR).pipe(Effect.orDie)
         yield* fs.writeFileString(file, text).pipe(Effect.orDie)
 
         const hint = hasTaskTool(agent)
@@ -136,5 +133,5 @@ export namespace TruncateEffect {
     }),
   )
 
-  export const defaultLayer = layer.pipe(Layer.provide(NodeFileSystem.layer), Layer.provide(NodePath.layer))
+  export const defaultLayer = layer.pipe(Layer.provide(AppFileSystem.defaultLayer), Layer.provide(NodePath.layer))
 }
