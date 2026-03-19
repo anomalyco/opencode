@@ -96,13 +96,14 @@ export namespace Pty {
       for (const session of sessions.values()) {
         try {
           session.process.kill()
-        } catch {}
+        } catch (err) {
+          // Process may have already exited
+          log.debug("Failed to kill PTY process", { error: err })
+        }
         for (const [key, ws] of session.subscribers.entries()) {
           try {
             if (ws.data === key) ws.close()
-          } catch {
-            // ignore
-          }
+          } catch {}
         }
       }
       sessions.clear()
@@ -229,7 +230,10 @@ export namespace Pty {
     log.info("removing session", { id })
     try {
       session.process.kill()
-    } catch {}
+    } catch (err) {
+      // Process may have already exited
+      log.debug("Failed to kill PTY process during removal", { id, error: err })
+    }
     for (const [key, ws] of session.subscribers.entries()) {
       try {
         if (ws.data === key) ws.close()
