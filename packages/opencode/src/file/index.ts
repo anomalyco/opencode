@@ -386,7 +386,7 @@ export namespace File {
             next.dirs = Array.from(dirs).toSorted()
           } else {
             const seen = new Set<string>()
-            for await (const file of Ripgrep.files({ cwd: Instance.directory })) {
+            for await (const file of Ripgrep.files({ cwd: Instance.directory, follow: true })) {
               next.files.push(file)
               let current = file
               while (true) {

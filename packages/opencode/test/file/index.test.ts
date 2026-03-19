@@ -818,6 +818,31 @@ describe("file/index Filesystem patterns", () => {
         },
       })
     })
+
+    test(
+      "indexes files inside linked directories",
+      async () => {
+        await using tmp = await setupSearchableRepo()
+        await using external = await tmpdir()
+
+        await fs.mkdir(path.join(external.path, "linked"), { recursive: true })
+        await fs.writeFile(path.join(external.path, "linked", "entry.ts"), "export const linked = true\n", "utf-8")
+
+        await fs.symlink(external.path, path.join(tmp.path, "docs"), process.platform === "win32" ? "junction" : "dir")
+
+        await Instance.provide({
+          directory: tmp.path,
+          fn: async () => {
+            await File.init()
+
+            const result = await File.search({ query: "entry.ts", type: "file" })
+            const normalized = result.map((item) => item.replaceAll("\\", "/"))
+            expect(normalized).toContain("docs/linked/entry.ts")
+          },
+        })
+      },
+      { timeout: 30000 },
+    )
   })
 
   describe("File.read() - diff/patch", () => {
