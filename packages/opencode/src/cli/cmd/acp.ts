@@ -67,19 +67,15 @@ export const AcpCommand = cmd({
       })
     }
 
-    if (args.attach) {
-      const sdk = createOpencodeClient({
-        baseUrl: args.attach,
-        directory: dir,
-      })
-      return await execute(sdk)
-    }
-
     await bootstrap(dir, async () => {
-      const opts = await resolveNetworkOptions(args)
-      const server = Server.listen(opts)
+      const baseUrl = args.attach
+        ? args.attach
+        : await resolveNetworkOptions(args).then((opts) => {
+            const server = Server.listen(opts)
+            return `http://${server.hostname}:${server.port}`
+          })
       const sdk = createOpencodeClient({
-        baseUrl: `http://${server.hostname}:${server.port}`,
+        baseUrl,
         directory: dir,
       })
       return await execute(sdk)
