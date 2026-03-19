@@ -1467,7 +1467,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 <div class="flex items-center rounded-md border border-border-weak-base bg-surface-panel overflow-hidden">
                   <Tooltip
                     placement="top"
-                    value={speech.state() === "recording" ? "Stop recording" : "Start voice input"}
+                    value={
+                      speech.state() === "recording"
+                        ? language.t("prompt.action.stopVoice")
+                        : language.t("prompt.action.startVoice")
+                    }
                   >
                     <IconButton
                       data-action="prompt-mic"
@@ -1480,7 +1484,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       onClick={toggleRecording}
                       disabled={store.mode !== "normal"}
                       tabIndex={store.mode === "normal" ? undefined : -1}
-                      aria-label={speech.state() === "recording" ? "Stop recording" : "Start voice input"}
+                      aria-label={
+                        speech.state() === "recording"
+                          ? language.t("prompt.action.stopVoice")
+                          : language.t("prompt.action.startVoice")
+                      }
                     />
                   </Tooltip>
 
@@ -1514,7 +1522,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               </Show>
 
               <Show when={!speech.isSupported()}>
-                <Tooltip placement="top" value="Speech recognition not supported">
+                <Tooltip placement="top" value={language.t("prompt.action.voiceNotSupported")}>
                   <div class="size-8 flex items-center justify-center opacity-40 cursor-not-allowed">
                     <Icon name="mic-off" class="size-4" />
                   </div>

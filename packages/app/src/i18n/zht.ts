@@ -277,6 +277,9 @@ export const dict = {
   "prompt.attachment.remove": "移除附件",
   "prompt.action.send": "傳送",
   "prompt.action.stop": "停止",
+  "prompt.action.startVoice": "開始語音輸入",
+  "prompt.action.stopVoice": "停止錄音",
+  "prompt.action.voiceNotSupported": "不支援語音辨識",
 
   "prompt.toast.pasteUnsupported.title": "不支援的附件",
   "prompt.toast.pasteUnsupported.description": "此處僅能附加圖片、PDF 或文字檔案。",

@@ -282,6 +282,9 @@ export const dict = {
   "prompt.attachment.remove": "Eki kaldır",
   "prompt.action.send": "Gönder",
   "prompt.action.stop": "Durdur",
+  "prompt.action.startVoice": "Sesli girişi başlat",
+  "prompt.action.stopVoice": "Kaydı durdur",
+  "prompt.action.voiceNotSupported": "Konuşma tanıma desteklenmiyor",
 
   "prompt.toast.pasteUnsupported.title": "Desteklenmeyen ek",
   "prompt.toast.pasteUnsupported.description": "Buraya yalnızca resimler, PDF'ler veya metin dosyaları eklenebilir.",

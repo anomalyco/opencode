@@ -280,6 +280,9 @@ export const dict = {
   "prompt.attachment.remove": "Fjern vedlegg",
   "prompt.action.send": "Send",
   "prompt.action.stop": "Stopp",
+  "prompt.action.startVoice": "Start taleinndata",
+  "prompt.action.stopVoice": "Stopp opptak",
+  "prompt.action.voiceNotSupported": "Talegjenkjenning støttes ikke",
 
   "prompt.toast.pasteUnsupported.title": "Ikke støttet vedlegg",
   "prompt.toast.pasteUnsupported.description": "Kun bilder, PDF-er eller tekstfiler kan legges ved her.",
