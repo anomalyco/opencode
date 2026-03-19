@@ -4,7 +4,7 @@ import { streamSSE } from "hono/streaming"
 import z from "zod"
 import { Orchestrator } from "../../parallel/orchestrator"
 import { PlanStore } from "../../parallel/plan"
-import { Plan } from "../../parallel/schema"
+import { Plan, Subtask, SubtaskID } from "../../parallel/schema"
 import { Instance } from "../../project/instance"
 import { Bus } from "@/bus"
 import { ParallelEvent } from "../../parallel/events"
@@ -318,5 +318,142 @@ export const parallel = new Hono()
           })
         })
       })
+    },
+  )
+  .put(
+    "/:planID/subtasks",
+    describeRoute({
+      summary: "Update all subtasks",
+      description: "Replace the entire subtasks array. Only allowed when plan status is 'proposed' or 'draft'.",
+      operationId: "parallel.updateSubtasks",
+      responses: {
+        200: {
+          description: "Updated plan",
+          content: {
+            "application/json": {
+              schema: resolver(Plan),
+            },
+          },
+        },
+        ...errors(400),
+        ...errors(404),
+      },
+    }),
+    validator("param", z.object({ planID: z.string() })),
+    validator("json", z.object({ subtasks: z.array(Subtask) })),
+    async (c) => {
+      const { planID } = c.req.valid("param")
+      const { subtasks } = c.req.valid("json")
+      const plan = await PlanStore.get(planID as any)
+
+      if (plan.status !== "proposed" && plan.status !== "draft") {
+        return c.json({ error: `Cannot edit subtasks when plan status is '${plan.status}'` }, 400)
+      }
+
+      const workers = subtasks.map((st) => ({
+        subtaskID: st.id,
+        status: "pending" as const,
+      }))
+
+      const updated = await PlanStore.update({
+        id: planID as any,
+        subtasks,
+        workers,
+      })
+
+      return c.json(updated)
+    },
+  )
+  .post(
+    "/:planID/subtasks",
+    describeRoute({
+      summary: "Add a subtask",
+      description: "Add a new subtask to the plan. Only allowed when plan status is 'proposed' or 'draft'.",
+      operationId: "parallel.addSubtask",
+      responses: {
+        200: {
+          description: "Updated plan",
+          content: {
+            "application/json": {
+              schema: resolver(Plan),
+            },
+          },
+        },
+        ...errors(400),
+        ...errors(404),
+      },
+    }),
+    validator("param", z.object({ planID: z.string() })),
+    validator("json", Subtask),
+    async (c) => {
+      const { planID } = c.req.valid("param")
+      const subtask = c.req.valid("json")
+      const plan = await PlanStore.get(planID as any)
+
+      if (plan.status !== "proposed" && plan.status !== "draft") {
+        return c.json({ error: `Cannot edit subtasks when plan status is '${plan.status}'` }, 400)
+      }
+
+      const subtasks = [...plan.subtasks, subtask]
+      const workers = [
+        ...plan.workers,
+        {
+          subtaskID: subtask.id,
+          status: "pending" as const,
+        },
+      ]
+
+      const updated = await PlanStore.update({
+        id: planID as any,
+        subtasks,
+        workers,
+      })
+
+      return c.json(updated)
+    },
+  )
+  .delete(
+    "/:planID/subtasks/:subtaskID",
+    describeRoute({
+      summary: "Remove a subtask",
+      description: "Remove a subtask from the plan. Only allowed when plan status is 'proposed' or 'draft'.",
+      operationId: "parallel.removeSubtask",
+      responses: {
+        200: {
+          description: "Updated plan",
+          content: {
+            "application/json": {
+              schema: resolver(Plan),
+            },
+          },
+        },
+        ...errors(400),
+        ...errors(404),
+      },
+    }),
+    validator("param", z.object({ planID: z.string(), subtaskID: z.string() })),
+    async (c) => {
+      const { planID, subtaskID } = c.req.valid("param")
+      const plan = await PlanStore.get(planID as any)
+
+      if (plan.status !== "proposed" && plan.status !== "draft") {
+        return c.json({ error: `Cannot edit subtasks when plan status is '${plan.status}'` }, 400)
+      }
+
+      const subtaskExists = plan.subtasks.some((st) => st.id === subtaskID)
+      if (!subtaskExists) {
+        return c.json({ error: `Subtask not found: ${subtaskID}` }, 404)
+      }
+
+      const subtasks = plan.subtasks.filter((st) => st.id !== subtaskID)
+      const workers = plan.workers.filter((w) => w.subtaskID !== subtaskID)
+
+      const updated = await PlanStore.update({
+        id: planID as any,
+        subtasks,
+        workers,
+      })
+
+      return c.json(updated)
     },
   )
