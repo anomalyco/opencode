@@ -398,7 +398,7 @@ describe("Parallel E2E", () => {
       })
 
       // Verify all plans are listed
-      const listed = await PlanStore.listByProject(projectID)
+      const listed = await PlanStore.listByProject(projectID as any)
       expect(listed.length).toBeGreaterThanOrEqual(3)
     })
   })

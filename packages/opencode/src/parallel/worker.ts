@@ -56,10 +56,12 @@ export namespace WorkerManager {
       maxWorkers: maxWorkers ?? "unlimited",
     })
 
+    // Pre-update all workers to "spawning" in a single batch to avoid race conditions
+    const initialWorkers = plan.workers.map((w) => ({ ...w, status: "spawning" as const }))
+    await PlanStore.update({ id: plan.id, workers: initialWorkers })
+
     const spawnOne = async (subtask: Subtask) => {
       if (abort.aborted) throw new Error("Aborted")
-
-      await updateWorker(plan.id, subtask.id, { status: "spawning" })
 
       const info = await Worktree.makeWorktreeInfo(`parallel-${plan.id.slice(0, 12)}-${subtask.id.slice(0, 20)}`)
       const bootstrap = await Worktree.createFromInfo(info)
@@ -78,6 +80,7 @@ export namespace WorkerManager {
         },
       })
 
+      // Update this specific worker to running
       await updateWorker(plan.id, subtask.id, {
         status: "running",
         sessionID: session.id,
@@ -109,16 +112,26 @@ export namespace WorkerManager {
 
     const results = await pooled(plan.subtasks, maxWorkers, spawnOne)
 
+    // Batch update failed workers
+    const failedUpdates: { subtaskID: SubtaskID; error: string }[] = []
     for (let i = 0; i < results.length; i++) {
       const result = results[i]
       if (result.status === "rejected") {
         const error = result.reason instanceof Error ? result.reason.message : "Spawn failed"
-        await updateWorker(plan.id, plan.subtasks[i].id, {
-          status: "failed",
-          error,
-        })
+        failedUpdates.push({ subtaskID: plan.subtasks[i].id, error })
         log.error("worker spawn failed", { subtaskID: plan.subtasks[i].id, error })
       }
+    }
+
+    // Apply all failed updates in parallel (they touch different workers)
+    if (failedUpdates.length > 0) {
+      await Promise.all(
+        failedUpdates.map(({ subtaskID, error }) =>
+          updateWorker(plan.id, subtaskID, { status: "failed", error }).catch((err) => {
+            log.warn("failed to mark worker as failed", { subtaskID, error: err })
+          }),
+        ),
+      )
     }
 
     const allFailed = results.every((r) => r.status === "rejected")

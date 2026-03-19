@@ -29,7 +29,7 @@ export const VALID_WORKER_TRANSITIONS: Record<WorkerStatus, WorkerStatus[]> = {
   running: ["stopping", "done", "failed"],
   stopping: ["done", "failed"],
   done: ["merged", "conflict"],
-  failed: [],
+  failed: ["pending"], // Allow retry
   merged: [],
   conflict: [],
 }
