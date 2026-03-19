@@ -74,16 +74,6 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           parentID: ctx.sessionID,
           title: params.description + ` (@${agent.name} subagent)`,
           permission: [
-            {
-              permission: "todowrite",
-              pattern: "*",
-              action: "deny",
-            },
-            {
-              permission: "todoread",
-              pattern: "*",
-              action: "deny",
-            },
             ...(hasTaskPermission
               ? []
               : [
@@ -95,7 +85,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                 ]),
             ...(config.experimental?.primary_tools?.map((t) => ({
               pattern: "*",
-              action: "allow" as const,
+              action: "deny" as const,
               permission: t,
             })) ?? []),
           ],
@@ -125,6 +115,10 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       ctx.abort.addEventListener("abort", cancel)
       using _ = defer(() => ctx.abort.removeEventListener("abort", cancel))
       const promptParts = await SessionPrompt.resolvePromptParts(params.prompt)
+      const toolOverrides = {
+        ...(hasTaskPermission ? {} : { task: false }),
+        ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
+      }
 
       const result = await SessionPrompt.prompt({
         messageID,
@@ -134,12 +128,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           providerID: model.providerID,
         },
         agent: agent.name,
-        tools: {
-          todowrite: false,
-          todoread: false,
-          ...(hasTaskPermission ? {} : { task: false }),
-          ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
-        },
+        ...(Object.keys(toolOverrides).length > 0 ? { tools: toolOverrides } : {}),
         parts: promptParts,
       })
 
