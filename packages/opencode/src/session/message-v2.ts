@@ -6,12 +6,9 @@ import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessag
 import { LSP } from "../lsp"
 import { Snapshot } from "@/snapshot"
 import { fn } from "@/util/fn"
-import { Database, eq, desc, inArray } from "@/storage/db"
 import { SyncEvent } from "../sync"
-import { MessageTable, PartTable } from "./session.sql"
-import { ProviderTransform } from "@/provider/transform"
-import { STATUS_CODES } from "http"
-import { Storage } from "@/storage/storage"
+import { Database, NotFoundError, and, desc, eq, inArray, lt, or } from "@/storage/db"
+import { MessageTable, PartTable, SessionTable } from "./session.sql"
 import { ProviderError } from "@/provider/error"
 import { iife } from "@/util/iife"
 import type { SystemError } from "bun"
@@ -455,7 +452,7 @@ export namespace MessageV2 {
       version: "v1",
       aggregate: "sessionID",
       schema: z.object({
-        sessionID: z.string(),
+        sessionID: SessionID.zod,
         info: Info,
       }),
     }),
@@ -473,7 +470,7 @@ export namespace MessageV2 {
       version: "v1",
       aggregate: "sessionID",
       schema: z.object({
-        sessionID: z.string(),
+        sessionID: SessionID.zod,
         part: Part,
         time: z.number(),
       }),

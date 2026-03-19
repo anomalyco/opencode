@@ -155,7 +155,7 @@ export namespace Database {
 
   type NotPromise<T> = T extends Promise<any> ? never : T
 
-  export function _transaction<T>(
+  export function transaction<T>(
     callback: (tx: TxOrDb) => NotPromise<T>,
     options?: {
       behavior?: "deferred" | "immediate" | "exclusive"
@@ -177,13 +177,5 @@ export namespace Database {
       }
       throw err
     }
-  }
-
-  export function transaction<T>(callback: (tx: TxOrDb) => NotPromise<T>) {
-    return _transaction(callback)
-  }
-
-  export function immediateTransaction<T>(callback: (tx: TxOrDb) => NotPromise<T>) {
-    return _transaction(callback, { behavior: "immediate" })
   }
 }

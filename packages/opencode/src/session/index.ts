@@ -188,7 +188,7 @@ export namespace Session {
       version: "v1",
       aggregate: "sessionID",
       schema: z.object({
-        sessionID: z.string(),
+        sessionID: SessionID.zod,
         info: Info,
       }),
     }),
@@ -197,7 +197,7 @@ export namespace Session {
       version: "v1",
       aggregate: "sessionID",
       schema: z.object({
-        sessionID: z.string(),
+        sessionID: SessionID.zod,
         url: z.string().optional(),
       }),
     }),
@@ -206,7 +206,7 @@ export namespace Session {
       version: "v1",
       aggregate: "sessionID",
       schema: z.object({
-        sessionID: z.string(),
+        sessionID: SessionID.zod,
         info: Info.partial().extend({
           time: Info.shape.time.partial().optional(),
         }),
@@ -217,7 +217,7 @@ export namespace Session {
       version: "v1",
       aggregate: "sessionID",
       schema: z.object({
-        sessionID: z.string(),
+        sessionID: SessionID.zod,
         info: Info,
       }),
     }),

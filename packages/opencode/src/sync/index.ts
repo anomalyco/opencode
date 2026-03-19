@@ -40,7 +40,7 @@ export namespace SyncEvent {
     Type extends string,
     Version extends string,
     Agg extends string,
-    Schema extends ZodObject<Record<Agg, z.ZodString | z.ZodPipe>>,
+    Schema extends ZodObject<Record<Agg, z.ZodType<string>>>,
   >(input: { type: Type; version: Version; aggregate: Agg; schema: Schema }) {
     const def = {
       type: input.type,
@@ -139,21 +139,29 @@ export namespace SyncEvent {
       throw new Error(`SyncEvent: "${def.aggregate}" required but not found: ${JSON.stringify(data)}`)
     }
 
-    Database.immediateTransaction((tx) => {
-      const id = Identifier.ascending("workspace")
-      const row = tx
-        .select({ seq: EventSequenceTable.seq })
-        .from(EventSequenceTable)
-        .where(eq(EventSequenceTable.aggregate_id, agg))
-        .get()
-      const seq = row?.seq != null ? row.seq + 1 : 0
+    // Note that this is an "immediate" transaction which is critical.
+    // We need to make sure we can safely read and write with nothing
+    // else changing the data from under us
+    Database.transaction(
+      (tx) => {
+        const id = Identifier.ascending("workspace")
+        const row = tx
+          .select({ seq: EventSequenceTable.seq })
+          .from(EventSequenceTable)
+          .where(eq(EventSequenceTable.aggregate_id, agg))
+          .get()
+        const seq = row?.seq != null ? row.seq + 1 : 0
 
-      process(def, { id, seq, aggregateID: agg, data })
+        process(def, { id, seq, aggregateID: agg, data })
 
-      Database.effect(() => {
-        const versionedDef = { ...def, type: versionedName(def.type, def.version) }
-        Bus.publish(versionedDef, { id, seq, aggregateID: agg, data } as z.output<Def["properties"]>)
-      })
-    })
+        Database.effect(() => {
+          const versionedDef = { ...def, type: versionedName(def.type, def.version) }
+          Bus.publish(versionedDef, { id, seq, aggregateID: agg, data } as z.output<Def["properties"]>)
+        })
+      },
+      {
+        behavior: "immediate",
+      },
+    )
   }
 }
