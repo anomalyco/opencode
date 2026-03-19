@@ -1,0 +1,45 @@
+---
+title: "Workspaces"
+description: "Create isolated git worktrees (sandboxes) from within a project"
+---
+
+In OpenCode, a **workspace** is an isolated **git worktree** attached to a project.
+
+- The project’s main worktree is the **local** workspace.
+- Additional worktrees are **sandbox** workspaces (extra directories tracked on the project).
+
+Each workspace has its own git branch and directory, so you can experiment without disturbing your main working tree.
+
+## Create a workspace from within a project
+
+<Steps>
+<Step title="Open the project">Open the project in the OpenCode TUI so it appears in the sidebar.</Step>
+
+<Step title="Create a new workspace">In the project’s **Workspaces** section, choose **New workspace**.</Step>
+
+<Step title="Wait for boot">OpenCode creates the underlying git worktree, populates it, then starts it.</Step>
+
+<Step title="Use it">Select the new workspace to start new sessions inside its isolated directory.</Step>
+</Steps>
+
+## What OpenCode does under the hood
+
+When a new workspace is created, OpenCode:
+
+- Creates a git branch using the `opencode/<generated-name>` naming scheme.
+- Adds a git worktree directory under OpenCode’s data directory (scoped to the project id).
+- Runs a hard reset/population step so the new worktree has the repo contents.
+- Bootstraps the worktree, then runs startup scripts.
+
+Startup scripts run in this order:
+
+1. **Project startup**: the project’s `commands.start` (if configured).
+2. **Worktree startup**: an optional extra startup command for the new worktree (primarily used when creating worktrees programmatically).
+
+## Manage workspaces
+
+From the workspace sidebar menu you can typically:
+
+- **Rename** the workspace label.
+- **Reset** the workspace branch back to the project’s default.
+- **Delete** the workspace (removes the worktree and its branch).
