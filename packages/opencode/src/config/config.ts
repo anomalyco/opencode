@@ -983,6 +983,7 @@ export namespace Config {
         .record(
           z.string(),
           ModelsDev.Model.partial().extend({
+            prompt: z.string().optional().describe("Custom system prompt for this model"),
             variants: z
               .record(
                 z.string(),

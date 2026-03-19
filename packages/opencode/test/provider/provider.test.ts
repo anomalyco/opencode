@@ -2247,6 +2247,112 @@ test("cloudflare-ai-gateway loads with env variables", async () => {
   })
 })
 
+test("custom model prompt is stored on model", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "custom-prompt-provider": {
+              name: "Custom Prompt Provider",
+              npm: "@ai-sdk/openai-compatible",
+              env: [],
+              models: {
+                "custom-model": {
+                  name: "Custom Model",
+                  tool_call: true,
+                  limit: { context: 128000, output: 4096 },
+                  prompt: "You are a custom coding assistant.",
+                },
+              },
+              options: { apiKey: "test-key" },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await Provider.list()
+      const model = providers[ProviderID.make("custom-prompt-provider")].models["custom-model"]
+      expect(model.prompt).toBe("You are a custom coding assistant.")
+    },
+  })
+})
+
+test("model prompt is undefined when not specified", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "no-prompt-provider": {
+              name: "No Prompt Provider",
+              npm: "@ai-sdk/openai-compatible",
+              env: [],
+              models: {
+                "no-prompt-model": {
+                  name: "No Prompt Model",
+                  tool_call: true,
+                  limit: { context: 128000, output: 4096 },
+                },
+              },
+              options: { apiKey: "test-key" },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await Provider.list()
+      const model = providers[ProviderID.make("no-prompt-provider")].models["no-prompt-model"]
+      expect(model.prompt).toBeUndefined()
+    },
+  })
+})
+
+test("model prompt overrides existing model prompt", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            anthropic: {
+              models: {
+                "claude-sonnet-4-20250514": {
+                  prompt: "You are a specialized Anthropic assistant.",
+                },
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("ANTHROPIC_API_KEY", "test-api-key")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      const model = providers[ProviderID.anthropic].models["claude-sonnet-4-20250514"]
+      expect(model.prompt).toBe("You are a specialized Anthropic assistant.")
+    },
+  })
+})
+
 test("cloudflare-ai-gateway forwards config metadata options", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
