@@ -127,7 +127,7 @@ Fully migrated (single namespace, InstanceState where needed, flattened facade):
 
 Still open and likely worth migrating:
 
-- [ ] `Plugin`
+- [x] `Plugin`
 - [ ] `ToolRegistry`
 - [ ] `Pty`
 - [ ] `Worktree`
