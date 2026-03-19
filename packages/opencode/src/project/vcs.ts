@@ -55,8 +55,9 @@ const files = Effect.fnUntraced(function* (
   nums: Map<string, { additions: number; deletions: number }>,
 ) {
   const base = ref ? yield* git.prefix(cwd) : ""
-  const next = yield* Effect.all(
-    list.map((item) =>
+  const next = yield* Effect.forEach(
+    list,
+    (item) =>
       Effect.gen(function* () {
         const before = item.status === "added" || !ref ? "" : yield* git.show(cwd, ref, item.file, base)
         const after = item.status === "deleted" ? "" : yield* work(fs, cwd, item.file)
@@ -70,7 +71,6 @@ const files = Effect.fnUntraced(function* (
           status: item.status,
         } satisfies Snapshot.FileDiff
       }),
-    ),
     { concurrency: 8 },
   )
   return next.toSorted((a, b) => a.file.localeCompare(b.file))
@@ -85,7 +85,7 @@ const track = Effect.fnUntraced(function* (
   if (!ref) {
     return yield* files(fs, git, cwd, ref, yield* git.status(cwd), new Map())
   }
-  const [list, nums] = yield* Effect.all([git.status(cwd), git.stats(cwd, ref)])
+  const [list, nums] = yield* Effect.all([git.status(cwd), git.stats(cwd, ref)], { concurrency: 2 })
   return yield* files(fs, git, cwd, ref, list, stats(nums))
 })
 
@@ -95,7 +95,9 @@ const compare = Effect.fnUntraced(function* (
   cwd: string,
   ref: string,
 ) {
-  const [list, nums, extra] = yield* Effect.all([git.diff(cwd, ref), git.stats(cwd, ref), git.status(cwd)])
+  const [list, nums, extra] = yield* Effect.all([git.diff(cwd, ref), git.stats(cwd, ref), git.status(cwd)], {
+    concurrency: 3,
+  })
   return yield* files(
     fs,
     git,
@@ -154,7 +156,9 @@ export namespace Vcs {
       if (instance.project.vcs === "git") {
         const get = () => Effect.runPromise(git.branch(instance.directory))
 
-        ;[current, root] = yield* Effect.all([git.branch(instance.directory), git.defaultBranch(instance.directory)])
+        ;[current, root] = yield* Effect.all([git.branch(instance.directory), git.defaultBranch(instance.directory)], {
+          concurrency: 2,
+        })
         log.info("initialized", { branch: current, default_branch: root?.name })
 
         yield* Effect.acquireRelease(
