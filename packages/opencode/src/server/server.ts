@@ -41,7 +41,6 @@ import { websocket } from "hono/bun"
 import { HTTPException } from "hono/http-exception"
 import { errors } from "./error"
 import { Filesystem } from "@/util/filesystem"
-import { Snapshot } from "@/snapshot"
 import { QuestionRoutes } from "./routes/question"
 import { PermissionRoutes } from "./routes/permission"
 import { GlobalRoutes } from "./routes/global"
@@ -333,39 +332,10 @@ export namespace Server {
           },
         }),
         async (c) => {
-          const [branch, default_branch] = await Promise.all([
-            runPromiseInstance(Vcs.Service.use((s) => s.branch())),
-            runPromiseInstance(Vcs.Service.use((s) => s.defaultBranch())),
-          ])
-          return c.json({ branch, default_branch })
-        },
-      )
-      .get(
-        "/vcs/diff",
-        describeRoute({
-          summary: "Get VCS diff",
-          description: "Retrieve the current git diff for the working tree or against the default branch.",
-          operationId: "vcs.diff",
-          responses: {
-            200: {
-              description: "VCS diff",
-              content: {
-                "application/json": {
-                  schema: resolver(Snapshot.FileDiff.array()),
-                },
-              },
-            },
-          },
-        }),
-        validator(
-          "query",
-          z.object({
-            mode: Vcs.Mode,
-          }),
-        ),
-        async (c) => {
-          const mode = c.req.valid("query").mode
-          return c.json(await runPromiseInstance(Vcs.Service.use((s) => s.diff(mode))))
+          const branch = await runPromiseInstance(Vcs.Service.use((s) => s.branch()))
+          return c.json({
+            branch,
+          })
         },
       )
       .get(
