@@ -9,11 +9,7 @@ import { DialogSelect } from "@tui/ui/dialog-select"
 import { TextAttributes } from "@opentui/core"
 import { pipe, flatMap, entries, sortBy, map, filter } from "remeda"
 
-function SubtaskModelPicker(props: {
-  subtask: Subtask
-  workerDefault: ModelRef
-  onSelect: (model: ModelRef) => void
-}) {
+function SubtaskModelPicker(props: { subtask: Subtask; workerDefault: ModelRef; onSelect: (model: ModelRef) => void }) {
   const sync = useSync()
   const dialog = useDialog()
 
@@ -118,8 +114,12 @@ export function ParallelPlan(props: { plan: Plan; onApproved: () => void; onCanc
       <SubtaskModelPicker
         subtask={subtask}
         workerDefault={props.plan.workerModel}
-        onSelect={(model) => {
+        onSelect={async (model) => {
           setSubtaskModels((prev) => ({ ...prev, [subtask.id]: model }))
+          // Persist immediately so it survives even if user doesn't approve
+          const { PlanStore } = await import("@/parallel/plan")
+          const updatedSubtasks = props.plan.subtasks.map((st) => (st.id === subtask.id ? { ...st, model } : st))
+          await PlanStore.update({ id: props.plan.id, subtasks: updatedSubtasks })
         }}
       />
     ))
