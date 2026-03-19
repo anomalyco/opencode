@@ -579,7 +579,7 @@ export namespace Provider {
             log.info("gitlab model discovery starting", { instanceUrl })
             const result = await discoverWorkflowModels(
               { instanceUrl, getHeaders },
-              { workingDirectory: process.cwd() },
+              { workingDirectory: Instance.directory },
             )
 
             if (!result.models.length) {
