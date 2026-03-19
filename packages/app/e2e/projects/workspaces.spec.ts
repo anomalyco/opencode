@@ -1,4 +1,3 @@
-import { base64Decode } from "@opencode-ai/util/encode"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -13,6 +12,7 @@ import {
   confirmDialog,
   openSidebar,
   openWorkspaceMenu,
+  resolveSlug,
   setWorkspacesEnabled,
   slugFromUrl,
   waitSlug,
@@ -27,15 +27,15 @@ async function setupWorkspaceTest(page: Page, project: { slug: string }) {
   await setWorkspacesEnabled(page, rootSlug, true)
 
   await page.getByRole("button", { name: "New workspace" }).first().click()
-  const slug = await waitSlug(page, [rootSlug])
-  const dir = base64Decode(slug)
+  const next = await resolveSlug(await waitSlug(page, [rootSlug]))
+  await expect(page).toHaveURL(new RegExp(`/${next.slug}/session(?:[/?#]|$)`))
 
   await openSidebar(page)
 
   await expect
     .poll(
       async () => {
-        const item = page.locator(workspaceItemSelector(slug)).first()
+        const item = page.locator(workspaceItemSelector(next.slug)).first()
         try {
           await item.hover({ timeout: 500 })
           return true
@@ -47,7 +47,7 @@ async function setupWorkspaceTest(page: Page, project: { slug: string }) {
     )
     .toBe(true)
 
-  return { rootSlug, slug, directory: dir }
+  return { rootSlug, slug: next.slug, directory: next.directory }
 }
 
 test("can enable and disable workspaces from project menu", async ({ page, withProject }) => {
@@ -79,15 +79,15 @@ test("can create a workspace", async ({ page, withProject }) => {
     await expect(page.getByRole("button", { name: "New workspace" }).first()).toBeVisible()
 
     await page.getByRole("button", { name: "New workspace" }).first().click()
-    const workspaceSlug = await waitSlug(page, [slug])
-    const workspaceDir = base64Decode(workspaceSlug)
+    const next = await resolveSlug(await waitSlug(page, [slug]))
+    await expect(page).toHaveURL(new RegExp(`/${next.slug}/session(?:[/?#]|$)`))
 
     await openSidebar(page)
 
     await expect
       .poll(
         async () => {
-          const item = page.locator(workspaceItemSelector(workspaceSlug)).first()
+          const item = page.locator(workspaceItemSelector(next.slug)).first()
           try {
             await item.hover({ timeout: 500 })
             return true
@@ -99,9 +99,9 @@ test("can create a workspace", async ({ page, withProject }) => {
       )
       .toBe(true)
 
-    await expect(page.locator(workspaceItemSelector(workspaceSlug)).first()).toBeVisible()
+    await expect(page.locator(workspaceItemSelector(next.slug)).first()).toBeVisible()
 
-    await cleanupTestProject(workspaceDir)
+    await cleanupTestProject(next.directory)
   })
 })
 
@@ -331,9 +331,9 @@ test("can reorder workspaces by drag and drop", async ({ page, withProject }) =>
       for (const _ of [0, 1]) {
         const prev = slugFromUrl(page.url())
         await page.getByRole("button", { name: "New workspace" }).first().click()
-        const slug = await waitSlug(page, [rootSlug, prev])
-        const dir = base64Decode(slug)
-        workspaces.push({ slug, directory: dir })
+        const next = await resolveSlug(await waitSlug(page, [rootSlug, prev]))
+        await expect(page).toHaveURL(new RegExp(`/${next.slug}/session(?:[/?#]|$)`))
+        workspaces.push(next)
 
         await openSidebar(page)
       }
