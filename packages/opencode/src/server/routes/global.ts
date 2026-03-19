@@ -75,8 +75,10 @@ export const GlobalRoutes = lazy(() =>
 
           q.push(
             JSON.stringify({
-              type: "server.connected",
-              properties: {},
+              payload: {
+                type: "server.connected",
+                properties: {},
+              },
             }),
           )
 
@@ -84,8 +86,10 @@ export const GlobalRoutes = lazy(() =>
           const heartbeat = setInterval(() => {
             q.push(
               JSON.stringify({
-                type: "server.heartbeat",
-                properties: {},
+                payload: {
+                  type: "server.heartbeat",
+                  properties: {},
+                },
               }),
             )
           }, 10_000)
