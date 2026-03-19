@@ -1,6 +1,7 @@
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Effect, Layer, Schema, ServiceMap, Stream } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
+import { withTransientReadRetry } from "@/util/effect-http-client"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import path from "path"
 import z from "zod"
@@ -76,7 +77,7 @@ export namespace Installation {
     Service,
     Effect.gen(function* () {
       const http = yield* HttpClient.HttpClient
-      const httpOk = HttpClient.filterStatusOk(http)
+      const httpOk = HttpClient.filterStatusOk(withTransientReadRetry(http))
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
 
       const text = Effect.fnUntraced(
