@@ -33,6 +33,13 @@ export namespace MergePipeline {
         const lastLine = lines[lines.length - 1] ?? ""
         const insertions = parseInt(lastLine.match(/(\d+) insertion/)?.[1] ?? "0")
         const deletions = parseInt(lastLine.match(/(\d+) deletion/)?.[1] ?? "0")
+        log.info("merge branch queued", {
+          planID,
+          branch: worker.branch!,
+          insertions,
+          deletions,
+          diffSize: insertions + deletions,
+        })
         return { worker, diffSize: insertions + deletions }
       }),
     )
@@ -42,7 +49,9 @@ export namespace MergePipeline {
     let allSuccess = true
 
     for (const { worker } of withDiffs) {
+      log.info("merge start", { planID, branch: worker.branch! })
       const result = await mergeBranch(planID, worker.branch!, cwd)
+      log.info("merge complete", { planID, branch: worker.branch!, result })
       Bus.publish(ParallelEvent.MergeProgress, {
         planID,
         branch: worker.branch!,
@@ -51,6 +60,7 @@ export namespace MergePipeline {
 
       if (result === "failed") {
         allSuccess = false
+        log.error("merge failed", { planID, branch: worker.branch!, error: "Merge conflict could not be resolved" })
         await PlanStore.updateWorker({
           id: planID,
           subtaskID: worker.subtaskID,
@@ -72,13 +82,23 @@ export namespace MergePipeline {
   }
 
   async function mergeBranch(planID: PlanID, branch: string, cwd: string): Promise<"clean" | "resolved" | "failed"> {
+    log.info("merge command", {
+      planID,
+      branch,
+      command: `git merge --no-ff -m "merge: parallel worker ${branch}" ${branch}`,
+    })
     const merge = await git(["merge", "--no-ff", "-m", `merge: parallel worker ${branch}`, branch], { cwd })
 
-    if (merge.exitCode === 0) return "clean"
+    if (merge.exitCode === 0) {
+      log.info("merge clean", { planID, branch, exitCode: merge.exitCode })
+      return "clean"
+    }
 
+    log.info("merge needs resolution", { planID, branch, exitCode: merge.exitCode })
     const resolved = await resolveConflicts(planID, branch, cwd)
     if (resolved) return "resolved"
 
+    log.error("merge resolution failed", { planID, branch })
     await git(["merge", "--abort"], { cwd })
     return "failed"
   }
@@ -87,11 +107,17 @@ export namespace MergePipeline {
     const status = await git(["diff", "--name-only", "--diff-filter=U"], { cwd })
     const conflictedFiles = outputText(status.stdout).split("\n").filter(Boolean)
 
-    if (conflictedFiles.length === 0) return false
+    if (conflictedFiles.length === 0) {
+      log.info("no conflicts to resolve", { planID, branch })
+      return false
+    }
+
+    log.info("resolving conflicts", { planID, branch, fileCount: conflictedFiles.length, files: conflictedFiles })
 
     const plan = await PlanStore.get(planID)
 
     for (const file of conflictedFiles) {
+      log.info("resolving file", { planID, branch, file })
       const content = await Bun.file(path.join(cwd, file)).text()
       const oursContent = await gitShow(`HEAD:${file}`, cwd)
       const theirsContent = await gitShow(`${branch}:${file}`, cwd)
@@ -111,9 +137,14 @@ export namespace MergePipeline {
 
       await Bun.write(path.join(cwd, file), resolution)
       await git(["add", file], { cwd })
+      log.info("file resolved", { planID, branch, file, result: "success" })
     }
 
+    log.info("committing resolved conflicts", { planID, branch, fileCount: conflictedFiles.length })
     const commit = await git(["commit", "--no-edit"], { cwd })
+    if (commit.exitCode !== 0) {
+      log.error("commit failed after resolution", { planID, branch, exitCode: commit.exitCode })
+    }
     return commit.exitCode === 0
   }
 
@@ -150,6 +181,19 @@ export namespace MergePipeline {
   async function gitShow(ref: string, cwd: string): Promise<string> {
     const result = await git(["show", ref], { cwd })
     return outputText(result.stdout)
+  }
+
+  async function cleanupPlan(planID: PlanID): Promise<void> {
+    const plan = await PlanStore.get(planID)
+    const workersToRemove = plan.workers.filter((w) => w.worktreeDir)
+    log.info("cleanup worktrees", { planID, worktreeCount: workersToRemove.length })
+    await Promise.allSettled(
+      workersToRemove.map((w) => {
+        log.info("removing worktree", { planID, branch: w.branch, worktreeDir: w.worktreeDir! })
+        return Worktree.remove({ directory: w.worktreeDir! })
+      }),
+    )
+    log.info("cleanup complete", { planID })
   }
 }
 
@@ -203,11 +247,4 @@ ${input.conflictedContent}
 \`\`\`
 
 Produce the resolved file content.`
-}
-
-async function cleanupPlan(planID: PlanID): Promise<void> {
-  const plan = await PlanStore.get(planID)
-  await Promise.allSettled(
-    plan.workers.filter((w) => w.worktreeDir).map((w) => Worktree.remove({ directory: w.worktreeDir! })),
-  )
 }
