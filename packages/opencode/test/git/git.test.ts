@@ -6,6 +6,8 @@ import { ManagedRuntime } from "effect"
 import { Git } from "../../src/git"
 import { tmpdir } from "../fixture/fixture"
 
+const weird = process.platform === "win32" ? "space file.txt" : "tab\tfile.txt"
+
 async function withGit<T>(fn: (rt: ManagedRuntime.ManagedRuntime<Git.Service, never>) => Promise<T>) {
   const rt = ManagedRuntime.make(Git.defaultLayer)
   try {
@@ -47,9 +49,9 @@ describe("Git", () => {
     })
   })
 
-  test("status() handles tabs in filenames", async () => {
+  test("status() handles special filenames", async () => {
     await using tmp = await tmpdir({ git: true })
-    const file = "tab\tfile.txt"
+    const file = weird
     await fs.writeFile(path.join(tmp.path, file), "hello\n", "utf-8")
 
     await withGit(async (rt) => {
@@ -68,7 +70,7 @@ describe("Git", () => {
   test("diff(), stats(), and mergeBase() parse tracked changes", async () => {
     await using tmp = await tmpdir({ git: true })
     await $`git branch -M main`.cwd(tmp.path).quiet()
-    const file = "tab\tfile.txt"
+    const file = weird
     await fs.writeFile(path.join(tmp.path, file), "before\n", "utf-8")
     await $`git add .`.cwd(tmp.path).quiet()
     await $`git commit --no-gpg-sign -m "add file"`.cwd(tmp.path).quiet()

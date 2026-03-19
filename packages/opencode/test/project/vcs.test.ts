@@ -34,11 +34,15 @@ function withVcs(
   )
 }
 
-function withVcsOnly(directory: string, body: (rt: ManagedRuntime.ManagedRuntime<Vcs.Service, never>) => Promise<void>) {
+function withVcsOnly(
+  directory: string,
+  body: (rt: ManagedRuntime.ManagedRuntime<Vcs.Service, never>) => Promise<void>,
+) {
   return withServices(directory, Vcs.defaultLayer, body)
 }
 
 type BranchEvent = { directory?: string; payload: { type: string; properties: { branch?: string } } }
+const weird = process.platform === "win32" ? "space file.txt" : "tab\tfile.txt"
 
 /** Wait for a Vcs.Event.BranchUpdated event on GlobalBus, with retry polling as fallback */
 function nextBranchUpdate(directory: string, timeout = 10_000) {
@@ -187,9 +191,9 @@ describe("Vcs diff", () => {
     })
   })
 
-  test("diff('git') handles tabs in filenames", async () => {
+  test("diff('git') handles special filenames", async () => {
     await using tmp = await tmpdir({ git: true })
-    const file = "tab\tfile.txt"
+    const file = weird
     await fs.writeFile(path.join(tmp.path, file), "hello\n", "utf-8")
 
     await withVcsOnly(tmp.path, async (rt) => {
