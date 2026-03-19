@@ -382,6 +382,8 @@ export namespace Worktree {
           directory: info.directory,
           init: InstanceBootstrap,
           fn: () => undefined,
+          project: Instance.project,
+          worktree: info.directory,
         })
           .then(() => true)
           .catch((error) => {

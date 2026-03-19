@@ -113,6 +113,8 @@ export namespace WorkerManager {
           title: `[parallel] ${subtask.title}`,
         })
       },
+      project: Instance.project, // Pass parent project info
+      worktree: info.directory, // Worktree is the directory itself
     })
 
     await updateWorker(plan.id, subtask.id, {
@@ -139,6 +141,8 @@ export namespace WorkerManager {
           ],
         })
       },
+      project: Instance.project,
+      worktree: info.directory,
     })
 
     return { subtaskID: subtask.id, sessionID: session.id }

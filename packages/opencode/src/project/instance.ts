@@ -62,7 +62,13 @@ function track(directory: string, next: Promise<Context>) {
 }
 
 export const Instance = {
-  async provide<R>(input: { directory: string; init?: () => Promise<any>; fn: () => R }): Promise<R> {
+  async provide<R>(input: {
+    directory: string
+    init?: () => Promise<any>
+    fn: () => R
+    project?: Project.Info // Optional: pass project directly to avoid detection
+    worktree?: string // Optional: pass worktree directly
+  }): Promise<R> {
     const directory = Filesystem.resolve(input.directory)
     let existing = cache.get(directory)
     if (!existing) {
@@ -72,6 +78,8 @@ export const Instance = {
         boot({
           directory,
           init: input.init,
+          project: input.project,
+          worktree: input.worktree,
         }),
       )
     }
