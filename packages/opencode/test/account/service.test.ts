@@ -3,7 +3,7 @@ import { Duration, Effect, Layer, Option, Schema } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 
 import { AccountRepo } from "../../src/account/repo"
-import { AccountService } from "../../src/account/service"
+import { AccountEffect } from "../../src/account/effect"
 import { AccessToken, AccountID, DeviceCode, Login, Org, OrgID, RefreshToken, UserCode } from "../../src/account/schema"
 import { Database } from "../../src/storage/db"
 import { testEffect } from "../lib/effect"
@@ -19,7 +19,7 @@ const truncate = Layer.effectDiscard(
 const it = testEffect(Layer.merge(AccountRepo.layer, truncate))
 
 const live = (client: HttpClient.HttpClient) =>
-  AccountService.layer.pipe(Layer.provide(Layer.succeed(HttpClient.HttpClient, client)))
+  AccountEffect.layer.pipe(Layer.provide(Layer.succeed(HttpClient.HttpClient, client)))
 
 const json = (req: Parameters<typeof HttpClientResponse.fromWeb>[0], body: unknown, status = 200) =>
   HttpClientResponse.fromWeb(
@@ -77,7 +77,7 @@ it.effect("orgsByAccount groups orgs per account", () =>
       }),
     )
 
-    const rows = yield* AccountService.use((s) => s.orgsByAccount()).pipe(Effect.provide(live(client)))
+    const rows = yield* AccountEffect.Service.use((s) => s.orgsByAccount()).pipe(Effect.provide(live(client)))
 
     expect(rows.map((row) => [row.account.id, row.orgs.map((org) => org.id)]).map(([id, orgs]) => [id, orgs])).toEqual([
       [AccountID.make("user-1"), [OrgID.make("org-1")]],
@@ -115,7 +115,7 @@ it.effect("token refresh persists the new token", () =>
       ),
     )
 
-    const token = yield* AccountService.use((s) => s.token(id)).pipe(Effect.provide(live(client)))
+    const token = yield* AccountEffect.Service.use((s) => s.token(id)).pipe(Effect.provide(live(client)))
 
     expect(Option.getOrThrow(token)).toBeDefined()
     expect(String(Option.getOrThrow(token))).toBe("at_new")
@@ -158,7 +158,9 @@ it.effect("config sends the selected org header", () =>
       }),
     )
 
-    const cfg = yield* AccountService.use((s) => s.config(id, OrgID.make("org-9"))).pipe(Effect.provide(live(client)))
+    const cfg = yield* AccountEffect.Service.use((s) => s.config(id, OrgID.make("org-9"))).pipe(
+      Effect.provide(live(client)),
+    )
 
     expect(Option.getOrThrow(cfg)).toEqual({ theme: "light", seats: 5 })
     expect(seen).toEqual({
@@ -196,7 +198,7 @@ it.effect("poll stores the account and first org on success", () =>
       ),
     )
 
-    const res = yield* AccountService.use((s) => s.poll(login)).pipe(Effect.provide(live(client)))
+    const res = yield* AccountEffect.Service.use((s) => s.poll(login)).pipe(Effect.provide(live(client)))
 
     expect(res._tag).toBe("PollSuccess")
     if (res._tag === "PollSuccess") {
