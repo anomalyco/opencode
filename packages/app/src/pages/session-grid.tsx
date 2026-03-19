@@ -1,4 +1,4 @@
-import { For, Show, createSignal, createMemo, Suspense, createEffect } from "solid-js"
+import { For, Show, createSignal, createMemo, Suspense, createEffect, onCleanup } from "solid-js"
 import { useSearchParams, useParams, useNavigate } from "@solidjs/router"
 import { SessionParamsProvider } from "@/hooks/use-session-params"
 import { TerminalProvider } from "@/context/terminal"
@@ -14,6 +14,26 @@ export function SessionGrid(props: { ids: string[] }) {
   
   const [dragId, setDragId] = createSignal<string | null>(null)
   const [localIds, setLocalIds] = createSignal<string[]>([])
+  const [isCtrl, setIsCtrl] = createSignal(false)
+
+  createEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Control" || e.key === "Meta") setIsCtrl(true)
+    }
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === "Control" || e.key === "Meta") setIsCtrl(false)
+    }
+    const handleBlur = () => setIsCtrl(false)
+    
+    window.addEventListener("keydown", handleKeyDown)
+    window.addEventListener("keyup", handleKeyUp)
+    window.addEventListener("blur", handleBlur)
+    onCleanup(() => {
+      window.removeEventListener("keydown", handleKeyDown)
+      window.removeEventListener("keyup", handleKeyUp)
+      window.removeEventListener("blur", handleBlur)
+    })
+  })
 
   createEffect(() => {
     if (!dragId()) {
@@ -89,66 +109,76 @@ export function SessionGrid(props: { ids: string[] }) {
 
   return (
     <div class={`grid gap-2 w-full h-full p-2 bg-background-base ${getGridClass()}`}>
-      <For each={localIds()}>
-        {(id, index) => (
-          <div
-            draggable={true}
-            class={`relative flex flex-col min-h-0 min-w-0 border rounded-lg overflow-hidden shadow-sm transition-all duration-200 ease-in-out cursor-grab select-none
-              ${id === params.id ? "ring-2 ring-blue-500 z-10" : "border-border-base hover:border-border-strong"}
-              ${dragId() === id ? "opacity-50 scale-[0.98] z-50 shadow-xl" : ""}
-              ${count() === 5 && index() === 4 ? "col-start-3 row-start-1 row-span-2" : ""}
-            `}
-            onDragStart={(e) => {
-              setDragId(id)
-              e.dataTransfer!.effectAllowed = "move"
-            }}
-            onDragOver={(e) => {
-              e.preventDefault()
-              e.dataTransfer!.dropEffect = "move"
-              moveTile(id)
-            }}
-            onDrop={(e) => {
-              e.preventDefault()
-              commitDrag()
-            }}
-            onDragEnd={() => {
-              commitDrag()
-            }}
-            onClick={(e) => {
-              if (id !== params.id) focusSession(id)
-            }}
-          >
-            <Show when={dragId() !== null}>
-              <div class="absolute inset-0 z-50 cursor-grabbing" />
-            </Show>
+      <For each={props.ids}>
+        {(id) => {
+          const visualIndex = () => localIds().indexOf(id)
 
-            <div class="absolute top-2 right-2 z-50 opacity-0 hover:opacity-100 transition-opacity">
-              <button
-                class="bg-surface-base text-text-strong rounded px-2 py-1 text-xs border border-border-base shadow-sm hover:bg-surface-raised-base"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  removeSessionFromGrid(id)
-                }}
-              >
-                Close
-              </button>
+          return (
+            <div
+              draggable={isCtrl()}
+              style={{ order: visualIndex() }}
+              class={`relative flex flex-col min-h-0 min-w-0 border rounded-lg overflow-hidden shadow-sm transition-all duration-200 ease-in-out select-none
+                ${isCtrl() ? "cursor-grab" : ""}
+                ${id === params.id ? "ring-2 ring-blue-500 z-10" : "border-border-base hover:border-border-strong"}
+                ${dragId() === id ? "opacity-50 scale-[0.98] z-50 shadow-xl" : ""}
+                ${count() === 5 && visualIndex() === 4 ? "col-start-3 row-start-1 row-span-2" : ""}
+              `}
+              onDragStart={(e) => {
+                if (!isCtrl()) {
+                  e.preventDefault()
+                  return
+                }
+                setDragId(id)
+                e.dataTransfer!.effectAllowed = "move"
+              }}
+              onDragOver={(e) => {
+                e.preventDefault()
+                e.dataTransfer!.dropEffect = "move"
+                moveTile(id)
+              }}
+              onDrop={(e) => {
+                e.preventDefault()
+                commitDrag()
+              }}
+              onDragEnd={() => {
+                commitDrag()
+              }}
+              onClick={(e) => {
+                if (id !== params.id) focusSession(id)
+              }}
+            >
+              <Show when={dragId() !== null}>
+                <div class="absolute inset-0 z-50 cursor-grabbing" />
+              </Show>
+
+              <div class="absolute top-2 right-2 z-50 opacity-0 hover:opacity-100 transition-opacity">
+                <button
+                  class="bg-surface-base text-text-strong rounded px-2 py-1 text-xs border border-border-base shadow-sm hover:bg-surface-raised-base"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    removeSessionFromGrid(id)
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+
+              <SessionParamsProvider dir={params.dir} id={id}>
+                <TerminalProvider>
+                  <FileProvider>
+                    <PromptProvider>
+                      <CommentsProvider>
+                        <Suspense fallback={<div class="size-full" />}>
+                          <Session />
+                        </Suspense>
+                      </CommentsProvider>
+                    </PromptProvider>
+                  </FileProvider>
+                </TerminalProvider>
+              </SessionParamsProvider>
             </div>
-
-            <SessionParamsProvider dir={params.dir} id={id}>
-              <TerminalProvider>
-                <FileProvider>
-                  <PromptProvider>
-                    <CommentsProvider>
-                      <Suspense fallback={<div class="size-full" />}>
-                        <Session />
-                      </Suspense>
-                    </CommentsProvider>
-                  </PromptProvider>
-                </FileProvider>
-              </TerminalProvider>
-            </SessionParamsProvider>
-          </div>
-        )}
+          )
+        }}
       </For>
     </div>
   )

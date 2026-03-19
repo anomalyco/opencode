@@ -31,7 +31,7 @@ Power users frequently juggle multiple contexts (e.g. looking at a chat with bac
 - Implemented `SessionGrid` (`packages/app/src/pages/session-grid.tsx`).
 - Uses a reactive `createMemo` to compute standard CSS Grid Tailwind classes (`grid-cols-X grid-rows-Y`) based entirely on the array length of active sessions.
 - Added self-contained close buttons and focus-ring states (blue border) for the currently "active" tile.
-- **Drag-to-Swap**: Each grid tile is draggable via native HTML5 drag-and-drop. Dragging one tile over another swaps their positions in the grid and updates the URL, making layouts persistent and shareable. The dragged tile dims slightly (`opacity-50`) while dragging.
+- **Smart Drag-to-Swap**: Holding `Ctrl` or `Cmd` unlocks drag-and-drop on any grid tile. Dragging one tile over another instantly reorders the surrounding tiles using CSS `order` for a smooth, dynamic "Kanban" feel. Dropping it updates the URL, making layouts persistent and shareable. The dragged tile dims slightly (`opacity-50`) while an invisible shield prevents iframe pointer events from breaking the drag.
 
 ### 4. Sidebar & UI Integration
 - Added `<GridToggleItem>` strictly beneath the "New session" buttons in both the expanded Workspace Panel and the hoverable Project Rail.
