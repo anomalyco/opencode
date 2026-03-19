@@ -37,9 +37,9 @@ export const TaskTool = Tool.define("task", async (ctx) => {
 
   const description = DESCRIPTION.replace(
     "{agents}",
-    list.map((a) => `- ${a.name}: ${a.description ?? "This subagent should only be called manually by the user."}`).join(
-      "\n",
-    ),
+    list
+      .map((a) => `- ${a.name}: ${a.description ?? "This subagent should only be called manually by the user."}`)
+      .join("\n"),
   )
   return {
     description,
