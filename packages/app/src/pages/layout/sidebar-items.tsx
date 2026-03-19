@@ -261,6 +261,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   const hoverReady = createMemo(() => hoverMessages() !== undefined)
   const hoverAllowed = createMemo(() => !props.mobile && props.sidebarExpanded())
   const hoverEnabled = createMemo(() => (props.popover ?? true) && hoverAllowed())
+  const [searchParams] = useSearchParams<{ grid?: string }>()
   const isActive = createMemo(() => {
     if (layout.sidebar.gridMode()) {
       const gridIds = searchParams.grid ? searchParams.grid.split(",") : (params.id ? [params.id] : [])
