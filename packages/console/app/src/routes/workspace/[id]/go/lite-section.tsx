@@ -308,7 +308,7 @@ export function LiteSection() {
               data-color="ghost"
               onClick={() => setStore("showModal", true)}
             >
-              <span>Other payment methods</span>
+              <span>{i18n.t("workspace.lite.promo.otherMethods")}</span>
               <span data-slot="other-methods-icons">
                 <span> </span>
                 <IconAlipay style={{ width: "16px", height: "16px" }} />
@@ -317,7 +317,11 @@ export function LiteSection() {
               </span>
             </button>
           </div>
-          <Modal open={store.showModal} onClose={() => setStore("showModal", false)} title="Select payment method">
+          <Modal
+            open={store.showModal}
+            onClose={() => setStore("showModal", false)}
+            title={i18n.t("workspace.lite.promo.selectMethod")}
+          >
             <div data-slot="modal-actions">
               <button
                 type="button"
