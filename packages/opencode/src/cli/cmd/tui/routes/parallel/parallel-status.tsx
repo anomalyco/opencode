@@ -2,6 +2,9 @@ import { useTheme } from "@tui/context/theme"
 import { useTerminalDimensions, useKeyboard } from "@opentui/solid"
 import { For, Show, createSignal, createMemo, createEffect } from "solid-js"
 import { useSync } from "@tui/context/sync"
+import { useDialog } from "@tui/ui/dialog"
+import { DialogSelect } from "@tui/ui/dialog-select"
+import { useToast } from "@tui/ui/toast"
 import type { Plan, WorkerState, Subtask } from "@/parallel/schema"
 import { TextAttributes } from "@opentui/core"
 import { pipe, sumBy } from "remeda"
@@ -207,8 +210,7 @@ function WorkerLane(props: {
       {/* Diff stats */}
       <Show when={props.worker.diffStat}>
         <text fg={theme.success}>
-          +{props.worker.diffStat!.additions} -{props.worker.diffStat!.deletions} ({props.worker.diffStat!.files}{" "}
-          files)
+          +{props.worker.diffStat!.additions} -{props.worker.diffStat!.deletions} ({props.worker.diffStat!.files} files)
         </text>
       </Show>
 
@@ -221,8 +223,24 @@ function WorkerLane(props: {
           <For each={recentTools()}>
             {(tool) => (
               <box flexDirection="row" gap={1}>
-                <text fg={tool.status === "completed" ? theme.success : tool.status === "running" ? theme.warning : tool.status === "error" ? theme.error : theme.textMuted}>
-                  {tool.status === "completed" ? "✓" : tool.status === "running" ? "●" : tool.status === "error" ? "✗" : "○"}
+                <text
+                  fg={
+                    tool.status === "completed"
+                      ? theme.success
+                      : tool.status === "running"
+                        ? theme.warning
+                        : tool.status === "error"
+                          ? theme.error
+                          : theme.textMuted
+                  }
+                >
+                  {tool.status === "completed"
+                    ? "✓"
+                    : tool.status === "running"
+                      ? "●"
+                      : tool.status === "error"
+                        ? "✗"
+                        : "○"}
                 </text>
                 <text fg={theme.text}>{tool.name}</text>
                 <Show when={tool.duration}>
@@ -243,10 +261,12 @@ function formatTokens(n: number): string {
   return String(n)
 }
 
-export function ParallelStatus(props: { plan: Plan }) {
+export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void }) {
   const { theme } = useTheme()
   const dim = useTerminalDimensions()
   const sync = useSync()
+  const dialog = useDialog()
+  const toast = useToast()
   const [selected, setSelected] = createSignal(0)
   const [expanded, setExpanded] = createSignal<number | null>(null)
   const [elapsed, setElapsed] = createSignal(0)
@@ -302,17 +322,48 @@ export function ParallelStatus(props: { plan: Plan }) {
   // Split workers into rows
   const rows = createMemo(() => {
     const cols = columns()
-    const workers = expanded() !== null
-      ? [props.plan.workers[expanded()!]]
-      : props.plan.workers
-    const result: typeof workers[] = []
+    const workers = expanded() !== null ? [props.plan.workers[expanded()!]] : props.plan.workers
+    const result: (typeof workers)[] = []
     for (let i = 0; i < workers.length; i += cols) {
       result.push(workers.slice(i, i + cols))
     }
     return result
   })
 
+  const handleCancel = () => {
+    dialog.replace(() => (
+      <DialogSelect
+        title="Cancel Running Plan?"
+        options={[
+          {
+            title: "Yes, cancel all",
+            value: "confirm",
+            description: "Abort all workers and cancel the plan",
+            onSelect: async () => {
+              try {
+                const { Orchestrator } = await import("@/parallel/orchestrator")
+                await Orchestrator.cancel(props.plan.id)
+                dialog.clear()
+                toast.show({ message: "Plan cancelled", variant: "info" })
+                props.onCancelled?.()
+              } catch (err) {
+                toast.error(err instanceof Error ? err.message : "Failed to cancel plan")
+              }
+            },
+          },
+          {
+            title: "No, continue",
+            value: "abort",
+            description: "Keep the plan running",
+            onSelect: () => dialog.clear(),
+          },
+        ]}
+      />
+    ))
+  }
+
   useKeyboard((evt) => {
+    if (dialog.stack.length > 0) return
     if (evt.name === "up" || evt.sequence === "k") {
       evt.preventDefault()
       setSelected((s) => Math.max(0, s - 1))
@@ -327,6 +378,9 @@ export function ParallelStatus(props: { plan: Plan }) {
       if (expanded() !== null) {
         setExpanded(null)
       }
+    } else if (evt.name === "c" || (evt.sequence === "c" && !evt.ctrl)) {
+      evt.preventDefault()
+      handleCancel()
     }
   })
 
@@ -353,7 +407,9 @@ export function ParallelStatus(props: { plan: Plan }) {
       <box marginBottom={1}>
         <text fg={theme.success}>{"█".repeat(Math.floor((done() / Math.max(total(), 1)) * 30))}</text>
         <text fg={theme.warning}>{"█".repeat(Math.floor((running() / Math.max(total(), 1)) * 30))}</text>
-        <text fg={theme.textMuted}>{"░".repeat(Math.max(0, 30 - Math.floor(((done() + running()) / Math.max(total(), 1)) * 30)))}</text>
+        <text fg={theme.textMuted}>
+          {"░".repeat(Math.max(0, 30 - Math.floor(((done() + running()) / Math.max(total(), 1)) * 30)))}
+        </text>
       </box>
 
       {/* Worker lanes */}
@@ -365,7 +421,11 @@ export function ParallelStatus(props: { plan: Plan }) {
                 const index = () => props.plan.workers.indexOf(worker)
                 const subtask = () => props.plan.subtasks.find((s) => s.id === worker.subtaskID)
                 return (
-                  <box flexGrow={1} flexBasis={0} onMouseUp={() => setExpanded((e) => (e === index() ? null : index()))}>
+                  <box
+                    flexGrow={1}
+                    flexBasis={0}
+                    onMouseUp={() => setExpanded((e) => (e === index() ? null : index()))}
+                  >
                     <WorkerLane
                       worker={worker}
                       subtask={subtask()}
@@ -384,7 +444,9 @@ export function ParallelStatus(props: { plan: Plan }) {
       {/* Totals */}
       <box marginTop={1} paddingTop={1} borderStyle="single" borderColor={theme.border} flexDirection="column" gap={0}>
         <box flexDirection="row" gap={2}>
-          <text fg={theme.text} attributes={TextAttributes.BOLD}>Total:</text>
+          <text fg={theme.text} attributes={TextAttributes.BOLD}>
+            Total:
+          </text>
           <text fg={theme.accent}>{formatCost(totals().cost)}</text>
           <text fg={theme.textMuted}>
             {formatTokens(totals().input)} in / {formatTokens(totals().output)} out
@@ -393,9 +455,7 @@ export function ParallelStatus(props: { plan: Plan }) {
           <text fg={theme.textMuted}>{formatDuration(elapsed())}</text>
         </box>
         <box flexDirection="row" gap={2} marginTop={1}>
-          <text fg={theme.textMuted}>
-            arrows navigate | enter expand/collapse | esc back
-          </text>
+          <text fg={theme.textMuted}>arrows navigate | enter expand/collapse | c cancel | esc back</text>
         </box>
       </box>
     </box>

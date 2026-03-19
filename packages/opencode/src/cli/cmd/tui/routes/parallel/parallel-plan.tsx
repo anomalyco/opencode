@@ -4,8 +4,8 @@ import { For, Show, createSignal, createMemo } from "solid-js"
 import type { Plan, Subtask, ModelRef } from "@/parallel/schema"
 import { useToast } from "@tui/ui/toast"
 import { useDialog } from "@tui/ui/dialog"
-import { useSync } from "@tui/context/sync"
 import { DialogSelect } from "@tui/ui/dialog-select"
+import { useSync } from "@tui/context/sync"
 import { TextAttributes } from "@opentui/core"
 import { pipe, flatMap, entries, sortBy, map, filter } from "remeda"
 
@@ -88,13 +88,34 @@ export function ParallelPlan(props: { plan: Plan; onApproved: () => void; onCanc
   }
 
   const handleCancel = async () => {
-    try {
-      const { Orchestrator } = await import("@/parallel/orchestrator")
-      await Orchestrator.cancel(props.plan.id)
-      props.onCancelled()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to cancel plan")
-    }
+    dialog.replace(() => (
+      <DialogSelect
+        title="Cancel Plan?"
+        options={[
+          {
+            title: "Yes, cancel",
+            value: "confirm",
+            description: "Abort the parallel plan",
+            onSelect: async () => {
+              try {
+                const { Orchestrator } = await import("@/parallel/orchestrator")
+                await Orchestrator.cancel(props.plan.id)
+                dialog.clear()
+                props.onCancelled()
+              } catch (err) {
+                toast.error(err instanceof Error ? err.message : "Failed to cancel plan")
+              }
+            },
+          },
+          {
+            title: "No, keep it",
+            value: "abort",
+            description: "Return to the plan view",
+            onSelect: () => dialog.clear(),
+          },
+        ]}
+      />
+    ))
   }
 
   const handleRegenerate = async () => {
