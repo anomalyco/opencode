@@ -1,7 +1,15 @@
 import { base64Decode } from "@opencode-ai/util/encode"
 import type { Page } from "@playwright/test"
 import { test, expect } from "../fixtures"
-import { defocus, createTestProject, cleanupTestProject, openSidebar, sessionIDFromUrl, waitDir, waitSlug } from "../actions"
+import {
+  defocus,
+  createTestProject,
+  cleanupTestProject,
+  openSidebar,
+  sessionIDFromUrl,
+  waitDir,
+  waitSlug,
+} from "../actions"
 import { projectSwitchSelector, promptSelector, workspaceItemSelector, workspaceNewSessionSelector } from "../selectors"
 import { dirSlug, resolveDirectory } from "../utils"
 
