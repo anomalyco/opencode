@@ -181,15 +181,30 @@ export namespace Orchestrator {
 
     await PlanStore.transition({ id: planID, status: "draft" })
 
+    // Preserve existing model overrides from current subtasks
+    const modelOverrides = new Map<string, ModelRef>()
+    for (const st of plan.subtasks) {
+      if (st.model) {
+        // Index by title since IDs change on regeneration
+        modelOverrides.set(st.title, st.model)
+      }
+    }
+
     const subtasks = await Decomposition.decompose({
       task: plan.task,
       model: plan.orchestratorModel,
     })
 
+    // Restore model overrides where titles match
+    const restoredSubtasks = subtasks.map((st) => {
+      const override = modelOverrides.get(st.title)
+      return override ? { ...st, model: override } : st
+    })
+
     return PlanStore.update({
       id: planID,
-      subtasks,
-      workers: subtasks.map((st) => ({
+      subtasks: restoredSubtasks,
+      workers: restoredSubtasks.map((st) => ({
         subtaskID: st.id,
         status: "pending" as const,
       })),
