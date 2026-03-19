@@ -366,7 +366,9 @@ export function SessionSidePanel(props: {
                 <Tabs.List>
                   <Tabs.Trigger value="changes" class="flex-1" classes={{ button: "w-full" }}>
                     {props.reviewCount()}{" "}
-                    {language.t(props.reviewCount() === 1 ? "session.review.change.one" : "session.review.change.other")}
+                    {language.t(
+                      props.reviewCount() === 1 ? "session.review.change.one" : "session.review.change.other",
+                    )}
                   </Tabs.Trigger>
                   <Tabs.Trigger value="all" class="flex-1" classes={{ button: "w-full" }}>
                     {language.t("session.files.all")}
@@ -395,9 +397,7 @@ export function SessionSidePanel(props: {
                         />
                       </Show>
                     </Match>
-                    <Match when={true}>
-                      {empty(props.empty())}
-                    </Match>
+                    <Match when={true}>{empty(props.empty())}</Match>
                   </Switch>
                 </Tabs.Content>
                 <Tabs.Content value="all" class="bg-background-stronger px-3 py-0">
