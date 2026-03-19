@@ -20,7 +20,7 @@ export const ParallelEvent = {
     }),
   ),
   WorkerTimeoutWarning: BusEvent.define(
-    "parallel.worker.timeoutWarning",
+    "parallel.worker.timeout_warning",
     z.object({
       planID: PlanID.zod,
       subtaskID: z.string(),
