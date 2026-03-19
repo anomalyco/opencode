@@ -3,13 +3,13 @@ import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { ManagedRuntime } from "effect"
-import { Git } from "../../src/git"
+import { GitEffect } from "../../src/git/effect"
 import { tmpdir } from "../fixture/fixture"
 
 const weird = process.platform === "win32" ? "space file.txt" : "tab\tfile.txt"
 
-async function withGit<T>(fn: (rt: ManagedRuntime.ManagedRuntime<Git.Service, never>) => Promise<T>) {
-  const rt = ManagedRuntime.make(Git.defaultLayer)
+async function withGit<T>(fn: (rt: ManagedRuntime.ManagedRuntime<GitEffect.Service, never>) => Promise<T>) {
+  const rt = ManagedRuntime.make(GitEffect.defaultLayer)
   try {
     return await fn(rt)
   } finally {
@@ -22,7 +22,7 @@ describe("Git", () => {
     await using tmp = await tmpdir({ git: true })
 
     await withGit(async (rt) => {
-      const branch = await rt.runPromise(Git.Service.use((git) => git.branch(tmp.path)))
+      const branch = await rt.runPromise(GitEffect.Service.use((git) => git.branch(tmp.path)))
       expect(branch).toBeDefined()
       expect(typeof branch).toBe("string")
     })
@@ -32,7 +32,7 @@ describe("Git", () => {
     await using tmp = await tmpdir()
 
     await withGit(async (rt) => {
-      const branch = await rt.runPromise(Git.Service.use((git) => git.branch(tmp.path)))
+      const branch = await rt.runPromise(GitEffect.Service.use((git) => git.branch(tmp.path)))
       expect(branch).toBeUndefined()
     })
   })
@@ -43,7 +43,7 @@ describe("Git", () => {
     await $`git config init.defaultBranch trunk`.cwd(tmp.path).quiet()
 
     await withGit(async (rt) => {
-      const branch = await rt.runPromise(Git.Service.use((git) => git.defaultBranch(tmp.path)))
+      const branch = await rt.runPromise(GitEffect.Service.use((git) => git.defaultBranch(tmp.path)))
       expect(branch?.name).toBe("trunk")
       expect(branch?.ref).toBe("trunk")
     })
@@ -55,7 +55,7 @@ describe("Git", () => {
     await fs.writeFile(path.join(tmp.path, file), "hello\n", "utf-8")
 
     await withGit(async (rt) => {
-      const status = await rt.runPromise(Git.Service.use((git) => git.status(tmp.path)))
+      const status = await rt.runPromise(GitEffect.Service.use((git) => git.status(tmp.path)))
       expect(status).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
@@ -79,9 +79,9 @@ describe("Git", () => {
 
     await withGit(async (rt) => {
       const [base, diff, stats] = await Promise.all([
-        rt.runPromise(Git.Service.use((git) => git.mergeBase(tmp.path, "main"))),
-        rt.runPromise(Git.Service.use((git) => git.diff(tmp.path, "HEAD"))),
-        rt.runPromise(Git.Service.use((git) => git.stats(tmp.path, "HEAD"))),
+        rt.runPromise(GitEffect.Service.use((git) => git.mergeBase(tmp.path, "main"))),
+        rt.runPromise(GitEffect.Service.use((git) => git.diff(tmp.path, "HEAD"))),
+        rt.runPromise(GitEffect.Service.use((git) => git.stats(tmp.path, "HEAD"))),
       ])
 
       expect(base).toBeTruthy()

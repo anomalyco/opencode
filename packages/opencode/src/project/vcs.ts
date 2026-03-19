@@ -4,7 +4,7 @@ import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { InstanceContext } from "@/effect/instance-context"
 import { FileWatcher } from "@/file/watcher"
-import { Git } from "@/git"
+import { GitEffect } from "@/git/effect"
 import { Snapshot } from "@/snapshot"
 import { Log } from "@/util/log"
 import path from "path"
@@ -25,7 +25,7 @@ const work = Effect.fnUntraced(function* (fs: AppFileSystem.Interface, cwd: stri
   return Buffer.from(buf).toString("utf8")
 })
 
-function stats(list: Git.Stat[]) {
+function stats(list: GitEffect.Stat[]) {
   const out = new Map<string, { additions: number; deletions: number }>()
   for (const item of list) {
     out.set(item.file, {
@@ -36,8 +36,8 @@ function stats(list: Git.Stat[]) {
   return out
 }
 
-function merge(...lists: Git.Item[][]) {
-  const out = new Map<string, Git.Item>()
+function merge(...lists: GitEffect.Item[][]) {
+  const out = new Map<string, GitEffect.Item>()
   for (const list of lists) {
     for (const item of list) {
       if (!out.has(item.file)) out.set(item.file, item)
@@ -48,10 +48,10 @@ function merge(...lists: Git.Item[][]) {
 
 const files = Effect.fnUntraced(function* (
   fs: AppFileSystem.Interface,
-  git: Git.Interface,
+  git: GitEffect.Interface,
   cwd: string,
   ref: string | undefined,
-  list: Git.Item[],
+  list: GitEffect.Item[],
   nums: Map<string, { additions: number; deletions: number }>,
 ) {
   const base = ref ? yield* git.prefix(cwd) : ""
@@ -78,7 +78,7 @@ const files = Effect.fnUntraced(function* (
 
 const track = Effect.fnUntraced(function* (
   fs: AppFileSystem.Interface,
-  git: Git.Interface,
+  git: GitEffect.Interface,
   cwd: string,
   ref: string | undefined,
 ) {
@@ -91,7 +91,7 @@ const track = Effect.fnUntraced(function* (
 
 const compare = Effect.fnUntraced(function* (
   fs: AppFileSystem.Interface,
-  git: Git.Interface,
+  git: GitEffect.Interface,
   cwd: string,
   ref: string,
 ) {
@@ -149,9 +149,9 @@ export namespace Vcs {
     Effect.gen(function* () {
       const instance = yield* InstanceContext
       const fs = yield* AppFileSystem.Service
-      const git = yield* Git.Service
+      const git = yield* GitEffect.Service
       let current: string | undefined
-      let root: Git.Base | undefined
+      let root: GitEffect.Base | undefined
 
       if (instance.project.vcs === "git") {
         const get = () => Effect.runPromise(git.branch(instance.directory))
@@ -203,5 +203,8 @@ export namespace Vcs {
     }),
   )
 
-  export const defaultLayer = layer.pipe(Layer.provide(Git.defaultLayer), Layer.provide(AppFileSystem.defaultLayer))
+  export const defaultLayer = layer.pipe(
+    Layer.provide(GitEffect.defaultLayer),
+    Layer.provide(AppFileSystem.defaultLayer),
+  )
 }
