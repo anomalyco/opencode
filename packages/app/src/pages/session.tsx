@@ -303,10 +303,13 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
     ),
   )
 
+  const totalVisible = createMemo(() => input.visibleUserMessages().length)
+
   return {
     turnStart,
     setTurnStart,
     renderedUserMessages,
+    totalVisible,
     loadAndReveal,
     onScrollerScroll,
   }
@@ -1777,6 +1780,8 @@ export default function Page() {
                       if (root) scheduleScrollState(root)
                     }}
                     turnStart={historyWindow.turnStart()}
+                    totalVisible={historyWindow.totalVisible()}
+                    totalLoaded={messages().length}
                     historyMore={historyMore()}
                     historyLoading={historyLoading()}
                     onLoadEarlier={() => {

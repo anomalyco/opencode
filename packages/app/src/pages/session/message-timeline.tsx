@@ -213,6 +213,8 @@ export function MessageTimeline(props: {
   centered: boolean
   setContentRef: (el: HTMLDivElement) => void
   turnStart: number
+  totalVisible: number
+  totalLoaded: number
   historyMore: boolean
   historyLoading: boolean
   onLoadEarlier: () => void
@@ -906,7 +908,7 @@ export function MessageTimeline(props: {
               }}
             >
               <Show when={props.turnStart > 0 || props.historyMore}>
-                <div class="w-full flex justify-center">
+                <div class="w-full flex flex-col items-center gap-1 py-2">
                   <Button
                     variant="ghost"
                     size="large"
@@ -918,6 +920,19 @@ export function MessageTimeline(props: {
                       ? language.t("session.messages.loadingEarlier")
                       : language.t("session.messages.loadEarlier")}
                   </Button>
+                  <Show when={props.totalVisible > 0}>
+                    <span class="text-11-regular text-text-weak opacity-50 select-none">
+                      {props.historyMore
+                        ? language.t("session.messages.showingOfMore", {
+                            showing: props.renderedUserMessages.length,
+                            total: props.totalVisible,
+                          })
+                        : language.t("session.messages.showingOf", {
+                            showing: props.renderedUserMessages.length,
+                            total: props.totalVisible,
+                          })}
+                    </span>
+                  </Show>
                 </div>
               </Show>
               <For each={rendered()}>

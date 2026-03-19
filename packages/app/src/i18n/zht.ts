@@ -511,7 +511,8 @@ export const dict = {
   "session.messages.loadingEarlier": "正在載入更早的訊息...",
   "session.messages.loadEarlier": "載入更早的訊息",
   "session.messages.loading": "正在載入訊息...",
-
+  "session.messages.showingOf": "顯示 {{showing}} / {{total}} 則訊息",
+  "session.messages.showingOfMore": "顯示 {{showing}} / {{total}}+ 則訊息",
   "session.messages.jumpToLatest": "跳到最新",
   "session.context.addToContext": "將 {{selection}} 新增到上下文",
   "session.todo.title": "待辦事項",

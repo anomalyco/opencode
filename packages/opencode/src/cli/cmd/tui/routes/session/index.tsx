@@ -317,6 +317,15 @@ export function Session() {
     }, 50)
   }
 
+  async function loadEarlier() {
+    if (!sync.session.history.more(route.sessionID)) return
+    const before = scroll?.scrollHeight ?? 0
+    await sync.session.history.loadMore(route.sessionID)
+    if (!scroll || scroll.isDestroyed) return
+    const delta = scroll.scrollHeight - before
+    if (delta > 0) scroll.scrollBy(delta)
+  }
+
   const local = useLocal()
 
   function moveFirstChild() {
@@ -732,6 +741,16 @@ export function Session() {
       },
     },
     {
+      title: "Load previous messages",
+      value: "session.load.earlier",
+      keybind: "messages_load_earlier",
+      category: "Session",
+      onSelect: (dialog) => {
+        void loadEarlier()
+        dialog.clear()
+      },
+    },
+    {
       title: "Jump to last user message",
       value: "session.messages_last_user",
       keybind: "messages_last_user",
@@ -1056,6 +1075,23 @@ export function Session() {
               scrollAcceleration={scrollAcceleration()}
             >
               <box height={1} />
+
+              <Show when={sync.session.history.more(route.sessionID) || sync.session.history.loading(route.sessionID)}>
+                <box flexShrink={0} justifyContent="center" paddingTop={1} paddingBottom={1}>
+                  <Show
+                    when={!sync.session.history.loading(route.sessionID)}
+                    fallback={<text fg={theme.textMuted}>Loading previous messages...</text>}
+                  >
+                    <text fg={theme.accent} onMouseUp={() => void loadEarlier()}>
+                      ▲ Load previous messages
+                    </text>
+                    <text fg={theme.textMuted}>
+                      {messages().length} messages loaded
+                      {messages().length >= 200 ? " · high memory usage" : ""}
+                    </text>
+                  </Show>
+                </box>
+              </Show>
               <For each={messages()}>
                 {(message, index) => (
                   <Switch>

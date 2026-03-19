@@ -23,6 +23,7 @@ export const TuiEvent = {
           "session.half.page.down",
           "session.first",
           "session.last",
+          "session.load.earlier",
           "prompt.clear",
           "prompt.submit",
           "agent.cycle",

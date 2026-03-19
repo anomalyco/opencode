@@ -64,6 +64,15 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       part: {
         [messageID: string]: Part[]
       }
+      history_cursor: {
+        [sessionID: string]: string | undefined
+      }
+      history_complete: {
+        [sessionID: string]: boolean | undefined
+      }
+      history_loading: {
+        [sessionID: string]: boolean | undefined
+      }
       lsp: LspStatus[]
       mcp: {
         [key: string]: McpStatus
@@ -96,6 +105,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       todo: {},
       message: {},
       part: {},
+      history_cursor: {},
+      history_complete: {},
+      history_loading: {},
       lsp: [],
       mcp: {},
       mcp_resource: {},
@@ -253,7 +265,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             }),
           )
           const updated = store.message[event.properties.info.sessionID]
-          if (updated.length > 100) {
+          if (updated.length > 500) {
             const oldest = updated[0]
             batch(() => {
               setStore(
@@ -475,6 +487,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             sdk.client.session.todo({ sessionID }),
             sdk.client.session.diff({ sessionID }),
           ])
+          const cursor = messages.response?.headers?.get("X-Next-Cursor") ?? undefined
           setStore(
             produce((draft) => {
               const match = Binary.search(draft.session, sessionID, (s) => s.id)
@@ -486,9 +499,42 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
                 draft.part[message.info.id] = message.parts
               }
               draft.session_diff[sessionID] = diff.data ?? []
+              draft.history_cursor[sessionID] = cursor
+              draft.history_complete[sessionID] = !cursor
             }),
           )
           fullSyncedSessions.add(sessionID)
+        },
+        history: {
+          more(sessionID: string) {
+            return !!store.history_cursor[sessionID] && !store.history_complete[sessionID]
+          },
+          loading(sessionID: string) {
+            return !!store.history_loading[sessionID]
+          },
+          async loadMore(sessionID: string) {
+            const cur = store.history_cursor[sessionID]
+            if (!cur || store.history_complete[sessionID] || store.history_loading[sessionID]) return
+            setStore("history_loading", sessionID, true)
+            try {
+              const result = await sdk.client.session.messages({ sessionID, limit: 100, before: cur })
+              const next = result.response?.headers?.get("X-Next-Cursor") ?? undefined
+              setStore(
+                produce((draft) => {
+                  const older = (result.data ?? []).map((x) => x.info)
+                  const existing = draft.message[sessionID] ?? []
+                  draft.message[sessionID] = [...older, ...existing]
+                  for (const msg of result.data ?? []) {
+                    draft.part[msg.info.id] = msg.parts
+                  }
+                  draft.history_cursor[sessionID] = next
+                  draft.history_complete[sessionID] = !next
+                }),
+              )
+            } finally {
+              setStore("history_loading", sessionID, false)
+            }
+          },
         },
       },
       workspace: {

@@ -281,6 +281,7 @@ export const TuiRoutes = lazy(() =>
             messages_half_page_down: "session.half.page.down",
             messages_first: "session.first",
             messages_last: "session.last",
+            messages_load_earlier: "session.load.earlier",
             agent_cycle: "agent.cycle",
           }[command],
         })
