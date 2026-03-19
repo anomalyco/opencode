@@ -1,6 +1,6 @@
 import { useFilteredList } from "@opencode-ai/ui/hooks"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
-import { createEffect, on, Component, Show, onCleanup, createMemo, createSignal } from "solid-js"
+import { createEffect, on, Component, Show, onCleanup, createMemo, createSignal, For } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocal } from "@/context/local"
 import { selectionFromLines, type SelectedLineRange, useFile } from "@/context/file"
@@ -25,6 +25,7 @@ import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Select } from "@opencode-ai/ui/select"
+import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ModelSelectorPopover } from "@/components/dialog-select-model"
 import { DialogSelectModelUnpaid } from "@/components/dialog-select-model-unpaid"
@@ -56,6 +57,7 @@ import { PromptImageAttachments } from "./prompt-input/image-attachments"
 import { PromptDragOverlay } from "./prompt-input/drag-overlay"
 import { promptPlaceholder } from "./prompt-input/placeholder"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
+import { useSpeechRecognition } from "@/hooks/use-speech-recognition"
 
 interface PromptInputProps {
   class?: string
@@ -282,6 +284,84 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     mode: "normal",
     applyingHistory: false,
   })
+
+  // Speech recognition state
+  const browserLangs = createMemo(() => {
+    const langs = Array.from(navigator.languages ?? [navigator.language]).filter(Boolean)
+    if (!langs.some((l) => l.startsWith("en"))) langs.push("en-US")
+    return langs
+  })
+
+  const [speechLang, setSpeechLang] = persisted(
+    Persist.global("speech-lang"),
+    createStore({ lang: navigator.language || "en-US" }),
+  )
+
+  const showLangSelector = createMemo(() => true)
+
+  const getSpeechLang = () => speechLang.lang || navigator.language || "en-US"
+
+  let finalTranscript = ""
+  let speechInsertCursor = 0
+  let speechBaseParts: ContentPart[] = []
+
+  const speech = useSpeechRecognition({
+    lang: getSpeechLang(),
+    onResult: (text, isFinal) => {
+      if (!text.trim()) return
+
+      if (isFinal) {
+        finalTranscript += (finalTranscript ? " " : "") + text.trim()
+      }
+
+      const spoken = isFinal ? finalTranscript : finalTranscript + (finalTranscript ? " " : "") + text.trim()
+      const before = speechBaseParts
+      const pos = speechInsertCursor
+
+      const textBefore = before
+        .filter((p): p is ContentPart & { type: "text" } => p.type === "text")
+        .map((p) => p.content)
+        .join("")
+        .slice(0, pos)
+      const textAfter = before
+        .filter((p): p is ContentPart & { type: "text" } => p.type === "text")
+        .map((p) => p.content)
+        .join("")
+        .slice(pos)
+      const nonText = before.filter((p) => p.type !== "text")
+
+      const merged = textBefore + spoken + textAfter
+      const newPart: ContentPart = { type: "text", content: merged, start: 0, end: merged.length }
+      const newParts: ContentPart[] = [...nonText, newPart]
+      const newCursor = pos + spoken.length
+
+      prompt.set(newParts, newCursor)
+
+      requestAnimationFrame(() => {
+        editorRef?.focus()
+        setCursorPosition(editorRef, newCursor)
+        queueScroll()
+      })
+    },
+    onError: (error) => {
+      console.error("Speech recognition error:", error)
+    },
+  })
+
+  const toggleRecording = () => {
+    if (store.mode !== "normal") return
+    if (speech.state() !== "recording") {
+      finalTranscript = ""
+      speechInsertCursor = getCursorPosition(editorRef) ?? promptLength(prompt.current())
+      speechBaseParts = [...prompt.current()]
+    }
+    speech.toggle()
+  }
+
+  const stopRecording = () => {
+    speech.abort() // Stop and ignore any pending results
+    finalTranscript = "" // Clear accumulated transcript
+  }
 
   const buttonsSpring = useSpring(() => (store.mode === "normal" ? 1 : 0), { visualDuration: 0.2, bounce: 0 })
   const motion = (value: number) => ({
@@ -1094,7 +1174,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     shouldQueue: props.shouldQueue,
     onQueue: props.onQueue,
     onAbort: props.onAbort,
-    onSubmit: props.onSubmit,
+    onSubmit: () => {
+      stopRecording()
+      props.onSubmit?.()
+    },
   })
 
   const handleKeyDown = (event: KeyboardEvent) => {
@@ -1303,11 +1386,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             if (!(target instanceof HTMLElement)) return
             if (
               target.closest(
-                '[data-action="prompt-attach"], [data-action="prompt-submit"], [data-action="prompt-permissions"]',
+                '[data-action="prompt-attach"], [data-action="prompt-submit"], [data-action="prompt-permissions"], [data-action="prompt-mic"]',
               )
             ) {
               return
             }
+            stopRecording()
             editorRef?.focus()
           }}
         >
@@ -1378,7 +1462,65 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               }}
             />
 
-            <div class="flex items-center gap-1 pointer-events-auto">
+            <div class="flex items-center gap-2 pointer-events-auto">
+              <Show when={speech.isSupported()}>
+                <div class="flex items-center rounded-md border border-border-weak-base bg-surface-panel overflow-hidden">
+                  <Tooltip
+                    placement="top"
+                    value={speech.state() === "recording" ? "Stop recording" : "Start voice input"}
+                  >
+                    <IconButton
+                      data-action="prompt-mic"
+                      type="button"
+                      icon="mic"
+                      variant="ghost"
+                      class="size-8 rounded-none"
+                      data-recording={speech.state() === "recording"}
+                      style={buttons()}
+                      onClick={toggleRecording}
+                      disabled={store.mode !== "normal"}
+                      tabIndex={store.mode === "normal" ? undefined : -1}
+                      aria-label={speech.state() === "recording" ? "Stop recording" : "Start voice input"}
+                    />
+                  </Tooltip>
+
+                  <Show when={showLangSelector()}>
+                    <DropdownMenu placement="top-start">
+                      <DropdownMenu.Trigger class="h-8 px-1.5 text-11-regular flex items-center rounded-none border-l border-border-weak-base hover:bg-white/5 transition-colors">
+                        {speechLang.lang}
+                      </DropdownMenu.Trigger>
+                      <DropdownMenu.Portal>
+                        <DropdownMenu.Content>
+                          <DropdownMenu.RadioGroup
+                            value={speechLang.lang}
+                            onChange={(v) => setSpeechLang("lang", v as string)}
+                          >
+                            <For each={browserLangs()}>
+                              {(lang) => (
+                                <DropdownMenu.RadioItem value={lang}>
+                                  <DropdownMenu.ItemLabel>{lang}</DropdownMenu.ItemLabel>
+                                  <DropdownMenu.ItemIndicator>
+                                    <Icon name="check-small" size="small" />
+                                  </DropdownMenu.ItemIndicator>
+                                </DropdownMenu.RadioItem>
+                              )}
+                            </For>
+                          </DropdownMenu.RadioGroup>
+                        </DropdownMenu.Content>
+                      </DropdownMenu.Portal>
+                    </DropdownMenu>
+                  </Show>
+                </div>
+              </Show>
+
+              <Show when={!speech.isSupported()}>
+                <Tooltip placement="top" value="Speech recognition not supported">
+                  <div class="size-8 flex items-center justify-center opacity-40 cursor-not-allowed">
+                    <Icon name="mic-off" class="size-4" />
+                  </div>
+                </Tooltip>
+              </Show>
+
               <Tooltip placement="top" inactive={!prompt.dirty() && !working()} value={tip()}>
                 <IconButton
                   data-action="prompt-submit"
