@@ -150,7 +150,6 @@ export function LicensePanel(props: { mode: "settings" | "gate" }) {
             <MetaRow label={language.t("settings.pricing.row.plan.title")} value={license.plan ?? "-"} />
             <MetaRow label={language.t("settings.pricing.row.validated.title")} value={format(license.lastValidatedAt)} />
             <MetaRow label={language.t("settings.pricing.row.expires.title")} value={format(license.expiresAt)} />
-            <MetaRow label={language.t("settings.pricing.row.grace.title")} value={format(license.graceUntil)} />
           </div>
         </div>
       </div>

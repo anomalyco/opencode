@@ -18,8 +18,6 @@ import {
   onCleanup,
   onMount,
   type ParentProps,
-  Switch,
-  Match,
 } from "solid-js"
 import { showToast } from "@opencode-ai/ui/toast"
 import { getFilename } from "@opencode-ai/util/path"
@@ -346,13 +344,7 @@ const GlobalSyncContext = createContext<ReturnType<typeof createGlobalSync>>()
 
 export function GlobalSyncProvider(props: ParentProps) {
   const value = createGlobalSync()
-  return (
-    <Switch>
-      <Match when={value.ready}>
-        <GlobalSyncContext.Provider value={value}>{props.children}</GlobalSyncContext.Provider>
-      </Match>
-    </Switch>
-  )
+  return <GlobalSyncContext.Provider value={value}>{props.children}</GlobalSyncContext.Provider>
 }
 
 export function useGlobalSync() {

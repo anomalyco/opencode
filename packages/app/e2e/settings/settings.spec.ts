@@ -24,7 +24,7 @@ test("smoke settings dialog opens, switches tabs, closes", async ({ page, gotoSe
   await expect(dialog.getByRole("button", { name: "Reset to defaults" })).toBeVisible()
   await expect(dialog.getByPlaceholder("Search shortcuts")).toBeVisible()
 
-  await dialog.getByRole("tab", { name: "Pricing" }).click()
+  await dialog.getByRole("tab", { name: "License" }).click()
   await expect(dialog.locator(settingsLicenseKeySelector)).toBeVisible()
   await expect(dialog.locator(settingsLicenseSubmitSelector)).toBeVisible()
 

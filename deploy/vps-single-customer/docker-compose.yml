@@ -3,6 +3,8 @@ services:
     build:
       context: ../..
       dockerfile: deploy/vps-single-customer/Dockerfile
+      args:
+        VITE_OPENCODE_LICENSE_URL: ${VITE_OPENCODE_LICENSE_URL}
     restart: unless-stopped
     environment:
       OPENCODE_SERVER_PASSWORD: ${OPENCODE_SERVER_PASSWORD}

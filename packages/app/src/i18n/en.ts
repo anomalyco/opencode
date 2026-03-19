@@ -611,7 +611,7 @@ export const dict = {
   "settings.section.server": "Server",
   "settings.tab.general": "General",
   "settings.tab.shortcuts": "Shortcuts",
-  "settings.tab.pricing": "Pricing",
+  "settings.tab.pricing": "License",
 
   "settings.general.section.appearance": "Appearance",
   "settings.general.section.notifications": "System notifications",
@@ -746,7 +746,7 @@ export const dict = {
   "settings.providers.tag.other": "Other",
   "settings.models.title": "Models",
   "settings.models.description": "Model settings will be configurable here.",
-  "settings.pricing.title": "Pricing",
+  "settings.pricing.title": "License",
   "settings.pricing.description": "Activate this installation with a valid license key from your billing service.",
   "settings.pricing.status.title": "Status",
   "settings.pricing.status.active": "Active",

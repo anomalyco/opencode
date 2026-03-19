@@ -31,7 +31,7 @@ bun run dev:license
 bun run dev -- --port 4444
 ```
 
-Open `http://localhost:4444`, go to `Settings > Pricing`, and paste one of these keys:
+Open `http://localhost:4444`, go to `Settings > License`, and paste one of these keys:
 
 - `TEST-ACTIVE-KEY` - unlocks the app
 - `TEST-EXPIRED-KEY` - returns an expired license

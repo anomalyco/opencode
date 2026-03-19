@@ -32,6 +32,7 @@ Copy `.env.example` to `.env` and fill in:
 - `NUMERAL_DOMAIN`
 - `LETSENCRYPT_EMAIL`
 - `OPENCODE_SERVER_PASSWORD`
+- `VITE_OPENCODE_LICENSE_URL`
 - `CUSTOMER_WORKSPACE`
 
 ## 4. Start the stack
@@ -58,5 +59,6 @@ The server should require HTTP Basic Auth using:
 ## Notes
 
 - The backend serves the locally built `packages/app/dist` when `OPENCODE_WEB_DIST` is set.
+- The web app bakes in `VITE_OPENCODE_LICENSE_URL` at build time and uses it for `POST /v1/licenses/activate` and `POST /v1/licenses/refresh`.
 - If no local web build is present, the server falls back to proxying `app.opencode.ai`.
 - Customers should add their own model/provider credentials inside the running app.
