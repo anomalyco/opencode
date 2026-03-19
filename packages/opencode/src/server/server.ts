@@ -557,6 +557,42 @@ export namespace Server {
       .all("/*", async (c) => {
         const path = c.req.path
 
+        // Try to serve from local frontend build first (if available).
+        // This allows patched frontend code to take effect instead of the CDN version.
+        const localAppDir = process.env.OPENCODE_APP_DIR ?? import.meta.dirname + "/../../app/dist"
+        const localFile = Bun.file(localAppDir + path)
+        if (await localFile.exists()) {
+          const headers = new Headers()
+          const mime = localFile.type
+          if (mime) headers.set("Content-Type", mime)
+          headers.set(
+            "Content-Security-Policy",
+            "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data: https://opencode.ai",
+          )
+          if (/^\/assets\//.test(path) && /\.[a-f0-9]{8,}\./.test(path)) {
+            headers.set("Cache-Control", "public, max-age=31536000, immutable")
+          } else {
+            headers.set("Cache-Control", "no-cache")
+          }
+          return new Response(localFile.stream(), { headers })
+        }
+
+        // SPA fallback: serve index.html for client-side routes (not assets/files with extensions)
+        if (!/\.\w+$/.test(path)) {
+          const indexFile = Bun.file(localAppDir + "/index.html")
+          if (await indexFile.exists()) {
+            const headers = new Headers()
+            headers.set("Content-Type", "text/html;charset=UTF-8")
+            headers.set(
+              "Content-Security-Policy",
+              "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data: https://opencode.ai",
+            )
+            headers.set("Cache-Control", "no-cache")
+            return new Response(indexFile.stream(), { headers })
+          }
+        }
+
+        // Fallback: proxy to CDN
         const response = await proxy(`https://app.opencode.ai${path}`, {
           ...c.req,
           headers: {
@@ -568,8 +604,6 @@ export namespace Server {
           "Content-Security-Policy",
           "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data: https://opencode.ai",
         )
-        // Hashed asset paths are immutable; cache them aggressively.
-        // Everything else (index.html, manifests) gets a short revalidation window.
         if (/^\/assets\//.test(path) && /\.[a-f0-9]{8,}\./.test(path)) {
           response.headers.set("Cache-Control", "public, max-age=31536000, immutable")
         } else if (!response.headers.has("Cache-Control")) {
