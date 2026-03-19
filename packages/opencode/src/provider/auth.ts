@@ -106,7 +106,7 @@ export namespace ProviderAuth {
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
-      const auth = yield* Auth.AuthEffect.Service
+      const auth = yield* Auth.Auth.Service
       const hooks = yield* Effect.promise(async () => {
         const mod = await import("../plugin")
         const plugins = await mod.Plugin.list()
@@ -213,7 +213,7 @@ export namespace ProviderAuth {
     }),
   )
 
-  export const defaultLayer = layer.pipe(Layer.provide(Auth.AuthEffect.layer))
+  export const defaultLayer = layer.pipe(Layer.provide(Auth.Auth.layer))
 
   export async function methods() {
     return runPromiseInstance(Service.use((svc) => svc.methods()))

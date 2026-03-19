@@ -6,7 +6,7 @@ import { AccountRepo, type AccountRow } from "./repo"
 import {
   type AccountError,
   AccessToken,
-  Account,
+  Account as AccountSchema,
   AccountID,
   DeviceCode,
   RefreshToken,
@@ -24,10 +24,30 @@ import {
   UserCode,
 } from "./schema"
 
-export * from "./schema"
+export {
+  Account as AccountSchema,
+  AccountID,
+  type AccountError,
+  AccountRepoError,
+  AccountServiceError,
+  AccessToken,
+  RefreshToken,
+  DeviceCode,
+  UserCode,
+  Org,
+  OrgID,
+  Login,
+  PollSuccess,
+  PollPending,
+  PollSlow,
+  PollExpired,
+  PollDenied,
+  PollError,
+  PollResult,
+} from "./schema"
 
 export type AccountOrgs = {
-  account: Account
+  account: AccountSchema
   orgs: readonly Org[]
 }
 
@@ -108,10 +128,10 @@ const mapAccountServiceError =
       ),
     )
 
-export namespace AccountEffect {
+export namespace Account {
   export interface Interface {
-    readonly active: () => Effect.Effect<Option.Option<Account>, AccountError>
-    readonly list: () => Effect.Effect<Account[], AccountError>
+    readonly active: () => Effect.Effect<Option.Option<AccountSchema>, AccountError>
+    readonly list: () => Effect.Effect<AccountSchema[], AccountError>
     readonly orgsByAccount: () => Effect.Effect<readonly AccountOrgs[], AccountError>
     readonly remove: (accountID: AccountID) => Effect.Effect<void, AccountError>
     readonly use: (accountID: AccountID, orgID: Option.Option<OrgID>) => Effect.Effect<void, AccountError>

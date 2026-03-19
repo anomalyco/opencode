@@ -9,7 +9,7 @@ import { Log } from "../util/log"
 import { ToolID } from "./schema"
 import { TRUNCATION_DIR } from "./truncation-dir"
 
-export namespace TruncateEffect {
+export namespace Truncate {
   const log = Log.create({ service: "truncation" })
   const RETENTION = Duration.days(7)
 
