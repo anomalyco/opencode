@@ -20,6 +20,8 @@ import { DialogHelp } from "./ui/dialog-help"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogParallelConfig } from "@tui/component/dialog-parallel"
+import { Parallel } from "@tui/routes/parallel"
+import { ParallelProvider } from "@tui/context/parallel"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
 import { DialogWorkspaceList } from "@tui/component/dialog-workspace-list"
 import { KeybindProvider } from "@tui/context/keybind"
@@ -852,6 +854,11 @@ function App() {
         </Match>
         <Match when={route.data.type === "session"}>
           <Session />
+        </Match>
+        <Match when={route.data.type === "parallel"}>
+          <ParallelProvider>
+            <Parallel />
+          </ParallelProvider>
         </Match>
       </Switch>
     </box>

@@ -1,17 +1,14 @@
-import { Show, createEffect, createSignal, onCleanup, createMemo } from "solid-js"
+import { Show, createEffect, createSignal, onCleanup } from "solid-js"
 import { useTheme } from "@tui/context/theme"
 import { useTerminalDimensions, useKeyboard } from "@opentui/solid"
 import { useRoute } from "@tui/context/route"
 import { useParallel } from "@tui/context/parallel"
 import { useLocal } from "@tui/context/local"
+import { useSDK } from "@tui/context/sdk"
 import { ParallelPlan } from "./parallel-plan"
 import { ParallelStatus } from "./parallel-status"
 import { ParallelMerge } from "./parallel-merge"
 import { TextAttributes } from "@opentui/core"
-import { Bus } from "@/bus"
-import { ParallelEvent } from "@/parallel/events"
-import { PlanStore } from "@/parallel/plan"
-import { PlanID } from "@/parallel/schema"
 
 export function Parallel() {
   const { theme } = useTheme()
@@ -19,11 +16,18 @@ export function Parallel() {
   const route = useRoute()
   const parallel = useParallel()
   const local = useLocal()
+  const sdk = useSDK()
   const [loading, setLoading] = createSignal(true)
   const [error, setError] = createSignal<string | null>(null)
   const [switchedOnComplete, setSwitchedOnComplete] = createSignal(false)
 
   const planID = () => (route.data.type === "parallel" ? route.data.planID : null)
+
+  async function fetchPlan(id: string) {
+    const res = await fetch(`${sdk.url}/parallel/${id}`)
+    if (!res.ok) throw new Error("Plan not found")
+    return res.json()
+  }
 
   // Load plan on mount / route change
   createEffect(() => {
@@ -32,19 +36,24 @@ export function Parallel() {
     setLoading(true)
     setError(null)
     setSwitchedOnComplete(false)
-    PlanStore.get(PlanID.make(id))
+    fetchPlan(id)
       .then((plan) => parallel.setPlan(plan))
       .catch(() => setError("Plan not found"))
       .finally(() => setLoading(false))
   })
 
-  // Subscribe to plan updates
-  const unsub = Bus.subscribe(ParallelEvent.PlanUpdated, (evt) => {
-    if (evt.properties.plan.id === planID()) {
-      parallel.setPlan(evt.properties.plan)
+  // Poll for plan updates every 3s (Bus is server-side only)
+  const pollTimer = setInterval(async () => {
+    const id = planID()
+    if (!id) return
+    try {
+      const plan = await fetchPlan(id)
+      parallel.setPlan(plan)
+    } catch {
+      // Plan may have been deleted
     }
-  })
-  onCleanup(unsub)
+  }, 3000)
+  onCleanup(() => clearInterval(pollTimer))
 
   // Auto-switch to build agent when plan completes successfully
   createEffect(() => {
