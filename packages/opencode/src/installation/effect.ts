@@ -1,6 +1,6 @@
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Effect, Layer, Schema, ServiceMap, Stream } from "effect"
-import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
+import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import path from "path"
@@ -59,6 +59,18 @@ export namespace Installation {
   export class UpgradeFailedError extends Schema.TaggedErrorClass<UpgradeFailedError>()("UpgradeFailedError", {
     stderr: Schema.String,
   }) {}
+
+  // Response schemas for external version APIs
+  const GitHubRelease = Schema.Struct({ tag_name: Schema.String })
+  const NpmPackage = Schema.Struct({ version: Schema.String })
+  const BrewFormula = Schema.Struct({ versions: Schema.Struct({ stable: Schema.String }) })
+  const BrewInfoV2 = Schema.Struct({
+    formulae: Schema.Array(Schema.Struct({ versions: Schema.Struct({ stable: Schema.String }) })),
+  })
+  const ChocoPackage = Schema.Struct({
+    d: Schema.Struct({ results: Schema.Array(Schema.Struct({ Version: Schema.String })) }),
+  })
+  const ScoopManifest = NpmPackage
 
   export interface Interface {
     readonly info: () => Effect.Effect<Info>
@@ -188,18 +200,16 @@ export namespace Installation {
             const formula = yield* getBrewFormula()
             if (formula.includes("/")) {
               const infoJson = yield* text(["brew", "info", "--json=v2", formula])
-              const info = JSON.parse(infoJson)
-              const version = info.formulae?.[0]?.versions?.stable
-              if (!version) throw new Error(`Could not detect version for tap formula: ${formula}`)
-              return version as string
+              const info = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(BrewInfoV2))(infoJson)
+              return info.formulae[0].versions.stable
             }
             const response = yield* httpOk.execute(
               HttpClientRequest.get("https://formulae.brew.sh/api/formula/opencode.json").pipe(
                 HttpClientRequest.acceptJson,
               ),
             )
-            const data: any = yield* response.json
-            return data.versions.stable as string
+            const data = yield* HttpClientResponse.schemaBodyJson(BrewFormula)(response)
+            return data.versions.stable
           }
 
           if (detectedMethod === "npm" || detectedMethod === "bun" || detectedMethod === "pnpm") {
@@ -210,8 +220,8 @@ export namespace Installation {
             const response = yield* httpOk.execute(
               HttpClientRequest.get(`${registry}/opencode-ai/${channel}`).pipe(HttpClientRequest.acceptJson),
             )
-            const data: any = yield* response.json
-            return data.version as string
+            const data = yield* HttpClientResponse.schemaBodyJson(NpmPackage)(response)
+            return data.version
           }
 
           if (detectedMethod === "choco") {
@@ -220,8 +230,8 @@ export namespace Installation {
                 "https://community.chocolatey.org/api/v2/Packages?$filter=Id%20eq%20%27opencode%27%20and%20IsLatestVersion&$select=Version",
               ).pipe(HttpClientRequest.setHeaders({ Accept: "application/json;odata=verbose" })),
             )
-            const data: any = yield* response.json
-            return data.d.results[0].Version as string
+            const data = yield* HttpClientResponse.schemaBodyJson(ChocoPackage)(response)
+            return data.d.results[0].Version
           }
 
           if (detectedMethod === "scoop") {
@@ -230,8 +240,8 @@ export namespace Installation {
                 "https://raw.githubusercontent.com/ScoopInstaller/Main/master/bucket/opencode.json",
               ).pipe(HttpClientRequest.setHeaders({ Accept: "application/json" })),
             )
-            const data: any = yield* response.json
-            return data.version as string
+            const data = yield* HttpClientResponse.schemaBodyJson(ScoopManifest)(response)
+            return data.version
           }
 
           const response = yield* httpOk.execute(
@@ -239,8 +249,8 @@ export namespace Installation {
               HttpClientRequest.acceptJson,
             ),
           )
-          const data: any = yield* response.json
-          return (data.tag_name as string).replace(/^v/, "")
+          const data = yield* HttpClientResponse.schemaBodyJson(GitHubRelease)(response)
+          return data.tag_name.replace(/^v/, "")
         },
         Effect.orDie,
       )
