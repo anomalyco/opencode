@@ -1,7 +1,6 @@
 import { Effect, Layer, ManagedRuntime } from "effect"
 import { AccountEffect } from "@/account/effect"
 import { AuthEffect } from "@/auth/effect"
-import { GitEffect } from "@/git/effect"
 import { Instances } from "@/effect/instances"
 import type { InstanceServices } from "@/effect/instances"
 import { TruncateEffect } from "@/tool/truncate-effect"
@@ -10,7 +9,6 @@ import { Instance } from "@/project/instance"
 export const runtime = ManagedRuntime.make(
   Layer.mergeAll(
     AccountEffect.defaultLayer, //
-    GitEffect.defaultLayer,
     TruncateEffect.defaultLayer,
     Instances.layer,
   ).pipe(Layer.provideMerge(AuthEffect.layer)),

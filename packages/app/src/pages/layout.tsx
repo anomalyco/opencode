@@ -633,8 +633,7 @@ export default function Layout(props: ParentProps) {
       if (!expanded) continue
       const key = workspaceKey(directory)
       const project = projects.find(
-        (item) =>
-          workspaceKey(item.worktree) === key || item.sandboxes?.some((sandbox) => workspaceKey(sandbox) === key),
+        (item) => workspaceKey(item.worktree) === key || item.sandboxes?.some((sandbox) => workspaceKey(sandbox) === key),
       )
       if (!project) continue
       if (project.vcs === "git" && layout.sidebar.workspaces(project.worktree)()) continue
@@ -1164,8 +1163,7 @@ export default function Layout(props: ParentProps) {
     const project = layout.projects
       .list()
       .find(
-        (item) =>
-          workspaceKey(item.worktree) === key || item.sandboxes?.some((sandbox) => workspaceKey(sandbox) === key),
+        (item) => workspaceKey(item.worktree) === key || item.sandboxes?.some((sandbox) => workspaceKey(sandbox) === key),
       )
     if (project) return project.worktree
 
