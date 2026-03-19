@@ -5,14 +5,12 @@ import { withStatics } from "@/util/schema"
 import { SessionID } from "@/session/schema"
 import { ProviderID, ModelID } from "@/provider/schema"
 
-export { SessionID } from "@/session/schema"
-
 export const PlanID = Schema.String.pipe(
   Schema.brand("PlanID"),
   withStatics((s) => ({
     make: (id: string) => s.makeUnsafe(id),
-    descending: (id?: string) => s.makeUnsafe(Identifier.descending("plan" as any, id)),
-    zod: z.string().pipe(z.custom<Schema.Schema.Type<typeof s>>()),
+    descending: (id?: string) => s.makeUnsafe(Identifier.descending("plan", id)),
+    zod: Identifier.schema("plan").pipe(z.custom<Schema.Schema.Type<typeof s>>()),
   })),
 )
 
@@ -22,8 +20,8 @@ export const SubtaskID = Schema.String.pipe(
   Schema.brand("SubtaskID"),
   withStatics((s) => ({
     make: (id: string) => s.makeUnsafe(id),
-    ascending: (id?: string) => s.makeUnsafe(Identifier.ascending("subtask" as any, id)),
-    zod: z.string().pipe(z.custom<Schema.Schema.Type<typeof s>>()),
+    ascending: (id?: string) => s.makeUnsafe(Identifier.ascending("subtask", id)),
+    zod: Identifier.schema("subtask").pipe(z.custom<Schema.Schema.Type<typeof s>>()),
   })),
 )
 

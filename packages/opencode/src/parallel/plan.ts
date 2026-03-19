@@ -4,9 +4,9 @@ import { Bus } from "@/bus"
 import { ParallelEvent } from "./events"
 import { validateTransition, validateWorkerTransition } from "./transitions"
 import type { Plan, PlanID, SubtaskID, WorkerState, PlanStatus, WorkerStatus, Subtask, ModelRef } from "./schema"
-import { PlanID as PlanIDSchema, SubtaskID as SubtaskIDSchema, Plan as PlanSchema, SessionID } from "./schema"
+import { PlanID as PlanIDSchema, SubtaskID as SubtaskIDSchema, Plan as PlanSchema } from "./schema"
+import { SessionID } from "@/session/schema"
 import { fn } from "@/util/fn"
-import { Instance } from "../project/instance"
 
 type PlanRow = typeof PlanTable.$inferSelect
 
@@ -14,12 +14,12 @@ function fromRow(row: PlanRow): Plan {
   return {
     id: row.id,
     sessionID: row.session_id,
-    status: row.status as PlanStatus,
+    status: row.status,
     task: row.task,
-    orchestratorModel: row.orchestrator_model as ModelRef,
-    workerModel: row.worker_model as ModelRef,
-    subtasks: row.subtasks as Subtask[],
-    workers: row.workers as WorkerState[],
+    orchestratorModel: row.orchestrator_model,
+    workerModel: row.worker_model,
+    subtasks: row.subtasks,
+    workers: row.workers,
     time: {
       created: row.time_created,
       approved: row.time_approved ?? undefined,
@@ -68,8 +68,8 @@ export namespace PlanStore {
       }
       Database.use((db) => {
         db.insert(PlanTable).values(toRow(plan)).run()
+        Database.effect(() => Bus.publish(ParallelEvent.PlanUpdated, { plan }))
       })
-      Bus.publish(ParallelEvent.PlanUpdated, { plan })
       return plan
     },
   )
@@ -98,6 +98,12 @@ export namespace PlanStore {
       if (input.status !== undefined) {
         validateTransition(existing.status, input.status)
         updates.status = input.status
+        if (input.status === "approved") {
+          updates.time_approved = Date.now()
+        }
+        if (input.status === "done" || input.status === "failed") {
+          updates.time_completed = Date.now()
+        }
       }
       if (input.subtasks !== undefined) {
         updates.subtasks = input.subtasks as any
@@ -106,12 +112,13 @@ export namespace PlanStore {
         updates.workers = input.workers as any
       }
 
-      const row = Database.use((db) =>
-        db.update(PlanTable).set(updates).where(eq(PlanTable.id, input.id)).returning().get(),
-      )
-      const plan = fromRow(row)
-      Bus.publish(ParallelEvent.PlanUpdated, { plan })
-      return plan
+      return Database.use((db) => {
+        const row = db.update(PlanTable).set(updates).where(eq(PlanTable.id, input.id)).returning().get()
+        if (!row) throw new NotFoundError({ message: `Plan not found: ${input.id}` })
+        const plan = fromRow(row)
+        Database.effect(() => Bus.publish(ParallelEvent.PlanUpdated, { plan }))
+        return plan
+      })
     },
   )
 
@@ -161,38 +168,27 @@ export namespace PlanStore {
       const updatedWorkers = [...plan.workers]
       updatedWorkers[workerIndex] = updatedWorker
 
-      return update({ id: input.id, workers: updatedWorkers })
+      return Database.use((db) => {
+        const row = db
+          .update(PlanTable)
+          .set({ workers: updatedWorkers as any })
+          .where(eq(PlanTable.id, input.id))
+          .returning()
+          .get()
+        if (!row) throw new NotFoundError({ message: `Plan not found: ${input.id}` })
+        const plan = fromRow(row)
+        Database.effect(() => {
+          Bus.publish(ParallelEvent.PlanUpdated, { plan })
+          Bus.publish(ParallelEvent.WorkerUpdated, { planID: input.id, worker: updatedWorker })
+        })
+        return plan
+      })
     },
   )
 
-  export async function approve(id: PlanID): Promise<Plan> {
-    const now = Date.now()
-    const row = Database.use((db) =>
-      db
-        .update(PlanTable)
-        .set({ status: "approved", time_approved: now })
-        .where(eq(PlanTable.id, id))
-        .returning()
-        .get(),
-    )
-    const plan = fromRow(row)
-    Bus.publish(ParallelEvent.PlanUpdated, { plan })
-    return plan
-  }
-
-  export async function complete(id: PlanID): Promise<Plan> {
-    const now = Date.now()
-    const row = Database.use((db) =>
-      db.update(PlanTable).set({ status: "done", time_completed: now }).where(eq(PlanTable.id, id)).returning().get(),
-    )
-    const plan = fromRow(row)
-    Bus.publish(ParallelEvent.PlanUpdated, { plan })
-    return plan
-  }
-
-  export async function remove(id: PlanID): Promise<void> {
+  export const remove = fn(PlanIDSchema.zod, async (id: PlanID): Promise<void> => {
     Database.use((db) => {
       db.delete(PlanTable).where(eq(PlanTable.id, id)).run()
     })
-  }
+  })
 }
