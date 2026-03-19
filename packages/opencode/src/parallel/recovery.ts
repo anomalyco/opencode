@@ -26,6 +26,12 @@ export namespace Recovery {
     canResume: boolean
     needsCleanup: boolean
     summary: string
+    /** Estimated work lost in terms of incomplete subtasks */
+    estimatedWorkLost: number
+    /** Recommended action: "resume" or "abandon" */
+    recommendedAction: "resume" | "abandon"
+    /** Time since interruption in milliseconds, if available */
+    timeSinceInterruption?: number
   }
 
   /**
@@ -70,15 +76,59 @@ export namespace Recovery {
       }
 
       const canResume = incompleteWorkers.length > 0 || plan.status === "merging"
+      const timeSinceInterruption = plan.time.approved ? Date.now() - plan.time.approved : undefined
 
-      const summary = [
+      // Build actionable summary with specific commands and recovery suggestions
+      const lines = [
         `Plan "${plan.task}" (${plan.id})`,
         `Status: ${plan.status}`,
-        `Workers: ${completedWorkers.length}/${plan.workers.length} completed`,
-        `Incomplete: ${incompleteWorkers.length} workers`,
-        `Worktrees on disk: ${existingWorktrees.length}`,
-        canResume ? "Can be resumed" : "Cannot be resumed — mark as failed",
-      ].join("\n")
+        `Progress: ${completedWorkers.length}/${plan.workers.length} workers completed (${incompleteWorkers.length} incomplete)`,
+        `Worktrees: ${existingWorktrees.length} found on disk`,
+      ]
+
+      if (incompleteWorkers.length > 0) {
+        const withWorktree = incompleteWorkers.filter((w) => w.worktreeDir && fs.existsSync(w.worktreeDir)).length
+        const withoutWorktree = incompleteWorkers.length - withWorktree
+
+        if (withWorktree > 0) {
+          lines.push(`  - ${withWorktree} worker(s) have worktrees that may contain uncommitted work`)
+        }
+        if (withoutWorktree > 0) {
+          lines.push(`  - ${withoutWorktree} worker(s) lost their worktrees and need restart`)
+        }
+      }
+
+      if (timeSinceInterruption) {
+        const minutes = Math.floor(timeSinceInterruption / 60000)
+        const hours = Math.floor(minutes / 60)
+        if (hours > 0) {
+          lines.push(`Interrupted: ${hours}h ${minutes % 60}m ago`)
+        } else {
+          lines.push(`Interrupted: ${minutes}m ago`)
+        }
+      }
+
+      // Determine recommended action and add actionable commands
+      const recommendedAction = canResume ? "resume" : "abandon"
+
+      if (canResume) {
+        lines.push("")
+        lines.push("Recommended action: RESUME")
+        lines.push(`  Run: opencode parallel resume ${plan.id}`)
+        if (incompleteWorkers.some((w) => w.worktreeDir && fs.existsSync(w.worktreeDir))) {
+          lines.push("  Some workers have worktrees with potential commits - these will be recovered")
+        }
+        if (incompleteWorkers.some((w) => !w.worktreeDir || !fs.existsSync(w.worktreeDir))) {
+          lines.push("  Some workers need restart - they will be respawned automatically")
+        }
+      } else {
+        lines.push("")
+        lines.push("Recommended action: ABANDON")
+        lines.push(`  Run: opencode parallel abandon ${plan.id}`)
+        lines.push("  This will clean up any remaining worktrees and mark the plan as failed")
+      }
+
+      const summary = lines.join("\n")
 
       results.push({
         plan,
@@ -88,6 +138,9 @@ export namespace Recovery {
         canResume,
         needsCleanup: false,
         summary,
+        estimatedWorkLost: incompleteWorkers.length,
+        recommendedAction,
+        timeSinceInterruption,
       })
     }
 
@@ -105,12 +158,18 @@ export namespace Recovery {
 
       log.info("found failed plan with orphaned worktrees", { planID: plan.id, worktrees: existingWorktrees.length })
 
-      const summary = [
+      const lines = [
         `Plan "${plan.task}" (${plan.id})`,
-        `Status: ${plan.status}`,
+        `Status: failed (cleanup needed)`,
         `Orphaned worktrees: ${existingWorktrees.length}`,
-        "Use 'abandon' action to clean up",
-      ].join("\n")
+        `Incomplete subtasks: ${plan.workers.length}`,
+        "",
+        "Action required: Clean up orphaned resources",
+        `  Run: opencode parallel abandon ${plan.id}`,
+        "  This will remove worktrees and mark workers as failed",
+      ]
+
+      const summary = lines.join("\n")
 
       results.push({
         plan,
@@ -120,6 +179,8 @@ export namespace Recovery {
         canResume: false,
         needsCleanup: true,
         summary,
+        estimatedWorkLost: plan.workers.length,
+        recommendedAction: "abandon",
       })
     }
 
@@ -136,12 +197,22 @@ export namespace Recovery {
     const plan = await PlanStore.get(planID)
 
     if (!INTERRUPTED_STATUSES.includes(plan.status)) {
-      throw new Error(`Plan ${planID} is not in an interrupted state (status: ${plan.status})`)
+      const allowedStatuses = INTERRUPTED_STATUSES.join(", ")
+      throw new Error(
+        `Cannot resume plan ${planID}: invalid status "${plan.status}".\n\n` +
+          `Resume is only available for plans in these states: ${allowedStatuses}.\n` +
+          `Current plan status indicates it's ${plan.status === "done" ? "already completed" : plan.status === "failed" ? "marked as failed" : "in a state that doesn't support resume"}.\n\n` +
+          `If you need to restart this plan, create a new parallel execution instead.`,
+      )
     }
 
     log.info("resuming interrupted plan", { planID, status: plan.status })
 
     // Phase 1: Assess each worker's actual state
+    let recoveredCount = 0
+    let failedCount = 0
+    let lostWorktreeCount = 0
+
     for (const worker of plan.workers) {
       if (!INTERRUPTED_WORKER_STATUSES.includes(worker.status)) continue
 
@@ -156,25 +227,55 @@ export namespace Recovery {
             status: "done",
             diffStat,
           } as any)
-          log.info("recovered completed worker", { planID, subtaskID: worker.subtaskID })
+          recoveredCount++
+          log.info("recovered completed worker", {
+            planID,
+            subtaskID: worker.subtaskID,
+            details: "Worktree has commits - worker completed but status wasn't saved",
+            nextStep: "Worker marked as done, will be included in merge",
+          })
         } else {
-          // Worktree exists but no commits — mark as failed (will need re-spawn)
+          // Worktree exists but no commits — worker didn't finish
           await PlanStore.updateWorker({
             id: planID,
             subtaskID: worker.subtaskID,
             status: "failed",
-            error: "Interrupted — worktree exists but no commits",
+            error: "Interrupted during execution - worktree exists but no commits found. Worker will be respawned.",
           } as any)
+          failedCount++
+          log.info("worker incomplete - will respawn", {
+            planID,
+            subtaskID: worker.subtaskID,
+            details: "Worktree exists but has no commits - worker was interrupted before completing",
+            nextStep: "Worker marked as failed, will be automatically respawned",
+          })
         }
       } else {
-        // No worktree — mark as failed
+        // No worktree — worker lost entirely
+        lostWorktreeCount++
         await PlanStore.updateWorker({
           id: planID,
           subtaskID: worker.subtaskID,
           status: "failed",
-          error: "Interrupted — worktree not found",
+          error: "Interrupted - worktree directory not found. Worker needs to be restarted from scratch.",
         } as any)
+        log.info("worktree missing - worker lost", {
+          planID,
+          subtaskID: worker.subtaskID,
+          expectedPath: worker.worktreeDir,
+          details: "Worktree directory no longer exists - all progress lost",
+          nextStep: "Worker marked as failed, will be respawned with fresh worktree",
+        })
       }
+    }
+
+    if (recoveredCount > 0 || failedCount > 0 || lostWorktreeCount > 0) {
+      log.info("worker recovery summary", {
+        planID,
+        recovered: recoveredCount,
+        needsRespawn: failedCount,
+        lost: lostWorktreeCount,
+      })
     }
 
     // Phase 2: Check if all workers are now in terminal state
@@ -188,18 +289,37 @@ export namespace Recovery {
     if (allFailed) {
       // Nothing to merge — mark plan as failed
       await forceStatus(planID, "failed")
-      log.info("all workers failed, plan marked as failed", { planID })
+      log.info("resume failed - all workers unsuccessful", {
+        planID,
+        details: "All workers failed during recovery - no work to merge",
+        action:
+          "Plan marked as failed. You may abandon it to clean up resources or review the errors and try a new plan.",
+      })
       return PlanStore.get(planID)
     }
 
     if (allDone && anyDone) {
       // All workers done — transition to merging and run merge
       await forceStatus(planID, "merging")
-      log.info("all workers done, starting merge", { planID })
+      log.info("all workers recovered - starting merge", {
+        planID,
+        recoveredCount: updatedPlan.workers.filter((w) => w.status === "done").length,
+        details: "All workers successfully recovered with commits",
+        nextStep: "Starting merge pipeline to combine all changes",
+      })
 
       const { MergePipeline } = await import("./merge")
       const success = await MergePipeline.run(planID)
       await forceStatus(planID, success ? "done" : "failed")
+
+      if (!success) {
+        log.info("merge failed during resume", {
+          planID,
+          details: "Merge pipeline encountered conflicts or errors",
+          action: "Plan marked as failed. Review conflicts and consider creating a new plan.",
+        })
+      }
+
       return PlanStore.get(planID)
     }
 
@@ -209,10 +329,17 @@ export namespace Recovery {
       await forceStatus(planID, "running")
     }
 
+    const doneCount = updatedPlan.workers.filter((w) => w.status === "done").length
+    const failedWorkersCount = updatedPlan.workers.filter((w) => w.status === "failed").length
+    const stillPending = updatedPlan.workers.filter((w) => w.status === "pending").length
+
     log.info("plan partially recovered", {
       planID,
-      done: updatedPlan.workers.filter((w) => w.status === "done").length,
-      failed: updatedPlan.workers.filter((w) => w.status === "failed").length,
+      done: doneCount,
+      failed: failedWorkersCount,
+      pending: stillPending,
+      details: `${doneCount} workers recovered, ${failedWorkersCount} need respawn`,
+      nextStep: "Workers will be respawned automatically. Check orchestrator chat for status updates.",
     })
 
     return PlanStore.get(planID)
@@ -226,6 +353,10 @@ export namespace Recovery {
 
     log.info("abandoning plan", { planID, status: plan.status })
 
+    // Count what will be cleaned up for the confirmation message
+    const worktreesToClean = plan.workers.filter((w) => w.worktreeDir && fs.existsSync(w.worktreeDir)).length
+    const incompleteCount = plan.workers.filter((w) => INTERRUPTED_WORKER_STATUSES.includes(w.status)).length
+
     // Mark all incomplete workers as failed (for interrupted plans)
     for (const worker of plan.workers) {
       if (INTERRUPTED_WORKER_STATUSES.includes(worker.status)) {
@@ -233,7 +364,7 @@ export namespace Recovery {
           id: planID,
           subtaskID: worker.subtaskID,
           status: "failed",
-          error: "Abandoned by user",
+          error: "Abandoned by user - plan cleanup requested",
         } as any)
       }
     }
@@ -243,6 +374,16 @@ export namespace Recovery {
 
     // Mark plan as failed
     await forceStatus(planID, "failed")
+
+    const cleanedWorktrees = plan.workers.filter((w) => w.worktreeDir).length
+
+    log.info("plan abandoned and cleaned up", {
+      planID,
+      workersMarkedFailed: incompleteCount,
+      worktreesRemoved: cleanedWorktrees,
+      branchesRemoved: plan.workers.filter((w) => w.branch).length,
+      confirmation: `Plan ${plan.id} has been abandoned. ${cleanedWorktrees} worktree(s) cleaned up, ${incompleteCount} incomplete worker(s) marked as failed.`,
+    })
 
     return PlanStore.get(planID)
   }
