@@ -1,7 +1,8 @@
 import { getFilename } from "@opencode-ai/util/path"
 import { type Session } from "@opencode-ai/sdk/v2/client"
 
-export const workspaceKey = (directory: string) => {
+export const workspaceKey = (directory?: string) => {
+  if (!directory) return ""
   const drive = directory.match(/^([A-Za-z]:)[\\/]+$/)
   if (drive) return `${drive[1]}${directory.includes("\\") ? "\\" : "/"}`
   if (/^[\\/]+$/.test(directory)) return directory.includes("\\") ? "\\" : "/"
@@ -22,7 +23,7 @@ export function sortSessions(now: number) {
   }
 }
 
-export const isRootVisibleSession = (session: Session, directory: string) =>
+export const isRootVisibleSession = (session: Session, directory?: string) =>
   workspaceKey(session.directory) === workspaceKey(directory) && !session.parentID && !session.time?.archived
 
 export const sortedRootSessions = (store: { session: Session[]; path: { directory: string } }, now: number) =>
@@ -52,6 +53,10 @@ export function getDraggableId(event: unknown): string | undefined {
 
 export const displayName = (project: { name?: string; worktree: string }) =>
   project.name || getFilename(project.worktree)
+
+export const sessionFamilyRootID = (session: Session) => session.lineage?.rootID ?? session.parentID ?? session.id
+
+export const sessionTargetID = (session: Session) => session.lineage?.latestID ?? session.id
 
 export const errorMessage = (err: unknown, fallback: string) => {
   if (err && typeof err === "object" && "data" in err) {

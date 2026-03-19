@@ -68,6 +68,11 @@ describe("layout workspace helpers", () => {
     expect(workspaceKey("C:///")).toBe("C:/")
   })
 
+  test("handles missing workspace keys safely", () => {
+    expect(workspaceKey(undefined)).toBe("")
+    expect(workspaceKey("")).toBe("")
+  })
+
   test("keeps local first while preserving known order", () => {
     const result = syncWorkspaceOrder("/root", ["/root", "/b", "/c"], ["/root", "/c", "/a", "/b"])
     expect(result).toEqual(["/root", "/c", "/b"])

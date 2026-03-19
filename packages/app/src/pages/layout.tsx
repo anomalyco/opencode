@@ -62,6 +62,7 @@ import {
   displayName,
   errorMessage,
   getDraggableId,
+  sessionTargetID,
   sortedRootSessions,
   syncWorkspaceOrder,
   workspaceKey,
@@ -1104,7 +1105,7 @@ export default function Layout(props: ParentProps) {
       setState("hoverSession", undefined)
       setState("hoverProject", undefined)
     }
-    navigate(`/${base64Encode(session.directory)}/session/${session.id}`)
+    navigate(`/${base64Encode(session.directory)}/session/${sessionTargetID(session)}`)
     layout.mobileSidebar.hide()
   }
 
