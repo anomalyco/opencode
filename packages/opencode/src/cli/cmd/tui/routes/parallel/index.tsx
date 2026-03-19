@@ -20,6 +20,10 @@ export function Parallel() {
   const [loading, setLoading] = createSignal(true)
   const [error, setError] = createSignal<string | null>(null)
   const [switchedOnComplete, setSwitchedOnComplete] = createSignal(false)
+  const isStatus = () => {
+    const s = parallel.plan?.status
+    return s === "approved" || s === "spawning" || s === "running"
+  }
   const back = () => {
     if (route.previous) {
       route.goBack()
@@ -115,7 +119,9 @@ export function Parallel() {
   })
 
   useKeyboard((evt) => {
+    if (evt.defaultPrevented) return
     if (evt.name === "escape") {
+      if (isStatus()) return
       back()
       evt.preventDefault()
     }
@@ -160,7 +166,7 @@ export function Parallel() {
             <ParallelPlan plan={plan} onApproved={() => {}} onCancelled={back} />
           </Show>
           <Show when={plan.status === "approved" || plan.status === "spawning" || plan.status === "running"}>
-            <ParallelStatus plan={plan} onCancelled={back} />
+            <ParallelStatus plan={plan} onCancelled={back} onBack={back} />
           </Show>
           <Show when={plan.status === "merging"}>
             <ParallelMerge plan={plan} />

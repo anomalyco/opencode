@@ -344,7 +344,7 @@ function WorkerLogs(props: { worker: WorkerState; subtask: Subtask | undefined; 
   )
 }
 
-export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void }) {
+export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void; onBack?: () => void }) {
   const { theme } = useTheme()
   const dim = useTerminalDimensions()
   const sync = useSync()
@@ -465,11 +465,16 @@ export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void }) 
       setExpanded((e) => (e === selected() ? null : selected()))
     } else if (evt.name === "escape") {
       evt.preventDefault()
+      evt.stopPropagation()
       if (showLogs() !== null) {
         setShowLogs(null)
-      } else if (expanded() !== null) {
-        setExpanded(null)
+        return
       }
+      if (expanded() !== null) {
+        setExpanded(null)
+        return
+      }
+      props.onBack?.()
     } else if (evt.name === "l" || (evt.sequence === "l" && !evt.ctrl)) {
       evt.preventDefault()
       setShowLogs((l) => (l === selected() ? null : selected()))
