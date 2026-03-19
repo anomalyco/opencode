@@ -124,6 +124,7 @@ const SessionRow = (props: {
       }
       
       if (layout.sidebar.gridMode()) {
+        if (params.dir !== props.slug) return // Allow default navigation to new workspace
         e.preventDefault()
         const existing = searchParams.grid ? searchParams.grid.split(",") : (params.id ? [params.id] : [])
         if (!existing.includes(props.session.id)) {
@@ -455,6 +456,7 @@ export const GridToggleItem = (props: {
   mobile?: boolean
   dense?: boolean
   sidebarExpanded: Accessor<boolean>
+  clearHoverProjectSoon?: () => void
 }): JSX.Element => {
   const layout = useLayout()
   const language = useLanguage()
@@ -469,6 +471,7 @@ export const GridToggleItem = (props: {
         layout.sidebar.toggleGridMode()
         if (layout.sidebar.gridMode()) {
            layout.sidebar.close()
+           props.clearHoverProjectSoon?.()
         }
       }}
     >

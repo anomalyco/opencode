@@ -47,6 +47,9 @@ Power users frequently juggle multiple contexts (e.g. looking at a chat with bac
 - **Sidebar Auto-Close**: Modified the `<GridToggleItem>` in the sidebar so that when a user turns Grid Mode ON, the sidebar automatically collapses to immediately afford the user maximum screen real estate to begin tiling their chats.
 - **5-Grid Layout Polish**: Improved the CSS Grid layout algorithm so that when exactly 5 sessions are tiled (a 3-column, 2-row layout), the 5th tile automatically spans across the 3 columns horizontally to fill the empty space rather than leaving a gap in the bottom right.
 
+- **Grid State Persistence Across Workspaces**: Integrated `searchParams.grid` directly into the `layout.tsx` core layout router. `lastProjectSession` now proactively saves and tracks the specific grid array state for every active project/workspace on the fly. When switching contexts, navigating back to a workspace fully restores its respective saved Grid Mode layout without dropping tiled sessions.
+- **Grid Mode Cross-Workspace Bleed Fix**: Resolved an edge-case bug where clicking a session item under a different workspace header in the sidebar while in Grid Mode would append that ID into the current workspace's grid URL array. Session selection correctly ignores the current grid state when navigating between entirely different workspaces.
+
 ## Next Steps / Future Polish
 - Implementing draggable/resizable splitters between the grid tiles (potentially migrating from native CSS Grid to a dedicated split-pane library like `allotment`).
 - Adjusting terminal interactions so specific terminals can map directly to specific tiled sessions.
