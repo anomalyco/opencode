@@ -356,22 +356,82 @@ The summary that you construct will be used so that another agent can read it an
       const userMessage = parent.info
       const compactionPart = parent.parts.find((part): part is MessageV2.CompactionPart => part.type === "compaction")
 
-      let messages = input.messages
-      let replay:
-        | {
-            info: MessageV2.User
-            parts: MessageV2.Part[]
-          }
-        | undefined
-      if (input.overflow) {
-        const idx = input.messages.findIndex((m) => m.info.id === input.parentID)
-        for (let i = idx - 1; i >= 0; i--) {
-          const msg = input.messages[i]
-          if (msg.info.role === "user" && !msg.parts.some((p) => p.type === "compaction")) {
-            replay = { info: msg.info, parts: msg.parts }
-            messages = input.messages.slice(0, i)
-            break
-          }
+[What goal(s) is the user trying to accomplish?]
+
+## Instructions
+
+- [What important instructions did the user give you that are relevant]
+- [If there is a plan or spec, include information about it so next agent can continue using it]
+
+## Discoveries
+
+[What notable things were learned during this conversation that would be useful for the next agent to know when continuing the work]
+
+## Accomplished
+
+[What work has been completed, what work is still in progress, and what work is left?]
+
+## Relevant files / directories
+
+[Construct a structured list of relevant files that have been read, edited, or created that pertain to the task at hand. If all the files in a directory are relevant, include the path to the directory.]
+---`
+
+    const promptText = compacting.prompt ?? [defaultPrompt, ...compacting.context].join("\n\n")
+    const result = await processor.process({
+      user: userMessage,
+      agent,
+      abort: input.abort,
+      sessionID: input.sessionID,
+      tools: {},
+      system: [],
+      messages: [
+        ...MessageV2.toModelMessages(messages, model, { stripMedia: true }),
+        {
+          role: "user",
+          content: promptText,
+        },
+      ],
+      model,
+    })
+
+    if (result === "compact") {
+      processor.message.error = new MessageV2.ContextOverflowError({
+        message: replay
+          ? "Conversation history too large to compact - exceeds model context limit"
+          : "Session too large to compact - context exceeds model limit even after stripping media",
+      }).toObject()
+      processor.message.finish = "error"
+      await Session.updateMessage(processor.message)
+      return "stop"
+    }
+
+    if (result === "continue" && input.auto) {
+      if (replay) {
+        const original = replay.info as MessageV2.User
+        const replayMsg = await Session.updateMessage({
+          id: MessageID.ascending(),
+          role: "user",
+          sessionID: input.sessionID,
+          time: { created: Date.now() },
+          agent: original.agent,
+          model: original.model,
+          format: original.format,
+          tools: original.tools,
+          system: original.system,
+          variant: original.variant,
+        })
+        for (const part of replay.parts) {
+          if (part.type === "compaction") continue
+          const replayPart =
+            part.type === "file" && MessageV2.isMedia(part.mime)
+              ? { type: "text" as const, text: `[Attached ${part.mime}: ${part.filename ?? "file"}]` }
+              : part
+          await Session.updatePart({
+            ...replayPart,
+            id: PartID.ascending(),
+            messageID: replayMsg.id,
+            sessionID: input.sessionID,
+          })
         }
         const hasContent =
           replay && messages.some((m) => m.info.role === "user" && !m.parts.some((p) => p.type === "compaction"))

@@ -153,15 +153,50 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
         </scrollbox>
 
         <box flexShrink={0} gap={1} paddingTop={1}>
-          <TuiPluginRuntime.Slot name="sidebar_footer" mode="single_winner" session_id={props.sessionID}>
-            <text fg={theme.textMuted}>
-              <span style={{ fg: theme.success }}>•</span> <b>Open</b>
-              <span style={{ fg: theme.text }}>
-                <b>Code</b>
-              </span>{" "}
-              <span>{InstallationVersion}</span>
-            </text>
-          </TuiPluginRuntime.Slot>
+          <Show when={!hasProviders() && !gettingStartedDismissed()}>
+            <box
+              backgroundColor={theme.backgroundElement}
+              paddingTop={1}
+              paddingBottom={1}
+              paddingLeft={2}
+              paddingRight={2}
+              flexDirection="row"
+              gap={1}
+            >
+              <text flexShrink={0} fg={theme.text}>
+                ⬖
+              </text>
+              <box flexGrow={1} gap={1}>
+                <box flexDirection="row" justifyContent="space-between">
+                  <text fg={theme.text}>
+                    <b>Getting started</b>
+                  </text>
+                  <text fg={theme.textMuted} onMouseDown={() => kv.set("dismissed_getting_started", true)}>
+                    ✕
+                  </text>
+                </box>
+                <text fg={theme.textMuted}>OpenCode includes free models so you can start immediately.</text>
+                <text fg={theme.textMuted}>
+                  Connect from 75+ providers to use other models, including Claude, GPT, Gemini etc
+                </text>
+                <box flexDirection="row" gap={1} justifyContent="space-between">
+                  <text fg={theme.text}>Connect provider</text>
+                  <text fg={theme.textMuted}>/connect</text>
+                </box>
+              </box>
+            </box>
+          </Show>
+          <text>
+            <span style={{ fg: theme.textMuted }}>{directory().split("/").slice(0, -1).join("/")}/</span>
+            <span style={{ fg: theme.accent }}>{directory().split("/").at(-1)}</span>
+          </text>
+          <text fg={theme.textMuted}>
+            <span style={{ fg: theme.success }}>•</span> <b>Open</b>
+            <span style={{ fg: theme.text }}>
+              <b>Code</b>
+            </span>{" "}
+            <span>{Installation.VERSION}</span>
+          </text>
         </box>
       </box>
     </Show>
