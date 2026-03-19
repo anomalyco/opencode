@@ -14,6 +14,8 @@ export const dict: Record<string, string> = {
   "ui.sessionReview.largeDiff.meta": "Limit: {{limit}} changed lines. Current: {{current}} changed lines.",
   "ui.sessionReview.largeDiff.renderAnyway": "Render anyway",
   "ui.sessionReview.openFile": "Open file",
+  "ui.sessionReview.openInReview": "Open in review",
+  "ui.sessionReview.openExternally": "Open externally",
   "ui.sessionReview.selection.line": "line {{line}}",
   "ui.sessionReview.selection.lines": "lines {{start}}-{{end}}",
 
