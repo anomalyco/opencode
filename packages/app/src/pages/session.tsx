@@ -50,6 +50,7 @@ import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
 import { Identifier } from "@/utils/id"
+import { OPEN_FILE_PATH_EVENT } from "@/utils/open-file-path"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { same } from "@/utils/same"
 import { formatServerError } from "@/utils/server-errors"
@@ -934,8 +935,8 @@ export default function Page() {
       openReviewFile(path, detail?.line)
     }
 
-    window.addEventListener("opencode:open-file-path", open)
-    onCleanup(() => window.removeEventListener("opencode:open-file-path", open))
+    window.addEventListener(OPEN_FILE_PATH_EVENT, open)
+    onCleanup(() => window.removeEventListener(OPEN_FILE_PATH_EVENT, open))
   })
 
   const changesOptions = ["session", "turn"] as const
