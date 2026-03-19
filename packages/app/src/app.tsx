@@ -265,6 +265,39 @@ function ConnectionError(props: { onRetry?: () => void; onServerSelected?: (key:
   )
 }
 
+function ServerScopedProviders(
+  props: ParentProps<{
+    router?: Component<BaseRouterProps>
+    disableHealthCheck?: boolean
+    appChildren?: JSX.Element
+  }>,
+) {
+  const server = useServer()
+
+  return (
+    <Show when={server.key} keyed>
+      {(_) => (
+        <ConnectionGate disableHealthCheck={props.disableHealthCheck}>
+          <GlobalSDKProvider>
+            <GlobalSyncProvider>
+              <Dynamic
+                component={props.router ?? Router}
+                root={(routerProps) => <RouterRoot appChildren={props.appChildren}>{routerProps.children}</RouterRoot>}
+              >
+                <Route path="/" component={HomeRoute} />
+                <Route path="/:dir" component={DirectoryLayout}>
+                  <Route path="/" component={SessionIndexRoute} />
+                  <Route path="/session/:id?" component={SessionRoute} />
+                </Route>
+              </Dynamic>
+            </GlobalSyncProvider>
+          </GlobalSDKProvider>
+        </ConnectionGate>
+      )}
+    </Show>
+  )
+}
+
 export function AppInterface(props: {
   children?: JSX.Element
   defaultServer: ServerConnection.Key
@@ -274,22 +307,11 @@ export function AppInterface(props: {
 }) {
   return (
     <ServerProvider defaultServer={props.defaultServer} servers={props.servers}>
-      <ConnectionGate disableHealthCheck={props.disableHealthCheck}>
-        <GlobalSDKProvider>
-          <GlobalSyncProvider>
-            <Dynamic
-              component={props.router ?? Router}
-              root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
-            >
-              <Route path="/" component={HomeRoute} />
-              <Route path="/:dir" component={DirectoryLayout}>
-                <Route path="/" component={SessionIndexRoute} />
-                <Route path="/session/:id?" component={SessionRoute} />
-              </Route>
-            </Dynamic>
-          </GlobalSyncProvider>
-        </GlobalSDKProvider>
-      </ConnectionGate>
+      <ServerScopedProviders
+        router={props.router}
+        disableHealthCheck={props.disableHealthCheck}
+        appChildren={props.children}
+      />
     </ServerProvider>
   )
 }
