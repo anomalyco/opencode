@@ -110,6 +110,11 @@ export namespace Orchestrator {
 
     await PlanStore.transition({ id: planID, status: success ? "done" : "failed" })
 
+    if (!success) {
+      const finalPlan = await PlanStore.get(planID)
+      await Recovery.cleanupWorktrees(finalPlan)
+    }
+
     log.info("plan execution complete", { planID, success })
   }
 
@@ -143,6 +148,8 @@ export namespace Orchestrator {
       activeExecutions.delete(planID)
     }
     await PlanStore.transition({ id: planID, status: "failed" })
+    const plan = await PlanStore.get(planID)
+    await Recovery.cleanupWorktrees(plan)
     log.info("plan cancelled", { planID })
   })
 
