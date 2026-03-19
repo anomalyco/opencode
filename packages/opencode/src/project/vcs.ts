@@ -1,3 +1,4 @@
+import { AppFileSystem } from "@/filesystem"
 import { Effect, Layer, ServiceMap } from "effect"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
@@ -5,7 +6,6 @@ import { InstanceContext } from "@/effect/instance-context"
 import { FileWatcher } from "@/file/watcher"
 import { Git } from "@/git"
 import { Snapshot } from "@/snapshot"
-import { Filesystem } from "@/util/filesystem"
 import { Log } from "@/util/log"
 import path from "path"
 import { Instance } from "./instance"
@@ -17,13 +17,13 @@ function count(text: string) {
   return text.slice(0, -1).split("\n").length
 }
 
-async function work(cwd: string, file: string) {
+const work = Effect.fnUntraced(function* (fs: AppFileSystem.Interface, cwd: string, file: string) {
   const full = path.join(cwd, file)
-  if (!(await Filesystem.exists(full))) return ""
-  const buf = await Filesystem.readBytes(full).catch(() => Buffer.alloc(0))
-  if (buf.includes(0)) return ""
-  return buf.toString("utf8")
-}
+  if (!(yield* fs.exists(full).pipe(Effect.orDie))) return ""
+  const buf = yield* fs.readFile(full).pipe(Effect.catch(() => Effect.succeed(new Uint8Array())))
+  if (Buffer.from(buf).includes(0)) return ""
+  return Buffer.from(buf).toString("utf8")
+})
 
 function stats(list: Git.Stat[]) {
   const out = new Map<string, { additions: number; deletions: number }>()
@@ -47,6 +47,7 @@ function merge(...lists: Git.Item[][]) {
 }
 
 const files = Effect.fnUntraced(function* (
+  fs: AppFileSystem.Interface,
   git: Git.Interface,
   cwd: string,
   ref: string | undefined,
@@ -58,7 +59,7 @@ const files = Effect.fnUntraced(function* (
     list.map((item) =>
       Effect.gen(function* () {
         const before = item.status === "added" || !ref ? "" : yield* git.show(cwd, ref, item.file, base)
-        const after = item.status === "deleted" ? "" : yield* Effect.promise(() => work(cwd, item.file))
+        const after = item.status === "deleted" ? "" : yield* work(fs, cwd, item.file)
         const stat = nums.get(item.file)
         return {
           file: item.file,
@@ -75,17 +76,28 @@ const files = Effect.fnUntraced(function* (
   return next.toSorted((a, b) => a.file.localeCompare(b.file))
 })
 
-const track = Effect.fnUntraced(function* (git: Git.Interface, cwd: string, ref: string | undefined) {
+const track = Effect.fnUntraced(function* (
+  fs: AppFileSystem.Interface,
+  git: Git.Interface,
+  cwd: string,
+  ref: string | undefined,
+) {
   if (!ref) {
-    return yield* files(git, cwd, ref, yield* git.status(cwd), new Map())
+    return yield* files(fs, git, cwd, ref, yield* git.status(cwd), new Map())
   }
   const [list, nums] = yield* Effect.all([git.status(cwd), git.stats(cwd, ref)])
-  return yield* files(git, cwd, ref, list, stats(nums))
+  return yield* files(fs, git, cwd, ref, list, stats(nums))
 })
 
-const compare = Effect.fnUntraced(function* (git: Git.Interface, cwd: string, ref: string) {
+const compare = Effect.fnUntraced(function* (
+  fs: AppFileSystem.Interface,
+  git: Git.Interface,
+  cwd: string,
+  ref: string,
+) {
   const [list, nums, extra] = yield* Effect.all([git.diff(cwd, ref), git.stats(cwd, ref), git.status(cwd)])
   return yield* files(
+    fs,
     git,
     cwd,
     ref,
@@ -134,6 +146,7 @@ export namespace Vcs {
     Service,
     Effect.gen(function* () {
       const instance = yield* InstanceContext
+      const fs = yield* AppFileSystem.Service
       const git = yield* Git.Service
       let current: string | undefined
       let root: Git.Base | undefined
@@ -173,18 +186,18 @@ export namespace Vcs {
           if (instance.project.vcs !== "git") return []
           if (mode === "git") {
             const ok = yield* git.hasHead(instance.directory)
-            return yield* track(git, instance.directory, ok ? "HEAD" : undefined)
+            return yield* track(fs, git, instance.directory, ok ? "HEAD" : undefined)
           }
 
           if (!root) return []
           if (current && current === root.name) return []
           const ref = yield* git.mergeBase(instance.directory, root.ref)
           if (!ref) return []
-          return yield* compare(git, instance.directory, ref)
+          return yield* compare(fs, git, instance.directory, ref)
         }),
       })
     }),
   )
 
-  export const defaultLayer = layer.pipe(Layer.provide(Git.layer))
+  export const defaultLayer = layer.pipe(Layer.provide(Git.defaultLayer), Layer.provide(AppFileSystem.defaultLayer))
 }
