@@ -593,22 +593,27 @@ export function Prompt(props: PromptProps) {
     }
 
     const data = result.data ?? []
-    if (data.length === 0) {
-      toast.show({ message: "No LSP servers running", variant: "warning" })
-      return
-    }
+    const opts = [
+      {
+        title: "Kill all LSP servers",
+        value: "/lsps killall",
+        description: "Stop every running LSP",
+        footer: `${data.length} running`,
+      },
+      ...data.map((item) => ({
+        title: item.name,
+        value: `/lsps kill ${item.name}`,
+        description: item.root || ".",
+        footer: "kill",
+      })),
+    ]
 
     dialog.replace(() => (
       <DialogSelect
         title="LSP Servers"
-        options={data.map((item) => ({
-          title: item.name,
-          value: item.name,
-          description: `/lsps kill ${item.name}`,
-          footer: item.root || ".",
-        }))}
+        options={opts}
         onSelect={async (option) => {
-          await runLsps(`/lsps kill ${option.value}`)
+          await runLsps(option.value)
           await showLsps()
         }}
       />

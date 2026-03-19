@@ -422,6 +422,9 @@ opencode.server.close()
 /instance/dispose
 /log
 /lsp
+/lsps
+/lsps/killall
+/lsps/kill/<name>
 /mcp
 /mnt/
 /mnt/c/
