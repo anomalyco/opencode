@@ -11,7 +11,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { iife } from "@/util/iife"
 import { GlobalBus } from "@/bus/global"
 import { existsSync } from "fs"
-import { Git } from "@/git"
+import { git } from "../util/git"
 import { Glob } from "../util/glob"
 import { which } from "../util/which"
 import { ProjectID } from "./schema"
@@ -119,7 +119,7 @@ export namespace Project {
           }
         }
 
-        const worktree = await Git.run(["rev-parse", "--git-common-dir"], {
+        const worktree = await git(["rev-parse", "--git-common-dir"], {
           cwd: sandbox,
         })
           .then(async (result) => {
@@ -147,7 +147,7 @@ export namespace Project {
 
         // generate id from root commit
         if (!id) {
-          const roots = await Git.run(["rev-list", "--max-parents=0", "HEAD"], {
+          const roots = await git(["rev-list", "--max-parents=0", "HEAD"], {
             cwd: sandbox,
           })
             .then(async (result) =>
@@ -184,7 +184,7 @@ export namespace Project {
           }
         }
 
-        const top = await Git.run(["rev-parse", "--show-toplevel"], {
+        const top = await git(["rev-parse", "--show-toplevel"], {
           cwd: sandbox,
         })
           .then(async (result) => gitpath(sandbox, await result.text()))
@@ -349,7 +349,7 @@ export namespace Project {
     if (input.project.vcs === "git") return input.project
     if (!which("git")) throw new Error("Git is not installed")
 
-    const result = await Git.run(["init", "--quiet"], {
+    const result = await git(["init", "--quiet"], {
       cwd: input.directory,
     })
     if (result.exitCode !== 0) {
