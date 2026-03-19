@@ -1,8 +1,10 @@
-import { spawn as launch, type ChildProcess } from "child_process"
+import { type ChildProcess } from "child_process"
+import launch from "cross-spawn"
 import { buffer } from "node:stream/consumers"
 
 export namespace Process {
   export type Stdio = "inherit" | "pipe" | "ignore"
+  export type Shell = boolean | string
 
   export interface Options {
     cwd?: string
@@ -10,6 +12,7 @@ export namespace Process {
     stdin?: Stdio
     stdout?: Stdio
     stderr?: Stdio
+    shell?: Shell
     abort?: AbortSignal
     kill?: NodeJS.Signals | number
     timeout?: number
@@ -60,6 +63,7 @@ export namespace Process {
       cwd: opts.cwd,
       env: opts.env === null ? {} : opts.env ? { ...process.env, ...opts.env } : undefined,
       stdio: [opts.stdin ?? "ignore", opts.stdout ?? "ignore", opts.stderr ?? "ignore"],
+      shell: opts.shell,
       windowsHide: process.platform === "win32",
     })
 
@@ -94,6 +98,7 @@ export namespace Process {
         reject(error)
       })
     })
+    void exited.catch(() => undefined)
 
     if (opts.abort) {
       opts.abort.addEventListener("abort", abort, { once: true })
@@ -110,6 +115,7 @@ export namespace Process {
       cwd: opts.cwd,
       env: opts.env,
       stdin: opts.stdin,
+      shell: opts.shell,
       abort: opts.abort,
       kill: opts.kill,
       timeout: opts.timeout,
@@ -135,6 +141,20 @@ export namespace Process {
       })
     if (out.code === 0 || opts.nothrow) return out
     throw new RunFailedError(cmd, out.code, out.stdout, out.stderr)
+  }
+
+  export async function stop(proc: ChildProcess) {
+    if (process.platform !== "win32" || !proc.pid) {
+      proc.kill()
+      return
+    }
+
+    const out = await run(["taskkill", "/pid", String(proc.pid), "/T", "/F"], {
+      nothrow: true,
+    })
+
+    if (out.code === 0) return
+    proc.kill()
   }
 
   export async function text(cmd: string[], opts: RunOptions = {}): Promise<TextResult> {
