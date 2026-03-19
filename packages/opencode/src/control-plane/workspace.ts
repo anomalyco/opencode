@@ -124,7 +124,7 @@ export namespace Workspace {
       await parseSSE(res.body, stop, (event) => {
         GlobalBus.emit("event", {
           directory: space.id,
-          payload: event,
+          payload: event as { type: string; properties: Record<string, unknown> },
         })
       })
       // Wait 250ms and retry if SSE connection fails
