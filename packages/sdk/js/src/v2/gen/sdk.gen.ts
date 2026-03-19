@@ -31,7 +31,7 @@ import type {
   FilePartSource,
   FileReadResponses,
   FileStatusResponses,
-  FileWriteResponses,
+  FileUploadResponses,
   FindFilesResponses,
   FindSymbolsResponses,
   FindTextResponses,
@@ -2406,16 +2406,14 @@ export class File extends HeyApiClient {
   }
 
   /**
-   * Write file
+   * Upload file
    *
-   * Write content to a file at the specified path, relative to the project directory.
+   * Upload a file to the specified path relative to the project directory.
    */
-  public write<ThrowOnError extends boolean = false>(
-    parameters?: {
+  public upload<ThrowOnError extends boolean = false>(
+    parameters: {
       directory?: string
-      path?: string
-      content?: string
-      encoding?: "base64" | "text"
+      path: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -2425,22 +2423,15 @@ export class File extends HeyApiClient {
         {
           args: [
             { in: "query", key: "directory" },
-            { in: "body", key: "path" },
-            { in: "body", key: "content" },
-            { in: "body", key: "encoding" },
+            { in: "query", key: "path" },
           ],
         },
       ],
     )
-    return (options?.client ?? this.client).post<FileWriteResponses, unknown, ThrowOnError>({
-      url: "/file/write",
+    return (options?.client ?? this.client).post<FileUploadResponses, unknown, ThrowOnError>({
+      url: "/file/upload",
       ...options,
       ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
     })
   }
 }

@@ -4,10 +4,12 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useParams } from "@solidjs/router"
 import { getFilename } from "@opencode-ai/util/path"
+import type { FileNode } from "@opencode-ai/sdk/v2"
 import { useSDK } from "./sdk"
 import { useSync } from "./sync"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
+import { usePlatform } from "@/context/platform"
 import { createPathHelpers } from "./file/path"
 import {
   approxBytes,
@@ -48,6 +50,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
   gate: false,
   init: () => {
     const sdk = useSDK()
+    const platform = usePlatform()
     useSync()
     const params = useParams()
     const language = useLanguage()
@@ -67,7 +70,17 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const tree = createFileTreeStore({
       scope,
       normalizeDir: path.normalizeDir,
-      list: (dir) => sdk.client.file.list({ path: dir }).then((x) => x.data ?? []),
+      list: async (dir) => {
+        const directory = /[^\x00-\x7F]/.test(sdk.directory) ? encodeURIComponent(sdk.directory) : sdk.directory
+        const res = await (platform.fetch ?? fetch)(`${sdk.url}/file?path=${encodeURIComponent(dir)}`, {
+          headers: {
+            "x-opencode-directory": directory,
+          },
+          cache: "no-store",
+        })
+        if (!res.ok) throw new Error(await res.text())
+        return (await res.json()) as FileNode[]
+      },
       onError: (message) => {
         showToast({
           variant: "error",
@@ -242,6 +255,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         refresh: (input: string) => tree.listDir(input, { force: true }),
         state: tree.dirState,
         children: tree.children,
+        insert: tree.insert,
         expand: tree.expandDir,
         collapse: tree.collapseDir,
         toggle(input: string) {

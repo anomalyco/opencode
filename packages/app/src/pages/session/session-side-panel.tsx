@@ -20,6 +20,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useFile, type SelectedLineRange } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
+import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 
@@ -72,6 +73,7 @@ export function SessionSidePanel(props: {
   activeDiff?: string
   focusReviewDiff: (path: string) => void
 }) {
+  const platform = usePlatform()
   const sdk = useSDK()
   const [uploading, setUploading] = createSignal(false)
   let uploadInput: HTMLInputElement | undefined
@@ -80,16 +82,34 @@ export function SessionSidePanel(props: {
     const input = e.target as HTMLInputElement
     if (!input.files || input.files.length === 0) return
     setUploading(true)
-    for (const file of input.files) {
-      const buffer = await file.arrayBuffer()
-      const bytes = new Uint8Array(buffer)
-      let str = ""
-      for (let i = 0; i < bytes.byteLength; i++) str += String.fromCharCode(bytes[i])
-      await sdk.client.file.write({ path: file.name, content: btoa(str), encoding: "base64" })
+    const dir = /[^\x00-\x7F]/.test(sdk.directory) ? encodeURIComponent(sdk.directory) : sdk.directory
+    try {
+      for (const file of input.files) {
+        const path = file.name
+        const res = await (platform.fetch ?? fetch)(`${sdk.url}/file/upload?path=${encodeURIComponent(file.name)}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/octet-stream",
+            "x-opencode-directory": dir,
+          },
+          cache: "no-store",
+          body: file,
+        })
+        if (!res.ok) throw new Error(`Upload failed: ${res.status}`)
+        props.file.tree.insert({
+          name: file.name,
+          path,
+          absolute: path,
+          type: "file",
+          ignored: false,
+        })
+      }
+      props.setFileTreeTabValue("all")
+      await props.file.tree.refresh("")
+    } finally {
+      setUploading(false)
+      input.value = ""
     }
-    setUploading(false)
-    input.value = ""
-    void props.file.tree.refresh("")
   }
 
   return (
@@ -318,24 +338,18 @@ export function SessionSidePanel(props: {
                     )}
                   </Tabs.Trigger>
                   <Tabs.Trigger value="all" class="flex-1" classes={{ button: "w-full" }}>
-                    <span class="flex items-center gap-1">
-                      {props.language.t("session.files.all")}
-                      <Tooltip value={props.language.t("session.files.upload")} placement="bottom">
-                        <IconButton
-                          icon="cloud-upload"
-                          variant="ghost"
-                          iconSize="small"
-                          class="h-4 w-4"
-                          disabled={uploading()}
-                          onClick={(e: MouseEvent) => {
-                            e.stopPropagation()
-                            uploadInput?.click()
-                          }}
-                          aria-label={props.language.t("session.files.upload")}
-                        />
-                      </Tooltip>
-                    </span>
+                    {props.language.t("session.files.all")}
                   </Tabs.Trigger>
+                  <Tooltip value={props.language.t("session.files.upload")} placement="bottom">
+                    <IconButton
+                      icon="cloud-upload"
+                      variant="ghost"
+                      iconSize="small"
+                      disabled={uploading()}
+                      onClick={() => uploadInput?.click()}
+                      aria-label={props.language.t("session.files.upload")}
+                    />
+                  </Tooltip>
                 </Tabs.List>
                 <Tabs.Content value="changes" class="bg-background-base px-3 py-0">
                   <Switch>

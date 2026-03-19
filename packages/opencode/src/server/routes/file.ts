@@ -140,6 +140,7 @@ export const FileRoutes = lazy(() =>
       async (c) => {
         const path = c.req.valid("query").path
         const content = await File.list(path)
+        c.header("Cache-Control", "no-store")
         return c.json(content)
       },
     )
@@ -224,14 +225,14 @@ export const FileRoutes = lazy(() =>
       },
     )
     .post(
-      "/file/write",
+      "/file/upload",
       describeRoute({
-        summary: "Write file",
-        description: "Write content to a file at the specified path, relative to the project directory.",
-        operationId: "file.write",
+        summary: "Upload file",
+        description: "Upload a file to the specified path relative to the project directory.",
+        operationId: "file.upload",
         responses: {
           200: {
-            description: "File written",
+            description: "File uploaded",
             content: {
               "application/json": {
                 schema: resolver(z.object({ path: z.string() })),
@@ -241,16 +242,15 @@ export const FileRoutes = lazy(() =>
         },
       }),
       validator(
-        "json",
+        "query",
         z.object({
           path: z.string(),
-          content: z.string(),
-          encoding: z.enum(["base64", "text"]).optional(),
         }),
       ),
       async (c) => {
-        const { path, content, encoding } = c.req.valid("json")
-        await File.write(path, content, encoding)
+        const { path } = c.req.valid("query")
+        const blob = await c.req.blob()
+        await File.save(path, await blob.arrayBuffer())
         return c.json({ path })
       },
     ),

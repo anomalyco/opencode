@@ -157,12 +157,28 @@ export function createFileTreeStore(options: TreeStoreOptions) {
     return out
   }
 
+  const insert = (node: FileNode) => {
+    const dir = options.normalizeDir(node.path.split("/").slice(0, -1).join("/"))
+    ensureDir(dir)
+    setTree("node", node.path, reconcile(node))
+    setTree(
+      "dir",
+      dir,
+      produce((draft) => {
+        const children = draft.children ?? []
+        if (children.includes(node.path)) return
+        draft.children = [...children, node.path]
+      }),
+    )
+  }
+
   return {
     listDir,
     expandDir,
     collapseDir,
     dirState,
     children,
+    insert,
     node: (path: string) => tree.node[path],
     isLoaded: (path: string) => Boolean(tree.dir[path]?.loaded),
     reset,
