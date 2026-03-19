@@ -420,7 +420,7 @@ export default function Page() {
   const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
   const sessionCount = createMemo(() => Math.max(info()?.summary?.files ?? 0, diffs().length))
   const hasSessionReview = createMemo(() => sessionCount() > 0)
-  const canReview = createMemo(() => !!params.id)
+  const canReview = createMemo(() => !!params.dir)
   const reviewTab = createMemo(() => isDesktop())
   const tabState = createSessionTabs({
     tabs,
@@ -1165,6 +1165,18 @@ export default function Page() {
     </div>
   )
 
+  const mobileReview = () =>
+    reviewContent({
+      diffStyle: "unified",
+      classes: {
+        root: "pb-8",
+        header: "px-4",
+        container: "px-4",
+      },
+      loadingClass: "px-4 py-4 text-text-weak",
+      emptyClass: "h-full pb-64 -mt-4 flex flex-col items-center justify-center text-center gap-6",
+    })
+
   createEffect(
     on(
       activeFileTab,
@@ -1798,7 +1810,7 @@ export default function Page() {
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
       <SessionHeader />
       <div class="flex-1 min-h-0 flex flex-col md:flex-row">
-        <Show when={!isDesktop() && !!params.id}>
+        <Show when={!isDesktop() && canReview()}>
           <Tabs value={store.mobileTab} class="h-auto">
             <Tabs.List>
               <Tabs.Trigger
@@ -1840,16 +1852,7 @@ export default function Page() {
                 <Show when={lastUserMessage()}>
                   <MessageTimeline
                     mobileChanges={mobileChanges()}
-                    mobileFallback={reviewContent({
-                      diffStyle: "unified",
-                      classes: {
-                        root: "pb-8",
-                        header: "px-4",
-                        container: "px-4",
-                      },
-                      loadingClass: "px-4 py-4 text-text-weak",
-                      emptyClass: "h-full pb-64 -mt-4 flex flex-col items-center justify-center text-center gap-6",
-                    })}
+                    mobileFallback={mobileReview()}
                     actions={actions}
                     scroll={ui.scroll}
                     onResumeScroll={resumeScroll}
@@ -1881,7 +1884,9 @@ export default function Page() {
                 </Show>
               </Match>
               <Match when={true}>
-                <NewSessionView worktree={newSessionWorktree()} />
+                <Show when={mobileChanges()} fallback={<NewSessionView worktree={newSessionWorktree()} />}>
+                  <div class="relative h-full overflow-hidden">{mobileReview()}</div>
+                </Show>
               </Match>
             </Switch>
           </div>
