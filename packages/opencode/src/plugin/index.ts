@@ -329,7 +329,7 @@ export namespace Plugin {
 >>>>>>> 080d3b93c (use forkScoped + Fiber.join for lazy init (match old Instance.state behavior))
 
       const loadFiber = yield* load().pipe(
-        Effect.catchCause(() => Effect.void),
+        Effect.catchCause((cause) => Effect.sync(() => log.error("init failed", { cause }))),
         Effect.forkScoped,
       )
 
