@@ -46,21 +46,13 @@ import Layout from "@/pages/layout"
 import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
 
-const Home = lazy(() => import("@/pages/home"))
+const HomeRoute = lazy(() => import("@/pages/home"))
 const Session = lazy(() => import("@/pages/session"))
 const Loading = () => <div class="size-full" />
 
-const HomeRoute = () => (
-  <Suspense fallback={<Loading />}>
-    <Home />
-  </Suspense>
-)
-
 const SessionRoute = () => (
   <SessionProviders>
-    <Suspense fallback={<Loading />}>
-      <Session />
-    </Suspense>
+    <Session />
   </SessionProviders>
 )
 
@@ -124,8 +116,10 @@ function SessionProviders(props: ParentProps) {
 function RouterRoot(props: ParentProps<{ appChildren?: JSX.Element }>) {
   return (
     <AppShellProviders>
-      {props.appChildren}
-      {props.children}
+      <Suspense fallback={<Loading />}>
+        {props.appChildren}
+        {props.children}
+      </Suspense>
     </AppShellProviders>
   )
 }
