@@ -15,6 +15,7 @@ import { DialogSelectFile } from "@/components/dialog-select-file"
 import { DialogSelectModel } from "@/components/dialog-select-model"
 import { DialogSelectMcp } from "@/components/dialog-select-mcp"
 import { DialogFork } from "@/components/dialog-fork"
+import { PlatformProvider, usePlatform } from "@/context/platform"
 import { showToast } from "@opencode-ai/ui/toast"
 import { findLast } from "@opencode-ai/util/array"
 import { createSessionTabs } from "@/pages/session/helpers"
@@ -49,6 +50,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const terminal = useTerminal()
   const layout = useLayout()
   const navigate = useNavigate()
+  const platform = usePlatform()
   const { params, tabs, view } = useSessionLayout()
 
   const info = () => {
@@ -487,7 +489,12 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         description: language.t("command.session.fork.description"),
         slash: "fork",
         disabled: !params.id || visibleUserMessages().length === 0,
-        onSelect: () => dialog.show(() => <DialogFork />),
+        onSelect: () =>
+          dialog.show(() => (
+            <PlatformProvider value={platform}>
+              <DialogFork />
+            </PlatformProvider>
+          )),
       }),
       ...share,
     ]
