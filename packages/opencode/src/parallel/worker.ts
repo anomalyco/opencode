@@ -260,7 +260,6 @@ export namespace WorkerManager {
     const defaultTimeoutMs = 30 * 60 * 1000 // 30 minutes
     const timeoutMs = cfg.parallel?.worker_timeout_ms ?? defaultTimeoutMs
     const warningThreshold = timeoutMs * 0.8
-    const warnedWorkers = new Set<SubtaskID>()
     const startTimes = new Map<string, number>()
     const warned = new Set<string>() // Track workers that have triggered timeout warning
 
