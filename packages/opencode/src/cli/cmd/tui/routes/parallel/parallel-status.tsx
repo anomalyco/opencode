@@ -261,6 +261,89 @@ function formatTokens(n: number): string {
   return String(n)
 }
 
+function formatTime(ts: number): string {
+  const date = new Date(ts)
+  return date.toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" })
+}
+
+function WorkerLogs(props: { worker: WorkerState; subtask: Subtask | undefined; width: number }) {
+  const { theme } = useTheme()
+  const sync = useSync()
+
+  const messages = createMemo(() => {
+    if (!props.worker.sessionID) return []
+    return sync.data.message[props.worker.sessionID] ?? []
+  })
+
+  const formattedMessages = createMemo(() => {
+    const msgs = messages()
+    const result: { role: string; preview: string; time: string; index: number }[] = []
+    for (let i = 0; i < msgs.length; i++) {
+      const msg = msgs[i]
+      const parts = sync.data.part[msg.id] ?? []
+      let preview = ""
+      if (msg.role === "user") {
+        const textPart = parts.find((p) => p.type === "text")
+        preview = textPart?.text?.slice(0, 100) ?? "User message"
+      } else {
+        for (const part of parts) {
+          if (part.type === "text" && part.text) {
+            preview = part.text.slice(0, 100)
+            break
+          }
+          if (part.type === "tool") {
+            preview = `[${part.tool}] ${part.state.status}`
+            break
+          }
+        }
+        if (!preview) preview = "Assistant response"
+      }
+      result.push({
+        role: msg.role,
+        preview: preview.replace(/\n/g, " "),
+        time: formatTime(msg.time.created),
+        index: i + 1,
+      })
+    }
+    return result.slice(-20)
+  })
+
+  return (
+    <box
+      flexDirection="column"
+      width={props.width}
+      backgroundColor={theme.backgroundPanel}
+      borderStyle="rounded"
+      borderColor={theme.border}
+      padding={1}
+      marginTop={1}
+    >
+      <box flexDirection="row" gap={1} marginBottom={1}>
+        <text fg={theme.primary} attributes={TextAttributes.BOLD}>
+          Logs: {props.subtask?.title ?? "Unknown"}
+        </text>
+        <text fg={theme.textMuted}>({messages().length} messages)</text>
+      </box>
+      <For each={formattedMessages()}>
+        {(msg) => (
+          <box flexDirection="row" gap={1} marginBottom={0}>
+            <text fg={theme.textMuted}>{msg.time}</text>
+            <text fg={msg.role === "user" ? theme.accent : theme.success} attributes={TextAttributes.BOLD}>
+              {msg.role === "user" ? "U" : "A"}
+            </text>
+            <text fg={theme.text} wrapMode="word">
+              {msg.preview.slice(0, props.width - 20)}
+            </text>
+          </box>
+        )}
+      </For>
+      <Show when={messages().length === 0}>
+        <text fg={theme.textMuted}>No messages yet</text>
+      </Show>
+    </box>
+  )
+}
+
 export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void }) {
   const { theme } = useTheme()
   const dim = useTerminalDimensions()
@@ -269,6 +352,7 @@ export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void }) 
   const toast = useToast()
   const [selected, setSelected] = createSignal(0)
   const [expanded, setExpanded] = createSignal<number | null>(null)
+  const [showLogs, setShowLogs] = createSignal<number | null>(null)
   const [elapsed, setElapsed] = createSignal(0)
 
   // Elapsed time timer
@@ -312,6 +396,7 @@ export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void }) 
 
   // Responsive columns: expanded=1, wide=3, medium=2, narrow=1
   const columns = () => {
+    if (showLogs() !== null) return 1
     if (expanded() !== null) return 1
     const w = width()
     if (w >= 100 && total() >= 3) return 3
@@ -322,7 +407,12 @@ export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void }) 
   // Split workers into rows
   const rows = createMemo(() => {
     const cols = columns()
-    const workers = expanded() !== null ? [props.plan.workers[expanded()!]] : props.plan.workers
+    const workers =
+      showLogs() !== null
+        ? [props.plan.workers[showLogs()!]]
+        : expanded() !== null
+          ? [props.plan.workers[expanded()!]]
+          : props.plan.workers
     const result: (typeof workers)[] = []
     for (let i = 0; i < workers.length; i += cols) {
       result.push(workers.slice(i, i + cols))
@@ -375,9 +465,14 @@ export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void }) 
       setExpanded((e) => (e === selected() ? null : selected()))
     } else if (evt.name === "escape") {
       evt.preventDefault()
-      if (expanded() !== null) {
+      if (showLogs() !== null) {
+        setShowLogs(null)
+      } else if (expanded() !== null) {
         setExpanded(null)
       }
+    } else if (evt.name === "l" || (evt.sequence === "l" && !evt.ctrl)) {
+      evt.preventDefault()
+      setShowLogs((l) => (l === selected() ? null : selected()))
     } else if (evt.name === "c" || (evt.sequence === "c" && !evt.ctrl)) {
       evt.preventDefault()
       handleCancel()
@@ -441,7 +536,13 @@ export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void }) 
         )}
       </For>
 
-      {/* Totals */}
+      <Show when={showLogs() !== null}>
+        <WorkerLogs
+          worker={props.plan.workers[showLogs()!]}
+          subtask={props.plan.subtasks.find((s) => s.id === props.plan.workers[showLogs()!].subtaskID)}
+          width={width()}
+        />
+      </Show>
       <box marginTop={1} paddingTop={1} borderStyle="single" borderColor={theme.border} flexDirection="column" gap={0}>
         <box flexDirection="row" gap={2}>
           <text fg={theme.text} attributes={TextAttributes.BOLD}>
@@ -455,7 +556,7 @@ export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void }) 
           <text fg={theme.textMuted}>{formatDuration(elapsed())}</text>
         </box>
         <box flexDirection="row" gap={2} marginTop={1}>
-          <text fg={theme.textMuted}>arrows navigate | enter expand/collapse | c cancel | esc back</text>
+          <text fg={theme.textMuted}>arrows navigate | enter expand | l logs | c cancel | esc back</text>
         </box>
       </box>
     </box>
