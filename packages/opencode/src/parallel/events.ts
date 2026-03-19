@@ -29,4 +29,13 @@ export const ParallelEvent = {
       timeoutMs: z.number(),
     }),
   ),
+  ConflictPredicted: BusEvent.define(
+    "parallel.conflict.predicted",
+    z.object({
+      planID: PlanID.zod,
+      subtaskA: SubtaskID.zod,
+      subtaskB: SubtaskID.zod,
+      overlappingFiles: z.array(z.string()),
+    }),
+  ),
 }

@@ -1232,6 +1232,13 @@ export namespace Config {
             .max(100)
             .optional()
             .describe("Maximum number of parallel plans per project (default: 5)"),
+          max_subtasks: z
+            .number()
+            .int()
+            .min(1)
+            .max(100)
+            .optional()
+            .describe("Maximum number of subtasks per plan (default: 20)"),
           require_approval: z
             .boolean()
             .optional()

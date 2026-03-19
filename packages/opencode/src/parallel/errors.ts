@@ -38,3 +38,11 @@ export const DependencyError = NamedError.create(
     message: z.string(),
   }),
 )
+
+export const RunningPlanError = NamedError.create(
+  "RunningPlanError",
+  z.object({
+    message: z.string(),
+    existingPlanID: z.string(),
+  }),
+)

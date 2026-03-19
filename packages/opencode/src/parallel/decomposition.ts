@@ -335,6 +335,54 @@ Output format: a JSON object with a "subtasks" array.`
     }))
   }
 
+  /**
+   * Check if two file scopes overlap.
+   * Scopes overlap if they are equal, or one is a parent of the other.
+   */
+  function scopesOverlap(a: string, b: string): boolean {
+    return a === b || a.startsWith(b + "/") || b.startsWith(a + "/")
+  }
+
+  /**
+   * Predict potential merge conflicts by analyzing file scope overlaps.
+   * Returns pairs of subtasks that have overlapping file scopes.
+   */
+  export function predictConflicts(subtasks: Subtask[]): Array<{
+    subtaskA: SubtaskID
+    subtaskB: SubtaskID
+    overlappingFiles: string[]
+  }> {
+    const conflicts: Array<{ subtaskA: SubtaskID; subtaskB: SubtaskID; overlappingFiles: string[] }> = []
+
+    for (let i = 0; i < subtasks.length; i++) {
+      for (let j = i + 1; j < subtasks.length; j++) {
+        const subtaskA = subtasks[i]
+        const subtaskB = subtasks[j]
+
+        // Find overlapping scopes between the two subtasks
+        const overlappingFiles: string[] = []
+
+        for (const scopeA of subtaskA.fileScope) {
+          for (const scopeB of subtaskB.fileScope) {
+            if (scopesOverlap(scopeA, scopeB)) {
+              overlappingFiles.push(scopeA, scopeB)
+            }
+          }
+        }
+
+        if (overlappingFiles.length > 0) {
+          conflicts.push({
+            subtaskA: subtaskA.id,
+            subtaskB: subtaskB.id,
+            overlappingFiles: [...new Set(overlappingFiles)],
+          })
+        }
+      }
+    }
+
+    return conflicts
+  }
+
   export async function decompose(input: {
     task: string
     model: ModelRef
@@ -369,7 +417,20 @@ Output format: a JSON object with a "subtasks" array.`
 
     const subtasks = assignSubtaskIDs(result.object.subtasks)
 
-    log.info("decomposition complete", { count: subtasks.length })
+    // Predict potential conflicts from overlapping file scopes
+    const conflicts = predictConflicts(subtasks)
+    if (conflicts.length > 0) {
+      log.warn("potential merge conflicts detected", {
+        conflictCount: conflicts.length,
+        conflicts: conflicts.map((c) => ({
+          subtaskA: subtasks.find((s) => s.id === c.subtaskA)?.title ?? c.subtaskA,
+          subtaskB: subtasks.find((s) => s.id === c.subtaskB)?.title ?? c.subtaskB,
+          overlappingFiles: c.overlappingFiles,
+        })),
+      })
+    }
+
+    log.info("decomposition complete", { count: subtasks.length, conflicts: conflicts.length })
     return subtasks
   }
 }

@@ -16,8 +16,9 @@ export const VALID_PLAN_TRANSITIONS: Record<PlanStatus, PlanStatus[]> = {
   proposed: ["draft", "approved", "cancelled", "failed"],
   approved: ["spawning", "cancelled", "failed"],
   spawning: ["running", "cancelled", "failed"],
-  running: ["merging", "cancelled", "failed"],
-  merging: ["done", "failed"],
+  running: ["merging", "partial_success", "cancelled", "failed"],
+  merging: ["done", "partial_success", "failed"],
+  partial_success: [],
   cancelled: [],
   done: [],
   failed: ["draft"],
@@ -63,7 +64,7 @@ export function validateWorkerTransition(from: WorkerStatus, to: WorkerStatus): 
 }
 
 export function isPlanTerminal(status: PlanStatus): boolean {
-  return status === "done" || status === "failed"
+  return status === "done" || status === "failed" || status === "partial_success"
 }
 
 export function isWorkerTerminal(status: WorkerStatus): boolean {

@@ -63,6 +63,42 @@ export namespace Orchestrator {
     }
   }
 
+  export async function checkRunningPlan(projectID: Plan["projectID"]): Promise<void> {
+    const active = await PlanStore.listByProjectAndStatus(projectID, "running")
+    const spawning = await PlanStore.listByProjectAndStatus(projectID, "spawning")
+    const merging = await PlanStore.listByProjectAndStatus(projectID, "merging")
+    const running = [...active, ...spawning, ...merging]
+
+    if (running.length > 0) {
+      const existingPlan = running[0]
+      throw new Error(
+        `A parallel plan is already running: ${existingPlan.id}. ` +
+          `Cancel it with "parallel_cancel ${existingPlan.id}" or wait for it to complete.`,
+      )
+    }
+  }
+
+  export async function checkSubtaskLimit(subtaskCount: number): Promise<void> {
+    const cfg = await Config.get()
+    const maxSubtasks = cfg.parallel?.max_subtasks ?? 20
+    const warningThreshold = Math.floor(maxSubtasks * 0.8)
+
+    if (subtaskCount > maxSubtasks) {
+      throw new Error(
+        `Subtask limit exceeded: ${subtaskCount} subtasks (max ${maxSubtasks}). ` +
+          `Split the task into smaller pieces or increase max_subtasks in config.`,
+      )
+    }
+
+    if (subtaskCount > warningThreshold) {
+      log.warn("subtask count approaching limit", {
+        count: subtaskCount,
+        max: maxSubtasks,
+        threshold: warningThreshold,
+      })
+    }
+  }
+
   export const create = fn(
     z.object({
       projectID: PlanSchema.shape.projectID,
@@ -73,6 +109,7 @@ export namespace Orchestrator {
     }),
     async (input): Promise<Plan> => {
       await checkPlanLimit(input.projectID)
+      await checkRunningPlan(input.projectID)
 
       const models = await resolveModels({
         orchestratorModel: input.orchestratorModel,
@@ -94,6 +131,8 @@ export namespace Orchestrator {
         model: models.orchestratorModel,
         codebaseContext: formattedContext,
       })
+
+      await checkSubtaskLimit(subtasks.length)
 
       const updated = await PlanStore.update({
         id: plan.id,
@@ -130,16 +169,34 @@ export namespace Orchestrator {
 
     await PlanStore.transition({ id: planID, status: "merging" })
 
-    const success = await MergePipeline.run(planID)
+    const mergeSuccess = await MergePipeline.run(planID)
 
-    await PlanStore.transition({ id: planID, status: success ? "done" : "failed" })
+    // Determine final status based on worker outcomes
+    const finalPlan = await PlanStore.get(planID)
+    const mergedWorkers = finalPlan.workers.filter((w) => w.status === "merged")
+    const failedWorkers = finalPlan.workers.filter((w) => w.status === "failed" || w.status === "conflict")
 
-    if (!success) {
-      const finalPlan = await PlanStore.get(planID)
+    let finalStatus: "done" | "partial_success" | "failed"
+    if (mergeSuccess && failedWorkers.length === 0) {
+      finalStatus = "done"
+    } else if (mergedWorkers.length > 0) {
+      finalStatus = "partial_success"
+      log.info("plan partial success", {
+        planID,
+        merged: mergedWorkers.length,
+        failed: failedWorkers.length,
+      })
+    } else {
+      finalStatus = "failed"
+    }
+
+    await PlanStore.transition({ id: planID, status: finalStatus })
+
+    if (finalStatus === "failed") {
       await Recovery.cleanupWorktrees(finalPlan)
     }
 
-    log.info("plan execution complete", { planID, success })
+    log.info("plan execution complete", { planID, status: finalStatus })
   }
 
   export const approve = fn(PlanIDSchema.zod, async (planID): Promise<Plan> => {

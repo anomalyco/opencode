@@ -48,6 +48,42 @@ export namespace WorkerManager {
     return results
   }
 
+  /**
+   * Wait for a worktree to become ready or fail.
+   * Returns { ready: true } if ready, { ready: false, error: string } if failed or timeout.
+   */
+  async function waitForWorktreeReady(
+    directory: string,
+    timeoutMs: number,
+  ): Promise<{ ready: boolean; error?: string }> {
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        cleanup()
+        resolve({ ready: false, error: `Timeout waiting for worktree to be ready after ${timeoutMs}ms` })
+      }, timeoutMs)
+
+      const handler = (event: { directory?: string; payload: any }) => {
+        if (event.directory !== directory) return
+
+        if (event.payload.type === Worktree.Event.Ready.type) {
+          cleanup()
+          resolve({ ready: true })
+        } else if (event.payload.type === Worktree.Event.Failed.type) {
+          cleanup()
+          const errorMsg = event.payload.properties?.message || "Worktree initialization failed"
+          resolve({ ready: false, error: errorMsg })
+        }
+      }
+
+      const cleanup = () => {
+        clearTimeout(timer)
+        GlobalBus.off("event", handler)
+      }
+
+      GlobalBus.on("event", handler)
+    })
+  }
+
   export async function spawnOne(
     plan: Plan,
     subtask: Subtask,
@@ -58,7 +94,14 @@ export namespace WorkerManager {
     const info = await Worktree.makeWorktreeInfo(`parallel-${plan.id.slice(0, 12)}-${subtask.id.slice(0, 20)}`)
     const bootstrap = await Worktree.createFromInfo(info)
 
+    // Start worktree initialization
     await bootstrap()
+
+    // Wait for worktree to be ready (with timeout)
+    const worktreeResult = await waitForWorktreeReady(info.directory, 30_000)
+    if (!worktreeResult.ready) {
+      throw new Error(`Worktree failed to become ready: ${worktreeResult.error}`)
+    }
 
     const session = await Instance.provide({
       directory: info.directory,
