@@ -1,6 +1,6 @@
 import { createEffect, createMemo, onCleanup, Show, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
-import { useLocation, useNavigate, useParams } from "@solidjs/router"
+import { useLocation, useNavigate, useParams, useSearchParams } from "@solidjs/router"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Button } from "@opencode-ai/ui/button"
@@ -42,6 +42,7 @@ export function Titlebar() {
   const language = useLanguage()
   const theme = useTheme()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams<{ grid?: string }>()
   const location = useLocation()
   const params = useParams()
 
@@ -243,7 +244,11 @@ export function Titlebar() {
                       tabIndex={layout.sidebar.opened() ? -1 : undefined}
                       onClick={() => {
                         if (!params.dir) return
-                        navigate(`/${params.dir}/session`)
+                        if (layout.sidebar.gridMode() && searchParams.grid) {
+                          navigate(`/${params.dir}/session?grid=${searchParams.grid},`)
+                        } else {
+                          navigate(`/${params.dir}/session`)
+                        }
                       }}
                       aria-label={language.t("command.session.new")}
                       aria-current={creating() ? "page" : undefined}

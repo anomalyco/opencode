@@ -5,6 +5,7 @@ import { TerminalProvider } from "@/context/terminal"
 import { FileProvider } from "@/context/file"
 import { PromptProvider } from "@/context/prompt"
 import { CommentsProvider } from "@/context/comments"
+import { IconButton } from "@opencode-ai/ui/icon-button"
 import Session from "@/pages/session"
 
 const emptyImage = new Image()
@@ -291,6 +292,7 @@ export function SessionGrid(props: { ids: string[] }) {
         <For each={stableIds()}>
           {(id) => {
             const visualIndex = () => localIds().indexOf(id)
+            const isFocused = () => id === (params.id ?? "")
 
             return (
               <div
@@ -298,7 +300,7 @@ export function SessionGrid(props: { ids: string[] }) {
                 style={{ order: visualIndex() }}
                 class={`relative flex flex-col min-h-0 min-w-0 border rounded-lg overflow-hidden shadow-sm transition-all duration-200 ease-in-out select-none
                   ${isCtrl() ? "cursor-grab" : ""}
-                  ${id === params.id ? "ring-2 ring-blue-500 z-10" : "border-border-base hover:border-border-strong"}
+                  ${isFocused() ? "ring-2 ring-blue-500 z-10" : "border-border-base hover:border-border-strong"}
                   ${dragId() === id ? "opacity-50 scale-[0.98] z-50 shadow-xl" : ""}
                   ${count() === 5 && visualIndex() === 4 ? "col-start-3 row-start-1 row-span-2" : ""}
                 `}
@@ -324,10 +326,10 @@ export function SessionGrid(props: { ids: string[] }) {
                   commitDrag()
                 }}
                 onClick={(e) => {
-                  if (id !== params.id) focusSession(id)
+                  if (!isFocused()) focusSession(id)
                 }}
                 onMouseEnter={(e) => {
-                  if (id !== params.id && !dragId()) focusSession(id, true)
+                  if (!isFocused() && !dragId()) focusSession(id, true)
                 }}
               >
                 <Show when={dragId() !== null}>
@@ -335,15 +337,16 @@ export function SessionGrid(props: { ids: string[] }) {
                 </Show>
 
                 <div class="absolute top-2 right-2 z-50 opacity-0 hover:opacity-100 transition-opacity">
-                  <button
-                    class="bg-surface-base text-text-strong rounded px-2 py-1 text-xs border border-border-base shadow-sm hover:bg-surface-raised-base"
+                  <IconButton
+                    icon="close"
+                    variant="ghost"
+                    class="size-6 rounded-md bg-surface-base text-text-weak hover:text-text-strong shadow-sm hover:bg-surface-raised-base border border-border-base"
+                    aria-label="Close session"
                     onClick={(e) => {
                       e.stopPropagation()
                       removeSessionFromGrid(id)
                     }}
-                  >
-                    Close
-                  </button>
+                  />
                 </div>
 
                 <SessionParamsProvider dir={params.dir} id={id}>

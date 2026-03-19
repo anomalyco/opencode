@@ -1,4 +1,4 @@
-import { useNavigate } from "@solidjs/router"
+import { useNavigate, useParams, useSearchParams } from "@solidjs/router"
 import { useCommand, type CommandOption } from "@/context/command"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
@@ -49,6 +49,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const terminal = useTerminal()
   const layout = useLayout()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams<{ grid?: string }>()
   const { params, tabs, view } = useSessionLayout()
 
   const info = () => {
@@ -249,7 +250,13 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         title: language.t("command.session.new"),
         keybind: "mod+shift+s",
         slash: "new",
-        onSelect: () => navigate(`/${params.dir}/session`),
+        onSelect: () => {
+          if (layout.sidebar.gridMode() && searchParams.grid) {
+            navigate(`/${params.dir}/session?grid=${searchParams.grid},`)
+          } else {
+            navigate(`/${params.dir}/session`)
+          }
+        },
       }),
       fileCommand({
         id: "file.open",

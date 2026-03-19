@@ -1,4 +1,4 @@
-import { useNavigate, useParams } from "@solidjs/router"
+import { useNavigate, useParams, useSearchParams } from "@solidjs/router"
 import { createEffect, createMemo, For, Show, type Accessor, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSortable } from "@thisbeyond/solid-dnd"
@@ -13,7 +13,7 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { type Session } from "@opencode-ai/sdk/v2/client"
-import { type LocalProject } from "@/context/layout"
+import { useLayout, type LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { NewSessionItem, GridToggleItem, SessionItem, SessionSkeleton } from "./sidebar-items"
@@ -311,6 +311,8 @@ export const SortableWorkspace = (props: {
 }): JSX.Element => {
   const navigate = useNavigate()
   const params = useParams()
+  const [searchParams] = useSearchParams<{ grid?: string }>()
+  const layout = useLayout()
   const globalSync = useGlobalSync()
   const language = useLanguage()
   const sortable = createSortable(props.directory)
@@ -429,7 +431,13 @@ export const SortableWorkspace = (props: {
                 root={props.project.worktree}
                 setHoverSession={props.ctx.setHoverSession}
                 clearHoverProjectSoon={props.ctx.clearHoverProjectSoon}
-                navigateToNewSession={() => navigate(`/${slug()}/session`)}
+                navigateToNewSession={() => {
+                  if (layout.sidebar.gridMode() && searchParams.grid) {
+                    navigate(`/${slug()}/session?grid=${searchParams.grid},`)
+                  } else {
+                    navigate(`/${slug()}/session`)
+                  }
+                }}
               />
             </div>
           </div>

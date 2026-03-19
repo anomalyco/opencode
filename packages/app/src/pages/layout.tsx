@@ -2130,7 +2130,11 @@ export default function Layout(props: ParentProps) {
                         onClick={() => {
                           const dir = worktree()
                           if (!dir) return
-                          navigateWithSidebarReset(`/${base64Encode(dir)}/session`)
+                          if (layout.sidebar.gridMode() && searchParams.grid) {
+                            navigateWithSidebarReset(`/${base64Encode(dir)}/session?grid=${searchParams.grid},`)
+                          } else {
+                            navigateWithSidebarReset(`/${base64Encode(dir)}/session`)
+                          }
                         }}
                       >
                         {language.t("command.session.new")}
