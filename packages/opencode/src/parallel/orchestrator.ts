@@ -86,9 +86,13 @@ export namespace Orchestrator {
         ...models,
       })
 
+      const codebaseContext = await Decomposition.gatherCodebaseContext(Instance.directory)
+      const formattedContext = Decomposition.formatCodebaseContext(codebaseContext)
+
       const subtasks = await Decomposition.decompose({
         task: input.task,
         model: models.orchestratorModel,
+        codebaseContext: formattedContext,
       })
 
       const updated = await PlanStore.update({
@@ -190,9 +194,13 @@ export namespace Orchestrator {
       }
     }
 
+    const codebaseContext = await Decomposition.gatherCodebaseContext(Instance.directory)
+    const formattedContext = Decomposition.formatCodebaseContext(codebaseContext)
+
     const subtasks = await Decomposition.decompose({
       task: plan.task,
       model: plan.orchestratorModel,
+      codebaseContext: formattedContext,
     })
 
     // Restore model overrides where titles match

@@ -2,8 +2,10 @@ import z from "zod"
 import { generateObject } from "ai"
 import { Provider } from "@/provider/provider"
 import { Log } from "@/util/log"
+import { Glob } from "@/util/glob"
 import { SubtaskID } from "./schema"
 import type { Subtask, ModelRef } from "./schema"
+import path from "path"
 
 export namespace Decomposition {
   const log = Log.create({ service: "decomposition" })
@@ -32,6 +34,175 @@ Output format: a JSON object with a "subtasks" array.`
   const OutputSchema = z.object({
     subtasks: z.array(SubtaskOutput),
   })
+
+  export interface CodebaseContext {
+    root: string
+    fileCount: number
+    directories: string[]
+    keyFiles: { path: string; type: string }[]
+    techStack: string[]
+    structure: string
+  }
+
+  export async function gatherCodebaseContext(root: string): Promise<CodebaseContext> {
+    log.info("gathering codebase context", { root })
+
+    const directories = new Set<string>()
+    const keyFiles: { path: string; type: string }[] = []
+    const techStack = new Set<string>()
+
+    const allFiles = await Glob.scan("**/*", {
+      cwd: root,
+      dot: true,
+      include: "file",
+    })
+
+    const IGNORE_PATTERNS = [/node_modules/, /\.git/, /dist/, /build/, /\.next/, /coverage/, /\.log$/]
+
+    const KEY_FILES = [
+      { pattern: /package\.json$/, type: "package" },
+      { pattern: /tsconfig\.json$/, type: "typescript" },
+      { pattern: /jsconfig\.json$/, type: "javascript" },
+      { pattern: /vite\.config\./, type: "vite" },
+      { pattern: /webpack\.config\./, type: "webpack" },
+      { pattern: /rollup\.config\./, type: "rollup" },
+      { pattern: /esbuild\.config\./, type: "esbuild" },
+      { pattern: /next\.config\./, type: "next" },
+      { pattern: /astro\.config\./, type: "astro" },
+      { pattern: /svelte\.config\./, type: "svelte" },
+      { pattern: /nuxt\.config\./, type: "nuxt" },
+      { pattern: /tailwind\.config\./, type: "tailwind" },
+      { pattern: /postcss\.config\./, type: "postcss" },
+      { pattern: /jest\.config\./, type: "jest" },
+      { pattern: /vitest\.config\./, type: "vitest" },
+      { pattern: /playwright\.config\./, type: "playwright" },
+      { pattern: /cypress\.config\./, type: "cypress" },
+      { pattern: /dockerfile$/i, type: "docker" },
+      { pattern: /docker-compose/, type: "docker-compose" },
+      { pattern: /\.github\//, type: "github" },
+      { pattern: /Makefile$/, type: "make" },
+      { pattern: /Cargo\.toml$/, type: "cargo" },
+      { pattern: /go\.mod$/, type: "go" },
+      { pattern: /pyproject\.toml$/, type: "python" },
+      { pattern: /requirements\.txt$/, type: "python" },
+      { pattern: /Pipfile$/, type: "python" },
+      { pattern: /Gemfile$/, type: "ruby" },
+      { pattern: /composer\.json$/, type: "php" },
+      { pattern: /pom\.xml$/, type: "java" },
+      { pattern: /build\.gradle$/, type: "java" },
+    ]
+
+    const filteredFiles: string[] = []
+    for (const file of allFiles) {
+      if (IGNORE_PATTERNS.some((p) => p.test(file))) continue
+      filteredFiles.push(file)
+
+      const dir = path.dirname(file)
+      if (dir !== "." && !dir.startsWith("node_modules") && !dir.startsWith(".git")) {
+        directories.add(dir.split("/")[0])
+      }
+
+      for (const { pattern, type } of KEY_FILES) {
+        if (pattern.test(file)) {
+          keyFiles.push({ path: file, type })
+          if (["package", "typescript", "javascript"].includes(type)) {
+            techStack.add(type)
+          }
+          if (["vite", "webpack", "rollup", "esbuild"].includes(type)) {
+            techStack.add("bundler")
+          }
+          if (["next", "astro", "svelte", "nuxt"].includes(type)) {
+            techStack.add("framework")
+            techStack.add(type)
+          }
+        }
+      }
+
+      if (file.endsWith(".tsx") || file.endsWith(".jsx")) {
+        techStack.add("react")
+      }
+      if (file.endsWith(".vue")) {
+        techStack.add("vue")
+      }
+      if (file.endsWith(".svelte")) {
+        techStack.add("svelte")
+      }
+      if (file.endsWith(".ts")) {
+        techStack.add("typescript")
+      }
+      if (file.endsWith(".js")) {
+        techStack.add("javascript")
+      }
+      if (file.endsWith(".py")) {
+        techStack.add("python")
+      }
+      if (file.endsWith(".go")) {
+        techStack.add("go")
+      }
+      if (file.endsWith(".rs")) {
+        techStack.add("rust")
+      }
+    }
+
+    const srcFiles = filteredFiles.filter((f: string) => {
+      const ext = path.extname(f)
+      return [
+        ".ts",
+        ".tsx",
+        ".js",
+        ".jsx",
+        ".vue",
+        ".svelte",
+        ".py",
+        ".go",
+        ".rs",
+        ".java",
+        ".kt",
+        ".rb",
+        ".php",
+      ].includes(ext)
+    })
+
+    const maxSample = 20
+    const structure = srcFiles.slice(0, maxSample).join("\n")
+
+    log.info("codebase context gathered", {
+      fileCount: filteredFiles.length,
+      dirCount: directories.size,
+      keyFileCount: keyFiles.length,
+      techCount: techStack.size,
+    })
+
+    return {
+      root,
+      fileCount: filteredFiles.length,
+      directories: Array.from(directories).slice(0, 50),
+      keyFiles: keyFiles.slice(0, 20),
+      techStack: Array.from(techStack),
+      structure,
+    }
+  }
+
+  export function formatCodebaseContext(ctx: CodebaseContext): string {
+    const lines: string[] = [
+      `Project Root: ${ctx.root}`,
+      `Total Files: ${ctx.fileCount}`,
+      ``,
+      `Technology Stack:`,
+      ...ctx.techStack.map((t) => `  - ${t}`),
+      ``,
+      `Key Configuration Files:`,
+      ...ctx.keyFiles.map((kf) => `  - ${kf.path} (${kf.type})`),
+      ``,
+      `Top-Level Directories:`,
+      ...ctx.directories.map((d) => `  - ${d}/`),
+      ``,
+      `Sample Source Files (${Math.min(20, ctx.fileCount)} shown):`,
+      ctx.structure || "  (No source files found)",
+    ]
+
+    return lines.join("\n")
+  }
 
   export async function decompose(input: {
     task: string
