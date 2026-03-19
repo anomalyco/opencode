@@ -786,6 +786,16 @@ export type Session = {
   }
   title: string
   version: string
+  git?: {
+    branch: string
+    head?: string
+    saved_at?: number
+  }
+  lineage?: {
+    rootID: string
+    latestID: string
+    number: number
+  }
   time: {
     created: number
     updated: number
@@ -3104,6 +3114,39 @@ export type SessionChildrenResponses = {
 
 export type SessionChildrenResponse = SessionChildrenResponses[keyof SessionChildrenResponses]
 
+export type SessionFamilyData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{sessionID}/family"
+}
+
+export type SessionFamilyErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionFamilyError = SessionFamilyErrors[keyof SessionFamilyErrors]
+
+export type SessionFamilyResponses = {
+  /**
+   * Session family
+   */
+  200: Array<Session>
+}
+
+export type SessionFamilyResponse = SessionFamilyResponses[keyof SessionFamilyResponses]
+
 export type SessionTodoData = {
   body?: never
   path: {
@@ -3201,6 +3244,72 @@ export type SessionForkResponses = {
 }
 
 export type SessionForkResponse = SessionForkResponses[keyof SessionForkResponses]
+
+export type SessionVersionData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{sessionID}/version"
+}
+
+export type SessionVersionErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionVersionError = SessionVersionErrors[keyof SessionVersionErrors]
+
+export type SessionVersionResponses = {
+  /**
+   * Created version
+   */
+  200: Session
+}
+
+export type SessionVersionResponse = SessionVersionResponses[keyof SessionVersionResponses]
+
+export type SessionSelectData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{sessionID}/select"
+}
+
+export type SessionSelectErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionSelectError = SessionSelectErrors[keyof SessionSelectErrors]
+
+export type SessionSelectResponses = {
+  /**
+   * Selected version
+   */
+  200: Session
+}
+
+export type SessionSelectResponse = SessionSelectResponses[keyof SessionSelectResponses]
 
 export type SessionAbortData = {
   body?: never

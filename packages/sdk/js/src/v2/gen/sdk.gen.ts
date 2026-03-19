@@ -110,6 +110,8 @@ import type {
   SessionDeleteErrors,
   SessionDeleteResponses,
   SessionDiffResponses,
+  SessionFamilyErrors,
+  SessionFamilyResponses,
   SessionForkResponses,
   SessionGetErrors,
   SessionGetResponses,
@@ -126,6 +128,8 @@ import type {
   SessionPromptResponses,
   SessionRevertErrors,
   SessionRevertResponses,
+  SessionSelectErrors,
+  SessionSelectResponses,
   SessionShareErrors,
   SessionShareResponses,
   SessionShellErrors,
@@ -142,6 +146,8 @@ import type {
   SessionUnshareResponses,
   SessionUpdateErrors,
   SessionUpdateResponses,
+  SessionVersionErrors,
+  SessionVersionResponses,
   SubtaskPartInput,
   TextPartInput,
   ToolIdsErrors,
@@ -1183,6 +1189,36 @@ export class Session extends HeyApiClient {
   }
 
   /**
+   * Get session family
+   *
+   * Retrieve all versions in the same session family, ordered from oldest to newest.
+   */
+  public family<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SessionFamilyResponses, SessionFamilyErrors, ThrowOnError>({
+      url: "/session/{sessionID}/family",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
    * Get session todos
    *
    * Retrieve the todo list associated with a specific session, showing tasks and action items.
@@ -1287,6 +1323,66 @@ export class Session extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * Create session version
+   *
+   * Create a new child version of the current session and switch the workspace to it.
+   */
+  public version<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionVersionResponses, SessionVersionErrors, ThrowOnError>({
+      url: "/session/{sessionID}/version",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Select session version
+   *
+   * Open a saved session version in the current workspace.
+   */
+  public select<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionSelectResponses, SessionSelectErrors, ThrowOnError>({
+      url: "/session/{sessionID}/select",
+      ...options,
+      ...params,
     })
   }
 

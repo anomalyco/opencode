@@ -72,6 +72,7 @@ export function SessionSidePanel(props: {
   kinds: Map<string, "add" | "del" | "mix">
   activeDiff?: string
   focusReviewDiff: (path: string) => void
+  readOnly: boolean
 }) {
   const platform = usePlatform()
   const sdk = useSDK()
@@ -80,6 +81,7 @@ export function SessionSidePanel(props: {
 
   async function handleUpload(e: Event) {
     const input = e.target as HTMLInputElement
+    if (props.readOnly) return
     if (!input.files || input.files.length === 0) return
     setUploading(true)
     const dir = /[^\x00-\x7F]/.test(sdk.directory) ? encodeURIComponent(sdk.directory) : sdk.directory
@@ -345,7 +347,7 @@ export function SessionSidePanel(props: {
                       icon="cloud-upload"
                       variant="ghost"
                       iconSize="small"
-                      disabled={uploading()}
+                      disabled={uploading() || props.readOnly}
                       onClick={() => uploadInput?.click()}
                       aria-label={props.language.t("session.files.upload")}
                     />

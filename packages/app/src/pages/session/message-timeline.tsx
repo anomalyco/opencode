@@ -1,5 +1,6 @@
 import { For, onCleanup, onMount, Show, type JSX } from "solid-js"
 import { Button } from "@opencode-ai/ui/button"
+import { Select } from "@opencode-ai/ui/select"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
@@ -40,6 +41,10 @@ export function MessageTimeline(props: {
   onTitleDraft: (value: string) => void
   onTitleMenuOpen: (open: boolean) => void
   onTitlePendingRename: (value: boolean) => void
+  currentVersionLabel?: string
+  versionOptions: { id: string; label: string }[]
+  currentVersionID?: string
+  onSelectVersion: (sessionID: string) => void
   onNavigateParent: () => void
   sessionID: string
   onArchiveSession: (sessionID: string) => void
@@ -225,6 +230,26 @@ export function MessageTimeline(props: {
                     </Show>
                   </Show>
                 </div>
+                <Show when={props.currentVersionLabel}>
+                  {(label) => (
+                    <div class="shrink-0 flex items-center gap-2">
+                      <Show
+                        when={props.versionOptions.length > 1}
+                        fallback={<span class="text-12-medium text-text-weak">{label()}</span>}
+                      >
+                        <Select
+                          options={props.versionOptions}
+                          current={props.versionOptions.find((item) => item.id === props.currentVersionID)}
+                          value={(item) => item.id}
+                          label={(item) => item.label}
+                          onSelect={(item) => item && props.onSelectVersion(item.id)}
+                          variant="ghost"
+                          size="small"
+                        />
+                      </Show>
+                    </div>
+                  )}
+                </Show>
                 <Show when={props.sessionID}>
                   {(id) => (
                     <div class="shrink-0 flex items-center">

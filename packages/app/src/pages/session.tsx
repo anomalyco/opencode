@@ -1,4 +1,4 @@
-import { For, onCleanup, Show, Match, Switch, createMemo, createEffect, on } from "solid-js"
+import { For, onCleanup, Show, Match, Switch, createMemo, createEffect, on, untrack } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Dynamic } from "solid-js/web"
@@ -31,6 +31,7 @@ import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useNavigate, useParams } from "@solidjs/router"
 import { UserMessage } from "@opencode-ai/sdk/v2"
+import type { Session as SDKSession } from "@opencode-ai/sdk/v2/client"
 import { useSDK } from "@/context/sdk"
 import { usePrompt } from "@/context/prompt"
 import { useComments } from "@/context/comments"
@@ -40,7 +41,12 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { SessionHeader, SessionContextTab, SortableTab, FileVisual, NewSessionView } from "@/components/session"
 import { navMark, navParams } from "@/utils/perf"
 import { same } from "@/utils/same"
-import { createOpenPreviewFile, createOpenReviewFile, focusTerminalById, getTabReorderIndex } from "@/pages/session/helpers"
+import {
+  createOpenPreviewFile,
+  createOpenReviewFile,
+  focusTerminalById,
+  getTabReorderIndex,
+} from "@/pages/session/helpers"
 import { createScrollSpy } from "@/pages/session/scroll-spy"
 import { FileTabContent } from "@/pages/session/file-tabs"
 import { SessionPreviewTab } from "@/pages/session/preview-tab"
@@ -58,6 +64,7 @@ import { SessionPromptDock } from "@/pages/session/session-prompt-dock"
 import { SessionMobileTabs } from "@/pages/session/session-mobile-tabs"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
+import { hasSessionChanges, sameVersionItems } from "@/pages/session/version-helpers"
 
 type HandoffSession = {
   prompt: string
@@ -306,6 +313,60 @@ export default function Page() {
   const hasReview = createMemo(() => reviewCount() > 0)
   const revertMessageID = createMemo(() => info()?.revert?.messageID)
   const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
+  const [versions, setVersions] = createStore({
+    loading: false,
+    items: [] as SDKSession[],
+  })
+  let versionToken = 0
+  let loadedVersionID: string | undefined
+
+  const versionLabel = (item: { lineage?: { number?: number } } | undefined) => `v${item?.lineage?.number ?? 1}`
+
+  const mergeSessions = (items: SDKSession[]) => {
+    if (items.length === 0) return false
+    if (!hasSessionChanges(sync.data.session, items)) return false
+    sync.set(
+      produce((draft) => {
+        for (const item of items) {
+          const index = draft.session.findIndex((session) => session.id === item.id)
+          if (index !== -1) {
+            draft.session[index] = item
+            continue
+          }
+          const next = draft.session.findIndex((session) => session.id > item.id)
+          if (next === -1) {
+            draft.session.push(item)
+            continue
+          }
+          draft.session.splice(next, 0, item)
+        }
+      }),
+    )
+    return true
+  }
+
+  const family = createMemo(() => {
+    if (versions.items.length > 0) return versions.items
+    const current = info()
+    return current ? [current] : []
+  })
+  const currentVersion = createMemo(() => family().find((item) => item.id === params.id) ?? info())
+  const latestVersion = createMemo(() => {
+    const items = family()
+    return items[items.length - 1] ?? currentVersion()
+  })
+  const readOnlyVersion = createMemo(() => {
+    const current = currentVersion()
+    if (!current?.lineage?.latestID) return false
+    return current.lineage.latestID !== current.id
+  })
+  const versionOptions = createMemo(() => {
+    const latestID = latestVersion()?.id
+    return family().map((item) => ({
+      id: item.id,
+      label: `${versionLabel(item)}${item.id === latestID ? ` ${language.t("session.version.latest")}` : ""}`,
+    }))
+  })
   const messagesReady = createMemo(() => {
     const id = params.id
     if (!id) return true
@@ -338,6 +399,83 @@ export default function Page() {
     }
     if (err instanceof Error) return err.message
     return language.t("common.requestFailed")
+  }
+
+  const refreshVersionView = async () => {
+    await file.tree.refresh("")
+    const paths = tabs()
+      .all()
+      .flatMap((tab) => {
+        const path = file.pathFromTab(tab)
+        return path ? [path] : []
+      })
+    const preview = view().preview.path()
+    if (preview) paths.push(preview)
+    await Promise.all([...new Set(paths)].map((path) => file.load(path, { force: true })))
+  }
+
+  const familyItems = (input: unknown, selected?: SDKSession) => {
+    if (Array.isArray(input)) return input.filter((item): item is SDKSession => !!item)
+    if (input && typeof input === "object" && "id" in input) return [input as SDKSession]
+    if (!selected) return [] as SDKSession[]
+
+    const rootID = selected.lineage?.rootID ?? selected.parentID ?? selected.id
+    return sync.data.session.filter(
+      (item) => (item.lineage?.rootID ?? item.parentID ?? item.id) === rootID,
+    ) as SDKSession[]
+  }
+
+  const loadVersions = async (sessionID: string) => {
+    const token = ++versionToken
+    setVersions("loading", true)
+    try {
+      const [selected, family] = await Promise.all([
+        sdk.client.session.select({ sessionID }),
+        sdk.client.session.family({ sessionID }),
+      ])
+      if (token !== versionToken) return
+      const items = familyItems(family.data, selected.data).toSorted((a: SDKSession, b: SDKSession) => {
+        const left = a.lineage?.number ?? a.time.created
+        const right = b.lineage?.number ?? b.time.created
+        if (left !== right) return left - right
+        return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+      })
+      const all = [...items, ...(selected.data ? [selected.data] : [])]
+      const next = items.length > 0 ? items : all
+      const merged = mergeSessions(all)
+      const changed = !sameVersionItems(versions.items, next)
+      const switched = loadedVersionID !== sessionID
+      if (changed) setVersions("items", next)
+      loadedVersionID = sessionID
+      if (merged || changed || switched) await refreshVersionView()
+    } catch (err) {
+      if (token !== versionToken) return
+      showToast({
+        title: language.t("session.version.selectFailed.title"),
+        description: errorMessage(err),
+      })
+    } finally {
+      if (token === versionToken) setVersions("loading", false)
+    }
+  }
+
+  const createVersion = async () => {
+    const sessionID = params.id
+    if (!sessionID) return
+    const next = await sdk.client.session
+      .version({ sessionID })
+      .then((x: { data?: SDKSession }) => x.data)
+      .catch((err: unknown) => {
+        showToast({
+          title: language.t("session.version.createFailed.title"),
+          description: errorMessage(err),
+        })
+        return undefined
+      })
+    if (!next) return
+    mergeSessions([next])
+    layout.handoff.setTabs(params.dir ?? "", next.id)
+    navigate(`/${params.dir}/session/${next.id}`)
   }
 
   createEffect(
@@ -677,12 +815,23 @@ export default function Page() {
 
   const hasScrollGesture = () => Date.now() - ui.scrollGesture < scrollGestureWindowMs
 
-  createEffect(() => {
-    sdk.directory
-    const id = params.id
-    if (!id) return
-    sync.session.sync(id)
-  })
+  createEffect(
+    on(
+      () => [sdk.directory, params.id] as const,
+      ([, id]) => {
+        if (!id) {
+          versionToken += 1
+          loadedVersionID = undefined
+          setVersions({ loading: false, items: [] })
+          return
+        }
+        untrack(() => {
+          void sync.session.sync(id)
+          void loadVersions(id)
+        })
+      },
+    ),
+  )
 
   createEffect(() => {
     if (!view().terminal.opened()) {
@@ -1055,12 +1204,7 @@ export default function Page() {
   )
 
   const previewPanel = () => (
-    <SessionPreviewTab
-      path={view().preview.path}
-      file={file}
-      view={view}
-      language={language}
-    />
+    <SessionPreviewTab path={view().preview.path} file={file} view={view} language={language} />
   )
 
   createEffect(
@@ -1618,6 +1762,13 @@ export default function Page() {
                     onTitleDraft={(value) => setTitle("draft", value)}
                     onTitleMenuOpen={(open) => setTitle("menuOpen", open)}
                     onTitlePendingRename={(value) => setTitle("pendingRename", value)}
+                    currentVersionLabel={versionLabel(currentVersion())}
+                    versionOptions={versionOptions()}
+                    currentVersionID={params.id}
+                    onSelectVersion={(sessionID) => {
+                      if (sessionID === params.id) return
+                      navigate(`/${params.dir}/session/${sessionID}`)
+                    }}
                     onNavigateParent={() => {
                       navigate(`/${params.dir}/session/${info()?.parentID}`)
                     }}
@@ -1689,6 +1840,8 @@ export default function Page() {
             t={language.t as (key: string, vars?: Record<string, string | number | boolean>) => string}
             responding={ui.responding}
             onDecide={decide}
+            readOnly={readOnlyVersion()}
+            onContinueVersion={() => void createVersion()}
             inputRef={(el) => {
               inputRef = el
             }}
@@ -1754,6 +1907,7 @@ export default function Page() {
           kinds={kinds()}
           activeDiff={tree.activeDiff}
           focusReviewDiff={focusReviewDiff}
+          readOnly={readOnlyVersion()}
         />
       </div>
 
