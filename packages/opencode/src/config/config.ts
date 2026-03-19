@@ -1219,6 +1219,12 @@ export namespace Config {
             .max(20)
             .optional()
             .describe("Maximum number of parallel worker agents (default: no limit, all subtasks run at once)"),
+          worker_timeout_ms: z
+            .number()
+            .int()
+            .min(60000)
+            .optional()
+            .describe("Timeout in milliseconds for worker execution (default: 1800000 = 30 minutes)"),
         })
         .optional()
         .describe("Parallel agent orchestration configuration"),
