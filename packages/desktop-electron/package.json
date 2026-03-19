@@ -30,7 +30,7 @@
     "@solid-primitives/storage": "catalog:",
     "@solidjs/meta": "catalog:",
     "@solidjs/router": "0.15.4",
-    "effect": "4.0.0-beta.31",
+    "effect": "catalog:",
     "electron-log": "^5",
     "electron-store": "^10",
     "electron-updater": "^6",
