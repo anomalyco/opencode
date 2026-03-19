@@ -1334,6 +1334,13 @@ export default function Layout(props: ParentProps) {
     const name = next === getFilename(project.worktree) ? "" : next
 
     if (project.id && project.id !== "global") {
+      // Sub-folder renames should be stored per-workspace, not shared across all worktrees.
+      const gitRoot = globalSync.data.project.find((x) => x.id === project.id)
+      const isSubfolder = gitRoot && project.worktree !== gitRoot.worktree
+      if (isSubfolder) {
+        globalSync.project.meta(project.worktree, { name })
+        return
+      }
       await globalSDK.client.project.update({ projectID: project.id, directory: project.worktree, name })
       return
     }

@@ -81,6 +81,20 @@ export function DialogEditProject(props: { project: LocalProject }) {
         const start = store.startup.trim()
 
         if (props.project.id && props.project.id !== "global") {
+          // Check if this is a sub-folder of a git project (worktree differs from git root).
+          // Sub-folder renames should be stored per-workspace, not shared across all worktrees.
+          const gitRoot = globalSync.data.project.find((x) => x.id === props.project.id)
+          const isSubfolder = gitRoot && props.project.worktree !== gitRoot.worktree
+          if (isSubfolder) {
+            globalSync.project.meta(props.project.worktree, {
+              name,
+              icon: { color: store.color, override: store.iconUrl || undefined },
+              commands: { start: start || undefined },
+            })
+            globalSync.project.icon(props.project.worktree, store.iconUrl || undefined)
+            dialog.close()
+            return
+          }
           await globalSDK.client.project.update({
             projectID: props.project.id,
             directory: props.project.worktree,

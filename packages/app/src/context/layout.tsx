@@ -409,7 +409,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       }
 
       const isGlobal = projectID === "global" || (metadata?.id === undefined && localOverride)
-      if (!isGlobal) return base
+      if (!isGlobal) {
+        // Allow per-workspace name override for git sub-folder workspaces.
+        // Without this, all sub-folders of the same repo share the project-level name.
+        if (local?.name !== undefined) return { ...base, name: local.name }
+        return base
+      }
 
       return {
         ...base,
