@@ -16,6 +16,13 @@ export function SessionGrid(props: { ids: string[] }) {
   const [localIds, setLocalIds] = createSignal<string[]>([])
   const [isCtrl, setIsCtrl] = createSignal(false)
 
+  // Use a stable sorted array for the DOM to prevent Solid's <For> loop from 
+  // physically detaching and reattaching DOM nodes when the array order changes.
+  // This prevents scroll positions from being lost and iframes from reloading.
+  const stableIds = createMemo(() => {
+    return [...props.ids].sort()
+  })
+
   createEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Control" || e.key === "Meta") setIsCtrl(true)
@@ -88,12 +95,17 @@ export function SessionGrid(props: { ids: string[] }) {
       const targetEl = e.currentTarget as HTMLElement
       const rect = targetEl.getBoundingClientRect()
       
-      const isHorizontalDrag = rect.width > rect.height
-      const midpoint = isHorizontalDrag ? rect.left + rect.width / 2 : rect.top + rect.height / 2
-      const mousePos = isHorizontalDrag ? e.clientX : e.clientY
-
-      if (from < to && mousePos < midpoint) return prev
-      if (from > to && mousePos > midpoint) return prev
+      const targetCenterX = rect.left + rect.width / 2
+      const targetCenterY = rect.top + rect.height / 2
+      
+      const dx = Math.abs(e.clientX - targetCenterX)
+      const dy = Math.abs(e.clientY - targetCenterY)
+      
+      // Require the mouse to be within the central 60% of the target tile before swapping
+      // to prevent flicker and allow dragging across items
+      if (dx > rect.width * 0.3 || dy > rect.height * 0.3) {
+        return prev
+      }
 
       const next = [...prev]
       const [item] = next.splice(from, 1)
@@ -121,7 +133,7 @@ export function SessionGrid(props: { ids: string[] }) {
 
   return (
     <div class={`grid gap-2 w-full h-full p-2 bg-background-base ${getGridClass()}`}>
-      <For each={props.ids}>
+      <For each={stableIds()}>
         {(id) => {
           const visualIndex = () => localIds().indexOf(id)
 
