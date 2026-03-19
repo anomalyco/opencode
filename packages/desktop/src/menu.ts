@@ -1,12 +1,11 @@
 import { Menu, MenuItem, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu"
+import { openUrl } from "@tauri-apps/plugin-opener"
 import { type as ostype } from "@tauri-apps/plugin-os"
 import { relaunch } from "@tauri-apps/plugin-process"
-import { openUrl } from "@tauri-apps/plugin-opener"
-
-import { runUpdater, UPDATER_ENABLED } from "./updater"
+import { commands } from "./bindings"
 import { installCli } from "./cli"
 import { initI18n, t } from "./i18n"
-import { commands } from "./bindings"
+import { runUpdater, UPDATER_ENABLED } from "./updater"
 
 export async function createMenu(trigger: (id: string) => void) {
   if (ostype() !== "macos") return

@@ -36,4 +36,19 @@ describe("file.ripgrep", () => {
     expect(hasVisible).toBe(true)
     expect(hasHidden).toBe(false)
   })
+
+  test("search returns empty when nothing matches", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "match.ts"), "const value = 'other'\n")
+      },
+    })
+
+    const hits = await Ripgrep.search({
+      cwd: tmp.path,
+      pattern: "needle",
+    })
+
+    expect(hits).toEqual([])
+  })
 })

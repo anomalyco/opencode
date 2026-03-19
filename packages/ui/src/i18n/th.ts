@@ -41,6 +41,9 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "กำลังลองใหม่",
   "ui.sessionTurn.retry.inSeconds": "ใน {{seconds}}วิ",
+  "ui.sessionTurn.retry.attempt": "ครั้งที่ {{attempt}}",
+  "ui.sessionTurn.retry.attemptLine": "{{line}} - ครั้งที่ {{attempt}}",
+  "ui.sessionTurn.retry.geminiHot": "gemini กำลังใช้งานหนาแน่นมาก",
   "ui.sessionTurn.error.freeUsageExceeded": "เกินขีดจำกัดการใช้งานฟรี",
   "ui.sessionTurn.error.addCredits": "เพิ่มเครดิต",
 
@@ -58,6 +61,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "พิจารณาขั้นตอนถัดไป",
 
   "ui.messagePart.questions.dismissed": "ละทิ้งคำถามแล้ว",
+  "ui.messagePart.compaction": "บีบอัดเซสชันแล้ว",
   "ui.messagePart.context.read.one": "อ่าน {{count}} รายการ",
   "ui.messagePart.context.read.other": "อ่าน {{count}} รายการ",
   "ui.messagePart.context.search.one": "ค้นหา {{count}} รายการ",
@@ -91,12 +95,15 @@ export const dict = {
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "ดึงจากเว็บ",
+  "ui.tool.websearch": "ค้นหาเว็บ",
+  "ui.tool.codesearch": "ค้นหาโค้ด",
   "ui.tool.shell": "เชลล์",
   "ui.tool.patch": "แพตช์",
   "ui.tool.todos": "รายการงาน",
   "ui.tool.todos.read": "อ่านรายการงาน",
   "ui.tool.questions": "คำถาม",
   "ui.tool.agent": "เอเจนต์ {{type}}",
+  "ui.tool.agent.default": "เอเจนต์",
 
   "ui.common.file.one": "ไฟล์",
   "ui.common.file.other": "ไฟล์",
@@ -120,9 +127,12 @@ export const dict = {
   "ui.message.collapse": "ย่อข้อความ",
   "ui.message.copy": "คัดลอก",
   "ui.message.copyMessage": "คัดลอกข้อความ",
+  "ui.message.forkMessage": "แตกแขนงไปยังเซสชันใหม่",
+  "ui.message.revertMessage": "รีเซ็ตไปยังจุดนี้",
   "ui.message.copyResponse": "คัดลอกคำตอบ",
   "ui.message.copied": "คัดลอกแล้ว!",
   "ui.message.interrupted": "ถูกขัดจังหวะ",
+  "ui.message.queued": "อยู่ในคิว",
   "ui.message.attachment.alt": "ไฟล์แนบ",
 
   "ui.patch.action.deleted": "ลบ",
@@ -136,4 +146,16 @@ export const dict = {
   "ui.question.multiHint": "เลือกทั้งหมดที่ใช้",
   "ui.question.singleHint": "เลือกหนึ่งคำตอบ",
   "ui.question.custom.placeholder": "พิมพ์คำตอบของคุณ...",
+
+  "ui.fileSearch.placeholder": "ค้นหา",
+  "ui.fileSearch.previousMatch": "ก่อนหน้า",
+  "ui.fileSearch.nextMatch": "ถัดไป",
+  "ui.fileSearch.close": "ปิดการค้นหา",
+  "ui.tool.task": "งาน",
+  "ui.tool.skill": "ทักษะ",
+  "ui.basicTool.called": "เรียกใช้ `{{tool}}`",
+  "ui.toolErrorCard.failed": "ล้มเหลว",
+  "ui.toolErrorCard.copyError": "คัดลอกข้อผิดพลาด",
+  "ui.message.duration.seconds": "{{count}}วิ",
+  "ui.message.duration.minutesSeconds": "{{minutes}}นาที {{seconds}}วิ",
 }

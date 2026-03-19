@@ -44,6 +44,9 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "ponovni pokušaj",
   "ui.sessionTurn.retry.inSeconds": "za {{seconds}}s",
+  "ui.sessionTurn.retry.attempt": "pokušaj #{{attempt}}",
+  "ui.sessionTurn.retry.attemptLine": "{{line}} - pokušaj #{{attempt}}",
+  "ui.sessionTurn.retry.geminiHot": "gemini je trenutno preopterećen",
   "ui.sessionTurn.error.freeUsageExceeded": "Besplatna upotreba premašena",
   "ui.sessionTurn.error.addCredits": "Dodaj kredite",
 
@@ -61,6 +64,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "Razmatranje sljedećih koraka",
 
   "ui.messagePart.questions.dismissed": "Pitanja odbačena",
+  "ui.messagePart.compaction": "Sesija sažeta",
   "ui.messagePart.context.read.one": "{{count}} čitanje",
   "ui.messagePart.context.read.other": "{{count}} čitanja",
   "ui.messagePart.context.search.one": "{{count}} pretraga",
@@ -94,12 +98,15 @@ export const dict = {
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "Web preuzimanje",
+  "ui.tool.websearch": "Pretraga weba",
+  "ui.tool.codesearch": "Pretraga koda",
   "ui.tool.shell": "Shell",
   "ui.tool.patch": "Patch",
   "ui.tool.todos": "Lista zadataka",
   "ui.tool.todos.read": "Čitanje liste zadataka",
   "ui.tool.questions": "Pitanja",
   "ui.tool.agent": "{{type}} agent",
+  "ui.tool.agent.default": "agent",
 
   "ui.common.file.one": "datoteka",
   "ui.common.file.other": "datoteke",
@@ -123,9 +130,12 @@ export const dict = {
   "ui.message.collapse": "Sažmi poruku",
   "ui.message.copy": "Kopiraj",
   "ui.message.copyMessage": "Kopiraj poruku",
+  "ui.message.forkMessage": "Forkaj u novu sesiju",
+  "ui.message.revertMessage": "Resetuj na ovu tačku",
   "ui.message.copyResponse": "Kopiraj odgovor",
   "ui.message.copied": "Kopirano!",
   "ui.message.interrupted": "Prekinuto",
+  "ui.message.queued": "U redu",
   "ui.message.attachment.alt": "prilog",
 
   "ui.patch.action.deleted": "Obrisano",
@@ -139,4 +149,16 @@ export const dict = {
   "ui.question.multiHint": "Odaberi sve što važi",
   "ui.question.singleHint": "Odaberi jedan odgovor",
   "ui.question.custom.placeholder": "Unesi svoj odgovor...",
+
+  "ui.fileSearch.placeholder": "Pronađi",
+  "ui.fileSearch.previousMatch": "Prethodno",
+  "ui.fileSearch.nextMatch": "Sljedeće",
+  "ui.fileSearch.close": "Zatvori pretragu",
+  "ui.tool.task": "Zadatak",
+  "ui.tool.skill": "Vještina",
+  "ui.basicTool.called": "Pozvan `{{tool}}`",
+  "ui.toolErrorCard.failed": "Neuspješno",
+  "ui.toolErrorCard.copyError": "Kopiraj grešku",
+  "ui.message.duration.seconds": "{{count}}s",
+  "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
 } satisfies Partial<Record<Keys, string>>

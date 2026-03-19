@@ -40,6 +40,9 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "nouvelle tentative",
   "ui.sessionTurn.retry.inSeconds": "dans {{seconds}}s",
+  "ui.sessionTurn.retry.attempt": "tentative n°{{attempt}}",
+  "ui.sessionTurn.retry.attemptLine": "{{line}} - tentative n°{{attempt}}",
+  "ui.sessionTurn.retry.geminiHot": "gemini est en surchauffe",
   "ui.sessionTurn.error.freeUsageExceeded": "Limite d'utilisation gratuite dépassée",
   "ui.sessionTurn.error.addCredits": "Ajouter des crédits",
 
@@ -57,6 +60,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "Examen des prochaines étapes",
 
   "ui.messagePart.questions.dismissed": "Questions ignorées",
+  "ui.messagePart.compaction": "Session compactée",
   "ui.messagePart.context.read.one": "{{count}} lecture",
   "ui.messagePart.context.read.other": "{{count}} lectures",
   "ui.messagePart.context.search.one": "{{count}} recherche",
@@ -90,12 +94,15 @@ export const dict = {
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "Webfetch",
+  "ui.tool.websearch": "Recherche Web",
+  "ui.tool.codesearch": "Recherche de code",
   "ui.tool.shell": "Shell",
   "ui.tool.patch": "Patch",
   "ui.tool.todos": "Tâches",
   "ui.tool.todos.read": "Lire les tâches",
   "ui.tool.questions": "Questions",
   "ui.tool.agent": "Agent {{type}}",
+  "ui.tool.agent.default": "Agent",
 
   "ui.common.file.one": "fichier",
   "ui.common.file.other": "fichiers",
@@ -119,9 +126,12 @@ export const dict = {
   "ui.message.collapse": "Réduire le message",
   "ui.message.copy": "Copier",
   "ui.message.copyMessage": "Copier le message",
+  "ui.message.forkMessage": "Bifurquer vers une nouvelle session",
+  "ui.message.revertMessage": "Réinitialiser à ce point",
   "ui.message.copyResponse": "Copier la réponse",
   "ui.message.copied": "Copié !",
   "ui.message.interrupted": "Interrompu",
+  "ui.message.queued": "En file",
   "ui.message.attachment.alt": "pièce jointe",
 
   "ui.patch.action.deleted": "Supprimé",
@@ -135,4 +145,16 @@ export const dict = {
   "ui.question.multiHint": "Sélectionnez tout ce qui s'applique",
   "ui.question.singleHint": "Sélectionnez une réponse",
   "ui.question.custom.placeholder": "Tapez votre réponse...",
+
+  "ui.fileSearch.placeholder": "Rechercher",
+  "ui.fileSearch.previousMatch": "Précédent",
+  "ui.fileSearch.nextMatch": "Suivant",
+  "ui.fileSearch.close": "Fermer la recherche",
+  "ui.tool.task": "Tâche",
+  "ui.tool.skill": "Compétence",
+  "ui.basicTool.called": "Appelé `{{tool}}`",
+  "ui.toolErrorCard.failed": "Échoué",
+  "ui.toolErrorCard.copyError": "Copier l'erreur",
+  "ui.message.duration.seconds": "{{count}}s",
+  "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
 }

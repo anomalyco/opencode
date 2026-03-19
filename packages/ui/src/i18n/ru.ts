@@ -39,6 +39,9 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "повтор",
   "ui.sessionTurn.retry.inSeconds": "через {{seconds}}с",
+  "ui.sessionTurn.retry.attempt": "попытка №{{attempt}}",
+  "ui.sessionTurn.retry.attemptLine": "{{line}} - попытка №{{attempt}}",
+  "ui.sessionTurn.retry.geminiHot": "gemini сейчас перегружен",
   "ui.sessionTurn.error.freeUsageExceeded": "Лимит бесплатного использования превышен",
   "ui.sessionTurn.error.addCredits": "Добавить кредиты",
 
@@ -56,6 +59,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "Рассмотрение следующих шагов",
 
   "ui.messagePart.questions.dismissed": "Вопросы отклонены",
+  "ui.messagePart.compaction": "Сессия сжата",
   "ui.messagePart.context.read.one": "{{count}} чтение",
   "ui.messagePart.context.read.other": "{{count}} чтений",
   "ui.messagePart.context.search.one": "{{count}} поиск",
@@ -89,12 +93,15 @@ export const dict = {
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "Webfetch",
+  "ui.tool.websearch": "Веб-поиск",
+  "ui.tool.codesearch": "Поиск кода",
   "ui.tool.shell": "Оболочка",
   "ui.tool.patch": "Патч",
   "ui.tool.todos": "Задачи",
   "ui.tool.todos.read": "Читать задачи",
   "ui.tool.questions": "Вопросы",
   "ui.tool.agent": "Агент {{type}}",
+  "ui.tool.agent.default": "Агент",
 
   "ui.common.file.one": "файл",
   "ui.common.file.other": "файлов",
@@ -118,9 +125,12 @@ export const dict = {
   "ui.message.collapse": "Свернуть сообщение",
   "ui.message.copy": "Копировать",
   "ui.message.copyMessage": "Копировать сообщение",
+  "ui.message.forkMessage": "Ответвить в новую сессию",
+  "ui.message.revertMessage": "Сбросить до этого момента",
   "ui.message.copyResponse": "Копировать ответ",
   "ui.message.copied": "Скопировано!",
   "ui.message.interrupted": "Прервано",
+  "ui.message.queued": "В очереди",
   "ui.message.attachment.alt": "вложение",
 
   "ui.patch.action.deleted": "Удалено",
@@ -134,4 +144,16 @@ export const dict = {
   "ui.question.multiHint": "Выберите все подходящие",
   "ui.question.singleHint": "Выберите один ответ",
   "ui.question.custom.placeholder": "Введите ваш ответ...",
+
+  "ui.fileSearch.placeholder": "Найти",
+  "ui.fileSearch.previousMatch": "Предыдущее",
+  "ui.fileSearch.nextMatch": "Следующее",
+  "ui.fileSearch.close": "Закрыть поиск",
+  "ui.tool.task": "Задача",
+  "ui.tool.skill": "Навык",
+  "ui.basicTool.called": "Вызван `{{tool}}`",
+  "ui.toolErrorCard.failed": "Ошибка",
+  "ui.toolErrorCard.copyError": "Скопировать ошибку",
+  "ui.message.duration.seconds": "{{count}}с",
+  "ui.message.duration.minutesSeconds": "{{minutes}}м {{seconds}}с",
 }

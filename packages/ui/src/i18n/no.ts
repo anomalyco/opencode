@@ -43,6 +43,9 @@ export const dict: Record<Keys, string> = {
 
   "ui.sessionTurn.retry.retrying": "Prøver igjen",
   "ui.sessionTurn.retry.inSeconds": "om {{seconds}}s",
+  "ui.sessionTurn.retry.attempt": "forsøk #{{attempt}}",
+  "ui.sessionTurn.retry.attemptLine": "{{line}} - forsøk #{{attempt}}",
+  "ui.sessionTurn.retry.geminiHot": "gemini er veldig overbelastet nå",
   "ui.sessionTurn.error.freeUsageExceeded": "Gratis bruk overskredet",
   "ui.sessionTurn.error.addCredits": "Legg til kreditt",
 
@@ -60,6 +63,7 @@ export const dict: Record<Keys, string> = {
   "ui.sessionTurn.status.consideringNextSteps": "Vurderer neste trinn",
 
   "ui.messagePart.questions.dismissed": "Spørsmål avvist",
+  "ui.messagePart.compaction": "Økt komprimert",
   "ui.messagePart.context.read.one": "{{count}} lest",
   "ui.messagePart.context.read.other": "{{count}} lest",
   "ui.messagePart.context.search.one": "{{count}} søk",
@@ -93,12 +97,15 @@ export const dict: Record<Keys, string> = {
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "Webhenting",
+  "ui.tool.websearch": "Nettsøk",
+  "ui.tool.codesearch": "Kodesøk",
   "ui.tool.shell": "Shell",
   "ui.tool.patch": "Patch",
   "ui.tool.todos": "Gjøremål",
   "ui.tool.todos.read": "Les gjøremål",
   "ui.tool.questions": "Spørsmål",
   "ui.tool.agent": "{{type}}-agent",
+  "ui.tool.agent.default": "Agent",
 
   "ui.common.file.one": "fil",
   "ui.common.file.other": "filer",
@@ -122,9 +129,12 @@ export const dict: Record<Keys, string> = {
   "ui.message.collapse": "Skjul melding",
   "ui.message.copy": "Kopier",
   "ui.message.copyMessage": "Kopier melding",
+  "ui.message.forkMessage": "Forgren til ny sesjon",
+  "ui.message.revertMessage": "Tilbakestill til dette punktet",
   "ui.message.copyResponse": "Kopier svar",
   "ui.message.copied": "Kopiert!",
   "ui.message.interrupted": "Avbrutt",
+  "ui.message.queued": "I kø",
   "ui.message.attachment.alt": "vedlegg",
 
   "ui.patch.action.deleted": "Slettet",
@@ -138,4 +148,16 @@ export const dict: Record<Keys, string> = {
   "ui.question.multiHint": "Velg alle som gjelder",
   "ui.question.singleHint": "Velg ett svar",
   "ui.question.custom.placeholder": "Skriv svaret ditt...",
+
+  "ui.fileSearch.placeholder": "Finn",
+  "ui.fileSearch.previousMatch": "Forrige treff",
+  "ui.fileSearch.nextMatch": "Neste treff",
+  "ui.fileSearch.close": "Lukk søk",
+  "ui.tool.task": "Oppgave",
+  "ui.tool.skill": "Ferdighet",
+  "ui.basicTool.called": "Kalte `{{tool}}`",
+  "ui.toolErrorCard.failed": "Mislyktes",
+  "ui.toolErrorCard.copyError": "Kopier feil",
+  "ui.message.duration.seconds": "{{count}}s",
+  "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
 }

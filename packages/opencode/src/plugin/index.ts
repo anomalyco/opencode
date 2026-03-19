@@ -16,8 +16,6 @@ import { gitlabAuthPlugin as GitlabAuthPlugin } from "@gitlab/opencode-gitlab-au
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
 
-  const BUILTIN = ["opencode-anthropic-auth@0.0.13"]
-
   // Built-in plugins that are directly imported (not installed from npm)
   const INTERNAL_PLUGINS: PluginInstance[] = [CodexAuthPlugin, CopilotAuthPlugin, GitlabAuthPlugin]
 
@@ -25,8 +23,12 @@ export namespace Plugin {
     const client = createOpencodeClient({
       baseUrl: "http://localhost:4096",
       directory: Instance.directory,
-      // @ts-ignore - fetch type incompatibility
-      fetch: async (...args) => Server.App().fetch(...args),
+      headers: Flag.OPENCODE_SERVER_PASSWORD
+        ? {
+            Authorization: `Basic ${Buffer.from(`${Flag.OPENCODE_SERVER_USERNAME ?? "opencode"}:${Flag.OPENCODE_SERVER_PASSWORD}`).toString("base64")}`,
+          }
+        : undefined,
+      fetch: async (...args) => Server.Default().fetch(...args),
     })
     const config = await Config.get()
     const hooks: Hooks[] = []
@@ -35,7 +37,9 @@ export namespace Plugin {
       project: Instance.project,
       worktree: Instance.worktree,
       directory: Instance.directory,
-      serverUrl: Server.url(),
+      get serverUrl(): URL {
+        return Server.url ?? new URL("http://localhost:4096")
+      },
       $: Bun.$,
     }
 
@@ -49,9 +53,6 @@ export namespace Plugin {
 
     let plugins = config.plugin ?? []
     if (plugins.length) await Config.waitForDependencies()
-    if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
-      plugins = [...BUILTIN, ...plugins]
-    }
 
     for (let plugin of plugins) {
       // ignore old codex plugin since it is supported first party now

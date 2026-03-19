@@ -40,6 +40,9 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "إعادة المحاولة",
   "ui.sessionTurn.retry.inSeconds": "خلال {{seconds}} ثواني",
+  "ui.sessionTurn.retry.attempt": "المحاولة رقم {{attempt}}",
+  "ui.sessionTurn.retry.attemptLine": "{{line}} - المحاولة رقم {{attempt}}",
+  "ui.sessionTurn.retry.geminiHot": "gemini مزدحم حاليا",
   "ui.sessionTurn.error.freeUsageExceeded": "تم تجاوز حد الاستخدام المجاني",
   "ui.sessionTurn.error.addCredits": "إضافة رصيد",
 
@@ -57,6 +60,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "النظر في الخطوات التالية",
 
   "ui.messagePart.questions.dismissed": "تم رفض الأسئلة",
+  "ui.messagePart.compaction": "تم ضغط الجلسة",
   "ui.messagePart.context.read.one": "{{count}} قراءة",
   "ui.messagePart.context.read.other": "{{count}} قراءات",
   "ui.messagePart.context.search.one": "{{count}} بحث",
@@ -90,12 +94,15 @@ export const dict = {
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "جلب الويب",
+  "ui.tool.websearch": "بحث الويب",
+  "ui.tool.codesearch": "بحث الكود",
   "ui.tool.shell": "Shell",
   "ui.tool.patch": "تصحيح",
   "ui.tool.todos": "المهام",
   "ui.tool.todos.read": "قراءة المهام",
   "ui.tool.questions": "أسئلة",
   "ui.tool.agent": "وكيل {{type}}",
+  "ui.tool.agent.default": "وكيل",
 
   "ui.common.file.one": "ملف",
   "ui.common.file.other": "ملفات",
@@ -119,9 +126,12 @@ export const dict = {
   "ui.message.collapse": "طي الرسالة",
   "ui.message.copy": "نسخ",
   "ui.message.copyMessage": "نسخ الرسالة",
+  "ui.message.forkMessage": "تشعب إلى جلسة جديدة",
+  "ui.message.revertMessage": "إعادة التعيين إلى هذه النقطة",
   "ui.message.copyResponse": "نسخ الرد",
   "ui.message.copied": "تم النسخ!",
   "ui.message.interrupted": "تمت المقاطعة",
+  "ui.message.queued": "في الانتظار",
   "ui.message.attachment.alt": "مرفق",
 
   "ui.patch.action.deleted": "محذوف",
@@ -135,4 +145,16 @@ export const dict = {
   "ui.question.multiHint": "حدد كل ما ينطبق",
   "ui.question.singleHint": "حدد إجابة واحدة",
   "ui.question.custom.placeholder": "اكتب إجابتك...",
+
+  "ui.fileSearch.placeholder": "بحث",
+  "ui.fileSearch.previousMatch": "المطابقة السابقة",
+  "ui.fileSearch.nextMatch": "المطابقة التالية",
+  "ui.fileSearch.close": "إغلاق البحث",
+  "ui.tool.task": "مهمة",
+  "ui.tool.skill": "مهارة",
+  "ui.basicTool.called": "تم استدعاء `{{tool}}`",
+  "ui.toolErrorCard.failed": "فشل",
+  "ui.toolErrorCard.copyError": "نسخ الخطأ",
+  "ui.message.duration.seconds": "{{count}}ث",
+  "ui.message.duration.minutesSeconds": "{{minutes}}د {{seconds}}ث",
 }

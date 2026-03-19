@@ -40,6 +40,9 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "재시도 중",
   "ui.sessionTurn.retry.inSeconds": "{{seconds}}초 후",
+  "ui.sessionTurn.retry.attempt": "{{attempt}}번째",
+  "ui.sessionTurn.retry.attemptLine": "{{line}} - {{attempt}}번째",
+  "ui.sessionTurn.retry.geminiHot": "gemini가 현재 과부하 상태입니다",
   "ui.sessionTurn.error.freeUsageExceeded": "무료 사용량 초과",
   "ui.sessionTurn.error.addCredits": "크레딧 추가",
 
@@ -57,6 +60,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "다음 단계 고려 중",
 
   "ui.messagePart.questions.dismissed": "질문 무시됨",
+  "ui.messagePart.compaction": "세션 압축됨",
   "ui.messagePart.context.read.one": "{{count}}개 읽음",
   "ui.messagePart.context.read.other": "{{count}}개 읽음",
   "ui.messagePart.context.search.one": "{{count}}개 검색",
@@ -90,12 +94,15 @@ export const dict = {
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "웹 가져오기",
+  "ui.tool.websearch": "웹 검색",
+  "ui.tool.codesearch": "코드 검색",
   "ui.tool.shell": "셸",
   "ui.tool.patch": "패치",
   "ui.tool.todos": "할 일",
   "ui.tool.todos.read": "할 일 읽기",
   "ui.tool.questions": "질문",
   "ui.tool.agent": "{{type}} 에이전트",
+  "ui.tool.agent.default": "에이전트",
 
   "ui.common.file.one": "파일",
   "ui.common.file.other": "파일",
@@ -119,9 +126,12 @@ export const dict = {
   "ui.message.collapse": "메시지 접기",
   "ui.message.copy": "복사",
   "ui.message.copyMessage": "메시지 복사",
+  "ui.message.forkMessage": "새 세션으로 분기",
+  "ui.message.revertMessage": "이 시점으로 초기화",
   "ui.message.copyResponse": "응답 복사",
   "ui.message.copied": "복사됨!",
   "ui.message.interrupted": "중단됨",
+  "ui.message.queued": "대기 중",
   "ui.message.attachment.alt": "첨부 파일",
 
   "ui.patch.action.deleted": "삭제됨",
@@ -135,4 +145,16 @@ export const dict = {
   "ui.question.multiHint": "해당하는 항목 모두 선택",
   "ui.question.singleHint": "하나의 답변을 선택",
   "ui.question.custom.placeholder": "답변 입력...",
+
+  "ui.fileSearch.placeholder": "찾기",
+  "ui.fileSearch.previousMatch": "이전 항목",
+  "ui.fileSearch.nextMatch": "다음 항목",
+  "ui.fileSearch.close": "검색 닫기",
+  "ui.tool.task": "작업",
+  "ui.tool.skill": "스킬",
+  "ui.basicTool.called": "`{{tool}}` 호출됨",
+  "ui.toolErrorCard.failed": "실패",
+  "ui.toolErrorCard.copyError": "오류 복사",
+  "ui.message.duration.seconds": "{{count}}초",
+  "ui.message.duration.minutesSeconds": "{{minutes}}분 {{seconds}}초",
 }

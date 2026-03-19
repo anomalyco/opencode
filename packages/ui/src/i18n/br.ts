@@ -40,6 +40,9 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "tentando novamente",
   "ui.sessionTurn.retry.inSeconds": "em {{seconds}}s",
+  "ui.sessionTurn.retry.attempt": "tentativa #{{attempt}}",
+  "ui.sessionTurn.retry.attemptLine": "{{line}} - tentativa #{{attempt}}",
+  "ui.sessionTurn.retry.geminiHot": "gemini está muito sobrecarregado agora",
   "ui.sessionTurn.error.freeUsageExceeded": "Limite de uso gratuito excedido",
   "ui.sessionTurn.error.addCredits": "Adicionar créditos",
 
@@ -57,6 +60,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "Considerando próximos passos",
 
   "ui.messagePart.questions.dismissed": "Perguntas descartadas",
+  "ui.messagePart.compaction": "Sessão compactada",
   "ui.messagePart.context.read.one": "{{count}} leitura",
   "ui.messagePart.context.read.other": "{{count}} leituras",
   "ui.messagePart.context.search.one": "{{count}} pesquisa",
@@ -90,12 +94,15 @@ export const dict = {
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "Buscar Web",
+  "ui.tool.websearch": "Pesquisa na Web",
+  "ui.tool.codesearch": "Pesquisa de Código",
   "ui.tool.shell": "Shell",
   "ui.tool.patch": "Patch",
   "ui.tool.todos": "Tarefas",
   "ui.tool.todos.read": "Ler tarefas",
   "ui.tool.questions": "Perguntas",
   "ui.tool.agent": "Agente {{type}}",
+  "ui.tool.agent.default": "Agente",
 
   "ui.common.file.one": "arquivo",
   "ui.common.file.other": "arquivos",
@@ -119,9 +126,12 @@ export const dict = {
   "ui.message.collapse": "Recolher mensagem",
   "ui.message.copy": "Copiar",
   "ui.message.copyMessage": "Copiar mensagem",
+  "ui.message.forkMessage": "Bifurcar para nova sessão",
+  "ui.message.revertMessage": "Redefinir para este ponto",
   "ui.message.copyResponse": "Copiar resposta",
   "ui.message.copied": "Copiado!",
   "ui.message.interrupted": "Interrompido",
+  "ui.message.queued": "Na fila",
   "ui.message.attachment.alt": "anexo",
 
   "ui.patch.action.deleted": "Excluído",
@@ -135,4 +145,16 @@ export const dict = {
   "ui.question.multiHint": "Selecione todas que se aplicam",
   "ui.question.singleHint": "Selecione uma resposta",
   "ui.question.custom.placeholder": "Digite sua resposta...",
+
+  "ui.fileSearch.placeholder": "Localizar",
+  "ui.fileSearch.previousMatch": "Ocorrência anterior",
+  "ui.fileSearch.nextMatch": "Próxima ocorrência",
+  "ui.fileSearch.close": "Fechar busca",
+  "ui.tool.task": "Tarefa",
+  "ui.tool.skill": "Habilidade",
+  "ui.basicTool.called": "Chamou `{{tool}}`",
+  "ui.toolErrorCard.failed": "Falhou",
+  "ui.toolErrorCard.copyError": "Copiar erro",
+  "ui.message.duration.seconds": "{{count}}s",
+  "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
 }
