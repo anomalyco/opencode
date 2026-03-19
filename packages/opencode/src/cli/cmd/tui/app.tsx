@@ -721,9 +721,9 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       },
     },
     {
-      title: vim() ? "Disable vim input" : "Enable vim input",
+      title: "Toggle vim mode",
       value: "input.vim.toggle",
-      category: "Settings",
+      category: "System",
       onSelect: (dialog) => {
         kv.set("input_vim_mode", !vim())
         dialog.clear()
