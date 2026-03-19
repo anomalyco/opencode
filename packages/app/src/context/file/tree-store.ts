@@ -16,6 +16,35 @@ type TreeStoreOptions = {
   onError: (message: string) => void
 }
 
+// ── Concurrency limiter ──────────────────────────────────────────────
+// Prevents the file tree from exhausting the browser's connection pool
+// when many directories are expanded simultaneously.
+const MAX_CONCURRENT = 6
+
+function createSemaphore(limit: number) {
+  let active = 0
+  const queue: Array<() => void> = []
+
+  function release() {
+    active--
+    const next = queue.shift()
+    if (next) {
+      active++
+      next()
+    }
+  }
+
+  function acquire(): Promise<void> {
+    if (active < limit) {
+      active++
+      return Promise.resolve()
+    }
+    return new Promise<void>((resolve) => queue.push(resolve))
+  }
+
+  return { acquire, release }
+}
+
 export function createFileTreeStore(options: TreeStoreOptions) {
   const [tree, setTree] = createStore<{
     node: Record<string, FileNode>
@@ -26,6 +55,7 @@ export function createFileTreeStore(options: TreeStoreOptions) {
   })
 
   const inflight = new Map<string, Promise<void>>()
+  const semaphore = createSemaphore(MAX_CONCURRENT)
 
   const reset = () => {
     inflight.clear()
@@ -60,8 +90,9 @@ export function createFileTreeStore(options: TreeStoreOptions) {
 
     const directory = options.scope()
 
-    const promise = options
-      .list(dir)
+    const promise = semaphore
+      .acquire()
+      .then(() => options.list(dir))
       .then((nodes) => {
         if (options.scope() !== directory) return
         const prevChildren = tree.dir[dir]?.children ?? []
@@ -120,6 +151,7 @@ export function createFileTreeStore(options: TreeStoreOptions) {
         options.onError(e.message)
       })
       .finally(() => {
+        semaphore.release()
         inflight.delete(dir)
       })
 
