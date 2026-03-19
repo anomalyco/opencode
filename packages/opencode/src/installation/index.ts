@@ -1,6 +1,5 @@
 import { Effect } from "effect"
 import { Installation as S } from "./effect"
-import { runtime } from "@/effect/runtime"
 
 export namespace Installation {
   export type Method = S.Method
@@ -20,7 +19,12 @@ export namespace Installation {
   export const layer = S.layer
   export const defaultLayer = S.defaultLayer
 
-  function runPromise<A>(f: (service: S.Interface) => Effect.Effect<A, any>) {
+  // Dynamic import breaks the circular dependency: many foundational modules
+  // (db.ts, provider/models.ts) import @/installation at load time, and a
+  // static import of runtime here would create a cycle since runtime
+  // transitively loads those same modules.
+  async function runPromise<A>(f: (service: S.Interface) => Effect.Effect<A, any>) {
+    const { runtime } = await import("@/effect/runtime")
     return runtime.runPromise(S.Service.use(f))
   }
 
