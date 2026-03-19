@@ -52,14 +52,11 @@ export const ProviderRoutes = lazy(() =>
         }
 
         const connected = await Provider.list()
-        // Trigger lazy model discovery for connected providers
-        await Promise.all(
-          Object.keys(connected).map((id) =>
-            Provider.discoverModels(id as any).catch((e) => {
-              log.warn("provider discovery error", { id, error: e })
-            }),
-          ),
-        )
+        const gitlab = ProviderID.make("gitlab")
+        if (connected[gitlab])
+          await Provider.discoverModels(gitlab).catch((e) => {
+            log.warn("provider discovery error", { id: "gitlab", error: e })
+          })
         const providers = Object.assign(
           mapValues(filteredProviders, (x) => Provider.fromModelsDevProvider(x)),
           connected,

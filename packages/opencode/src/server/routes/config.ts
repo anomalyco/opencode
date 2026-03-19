@@ -3,6 +3,7 @@ import { describeRoute, validator, resolver } from "hono-openapi"
 import z from "zod"
 import { Config } from "../../config/config"
 import { Provider } from "../../provider/provider"
+import { ProviderID } from "../../provider/schema"
 import { mapValues } from "remeda"
 import { errors } from "../error"
 import { Log } from "../../util/log"
@@ -83,14 +84,11 @@ export const ConfigRoutes = lazy(() =>
       async (c) => {
         using _ = log.time("providers")
         const providers = await Provider.list().then((x) => mapValues(x, (item) => item))
-        // Trigger lazy model discovery for connected providers
-        await Promise.all(
-          Object.keys(providers).map((id) =>
-            Provider.discoverModels(id as any).catch((e) => {
-              log.warn("config.providers discovery error", { id, error: e })
-            }),
-          ),
-        )
+        const gitlab = ProviderID.make("gitlab")
+        if (providers[gitlab])
+          await Provider.discoverModels(gitlab).catch((e) => {
+            log.warn("config.providers discovery error", { id: "gitlab", error: e })
+          })
         return c.json({
           providers: Object.values(providers),
           default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),
