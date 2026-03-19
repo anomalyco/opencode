@@ -31,11 +31,11 @@ import { HighlightsProvider } from "@/context/highlights"
 import { LicenseGate } from "@/components/license-gate"
 import Layout from "@/pages/layout"
 import DirectoryLayout from "@/pages/directory-layout"
+import Home from "@/pages/home"
+import Session from "@/pages/session"
 import { ErrorPage } from "./pages/error"
 import { Suspense, JSX } from "solid-js"
 
-const Home = lazy(() => import("@/pages/home"))
-const Session = lazy(() => import("@/pages/session"))
 const Loading = () => <div class="size-full" />
 
 function UiI18nBridge(props: ParentProps) {

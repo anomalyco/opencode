@@ -18,6 +18,8 @@ services:
     command:
       - bun
       - run
+      - --preload
+      - "@opentui/solid/preload"
       - /app/packages/opencode/src/index.ts
       - serve
       - --hostname
