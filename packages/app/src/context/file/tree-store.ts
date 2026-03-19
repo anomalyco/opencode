@@ -45,6 +45,8 @@ function createSemaphore(limit: number) {
   return { acquire, release }
 }
 
+const semaphore = createSemaphore(MAX_CONCURRENT)
+
 export function createFileTreeStore(options: TreeStoreOptions) {
   const [tree, setTree] = createStore<{
     node: Record<string, FileNode>
@@ -55,7 +57,6 @@ export function createFileTreeStore(options: TreeStoreOptions) {
   })
 
   const inflight = new Map<string, Promise<void>>()
-  const semaphore = createSemaphore(MAX_CONCURRENT)
 
   const reset = () => {
     inflight.clear()
