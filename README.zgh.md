@@ -111,7 +111,7 @@ I wuggar n umlan ɣef wamek ara tesseɣtiḍ OpenCode, [**rzu tutrawt nneɣ**](h
 
 ### Tiwisi
 
-Ig tebɣid ad tawsed deg OpenCode, ɣer [tutrawt n tiwisi](https://www.google.com/search?q=./CONTRIBUTING.md) qbel ad d-tazneḍ turaɡt n usnifel (pull request).
+Ig tebɣid ad tawsed deg OpenCode, ɣer [tutrawt n tiwisi](./CONTRIBUTING.md) qbel ad d-tazneḍ turaɡt n usnifel (pull request).
 
 ### Asku ɣef OpenCode
 
