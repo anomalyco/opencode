@@ -822,18 +822,8 @@ export namespace SessionPrompt {
         agent,
         abort,
         sessionID,
-        system,
-        messages: [
-          ...MessageV2.toModelMessages(msgs, model),
-          ...(isLastStep
-            ? [
-                {
-                  role: "assistant" as const,
-                  content: MAX_STEPS,
-                },
-              ]
-            : []),
-        ],
+        system: isLastStep ? [...system, MAX_STEPS] : system,
+        messages: MessageV2.toModelMessages(msgs, model),
         tools,
         model,
         toolChoice: format.type === "json_schema" ? "required" : undefined,

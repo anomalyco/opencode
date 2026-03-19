@@ -211,12 +211,7 @@ When constructing the summary, try to stick to this template:
         ...MessageV2.toModelMessages(messages, model, { stripMedia: true }),
         {
           role: "user",
-          content: [
-            {
-              type: "text",
-              text: promptText,
-            },
-          ],
+          content: promptText,
         },
       ],
       model,

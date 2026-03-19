@@ -100,6 +100,7 @@ div[data-tauri-decorum-tb] {
   border-radius: 999px;
   transform: translateX(-50%);
   animation: desktop-busy-pulse 1.2s ease-in-out infinite;
+  border: 1px solid rgba(255, 255, 255, 0.22);
   box-shadow: 0 0 12px currentColor;
 }
 
@@ -113,16 +114,16 @@ div[data-tauri-decorum-tb] {
 .desktop-busy-dot-b {
   width: 9px;
   height: 9px;
-  background: var(--color-warning-base);
-  color: var(--color-warning-base);
+  background: #f3e7b3;
+  color: #f3e7b3;
   animation-delay: 0.2s;
 }
 
 .desktop-busy-dot-c {
   width: 8px;
   height: 8px;
-  background: var(--color-text-muted);
-  color: var(--color-text-muted);
+  background: #b78cff;
+  color: #b78cff;
   animation-delay: 0.4s;
 }
 

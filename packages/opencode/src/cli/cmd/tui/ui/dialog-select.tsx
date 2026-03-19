@@ -314,7 +314,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                           if (index === -1) return
                           moveTo(index)
                         }}
-                        backgroundColor={active() ? (option.bg ?? theme.primary) : RGBA.fromInts(0, 0, 0, 0)}
+                        backgroundColor={active() ? (option.bg ?? theme.accent) : RGBA.fromInts(0, 0, 0, 0)}
                         paddingLeft={current() || option.gutter ? 1 : 3}
                         paddingRight={3}
                         gap={1}

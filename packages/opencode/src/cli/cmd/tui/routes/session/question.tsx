@@ -331,13 +331,13 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                       onMouseUp={() => selectOption()}
                     >
                       <box flexDirection="row">
-                        <box backgroundColor={active() ? theme.backgroundElement : undefined} paddingRight={1}>
-                          <text fg={active() ? tint(theme.textMuted, theme.secondary, 0.6) : theme.textMuted}>
+                        <box backgroundColor={active() ? theme.accent : undefined} paddingRight={1}>
+                          <text fg={active() ? selectedForeground(theme, theme.accent) : theme.textMuted}>
                             {`${i() + 1}.`}
                           </text>
                         </box>
-                        <box backgroundColor={active() ? theme.backgroundElement : undefined}>
-                          <text fg={active() ? theme.secondary : picked() ? theme.success : theme.text}>
+                        <box backgroundColor={active() ? theme.accent : undefined}>
+                          <text fg={active() ? selectedForeground(theme, theme.accent) : picked() ? theme.success : theme.text}>
                             {multi() ? `[${picked() ? "✓" : " "}] ${opt.label}` : opt.label}
                           </text>
                         </box>
@@ -360,13 +360,13 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                   onMouseUp={() => selectOption()}
                 >
                   <box flexDirection="row">
-                    <box backgroundColor={other() ? theme.backgroundElement : undefined} paddingRight={1}>
-                      <text fg={other() ? tint(theme.textMuted, theme.secondary, 0.6) : theme.textMuted}>
+                    <box backgroundColor={other() ? theme.accent : undefined} paddingRight={1}>
+                      <text fg={other() ? selectedForeground(theme, theme.accent) : theme.textMuted}>
                         {`${options().length + 1}.`}
                       </text>
                     </box>
-                    <box backgroundColor={other() ? theme.backgroundElement : undefined}>
-                      <text fg={other() ? theme.secondary : customPicked() ? theme.success : theme.text}>
+                    <box backgroundColor={other() ? theme.accent : undefined}>
+                      <text fg={other() ? selectedForeground(theme, theme.accent) : customPicked() ? theme.success : theme.text}>
                         {multi() ? `[${customPicked() ? "✓" : " "}] Type your own answer` : "Type your own answer"}
                       </text>
                     </box>
