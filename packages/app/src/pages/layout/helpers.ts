@@ -1,11 +1,17 @@
 import { getFilename } from "@opencode-ai/util/path"
 import { type Session } from "@opencode-ai/sdk/v2/client"
 
+type SessionStore = {
+  session?: Session[]
+  path: { directory: string }
+}
+
 export const workspaceKey = (directory: string) => {
-  const drive = directory.match(/^([A-Za-z]:)[\\/]+$/)
-  if (drive) return `${drive[1]}${directory.includes("\\") ? "\\" : "/"}`
-  if (/^[\\/]+$/.test(directory)) return directory.includes("\\") ? "\\" : "/"
-  return directory.replace(/[\\/]+$/, "")
+  const value = directory.replaceAll("\\", "/")
+  const drive = value.match(/^([A-Za-z]:)\/+$/)
+  if (drive) return `${drive[1]}/`
+  if (/^\/+$/i.test(value)) return "/"
+  return value.replace(/\/+$/, "")
 }
 
 function sortSessions(now: number) {
@@ -25,13 +31,13 @@ function sortSessions(now: number) {
 const isRootVisibleSession = (session: Session, directory: string) =>
   workspaceKey(session.directory) === workspaceKey(directory) && !session.parentID && !session.time?.archived
 
-export const sortedRootSessions = (store: { session: Session[]; path: { directory: string } }, now: number) =>
-  store.session.filter((session) => isRootVisibleSession(session, store.path.directory)).sort(sortSessions(now))
+const roots = (store: SessionStore) =>
+  (store.session ?? []).filter((session) => isRootVisibleSession(session, store.path.directory))
 
-export const latestRootSession = (stores: { session: Session[]; path: { directory: string } }[], now: number) =>
-  stores
-    .flatMap((store) => store.session.filter((session) => isRootVisibleSession(session, store.path.directory)))
-    .sort(sortSessions(now))[0]
+export const sortedRootSessions = (store: SessionStore, now: number) => roots(store).sort(sortSessions(now))
+
+export const latestRootSession = (stores: SessionStore[], now: number) =>
+  stores.flatMap(roots).sort(sortSessions(now))[0]
 
 export function hasProjectPermissions<T>(
   request: Record<string, T[] | undefined>,
@@ -40,9 +46,9 @@ export function hasProjectPermissions<T>(
   return Object.values(request).some((list) => list?.some(include))
 }
 
-export const childMapByParent = (sessions: Session[]) => {
+export const childMapByParent = (sessions: Session[] | undefined) => {
   const map = new Map<string, string[]>()
-  for (const session of sessions) {
+  for (const session of sessions ?? []) {
     if (!session.parentID) continue
     const existing = map.get(session.parentID)
     if (existing) {
