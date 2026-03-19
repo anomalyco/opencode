@@ -6,6 +6,7 @@ import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { SettingsGeneral } from "./settings-general"
 import { SettingsKeybinds } from "./settings-keybinds"
+import { SettingsPricing } from "./settings-pricing"
 import { SettingsProviders } from "./settings-providers"
 import { SettingsModels } from "./settings-models"
 
@@ -30,6 +31,10 @@ export const DialogSettings: Component = () => {
                     <Tabs.Trigger value="shortcuts">
                       <Icon name="keyboard" />
                       {language.t("settings.tab.shortcuts")}
+                    </Tabs.Trigger>
+                    <Tabs.Trigger value="pricing">
+                      <Icon name="checklist" />
+                      {language.t("settings.tab.pricing")}
                     </Tabs.Trigger>
                   </div>
                 </div>
@@ -60,6 +65,9 @@ export const DialogSettings: Component = () => {
         </Tabs.Content>
         <Tabs.Content value="shortcuts" class="no-scrollbar">
           <SettingsKeybinds />
+        </Tabs.Content>
+        <Tabs.Content value="pricing" class="no-scrollbar">
+          <SettingsPricing />
         </Tabs.Content>
         <Tabs.Content value="providers" class="no-scrollbar">
           <SettingsProviders />

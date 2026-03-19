@@ -16,6 +16,7 @@ import { getFilename } from "@opencode-ai/util/path"
 import { type Message, type Session, type TextPart } from "@opencode-ai/sdk/v2/client"
 import { For, Match, Show, Switch, createMemo, onCleanup, type Accessor, type JSX } from "solid-js"
 import { agentColor } from "@/utils/agent"
+import { sessionFamilyRootID, sessionTargetID } from "./helpers"
 
 const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
@@ -111,14 +112,24 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
     const agent = sessionStore.agent.find((a) => a.name === user.agent)
     return agentColor(user.agent, agent?.color)
   })
+  const targetID = createMemo(() => sessionTargetID(props.session))
+  const targetSession = createMemo(() => sessionStore.session.find((item) => item.id === targetID()) ?? props.session)
 
   const hoverMessages = createMemo(() =>
-    sessionStore.message[props.session.id]?.filter((message) => message.role === "user"),
+    sessionStore.message[targetSession().id]?.filter((message) => message.role === "user"),
   )
-  const hoverReady = createMemo(() => sessionStore.message[props.session.id] !== undefined)
+  const hoverReady = createMemo(() => sessionStore.message[targetSession().id] !== undefined)
   const hoverAllowed = createMemo(() => !props.mobile && props.sidebarExpanded())
   const hoverEnabled = createMemo(() => (props.popover ?? true) && hoverAllowed())
   const isActive = createMemo(() => props.session.id === params.id)
+  const isFamilyActive = createMemo(() => {
+    const id = params.id
+    if (!id) return false
+    if (id === targetID()) return true
+    const current = sessionStore.session.find((item) => item.id === id)
+    if (!current) return false
+    return sessionFamilyRootID(current) === props.session.id
+  })
 
   const hoverPrefetch = { current: undefined as ReturnType<typeof setTimeout> | undefined }
   const cancelHoverPrefetch = () => {
@@ -130,7 +141,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
     if (hoverPrefetch.current !== undefined) return
     hoverPrefetch.current = setTimeout(() => {
       hoverPrefetch.current = undefined
-      props.prefetchSession(props.session)
+      props.prefetchSession(targetSession())
     }, 200)
   }
 
@@ -144,13 +155,13 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
 
   const item = (
     <A
-      href={`${props.slug}/session/${props.session.id}`}
+      href={`${props.slug}/session/${targetID()}`}
       class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none transition-[padding] ${props.mobile ? "pr-7" : ""} group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7 ${props.dense ? "py-0.5" : "py-1"}`}
       onPointerEnter={scheduleHoverPrefetch}
       onPointerLeave={cancelHoverPrefetch}
       onMouseEnter={scheduleHoverPrefetch}
       onMouseLeave={cancelHoverPrefetch}
-      onFocus={() => props.prefetchSession(props.session, "high")}
+      onFocus={() => props.prefetchSession(targetSession(), "high")}
       onClick={() => {
         props.setHoverSession(undefined)
         if (layout.sidebar.opened()) return
@@ -196,6 +207,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
       data-session-id={props.session.id}
       class="group/session relative w-full rounded-md cursor-default transition-colors pl-2 pr-3
              hover:bg-surface-raised-base-hover [&:has(:focus-visible)]:bg-surface-raised-base-hover has-[[data-expanded]]:bg-surface-raised-base-hover has-[.active]:bg-surface-base-active"
+      classList={{ active: isFamilyActive() }}
     >
       <Show
         when={hoverEnabled()}
@@ -227,11 +239,8 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
                 getLabel={messageLabel}
                 onMessageSelect={(message) => {
                   if (!isActive()) {
-                    layout.pendingMessage.set(
-                      `${base64Encode(props.session.directory)}/${props.session.id}`,
-                      message.id,
-                    )
-                    navigate(`${props.slug}/session/${props.session.id}`)
+                    layout.pendingMessage.set(`${base64Encode(props.session.directory)}/${targetID()}`, message.id)
+                    navigate(`${props.slug}/session/${targetID()}`)
                     return
                   }
                   window.history.replaceState(null, "", `#message-${message.id}`)

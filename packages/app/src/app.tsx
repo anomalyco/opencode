@@ -16,6 +16,7 @@ import { LayoutProvider } from "@/context/layout"
 import { GlobalSDKProvider } from "@/context/global-sdk"
 import { normalizeServerUrl, ServerProvider, useServer } from "@/context/server"
 import { SettingsProvider } from "@/context/settings"
+import { LicenseProvider, useLicense } from "@/context/license"
 import { TerminalProvider } from "@/context/terminal"
 import { PromptProvider } from "@/context/prompt"
 import { FileProvider } from "@/context/file"
@@ -27,6 +28,7 @@ import { CommandProvider } from "@/context/command"
 import { LanguageProvider, useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { HighlightsProvider } from "@/context/highlights"
+import { LicenseGate } from "@/components/license-gate"
 import Layout from "@/pages/layout"
 import DirectoryLayout from "@/pages/directory-layout"
 import { ErrorPage } from "./pages/error"
@@ -43,7 +45,12 @@ function UiI18nBridge(props: ParentProps) {
 
 declare global {
   interface Window {
-    __OPENCODE__?: { updaterEnabled?: boolean; serverPassword?: string; deepLinks?: string[] }
+    __OPENCODE__?: {
+      updaterEnabled?: boolean
+      serverPassword?: string
+      deepLinks?: string[]
+      licenseUrl?: string
+    }
   }
 }
 
@@ -84,6 +91,11 @@ function ServerKey(props: ParentProps) {
   )
 }
 
+function LicenseKey(props: ParentProps) {
+  const license = useLicense()
+  return <Show when={license.ready() && license.licensed()} fallback={<LicenseGate />}>{props.children}</Show>
+}
+
 export function AppInterface(props: { defaultUrl?: string; children?: JSX.Element; isSidecar?: boolean }) {
   const platform = usePlatform()
 
@@ -113,22 +125,26 @@ export function AppInterface(props: { defaultUrl?: string; children?: JSX.Elemen
             <Router
               root={(routerProps) => (
                 <SettingsProvider>
-                  <PermissionProvider>
-                    <LayoutProvider>
-                      <NotificationProvider>
-                        <ModelsProvider>
-                          <CommandProvider>
-                            <HighlightsProvider>
-                              <Layout>
-                                {props.children}
-                                {routerProps.children}
-                              </Layout>
-                            </HighlightsProvider>
-                          </CommandProvider>
-                        </ModelsProvider>
-                      </NotificationProvider>
-                    </LayoutProvider>
-                  </PermissionProvider>
+                  <LicenseProvider>
+                    <LicenseKey>
+                      <PermissionProvider>
+                        <LayoutProvider>
+                          <NotificationProvider>
+                            <ModelsProvider>
+                              <CommandProvider>
+                                <HighlightsProvider>
+                                  <Layout>
+                                    {props.children}
+                                    {routerProps.children}
+                                  </Layout>
+                                </HighlightsProvider>
+                              </CommandProvider>
+                            </ModelsProvider>
+                          </NotificationProvider>
+                        </LayoutProvider>
+                      </PermissionProvider>
+                    </LicenseKey>
+                  </LicenseProvider>
                 </SettingsProvider>
               )}
             >
