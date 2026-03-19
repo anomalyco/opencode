@@ -40,7 +40,7 @@ function lookup(_key: string) {
     Layer.fresh(PermissionNext.layer),
     Layer.fresh(ProviderAuth.defaultLayer),
     Layer.fresh(FileWatcher.layer).pipe(Layer.orDie),
-    Layer.fresh(Vcs.layer),
+    Layer.fresh(Vcs.defaultLayer),
     Layer.fresh(FileTime.layer).pipe(Layer.orDie),
     Layer.fresh(Format.layer),
     Layer.fresh(File.layer),

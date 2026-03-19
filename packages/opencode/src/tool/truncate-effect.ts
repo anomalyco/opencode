@@ -1,7 +1,8 @@
-import { NodeFileSystem, NodePath } from "@effect/platform-node"
-import { Cause, Duration, Effect, FileSystem, Layer, Schedule, ServiceMap } from "effect"
+import { NodePath } from "@effect/platform-node"
+import { Cause, Duration, Effect, Layer, Schedule, ServiceMap } from "effect"
 import path from "path"
 import type { Agent } from "../agent/agent"
+import { AppFileSystem } from "@/filesystem"
 import { PermissionNext } from "../permission"
 import { Identifier } from "../id/id"
 import { Log } from "../util/log"
@@ -44,7 +45,7 @@ export namespace TruncateEffect {
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem
+      const fs = yield* AppFileSystem.Service
 
       const cleanup = Effect.fn("Truncate.cleanup")(function* () {
         const cutoff = Identifier.timestamp(Identifier.create("tool", false, Date.now() - Duration.toMillis(RETENTION)))
@@ -101,7 +102,7 @@ export namespace TruncateEffect {
         const preview = out.join("\n")
         const file = path.join(TRUNCATION_DIR, ToolID.ascending())
 
-        yield* fs.makeDirectory(TRUNCATION_DIR, { recursive: true }).pipe(Effect.orDie)
+        yield* fs.ensureDir(TRUNCATION_DIR).pipe(Effect.orDie)
         yield* fs.writeFileString(file, text).pipe(Effect.orDie)
 
         const hint = hasTaskTool(agent)
@@ -132,5 +133,5 @@ export namespace TruncateEffect {
     }),
   )
 
-  export const defaultLayer = layer.pipe(Layer.provide(NodeFileSystem.layer), Layer.provide(NodePath.layer))
+  export const defaultLayer = layer.pipe(Layer.provide(AppFileSystem.defaultLayer), Layer.provide(NodePath.layer))
 }

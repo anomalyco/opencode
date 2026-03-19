@@ -10,7 +10,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { InstanceContext } from "@/effect/instance-context"
 import { Flag } from "@/flag/flag"
 import { Instance } from "@/project/instance"
-import { git } from "@/util/git"
+import { Git } from "@/git"
 import { lazy } from "@/util/lazy"
 import { Config } from "../config/config"
 import { FileIgnore } from "./ignore"
@@ -49,6 +49,13 @@ export namespace FileWatcher {
     if (process.platform === "win32") return "windows"
     if (process.platform === "darwin") return "fs-events"
     if (process.platform === "linux") return "inotify"
+  }
+
+  function protecteds(dir: string) {
+    return Protected.paths().filter((item) => {
+      const rel = path.relative(dir, item)
+      return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel)
+    })
   }
 
   export const hasNativeBinding = () => !!watcher()
@@ -105,12 +112,12 @@ export namespace FileWatcher {
       const cfgIgnores = cfg.watcher?.ignore ?? []
 
       if (yield* Flag.OPENCODE_EXPERIMENTAL_FILEWATCHER) {
-        yield* subscribe(instance.directory, [...FileIgnore.PATTERNS, ...cfgIgnores, ...Protected.paths()])
+        yield* subscribe(instance.directory, [...FileIgnore.PATTERNS, ...cfgIgnores, ...protecteds(instance.directory)])
       }
 
       if (instance.project.vcs === "git") {
         const result = yield* Effect.promise(() =>
-          git(["rev-parse", "--git-dir"], {
+          Git.run(["rev-parse", "--git-dir"], {
             cwd: instance.project.worktree,
           }),
         )
