@@ -42,32 +42,56 @@ export function Parallel() {
       .finally(() => setLoading(false))
   })
 
-  // Poll for plan updates every 3s (Bus is server-side only)
-  // Use EventSource instead of polling
+  // Poll for plan updates every 3s (SSE not available in Bun/TUI)
   createEffect(() => {
     const id = planID()
     if (!id) return
 
-    const es = new EventSource(`${sdk.url}/parallel/${id}/events`, {
-      fetch: (url: string | URL) => sdk.fetch(url),
-    } as any)
+    // Try SSE first, fall back to polling
+    let es: any = null
+    let pollTimer: ReturnType<typeof setInterval> | null = null
 
-    es.addEventListener("message", (e) => {
-      try {
-        const data = JSON.parse(e.data)
-        if (data.type === "parallel.plan.updated") {
-          parallel.setPlan(data.payload.plan)
-        }
-      } catch {
-        // ignore parse errors
+    const handleUpdate = (data: any) => {
+      if (data.type === "parallel.plan.updated") {
+        parallel.setPlan(data.payload.plan)
       }
-    })
+    }
 
-    es.addEventListener("error", () => {
-      // Connection error, will retry automatically
-    })
+    // Check if EventSource is available (browser) or use polling (Bun/TUI)
+    if (typeof EventSource !== "undefined") {
+      try {
+        es = new EventSource(`${sdk.url}/parallel/${id}/events`)
+        es.addEventListener("message", (e: MessageEvent) => {
+          try {
+            handleUpdate(JSON.parse(e.data))
+          } catch {}
+        })
+        es.addEventListener("error", () => {
+          // Will reconnect automatically
+        })
+      } catch {
+        // Fall through to polling
+        es = null
+      }
+    }
 
-    onCleanup(() => es.close())
+    // Fallback polling if SSE failed or unavailable
+    if (!es) {
+      pollTimer = setInterval(async () => {
+        try {
+          const res = await sdk.fetch(`${sdk.url}/parallel/${id}`)
+          if (res.ok) {
+            const plan = await res.json()
+            parallel.setPlan(plan)
+          }
+        } catch {}
+      }, 3000)
+    }
+
+    onCleanup(() => {
+      if (es) es.close()
+      if (pollTimer) clearInterval(pollTimer)
+    })
   })
 
   // Auto-switch to build agent when plan completes successfully

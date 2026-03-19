@@ -180,12 +180,20 @@ export namespace WorkerManager {
         const updates = Array.from(pendingUpdates.entries())
         pendingUpdates.clear()
 
+        // Deduplicate by keeping only the last update per subtask
+        const uniqueUpdates = new Map(updates)
+
         await Promise.all(
-          updates.map(async ([subtaskID, update]) => {
-            if (update.status === "done") {
-              await updateWorker(planID, subtaskID, { status: "done", diffStat: update.diffStat })
-            } else {
-              await updateWorker(planID, subtaskID, { status: "failed", error: update.error })
+          Array.from(uniqueUpdates.entries()).map(async ([subtaskID, update]) => {
+            try {
+              if (update.status === "done") {
+                await updateWorker(planID, subtaskID, { status: "done", diffStat: update.diffStat })
+              } else {
+                await updateWorker(planID, subtaskID, { status: "failed", error: update.error })
+              }
+            } catch (err) {
+              // If update fails (e.g., already in target state), log but don't fail
+              log.warn("worker update skipped", { planID, subtaskID, error: err })
             }
           }),
         )
@@ -279,7 +287,8 @@ export namespace WorkerManager {
             const minutes = Math.round(timeoutMs / 60000)
             pending.delete(sessionID)
             startTimes.delete(sessionID)
-            await updateWorker(planID, worker.subtaskID, {
+            // Queue timeout update instead of calling directly
+            pendingUpdates.set(worker.subtaskID, {
               status: "failed",
               error: `Worker exceeded timeout (${minutes} minutes)`,
             })
@@ -301,20 +310,26 @@ export namespace WorkerManager {
               pending.delete(sessionID)
               startTimes.delete(sessionID)
               const diffStat = await collectDiffStat(worker.worktreeDir)
-              await updateWorker(planID, worker.subtaskID, { status: "done", diffStat })
+              // Queue completion instead of calling updateWorker directly
+              pendingUpdates.set(worker.subtaskID, { status: "done", diffStat })
             }
           } catch {
             pending.delete(sessionID)
             startTimes.delete(sessionID)
-            await updateWorker(planID, worker.subtaskID, {
+            // Queue failure instead of calling directly
+            pendingUpdates.set(worker.subtaskID, {
               status: "failed",
               error: "Worker session errored",
             })
           }
         }
 
-        if (pending.size === 0) {
+        // Process any queued updates
+        if (pendingUpdates.size > 0) {
           await processBatch()
+        }
+
+        if (pending.size === 0) {
           cleanup()
           resolve()
         }
