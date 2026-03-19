@@ -85,23 +85,34 @@ export namespace MergePipeline {
   }
 
   async function mergeBranch(planID: PlanID, branch: string, cwd: string): Promise<"clean" | "resolved" | "failed"> {
+    // Get plan and worker info for better merge message
+    const plan = await PlanStore.get(planID)
+    const worker = plan.workers.find((w) => w.branch === branch)
+    const subtask = worker ? plan.subtasks.find((s) => s.id === worker.subtaskID) : undefined
+
+    // Build descriptive merge message
+    const subtaskTitle = subtask?.title ?? "Unknown subtask"
+    const taskPreview = plan.task.slice(0, 60)
+    const mergeMessage = `merge: ${subtaskTitle}\n\nTask: ${taskPreview}\nWorker: ${branch}\nPlan: ${planID.slice(0, 12)}`
+
     log.info("merge command", {
       planID,
       branch,
-      command: `git merge --no-ff -m "merge: parallel worker ${branch}" ${branch}`,
+      subtaskTitle,
+      command: `git merge --no-ff -m "${mergeMessage.split("\n")[0]}" ${branch}`,
     })
-    const merge = await git(["merge", "--no-ff", "-m", `merge: parallel worker ${branch}`, branch], { cwd })
+    const merge = await git(["merge", "--no-ff", "-m", mergeMessage, branch], { cwd })
 
     if (merge.exitCode === 0) {
-      log.info("merge clean", { planID, branch, exitCode: merge.exitCode })
+      log.info("merge clean", { planID, branch, subtaskTitle, exitCode: merge.exitCode })
       return "clean"
     }
 
-    log.info("merge needs resolution", { planID, branch, exitCode: merge.exitCode })
+    log.info("merge needs resolution", { planID, branch, subtaskTitle, exitCode: merge.exitCode })
     const resolved = await resolveConflicts(planID, branch, cwd)
     if (resolved) return "resolved"
 
-    log.error("merge resolution failed", { planID, branch })
+    log.error("merge resolution failed", { planID, branch, subtaskTitle })
     await git(["merge", "--abort"], { cwd })
     return "failed"
   }
