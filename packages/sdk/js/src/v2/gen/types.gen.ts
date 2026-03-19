@@ -2084,6 +2084,49 @@ export type AuthSetResponses = {
 
 export type AuthSetResponse = AuthSetResponses[keyof AuthSetResponses]
 
+export type AuthWellknownListData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/auth/wellknown"
+}
+
+export type AuthWellknownListResponses = {
+  /**
+   * List of well-known URLs
+   */
+  200: Array<string>
+}
+
+export type AuthWellknownListResponse = AuthWellknownListResponses[keyof AuthWellknownListResponses]
+
+export type AuthWellknownRefreshData = {
+  body?: {
+    url: string
+  }
+  path?: never
+  query?: never
+  url: "/auth/wellknown"
+}
+
+export type AuthWellknownRefreshErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type AuthWellknownRefreshError = AuthWellknownRefreshErrors[keyof AuthWellknownRefreshErrors]
+
+export type AuthWellknownRefreshResponses = {
+  /**
+   * Successfully authenticated
+   */
+  200: boolean
+}
+
+export type AuthWellknownRefreshResponse = AuthWellknownRefreshResponses[keyof AuthWellknownRefreshResponses]
+
 export type ProjectListData = {
   body?: never
   path?: never

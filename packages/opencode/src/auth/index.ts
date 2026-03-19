@@ -54,4 +54,46 @@ export namespace Auth {
   export async function remove(key: string) {
     return runPromise((service) => service.remove(key))
   }
+
+  export async function urls(): Promise<string[]> {
+    const data = await all()
+    return Object.entries(data)
+      .filter(([, value]) => value.type === "wellknown")
+      .map(([key]) => key)
+  }
+
+  const WellKnownConfig = z.object({
+    auth: z.object({
+      command: z.array(z.string()),
+      env: z.string(),
+    }),
+  })
+
+  export async function wellknown(url: string) {
+    const normalized = url.replace(/\/+$/, "")
+    const response = await fetch(`${normalized}/.well-known/opencode`)
+    if (!response.ok) {
+      throw new Error(`failed to fetch well-known config from ${normalized}: ${response.status}`)
+    }
+    const parsed = WellKnownConfig.safeParse(await response.json())
+    if (!parsed.success) {
+      throw new Error(`invalid well-known config from ${normalized}: ${parsed.error.message}`)
+    }
+    const proc = Bun.spawn({
+      cmd: parsed.data.auth.command,
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const exit = await proc.exited
+    if (exit !== 0) {
+      const stderr = await new Response(proc.stderr).text()
+      throw new Error(`auth command failed with exit code ${exit}${stderr ? ": " + stderr.trim() : ""}`)
+    }
+    const token = await new Response(proc.stdout).text()
+    await set(normalized, {
+      type: "wellknown",
+      key: parsed.data.auth.env,
+      token: token.trim(),
+    })
+  }
 }

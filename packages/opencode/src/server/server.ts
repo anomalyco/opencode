@@ -192,6 +192,57 @@ export namespace Server {
           return c.json(true)
         },
       )
+      .get(
+        "/auth/wellknown",
+        describeRoute({
+          summary: "List well-known auth URLs",
+          description: "Get a list of all well-known authentication URLs stored in credentials.",
+          operationId: "auth.wellknown.list",
+          responses: {
+            200: {
+              description: "List of well-known URLs",
+              content: {
+                "application/json": {
+                  schema: resolver(z.array(z.string())),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          return c.json(await Auth.urls())
+        },
+      )
+      .post(
+        "/auth/wellknown",
+        describeRoute({
+          summary: "Authenticate with well-known URL",
+          description:
+            "Fetch a well-known config from the given URL, run its auth command, and store the resulting token.",
+          operationId: "auth.wellknown.refresh",
+          responses: {
+            200: {
+              description: "Successfully authenticated",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+            ...errors(400),
+          },
+        }),
+        validator(
+          "json",
+          z.object({
+            url: z.string(),
+          }),
+        ),
+        async (c) => {
+          await Auth.wellknown(c.req.valid("json").url)
+          return c.json(true)
+        },
+      )
       .use(async (c, next) => {
         if (c.req.path === "/log") return next()
         const rawWorkspaceID = c.req.query("workspace") || c.req.header("x-opencode-workspace")

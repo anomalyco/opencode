@@ -13,6 +13,9 @@ import type {
   AuthRemoveResponses,
   AuthSetErrors,
   AuthSetResponses,
+  AuthWellknownListResponses,
+  AuthWellknownRefreshErrors,
+  AuthWellknownRefreshResponses,
   CommandListResponses,
   Config as Config3,
   ConfigGetResponses,
@@ -309,6 +312,48 @@ export class Global extends HeyApiClient {
   }
 }
 
+export class Wellknown extends HeyApiClient {
+  /**
+   * List well-known auth URLs
+   *
+   * Get a list of all well-known authentication URLs stored in credentials.
+   */
+  public list<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<AuthWellknownListResponses, unknown, ThrowOnError>({
+      url: "/auth/wellknown",
+      ...options,
+    })
+  }
+
+  /**
+   * Authenticate with well-known URL
+   *
+   * Fetch a well-known config from the given URL, run its auth command, and store the resulting token.
+   */
+  public refresh<ThrowOnError extends boolean = false>(
+    parameters?: {
+      url?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "url" }] }])
+    return (options?.client ?? this.client).post<
+      AuthWellknownRefreshResponses,
+      AuthWellknownRefreshErrors,
+      ThrowOnError
+    >({
+      url: "/auth/wellknown",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Auth extends HeyApiClient {
   /**
    * Remove auth credentials
@@ -362,6 +407,11 @@ export class Auth extends HeyApiClient {
         ...params.headers,
       },
     })
+  }
+
+  private _wellknown?: Wellknown
+  get wellknown(): Wellknown {
+    return (this._wellknown ??= new Wellknown({ client: this.client }))
   }
 }
 

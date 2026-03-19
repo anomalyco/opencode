@@ -583,6 +583,29 @@ export function Prompt(props: PromptProps) {
     // Filter out text parts (pasted content) since they're now expanded inline
     const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text")
 
+    // Handle /auth and /auth <url> commands
+    if (inputText === "/auth" || inputText.startsWith("/auth ")) {
+      const url = inputText.slice("/auth".length).trim()
+      input.extmarks.clear()
+      setStore("prompt", { input: "", parts: [] })
+      setStore("extmarkToPartIndex", new Map())
+      input.clear()
+      if (!url) {
+        command.trigger("auth.login")
+        return
+      }
+      toast.show({ message: "Authenticating...", variant: "info" })
+      const { error } = await sdk.client.auth.wellknown.refresh({ url })
+      if (error) {
+        toast.show({ message: "Authentication failed", variant: "error", duration: 4000 })
+        return
+      }
+      await sdk.client.instance.dispose()
+      await sync.bootstrap()
+      toast.show({ message: "Authenticated with " + url, variant: "success", duration: 3000 })
+      return
+    }
+
     // Capture mode before it gets reset
     const currentMode = store.mode
     const variant = local.model.variant.current()
