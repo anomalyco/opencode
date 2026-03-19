@@ -4,6 +4,7 @@ import { promptSelector } from "./selectors"
 import { createSdk, dirSlug, getWorktree, sessionPath } from "./utils"
 
 export const settingsKey = "settings.v3"
+export const licenseKey = "opencode.global.dat:license"
 
 type TestFixtures = {
   sdk: ReturnType<typeof createSdk>
@@ -79,6 +80,19 @@ async function seedStorage(page: Page, input: { directory: string; extra?: strin
         recent: [{ providerID: "opencode", modelID: "big-pickle" }],
         user: [],
         variant: {},
+      }),
+    )
+    localStorage.setItem(
+      "opencode.global.dat:license",
+      JSON.stringify({
+        installID: "e2e-install",
+        state: "active",
+        maskedKey: "E2E-XXXX-1234",
+        plan: "test",
+        lastValidatedAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString(),
+        graceUntil: new Date(Date.now() + 1000 * 60 * 60 * 24 * 37).toISOString(),
+        nextCheckAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString(),
       }),
     )
   })

@@ -4,6 +4,8 @@ import {
   settingsColorSchemeSelector,
   settingsFontSelector,
   settingsLanguageSelectSelector,
+  settingsLicenseKeySelector,
+  settingsLicenseSubmitSelector,
   settingsNotificationsAgentSelector,
   settingsNotificationsErrorsSelector,
   settingsNotificationsPermissionsSelector,
@@ -21,6 +23,10 @@ test("smoke settings dialog opens, switches tabs, closes", async ({ page, gotoSe
   await dialog.getByRole("tab", { name: "Shortcuts" }).click()
   await expect(dialog.getByRole("button", { name: "Reset to defaults" })).toBeVisible()
   await expect(dialog.getByPlaceholder("Search shortcuts")).toBeVisible()
+
+  await dialog.getByRole("tab", { name: "Pricing" }).click()
+  await expect(dialog.locator(settingsLicenseKeySelector)).toBeVisible()
+  await expect(dialog.locator(settingsLicenseSubmitSelector)).toBeVisible()
 
   await closeDialog(page, dialog)
 })
@@ -48,6 +54,20 @@ test("changing language updates settings labels", async ({ page, gotoSession }) 
   await select.locator('[data-slot="select-select-trigger"]').click()
   await page.locator('[data-slot="select-select-item"]').filter({ hasText: "English" }).click()
   await expect(heading).toHaveText("General")
+})
+
+test("settings select stays open until the user picks an option", async ({ page, gotoSession }) => {
+  await gotoSession()
+
+  const dialog = await openSettings(page)
+  const select = dialog.locator(settingsLanguageSelectSelector)
+  await expect(select).toBeVisible()
+
+  await select.locator('[data-slot="select-select-trigger"]').click()
+
+  const items = page.locator('[data-slot="select-select-item"]')
+  await expect(items.filter({ hasText: "Deutsch" }).first()).toBeVisible()
+  await expect(items.filter({ hasText: "English" }).first()).toBeVisible()
 })
 
 test("changing color scheme persists in localStorage", async ({ page, gotoSession }) => {
