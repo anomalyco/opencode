@@ -148,6 +148,12 @@ export namespace AccountEffect {
           mapAccountServiceError("HTTP request failed"),
         )
 
+      const executeEffect = <E>(request: Effect.Effect<HttpClientRequest.HttpClientRequest, E>) =>
+        request.pipe(
+          Effect.flatMap((req) => http.execute(req)),
+          mapAccountServiceError("HTTP request failed"),
+        )
+
       const resolveToken = Effect.fnUntraced(function* (row: AccountRow) {
         const now = yield* Clock.currentTimeMillis
         if (row.token_expiry && row.token_expiry > now) return row.access_token
@@ -290,7 +296,7 @@ export namespace AccountEffect {
       })
 
       const poll = Effect.fn("Account.poll")(function* (input: Login) {
-        const response = yield* executeEffectOk(
+        const response = yield* executeEffect(
           HttpClientRequest.post(`${input.server}/auth/device/token`).pipe(
             HttpClientRequest.acceptJson,
             HttpClientRequest.schemaBodyJson(DeviceTokenRequest)(
