@@ -130,6 +130,7 @@ export namespace WorkerManager {
 
   export async function waitAll(planID: PlanID, abort: AbortSignal): Promise<void> {
     const plan = await PlanStore.get(planID)
+    const cfg = await Config.get()
     const running = plan.workers.filter((w) => w.status === "running")
 
     if (running.length === 0) {
@@ -139,13 +140,20 @@ export namespace WorkerManager {
 
     log.info("waiting for workers", { planID, count: running.length })
 
+    const defaultTimeoutMs = 30 * 60 * 1000 // 30 minutes
+    const timeoutMs = cfg.parallel?.worker_timeout_ms ?? defaultTimeoutMs
+    const startTimes = new Map<string, number>()
+
     // Build a map of sessionID -> worker for fast lookup
-    const sessionToWorker = new Map<string, { subtaskID: SubtaskID; worktreeDir: string }>()
+    const sessionToWorker = new Map<string, { subtaskID: SubtaskID; worktreeDir: string; startTime: number }>()
     for (const worker of running) {
       if (worker.sessionID && worker.worktreeDir) {
+        const startTime = Date.now()
+        startTimes.set(worker.sessionID, startTime)
         sessionToWorker.set(worker.sessionID, {
           subtaskID: worker.subtaskID,
           worktreeDir: worker.worktreeDir,
+          startTime,
         })
       }
     }
@@ -179,6 +187,7 @@ export namespace WorkerManager {
         if (!worker) return
 
         pending.delete(sessionID)
+        startTimes.delete(sessionID)
         log.info("worker completed", { planID, subtaskID: worker.subtaskID })
 
         try {
@@ -199,6 +208,7 @@ export namespace WorkerManager {
       const cleanup = () => {
         GlobalBus.off("event", handler)
         if (fallbackTimer) clearInterval(fallbackTimer)
+        startTimes.clear()
       }
 
       GlobalBus.on("event", handler)
@@ -215,6 +225,20 @@ export namespace WorkerManager {
           const worker = sessionToWorker.get(sessionID)
           if (!worker) continue
 
+          // Check for timeout
+          const elapsed = Date.now() - worker.startTime
+          if (elapsed > timeoutMs) {
+            const minutes = Math.round(timeoutMs / 60000)
+            pending.delete(sessionID)
+            startTimes.delete(sessionID)
+            await updateWorker(planID, worker.subtaskID, {
+              status: "failed",
+              error: `Worker exceeded timeout (${minutes} minutes)`,
+            })
+            log.error("worker timed out", { planID, subtaskID: worker.subtaskID, elapsed })
+            continue
+          }
+
           try {
             const idle = await Instance.provide({
               directory: worker.worktreeDir,
@@ -227,11 +251,13 @@ export namespace WorkerManager {
 
             if (idle) {
               pending.delete(sessionID)
+              startTimes.delete(sessionID)
               const diffStat = await collectDiffStat(worker.worktreeDir)
               await updateWorker(planID, worker.subtaskID, { status: "done", diffStat })
             }
           } catch {
             pending.delete(sessionID)
+            startTimes.delete(sessionID)
             await updateWorker(planID, worker.subtaskID, {
               status: "failed",
               error: "Worker session errored",
