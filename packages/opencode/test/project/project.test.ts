@@ -10,48 +10,45 @@ import { ProjectID } from "../../src/project/schema"
 
 Log.init({ print: false })
 
-const gitModule = await import("../../src/git")
-const originalGit = gitModule.Git.run
+const gitModule = await import("../../src/util/git")
+const originalGit = gitModule.git
 
 type Mode = "none" | "rev-list-fail" | "top-fail" | "common-dir-fail"
 let mode: Mode = "none"
 
-mock.module("../../src/git", () => ({
-  Git: {
-    ...gitModule.Git,
-    run: (args: string[], opts: { cwd: string; env?: Record<string, string> }) => {
-      const cmd = ["git", ...args].join(" ")
-      if (
-        mode === "rev-list-fail" &&
-        cmd.includes("git rev-list") &&
-        cmd.includes("--max-parents=0") &&
-        cmd.includes("HEAD")
-      ) {
-        return Promise.resolve({
-          exitCode: 128,
-          text: () => "",
-          stdout: Buffer.from(""),
-          stderr: Buffer.from("fatal"),
-        })
-      }
-      if (mode === "top-fail" && cmd.includes("git rev-parse") && cmd.includes("--show-toplevel")) {
-        return Promise.resolve({
-          exitCode: 128,
-          text: () => "",
-          stdout: Buffer.from(""),
-          stderr: Buffer.from("fatal"),
-        })
-      }
-      if (mode === "common-dir-fail" && cmd.includes("git rev-parse") && cmd.includes("--git-common-dir")) {
-        return Promise.resolve({
-          exitCode: 128,
-          text: () => "",
-          stdout: Buffer.from(""),
-          stderr: Buffer.from("fatal"),
-        })
-      }
-      return originalGit(args, opts)
-    },
+mock.module("../../src/util/git", () => ({
+  git: (args: string[], opts: { cwd: string; env?: Record<string, string> }) => {
+    const cmd = ["git", ...args].join(" ")
+    if (
+      mode === "rev-list-fail" &&
+      cmd.includes("git rev-list") &&
+      cmd.includes("--max-parents=0") &&
+      cmd.includes("HEAD")
+    ) {
+      return Promise.resolve({
+        exitCode: 128,
+        text: () => Promise.resolve(""),
+        stdout: Buffer.from(""),
+        stderr: Buffer.from("fatal"),
+      })
+    }
+    if (mode === "top-fail" && cmd.includes("git rev-parse") && cmd.includes("--show-toplevel")) {
+      return Promise.resolve({
+        exitCode: 128,
+        text: () => Promise.resolve(""),
+        stdout: Buffer.from(""),
+        stderr: Buffer.from("fatal"),
+      })
+    }
+    if (mode === "common-dir-fail" && cmd.includes("git rev-parse") && cmd.includes("--git-common-dir")) {
+      return Promise.resolve({
+        exitCode: 128,
+        text: () => Promise.resolve(""),
+        stdout: Buffer.from(""),
+        stderr: Buffer.from("fatal"),
+      })
+    }
+    return originalGit(args, opts)
   },
 }))
 

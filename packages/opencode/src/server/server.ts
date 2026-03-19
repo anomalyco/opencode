@@ -1,10 +1,7 @@
-import { BusEvent } from "@/bus/bus-event"
-import { Bus } from "@/bus"
 import { Log } from "../util/log"
 import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler } from "hono-openapi"
 import { Hono } from "hono"
 import { cors } from "hono/cors"
-import { streamSSE } from "hono/streaming"
 import { proxy } from "hono/proxy"
 import { basicAuth } from "hono/basic-auth"
 import z from "zod"
@@ -34,6 +31,7 @@ import { FileRoutes } from "./routes/file"
 import { ConfigRoutes } from "./routes/config"
 import { ExperimentalRoutes } from "./routes/experimental"
 import { ProviderRoutes } from "./routes/provider"
+import { EventRoutes } from "./routes/event"
 import { InstanceBootstrap } from "../project/bootstrap"
 import { NotFoundError } from "../storage/db"
 import type { ContentfulStatusCode } from "hono/utils/http-status"
@@ -41,7 +39,6 @@ import { websocket } from "hono/bun"
 import { HTTPException } from "hono/http-exception"
 import { errors } from "./error"
 import { Filesystem } from "@/util/filesystem"
-import { Snapshot } from "@/snapshot"
 import { QuestionRoutes } from "./routes/question"
 import { PermissionRoutes } from "./routes/permission"
 import { GlobalRoutes } from "./routes/global"
@@ -252,6 +249,7 @@ export namespace Server {
       .route("/question", QuestionRoutes())
       .route("/provider", ProviderRoutes())
       .route("/", FileRoutes())
+      .route("/", EventRoutes())
       .route("/mcp", McpRoutes())
       .route("/tui", TuiRoutes())
       .post(
@@ -333,39 +331,10 @@ export namespace Server {
           },
         }),
         async (c) => {
-          const [branch, default_branch] = await Promise.all([
-            runPromiseInstance(Vcs.Service.use((s) => s.branch())),
-            runPromiseInstance(Vcs.Service.use((s) => s.defaultBranch())),
-          ])
-          return c.json({ branch, default_branch })
-        },
-      )
-      .get(
-        "/vcs/diff",
-        describeRoute({
-          summary: "Get VCS diff",
-          description: "Retrieve the current git diff for the working tree or against the default branch.",
-          operationId: "vcs.diff",
-          responses: {
-            200: {
-              description: "VCS diff",
-              content: {
-                "application/json": {
-                  schema: resolver(Snapshot.FileDiff.array()),
-                },
-              },
-            },
-          },
-        }),
-        validator(
-          "query",
-          z.object({
-            mode: Vcs.Mode,
-          }),
-        ),
-        async (c) => {
-          const mode = c.req.valid("query").mode
-          return c.json(await runPromiseInstance(Vcs.Service.use((s) => s.diff(mode))))
+          const branch = await runPromiseInstance(Vcs.Service.use((s) => s.branch()))
+          return c.json({
+            branch,
+          })
         },
       )
       .get(
@@ -526,64 +495,6 @@ export namespace Server {
         }),
         async (c) => {
           return c.json(await Format.status())
-        },
-      )
-      .get(
-        "/event",
-        describeRoute({
-          summary: "Subscribe to events",
-          description: "Get events",
-          operationId: "event.subscribe",
-          responses: {
-            200: {
-              description: "Event stream",
-              content: {
-                "text/event-stream": {
-                  schema: resolver(BusEvent.payloads()),
-                },
-              },
-            },
-          },
-        }),
-        async (c) => {
-          log.info("event connected")
-          c.header("X-Accel-Buffering", "no")
-          c.header("X-Content-Type-Options", "nosniff")
-          return streamSSE(c, async (stream) => {
-            stream.writeSSE({
-              data: JSON.stringify({
-                type: "server.connected",
-                properties: {},
-              }),
-            })
-            const unsub = Bus.subscribeAll(async (event) => {
-              await stream.writeSSE({
-                data: JSON.stringify(event),
-              })
-              if (event.type === Bus.InstanceDisposed.type) {
-                stream.close()
-              }
-            })
-
-            // Send heartbeat every 10s to prevent stalled proxy streams.
-            const heartbeat = setInterval(() => {
-              stream.writeSSE({
-                data: JSON.stringify({
-                  type: "server.heartbeat",
-                  properties: {},
-                }),
-              })
-            }, 10_000)
-
-            await new Promise<void>((resolve) => {
-              stream.onAbort(() => {
-                clearInterval(heartbeat)
-                unsub()
-                resolve()
-                log.info("event disconnected")
-              })
-            })
-          })
         },
       )
       .all("/*", async (c) => {

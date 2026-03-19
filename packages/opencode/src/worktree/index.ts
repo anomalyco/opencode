@@ -12,7 +12,7 @@ import type { ProjectID } from "../project/schema"
 import { fn } from "../util/fn"
 import { Log } from "../util/log"
 import { Process } from "../util/process"
-import { Git } from "@/git"
+import { git } from "../util/git"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 
@@ -250,14 +250,14 @@ export namespace Worktree {
   }
 
   async function sweep(root: string) {
-    const first = await Git.run(["clean", "-ffdx"], { cwd: root })
+    const first = await git(["clean", "-ffdx"], { cwd: root })
     if (first.exitCode === 0) return first
 
     const entries = failed(first)
     if (!entries.length) return first
 
     await prune(root, entries)
-    return Git.run(["clean", "-ffdx"], { cwd: root })
+    return git(["clean", "-ffdx"], { cwd: root })
   }
 
   async function canonical(input: string) {
@@ -276,7 +276,7 @@ export namespace Worktree {
       if (await exists(directory)) continue
 
       const ref = `refs/heads/${branch}`
-      const branchCheck = await Git.run(["show-ref", "--verify", "--quiet", ref], {
+      const branchCheck = await git(["show-ref", "--verify", "--quiet", ref], {
         cwd: Instance.worktree,
       })
       if (branchCheck.exitCode === 0) continue
@@ -348,7 +348,7 @@ export namespace Worktree {
   }
 
   export async function createFromInfo(info: Info, startCommand?: string) {
-    const created = await Git.run(["worktree", "add", "--no-checkout", "-b", info.branch, info.directory], {
+    const created = await git(["worktree", "add", "--no-checkout", "-b", info.branch, info.directory], {
       cwd: Instance.worktree,
     })
     if (created.exitCode !== 0) {
@@ -362,7 +362,7 @@ export namespace Worktree {
 
     return () => {
       const start = async () => {
-        const populated = await Git.run(["reset", "--hard"], { cwd: info.directory })
+        const populated = await git(["reset", "--hard"], { cwd: info.directory })
         if (populated.exitCode !== 0) {
           const message = errorText(populated) || "Failed to populate worktree"
           log.error("worktree checkout failed", { directory: info.directory, message })
@@ -479,10 +479,10 @@ export namespace Worktree {
 
     const stop = async (target: string) => {
       if (!(await exists(target))) return
-      await Git.run(["fsmonitor--daemon", "stop"], { cwd: target })
+      await git(["fsmonitor--daemon", "stop"], { cwd: target })
     }
 
-    const list = await Git.run(["worktree", "list", "--porcelain"], { cwd: Instance.worktree })
+    const list = await git(["worktree", "list", "--porcelain"], { cwd: Instance.worktree })
     if (list.exitCode !== 0) {
       throw new RemoveFailedError({ message: errorText(list) || "Failed to read git worktrees" })
     }
@@ -499,11 +499,11 @@ export namespace Worktree {
     }
 
     await stop(entry.path)
-    const removed = await Git.run(["worktree", "remove", "--force", entry.path], {
+    const removed = await git(["worktree", "remove", "--force", entry.path], {
       cwd: Instance.worktree,
     })
     if (removed.exitCode !== 0) {
-      const next = await Git.run(["worktree", "list", "--porcelain"], { cwd: Instance.worktree })
+      const next = await git(["worktree", "list", "--porcelain"], { cwd: Instance.worktree })
       if (next.exitCode !== 0) {
         throw new RemoveFailedError({
           message: errorText(removed) || errorText(next) || "Failed to remove git worktree",
@@ -520,7 +520,7 @@ export namespace Worktree {
 
     const branch = entry.branch?.replace(/^refs\/heads\//, "")
     if (branch) {
-      const deleted = await Git.run(["branch", "-D", branch], { cwd: Instance.worktree })
+      const deleted = await git(["branch", "-D", branch], { cwd: Instance.worktree })
       if (deleted.exitCode !== 0) {
         throw new RemoveFailedError({ message: errorText(deleted) || "Failed to delete worktree branch" })
       }
@@ -540,7 +540,7 @@ export namespace Worktree {
       throw new ResetFailedError({ message: "Cannot reset the primary workspace" })
     }
 
-    const list = await Git.run(["worktree", "list", "--porcelain"], { cwd: Instance.worktree })
+    const list = await git(["worktree", "list", "--porcelain"], { cwd: Instance.worktree })
     if (list.exitCode !== 0) {
       throw new ResetFailedError({ message: errorText(list) || "Failed to read git worktrees" })
     }
@@ -573,7 +573,7 @@ export namespace Worktree {
       throw new ResetFailedError({ message: "Worktree not found" })
     }
 
-    const remoteList = await Git.run(["remote"], { cwd: Instance.worktree })
+    const remoteList = await git(["remote"], { cwd: Instance.worktree })
     if (remoteList.exitCode !== 0) {
       throw new ResetFailedError({ message: errorText(remoteList) || "Failed to list git remotes" })
     }
@@ -592,17 +592,17 @@ export namespace Worktree {
           : ""
 
     const remoteHead = remote
-      ? await Git.run(["symbolic-ref", `refs/remotes/${remote}/HEAD`], { cwd: Instance.worktree })
+      ? await git(["symbolic-ref", `refs/remotes/${remote}/HEAD`], { cwd: Instance.worktree })
       : { exitCode: 1, stdout: undefined, stderr: undefined }
 
     const remoteRef = remoteHead.exitCode === 0 ? outputText(remoteHead.stdout) : ""
     const remoteTarget = remoteRef ? remoteRef.replace(/^refs\/remotes\//, "") : ""
     const remoteBranch = remote && remoteTarget.startsWith(`${remote}/`) ? remoteTarget.slice(`${remote}/`.length) : ""
 
-    const mainCheck = await Git.run(["show-ref", "--verify", "--quiet", "refs/heads/main"], {
+    const mainCheck = await git(["show-ref", "--verify", "--quiet", "refs/heads/main"], {
       cwd: Instance.worktree,
     })
-    const masterCheck = await Git.run(["show-ref", "--verify", "--quiet", "refs/heads/master"], {
+    const masterCheck = await git(["show-ref", "--verify", "--quiet", "refs/heads/master"], {
       cwd: Instance.worktree,
     })
     const localBranch = mainCheck.exitCode === 0 ? "main" : masterCheck.exitCode === 0 ? "master" : ""
@@ -613,7 +613,7 @@ export namespace Worktree {
     }
 
     if (remoteBranch) {
-      const fetch = await Git.run(["fetch", remote, remoteBranch], { cwd: Instance.worktree })
+      const fetch = await git(["fetch", remote, remoteBranch], { cwd: Instance.worktree })
       if (fetch.exitCode !== 0) {
         throw new ResetFailedError({ message: errorText(fetch) || `Failed to fetch ${target}` })
       }
@@ -625,7 +625,7 @@ export namespace Worktree {
 
     const worktreePath = entry.path
 
-    const resetToTarget = await Git.run(["reset", "--hard", target], { cwd: worktreePath })
+    const resetToTarget = await git(["reset", "--hard", target], { cwd: worktreePath })
     if (resetToTarget.exitCode !== 0) {
       throw new ResetFailedError({ message: errorText(resetToTarget) || "Failed to reset worktree to target" })
     }
@@ -635,26 +635,26 @@ export namespace Worktree {
       throw new ResetFailedError({ message: errorText(clean) || "Failed to clean worktree" })
     }
 
-    const update = await Git.run(["submodule", "update", "--init", "--recursive", "--force"], { cwd: worktreePath })
+    const update = await git(["submodule", "update", "--init", "--recursive", "--force"], { cwd: worktreePath })
     if (update.exitCode !== 0) {
       throw new ResetFailedError({ message: errorText(update) || "Failed to update submodules" })
     }
 
-    const subReset = await Git.run(["submodule", "foreach", "--recursive", "git", "reset", "--hard"], {
+    const subReset = await git(["submodule", "foreach", "--recursive", "git", "reset", "--hard"], {
       cwd: worktreePath,
     })
     if (subReset.exitCode !== 0) {
       throw new ResetFailedError({ message: errorText(subReset) || "Failed to reset submodules" })
     }
 
-    const subClean = await Git.run(["submodule", "foreach", "--recursive", "git", "clean", "-fdx"], {
+    const subClean = await git(["submodule", "foreach", "--recursive", "git", "clean", "-fdx"], {
       cwd: worktreePath,
     })
     if (subClean.exitCode !== 0) {
       throw new ResetFailedError({ message: errorText(subClean) || "Failed to clean submodules" })
     }
 
-    const status = await Git.run(["-c", "core.fsmonitor=false", "status", "--porcelain=v1"], { cwd: worktreePath })
+    const status = await git(["-c", "core.fsmonitor=false", "status", "--porcelain=v1"], { cwd: worktreePath })
     if (status.exitCode !== 0) {
       throw new ResetFailedError({ message: errorText(status) || "Failed to read git status" })
     }
