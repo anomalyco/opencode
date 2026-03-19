@@ -1,6 +1,7 @@
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import { base64Decode } from "@opencode-ai/util/encode"
 import type { Page } from "@playwright/test"
 
 import { test, expect } from "../fixtures"
