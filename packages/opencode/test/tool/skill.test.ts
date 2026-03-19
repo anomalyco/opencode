@@ -19,6 +19,18 @@ const baseCtx: Omit<Tool.Context, "ask"> = {
 }
 
 describe("tool.skill", () => {
+  test("description lists built-in using-opencode skill", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const tool = await SkillTool.init()
+        expect(tool.description).toContain("**using-opencode**")
+      },
+    })
+  })
+
   test("description lists skill location URL", async () => {
     await using tmp = await tmpdir({
       git: true,
@@ -109,5 +121,30 @@ Use this skill.
     } finally {
       process.env.OPENCODE_TEST_HOME = home
     }
+  })
+
+  test("execute returns built-in using-opencode skill content", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const tool = await SkillTool.init()
+        const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+        const ctx: Tool.Context = {
+          ...baseCtx,
+          ask: async (req) => {
+            requests.push(req)
+          },
+        }
+
+        const result = await tool.execute({ name: "using-opencode" }, ctx)
+
+        expect(requests.length).toBe(1)
+        expect(requests[0].patterns).toContain("using-opencode")
+        expect(result.output).toContain(`<skill_content name="using-opencode">`)
+        expect(result.output).toContain("OpenCode")
+      },
+    })
   })
 })

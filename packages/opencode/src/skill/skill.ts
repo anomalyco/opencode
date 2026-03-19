@@ -1,6 +1,6 @@
 import os from "os"
 import path from "path"
-import { pathToFileURL } from "url"
+import { fileURLToPath, pathToFileURL } from "url"
 import z from "zod"
 import { Effect, Layer, ServiceMap } from "effect"
 import { NamedError } from "@opencode-ai/util/error"
@@ -24,6 +24,7 @@ export namespace Skill {
   const EXTERNAL_SKILL_PATTERN = "skills/**/SKILL.md"
   const OPENCODE_SKILL_PATTERN = "{skill,skills}/**/SKILL.md"
   const SKILL_PATTERN = "**/SKILL.md"
+  const BUILTIN = [fileURLToPath(new URL("./builtin/using-opencode/SKILL.md", import.meta.url))]
 
   export const Info = z.object({
     name: z.string(),
@@ -68,7 +69,7 @@ export namespace Skill {
     readonly available: (agent?: Agent.Info) => Effect.Effect<Info[]>
   }
 
-  const add = async (state: State, match: string) => {
+  const add = async (state: State, match: string, opts?: { dir?: boolean }) => {
     const md = await ConfigMarkdown.parse(match).catch(async (err) => {
       const message = ConfigMarkdown.FrontmatterError.isInstance(err)
         ? err.data.message
@@ -92,7 +93,7 @@ export namespace Skill {
       })
     }
 
-    state.dirs.add(path.dirname(match))
+    if (opts?.dir !== false) state.dirs.add(path.dirname(match))
     state.skills[parsed.data.name] = {
       name: parsed.data.name,
       description: parsed.data.description,
@@ -124,6 +125,10 @@ export namespace Skill {
     }
 
     const load = async () => {
+      for (const file of BUILTIN) {
+        await add(state, file, { dir: false })
+      }
+
       if (!Flag.OPENCODE_DISABLE_EXTERNAL_SKILLS) {
         for (const dir of EXTERNAL_DIRS) {
           const root = path.join(Global.Path.home, dir)
