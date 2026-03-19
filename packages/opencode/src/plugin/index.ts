@@ -126,12 +126,75 @@ export namespace Plugin {
   }
 
   export async function init() {
-    const hooks = await state().then((x) => x.hooks)
+    const st = await state()
+    const hooks = st.hooks
+    const input = st.input
     const config = await Config.get()
+    const loaded = new Set(config.plugin ?? [])
     for (const hook of hooks) {
-      // @ts-expect-error this is because we haven't moved plugin to sdk v2
-      await hook.config?.(config)
+      try {
+        // @ts-expect-error this is because we haven't moved plugin to sdk v2
+        await hook.config?.(config)
+      } catch (err) {
+        log.error("plugin config hook failed", { error: err })
+      }
     }
+
+    const added = (config.plugin ?? []).filter((x) => !loaded.has(x))
+    const next: Hooks[] = []
+    if (added.length) await Config.waitForDependencies()
+
+    for (let plugin of added) {
+      if (plugin.includes("opencode-openai-codex-auth") || plugin.includes("opencode-copilot-auth")) continue
+      log.info("loading plugin", { path: plugin })
+      if (!plugin.startsWith("file://")) {
+        const i = plugin.lastIndexOf("@")
+        const pkg = i > 0 ? plugin.substring(0, i) : plugin
+        const version = i > 0 ? plugin.substring(i + 1) : "latest"
+        plugin = await BunProc.install(pkg, version).catch((err) => {
+          const cause = err instanceof Error ? err.cause : err
+          const detail = cause instanceof Error ? cause.message : String(cause ?? err)
+          log.error("failed to install plugin", { pkg, version, error: detail })
+          Bus.publish(Session.Event.Error, {
+            error: new NamedError.Unknown({
+              message: `Failed to install plugin ${pkg}@${version}: ${detail}`,
+            }).toObject(),
+          })
+          return ""
+        })
+        if (!plugin) continue
+      }
+      await import(plugin)
+        .then(async (mod) => {
+          const seen = new Set<PluginInstance>()
+          for (const [_name, fn] of Object.entries<PluginInstance>(mod)) {
+            if (seen.has(fn)) continue
+            seen.add(fn)
+            next.push(await fn(input))
+          }
+        })
+        .catch((err) => {
+          const message = err instanceof Error ? err.message : String(err)
+          log.error("failed to load plugin", { path: plugin, error: message })
+          Bus.publish(Session.Event.Error, {
+            error: new NamedError.Unknown({
+              message: `Failed to load plugin ${plugin}: ${message}`,
+            }).toObject(),
+          })
+        })
+    }
+
+    for (const hook of next) {
+      try {
+        // @ts-expect-error this is because we haven't moved plugin to sdk v2
+        await hook.config?.(config)
+      } catch (err) {
+        log.error("plugin config hook failed", { error: err })
+      }
+    }
+
+    hooks.push(...next)
+
     Bus.subscribeAll(async (input) => {
       const hooks = await state().then((x) => x.hooks)
       for (const hook of hooks) {
