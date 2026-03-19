@@ -8,6 +8,7 @@ import { streamSSE } from "hono/streaming"
 import { proxy } from "hono/proxy"
 import { basicAuth } from "hono/basic-auth"
 import z from "zod"
+import path from "path"
 import { Provider } from "../provider/provider"
 import { NamedError } from "@opencode-ai/util/error"
 import { LSP } from "../lsp"
@@ -47,12 +48,47 @@ globalThis.AI_SDK_LOG_WARNINGS = false
 
 export namespace Server {
   const log = Log.create({ service: "server" })
+  const localWebDist = process.env.OPENCODE_WEB_DIST || path.resolve(import.meta.dir, "../../../app/dist")
 
   let _url: URL | undefined
   let _corsWhitelist: string[] = []
 
   export function url(): URL {
     return _url ?? new URL("http://localhost:4096")
+  }
+
+  function withWebCsp(response: Response) {
+    response.headers.set(
+      "Content-Security-Policy",
+      "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:",
+    )
+    return response
+  }
+
+  async function localWebResponse(requestPath: string) {
+    const normalizedPath = (() => {
+      try {
+        return decodeURIComponent(requestPath)
+      } catch {
+        return requestPath
+      }
+    })()
+    const relativePath = normalizedPath.replace(/^\/+/, "")
+    const target = path.resolve(localWebDist, relativePath || "index.html")
+    if (!target.startsWith(localWebDist + path.sep) && target !== localWebDist) return
+
+    const file = Bun.file(target)
+    if (await file.exists()) {
+      return withWebCsp(new Response(file))
+    }
+
+    // For SPA routes, serve index.html and let the client router take over.
+    if (!path.extname(relativePath)) {
+      const index = Bun.file(path.join(localWebDist, "index.html"))
+      if (await index.exists()) {
+        return withWebCsp(new Response(index))
+      }
+    }
   }
 
   const app = new Hono()
@@ -534,6 +570,8 @@ export namespace Server {
         )
         .all("/*", async (c) => {
           const path = c.req.path
+          const local = await localWebResponse(path)
+          if (local) return local
 
           const response = await proxy(`https://app.opencode.ai${path}`, {
             ...c.req,
@@ -542,11 +580,7 @@ export namespace Server {
               host: "app.opencode.ai",
             },
           })
-          response.headers.set(
-            "Content-Security-Policy",
-            "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:",
-          )
-          return response
+          return withWebCsp(response)
         }) as unknown as Hono,
   )
 

@@ -71,6 +71,20 @@ export namespace Session {
         .optional(),
       title: z.string(),
       version: z.string(),
+      git: z
+        .object({
+          branch: z.string(),
+          head: z.string().optional(),
+          saved_at: z.number().optional(),
+        })
+        .optional(),
+      lineage: z
+        .object({
+          rootID: Identifier.schema("session"),
+          latestID: Identifier.schema("session"),
+          number: z.number(),
+        })
+        .optional(),
       time: z.object({
         created: z.number(),
         updated: z.number(),
@@ -165,6 +179,7 @@ export namespace Session {
       if (!original) throw new Error("session not found")
       const title = getForkedTitle(original.title)
       const session = await createNext({
+        parentID: input.sessionID,
         directory: Instance.directory,
         title,
       })
@@ -210,13 +225,26 @@ export namespace Session {
     directory: string
     permission?: PermissionNext.Ruleset
   }) {
+    const parent = input.parentID ? await get(input.parentID).catch(() => undefined) : undefined
+    const id = Identifier.descending("session", input.id)
     const result: Info = {
-      id: Identifier.descending("session", input.id),
+      id,
       slug: Slug.create(),
       version: Installation.VERSION,
       projectID: Instance.project.id,
       directory: input.directory,
       parentID: input.parentID,
+      lineage: parent
+        ? {
+            rootID: parent.lineage?.rootID ?? parent.id,
+            latestID: id,
+            number: (parent.lineage?.number ?? 0) + 1,
+          }
+        : {
+            rootID: id,
+            latestID: id,
+            number: 1,
+          },
       title: input.title ?? createDefaultTitle(!!input.parentID),
       permission: input.permission,
       time: {

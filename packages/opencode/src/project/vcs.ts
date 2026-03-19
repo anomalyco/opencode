@@ -58,6 +58,12 @@ export namespace Vcs {
 
       return {
         branch: async () => current,
+        set(next: string | undefined) {
+          if (next === current) return
+          log.info("branch changed", { from: current, to: next })
+          current = next
+          Bus.publish(Event.BranchUpdated, { branch: next })
+        },
         unsubscribe,
       }
     },
@@ -72,5 +78,11 @@ export namespace Vcs {
 
   export async function branch() {
     return await state().then((s) => s.branch())
+  }
+
+  export async function refresh() {
+    const next = await currentBranch()
+    await state().then((s) => s.set?.(next))
+    return next
   }
 }

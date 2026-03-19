@@ -7,6 +7,7 @@ import { MessageV2 } from "../../session/message-v2"
 import { SessionPrompt } from "../../session/prompt"
 import { SessionCompaction } from "../../session/compaction"
 import { SessionRevert } from "../../session/revert"
+import { SessionVersion } from "../../session/version"
 import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
 import { Todo } from "../../session/todo"
@@ -14,6 +15,7 @@ import { Agent } from "../../agent/agent"
 import { Snapshot } from "@/snapshot"
 import { Log } from "../../util/log"
 import { PermissionNext } from "@/permission/next"
+import { Identifier } from "@/id/id"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 
@@ -149,6 +151,37 @@ export const SessionRoutes = lazy(() =>
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
         const session = await Session.children(sessionID)
+        return c.json(session)
+      },
+    )
+    .get(
+      "/:sessionID/family",
+      describeRoute({
+        summary: "Get session family",
+        tags: ["Session"],
+        description: "Retrieve all versions in the same session family, ordered from oldest to newest.",
+        operationId: "session.family",
+        responses: {
+          200: {
+            description: "Session family",
+            content: {
+              "application/json": {
+                schema: resolver(Session.Info.array()),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: Identifier.schema("session"),
+        }),
+      ),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        const session = await SessionVersion.family(sessionID)
         return c.json(session)
       },
     )
@@ -351,6 +384,66 @@ export const SessionRoutes = lazy(() =>
         const sessionID = c.req.valid("param").sessionID
         const body = c.req.valid("json")
         const result = await Session.fork({ ...body, sessionID })
+        return c.json(result)
+      },
+    )
+    .post(
+      "/:sessionID/version",
+      describeRoute({
+        summary: "Create session version",
+        description: "Create a new child version of the current session and switch the workspace to it.",
+        operationId: "session.version",
+        responses: {
+          200: {
+            description: "Created version",
+            content: {
+              "application/json": {
+                schema: resolver(Session.Info),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: Identifier.schema("session"),
+        }),
+      ),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        const result = await SessionVersion.create(sessionID)
+        return c.json(result)
+      },
+    )
+    .post(
+      "/:sessionID/select",
+      describeRoute({
+        summary: "Select session version",
+        description: "Open a saved session version in the current workspace.",
+        operationId: "session.select",
+        responses: {
+          200: {
+            description: "Selected version",
+            content: {
+              "application/json": {
+                schema: resolver(Session.Info),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: Identifier.schema("session"),
+        }),
+      ),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        const result = await SessionVersion.select(sessionID)
         return c.json(result)
       },
     )
