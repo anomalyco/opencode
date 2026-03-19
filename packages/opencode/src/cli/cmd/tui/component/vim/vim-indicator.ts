@@ -8,6 +8,7 @@ export function useVimIndicator(input: {
 }) {
   return createMemo(() => {
     if (!input.enabled() || !input.active()) return
-    return input.state.isInsert() ? "INSERT" : "NORMAL"
+    if (input.state.isInsert()) return "INSERT"
+    return undefined
   })
 }
