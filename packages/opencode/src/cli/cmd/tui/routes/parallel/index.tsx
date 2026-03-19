@@ -24,7 +24,7 @@ export function Parallel() {
   const planID = () => (route.data.type === "parallel" ? route.data.planID : null)
 
   async function fetchPlan(id: string) {
-    const res = await fetch(`${sdk.url}/parallel/${id}`)
+    const res = await sdk.fetch(`${sdk.url}/parallel/${id}`)
     if (!res.ok) throw new Error("Plan not found")
     return res.json()
   }
