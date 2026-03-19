@@ -11,31 +11,11 @@ import { decode64 } from "@/utils/base64"
 import { same } from "@/utils/same"
 import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
 import { createPathHelpers } from "./file/path"
+import { type AvatarColorKey, pickAvailableColor, pickProjectIcon } from "./project-avatar"
 
-const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const
 const DEFAULT_PANEL_WIDTH = 344
 const DEFAULT_SESSION_WIDTH = 600
 const DEFAULT_TERMINAL_HEIGHT = 280
-export type AvatarColorKey = (typeof AVATAR_COLOR_KEYS)[number]
-
-export function getAvatarColors(key?: string) {
-  if (key && AVATAR_COLOR_KEYS.includes(key as AvatarColorKey)) {
-    return {
-      background: `var(--avatar-background-${key})`,
-      foreground: `var(--avatar-text-${key})`,
-    }
-  }
-  return {
-    background: "var(--surface-info-base)",
-    foreground: "var(--text-base)",
-  }
-}
-
-export function pickProjectIcon(input: { child?: string; meta?: { url?: string; override?: string } }) {
-  const url = input.child ?? input.meta?.url ?? input.meta?.override
-  const override = input.child ?? input.meta?.override ?? input.meta?.url
-  return { url, override }
-}
 
 type SessionTabs = {
   active?: string
@@ -383,12 +363,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     const [colors, setColors] = createStore<Record<string, AvatarColorKey>>({})
     const colorRequested = new Map<string, AvatarColorKey>()
-
-    function pickAvailableColor(used: Set<string>): AvatarColorKey {
-      const available = AVATAR_COLOR_KEYS.filter((c) => !used.has(c))
-      if (available.length === 0) return AVATAR_COLOR_KEYS[Math.floor(Math.random() * AVATAR_COLOR_KEYS.length)]
-      return available[Math.floor(Math.random() * available.length)]
-    }
 
     function enrich(project: { worktree: string; expanded: boolean }) {
       const [childStore] = globalSync.child(project.worktree, { bootstrap: false })

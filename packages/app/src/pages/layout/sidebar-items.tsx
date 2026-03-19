@@ -12,14 +12,13 @@ import { A, useNavigate, useParams } from "@solidjs/router"
 import { type Accessor, createMemo, For, type JSX, Match, onCleanup, Show, Switch } from "solid-js"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
-import { getAvatarColors, type LocalProject, useLayout } from "@/context/layout"
+import { type LocalProject, useLayout } from "@/context/layout"
+import { getAvatarColors, pickProjectIconSrc } from "@/context/project-avatar"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
 import { messageAgentColor } from "@/utils/agent"
 import { sessionPermissionRequest } from "../session/composer/session-request-tree"
 import { hasProjectPermissions } from "./helpers"
-
-const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
 export const ProjectIcon = (props: { project: LocalProject; class?: string; notify?: boolean }): JSX.Element => {
   const globalSync = useGlobalSync()
@@ -43,11 +42,7 @@ export const ProjectIcon = (props: { project: LocalProject; class?: string; noti
       <div class="size-full rounded overflow-clip">
         <Avatar
           fallback={name()}
-          src={
-            props.project.id === OPENCODE_PROJECT_ID
-              ? "https://opencode.ai/favicon.svg"
-              : (props.project.icon?.url ?? props.project.icon?.override)
-          }
+          src={pickProjectIconSrc({ id: props.project.id, icon: props.project.icon })}
           {...getAvatarColors(props.project.icon?.color)}
           class="size-full rounded"
           classList={{ "badge-mask": notify() }}

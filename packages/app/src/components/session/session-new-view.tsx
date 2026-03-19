@@ -3,8 +3,9 @@ import { DateTime } from "luxon"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
 import { useLanguage } from "@/context/language"
+import { getAvatarColors, pickProjectIconSrc } from "@/context/project-avatar"
 import { Icon } from "@opencode-ai/ui/icon"
-import { Mark } from "@opencode-ai/ui/logo"
+import { Avatar } from "@opencode-ai/ui/avatar"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 
 const MAIN_WORKTREE = "main"
@@ -19,6 +20,11 @@ export function NewSessionView(props: NewSessionViewProps) {
   const sync = useSync()
   const sdk = useSDK()
   const language = useLanguage()
+
+  const iconSrc = createMemo(() =>
+    pickProjectIconSrc({ id: sync.project?.id, icon: sync.project?.icon, fallback: sync.data.icon }),
+  )
+  const color = createMemo(() => sync.project?.icon?.color)
 
   const sandboxes = createMemo(() => sync.project?.sandboxes ?? [])
   const options = createMemo(() => [MAIN_WORKTREE, ...sandboxes(), CREATE_WORKTREE])
@@ -53,7 +59,12 @@ export function NewSessionView(props: NewSessionViewProps) {
       <div class="flex-1 px-6 pb-30 flex items-center justify-center text-center">
         <div class="w-full max-w-200 flex flex-col items-center text-center gap-4">
           <div class="flex flex-col items-center gap-6">
-            <Mark class="w-10" />
+            <Avatar
+              fallback={getFilename(projectRoot())}
+              src={iconSrc()}
+              {...getAvatarColors(color())}
+              class="size-10 rounded"
+            />
             <div class="text-20-medium text-text-strong">{language.t("session.new.title")}</div>
           </div>
           <div class="w-full flex flex-col gap-4 items-center">
