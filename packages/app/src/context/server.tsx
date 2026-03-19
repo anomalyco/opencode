@@ -223,6 +223,9 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       get key() {
         return state.active
       },
+      get origin() {
+        return origin()
+      },
       get name() {
         return serverName(current())
       },

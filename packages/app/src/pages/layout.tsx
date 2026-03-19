@@ -93,10 +93,27 @@ import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from 
 import { SidebarContent } from "./layout/sidebar-shell"
 
 export default function Layout(props: ParentProps) {
+  type SessionRoute = { directory: string; id: string; at: number }
+
+  const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === "object" && value !== null && !Array.isArray(value)
+
+  // Migrate lastProjectSession from flat { [dir]: route } to per-origin { [origin]: { [dir]: route } }
+  const migrateLayoutPage = (value: unknown) => {
+    if (!isRecord(value)) return value
+    const lps = value.lastProjectSession
+    if (!isRecord(lps)) return value
+    // Already migrated if the values are origin-keyed records of records
+    const firstValue = Object.values(lps)[0]
+    if (firstValue !== undefined && isRecord(firstValue) && !("id" in firstValue)) return value
+    // Wrap existing flat entries under "local" origin
+    return { ...value, lastProjectSession: { local: lps } }
+  }
+
   const [store, setStore, , ready] = persisted(
-    Persist.global("layout.page", ["layout.page.v1"]),
+    { ...Persist.global("layout.page", ["layout.page.v1"]), migrate: migrateLayoutPage },
     createStore({
-      lastProjectSession: {} as { [directory: string]: { directory: string; id: string; at: number } },
+      lastProjectSession: {} as { [origin: string]: { [directory: string]: SessionRoute } },
       activeProject: undefined as string | undefined,
       activeWorkspace: undefined as string | undefined,
       workspaceOrder: {} as Record<string, string[]>,
@@ -106,6 +123,9 @@ export default function Layout(props: ParentProps) {
       gettingStartedDismissed: false,
     }),
   )
+
+  // Accessors for per-origin lastProjectSession
+  const originSessions = () => store.lastProjectSession[server.origin] ?? {}
 
   const pageReady = createMemo(() => ready())
 
@@ -1187,14 +1207,19 @@ export default function Layout(props: ParentProps) {
   }
 
   function rememberSessionRoute(directory: string, id: string, root = activeProjectRoot(directory)) {
-    setStore("lastProjectSession", root, { directory, id, at: Date.now() })
+    const key = server.origin
+    if (!key) return root
+    setStore("lastProjectSession", key, root, { directory, id, at: Date.now() })
     return root
   }
 
   function clearLastProjectSession(root: string) {
-    if (!store.lastProjectSession[root]) return
+    const key = server.origin
+    if (!key) return
+    if (!store.lastProjectSession[key]?.[root]) return
     setStore(
       "lastProjectSession",
+      key,
       produce((draft) => {
         delete draft[root]
       }),
@@ -1233,11 +1258,12 @@ export default function Layout(props: ParentProps) {
       dirs = effectiveWorkspaceOrder(root, [root, ...listed], store.workspaceOrder[root])
       return canOpen(target)
     }
+    const originKey = server.origin
     const openSession = async (target: { directory: string; id: string }) => {
       if (!canOpen(target.directory)) return false
       const [data] = globalSync.child(target.directory, { bootstrap: false })
       if (data.session.some((item) => item.id === target.id)) {
-        setStore("lastProjectSession", root, { directory: target.directory, id: target.id, at: Date.now() })
+        if (originKey) setStore("lastProjectSession", originKey, root, { directory: target.directory, id: target.id, at: Date.now() })
         navigateWithSidebarReset(`/${base64Encode(target.directory)}/session/${target.id}`)
         return true
       }
@@ -1247,12 +1273,12 @@ export default function Layout(props: ParentProps) {
         .catch(() => undefined)
       if (!resolved?.directory) return false
       if (!canOpen(resolved.directory)) return false
-      setStore("lastProjectSession", root, { directory: resolved.directory, id: resolved.id, at: Date.now() })
+      if (originKey) setStore("lastProjectSession", originKey, root, { directory: resolved.directory, id: resolved.id, at: Date.now() })
       navigateWithSidebarReset(`/${base64Encode(resolved.directory)}/session/${resolved.id}`)
       return true
     }
 
-    const projectSession = store.lastProjectSession[root]
+    const projectSession = originSessions()[root]
     if (projectSession?.id) {
       await refreshDirs(projectSession.directory)
       const opened = await openSession(projectSession)
@@ -1439,7 +1465,7 @@ export default function Layout(props: ParentProps) {
 
     if (!result) return
 
-    if (workspaceKey(store.lastProjectSession[root]?.directory ?? "") === workspaceKey(directory)) {
+    if (workspaceKey(originSessions()[root]?.directory ?? "") === workspaceKey(directory)) {
       clearLastProjectSession(root)
     }
 
