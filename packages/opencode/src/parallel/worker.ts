@@ -257,6 +257,8 @@ export namespace WorkerManager {
 
     const defaultTimeoutMs = 30 * 60 * 1000 // 30 minutes
     const timeoutMs = cfg.parallel?.worker_timeout_ms ?? defaultTimeoutMs
+    const warningThreshold = timeoutMs * 0.8
+    const warnedWorkers = new Set<SubtaskID>()
     const startTimes = new Map<string, number>()
 
     // Build a map of sessionID -> worker for fast lookup
@@ -396,6 +398,28 @@ export namespace WorkerManager {
 
           // Check for timeout
           const elapsed = Date.now() - worker.startTime
+          if (elapsed > warningThreshold && !warnedWorkers.has(worker.subtaskID)) {
+            warnedWorkers.add(worker.subtaskID)
+            const remaining = timeoutMs - elapsed
+            log.warn("worker approaching timeout", {
+              planID,
+              subtaskID: worker.subtaskID,
+              elapsedMs: elapsed,
+              remainingMs: remaining,
+            })
+            GlobalBus.emit("event", {
+              payload: {
+                type: "parallel.worker.timeout_warning",
+                properties: {
+                  planID,
+                  subtaskID: worker.subtaskID,
+                  elapsedMs: elapsed,
+                  timeoutMs,
+                  remainingMs: remaining,
+                },
+              },
+            })
+          }
           if (elapsed > timeoutMs) {
             const minutes = Math.round(timeoutMs / 60000)
             pending.delete(sessionID)

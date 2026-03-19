@@ -19,4 +19,14 @@ export const ParallelEvent = {
       result: z.enum(["clean", "resolved", "failed"]),
     }),
   ),
+  WorkerTimeoutWarning: BusEvent.define(
+    "parallel.worker.timeout_warning",
+    z.object({
+      planID: PlanID.zod,
+      subtaskID: z.string(),
+      elapsedMs: z.number(),
+      timeoutMs: z.number(),
+      remainingMs: z.number(),
+    }),
+  ),
 }
