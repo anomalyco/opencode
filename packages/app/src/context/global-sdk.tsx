@@ -7,6 +7,7 @@ import { createSdkForServer } from "@/utils/server"
 import { useLanguage } from "./language"
 import { usePlatform } from "./platform"
 import { useServer } from "./server"
+import { useAuth } from "@/others"
 
 const abortError = z.object({
   name: z.literal("AbortError"),
@@ -18,6 +19,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     const language = useLanguage()
     const server = useServer()
     const platform = usePlatform()
+    const auth = useAuth()
     const abort = new AbortController()
 
     const eventFetch = (() => {
@@ -38,6 +40,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       signal: abort.signal,
       fetch: eventFetch,
       server: currentServer.http,
+      authToken: auth.token,
     })
     const emitter = createGlobalEmitter<{
       [key: string]: Event
@@ -212,18 +215,20 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       server: server.current.http,
       fetch: platform.fetch,
       throwOnError: true,
+      authToken: auth.token,
     })
 
     return {
       url: currentServer.http.url,
       client: sdk,
       event: emitter,
-      createClient(opts: Omit<Parameters<typeof createSdkForServer>[0], "server" | "fetch">) {
+      createClient(opts: Omit<Parameters<typeof createSdkForServer>[0], "server" | "fetch" | "authToken">) {
         const s = server.current
         if (!s) throw new Error(language.t("error.globalSDK.serverNotAvailable"))
         return createSdkForServer({
           server: s.http,
           fetch: platform.fetch,
+          authToken: auth.token,
           ...opts,
         })
       },

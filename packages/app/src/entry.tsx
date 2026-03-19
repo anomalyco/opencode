@@ -8,6 +8,8 @@ import { dict as zh } from "@/i18n/zh"
 import { handleNotificationClick } from "@/utils/notification-click"
 import pkg from "../package.json"
 import { ServerConnection } from "./context/server"
+import { AuthProvider, useAuth, LoginPage } from "./others"
+import { Show, type JSX } from "solid-js"
 
 const DEFAULT_SERVER_URL_KEY = "opencode.settings.dat:defaultServerUrl"
 
@@ -125,17 +127,49 @@ const platform: Platform = {
   setDefaultServer: writeDefaultServerUrl,
 }
 
+/**
+ * 认证网关组件
+ * 检查用户是否已登录，未登录则显示登录页面
+ */
+function AuthGate(props: { children: JSX.Element }) {
+  const auth = useAuth()
+
+  return (
+    <Show
+      when={!auth.isLoading}
+      fallback={
+        <div class="h-dvh w-screen flex flex-col items-center justify-center bg-background-base">
+          <div class="w-16 h-20 opacity-50 animate-pulse" />
+        </div>
+      }
+    >
+      <Show
+        when={auth.isAuthenticated}
+        fallback={<LoginPage onLoginSuccess={() => {}} />}
+      >
+        {props.children}
+      </Show>
+    </Show>
+  )
+}
+
 if (root instanceof HTMLElement) {
   const server: ServerConnection.Http = { type: "http", http: { url: getCurrentUrl() } }
+  const defaultUrl = getDefaultUrl()
+
   render(
     () => (
       <PlatformProvider value={platform}>
         <AppBaseProviders>
-          <AppInterface
-            defaultServer={ServerConnection.Key.make(getDefaultUrl())}
-            servers={[server]}
-            disableHealthCheck
-          />
+          <AuthProvider serverUrl={defaultUrl}>
+            <AuthGate>
+              <AppInterface
+                defaultServer={ServerConnection.Key.make(defaultUrl)}
+                servers={[server]}
+                disableHealthCheck
+              />
+            </AuthGate>
+          </AuthProvider>
         </AppBaseProviders>
       </PlatformProvider>
     ),
