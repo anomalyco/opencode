@@ -292,7 +292,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
     const text = parts.find((part): part is TextPart => part?.type === "text" && !part.synthetic && !part.ignored)
     return text?.text
   }
-  const item = (
+  const item = () => (
     <SessionRow
       session={props.session}
       slug={props.slug}
@@ -323,7 +323,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
         when={hoverEnabled()}
         fallback={
           <Tooltip placement={props.mobile ? "bottom" : "right"} value={props.session.title} gutter={10}>
-            {item}
+            {item()}
           </Tooltip>
         }
       >
@@ -346,7 +346,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
 
             navigate(`${props.slug}/session/${props.session.id}#message-${message.id}`)
           }}
-          trigger={item}
+          trigger={item()}
         />
       </Show>
 
@@ -389,7 +389,7 @@ export const NewSessionItem = (props: {
   const language = useLanguage()
   const label = language.t("command.session.new")
   const tooltip = () => props.mobile || !props.sidebarExpanded()
-  const item = (
+  const item = () => (
     <A
       href={`/${props.slug}/session`}
       end
@@ -417,11 +417,11 @@ export const NewSessionItem = (props: {
         when={!tooltip()}
         fallback={
           <Tooltip placement={props.mobile ? "bottom" : "right"} value={label} gutter={10}>
-            {item}
+            {item()}
           </Tooltip>
         }
       >
-        {item}
+        {item()}
       </Show>
     </div>
   )
@@ -438,7 +438,7 @@ export const GridToggleItem = (props: {
   
   const label = "Grid Mode"
   const tooltip = () => props.mobile || !props.sidebarExpanded()
-  const item = (
+  const item = () => (
     <button
       class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none ${props.dense ? "py-0.5" : "py-1"}`}
       onClick={(e) => {
@@ -465,11 +465,11 @@ export const GridToggleItem = (props: {
         when={!tooltip()}
         fallback={
           <Tooltip placement={props.mobile ? "bottom" : "right"} value={label} gutter={10}>
-            {item}
+            {item()}
           </Tooltip>
         }
       >
-        {item}
+        {item()}
       </Show>
     </div>
   )
