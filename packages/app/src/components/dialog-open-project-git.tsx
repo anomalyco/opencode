@@ -1,7 +1,7 @@
 import { Button } from "@opencode-ai/ui/button"
 import { Progress } from "@opencode-ai/ui/progress"
 import { TextField } from "@opencode-ai/ui/text-field"
-import { type JSX, Show, createEffect, onMount } from "solid-js"
+import { Show, createEffect, onMount } from "solid-js"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useLanguage } from "@/context/language"
 import { type Platform, usePlatform } from "@/context/platform"
@@ -108,9 +108,7 @@ export function DialogOpenProjectGit(props: Props) {
             class="flex-1 h-9 rounded-md border border-border-base bg-surface-base px-3 text-14-regular text-text-strong"
             value={props.target}
             placeholder={props.targetRoot || "~/Documents/code"}
-            onInput={(event: JSX.InputEventUnion<HTMLInputElement, InputEvent>) =>
-              props.setTarget(event.currentTarget.value, true)
-            }
+            onInput={(event) => props.setTarget(event.currentTarget.value, true)}
           />
           <Button type="button" variant="secondary" size="large" class="min-w-24" onClick={browse}>
             Choose...

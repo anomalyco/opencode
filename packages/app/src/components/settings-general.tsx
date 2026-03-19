@@ -1,4 +1,4 @@
-import { Component, Show, createMemo } from "solid-js"
+import { Component, Show, createMemo, createResource } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
