@@ -1,6 +1,6 @@
 import { BusEvent } from "@/bus/bus-event"
 import z from "zod"
-import { Plan, WorkerState, PlanID } from "./schema"
+import { Plan, WorkerState, PlanID, SubtaskID } from "./schema"
 
 export const ParallelEvent = {
   PlanUpdated: BusEvent.define("parallel.plan.updated", z.object({ plan: Plan })),
@@ -23,7 +23,7 @@ export const ParallelEvent = {
     "parallel.worker.timeout_warning",
     z.object({
       planID: PlanID.zod,
-      subtaskID: z.string(),
+      subtaskID: SubtaskID.zod,
       elapsedMs: z.number(),
       remainingMs: z.number(),
       timeoutMs: z.number(),
