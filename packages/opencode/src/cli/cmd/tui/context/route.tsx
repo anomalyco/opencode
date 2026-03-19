@@ -25,9 +25,43 @@ export type Route = HomeRoute | SessionRoute | ParallelRoute
 export const { use: useRoute, provider: RouteProvider } = createSimpleContext({
   name: "Route",
   init: () => {
+    const copy = (r: Route): Route => {
+      if (r.type === "home") {
+        return {
+          type: "home",
+          initialPrompt: r.initialPrompt,
+          workspaceID: r.workspaceID,
+        }
+      }
+      if (r.type === "session") {
+        return {
+          type: "session",
+          sessionID: r.sessionID,
+          initialPrompt: r.initialPrompt,
+        }
+      }
+      return {
+        type: "parallel",
+        planID: r.planID,
+        returnTo: r.returnTo
+          ? r.returnTo.type === "home"
+            ? {
+                type: "home",
+                initialPrompt: r.returnTo.initialPrompt,
+                workspaceID: r.returnTo.workspaceID,
+              }
+            : {
+                type: "session",
+                sessionID: r.returnTo.sessionID,
+                initialPrompt: r.returnTo.initialPrompt,
+              }
+          : undefined,
+      }
+    }
+
     const [store, setStore] = createStore<Route>(
       process.env["OPENCODE_ROUTE"]
-        ? JSON.parse(process.env["OPENCODE_ROUTE"])
+        ? copy(JSON.parse(process.env["OPENCODE_ROUTE"]))
         : {
             type: "home",
           },
@@ -45,8 +79,8 @@ export const { use: useRoute, provider: RouteProvider } = createSimpleContext({
       navigate(route: Route) {
         console.log("navigate", route)
         // Store current route in history before navigating
-        setHistory((prev) => [...prev, store])
-        setStore(route)
+        setHistory((prev) => [...prev, copy(store as Route)])
+        setStore(copy(route))
       },
       goBack() {
         const prev = history[history.length - 1]

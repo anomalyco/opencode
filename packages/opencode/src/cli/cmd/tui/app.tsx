@@ -259,10 +259,6 @@ function App() {
   }
   const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
 
-  createEffect(() => {
-    console.log(JSON.stringify(route.data))
-  })
-
   // Update terminal window title based on current route and session
   createEffect(() => {
     if (!terminalTitleEnabled() || Flag.OPENCODE_DISABLE_TERMINAL_TITLE) return
@@ -381,6 +377,19 @@ function App() {
   )
 
   const connected = useConnected()
+  const parent = () => {
+    if (route.data.type === "parallel") return route.data.returnTo
+    if (route.data.type === "session") {
+      return {
+        type: "session" as const,
+        sessionID: route.data.sessionID,
+      }
+    }
+    return {
+      type: "home" as const,
+      workspaceID: route.data.workspaceID,
+    }
+  }
   command.register(() => [
     {
       title: "Switch session",
@@ -536,14 +545,15 @@ function App() {
         try {
           const { PlanStore } = await import("@/parallel/plan")
           const plans = await PlanStore.list()
+          const back = parent()
           const active = plans.find(
             (p) =>
               p.status === "running" || p.status === "spawning" || p.status === "merging" || p.status === "proposed",
           )
           if (active) {
-            route.navigate({ type: "parallel", planID: active.id })
+            route.navigate({ type: "parallel", planID: active.id, returnTo: back })
           } else if (plans.length > 0) {
-            route.navigate({ type: "parallel", planID: plans[0].id })
+            route.navigate({ type: "parallel", planID: plans[0].id, returnTo: back })
           } else {
             toast.show({ message: "No parallel plans found", variant: "info" })
           }
@@ -572,7 +582,8 @@ function App() {
           // Switch to orchestrator agent and show the interrupted plan
           local.agent.set("orchestrator")
           const first = interrupted[0]
-          route.navigate({ type: "parallel", planID: first.plan.id })
+          const back = parent()
+          route.navigate({ type: "parallel", planID: first.plan.id, returnTo: back })
           toast.show({
             message: `Showing interrupted plan: ${first.plan.task}`,
             variant: "info",

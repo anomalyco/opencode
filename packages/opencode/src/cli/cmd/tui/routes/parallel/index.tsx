@@ -20,6 +20,17 @@ export function Parallel() {
   const [loading, setLoading] = createSignal(true)
   const [error, setError] = createSignal<string | null>(null)
   const [switchedOnComplete, setSwitchedOnComplete] = createSignal(false)
+  const back = () => {
+    if (route.previous) {
+      route.goBack()
+      return
+    }
+    if (route.data.type === "parallel" && route.data.returnTo) {
+      route.navigate(route.data.returnTo)
+      return
+    }
+    route.navigate({ type: "home" })
+  }
 
   const planID = () => (route.data.type === "parallel" ? route.data.planID : null)
 
@@ -105,7 +116,7 @@ export function Parallel() {
 
   useKeyboard((evt) => {
     if (evt.name === "escape") {
-      route.goBack()
+      back()
       evt.preventDefault()
     }
   })
@@ -146,10 +157,10 @@ export function Parallel() {
           paddingTop={2}
         >
           <Show when={plan.status === "proposed" || plan.status === "draft"}>
-            <ParallelPlan plan={plan} onApproved={() => {}} onCancelled={() => route.goBack()} />
+            <ParallelPlan plan={plan} onApproved={() => {}} onCancelled={back} />
           </Show>
           <Show when={plan.status === "approved" || plan.status === "spawning" || plan.status === "running"}>
-            <ParallelStatus plan={plan} onCancelled={() => route.goBack()} />
+            <ParallelStatus plan={plan} onCancelled={back} />
           </Show>
           <Show when={plan.status === "merging"}>
             <ParallelMerge plan={plan} />
