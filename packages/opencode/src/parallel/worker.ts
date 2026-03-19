@@ -82,7 +82,7 @@ export namespace WorkerManager {
       directory: info.directory,
       init: InstanceBootstrap,
       fn: async () => {
-        const promptText = buildWorkerPrompt(plan.task, subtask)
+        const promptText = buildWorkerPrompt(plan.task, subtask, plan.subtasks)
         const { SessionPrompt } = await import("../session/prompt")
         await SessionPrompt.prompt({
           sessionID: session.id,
@@ -103,30 +103,101 @@ export namespace WorkerManager {
     const cfg = await Config.get()
     const maxWorkers = cfg.parallel?.max_workers
     const spawnStartTime = Date.now()
-    log.info("spawning workers", {
+
+    // Build dependency graph
+    const subtaskMap = new Map<SubtaskID, Subtask>()
+    const dependencyGraph = new Map<SubtaskID, Set<SubtaskID>>()
+    const reverseGraph = new Map<SubtaskID, Set<SubtaskID>>()
+
+    for (const st of plan.subtasks) {
+      subtaskMap.set(st.id, st)
+      dependencyGraph.set(st.id, new Set(st.dependencies))
+      reverseGraph.set(st.id, new Set())
+    }
+
+    for (const st of plan.subtasks) {
+      for (const dep of st.dependencies) {
+        reverseGraph.get(dep)?.add(st.id)
+      }
+    }
+
+    // Track completion status
+    const completed = new Set<SubtaskID>()
+    const failed = new Set<SubtaskID>()
+    const running = new Set<SubtaskID>()
+
+    function getReadySubtasks(): Subtask[] {
+      return plan.subtasks.filter((st) => {
+        if (completed.has(st.id) || failed.has(st.id) || running.has(st.id)) {
+          return false
+        }
+        const deps = dependencyGraph.get(st.id) ?? new Set()
+        return Array.from(deps).every((dep) => completed.has(dep))
+      })
+    }
+
+    log.info("spawning workers with dependencies", {
       planID: plan.id,
       count: plan.subtasks.length,
       maxWorkers: maxWorkers ?? "unlimited",
     })
 
-    const initialWorkers = plan.workers.map((w) => ({ ...w, status: "spawning" as const }))
+    // Initialize all workers as pending
+    const initialWorkers = plan.workers.map((w) => ({ ...w, status: "pending" as const }))
     await PlanStore.update({ id: plan.id, workers: initialWorkers })
 
-    const results = await pooled(plan.subtasks, maxWorkers, (subtask) => spawnOne(plan, subtask, abort))
+    // Spawn workers respecting dependencies and concurrency
+    const spawnPromises: Promise<{ subtaskID: SubtaskID; status: "fulfilled" | "rejected"; error?: string }>[] = []
 
-    const failedUpdates: { subtaskID: SubtaskID; error: string }[] = []
-    for (let i = 0; i < results.length; i++) {
-      const result = results[i]
-      if (result.status === "rejected") {
-        const error = result.reason instanceof Error ? result.reason.message : "Spawn failed"
-        failedUpdates.push({ subtaskID: plan.subtasks[i].id, error })
-        log.error("worker spawn failed", { subtaskID: plan.subtasks[i].id, error })
+    async function spawnNextBatch(): Promise<void> {
+      const ready = getReadySubtasks()
+      if (ready.length === 0) return
+
+      const availableSlots = maxWorkers ? maxWorkers - running.size : Infinity
+      if (availableSlots <= 0) return
+
+      const toSpawn = ready.slice(0, availableSlots)
+
+      for (const st of toSpawn) {
+        running.add(st.id)
+        await updateWorker(plan.id, st.id, { status: "spawning" })
+
+        const spawnPromise = spawnOne(plan, st, abort)
+          .then(({ subtaskID }) => {
+            completed.add(subtaskID)
+            running.delete(subtaskID)
+            return { subtaskID, status: "fulfilled" as const }
+          })
+          .catch((err) => {
+            const error = err instanceof Error ? err.message : "Spawn failed"
+            failed.add(st.id)
+            running.delete(st.id)
+            log.error("worker spawn failed", { subtaskID: st.id, error })
+            return { subtaskID: st.id, status: "rejected" as const, error }
+          })
+          .finally(async () => {
+            // Try to spawn more workers after this one completes/fails
+            await spawnNextBatch()
+          })
+
+        spawnPromises.push(spawnPromise)
       }
     }
 
-    if (failedUpdates.length > 0) {
+    // Start initial batch
+    await spawnNextBatch()
+
+    // Wait for all spawns to complete
+    const results = await Promise.all(spawnPromises)
+
+    // Update failed workers
+    const failures = results.filter(
+      (r): r is typeof r & { status: "rejected"; error: string } => r.status === "rejected",
+    )
+
+    if (failures.length > 0) {
       await Promise.all(
-        failedUpdates.map(({ subtaskID, error }) =>
+        failures.map(({ subtaskID, error }) =>
           updateWorker(plan.id, subtaskID, { status: "failed", error }).catch((err) => {
             log.warn("failed to mark worker as failed", { subtaskID, error: err })
           }),
@@ -134,12 +205,41 @@ export namespace WorkerManager {
       )
     }
 
-    const allFailed = results.every((r) => r.status === "rejected")
-    if (allFailed) {
-      throw new Error("All workers failed to spawn")
+    // Check for dependency failures - mark dependent subtasks as blocked
+    const blocked: { subtaskID: SubtaskID; error: string }[] = []
+    for (const st of plan.subtasks) {
+      if (!completed.has(st.id) && !failed.has(st.id)) {
+        const hasFailedDep = st.dependencies.some((dep) => failed.has(dep))
+        if (hasFailedDep) {
+          blocked.push({ subtaskID: st.id, error: "Blocked: dependency failed" })
+        }
+      }
     }
 
-    log.info("workers spawned", { planID: plan.id, durationMs: Date.now() - spawnStartTime })
+    if (blocked.length > 0) {
+      await Promise.all(
+        blocked.map(({ subtaskID, error }) =>
+          updateWorker(plan.id, subtaskID, { status: "failed", error }).catch((err) => {
+            log.warn("failed to mark worker as blocked", { subtaskID, error: err })
+          }),
+        ),
+      )
+    }
+
+    const allFailedOrBlocked = plan.subtasks.every(
+      (st) => failed.has(st.id) || blocked.some((b) => b.subtaskID === st.id),
+    )
+    if (allFailedOrBlocked) {
+      throw new Error("All workers failed to spawn or were blocked by failed dependencies")
+    }
+
+    log.info("workers spawned", {
+      planID: plan.id,
+      durationMs: Date.now() - spawnStartTime,
+      completed: completed.size,
+      failed: failed.size,
+      blocked: blocked.length,
+    })
   }
 
   export async function waitAll(planID: PlanID, abort: AbortSignal): Promise<void> {
@@ -384,7 +484,17 @@ export namespace WorkerManager {
     }
   }
 
-  function buildWorkerPrompt(globalTask: string, subtask: Subtask): string {
+  function buildWorkerPrompt(globalTask: string, subtask: Subtask, allSubtasks: Subtask[]): string {
+    const depInfo =
+      subtask.dependencies.length > 0
+        ? `\n## Dependencies\nThis subtask depends on the following subtasks (they have already completed):\n${subtask.dependencies
+            .map((depID) => {
+              const dep = allSubtasks.find((st) => st.id === depID)
+              return dep ? `- ${dep.title}` : `- ${depID}`
+            })
+            .join("\n")}`
+        : ""
+
     return `# Parallel Task Execution
 
 ## Global Context
@@ -393,7 +503,7 @@ ${globalTask}
 ## Your Specific Subtask
 **${subtask.title}**
 
-${subtask.description}
+${subtask.description}${depInfo}
 
 ## File Scope
 You should primarily modify these files:
