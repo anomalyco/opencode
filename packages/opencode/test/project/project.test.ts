@@ -6,48 +6,52 @@ import path from "path"
 import { tmpdir } from "../fixture/fixture"
 import { Filesystem } from "../../src/util/filesystem"
 import { GlobalBus } from "../../src/bus/global"
+import { ProjectID } from "../../src/project/schema"
 
 Log.init({ print: false })
 
-const gitModule = await import("../../src/util/git")
-const originalGit = gitModule.git
+const gitModule = await import("../../src/git")
+const originalGit = gitModule.Git.run
 
 type Mode = "none" | "rev-list-fail" | "top-fail" | "common-dir-fail"
 let mode: Mode = "none"
 
-mock.module("../../src/util/git", () => ({
-  git: (args: string[], opts: { cwd: string; env?: Record<string, string> }) => {
-    const cmd = ["git", ...args].join(" ")
-    if (
-      mode === "rev-list-fail" &&
-      cmd.includes("git rev-list") &&
-      cmd.includes("--max-parents=0") &&
-      cmd.includes("--all")
-    ) {
-      return Promise.resolve({
-        exitCode: 128,
-        text: () => Promise.resolve(""),
-        stdout: Buffer.from(""),
-        stderr: Buffer.from("fatal"),
-      })
-    }
-    if (mode === "top-fail" && cmd.includes("git rev-parse") && cmd.includes("--show-toplevel")) {
-      return Promise.resolve({
-        exitCode: 128,
-        text: () => Promise.resolve(""),
-        stdout: Buffer.from(""),
-        stderr: Buffer.from("fatal"),
-      })
-    }
-    if (mode === "common-dir-fail" && cmd.includes("git rev-parse") && cmd.includes("--git-common-dir")) {
-      return Promise.resolve({
-        exitCode: 128,
-        text: () => Promise.resolve(""),
-        stdout: Buffer.from(""),
-        stderr: Buffer.from("fatal"),
-      })
-    }
-    return originalGit(args, opts)
+mock.module("../../src/git", () => ({
+  Git: {
+    ...gitModule.Git,
+    run: (args: string[], opts: { cwd: string; env?: Record<string, string> }) => {
+      const cmd = ["git", ...args].join(" ")
+      if (
+        mode === "rev-list-fail" &&
+        cmd.includes("git rev-list") &&
+        cmd.includes("--max-parents=0") &&
+        cmd.includes("HEAD")
+      ) {
+        return Promise.resolve({
+          exitCode: 128,
+          text: () => "",
+          stdout: Buffer.from(""),
+          stderr: Buffer.from("fatal"),
+        })
+      }
+      if (mode === "top-fail" && cmd.includes("git rev-parse") && cmd.includes("--show-toplevel")) {
+        return Promise.resolve({
+          exitCode: 128,
+          text: () => "",
+          stdout: Buffer.from(""),
+          stderr: Buffer.from("fatal"),
+        })
+      }
+      if (mode === "common-dir-fail" && cmd.includes("git rev-parse") && cmd.includes("--git-common-dir")) {
+        return Promise.resolve({
+          exitCode: 128,
+          text: () => "",
+          stdout: Buffer.from(""),
+          stderr: Buffer.from("fatal"),
+        })
+      }
+      return originalGit(args, opts)
+    },
   },
 }))
 
@@ -74,7 +78,7 @@ describe("Project.fromDirectory", () => {
     const { project } = await p.fromDirectory(tmp.path)
 
     expect(project).toBeDefined()
-    expect(project.id).toBe("global")
+    expect(project.id).toBe(ProjectID.global)
     expect(project.vcs).toBe("git")
     expect(project.worktree).toBe(tmp.path)
 
@@ -90,7 +94,7 @@ describe("Project.fromDirectory", () => {
     const { project } = await p.fromDirectory(tmp.path)
 
     expect(project).toBeDefined()
-    expect(project.id).not.toBe("global")
+    expect(project.id).not.toBe(ProjectID.global)
     expect(project.vcs).toBe("git")
     expect(project.worktree).toBe(tmp.path)
 
@@ -107,7 +111,7 @@ describe("Project.fromDirectory", () => {
     await withMode("rev-list-fail", async () => {
       const { project } = await p.fromDirectory(tmp.path)
       expect(project.vcs).toBe("git")
-      expect(project.id).toBe("global")
+      expect(project.id).toBe(ProjectID.global)
       expect(project.worktree).toBe(tmp.path)
     })
   })
@@ -168,6 +172,52 @@ describe("Project.fromDirectory with worktrees", () => {
         .cwd(tmp.path)
         .quiet()
         .catch(() => {})
+    }
+  })
+
+  test("worktree should share project ID with main repo", async () => {
+    const p = await loadProject()
+    await using tmp = await tmpdir({ git: true })
+
+    const { project: main } = await p.fromDirectory(tmp.path)
+
+    const worktreePath = path.join(tmp.path, "..", path.basename(tmp.path) + "-wt-shared")
+    try {
+      await $`git worktree add ${worktreePath} -b shared-${Date.now()}`.cwd(tmp.path).quiet()
+
+      const { project: wt } = await p.fromDirectory(worktreePath)
+
+      expect(wt.id).toBe(main.id)
+
+      // Cache should live in the common .git dir, not the worktree's .git file
+      const cache = path.join(tmp.path, ".git", "opencode")
+      const exists = await Filesystem.exists(cache)
+      expect(exists).toBe(true)
+    } finally {
+      await $`git worktree remove ${worktreePath}`
+        .cwd(tmp.path)
+        .quiet()
+        .catch(() => {})
+    }
+  })
+
+  test("separate clones of the same repo should share project ID", async () => {
+    const p = await loadProject()
+    await using tmp = await tmpdir({ git: true })
+
+    // Create a bare remote, push, then clone into a second directory
+    const bare = tmp.path + "-bare"
+    const clone = tmp.path + "-clone"
+    try {
+      await $`git clone --bare ${tmp.path} ${bare}`.quiet()
+      await $`git clone ${bare} ${clone}`.quiet()
+
+      const { project: a } = await p.fromDirectory(tmp.path)
+      const { project: b } = await p.fromDirectory(clone)
+
+      expect(b.id).toBe(a.id)
+    } finally {
+      await $`rm -rf ${bare} ${clone}`.quiet().nothrow()
     }
   })
 
@@ -301,7 +351,7 @@ describe("Project.update", () => {
 
     await expect(
       Project.update({
-        projectID: "nonexistent-project-id",
+        projectID: ProjectID.make("nonexistent-project-id"),
         name: "Should Fail",
       }),
     ).rejects.toThrow("Project not found: nonexistent-project-id")

@@ -70,7 +70,7 @@ export async function migrateTuiConfig(input: MigrateInput) {
     if (extracted.keybinds !== undefined) payload.keybinds = extracted.keybinds
     if (tui) Object.assign(payload, tui)
 
-    const wrote = await Bun.write(target, JSON.stringify(payload, null, 2))
+    const wrote = await Filesystem.write(target, JSON.stringify(payload, null, 2))
       .then(() => true)
       .catch((error) => {
         log.warn("failed to write tui migration target", { from: file, to: target, error })
@@ -104,7 +104,7 @@ async function backupAndStripLegacy(file: string, source: string) {
   const hasBackup = await Filesystem.exists(backup)
   const backed = hasBackup
     ? true
-    : await Bun.write(backup, source)
+    : await Filesystem.write(backup, source)
         .then(() => true)
         .catch((error) => {
           log.warn("failed to backup source config during tui migration", { path: file, backup, error })
@@ -123,7 +123,7 @@ async function backupAndStripLegacy(file: string, source: string) {
     return applyEdits(acc, edits)
   }, source)
 
-  return Bun.write(file, text)
+  return Filesystem.write(file, text)
     .then(() => {
       log.info("stripped tui keys from server config", { path: file, backup })
       return true

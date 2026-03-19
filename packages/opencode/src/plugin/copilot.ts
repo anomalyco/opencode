@@ -1,6 +1,7 @@
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
 import { Installation } from "@/installation"
 import { iife } from "@/util/iife"
+import { setTimeout as sleep } from "node:timers/promises"
 
 const CLIENT_ID = "Ov23li8tweQw6odWQebz"
 // Add a small safety buffer when polling to avoid hitting the server
@@ -167,7 +168,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
               key: "enterpriseUrl",
               message: "Enter your GitHub Enterprise URL or domain",
               placeholder: "company.ghe.com or https://company.ghe.com",
-              condition: (inputs) => inputs.deploymentType === "enterprise",
+              when: { key: "deploymentType", op: "eq", value: "enterprise" },
               validate: (value) => {
                 if (!value) return "URL or domain is required"
                 try {
@@ -184,12 +185,10 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
             const deploymentType = inputs.deploymentType || "github.com"
 
             let domain = "github.com"
-            let actualProvider = "github-copilot"
 
             if (deploymentType === "enterprise") {
               const enterpriseUrl = inputs.enterpriseUrl
               domain = normalizeDomain(enterpriseUrl!)
-              actualProvider = "github-copilot-enterprise"
             }
 
             const urls = getUrls(domain)
@@ -261,8 +260,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
                       expires: 0,
                     }
 
-                    if (actualProvider === "github-copilot-enterprise") {
-                      result.provider = "github-copilot-enterprise"
+                    if (deploymentType === "enterprise") {
                       result.enterpriseUrl = domain
                     }
 
@@ -270,7 +268,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
                   }
 
                   if (data.error === "authorization_pending") {
-                    await Bun.sleep(deviceData.interval * 1000 + OAUTH_POLLING_SAFETY_MARGIN_MS)
+                    await sleep(deviceData.interval * 1000 + OAUTH_POLLING_SAFETY_MARGIN_MS)
                     continue
                   }
 
@@ -286,13 +284,13 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
                       newInterval = serverInterval * 1000
                     }
 
-                    await Bun.sleep(newInterval + OAUTH_POLLING_SAFETY_MARGIN_MS)
+                    await sleep(newInterval + OAUTH_POLLING_SAFETY_MARGIN_MS)
                     continue
                   }
 
                   if (data.error) return { type: "failed" as const }
 
-                  await Bun.sleep(deviceData.interval * 1000 + OAUTH_POLLING_SAFETY_MARGIN_MS)
+                  await sleep(deviceData.interval * 1000 + OAUTH_POLLING_SAFETY_MARGIN_MS)
                   continue
                 }
               },
@@ -306,6 +304,24 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
 
       if (incoming.model.api.npm === "@ai-sdk/anthropic") {
         output.headers["anthropic-beta"] = "interleaved-thinking-2025-05-14"
+      }
+
+      const parts = await sdk.session
+        .message({
+          path: {
+            id: incoming.message.sessionID,
+            messageID: incoming.message.id,
+          },
+          query: {
+            directory: input.directory,
+          },
+          throwOnError: true,
+        })
+        .catch(() => undefined)
+
+      if (parts?.data.parts?.some((part) => part.type === "compaction")) {
+        output.headers["x-initiator"] = "agent"
+        return
       }
 
       const session = await sdk.session
