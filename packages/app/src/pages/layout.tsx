@@ -1177,13 +1177,6 @@ export default function Layout(props: ParentProps) {
     return currentProject()?.worktree ?? projectRoot(directory)
   }
 
-  function touchProjectRoute() {
-    const root = currentProject()?.worktree
-    if (!root) return
-    if (server.projects.last() !== root) server.projects.touch(root)
-    return root
-  }
-
   function rememberSessionRoute(directory: string, id: string, root = activeProjectRoot(directory)) {
     setStore("lastProjectSession", root, { directory, id, at: Date.now() })
     return root
@@ -1683,38 +1676,55 @@ export default function Layout(props: ParentProps) {
   const activeRoute = {
     session: "",
     sessionProject: "",
+    directory: "",
   }
 
   createEffect(
     on(
-      () => [pageReady(), params.dir, params.id, currentProject()?.worktree] as const,
-      ([ready, dir, id]) => {
-        if (!ready || !dir) {
+      () => {
+        const dir = params.dir
+        const directory = dir ? decode64(dir) : undefined
+        const resolved = directory ? globalSync.child(directory, { bootstrap: false })[0].path.directory : ""
+        return [pageReady(), dir, params.id, currentProject()?.worktree, directory, resolved] as const
+      },
+      ([ready, dir, id, root, directory, resolved]) => {
+        if (!ready || !dir || !directory) {
           activeRoute.session = ""
           activeRoute.sessionProject = ""
+          activeRoute.directory = ""
           return
         }
-
-        const directory = decode64(dir)
-        if (!directory) return
-
-        const root = touchProjectRoute() ?? activeProjectRoot(directory)
 
         if (!id) {
           activeRoute.session = ""
           activeRoute.sessionProject = ""
+          activeRoute.directory = ""
           return
         }
 
+        const next = resolved || directory
         const session = `${dir}/${id}`
-        if (session !== activeRoute.session) {
+
+        if (!root) {
           activeRoute.session = session
-          activeRoute.sessionProject = syncSessionRoute(directory, id, root)
+          activeRoute.directory = next
+          activeRoute.sessionProject = ""
+          return
+        }
+
+        if (server.projects.last() !== root) server.projects.touch(root)
+
+        const changed = session !== activeRoute.session || next !== activeRoute.directory
+        if (changed) {
+          activeRoute.session = session
+          activeRoute.directory = next
+          activeRoute.sessionProject = syncSessionRoute(next, id, root)
           return
         }
 
         if (root === activeRoute.sessionProject) return
-        activeRoute.sessionProject = rememberSessionRoute(directory, id, root)
+        activeRoute.directory = next
+        activeRoute.sessionProject = rememberSessionRoute(next, id, root)
       },
     ),
   )
