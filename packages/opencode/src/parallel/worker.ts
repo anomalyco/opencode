@@ -92,7 +92,7 @@ export namespace WorkerManager {
     if (abort.aborted) throw new Error("Aborted")
 
     const info = await Worktree.makeWorktreeInfo(`parallel-${plan.id.slice(0, 12)}-${subtask.id.slice(0, 20)}`)
-    const bootstrap = await Worktree.createFromInfo(info)
+    const bootstrap = await Worktree.createFromInfo(info, undefined, ParallelBootstrap)
 
     // Start worktree initialization
     await bootstrap()

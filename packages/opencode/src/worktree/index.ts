@@ -347,7 +347,7 @@ export namespace Worktree {
     return candidate(root, base || undefined)
   }
 
-  export async function createFromInfo(info: Info, startCommand?: string) {
+  export async function createFromInfo(info: Info, startCommand?: string, bootstrapFn?: () => Promise<void>) {
     const created = await git(["worktree", "add", "--no-checkout", "-b", info.branch, info.directory], {
       cwd: Instance.worktree,
     })
@@ -359,6 +359,8 @@ export namespace Worktree {
 
     const projectID = Instance.project.id
     const extra = startCommand?.trim()
+    // Use provided bootstrap or default to InstanceBootstrap
+    const initFn = bootstrapFn ?? InstanceBootstrap
 
     return () => {
       const start = async () => {
@@ -380,7 +382,7 @@ export namespace Worktree {
 
         const booted = await Instance.provide({
           directory: info.directory,
-          init: InstanceBootstrap,
+          init: initFn, // Use the provided bootstrap function
           fn: () => undefined,
           project: Instance.project,
           worktree: info.directory,
