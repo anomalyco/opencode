@@ -1,0 +1,8 @@
+{
+  email {$LETSENCRYPT_EMAIL}
+}
+
+{$NUMERAL_DOMAIN} {
+  encode zstd gzip
+  reverse_proxy numeral:4096
+}

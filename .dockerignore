@@ -1,0 +1,17 @@
+.git
+.github
+.idea
+.vscode
+.DS_Store
+.sst
+.turbo
+node_modules
+packages/*/node_modules
+packages/console/*/node_modules
+packages/app/dist
+packages/*/dist
+coverage
+playwright-report
+test-results
+tmp
+dist
