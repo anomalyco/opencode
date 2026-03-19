@@ -186,6 +186,15 @@ export namespace Provider {
         options: {},
       }
     },
+    xai: async () => {
+      return {
+        autoload: false,
+        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+          return sdk.responses(modelID)
+        },
+        options: {},
+      }
+    },
     "github-copilot": async () => {
       return {
         autoload: false,
