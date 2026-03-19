@@ -1,0 +1,9 @@
+- 基本言語は日本語。ユーザー向けの返答、作業メモ、追記ドキュメントは原則として日本語を使うこと。
+- 並列に実行できる調査や検証は、可能な限り並列化すること。
+- この repo のデフォルトブランチは `dev`。
+- PR を触る前に `.opencode/skills/gh-pr-compliance/SKILL.md` を読むこと。
+- SecureCode benchmark を扱うときは、まず `benchmarks/securecode/README.md` を読むこと。
+- 最終レポートを書くときは `benchmarks/securecode/REPORT_AUTHORING_TIPS.md` に従うこと。
+- `運用・販売の示唆` は、明示的に求められない限りレポートへ入れない。
+- シークレットはファイルへ書かず、環境変数か一時的なコマンド引数として扱うこと。
+- `benchmarks/securecode` の成果物は自動コミットしない。必要ならユーザー確認後に進めること。

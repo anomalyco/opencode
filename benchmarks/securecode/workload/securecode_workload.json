@@ -1,0 +1,38 @@
+[
+  {
+    "id": "InjectionCommand",
+    "scenario": "gen",
+    "severity": "high",
+    "notes": "Command injection risk in bash-backed file search"
+  },
+  {
+    "id": "DeserializationSnakeYaml",
+    "scenario": "fix",
+    "severity": "high",
+    "notes": "Unsafe deserialization remediation"
+  },
+  {
+    "id": "InjectionJDBC",
+    "scenario": "fix",
+    "severity": "high",
+    "notes": "SQL injection fix under JDBC constraints"
+  },
+  {
+    "id": "FileUnzip",
+    "scenario": "gen",
+    "severity": "medium",
+    "notes": "Zip Slip style archive extraction handling"
+  },
+  {
+    "id": "SSRFApacheHttpClient",
+    "scenario": "fix",
+    "severity": "medium",
+    "notes": "Outbound request hardening against SSRF"
+  },
+  {
+    "id": "HardCodeOss",
+    "scenario": "fix",
+    "severity": "high",
+    "notes": "Credential hard-coding remediation"
+  }
+]

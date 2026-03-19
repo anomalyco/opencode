@@ -4,6 +4,10 @@
 - Local `main` ref may not exist; use `dev` or `origin/dev` for diffs.
 - Prefer automation: execute requested actions without confirmation unless blocked by missing info or safety/irreversibility.
 - Before creating, editing, or reopening a GitHub PR, always use the shared project skill at `.opencode/skills/gh-pr-compliance/SKILL.md`. In Codex-style harnesses that do not expose a `skill` tool, read that file directly and follow it before touching the PR.
+- 基本言語は日本語。ユーザー向けの返答、コミットメッセージ案、PR/issue の下書き、作業メモ、追記ドキュメントは原則として日本語を使うこと。
+- 思考は英語でもよいが、外に出す文章は特段の理由がない限り日本語に統一すること。
+- コード、外部 API、OSS 由来の識別子、既存の英語 UI 文言、標準的な技術用語は無理に翻訳しない。
+- 英語を使うのは、ユーザーが明示的に要求した場合、外部プロジェクトの規約が英語必須な場合、または翻訳すると正確さが落ちる場合に限る。
 
 ## Style Guide
 

@@ -15,6 +15,9 @@ ts-dist
 **/.serena
 .serena/
 /result
+/results
+**/__pycache__/
+*.pyc
 refs
 Session.vim
 /opencode.json
