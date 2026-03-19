@@ -112,21 +112,15 @@ export const PrCommand = cmd({
         UI.println("Starting opencode...")
         UI.println()
 
-        // Launch opencode TUI with session ID if available
-        const { spawn } = await import("child_process")
         const opencodeArgs = sessionId ? ["-s", sessionId] : []
-        const opencodeProcess = spawn("opencode", opencodeArgs, {
-          stdio: "inherit",
+        const opencodeProcess = Process.spawn(["opencode", ...opencodeArgs], {
+          stdin: "inherit",
+          stdout: "inherit",
+          stderr: "inherit",
           cwd: process.cwd(),
         })
-
-        await new Promise<void>((resolve, reject) => {
-          opencodeProcess.on("exit", (code) => {
-            if (code === 0) resolve()
-            else reject(new Error(`opencode exited with code ${code}`))
-          })
-          opencodeProcess.on("error", reject)
-        })
+        const code = await opencodeProcess.exited
+        if (code !== 0) throw new Error(`opencode exited with code ${code}`)
       },
     })
   },
