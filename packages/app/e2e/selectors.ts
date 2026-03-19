@@ -1,5 +1,6 @@
 export const promptSelector = '[data-component="prompt-input"]'
-export const terminalSelector = '[data-component="terminal"]'
+export const terminalPanelSelector = '#terminal-panel[aria-hidden="false"]'
+export const terminalSelector = `${terminalPanelSelector} [data-component="terminal"]`
 export const sessionComposerDockSelector = '[data-component="session-prompt-dock"]'
 export const questionDockSelector = '[data-component="dock-prompt"][data-kind="question"]'
 export const permissionDockSelector = '[data-component="dock-prompt"][data-kind="permission"]'
@@ -12,6 +13,9 @@ export const sessionTodoToggleButtonSelector = '[data-action="session-todo-toggl
 export const sessionTodoListSelector = '[data-slot="session-todo-list"]'
 
 export const modelVariantCycleSelector = '[data-action="model-variant-cycle"]'
+export const promptAgentSelector = '[data-component="prompt-agent-control"]'
+export const promptModelSelector = '[data-component="prompt-model-control"]'
+export const promptVariantSelector = '[data-component="prompt-variant-control"]'
 export const settingsLanguageSelectSelector = '[data-action="settings-language"]'
 export const settingsColorSchemeSelector = '[data-action="settings-color-scheme"]'
 export const settingsThemeSelector = '[data-action="settings-theme"]'
@@ -50,8 +54,6 @@ export const dropdownMenuTriggerSelector = '[data-slot="dropdown-menu-trigger"]'
 export const dropdownMenuContentSelector = '[data-component="dropdown-menu-content"]'
 
 export const inlineInputSelector = '[data-component="inline-input"]'
-
-export const sessionTimelineHeaderSelector = "[data-session-title]"
 
 export const sessionItemSelector = (sessionID: string) => `${sidebarNavSelector} [data-session-id="${sessionID}"]`
 

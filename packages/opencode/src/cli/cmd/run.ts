@@ -1,6 +1,6 @@
 import type { Argv } from "yargs"
 import path from "path"
-import { pathToFileURL } from "bun"
+import { pathToFileURL } from "url"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
 import { Flag } from "../../flag/flag"
@@ -11,7 +11,7 @@ import { createOpencodeClient, type Message, type OpencodeClient, type ToolPart 
 import { Server } from "../../server/server"
 import { Provider } from "../../provider/provider"
 import { Agent } from "../../agent/agent"
-import { PermissionNext } from "../../permission/next"
+import { PermissionNext } from "../../permission"
 import { Tool } from "../../tool/tool"
 import { GlobTool } from "../../tool/glob"
 import { GrepTool } from "../../tool/grep"
@@ -667,7 +667,7 @@ export const RunCommand = cmd({
     await bootstrap(process.cwd(), async () => {
       const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
         const request = new Request(input, init)
-        return Server.App().fetch(request)
+        return Server.Default().fetch(request)
       }) as typeof globalThis.fetch
       const sdk = createOpencodeClient({ baseUrl: "http://opencode.internal", fetch: fetchFn })
       await execute(sdk)

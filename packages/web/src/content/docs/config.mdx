@@ -244,7 +244,7 @@ You can configure the providers and models you want to use in your OpenCode conf
 
 The `small_model` option configures a separate model for lightweight tasks like title generation. By default, OpenCode tries to use a cheaper model if one is available from your provider, otherwise it falls back to your main model.
 
-Provider options can include `timeout` and `setCacheKey`:
+Provider options can include `timeout`, `chunkTimeout`, and `setCacheKey`:
 
 ```json title="opencode.json"
 {
@@ -253,6 +253,7 @@ Provider options can include `timeout` and `setCacheKey`:
     "anthropic": {
       "options": {
         "timeout": 600000,
+        "chunkTimeout": 30000,
         "setCacheKey": true
       }
     }
@@ -261,6 +262,7 @@ Provider options can include `timeout` and `setCacheKey`:
 ```
 
 - `timeout` - Request timeout in milliseconds (default: 300000). Set to `false` to disable.
+- `chunkTimeout` - Timeout in milliseconds between streamed response chunks. If no chunk arrives in time, the request is aborted.
 - `setCacheKey` - Ensure a cache key is always set for designated provider.
 
 You can also configure [local models](/docs/models#local). [Learn more](/docs/models).
@@ -419,6 +421,23 @@ Customize keybinds in `tui.json`.
 ```
 
 [Learn more here](/docs/keybinds).
+
+---
+
+### Snapshot
+
+OpenCode uses snapshots to track file changes during agent operations, enabling you to undo and revert changes within a session. Snapshots are enabled by default.
+
+For large repositories or projects with many submodules, the snapshot system can cause slow indexing and significant disk usage as it tracks all changes using an internal git repository. You can disable snapshots using the `snapshot` option.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "snapshot": false
+}
+```
+
+Note that disabling snapshots means changes made by the agent cannot be rolled back through the UI.
 
 ---
 
