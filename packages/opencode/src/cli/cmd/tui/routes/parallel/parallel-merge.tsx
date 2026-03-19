@@ -9,6 +9,7 @@ import { Spinner } from "@tui/component/spinner"
 type MergeStatus = "clean" | "resolved" | "failed" | "pending" | "merging"
 
 export function ParallelMerge(props: { plan: Plan }) {
+  // Test 3: ESC fix validation comment
   const { theme } = useTheme()
   const dim = useTerminalDimensions()
   const sdk = useSDK()
