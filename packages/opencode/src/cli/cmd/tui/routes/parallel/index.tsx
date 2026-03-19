@@ -1,4 +1,4 @@
-import { Show, createEffect, onCleanup } from "solid-js"
+import { Show, createEffect, createSignal, onCleanup } from "solid-js"
 import { useTheme } from "@tui/context/theme"
 import { useTerminalDimensions, useKeyboard } from "@opentui/solid"
 import { useRoute } from "@tui/context/route"
@@ -17,6 +17,8 @@ export function Parallel() {
   const dim = useTerminalDimensions()
   const route = useRoute()
   const parallel = useParallel()
+  const [loading, setLoading] = createSignal(true)
+  const [error, setError] = createSignal<string | null>(null)
 
   const planID = () => (route.data.type === "parallel" ? route.data.planID : null)
 
@@ -24,9 +26,12 @@ export function Parallel() {
   createEffect(() => {
     const id = planID()
     if (!id) return
+    setLoading(true)
+    setError(null)
     PlanStore.get(PlanID.make(id))
       .then((plan) => parallel.setPlan(plan))
-      .catch(() => {})
+      .catch(() => setError("Plan not found"))
+      .finally(() => setLoading(false))
   })
 
   // Subscribe to plan updates
@@ -45,7 +50,32 @@ export function Parallel() {
   })
 
   return (
-    <Show when={parallel.plan} keyed>
+    <Show
+      when={!loading() && !error() && parallel.plan}
+      keyed
+      fallback={
+        <box
+          width={dim().width}
+          height={dim().height}
+          backgroundColor={theme.background}
+          alignItems="center"
+          justifyContent="center"
+        >
+          <box
+            flexDirection="column"
+            width={Math.min(60, dim().width - 2)}
+            backgroundColor={theme.backgroundPanel}
+            padding={2}
+            alignItems="center"
+          >
+            <text attributes={TextAttributes.BOLD} fg={theme.text}>
+              {loading() ? "Loading plan..." : error() ?? "No parallel plans found"}
+            </text>
+            <text fg={theme.textMuted}>Press ESC to go back</text>
+          </box>
+        </box>
+      }
+    >
       {(plan) => (
         <box
           width={dim().width}
