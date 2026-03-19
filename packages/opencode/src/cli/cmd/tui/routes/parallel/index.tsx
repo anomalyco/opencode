@@ -43,17 +43,32 @@ export function Parallel() {
   })
 
   // Poll for plan updates every 3s (Bus is server-side only)
-  const pollTimer = setInterval(async () => {
+  // Use EventSource instead of polling
+  createEffect(() => {
     const id = planID()
     if (!id) return
-    try {
-      const plan = await fetchPlan(id)
-      parallel.setPlan(plan)
-    } catch {
-      // Plan may have been deleted
-    }
-  }, 3000)
-  onCleanup(() => clearInterval(pollTimer))
+
+    const es = new EventSource(`${sdk.url}/parallel/${id}/events`, {
+      fetch: (url: string | URL) => sdk.fetch(url),
+    } as any)
+
+    es.addEventListener("message", (e) => {
+      try {
+        const data = JSON.parse(e.data)
+        if (data.type === "parallel.plan.updated") {
+          parallel.setPlan(data.payload.plan)
+        }
+      } catch {
+        // ignore parse errors
+      }
+    })
+
+    es.addEventListener("error", () => {
+      // Connection error, will retry automatically
+    })
+
+    onCleanup(() => es.close())
+  })
 
   // Auto-switch to build agent when plan completes successfully
   createEffect(() => {

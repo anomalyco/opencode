@@ -1,10 +1,14 @@
 import { Hono } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
+import { streamSSE } from "hono/streaming"
 import z from "zod"
 import { Orchestrator } from "../../parallel/orchestrator"
 import { PlanStore } from "../../parallel/plan"
 import { Plan } from "../../parallel/schema"
 import { Instance } from "../../project/instance"
+import { Bus } from "@/bus"
+import { ParallelEvent } from "../../parallel/events"
+import { Log } from "../../util/log"
 
 const errors = (code: number) => ({
   [code]: {
@@ -214,5 +218,105 @@ export const parallel = new Hono()
       const { planID } = c.req.valid("param")
       await PlanStore.remove(planID as any)
       return c.json({ ok: true })
+    },
+  )
+  .get(
+    "/:planID/events",
+    describeRoute({
+      summary: "Get parallel plan events",
+      description: "Subscribe to parallel plan events using server-sent events.",
+      operationId: "parallel.events",
+      responses: {
+        200: {
+          description: "Event stream",
+          content: {
+            "text/event-stream": {
+              schema: resolver(
+                z
+                  .object({
+                    type: z.string(),
+                    payload: z.any(),
+                  })
+                  .meta({
+                    ref: "ParallelEvent",
+                  }),
+              ),
+            },
+          },
+        },
+      },
+    }),
+    validator("param", z.object({ planID: z.string() })),
+    async (c) => {
+      const { planID } = c.req.valid("param")
+      const log = Log.create({ service: "parallel" })
+      log.info("parallel events connected", { planID })
+
+      c.header("X-Accel-Buffering", "no")
+      c.header("X-Content-Type-Options", "nosniff")
+
+      return streamSSE(c, async (stream) => {
+        const plan = await PlanStore.get(planID as any)
+
+        stream.writeSSE({
+          data: JSON.stringify({
+            type: "parallel.plan.updated",
+            payload: { plan },
+          }),
+        })
+
+        const unsubPlan = Bus.subscribe(ParallelEvent.PlanUpdated, (event) => {
+          if (event.properties.plan.id === planID) {
+            stream.writeSSE({
+              data: JSON.stringify({
+                type: event.type,
+                payload: event.properties,
+              }),
+            })
+          }
+        })
+
+        const unsubWorker = Bus.subscribe(ParallelEvent.WorkerUpdated, (event) => {
+          if (event.properties.planID === planID) {
+            stream.writeSSE({
+              data: JSON.stringify({
+                type: event.type,
+                payload: event.properties,
+              }),
+            })
+          }
+        })
+
+        const unsubMerge = Bus.subscribe(ParallelEvent.MergeProgress, (event) => {
+          if (event.properties.planID === planID) {
+            stream.writeSSE({
+              data: JSON.stringify({
+                type: event.type,
+                payload: event.properties,
+              }),
+            })
+          }
+        })
+
+        const heartbeat = setInterval(() => {
+          stream.writeSSE({
+            data: JSON.stringify({
+              type: "server.heartbeat",
+              payload: {},
+            }),
+          })
+        }, 10_000)
+
+        await new Promise<void>((resolve) => {
+          stream.onAbort(() => {
+            clearInterval(heartbeat)
+            unsubPlan()
+            unsubWorker()
+            unsubMerge()
+            resolve()
+            log.info("parallel events disconnected", { planID })
+          })
+        })
+      })
     },
   )
