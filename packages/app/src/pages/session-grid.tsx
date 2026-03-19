@@ -31,7 +31,8 @@ export function SessionGrid(props: { ids: string[] }) {
   }
 
   const focusSession = (id: string) => {
-    navigate(`/${params.dir}/session/${id}?${searchParams.toString()}`)
+    const gridParam = searchParams.grid ? `?grid=${searchParams.grid}` : ""
+    navigate(`/${params.dir}/session/${id}${gridParam}`)
   }
 
   const removeSessionFromGrid = (id: string) => {
