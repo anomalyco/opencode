@@ -1,17 +1,18 @@
+import { Effect } from "effect"
 import { afterEach, describe, expect, test } from "bun:test"
 import { tmpdir } from "../fixture/fixture"
 import { withServices } from "../fixture/instance"
-import { FormatService } from "../../src/format"
+import { Format } from "../../src/format"
 import { Instance } from "../../src/project/instance"
 
-describe("FormatService", () => {
+describe("Format", () => {
   afterEach(() => Instance.disposeAll())
 
   test("status() returns built-in formatters when no config overrides", async () => {
     await using tmp = await tmpdir()
 
-    await withServices(tmp.path, FormatService.layer, async (rt) => {
-      const statuses = await rt.runPromise(FormatService.use((s) => s.status()))
+    await withServices(tmp.path, Format.layer, async (rt) => {
+      const statuses = await rt.runPromise(Format.Service.use((s) => s.status()))
       expect(Array.isArray(statuses)).toBe(true)
       expect(statuses.length).toBeGreaterThan(0)
 
@@ -32,8 +33,8 @@ describe("FormatService", () => {
       config: { formatter: false },
     })
 
-    await withServices(tmp.path, FormatService.layer, async (rt) => {
-      const statuses = await rt.runPromise(FormatService.use((s) => s.status()))
+    await withServices(tmp.path, Format.layer, async (rt) => {
+      const statuses = await rt.runPromise(Format.Service.use((s) => s.status()))
       expect(statuses).toEqual([])
     })
   })
@@ -47,18 +48,18 @@ describe("FormatService", () => {
       },
     })
 
-    await withServices(tmp.path, FormatService.layer, async (rt) => {
-      const statuses = await rt.runPromise(FormatService.use((s) => s.status()))
+    await withServices(tmp.path, Format.layer, async (rt) => {
+      const statuses = await rt.runPromise(Format.Service.use((s) => s.status()))
       const gofmt = statuses.find((s) => s.name === "gofmt")
       expect(gofmt).toBeUndefined()
     })
   })
 
-  test("init() completes without error", async () => {
+  test("service initializes without error", async () => {
     await using tmp = await tmpdir()
 
-    await withServices(tmp.path, FormatService.layer, async (rt) => {
-      await rt.runPromise(FormatService.use((s) => s.init()))
+    await withServices(tmp.path, Format.layer, async (rt) => {
+      await rt.runPromise(Format.Service.use(() => Effect.void))
     })
   })
 })

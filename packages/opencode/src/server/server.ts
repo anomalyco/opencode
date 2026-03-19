@@ -14,7 +14,7 @@ import { LSP } from "../lsp"
 import { Format } from "../format"
 import { TuiRoutes } from "./routes/tui"
 import { Instance } from "../project/instance"
-import { Vcs, VcsService } from "../project/vcs"
+import { Vcs } from "../project/vcs"
 import { runPromiseInstance } from "@/effect/runtime"
 import { Agent } from "../agent/agent"
 import { Skill } from "../skill/skill"
@@ -67,6 +67,7 @@ export namespace Server {
           let status: ContentfulStatusCode
           if (err instanceof NotFoundError) status = 404
           else if (err instanceof Provider.ModelNotFoundError) status = 400
+          else if (err.name === "ProviderAuthValidationFailed") status = 400
           else if (err.name.startsWith("Worktree")) status = 400
           else status = 500
           return c.json(err.toObject(), { status })
@@ -333,8 +334,8 @@ export namespace Server {
         }),
         async (c) => {
           const [branch, default_branch] = await Promise.all([
-            runPromiseInstance(VcsService.use((s) => s.branch())),
-            runPromiseInstance(VcsService.use((s) => s.defaultBranch())),
+            runPromiseInstance(Vcs.Service.use((s) => s.branch())),
+            runPromiseInstance(Vcs.Service.use((s) => s.defaultBranch())),
           ])
           return c.json({ branch, default_branch })
         },
@@ -364,7 +365,7 @@ export namespace Server {
         ),
         async (c) => {
           const mode = c.req.valid("query").mode
-          return c.json(await runPromiseInstance(VcsService.use((s) => s.diff(mode))))
+          return c.json(await runPromiseInstance(Vcs.Service.use((s) => s.diff(mode))))
         },
       )
       .get(

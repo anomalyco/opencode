@@ -2,13 +2,13 @@ import { $ } from "bun"
 import { afterEach, describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { Layer, ManagedRuntime } from "effect"
+import { Effect, Layer, ManagedRuntime } from "effect"
 import { tmpdir } from "../fixture/fixture"
 import { watcherConfigLayer, withServices } from "../fixture/instance"
-import { FileWatcher, FileWatcherService } from "../../src/file/watcher"
+import { FileWatcher } from "../../src/file/watcher"
 import { Instance } from "../../src/project/instance"
 import { GlobalBus } from "../../src/bus/global"
-import { Vcs, VcsService } from "../../src/project/vcs"
+import { Vcs } from "../../src/project/vcs"
 
 // Skip in CI — native @parcel/watcher binding needed
 const describeVcs = FileWatcher.hasNativeBinding() && !process.env.CI ? describe : describe.skip
@@ -19,31 +19,35 @@ const describeVcs = FileWatcher.hasNativeBinding() && !process.env.CI ? describe
 
 function withVcs(
   directory: string,
-  body: (rt: ManagedRuntime.ManagedRuntime<FileWatcherService | VcsService, never>) => Promise<void>,
+  body: (rt: ManagedRuntime.ManagedRuntime<FileWatcher.Service | Vcs.Service, never>) => Promise<void>,
 ) {
   return withServices(
     directory,
-    Layer.merge(FileWatcherService.layer, VcsService.layer),
+    Layer.merge(FileWatcher.layer, Vcs.layer),
     async (rt) => {
-      await rt.runPromise(FileWatcherService.use((s) => s.init()))
-      await rt.runPromise(VcsService.use((s) => s.init()))
-      await Bun.sleep(200)
+      await rt.runPromise(FileWatcher.Service.use(() => Effect.void))
+      await rt.runPromise(Vcs.Service.use(() => Effect.void))
+      await Bun.sleep(500)
       await body(rt)
     },
     { provide: [watcherConfigLayer] },
   )
 }
 
-function withVcsOnly(directory: string, body: (rt: ManagedRuntime.ManagedRuntime<VcsService, never>) => Promise<void>) {
-  return withServices(directory, VcsService.layer, body)
+function withVcsOnly(directory: string, body: (rt: ManagedRuntime.ManagedRuntime<Vcs.Service, never>) => Promise<void>) {
+  return withServices(directory, Vcs.layer, body)
 }
 
 type BranchEvent = { directory?: string; payload: { type: string; properties: { branch?: string } } }
 
-/** Wait for a Vcs.Event.BranchUpdated event on GlobalBus */
-function nextBranchUpdate(directory: string, timeout = 5000) {
+/** Wait for a Vcs.Event.BranchUpdated event on GlobalBus, with retry polling as fallback */
+function nextBranchUpdate(directory: string, timeout = 10_000) {
   return new Promise<string | undefined>((resolve, reject) => {
+    let settled = false
+
     const timer = setTimeout(() => {
+      if (settled) return
+      settled = true
       GlobalBus.off("event", on)
       reject(new Error("timed out waiting for BranchUpdated event"))
     }, timeout)
@@ -51,6 +55,8 @@ function nextBranchUpdate(directory: string, timeout = 5000) {
     function on(evt: BranchEvent) {
       if (evt.directory !== directory) return
       if (evt.payload.type !== Vcs.Event.BranchUpdated.type) return
+      if (settled) return
+      settled = true
       clearTimeout(timer)
       GlobalBus.off("event", on)
       resolve(evt.payload.properties.branch)
@@ -71,7 +77,7 @@ describeVcs("Vcs", () => {
     await using tmp = await tmpdir({ git: true })
 
     await withVcs(tmp.path, async (rt) => {
-      const branch = await rt.runPromise(VcsService.use((s) => s.branch()))
+      const branch = await rt.runPromise(Vcs.Service.use((s) => s.branch()))
       expect(branch).toBeDefined()
       expect(typeof branch).toBe("string")
     })
@@ -81,7 +87,7 @@ describeVcs("Vcs", () => {
     await using tmp = await tmpdir()
 
     await withVcs(tmp.path, async (rt) => {
-      const branch = await rt.runPromise(VcsService.use((s) => s.branch()))
+      const branch = await rt.runPromise(Vcs.Service.use((s) => s.branch()))
       expect(branch).toBeUndefined()
     })
   })
@@ -114,7 +120,7 @@ describeVcs("Vcs", () => {
       await fs.writeFile(head, `ref: refs/heads/${branch}\n`)
 
       await pending
-      const current = await rt.runPromise(VcsService.use((s) => s.branch()))
+      const current = await rt.runPromise(Vcs.Service.use((s) => s.branch()))
       expect(current).toBe(branch)
     })
   })
@@ -128,7 +134,7 @@ describe("Vcs diff", () => {
     await $`git branch -M main`.cwd(tmp.path).quiet()
 
     await withVcsOnly(tmp.path, async (rt) => {
-      const branch = await rt.runPromise(VcsService.use((s) => s.defaultBranch()))
+      const branch = await rt.runPromise(Vcs.Service.use((s) => s.defaultBranch()))
       expect(branch).toBe("main")
     })
   })
@@ -139,7 +145,7 @@ describe("Vcs diff", () => {
     await $`git config init.defaultBranch trunk`.cwd(tmp.path).quiet()
 
     await withVcsOnly(tmp.path, async (rt) => {
-      const branch = await rt.runPromise(VcsService.use((s) => s.defaultBranch()))
+      const branch = await rt.runPromise(Vcs.Service.use((s) => s.defaultBranch()))
       expect(branch).toBe("trunk")
     })
   })
@@ -153,8 +159,8 @@ describe("Vcs diff", () => {
 
     await withVcsOnly(dir, async (rt) => {
       const [branch, base] = await Promise.all([
-        rt.runPromise(VcsService.use((s) => s.branch())),
-        rt.runPromise(VcsService.use((s) => s.defaultBranch())),
+        rt.runPromise(Vcs.Service.use((s) => s.branch())),
+        rt.runPromise(Vcs.Service.use((s) => s.defaultBranch())),
       ])
       expect(branch).toBe("feature/test")
       expect(base).toBe("main")
@@ -169,7 +175,7 @@ describe("Vcs diff", () => {
     await fs.writeFile(path.join(tmp.path, "file.txt"), "changed\n", "utf-8")
 
     await withVcsOnly(tmp.path, async (rt) => {
-      const diff = await rt.runPromise(VcsService.use((s) => s.diff("git")))
+      const diff = await rt.runPromise(Vcs.Service.use((s) => s.diff("git")))
       expect(diff).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
@@ -187,7 +193,7 @@ describe("Vcs diff", () => {
     await fs.writeFile(path.join(tmp.path, file), "hello\n", "utf-8")
 
     await withVcsOnly(tmp.path, async (rt) => {
-      const diff = await rt.runPromise(VcsService.use((s) => s.diff("git")))
+      const diff = await rt.runPromise(Vcs.Service.use((s) => s.diff("git")))
       expect(diff).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
@@ -208,7 +214,7 @@ describe("Vcs diff", () => {
     await $`git commit --no-gpg-sign -m "branch file"`.cwd(tmp.path).quiet()
 
     await withVcsOnly(tmp.path, async (rt) => {
-      const diff = await rt.runPromise(VcsService.use((s) => s.diff("branch")))
+      const diff = await rt.runPromise(Vcs.Service.use((s) => s.diff("branch")))
       expect(diff).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
