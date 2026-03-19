@@ -1,12 +1,13 @@
 import z from "zod"
 import { Filesystem } from "../util/filesystem"
 import path from "path"
-import { and, Database, eq, inArray, sql } from "../storage/db"
+import { and, Database, eq, inArray, ne, sql } from "../storage/db"
 import { ProjectTable } from "./project.sql"
 import { PermissionTable, SessionTable } from "../session/session.sql"
 import { Log } from "../util/log"
 import { Flag } from "@/flag/flag"
 import { fn } from "@opencode-ai/util/fn"
+import { $ } from "bun"
 import { BusEvent } from "@/bus/bus-event"
 import { iife } from "@/util/iife"
 import { GlobalBus } from "@/bus/global"
@@ -207,6 +208,11 @@ export namespace Project {
     )
   }
 
+  export async function initGit(input: { directory: string; project: Info }) {
+    await $`git init`.cwd(input.directory).quiet()
+    return fromDirectory(input.directory).then((x) => x.project)
+  }
+
   export function fromRow(row: Row): Info {
     const icon =
       row.icon_url || row.icon_color
@@ -349,6 +355,16 @@ export namespace Project {
         }
       }
 
+      const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.worktree, directory)).get())
+      if (row) {
+        return {
+          id: ProjectID.make(row.id),
+          worktree: row.worktree,
+          sandbox: row.worktree,
+          vcs: row.vcs ? Info.shape.vcs.parse(row.vcs) : Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
+        }
+      }
+
       return {
         id: ProjectID.global,
         worktree: "/",
@@ -387,7 +403,7 @@ export namespace Project {
       return fresh
     })
 
-    if (Flag.OPENCODE_EXPERIMENTAL_ICON_DISCOVERY) discover(existing)
+    if (Flag.OPENCODE_EXPERIMENTAL_ICON_DISCOVERY) await discover(existing)
 
     const result: Info = {
       ...existing,
@@ -441,8 +457,7 @@ export namespace Project {
     if (input.vcs !== "git") return
     if (input.icon?.override) return
     if (input.icon?.url) return
-    const glob = new Glob("**/{favicon}.{ico,png,svg,jpg,jpeg,webp}")
-    const matches = await glob.scan({
+    const matches = await Glob.scan("**/{favicon}.{ico,png,svg,jpg,jpeg,webp}", {
       cwd: input.worktree,
       absolute: true,
     })
@@ -453,16 +468,23 @@ export namespace Project {
     const base64 = Buffer.from(buffer).toString("base64")
     const mime = file.type || "image/png"
     const url = `data:${mime};base64,${base64}`
-    await update({
+    const updated = await update({
       projectID: input.id,
       icon: {
         url,
       },
     })
-    return
+    log.info("discovered project icon", { projectID: input.id, shortest, updated: updated.icon?.url != null })
+    input.icon = updated.icon
+    input.time = updated.time
+    return updated
   }
 
-  async function migrateFromGlobal(id: string, worktree: string) {
+  function whereID(id: ProjectID) {
+    return eq(ProjectTable.id, id)
+  }
+
+  async function migrateFromGlobal(id: ProjectID, worktree: string) {
     const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, ProjectID.global)).get())
     if (!row) return
 
@@ -486,14 +508,14 @@ export namespace Project {
     }
   }
 
-  export function setInitialized(id: string) {
+  export function setInitialized(id: ProjectID) {
     Database.use((db) =>
       db
         .update(ProjectTable)
         .set({
           time_initialized: Date.now(),
         })
-        .where(eq(ProjectTable.id, id))
+        .where(whereID(id))
         .run(),
     )
   }
@@ -503,14 +525,14 @@ export namespace Project {
       db
         .select()
         .from(ProjectTable)
-        .where(and(eq(ProjectTable.id, ProjectID.global), eq(ProjectTable.vcs, "git")))
+        .where(and(ne(ProjectTable.id, ProjectID.global), eq(ProjectTable.vcs, "git")))
         .all()
         .map((row) => fromRow(row)),
     )
   }
 
-  export function get(id: string): Info | undefined {
-    const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
+  export function get(id: ProjectID): Info | undefined {
+    const row = Database.use((db) => db.select().from(ProjectTable).where(whereID(id)).get())
     if (!row) return undefined
     return fromRow(row)
   }
@@ -533,7 +555,7 @@ export namespace Project {
             commands: input.commands,
             time_updated: Date.now(),
           })
-          .where(eq(ProjectTable.id, input.projectID))
+          .where(whereID(ProjectID.make(input.projectID)))
           .returning()
           .get(),
       )
@@ -549,8 +571,8 @@ export namespace Project {
     },
   )
 
-  export async function sandboxes(id: string) {
-    const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
+  export async function sandboxes(id: ProjectID) {
+    const row = Database.use((db) => db.select().from(ProjectTable).where(whereID(id)).get())
     if (!row) return []
     const data = fromRow(row)
     const valid: string[] = []
@@ -563,8 +585,8 @@ export namespace Project {
     return valid
   }
 
-  export async function addSandbox(id: string, directory: string) {
-    const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
+  export async function addSandbox(id: ProjectID, directory: string) {
+    const row = Database.use((db) => db.select().from(ProjectTable).where(whereID(id)).get())
     if (!row) throw new Error(`Project not found: ${id}`)
     const sandboxes = [...row.sandboxes]
     if (!sandboxes.includes(directory)) sandboxes.push(directory)
@@ -572,7 +594,7 @@ export namespace Project {
       db
         .update(ProjectTable)
         .set({ sandboxes, time_updated: Date.now() })
-        .where(eq(ProjectTable.id, id))
+        .where(whereID(id))
         .returning()
         .get(),
     )
@@ -587,15 +609,15 @@ export namespace Project {
     return data
   }
 
-  export async function removeSandbox(id: string, directory: string) {
-    const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
+  export async function removeSandbox(id: ProjectID, directory: string) {
+    const row = Database.use((db) => db.select().from(ProjectTable).where(whereID(id)).get())
     if (!row) throw new Error(`Project not found: ${id}`)
     const sandboxes = row.sandboxes.filter((s) => s !== directory)
     const result = Database.use((db) =>
       db
         .update(ProjectTable)
         .set({ sandboxes, time_updated: Date.now() })
-        .where(eq(ProjectTable.id, id))
+        .where(whereID(id))
         .returning()
         .get(),
     )
