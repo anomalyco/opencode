@@ -32,5 +32,6 @@ export const PlanTable = sqliteTable(
     index("plan_project_idx").on(table.project_id),
     index("plan_session_idx").on(table.session_id),
     index("plan_status_idx").on(table.status),
+    index("plan_project_status_idx").on(table.project_id, table.status),
   ],
 )

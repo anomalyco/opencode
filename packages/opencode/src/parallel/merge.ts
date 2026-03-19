@@ -15,6 +15,7 @@ export namespace MergePipeline {
   const log = Log.create({ service: "merge" })
 
   export async function run(planID: PlanID): Promise<boolean> {
+    const mergeStartTime = Date.now()
     const plan = await PlanStore.get(planID)
     const cwd = Instance.worktree
 
@@ -78,6 +79,8 @@ export namespace MergePipeline {
 
     await cleanupPlan(planID)
 
+    log.info("all merges complete", { planID, durationMs: Date.now() - mergeStartTime })
+
     return allSuccess
   }
 
@@ -116,11 +119,21 @@ export namespace MergePipeline {
 
     const plan = await PlanStore.get(planID)
 
+    // Cache for git show results to avoid redundant calls
+    const showCache = new Map<string, string>()
+    const cachedGitShow = async (ref: string, file: string): Promise<string> => {
+      const key = `${ref}:${file}`
+      if (showCache.has(key)) return showCache.get(key)!
+      const content = await gitShow(key, cwd)
+      showCache.set(key, content)
+      return content
+    }
+
     for (const file of conflictedFiles) {
       log.info("resolving file", { planID, branch, file })
       const content = await Bun.file(path.join(cwd, file)).text()
-      const oursContent = await gitShow(`HEAD:${file}`, cwd)
-      const theirsContent = await gitShow(`${branch}:${file}`, cwd)
+      const oursContent = await cachedGitShow("HEAD", file)
+      const theirsContent = await cachedGitShow(branch, file)
 
       const worker = plan.workers.find((w) => w.branch === branch)
       const subtask = plan.subtasks.find((s) => s.id === worker?.subtaskID)
