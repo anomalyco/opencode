@@ -1,7 +1,15 @@
 import { base64Decode } from "@opencode-ai/util/encode"
 import type { Page } from "@playwright/test"
 import { test, expect } from "../fixtures"
-import { defocus, createTestProject, cleanupTestProject, openSidebar, sessionIDFromUrl, waitSlug } from "../actions"
+import {
+  defocus,
+  createTestProject,
+  cleanupTestProject,
+  openSidebar,
+  sessionIDFromUrl,
+  waitDir,
+  waitSlug,
+} from "../actions"
 import { projectSwitchSelector, promptSelector, workspaceItemSelector, workspaceNewSessionSelector } from "../selectors"
 import { dirSlug, resolveDirectory } from "../utils"
 
@@ -100,11 +108,8 @@ test("switching back to a project opens the latest workspace session", async ({ 
         await expect(btn).toBeVisible()
         await btn.click({ force: true })
 
-        // A new workspace can be discovered via a transient slug before the route and sidebar
-        // settle to the canonical workspace path on Windows, so interact with either and assert
-        // against the resolved workspace slug.
         await waitSlug(page)
-        await expect(page).toHaveURL(new RegExp(`/${next}/session(?:[/?#]|$)`))
+        await waitDir(page, space)
 
         // Create a session by sending a prompt
         const prompt = page.locator(promptSelector)
@@ -132,6 +137,7 @@ test("switching back to a project opens the latest workspace session", async ({ 
         await expect(rootButton).toBeVisible()
         await rootButton.click()
 
+        await waitDir(page, space)
         await expect.poll(() => sessionIDFromUrl(page.url()) ?? "").toBe(created)
         await expect(page).toHaveURL(new RegExp(`/session/${created}(?:[/?#]|$)`))
       },

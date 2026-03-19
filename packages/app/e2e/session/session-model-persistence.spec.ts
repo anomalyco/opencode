@@ -1,7 +1,6 @@
-import { base64Decode } from "@opencode-ai/util/encode"
 import type { Locator, Page } from "@playwright/test"
 import { test, expect } from "../fixtures"
-import { openSidebar, sessionIDFromUrl, setWorkspacesEnabled, waitSessionIdle, waitSlug } from "../actions"
+import { openSidebar, resolveSlug, sessionIDFromUrl, setWorkspacesEnabled, waitSessionIdle, waitSlug } from "../actions"
 import {
   promptAgentSelector,
   promptModelSelector,
@@ -224,10 +223,9 @@ async function createWorkspace(page: Page, root: string, seen: string[]) {
   await openSidebar(page)
   await page.getByRole("button", { name: "New workspace" }).first().click()
 
-  const slug = await waitSlug(page, [root, ...seen])
-  const directory = base64Decode(slug)
-  if (!directory) throw new Error(`Failed to decode workspace slug: ${slug}`)
-  return { slug, directory }
+  const next = await resolveSlug(await waitSlug(page, [root, ...seen]))
+  await expect(page).toHaveURL(new RegExp(`/${next.slug}/session(?:[/?#]|$)`))
+  return next
 }
 
 async function waitWorkspace(page: Page, slug: string) {
@@ -257,8 +255,8 @@ async function newWorkspaceSession(page: Page, slug: string) {
   await expect(button).toBeVisible()
   await button.click({ force: true })
 
-  const next = await waitSlug(page)
-  await expect(page).toHaveURL(new RegExp(`/${next}/session(?:[/?#]|$)`))
+  const next = await resolveSlug(await waitSlug(page))
+  await expect(page).toHaveURL(new RegExp(`/${next.slug}/session(?:[/?#]|$)`))
   await expect(page.locator(promptSelector)).toBeVisible()
   return currentDir(page)
 }
