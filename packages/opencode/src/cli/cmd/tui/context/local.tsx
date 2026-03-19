@@ -93,6 +93,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
     })
 
+    // Parallel store declared early so model resolution can reference it
+    const [parallelStore, setParallelStore] = createStore<{
+      ready: boolean
+      orchestrator_model?: string
+      worker_model?: string
+      max_workers?: number
+    }>({ ready: false })
+
     const model = iife(() => {
       const [modelStore, setModelStore] = createStore<{
         ready: boolean
@@ -195,6 +203,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         return (
           getFirstValidModel(
             () => modelStore.model[a.name],
+            // For orchestrator agent, use the parallel config model as fallback
+            () => {
+              if (a.name !== "orchestrator") return undefined
+              const m = parallelStore.orchestrator_model
+              if (!m) return undefined
+              const { providerID, modelID } = Provider.parseModel(m)
+              return { providerID, modelID }
+            },
             () => a.model,
             fallbackModel,
           ) ?? undefined
@@ -398,12 +414,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
     // --- Parallel config (local state, same pattern as model store) ---
     const parallelFilePath = path.join(Global.Path.state, "parallel.json")
-    const [parallelStore, setParallelStore] = createStore<{
-      ready: boolean
-      orchestrator_model?: string
-      worker_model?: string
-      max_workers?: number
-    }>({ ready: false })
 
     function saveParallel() {
       if (!parallelStore.ready) return
