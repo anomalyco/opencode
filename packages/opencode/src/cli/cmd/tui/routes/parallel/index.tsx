@@ -149,7 +149,7 @@ export function Parallel() {
             <ParallelPlan plan={plan} onApproved={() => {}} onCancelled={() => route.navigate({ type: "home" })} />
           </Show>
           <Show when={plan.status === "approved" || plan.status === "spawning" || plan.status === "running"}>
-            <ParallelStatus plan={plan} />
+            <ParallelStatus plan={plan} onCancelled={() => route.navigate({ type: "home" })} />
           </Show>
           <Show when={plan.status === "merging"}>
             <ParallelMerge plan={plan} />
