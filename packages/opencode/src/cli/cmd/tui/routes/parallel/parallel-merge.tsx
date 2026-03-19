@@ -1,14 +1,32 @@
 import { useTheme } from "@tui/context/theme"
 import { useTerminalDimensions } from "@opentui/solid"
-import { For, Show } from "solid-js"
+import { For, Show, createSignal, createEffect, onCleanup } from "solid-js"
 import type { Plan, WorkerState } from "@/parallel/schema"
 import { TextAttributes } from "@opentui/core"
+import { useSDK } from "@tui/context/sdk"
+import { Spinner } from "@tui/component/spinner"
+import { ParallelEvent } from "@/parallel/events"
+
+type MergeStatus = "clean" | "resolved" | "failed" | "pending" | "merging"
 
 export function ParallelMerge(props: { plan: Plan }) {
   const { theme } = useTheme()
   const dim = useTerminalDimensions()
+  const sdk = useSDK()
+  const [progressMap, setProgressMap] = createSignal<Record<string, MergeStatus>>({})
 
-  const mergeColor = (result: "clean" | "resolved" | "failed" | "pending" | "merging") => {
+  createEffect(() => {
+    const unsub = sdk.event.on(ParallelEvent.MergeProgress.type, (evt) => {
+      if (evt.properties.planID !== props.plan.id) return
+      setProgressMap((prev) => ({
+        ...prev,
+        [evt.properties.branch]: evt.properties.result,
+      }))
+    })
+    onCleanup(unsub)
+  })
+
+  const mergeColor = (result: MergeStatus) => {
     switch (result) {
       case "clean":
         return theme.success
@@ -23,7 +41,7 @@ export function ParallelMerge(props: { plan: Plan }) {
     }
   }
 
-  const mergeIcon = (result: "clean" | "resolved" | "failed" | "pending" | "merging") => {
+  const mergeIcon = (result: MergeStatus) => {
     switch (result) {
       case "clean":
         return "✓"
@@ -38,16 +56,20 @@ export function ParallelMerge(props: { plan: Plan }) {
     }
   }
 
-  const workerMergeStatus = (worker: WorkerState): "clean" | "resolved" | "failed" | "pending" | "merging" => {
+  const workerMergeStatus = (worker: WorkerState): MergeStatus => {
     if (worker.status === "merged") return "clean"
     if (worker.status === "conflict") return "failed"
-    if (worker.status === "done") return "pending"
+    if (worker.status === "done") {
+      const branchProgress = progressMap()[worker.branch ?? ""]
+      return branchProgress ?? "merging"
+    }
     return "pending"
   }
 
   const completed = () =>
     props.plan.workers.filter((w) => w.status === "done" || w.status === "merged" || w.status === "conflict").length
   const total = () => props.plan.workers.length
+  const isMerging = () => props.plan.workers.some((w) => w.status === "done" && !progressMap()[w.branch ?? ""])
 
   return (
     <box
@@ -66,17 +88,26 @@ export function ParallelMerge(props: { plan: Plan }) {
         </text>
       </box>
 
+      <Show when={isMerging()}>
+        <box marginBottom={1}>
+          <Spinner color={theme.warning}>Merging branches...</Spinner>
+        </box>
+      </Show>
+
       <box flexDirection="column" gap={1}>
         <For each={props.plan.workers}>
           {(worker) => {
             const subtask = () => props.plan.subtasks.find((s) => s.id === worker.subtaskID)
-            const status = workerMergeStatus(worker)
+            const status = () => workerMergeStatus(worker)
+            const isActive = () => status() === "merging"
 
             return (
               <box flexDirection="row" gap={2}>
-                <text fg={mergeColor(status)}>{mergeIcon(status)}</text>
+                <Show when={isActive()} fallback={<text fg={mergeColor(status())}>{mergeIcon(status())}</text>}>
+                  <Spinner color={theme.warning} />
+                </Show>
                 <text fg={theme.text}>{subtask()?.title}</text>
-                <text fg={theme.textMuted}>— {status}</text>
+                <text fg={theme.textMuted}>— {status()}</text>
                 <Show when={worker.branch}>
                   <text fg={theme.accent}>({worker.branch?.slice(0, 20)})</text>
                 </Show>
