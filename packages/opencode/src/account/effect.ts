@@ -108,8 +108,8 @@ const mapAccountServiceError =
       ),
     )
 
-export namespace AccountService {
-  export interface Service {
+export namespace AccountEffect {
+  export interface Interface {
     readonly active: () => Effect.Effect<Option.Option<Account>, AccountError>
     readonly list: () => Effect.Effect<Account[], AccountError>
     readonly orgsByAccount: () => Effect.Effect<readonly AccountOrgs[], AccountError>
@@ -124,11 +124,11 @@ export namespace AccountService {
     readonly login: (url: string) => Effect.Effect<Login, AccountError>
     readonly poll: (input: Login) => Effect.Effect<PollResult, AccountError>
   }
-}
 
-export class AccountService extends ServiceMap.Service<AccountService, AccountService.Service>()("@opencode/Account") {
-  static readonly layer: Layer.Layer<AccountService, never, AccountRepo | HttpClient.HttpClient> = Layer.effect(
-    AccountService,
+  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Account") {}
+
+  export const layer: Layer.Layer<Service, never, AccountRepo | HttpClient.HttpClient> = Layer.effect(
+    Service,
     Effect.gen(function* () {
       const repo = yield* AccountRepo
       const http = yield* HttpClient.HttpClient
@@ -148,8 +148,6 @@ export class AccountService extends ServiceMap.Service<AccountService, AccountSe
           mapAccountServiceError("HTTP request failed"),
         )
 
-      // Returns a usable access token for a stored account row, refreshing and
-      // persisting it when the cached token has expired.
       const resolveToken = Effect.fnUntraced(function* (row: AccountRow) {
         const now = yield* Clock.currentTimeMillis
         if (row.token_expiry && row.token_expiry > now) return row.access_token
@@ -218,11 +216,11 @@ export class AccountService extends ServiceMap.Service<AccountService, AccountSe
         )
       })
 
-      const token = Effect.fn("AccountService.token")((accountID: AccountID) =>
+      const token = Effect.fn("Account.token")((accountID: AccountID) =>
         resolveAccess(accountID).pipe(Effect.map(Option.map((r) => r.accessToken))),
       )
 
-      const orgsByAccount = Effect.fn("AccountService.orgsByAccount")(function* () {
+      const orgsByAccount = Effect.fn("Account.orgsByAccount")(function* () {
         const accounts = yield* repo.list()
         const [errors, results] = yield* Effect.partition(
           accounts,
@@ -237,7 +235,7 @@ export class AccountService extends ServiceMap.Service<AccountService, AccountSe
         return results
       })
 
-      const orgs = Effect.fn("AccountService.orgs")(function* (accountID: AccountID) {
+      const orgs = Effect.fn("Account.orgs")(function* (accountID: AccountID) {
         const resolved = yield* resolveAccess(accountID)
         if (Option.isNone(resolved)) return []
 
@@ -246,7 +244,7 @@ export class AccountService extends ServiceMap.Service<AccountService, AccountSe
         return yield* fetchOrgs(account.url, accessToken)
       })
 
-      const config = Effect.fn("AccountService.config")(function* (accountID: AccountID, orgID: OrgID) {
+      const config = Effect.fn("Account.config")(function* (accountID: AccountID, orgID: OrgID) {
         const resolved = yield* resolveAccess(accountID)
         if (Option.isNone(resolved)) return Option.none()
 
@@ -270,7 +268,7 @@ export class AccountService extends ServiceMap.Service<AccountService, AccountSe
         return Option.some(parsed.config)
       })
 
-      const login = Effect.fn("AccountService.login")(function* (server: string) {
+      const login = Effect.fn("Account.login")(function* (server: string) {
         const response = yield* executeEffectOk(
           HttpClientRequest.post(`${server}/auth/device/code`).pipe(
             HttpClientRequest.acceptJson,
@@ -291,7 +289,7 @@ export class AccountService extends ServiceMap.Service<AccountService, AccountSe
         })
       })
 
-      const poll = Effect.fn("AccountService.poll")(function* (input: Login) {
+      const poll = Effect.fn("Account.poll")(function* (input: Login) {
         const response = yield* executeEffectOk(
           HttpClientRequest.post(`${input.server}/auth/device/token`).pipe(
             HttpClientRequest.acceptJson,
@@ -337,7 +335,7 @@ export class AccountService extends ServiceMap.Service<AccountService, AccountSe
         return new PollSuccess({ email: account.email })
       })
 
-      return AccountService.of({
+      return Service.of({
         active: repo.active,
         list: repo.list,
         orgsByAccount,
@@ -352,8 +350,5 @@ export class AccountService extends ServiceMap.Service<AccountService, AccountSe
     }),
   )
 
-  static readonly defaultLayer = AccountService.layer.pipe(
-    Layer.provide(AccountRepo.layer),
-    Layer.provide(FetchHttpClient.layer),
-  )
+  export const defaultLayer = layer.pipe(Layer.provide(AccountRepo.layer), Layer.provide(FetchHttpClient.layer))
 }
