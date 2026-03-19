@@ -23,7 +23,7 @@ function withVcs(
 ) {
   return withServices(
     directory,
-    Layer.merge(FileWatcher.layer, Vcs.layer),
+    Layer.merge(FileWatcher.layer, Vcs.defaultLayer),
     async (rt) => {
       await rt.runPromise(FileWatcher.Service.use(() => Effect.void))
       await rt.runPromise(Vcs.Service.use(() => Effect.void))
@@ -35,7 +35,7 @@ function withVcs(
 }
 
 function withVcsOnly(directory: string, body: (rt: ManagedRuntime.ManagedRuntime<Vcs.Service, never>) => Promise<void>) {
-  return withServices(directory, Vcs.layer, body)
+  return withServices(directory, Vcs.defaultLayer, body)
 }
 
 type BranchEvent = { directory?: string; payload: { type: string; properties: { branch?: string } } }
