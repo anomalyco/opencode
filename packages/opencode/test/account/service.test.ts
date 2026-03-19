@@ -46,7 +46,9 @@ const login = () =>
 
 const deviceTokenClient = (body: unknown, status = 400) =>
   HttpClient.make((req) =>
-    Effect.succeed(req.url === "https://one.example.com/auth/device/token" ? json(req, body, status) : json(req, {}, 404)),
+    Effect.succeed(
+      req.url === "https://one.example.com/auth/device/token" ? json(req, body, status) : json(req, {}, 404),
+    ),
   )
 
 const poll = (body: unknown, status = 400) =>
