@@ -247,3 +247,134 @@ it.effect("poll returns pending when the server responds with authorization_pend
     expect(result._tag).toBe("PollPending")
   }),
 )
+
+it.effect("poll returns slow when the server responds with slow_down", () =>
+  Effect.gen(function* () {
+    const login = new Login({
+      code: DeviceCode.make("device-code"),
+      user: UserCode.make("user-code"),
+      url: "https://one.example.com/verify",
+      server: "https://one.example.com",
+      expiry: Duration.seconds(600),
+      interval: Duration.seconds(5),
+    })
+
+    const client = HttpClient.make((req) =>
+      Effect.succeed(
+        req.url === "https://one.example.com/auth/device/token"
+          ? json(
+              req,
+              {
+                error: "slow_down",
+                error_description: "Polling too frequently, please slow down",
+              },
+              400,
+            )
+          : json(req, {}, 404),
+      ),
+    )
+
+    const result = yield* AccountEffect.Service.use((s) => s.poll(login)).pipe(Effect.provide(live(client)))
+
+    expect(result._tag).toBe("PollSlow")
+  }),
+)
+
+it.effect("poll returns denied when the server responds with access_denied", () =>
+  Effect.gen(function* () {
+    const login = new Login({
+      code: DeviceCode.make("device-code"),
+      user: UserCode.make("user-code"),
+      url: "https://one.example.com/verify",
+      server: "https://one.example.com",
+      expiry: Duration.seconds(600),
+      interval: Duration.seconds(5),
+    })
+
+    const client = HttpClient.make((req) =>
+      Effect.succeed(
+        req.url === "https://one.example.com/auth/device/token"
+          ? json(
+              req,
+              {
+                error: "access_denied",
+                error_description: "The authorization request was denied",
+              },
+              400,
+            )
+          : json(req, {}, 404),
+      ),
+    )
+
+    const result = yield* AccountEffect.Service.use((s) => s.poll(login)).pipe(Effect.provide(live(client)))
+
+    expect(result._tag).toBe("PollDenied")
+  }),
+)
+
+it.effect("poll returns expired when the server responds with expired_token", () =>
+  Effect.gen(function* () {
+    const login = new Login({
+      code: DeviceCode.make("device-code"),
+      user: UserCode.make("user-code"),
+      url: "https://one.example.com/verify",
+      server: "https://one.example.com",
+      expiry: Duration.seconds(600),
+      interval: Duration.seconds(5),
+    })
+
+    const client = HttpClient.make((req) =>
+      Effect.succeed(
+        req.url === "https://one.example.com/auth/device/token"
+          ? json(
+              req,
+              {
+                error: "expired_token",
+                error_description: "The device code has expired",
+              },
+              400,
+            )
+          : json(req, {}, 404),
+      ),
+    )
+
+    const result = yield* AccountEffect.Service.use((s) => s.poll(login)).pipe(Effect.provide(live(client)))
+
+    expect(result._tag).toBe("PollExpired")
+  }),
+)
+
+it.effect("poll returns poll error for other OAuth errors", () =>
+  Effect.gen(function* () {
+    const login = new Login({
+      code: DeviceCode.make("device-code"),
+      user: UserCode.make("user-code"),
+      url: "https://one.example.com/verify",
+      server: "https://one.example.com",
+      expiry: Duration.seconds(600),
+      interval: Duration.seconds(5),
+    })
+
+    const client = HttpClient.make((req) =>
+      Effect.succeed(
+        req.url === "https://one.example.com/auth/device/token"
+          ? json(
+              req,
+              {
+                error: "server_error",
+                error_description: "An unexpected error occurred",
+              },
+              400,
+            )
+          : json(req, {}, 404),
+      ),
+    )
+
+    const result = yield* AccountEffect.Service.use((s) => s.poll(login)).pipe(Effect.provide(live(client)))
+
+    expect(result._tag).toBe("PollError")
+    if (result._tag === "PollError") {
+      expect(String(result.cause)).toContain("server_error")
+    }
+  }),
+)
