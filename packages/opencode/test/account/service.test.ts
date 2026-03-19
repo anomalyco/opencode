@@ -215,3 +215,35 @@ it.effect("poll stores the account and first org on success", () =>
     )
   }),
 )
+
+it.effect("poll returns pending when the server responds with authorization_pending", () =>
+  Effect.gen(function* () {
+    const login = new Login({
+      code: DeviceCode.make("device-code"),
+      user: UserCode.make("user-code"),
+      url: "https://one.example.com/verify",
+      server: "https://one.example.com",
+      expiry: Duration.seconds(600),
+      interval: Duration.seconds(5),
+    })
+
+    const client = HttpClient.make((req) =>
+      Effect.succeed(
+        req.url === "https://one.example.com/auth/device/token"
+          ? json(
+              req,
+              {
+                error: "authorization_pending",
+                error_description: "The authorization request is still pending",
+              },
+              400,
+            )
+          : json(req, {}, 404),
+      ),
+    )
+
+    const result = yield* AccountEffect.Service.use((s) => s.poll(login)).pipe(Effect.provide(live(client)))
+
+    expect(result._tag).toBe("PollPending")
+  }),
+)
