@@ -461,6 +461,10 @@ export const RunCommand = cmd({
             const part = event.properties.part
             if (part.sessionID !== sessionID) continue
 
+            if (part.type === "tool" && part.state.status === "running" && emit("tool_use", { part })) {
+              continue
+            }
+
             if (part.type === "tool" && (part.state.status === "completed" || part.state.status === "error")) {
               if (emit("tool_use", { part })) continue
               if (part.state.status === "completed") {
@@ -474,12 +478,7 @@ export const RunCommand = cmd({
               UI.error(part.state.error)
             }
 
-            if (
-              part.type === "tool" &&
-              part.tool === "task" &&
-              part.state.status === "running" &&
-              args.format !== "json"
-            ) {
+            if (part.type === "tool" && part.tool === "task" && part.state.status === "running") {
               if (toggles.get(part.id) === true) continue
               task(props<typeof TaskTool>(part))
               toggles.set(part.id, true)
