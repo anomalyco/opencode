@@ -9,6 +9,7 @@
     "dev": "bun run --cwd packages/opencode --conditions=browser src/index.ts",
     "dev:desktop": "bun --cwd packages/desktop tauri dev",
     "dev:web": "bun --cwd packages/app dev",
+    "dev:console": "ulimit -n 10240 2>/dev/null; bun run --cwd packages/console/app dev",
     "dev:storybook": "bun --cwd packages/storybook storybook",
     "typecheck": "bun turbo typecheck",
     "prepare": "husky",
@@ -24,6 +25,7 @@
       "packages/slack"
     ],
     "catalog": {
+      "@effect/platform-node": "4.0.0-beta.35",
       "@types/bun": "1.3.9",
       "@octokit/rest": "22.0.0",
       "@hono/zod-validator": "0.4.2",
@@ -43,7 +45,7 @@
       "dompurify": "3.3.1",
       "drizzle-kit": "1.0.0-beta.16-ea816b6",
       "drizzle-orm": "1.0.0-beta.16-ea816b6",
-      "effect": "4.0.0-beta.31",
+      "effect": "4.0.0-beta.35",
       "ai": "5.0.124",
       "hono": "4.10.7",
       "hono-openapi": "1.1.2",
