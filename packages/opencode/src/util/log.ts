@@ -5,7 +5,24 @@ import { Global } from "../global"
 import z from "zod"
 import { Glob } from "./glob"
 
+/**
+ * Logging utility with structured logging support.
+ *
+ * Features:
+ * - Multiple log levels (DEBUG, INFO, WARN, ERROR)
+ * - Tagged loggers for contextual logging
+ * - File output with automatic rotation
+ * - Timing utilities for performance tracking
+ *
+ * @example
+ * ```typescript
+ * const log = Log.create({ service: "my-service" })
+ * log.info("Processing started", { userId: 123 })
+ * log.error("Failed to connect", { error: err.message })
+ * ```
+ */
 export namespace Log {
+  /** Log level enumeration - higher levels are more severe */
   export const Level = z.enum(["DEBUG", "INFO", "WARN", "ERROR"]).meta({ ref: "LogLevel", description: "Log level" })
   export type Level = z.infer<typeof Level>
 
@@ -22,13 +39,30 @@ export namespace Log {
     return levelPriority[input] >= levelPriority[level]
   }
 
+  /**
+   * Logger interface with tagging and timing capabilities.
+   *
+   * All logging methods accept:
+   * - message: The primary log message
+   * - extra: Optional structured data to include
+   */
   export type Logger = {
+    /** Log a debug message (lowest priority) */
     debug(message?: any, extra?: Record<string, any>): void
+    /** Log an info message */
     info(message?: any, extra?: Record<string, any>): void
+    /** Log an error message (highest priority) */
     error(message?: any, extra?: Record<string, any>): void
+    /** Log a warning message */
     warn(message?: any, extra?: Record<string, any>): void
+    /** Create a new logger with additional tag */
     tag(key: string, value: string): Logger
+    /** Create a copy of this logger */
     clone(): Logger
+    /**
+     * Start a timer for performance tracking.
+     * Returns an object with stop() method and dispose symbol for auto-stopping.
+     */
     time(
       message: string,
       extra?: Record<string, any>,
@@ -40,15 +74,21 @@ export namespace Log {
 
   const loggers = new Map<string, Logger>()
 
+  /** Default logger instance for general logging */
   export const Default = create({ service: "default" })
 
+  /** Options for initializing the logging system */
   export interface Options {
+    /** Whether to print to console instead of file */
     print: boolean
+    /** Development mode - uses "dev.log" filename */
     dev?: boolean
+    /** Minimum log level to record */
     level?: Level
   }
 
   let logpath = ""
+  /** Get the current log file path */
   export function file() {
     return logpath
   }
@@ -57,6 +97,12 @@ export namespace Log {
     return msg.length
   }
 
+  /**
+   * Initialize the logging system.
+   *
+   * @param options - Configuration options for logging
+   * @throws If log file cannot be created
+   */
   export async function init(options: Options) {
     if (options.level) level = options.level
     cleanup(Global.Path.log)
@@ -97,6 +143,20 @@ export namespace Log {
   }
 
   let last = Date.now()
+
+  /**
+   * Create a new logger with the given tags.
+   *
+   * Loggers are cached by service name for reuse.
+   *
+   * @param tags - Key-value pairs to include in all log entries from this logger
+   * @returns A configured Logger instance
+   * @example
+   * ```typescript
+   * const log = Log.create({ service: "database", host: "localhost" })
+   * log.info("Connected") // Logs: service=database host=localhost Connected
+   * ```
+   */
   export function create(tags?: Record<string, any>) {
     tags = tags || {}
 
