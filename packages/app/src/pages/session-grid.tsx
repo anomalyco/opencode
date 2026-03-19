@@ -76,7 +76,7 @@ export function SessionGrid(props: { ids: string[] }) {
     }
   }
 
-  const moveTile = (hoverId: string) => {
+  const moveTile = (hoverId: string, e: DragEvent) => {
     const dragging = dragId()
     if (!dragging || dragging === hoverId) return
 
@@ -84,6 +84,16 @@ export function SessionGrid(props: { ids: string[] }) {
       const from = prev.indexOf(dragging)
       const to = prev.indexOf(hoverId)
       if (from === -1 || to === -1 || from === to) return prev
+
+      const targetEl = e.currentTarget as HTMLElement
+      const rect = targetEl.getBoundingClientRect()
+      
+      const isHorizontalDrag = rect.width > rect.height
+      const midpoint = isHorizontalDrag ? rect.left + rect.width / 2 : rect.top + rect.height / 2
+      const mousePos = isHorizontalDrag ? e.clientX : e.clientY
+
+      if (from < to && mousePos < midpoint) return prev
+      if (from > to && mousePos > midpoint) return prev
 
       const next = [...prev]
       const [item] = next.splice(from, 1)
@@ -95,9 +105,11 @@ export function SessionGrid(props: { ids: string[] }) {
   const commitDrag = () => {
     const dragging = dragId()
     if (!dragging) return
+    
+    // Capture state before resetting dragId to prevent the createEffect from wiping it
+    const currentLocal = [...localIds()]
     setDragId(null)
     
-    const currentLocal = localIds()
     if (currentLocal.join(",") !== props.ids.join(",")) {
       const newFocusedId = params.id ? currentLocal.find((id) => id === params.id) ?? currentLocal[0] : undefined
       const navUrl = newFocusedId
@@ -134,7 +146,7 @@ export function SessionGrid(props: { ids: string[] }) {
               onDragOver={(e) => {
                 e.preventDefault()
                 e.dataTransfer!.dropEffect = "move"
-                moveTile(id)
+                moveTile(id, e)
               }}
               onDrop={(e) => {
                 e.preventDefault()
