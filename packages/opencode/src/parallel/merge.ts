@@ -9,10 +9,62 @@ import { ParallelEvent } from "./events"
 import { Log } from "@/util/log"
 import { Worktree } from "../worktree"
 import { Provider } from "@/provider/provider"
-import type { PlanID, ModelRef } from "./schema"
+import type { PlanID, ModelRef, SubtaskID } from "./schema"
+
+export type FileScopeViolation = {
+  subtaskID: SubtaskID
+  title: string
+  outOfScopeFiles: string[]
+}
 
 export namespace MergePipeline {
   const log = Log.create({ service: "merge" })
+
+  /**
+   * Validate that workers stayed within their declared fileScope.
+   * Returns violations (out-of-scope file changes) for logging/warning.
+   */
+  export async function validateFileScope(planID: PlanID): Promise<FileScopeViolation[]> {
+    const plan = await PlanStore.get(planID)
+    const cwd = Instance.worktree
+    const violations: FileScopeViolation[] = []
+
+    for (const worker of plan.workers) {
+      if (!worker.branch || worker.status !== "done") continue
+
+      const subtask = plan.subtasks.find((s) => s.id === worker.subtaskID)
+      if (!subtask) continue
+
+      // Get list of files changed in this worker's branch
+      const result = await git(["diff", "--name-only", `HEAD...${worker.branch}`], { cwd })
+      const changedFiles = outputText(result.stdout).split("\n").filter(Boolean)
+
+      // Check each changed file against declared fileScope
+      const outOfScopeFiles = changedFiles.filter((file) => {
+        return !subtask.fileScope.some((scope) => {
+          // Match if file equals scope exactly, or file is under scope directory
+          return file === scope || file.startsWith(scope + "/") || file.startsWith(scope)
+        })
+      })
+
+      if (outOfScopeFiles.length > 0) {
+        violations.push({
+          subtaskID: worker.subtaskID,
+          title: subtask.title,
+          outOfScopeFiles,
+        })
+        log.warn("file scope violation detected", {
+          planID,
+          subtaskID: worker.subtaskID,
+          subtaskTitle: subtask.title,
+          declaredScope: subtask.fileScope,
+          outOfScopeFiles,
+        })
+      }
+    }
+
+    return violations
+  }
 
   export async function run(planID: PlanID): Promise<boolean> {
     const mergeStartTime = Date.now()
@@ -24,6 +76,19 @@ export namespace MergePipeline {
     if (completed.length === 0) {
       log.warn("no completed workers to merge", { planID })
       return false
+    }
+
+    // Validate file scope compliance before merging
+    const violations = await validateFileScope(planID)
+    if (violations.length > 0) {
+      log.warn("file scope violations detected - workers modified files outside declared scope", {
+        planID,
+        violationCount: violations.length,
+        violations: violations.map((v) => ({
+          subtask: v.title,
+          files: v.outOfScopeFiles,
+        })),
+      })
     }
 
     const withDiffs = await Promise.all(
