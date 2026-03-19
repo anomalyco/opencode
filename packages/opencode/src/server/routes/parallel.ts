@@ -457,3 +457,32 @@ export const parallel = new Hono()
       return c.json(updated)
     },
   )
+  .post(
+    "/:planID/workers/:subtaskID/retry",
+    describeRoute({
+      summary: "Retry a failed worker",
+      description: "Retry a specific failed worker by its subtask ID.",
+      operationId: "parallel.retryWorker",
+      responses: {
+        200: {
+          description: "Retry initiated",
+          content: {
+            "application/json": {
+              schema: resolver(Plan),
+            },
+          },
+        },
+        ...errors(400),
+        ...errors(404),
+      },
+    }),
+    validator("param", z.object({ planID: z.string(), subtaskID: z.string() })),
+    async (c) => {
+      const { planID, subtaskID } = c.req.valid("param")
+      const plan = await Orchestrator.retryWorker({
+        planID: planID as any,
+        subtaskID: subtaskID as any,
+      })
+      return c.json(plan)
+    },
+  )

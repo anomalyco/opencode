@@ -46,6 +46,59 @@ export namespace WorkerManager {
     return results
   }
 
+  export async function spawnOne(
+    plan: Plan,
+    subtask: Subtask,
+    abort: AbortSignal,
+  ): Promise<{ subtaskID: SubtaskID; sessionID: string }> {
+    if (abort.aborted) throw new Error("Aborted")
+
+    const info = await Worktree.makeWorktreeInfo(`parallel-${plan.id.slice(0, 12)}-${subtask.id.slice(0, 20)}`)
+    const bootstrap = await Worktree.createFromInfo(info)
+
+    await bootstrap()
+
+    const session = await Instance.provide({
+      directory: info.directory,
+      init: InstanceBootstrap,
+      fn: async () => {
+        return Session.createNext({
+          parentID: plan.sessionID,
+          directory: info.directory,
+          title: `[parallel] ${subtask.title}`,
+        })
+      },
+    })
+
+    await updateWorker(plan.id, subtask.id, {
+      status: "running",
+      sessionID: session.id,
+      worktreeName: info.name,
+      worktreeDir: info.directory,
+      branch: info.branch,
+    })
+
+    await Instance.provide({
+      directory: info.directory,
+      init: InstanceBootstrap,
+      fn: async () => {
+        const promptText = buildWorkerPrompt(plan.task, subtask)
+        const { SessionPrompt } = await import("../session/prompt")
+        await SessionPrompt.prompt({
+          sessionID: session.id,
+          parts: [
+            {
+              type: "text" as const,
+              text: promptText,
+            },
+          ],
+        })
+      },
+    })
+
+    return { subtaskID: subtask.id, sessionID: session.id }
+  }
+
   export async function spawnAll(plan: Plan, abort: AbortSignal): Promise<void> {
     const cfg = await Config.get()
     const maxWorkers = cfg.parallel?.max_workers
@@ -56,63 +109,11 @@ export namespace WorkerManager {
       maxWorkers: maxWorkers ?? "unlimited",
     })
 
-    // Pre-update all workers to "spawning" in a single batch to avoid race conditions
     const initialWorkers = plan.workers.map((w) => ({ ...w, status: "spawning" as const }))
     await PlanStore.update({ id: plan.id, workers: initialWorkers })
 
-    const spawnOne = async (subtask: Subtask) => {
-      if (abort.aborted) throw new Error("Aborted")
+    const results = await pooled(plan.subtasks, maxWorkers, (subtask) => spawnOne(plan, subtask, abort))
 
-      const info = await Worktree.makeWorktreeInfo(`parallel-${plan.id.slice(0, 12)}-${subtask.id.slice(0, 20)}`)
-      const bootstrap = await Worktree.createFromInfo(info)
-
-      await bootstrap()
-
-      const session = await Instance.provide({
-        directory: info.directory,
-        init: InstanceBootstrap,
-        fn: async () => {
-          return Session.createNext({
-            parentID: plan.sessionID,
-            directory: info.directory,
-            title: `[parallel] ${subtask.title}`,
-          })
-        },
-      })
-
-      // Update this specific worker to running
-      await updateWorker(plan.id, subtask.id, {
-        status: "running",
-        sessionID: session.id,
-        worktreeName: info.name,
-        worktreeDir: info.directory,
-        branch: info.branch,
-      })
-
-      await Instance.provide({
-        directory: info.directory,
-        init: InstanceBootstrap,
-        fn: async () => {
-          const promptText = buildWorkerPrompt(plan.task, subtask)
-          const { SessionPrompt } = await import("../session/prompt")
-          await SessionPrompt.prompt({
-            sessionID: session.id,
-            parts: [
-              {
-                type: "text" as const,
-                text: promptText,
-              },
-            ],
-          })
-        },
-      })
-
-      return { subtaskID: subtask.id, sessionID: session.id }
-    }
-
-    const results = await pooled(plan.subtasks, maxWorkers, spawnOne)
-
-    // Batch update failed workers
     const failedUpdates: { subtaskID: SubtaskID; error: string }[] = []
     for (let i = 0; i < results.length; i++) {
       const result = results[i]
@@ -123,7 +124,6 @@ export namespace WorkerManager {
       }
     }
 
-    // Apply all failed updates in parallel (they touch different workers)
     if (failedUpdates.length > 0) {
       await Promise.all(
         failedUpdates.map(({ subtaskID, error }) =>

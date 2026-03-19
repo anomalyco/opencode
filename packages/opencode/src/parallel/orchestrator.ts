@@ -8,8 +8,8 @@ import { Provider } from "@/provider/provider"
 import { Instance } from "@/project/instance"
 import { Log } from "@/util/log"
 import { fn } from "@/util/fn"
-import type { Plan, PlanID, ModelRef } from "./schema"
-import { Plan as PlanSchema, PlanID as PlanIDSchema } from "./schema"
+import type { Plan, PlanID, ModelRef, SubtaskID } from "./schema"
+import { Plan as PlanSchema, PlanID as PlanIDSchema, SubtaskID as SubtaskIDSchema } from "./schema"
 import z from "zod"
 
 export namespace Orchestrator {
@@ -211,4 +211,73 @@ export namespace Orchestrator {
       status: "proposed",
     })
   }
+
+  export const retryWorker = fn(
+    z.object({
+      planID: PlanIDSchema.zod,
+      subtaskID: SubtaskIDSchema.zod,
+    }),
+    async ({ planID, subtaskID }): Promise<Plan> => {
+      const plan = await PlanStore.get(planID)
+      const worker = plan.workers.find((w) => w.subtaskID === subtaskID)
+
+      if (!worker) {
+        throw new Error(`Worker not found for subtask: ${subtaskID}`)
+      }
+
+      if (worker.status !== "failed") {
+        throw new Error(`Cannot retry worker with status '${worker.status}'. Only failed workers can be retried.`)
+      }
+
+      const subtask = plan.subtasks.find((st) => st.id === subtaskID)
+      if (!subtask) {
+        throw new Error(`Subtask not found: ${subtaskID}`)
+      }
+
+      await PlanStore.updateWorker({
+        id: planID,
+        subtaskID,
+        status: "pending",
+        error: undefined,
+        sessionID: undefined,
+        worktreeName: undefined,
+        worktreeDir: undefined,
+        branch: undefined,
+        diffStat: undefined,
+      })
+
+      const controller = new AbortController()
+
+      WorkerManager.spawnOne(plan, subtask, controller.signal)
+        .then(async () => {
+          await WorkerManager.waitAll(planID, controller.signal)
+
+          const updated = await PlanStore.get(planID)
+          const allDone = updated.workers.every((w) => w.status === "done" || w.status === "merged")
+          const hasFailures = updated.workers.some((w) => w.status === "failed")
+
+          if (allDone && !hasFailures && updated.status === "running") {
+            await PlanStore.transition({ id: planID, status: "merging" })
+            const success = await MergePipeline.run(planID)
+            await PlanStore.transition({ id: planID, status: success ? "done" : "failed" })
+            if (!success) {
+              const finalPlan = await PlanStore.get(planID)
+              await Recovery.cleanupWorktrees(finalPlan)
+            }
+          }
+        })
+        .catch(async (error) => {
+          log.error("worker retry failed", { planID, subtaskID, error })
+          await PlanStore.updateWorker({
+            id: planID,
+            subtaskID,
+            status: "failed",
+            error: error instanceof Error ? error.message : "Retry failed",
+          }).catch(() => {})
+        })
+
+      log.info("worker retry initiated", { planID, subtaskID })
+      return PlanStore.get(planID)
+    },
+  )
 }
