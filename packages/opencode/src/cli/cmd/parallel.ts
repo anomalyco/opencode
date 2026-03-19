@@ -3,6 +3,7 @@ import { cmd } from "./cmd"
 import { bootstrap } from "../bootstrap"
 import { UI } from "../ui"
 import { PlanStore } from "../../parallel/plan"
+import { Instance } from "../../project/instance"
 
 export const ParallelCommand = cmd({
   command: "parallel [task]",
@@ -59,9 +60,7 @@ export const ParallelCommand = cmd({
         ? Provider.parseModel(args["orchestrator-model"] as string)
         : undefined
 
-      const workerModel = args["worker-model"]
-        ? Provider.parseModel(args["worker-model"] as string)
-        : undefined
+      const workerModel = args["worker-model"] ? Provider.parseModel(args["worker-model"] as string) : undefined
 
       // Apply --workers to config if specified
       if (args.workers) {
@@ -82,14 +81,13 @@ export const ParallelCommand = cmd({
       UI.println(`Creating parallel plan for: ${args.task}`)
 
       const plan = await Orchestrator.create({
+        projectID: Instance.project.id,
         sessionID: session.id,
         task: args.task as string,
         orchestratorModel: orchestratorModel
           ? { providerID: orchestratorModel.providerID, modelID: orchestratorModel.modelID }
           : undefined,
-        workerModel: workerModel
-          ? { providerID: workerModel.providerID, modelID: workerModel.modelID }
-          : undefined,
+        workerModel: workerModel ? { providerID: workerModel.providerID, modelID: workerModel.modelID } : undefined,
       })
 
       if (args.json) {

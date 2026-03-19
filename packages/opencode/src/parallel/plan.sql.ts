@@ -1,17 +1,22 @@
 import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core"
+import { ProjectTable } from "../project/project.sql"
 import { SessionTable } from "../session/session.sql"
 import { Timestamps } from "../storage/schema.sql"
 import type { PlanID, PlanStatus, ModelRef, Subtask, WorkerState } from "./schema"
 import type { SessionID } from "../session/schema"
+import type { ProjectID } from "../project/schema"
 
 export const PlanTable = sqliteTable(
   "plan",
   {
     id: text().$type<PlanID>().primaryKey(),
+    project_id: text()
+      .$type<ProjectID>()
+      .notNull()
+      .references(() => ProjectTable.id, { onDelete: "cascade" }),
     session_id: text()
       .$type<SessionID>()
-      .notNull()
-      .references(() => SessionTable.id, { onDelete: "cascade" }),
+      .references(() => SessionTable.id, { onDelete: "set null" }),
     status: text().$type<PlanStatus>().notNull(),
     task: text().notNull(),
     orchestrator_model: text({ mode: "json" }).notNull().$type<ModelRef>(),
@@ -22,5 +27,9 @@ export const PlanTable = sqliteTable(
     time_approved: integer(),
     time_completed: integer(),
   },
-  (table) => [index("plan_session_idx").on(table.session_id), index("plan_status_idx").on(table.status)],
+  (table) => [
+    index("plan_project_idx").on(table.project_id),
+    index("plan_session_idx").on(table.session_id),
+    index("plan_status_idx").on(table.status),
+  ],
 )

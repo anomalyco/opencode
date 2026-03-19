@@ -3,11 +3,12 @@ import { Tool } from "./tool"
 import { PlanStore } from "@/parallel/plan"
 import { Orchestrator } from "@/parallel/orchestrator"
 import { SubtaskID } from "@/parallel/schema"
+import { Instance } from "@/project/instance"
 import type { Subtask } from "@/parallel/schema"
 
 export const ParallelPlanTool = Tool.define("parallel_plan", {
   description:
-    "Create or update a parallel execution plan. Call this to propose subtasks that will run in parallel across isolated git worktrees. If a plan already exists for this session, it will be updated. Each subtask must have a distinct set of files (no overlap).",
+    "Create or update a parallel execution plan. Call this to propose subtasks that will run in parallel across isolated git worktrees. If a plan already exists for this project, it will be updated. Each subtask must have a distinct set of files (no overlap).",
   parameters: z.object({
     task: z.string().describe("Overall task description"),
     subtasks: z
@@ -15,18 +16,24 @@ export const ParallelPlanTool = Tool.define("parallel_plan", {
         z.object({
           title: z.string().describe("Short title for this subtask"),
           description: z.string().describe("Detailed instructions for the worker agent"),
-          fileScope: z.array(z.string()).describe("Files this subtask will create or modify. Must not overlap with other subtasks."),
+          fileScope: z
+            .array(z.string())
+            .describe("Files this subtask will create or modify. Must not overlap with other subtasks."),
         }),
       )
       .describe("List of independent subtasks to execute in parallel"),
   }),
   async execute(params, ctx) {
     const models = await Orchestrator.resolveModels()
+    const projectID = Instance.project.id
 
-    // Find existing draft/proposed plan for this session
+    // Find existing draft/proposed plan for this project+session (session-scoped to prevent cross-session overwrites)
     const plans = await PlanStore.list()
     const existing = plans.find(
-      (p) => p.sessionID === ctx.sessionID && (p.status === "draft" || p.status === "proposed"),
+      (p) =>
+        p.projectID === projectID &&
+        p.sessionID === ctx.sessionID &&
+        (p.status === "draft" || p.status === "proposed"),
     )
 
     const subtasks: Subtask[] = params.subtasks.map((st) => ({
@@ -52,6 +59,7 @@ export const ParallelPlanTool = Tool.define("parallel_plan", {
       })
     } else {
       const created = await PlanStore.create({
+        projectID,
         sessionID: ctx.sessionID,
         task: params.task,
         ...models,

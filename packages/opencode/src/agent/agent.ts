@@ -163,20 +163,10 @@ export namespace Agent {
         permission: PermissionNext.merge(
           defaults,
           PermissionNext.fromConfig({
-            "*": "deny",
-            grep: "allow",
-            glob: "allow",
-            list: "allow",
-            bash: "allow",
-            read: "allow",
             question: "allow",
             parallel_plan: "allow",
             parallel_execute: "allow",
             parallel_status: "allow",
-            external_directory: {
-              "*": "ask",
-              ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
-            },
           }),
           user,
         ),

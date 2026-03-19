@@ -6,6 +6,7 @@ import { validateTransition, validateWorkerTransition } from "./transitions"
 import type { Plan, PlanID, SubtaskID, WorkerState, PlanStatus, WorkerStatus, Subtask, ModelRef } from "./schema"
 import { PlanID as PlanIDSchema, SubtaskID as SubtaskIDSchema, Plan as PlanSchema } from "./schema"
 import { SessionID } from "@/session/schema"
+import { ProjectID } from "@/project/schema"
 import { fn } from "@/util/fn"
 
 type PlanRow = typeof PlanTable.$inferSelect
@@ -13,7 +14,8 @@ type PlanRow = typeof PlanTable.$inferSelect
 function fromRow(row: PlanRow): Plan {
   return {
     id: row.id,
-    sessionID: row.session_id,
+    projectID: row.project_id,
+    sessionID: row.session_id ?? undefined,
     status: row.status,
     task: row.task,
     orchestratorModel: row.orchestrator_model,
@@ -31,7 +33,8 @@ function fromRow(row: PlanRow): Plan {
 function toRow(plan: Plan) {
   return {
     id: plan.id,
-    session_id: plan.sessionID,
+    project_id: plan.projectID,
+    session_id: plan.sessionID ?? null,
     status: plan.status,
     task: plan.task,
     orchestrator_model: plan.orchestratorModel,
@@ -47,6 +50,7 @@ function toRow(plan: Plan) {
 export namespace PlanStore {
   export const create = fn(
     PlanSchema.pick({
+      projectID: true,
       sessionID: true,
       task: true,
       orchestratorModel: true,
@@ -55,6 +59,7 @@ export namespace PlanStore {
     async (input): Promise<Plan> => {
       const plan: Plan = {
         id: PlanIDSchema.descending(),
+        projectID: input.projectID,
         sessionID: input.sessionID,
         status: "draft",
         task: input.task,

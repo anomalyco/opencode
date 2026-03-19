@@ -2,23 +2,28 @@ import z from "zod"
 import { Tool } from "./tool"
 import { PlanStore } from "@/parallel/plan"
 import { Orchestrator } from "@/parallel/orchestrator"
+import { Instance } from "@/project/instance"
 
 export const ParallelExecuteTool = Tool.define("parallel_execute", {
   description:
     "Approve and launch a parallel execution plan. Workers will spawn in isolated git worktrees and execute subtasks in parallel. Call this when the user confirms the plan is ready.",
   parameters: z.object({
-    plan_id: z.string().optional().describe("Plan ID to execute. If omitted, uses the latest proposed plan for this session."),
+    plan_id: z
+      .string()
+      .optional()
+      .describe("Plan ID to execute. If omitted, uses the latest proposed plan for this project."),
   }),
   async execute(params, ctx) {
     let planID = params.plan_id
+    const projectID = Instance.project.id
 
     if (!planID) {
       const plans = await PlanStore.list()
-      const proposed = plans.find((p) => p.sessionID === ctx.sessionID && p.status === "proposed")
+      const proposed = plans.find((p) => p.projectID === projectID && p.status === "proposed")
       if (!proposed) {
         return {
           title: "No plan found",
-          output: "No proposed plan found for this session. Create a plan first with parallel_plan.",
+          output: "No proposed plan found for this project. Create a plan first with parallel_plan.",
           metadata: {} as Record<string, never>,
         }
       }
@@ -26,6 +31,15 @@ export const ParallelExecuteTool = Tool.define("parallel_execute", {
     }
 
     const plan = await PlanStore.get(planID as any)
+
+    // Verify plan belongs to current project
+    if (plan.projectID !== projectID) {
+      return {
+        title: "Plan not found",
+        output: "Plan does not belong to this project.",
+        metadata: {} as Record<string, never>,
+      }
+    }
 
     if (plan.status !== "proposed") {
       return {

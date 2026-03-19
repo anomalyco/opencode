@@ -3,6 +3,7 @@ import z from "zod"
 import { Identifier } from "@/id/id"
 import { withStatics } from "@/util/schema"
 import { SessionID } from "@/session/schema"
+import { ProjectID } from "@/project/schema"
 import { ProviderID, ModelID } from "@/provider/schema"
 
 export const PlanID = Schema.String.pipe(
@@ -71,7 +72,8 @@ export type WorkerState = z.infer<typeof WorkerState>
 
 export const Plan = z.object({
   id: PlanID.zod,
-  sessionID: SessionID.zod,
+  projectID: ProjectID.zod,
+  sessionID: SessionID.zod.optional(),
   status: PlanStatus,
   task: z.string(),
   orchestratorModel: ModelRef,

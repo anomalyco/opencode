@@ -4,6 +4,7 @@ import z from "zod"
 import { Orchestrator } from "../../parallel/orchestrator"
 import { PlanStore } from "../../parallel/plan"
 import { Plan } from "../../parallel/schema"
+import { Instance } from "../../project/instance"
 
 const errors = (code: number) => ({
   [code]: {
@@ -39,8 +40,9 @@ export const parallel = new Hono()
       },
     }),
     async (c) => {
+      const projectID = Instance.project.id
       const plans = await PlanStore.list()
-      return c.json(plans)
+      return c.json(plans.filter((p) => p.projectID === projectID))
     },
   )
   .post(
@@ -64,7 +66,8 @@ export const parallel = new Hono()
     validator(
       "json",
       z.object({
-        sessionID: z.string(),
+        projectID: z.string(),
+        sessionID: z.string().optional(),
         task: z.string(),
         orchestratorModel: z.object({
           modelID: z.string(),
@@ -79,6 +82,7 @@ export const parallel = new Hono()
     async (c) => {
       const body = c.req.valid("json")
       const plan = await Orchestrator.create({
+        projectID: body.projectID as any,
         sessionID: body.sessionID as any,
         task: body.task,
         orchestratorModel: body.orchestratorModel as any,

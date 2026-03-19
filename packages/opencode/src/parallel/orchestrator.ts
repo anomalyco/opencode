@@ -4,6 +4,7 @@ import { WorkerManager } from "./worker"
 import { MergePipeline } from "./merge"
 import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider"
+import { Instance } from "@/project/instance"
 import { Log } from "@/util/log"
 import { fn } from "@/util/fn"
 import type { Plan, PlanID, ModelRef } from "./schema"
@@ -34,15 +35,13 @@ export namespace Orchestrator {
       return { providerID: parsed.providerID, modelID: parsed.modelID }
     }
 
-    const orchestratorModel =
-      input?.orchestratorModel ??
+    const orchestratorModel = input?.orchestratorModel ??
       parseConfigModel(cfg.parallel?.orchestrator_model) ?? {
         providerID: defaultModel.providerID,
         modelID: defaultModel.modelID,
       }
 
-    const workerModel =
-      input?.workerModel ??
+    const workerModel = input?.workerModel ??
       parseConfigModel(cfg.parallel?.worker_model) ?? {
         providerID: defaultModel.providerID,
         modelID: defaultModel.modelID,
@@ -53,6 +52,7 @@ export namespace Orchestrator {
 
   export const create = fn(
     z.object({
+      projectID: PlanSchema.shape.projectID,
       sessionID: PlanSchema.shape.sessionID,
       task: PlanSchema.shape.task,
       orchestratorModel: PlanSchema.shape.orchestratorModel.optional(),
@@ -65,6 +65,7 @@ export namespace Orchestrator {
       })
 
       const plan = await PlanStore.create({
+        projectID: input.projectID,
         sessionID: input.sessionID,
         task: input.task,
         ...models,
