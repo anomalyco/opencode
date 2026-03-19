@@ -211,26 +211,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 </For>
               </Show>
             </box>
-            <Show when={todo().length > 0 && todo().some((t) => t.status !== "completed")}>
-              <box>
-                <box
-                  flexDirection="row"
-                  gap={1}
-                  onMouseDown={() => todo().length > 2 && setExpanded("todo", !expanded.todo)}
-                >
-                  <Show when={todo().length > 2}>
-                    <text fg={theme.text}>{expanded.todo ? "▼" : "▶"}</text>
-                  </Show>
-                  <text fg={theme.text}>
-                    <b>Todo</b>
-                  </text>
-                </box>
-                <Show when={todo().length <= 2 || expanded.todo}>
-                  <For each={todo()}>{(todo) => <TodoItem status={todo.status} content={todo.content} />}</For>
-                </Show>
-              </box>
-            </Show>
-            <Show when={diff().length > 0}>
+            <Show when={sync.data.vcs?.branch || diff().length > 0}>
               <box>
                 <box
                   flexDirection="row"
@@ -241,11 +222,19 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                     <text fg={theme.text}>{expanded.diff ? "▼" : "▶"}</text>
                   </Show>
                   <text fg={theme.text}>
-                    <b>Modified Files</b>
+                    <b>Git</b>
                   </text>
                 </box>
-                <Show when={diff().length <= 2 || expanded.diff}>
-                  <For each={diff() || []}>
+                <Show when={sync.data.vcs?.branch}>
+                  <text fg={theme.textMuted}> {sync.data.vcs!.branch}</text>
+                </Show>
+                <Show when={diff().length > 0}>
+                  <text fg={theme.textMuted}>
+                    {diff().length} modified file{diff().length > 1 ? "s" : ""}
+                  </text>
+                </Show>
+                <Show when={diff().length > 0 && (diff().length <= 2 || expanded.diff)}>
+                  <For each={diff()}>
                     {(item) => {
                       return (
                         <box flexDirection="row" gap={1} justifyContent="space-between">
@@ -264,6 +253,25 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                       )
                     }}
                   </For>
+                </Show>
+              </box>
+            </Show>
+            <Show when={todo().length > 0 && todo().some((t) => t.status !== "completed")}>
+              <box>
+                <box
+                  flexDirection="row"
+                  gap={1}
+                  onMouseDown={() => todo().length > 2 && setExpanded("todo", !expanded.todo)}
+                >
+                  <Show when={todo().length > 2}>
+                    <text fg={theme.text}>{expanded.todo ? "▼" : "▶"}</text>
+                  </Show>
+                  <text fg={theme.text}>
+                    <b>Todo</b>
+                  </text>
+                </box>
+                <Show when={todo().length <= 2 || expanded.todo}>
+                  <For each={todo()}>{(todo) => <TodoItem status={todo.status} content={todo.content} />}</For>
                 </Show>
               </box>
             </Show>
@@ -304,17 +312,18 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
               </box>
             </box>
           </Show>
-          <box>
-            <text>
-              <span style={{ fg: theme.textMuted }}>{directory().split("/").slice(0, -1).join("/")}/</span>
-              <span style={{ fg: theme.text }}>{directory().split("/").at(-1)?.split(":")[0]}</span>
-            </text>
-            <Show when={sync.data.vcs?.branch}>
-              <text fg={theme.textMuted}>
-                 {sync.data.vcs!.branch}
+          <Show when={sync.data.vcs?.branch}>
+            <box>
+              <text fg={theme.text}>
+                <b>Git</b>
               </text>
-            </Show>
-          </box>
+              <text fg={theme.textMuted}> {sync.data.vcs!.branch}</text>
+            </box>
+          </Show>
+          <text>
+            <span style={{ fg: theme.textMuted }}>{directory().split("/").slice(0, -1).join("/")}/</span>
+            <span style={{ fg: theme.text }}>{directory().split("/").at(-1)?.split(":")[0]}</span>
+          </text>
           <text fg={theme.textMuted}>
             <span style={{ fg: theme.success }}>•</span> <b>Open</b>
             <span style={{ fg: theme.text }}>
