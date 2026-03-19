@@ -1,29 +1,30 @@
-import { Effect, Layer, ServiceMap } from "effect"
-import { Process } from "@/util/process"
-
-const cfg = [
-  "--no-optional-locks",
-  "-c",
-  "core.autocrlf=false",
-  "-c",
-  "core.fsmonitor=false",
-  "-c",
-  "core.longpaths=true",
-  "-c",
-  "core.symlinks=true",
-  "-c",
-  "core.quotepath=false",
-] as const
-
-function out(result: { text(): string }) {
-  return result.text().trim()
-}
-
-function split(text: string) {
-  return text.split("\0").filter(Boolean)
-}
+import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node"
+import { Effect, Layer, ManagedRuntime, ServiceMap, Stream } from "effect"
+import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 
 export namespace Git {
+  const cfg = [
+    "--no-optional-locks",
+    "-c",
+    "core.autocrlf=false",
+    "-c",
+    "core.fsmonitor=false",
+    "-c",
+    "core.longpaths=true",
+    "-c",
+    "core.symlinks=true",
+    "-c",
+    "core.quotepath=false",
+  ] as const
+
+  function out(result: { text(): string }) {
+    return result.text().trim()
+  }
+
+  function split(text: string) {
+    return text.split("\0").filter(Boolean)
+  }
+
   export type Kind = "added" | "deleted" | "modified"
 
   export type Base = {
@@ -53,6 +54,21 @@ export namespace Git {
   export interface Options {
     readonly cwd: string
     readonly env?: Record<string, string>
+  }
+
+  export interface Interface {
+    readonly run: (args: string[], opts: Options) => Effect.Effect<Result>
+    readonly text: (args: string[], opts: Options) => Effect.Effect<string>
+    readonly lines: (args: string[], opts: Options) => Effect.Effect<string[]>
+    readonly branch: (cwd: string) => Effect.Effect<string | undefined>
+    readonly prefix: (cwd: string) => Effect.Effect<string>
+    readonly defaultBranch: (cwd: string) => Effect.Effect<Base | undefined>
+    readonly hasHead: (cwd: string) => Effect.Effect<boolean>
+    readonly mergeBase: (cwd: string, base: string, head?: string) => Effect.Effect<string | undefined>
+    readonly show: (cwd: string, ref: string, file: string, prefix?: string) => Effect.Effect<string>
+    readonly status: (cwd: string) => Effect.Effect<Item[]>
+    readonly diff: (cwd: string, ref: string) => Effect.Effect<Item[]>
+    readonly stats: (cwd: string, ref: string) => Effect.Effect<Stat[]>
   }
 
   function kind(code: string | undefined): Kind {
@@ -105,218 +121,228 @@ export namespace Git {
     return out
   }
 
-  async function refs(cwd: string) {
-    return lines(["for-each-ref", "--format=%(refname:short)", "refs/heads"], { cwd })
-  }
-
-  async function configured(cwd: string, list: string[]) {
-    const result = await run(["config", "init.defaultBranch"], { cwd })
-    if (result.exitCode !== 0) return
-    const name = out(result)
-    if (!name || !list.includes(name)) return
-    const ref = await run(["rev-parse", "--verify", name], { cwd })
-    if (ref.exitCode !== 0) return
-    return { name, ref: name } satisfies Base
-  }
-
-  async function remoteHead(cwd: string, remote: string) {
-    const result = await run(["ls-remote", "--symref", remote, "HEAD"], { cwd })
-    if (result.exitCode !== 0) return
-    for (const line of result.text().split("\n")) {
-      const match = /^ref: refs\/heads\/(.+)\tHEAD$/.exec(line.trim())
-      if (!match?.[1]) continue
-      return { name: match[1], ref: `${remote}/${match[1]}` } satisfies Base
-    }
-  }
-
-  async function primary(cwd: string) {
-    const list = await lines(["remote"], { cwd })
-    if (list.includes("origin")) return "origin"
-    if (list.length === 1) return list[0]
-    if (list.includes("upstream")) return "upstream"
-    return list[0]
-  }
-
-  export interface Interface {
-    readonly run: (args: string[], opts: Options) => Effect.Effect<Result>
-    readonly text: (args: string[], opts: Options) => Effect.Effect<string>
-    readonly lines: (args: string[], opts: Options) => Effect.Effect<string[]>
-    readonly branch: (cwd: string) => Effect.Effect<string | undefined>
-    readonly prefix: (cwd: string) => Effect.Effect<string>
-    readonly defaultBranch: (cwd: string) => Effect.Effect<Base | undefined>
-    readonly hasHead: (cwd: string) => Effect.Effect<boolean>
-    readonly mergeBase: (cwd: string, base: string, head?: string) => Effect.Effect<string | undefined>
-    readonly show: (cwd: string, ref: string, file: string, prefix?: string) => Effect.Effect<string>
-    readonly status: (cwd: string) => Effect.Effect<Item[]>
-    readonly diff: (cwd: string, ref: string) => Effect.Effect<Item[]>
-    readonly stats: (cwd: string, ref: string) => Effect.Effect<Stat[]>
-  }
-
-  export async function run(args: string[], opts: Options): Promise<Result> {
-    return Process.run(["git", ...cfg, ...args], {
-      cwd: opts.cwd,
-      env: opts.env,
-      stdin: "ignore",
-      nothrow: true,
-    })
-      .then((result) => ({
-        exitCode: result.code,
-        text: () => result.stdout.toString(),
-        stdout: result.stdout,
-        stderr: result.stderr,
-      }))
-      .catch((error) => ({
-        exitCode: 1,
-        text: () => "",
-        stdout: Buffer.alloc(0),
-        stderr: Buffer.from(error instanceof Error ? error.message : String(error)),
-      }))
-  }
-
-  export async function text(args: string[], opts: Options) {
-    return (await run(args, opts)).text()
-  }
-
-  export async function lines(args: string[], opts: Options) {
-    return (await text(args, opts))
-      .split(/\r?\n/)
-      .map((item) => item.trim())
-      .filter(Boolean)
-  }
-
-  export async function branch(cwd: string) {
-    const result = await run(["rev-parse", "--abbrev-ref", "HEAD"], { cwd })
-    if (result.exitCode !== 0) return
-    const text = out(result)
-    return text || undefined
-  }
-
-  export async function prefix(cwd: string) {
-    const result = await run(["rev-parse", "--show-prefix"], { cwd })
-    if (result.exitCode !== 0) return ""
-    return out(result)
-  }
-
-  export async function defaultBranch(cwd: string) {
-    const remote = await primary(cwd)
-    if (remote) {
-      const head = await run(["symbolic-ref", `refs/remotes/${remote}/HEAD`], { cwd })
-      if (head.exitCode === 0) {
-        const ref = out(head).replace(/^refs\/remotes\//, "")
-        const name = ref.startsWith(`${remote}/`) ? ref.slice(`${remote}/`.length) : ""
-        if (name) return { name, ref } satisfies Base
-      }
-
-      const next = await remoteHead(cwd, remote)
-      if (next) return next
-    }
-
-    const list = await refs(cwd)
-    const next = await configured(cwd, list)
-    if (next) return next
-    for (const name of ["main", "master"]) {
-      if (list.includes(name)) return { name, ref: name } satisfies Base
-    }
-  }
-
-  export async function hasHead(cwd: string) {
-    const result = await run(["rev-parse", "--verify", "HEAD"], { cwd })
-    return result.exitCode === 0
-  }
-
-  export async function mergeBase(cwd: string, base: string, head = "HEAD") {
-    const result = await run(["merge-base", base, head], { cwd })
-    if (result.exitCode !== 0) return
-    const text = out(result)
-    return text || undefined
-  }
-
-  export async function show(cwd: string, ref: string, file: string, prefix = "") {
-    const target = prefix ? `${prefix}${file}` : file
-    const result = await run(["show", `${ref}:${target}`], { cwd })
-    if (result.exitCode !== 0) return ""
-    return result.text()
-  }
-
-  export async function status(cwd: string) {
-    return parseStatus(await text(["status", "--porcelain=v1", "--untracked-files=all", "--no-renames", "-z", "--", "."], { cwd }))
-  }
-
-  export async function diff(cwd: string, ref: string) {
-    return parseNames(await text(["diff", "--no-ext-diff", "--no-renames", "--name-status", "-z", ref, "--", "."], { cwd }))
-  }
-
-  export async function stats(cwd: string, ref: string) {
-    return parseStats(await text(["diff", "--no-ext-diff", "--no-renames", "--numstat", "-z", ref, "--", "."], { cwd }))
-  }
-
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Git") {}
 
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
-      const fxRun = Effect.fn("Git.run")(function* (args: string[], opts: Options) {
-        return yield* Effect.promise(() => run(args, opts))
+      const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+
+      const run = Effect.fn("Git.run")(
+        function* (args: string[], opts: Options) {
+          const proc = ChildProcess.make("git", [...cfg, ...args], {
+            cwd: opts.cwd,
+            env: opts.env,
+            extendEnv: true,
+          })
+          const handle = yield* spawner.spawn(proc)
+          const [stdout, stderr] = yield* Effect.all(
+            [Stream.mkString(Stream.decodeText(handle.stdout)), Stream.mkString(Stream.decodeText(handle.stderr))],
+            { concurrency: 2 },
+          )
+          return {
+            exitCode: yield* handle.exitCode,
+            text: () => stdout,
+            stdout: Buffer.from(stdout),
+            stderr: Buffer.from(stderr),
+          } satisfies Result
+        },
+        Effect.scoped,
+        Effect.catch((err) =>
+          Effect.succeed({
+            exitCode: ChildProcessSpawner.ExitCode(1),
+            text: () => "",
+            stdout: Buffer.alloc(0),
+            stderr: Buffer.from(String(err)),
+          }),
+        ),
+      )
+
+      const text = Effect.fn("Git.text")(function* (args: string[], opts: Options) {
+        return (yield* run(args, opts)).text()
       })
 
-      const fxText = Effect.fn("Git.text")(function* (args: string[], opts: Options) {
-        return yield* Effect.promise(() => text(args, opts))
+      const lines = Effect.fn("Git.lines")(function* (args: string[], opts: Options) {
+        return (yield* text(args, opts))
+          .split(/\r?\n/)
+          .map((item) => item.trim())
+          .filter(Boolean)
       })
 
-      const fxLines = Effect.fn("Git.lines")(function* (args: string[], opts: Options) {
-        return yield* Effect.promise(() => lines(args, opts))
+      const refs = Effect.fnUntraced(function* (cwd: string) {
+        return yield* lines(["for-each-ref", "--format=%(refname:short)", "refs/heads"], { cwd })
       })
 
-      const fxBranch = Effect.fn("Git.branch")(function* (cwd: string) {
-        return yield* Effect.promise(() => branch(cwd))
+      const configured = Effect.fnUntraced(function* (cwd: string, list: string[]) {
+        const result = yield* run(["config", "init.defaultBranch"], { cwd })
+        if (result.exitCode !== 0) return
+        const name = out(result)
+        if (!name || !list.includes(name)) return
+        const ref = yield* run(["rev-parse", "--verify", name], { cwd })
+        if (ref.exitCode !== 0) return
+        return { name, ref: name } satisfies Base
       })
 
-      const fxPrefix = Effect.fn("Git.prefix")(function* (cwd: string) {
-        return yield* Effect.promise(() => prefix(cwd))
+      const remoteHead = Effect.fnUntraced(function* (cwd: string, remote: string) {
+        const result = yield* run(["ls-remote", "--symref", remote, "HEAD"], { cwd })
+        if (result.exitCode !== 0) return
+        for (const line of result.text().split("\n")) {
+          const match = /^ref: refs\/heads\/(.+)\tHEAD$/.exec(line.trim())
+          if (!match?.[1]) continue
+          return { name: match[1], ref: `${remote}/${match[1]}` } satisfies Base
+        }
       })
 
-      const fxDefaultBranch = Effect.fn("Git.defaultBranch")(function* (cwd: string) {
-        return yield* Effect.promise(() => defaultBranch(cwd))
+      const primary = Effect.fnUntraced(function* (cwd: string) {
+        const list = yield* lines(["remote"], { cwd })
+        if (list.includes("origin")) return "origin"
+        if (list.length === 1) return list[0]
+        if (list.includes("upstream")) return "upstream"
+        return list[0]
       })
 
-      const fxHasHead = Effect.fn("Git.hasHead")(function* (cwd: string) {
-        return yield* Effect.promise(() => hasHead(cwd))
+      const branch = Effect.fn("Git.branch")(function* (cwd: string) {
+        const result = yield* run(["rev-parse", "--abbrev-ref", "HEAD"], { cwd })
+        if (result.exitCode !== 0) return
+        const text = out(result)
+        return text || undefined
       })
 
-      const fxMergeBase = Effect.fn("Git.mergeBase")(function* (cwd: string, base: string, head?: string) {
-        return yield* Effect.promise(() => mergeBase(cwd, base, head))
+      const prefix = Effect.fn("Git.prefix")(function* (cwd: string) {
+        const result = yield* run(["rev-parse", "--show-prefix"], { cwd })
+        if (result.exitCode !== 0) return ""
+        return out(result)
       })
 
-      const fxShow = Effect.fn("Git.show")(function* (cwd: string, ref: string, file: string, prefix?: string) {
-        return yield* Effect.promise(() => show(cwd, ref, file, prefix))
+      const defaultBranch = Effect.fn("Git.defaultBranch")(function* (cwd: string) {
+        const remote = yield* primary(cwd)
+        if (remote) {
+          const head = yield* run(["symbolic-ref", `refs/remotes/${remote}/HEAD`], { cwd })
+          if (head.exitCode === 0) {
+            const ref = out(head).replace(/^refs\/remotes\//, "")
+            const name = ref.startsWith(`${remote}/`) ? ref.slice(`${remote}/`.length) : ""
+            if (name) return { name, ref } satisfies Base
+          }
+
+          const next = yield* remoteHead(cwd, remote)
+          if (next) return next
+        }
+
+        const list = yield* refs(cwd)
+        const next = yield* configured(cwd, list)
+        if (next) return next
+        for (const name of ["main", "master"]) {
+          if (list.includes(name)) return { name, ref: name } satisfies Base
+        }
       })
 
-      const fxStatus = Effect.fn("Git.status")(function* (cwd: string) {
-        return yield* Effect.promise(() => status(cwd))
+      const hasHead = Effect.fn("Git.hasHead")(function* (cwd: string) {
+        const result = yield* run(["rev-parse", "--verify", "HEAD"], { cwd })
+        return result.exitCode === 0
       })
 
-      const fxDiff = Effect.fn("Git.diff")(function* (cwd: string, ref: string) {
-        return yield* Effect.promise(() => diff(cwd, ref))
+      const mergeBase = Effect.fn("Git.mergeBase")(function* (cwd: string, base: string, head = "HEAD") {
+        const result = yield* run(["merge-base", base, head], { cwd })
+        if (result.exitCode !== 0) return
+        const text = out(result)
+        return text || undefined
       })
 
-      const fxStats = Effect.fn("Git.stats")(function* (cwd: string, ref: string) {
-        return yield* Effect.promise(() => stats(cwd, ref))
+      const show = Effect.fn("Git.show")(function* (cwd: string, ref: string, file: string, prefix = "") {
+        const target = prefix ? `${prefix}${file}` : file
+        const result = yield* run(["show", `${ref}:${target}`], { cwd })
+        if (result.exitCode !== 0) return ""
+        return result.text()
+      })
+
+      const status = Effect.fn("Git.status")(function* (cwd: string) {
+        return parseStatus(
+          yield* text(["status", "--porcelain=v1", "--untracked-files=all", "--no-renames", "-z", "--", "."], { cwd }),
+        )
+      })
+
+      const diff = Effect.fn("Git.diff")(function* (cwd: string, ref: string) {
+        return parseNames(
+          yield* text(["diff", "--no-ext-diff", "--no-renames", "--name-status", "-z", ref, "--", "."], { cwd }),
+        )
+      })
+
+      const stats = Effect.fn("Git.stats")(function* (cwd: string, ref: string) {
+        return parseStats(
+          yield* text(["diff", "--no-ext-diff", "--no-renames", "--numstat", "-z", ref, "--", "."], { cwd }),
+        )
       })
 
       return Service.of({
-        run: fxRun,
-        text: fxText,
-        lines: fxLines,
-        branch: fxBranch,
-        prefix: fxPrefix,
-        defaultBranch: fxDefaultBranch,
-        hasHead: fxHasHead,
-        mergeBase: fxMergeBase,
-        show: fxShow,
-        status: fxStatus,
-        diff: fxDiff,
-        stats: fxStats,
+        run,
+        text,
+        lines,
+        branch,
+        prefix,
+        defaultBranch,
+        hasHead,
+        mergeBase,
+        show,
+        status,
+        diff,
+        stats,
       })
     }),
   )
+
+  const platformLayer = NodeChildProcessSpawner.layer.pipe(
+    Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
+  )
+
+  export const defaultLayer = layer.pipe(Layer.provide(platformLayer))
+
+  const runtime = ManagedRuntime.make(defaultLayer)
+
+  export function run(args: string[], opts: Options) {
+    return runtime.runPromise(Service.use((git) => git.run(args, opts)))
+  }
+
+  export function text(args: string[], opts: Options) {
+    return runtime.runPromise(Service.use((git) => git.text(args, opts)))
+  }
+
+  export function lines(args: string[], opts: Options) {
+    return runtime.runPromise(Service.use((git) => git.lines(args, opts)))
+  }
+
+  export function branch(cwd: string) {
+    return runtime.runPromise(Service.use((git) => git.branch(cwd)))
+  }
+
+  export function prefix(cwd: string) {
+    return runtime.runPromise(Service.use((git) => git.prefix(cwd)))
+  }
+
+  export function defaultBranch(cwd: string) {
+    return runtime.runPromise(Service.use((git) => git.defaultBranch(cwd)))
+  }
+
+  export function hasHead(cwd: string) {
+    return runtime.runPromise(Service.use((git) => git.hasHead(cwd)))
+  }
+
+  export function mergeBase(cwd: string, base: string, head?: string) {
+    return runtime.runPromise(Service.use((git) => git.mergeBase(cwd, base, head)))
+  }
+
+  export function show(cwd: string, ref: string, file: string, prefix?: string) {
+    return runtime.runPromise(Service.use((git) => git.show(cwd, ref, file, prefix)))
+  }
+
+  export function status(cwd: string) {
+    return runtime.runPromise(Service.use((git) => git.status(cwd)))
+  }
+
+  export function diff(cwd: string, ref: string) {
+    return runtime.runPromise(Service.use((git) => git.diff(cwd, ref)))
+  }
+
+  export function stats(cwd: string, ref: string) {
+    return runtime.runPromise(Service.use((git) => git.stats(cwd, ref)))
+  }
 }

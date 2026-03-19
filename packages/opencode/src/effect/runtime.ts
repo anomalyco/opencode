@@ -10,7 +10,7 @@ import { Instance } from "@/project/instance"
 export const runtime = ManagedRuntime.make(
   Layer.mergeAll(
     AccountEffect.defaultLayer, //
-    Git.layer,
+    Git.defaultLayer,
     TruncateEffect.defaultLayer,
     Instances.layer,
   ).pipe(Layer.provideMerge(AuthEffect.layer)),
