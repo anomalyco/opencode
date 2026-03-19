@@ -1,17 +1,25 @@
 import type { Page } from "@playwright/test"
 import { test, expect } from "../fixtures"
-import { openSidebar, sessionIDFromUrl, setWorkspacesEnabled, slugFromUrl, waitSlug } from "../actions"
+import { openSidebar, resolveSlug, sessionIDFromUrl, setWorkspacesEnabled, waitDir, waitSlug } from "../actions"
 import { promptSelector, workspaceItemSelector, workspaceNewSessionSelector } from "../selectors"
 import { createSdk, dirDecode, dirSlug, resolveDirectory } from "../utils"
 
-async function waitWorkspaceReady(page: Page, slug: string) {
+function item(space: { slug: string; raw: string }) {
+  return `${workspaceItemSelector(space.slug)}, ${workspaceItemSelector(space.raw)}`
+}
+
+function button(space: { slug: string; raw: string }) {
+  return `${workspaceNewSessionSelector(space.slug)}, ${workspaceNewSessionSelector(space.raw)}`
+}
+
+async function waitWorkspaceReady(page: Page, space: { slug: string; raw: string }) {
   await openSidebar(page)
   await expect
     .poll(
       async () => {
-        const item = page.locator(workspaceItemSelector(slug)).first()
+        const row = page.locator(item(space)).first()
         try {
-          await item.hover({ timeout: 500 })
+          await row.hover({ timeout: 500 })
           return true
         } catch {
           return false
@@ -26,38 +34,30 @@ async function createWorkspace(page: Page, root: string, seen: string[]) {
   await openSidebar(page)
   await page.getByRole("button", { name: "New workspace" }).first().click()
 
-  const raw = await waitSlug(page, [root, ...seen])
-  const directory = dirDecode(raw)
-  if (!directory) throw new Error(`Failed to decode workspace slug: ${raw}`)
-  const space = await resolveDirectory(directory)
-  return { slug: dirSlug(space), directory: space, raw }
+  const next = await resolveSlug(await waitSlug(page, [root, ...seen]))
+  await waitDir(page, next.directory)
+  return next
 }
 
-async function openWorkspaceNewSession(page: Page, slug: string, raw = slug) {
-  await waitWorkspaceReady(page, slug)
+async function openWorkspaceNewSession(page: Page, space: { slug: string; raw: string; directory: string }) {
+  await waitWorkspaceReady(page, space)
 
-  const item = page.locator(`${workspaceItemSelector(slug)}, ${workspaceItemSelector(raw)}`).first()
-  await item.hover()
+  const row = page.locator(item(space)).first()
+  await row.hover()
 
-  const button = page.locator(`${workspaceNewSessionSelector(slug)}, ${workspaceNewSessionSelector(raw)}`).first()
-  await expect(button).toBeVisible()
-  await button.click({ force: true })
+  const next = page.locator(button(space)).first()
+  await expect(next).toBeVisible()
+  await next.click({ force: true })
 
-  const next = await waitSlug(page)
-  await expect(page).toHaveURL(new RegExp(`/${next}/session(?:[/?#]|$)`))
-  return next
+  return waitDir(page, space.directory)
 }
 
 async function createSessionFromWorkspace(
   page: Page,
-  workspace: { slug: string; raw?: string },
+  space: { slug: string; raw: string; directory: string },
   text: string,
 ) {
-  const next = await openWorkspaceNewSession(page, workspace.slug, workspace.raw)
-  const directory = dirDecode(next)
-  if (!directory) throw new Error(`Failed to decode workspace slug: ${next}`)
-  const space = await resolveDirectory(directory)
-  const target = dirSlug(space)
+  const next = await openWorkspaceNewSession(page, space)
 
   const prompt = page.locator(promptSelector)
   await expect(prompt).toBeVisible()
@@ -68,13 +68,13 @@ async function createSessionFromWorkspace(
   await expect.poll(async () => ((await prompt.textContent()) ?? "").trim()).toContain(text)
   await prompt.press("Enter")
 
-  await expect.poll(() => slugFromUrl(page.url())).toBe(target)
+  await waitDir(page, next.directory)
   await expect.poll(() => sessionIDFromUrl(page.url()) ?? "", { timeout: 30_000 }).not.toBe("")
 
   const sessionID = sessionIDFromUrl(page.url())
   if (!sessionID) throw new Error(`Failed to parse session id from url: ${page.url()}`)
-  await expect(page).toHaveURL(new RegExp(`/${target}/session/${sessionID}(?:[/?#]|$)`))
-  return { sessionID, slug: target }
+  await expect(page).toHaveURL(new RegExp(`/session/${sessionID}(?:[/?#]|$)`))
+  return { sessionID, slug: next.slug }
 }
 
 async function sessionDirectory(directory: string, sessionID: string) {
@@ -95,11 +95,11 @@ test("new sessions from sidebar workspace actions stay in selected workspace", a
 
     const first = await createWorkspace(page, root, [])
     trackDirectory(first.directory)
-    await waitWorkspaceReady(page, first.slug)
+    await waitWorkspaceReady(page, first)
 
     const second = await createWorkspace(page, root, [first.slug])
     trackDirectory(second.directory)
-    await waitWorkspaceReady(page, second.slug)
+    await waitWorkspaceReady(page, second)
 
     const firstSession = await createSessionFromWorkspace(page, first, `workspace one ${Date.now()}`)
     trackSession(firstSession.sessionID, first.directory)
