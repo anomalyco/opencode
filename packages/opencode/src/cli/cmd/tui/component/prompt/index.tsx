@@ -97,7 +97,7 @@ export function Prompt(props: PromptProps) {
   const pasteStyleId = syntax().getStyleId("extmark.paste")!
   let promptPartTypeId = 0
 
-  sdk.event.on(TuiEvent.PromptAppend.type, (evt) => {
+  const offPrompt = sdk.event.on(TuiEvent.PromptAppend.type, (evt) => {
     if (!input || input.isDestroyed) return
     input.insertText(evt.properties.text)
     setTimeout(() => {
@@ -108,6 +108,7 @@ export function Prompt(props: PromptProps) {
       renderer.requestRender()
     }, 0)
   })
+  onCleanup(offPrompt)
 
   createEffect(() => {
     if (props.disabled) input.cursorColor = theme.backgroundElement
@@ -548,10 +549,8 @@ export function Prompt(props: PromptProps) {
       })
 
       if (res.error) {
-        console.log("Creating a session failed:", res.error)
-
         toast.show({
-          message: "Creating a session failed. Open console for more details.",
+          message: "Creating a session failed.",
           variant: "error",
         })
 

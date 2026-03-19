@@ -1,6 +1,6 @@
 import { SyntaxStyle, RGBA, type TerminalColors } from "@opentui/core"
 import path from "path"
-import { createEffect, createMemo, onMount } from "solid-js"
+import { createEffect, createMemo, onCleanup, onMount } from "solid-js"
 import { createSimpleContext } from "./helper"
 import { Glob } from "../../../../util/glob"
 import aura from "./theme/aura.json" with { type: "json" }
@@ -317,13 +317,11 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     onMount(init)
 
     function resolveSystemTheme() {
-      console.log("resolveSystemTheme")
       renderer
         .getPalette({
           size: 16,
         })
         .then((colors) => {
-          console.log(colors.palette)
           if (!colors.palette[0]) {
             if (store.active === "system") {
               setStore(
@@ -347,9 +345,13 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     }
 
     const renderer = useRenderer()
-    process.on("SIGUSR2", async () => {
+    const reload = async () => {
       renderer.clearPaletteCache()
       init()
+    }
+    process.on("SIGUSR2", reload)
+    onCleanup(() => {
+      process.off("SIGUSR2", reload)
     })
 
     const values = createMemo(() => {
