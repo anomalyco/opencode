@@ -2,15 +2,25 @@ import z from "zod"
 import { Tool } from "./tool"
 import { PlanStore } from "@/parallel/plan"
 import { Orchestrator } from "@/parallel/orchestrator"
-import { SubtaskID } from "@/parallel/schema"
+import { SubtaskID, ModelRef } from "@/parallel/schema"
 import { Instance } from "@/project/instance"
+import { Provider } from "@/provider/provider"
 import type { Subtask } from "@/parallel/schema"
+
+const SubtaskModelSchema = z.object({
+  providerID: z.string().describe("Provider ID (e.g., 'anthropic')"),
+  modelID: z.string().describe("Model ID (e.g., 'claude-sonnet-4-20250514')"),
+})
 
 export const ParallelPlanTool = Tool.define("parallel_plan", {
   description:
     "Create or update a parallel execution plan. Call this to propose subtasks that will run in parallel across isolated git worktrees. If a plan already exists for this project, it will be updated. Each subtask must have a distinct set of files (no overlap).",
   parameters: z.object({
     task: z.string().describe("Overall task description"),
+    replace: z
+      .boolean()
+      .optional()
+      .describe("When true, completely replace existing subtasks instead of updating. Use for plan regeneration."),
     subtasks: z
       .array(
         z.object({
@@ -19,6 +29,9 @@ export const ParallelPlanTool = Tool.define("parallel_plan", {
           fileScope: z
             .array(z.string())
             .describe("Files this subtask will create or modify. Must not overlap with other subtasks."),
+          model: SubtaskModelSchema.optional().describe(
+            "Optional model override for this subtask. If not specified, uses the plan's worker model.",
+          ),
         }),
       )
       .describe("List of independent subtasks to execute in parallel"),
@@ -29,12 +42,14 @@ export const ParallelPlanTool = Tool.define("parallel_plan", {
 
     // Find existing draft/proposed plan for this project+session (session-scoped to prevent cross-session overwrites)
     const plans = await PlanStore.list()
-    const existing = plans.find(
-      (p) =>
-        p.projectID === projectID &&
-        p.sessionID === ctx.sessionID &&
-        (p.status === "draft" || p.status === "proposed"),
-    )
+    const existing = params.replace
+      ? null // When replace is true, always create new
+      : plans.find(
+          (p) =>
+            p.projectID === projectID &&
+            p.sessionID === ctx.sessionID &&
+            (p.status === "draft" || p.status === "proposed"),
+        )
 
     const subtasks: Subtask[] = params.subtasks.map((st) => ({
       id: SubtaskID.ascending(),
@@ -42,6 +57,12 @@ export const ParallelPlanTool = Tool.define("parallel_plan", {
       description: st.description,
       fileScope: st.fileScope,
       dependencies: [],
+      model: st.model
+        ? {
+            modelID: st.model.modelID as any,
+            providerID: st.model.providerID as any,
+          }
+        : undefined,
     }))
 
     const workers = subtasks.map((st) => ({
@@ -73,7 +94,10 @@ export const ParallelPlanTool = Tool.define("parallel_plan", {
     }
 
     const summary = subtasks
-      .map((st, i) => `${i + 1}. **${st.title}** — ${st.fileScope.length} file(s): ${st.fileScope.join(", ")}`)
+      .map((st, i) => {
+        const modelInfo = st.model ? ` [${st.model.modelID}]` : ""
+        return `${i + 1}. **${st.title}**${modelInfo} — ${st.fileScope.length} file(s): ${st.fileScope.join(", ")}`
+      })
       .join("\n")
 
     return {

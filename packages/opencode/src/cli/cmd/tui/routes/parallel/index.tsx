@@ -1,8 +1,9 @@
-import { Show, createEffect, createSignal, onCleanup } from "solid-js"
+import { Show, createEffect, createSignal, onCleanup, createMemo } from "solid-js"
 import { useTheme } from "@tui/context/theme"
 import { useTerminalDimensions, useKeyboard } from "@opentui/solid"
 import { useRoute } from "@tui/context/route"
 import { useParallel } from "@tui/context/parallel"
+import { useLocal } from "@tui/context/local"
 import { ParallelPlan } from "./parallel-plan"
 import { ParallelStatus } from "./parallel-status"
 import { ParallelMerge } from "./parallel-merge"
@@ -17,8 +18,10 @@ export function Parallel() {
   const dim = useTerminalDimensions()
   const route = useRoute()
   const parallel = useParallel()
+  const local = useLocal()
   const [loading, setLoading] = createSignal(true)
   const [error, setError] = createSignal<string | null>(null)
+  const [switchedOnComplete, setSwitchedOnComplete] = createSignal(false)
 
   const planID = () => (route.data.type === "parallel" ? route.data.planID : null)
 
@@ -28,6 +31,7 @@ export function Parallel() {
     if (!id) return
     setLoading(true)
     setError(null)
+    setSwitchedOnComplete(false)
     PlanStore.get(PlanID.make(id))
       .then((plan) => parallel.setPlan(plan))
       .catch(() => setError("Plan not found"))
@@ -41,6 +45,15 @@ export function Parallel() {
     }
   })
   onCleanup(unsub)
+
+  // Auto-switch to build agent when plan completes successfully
+  createEffect(() => {
+    const plan = parallel.plan
+    if (plan?.status === "done" && !switchedOnComplete()) {
+      setSwitchedOnComplete(true)
+      local.agent.set("build")
+    }
+  })
 
   useKeyboard((evt) => {
     if (evt.name === "escape") {
@@ -69,7 +82,7 @@ export function Parallel() {
             alignItems="center"
           >
             <text attributes={TextAttributes.BOLD} fg={theme.text}>
-              {loading() ? "Loading plan..." : error() ?? "No parallel plans found"}
+              {loading() ? "Loading plan..." : (error() ?? "No parallel plans found")}
             </text>
             <text fg={theme.textMuted}>Press ESC to go back</text>
           </box>
@@ -84,10 +97,10 @@ export function Parallel() {
           alignItems="center"
           paddingTop={2}
         >
-          <Show when={plan.status === "proposed"}>
+          <Show when={plan.status === "proposed" || plan.status === "draft"}>
             <ParallelPlan plan={plan} onApproved={() => {}} onCancelled={() => route.navigate({ type: "home" })} />
           </Show>
-          <Show when={plan.status === "spawning" || plan.status === "running"}>
+          <Show when={plan.status === "approved" || plan.status === "spawning" || plan.status === "running"}>
             <ParallelStatus plan={plan} />
           </Show>
           <Show when={plan.status === "merging"}>
@@ -105,6 +118,7 @@ export function Parallel() {
                 Complete
               </text>
               <text fg={theme.text}>All subtasks merged successfully</text>
+              <text fg={theme.textMuted}>Press ESC to go back</text>
             </box>
           </Show>
           <Show when={plan.status === "failed"}>
@@ -119,6 +133,7 @@ export function Parallel() {
                 Failed
               </text>
               <text fg={theme.text}>Plan execution failed</text>
+              <text fg={theme.textMuted}>Press ESC to go back</text>
             </box>
           </Show>
         </box>
