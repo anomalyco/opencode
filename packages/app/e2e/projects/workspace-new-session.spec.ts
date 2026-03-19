@@ -101,13 +101,13 @@ test("new sessions from sidebar workspace actions stay in selected workspace", a
     trackDirectory(second.directory)
     await waitWorkspaceReady(page, second)
 
-    const firstSession = await createSessionFromWorkspace(page, first.slug, `workspace one ${Date.now()}`)
+    const firstSession = await createSessionFromWorkspace(page, first, `workspace one ${Date.now()}`)
     trackSession(firstSession.sessionID, first.directory)
 
-    const secondSession = await createSessionFromWorkspace(page, second.slug, `workspace two ${Date.now()}`)
+    const secondSession = await createSessionFromWorkspace(page, second, `workspace two ${Date.now()}`)
     trackSession(secondSession.sessionID, second.directory)
 
-    const thirdSession = await createSessionFromWorkspace(page, first.slug, `workspace one again ${Date.now()}`)
+    const thirdSession = await createSessionFromWorkspace(page, first, `workspace one again ${Date.now()}`)
     trackSession(thirdSession.sessionID, first.directory)
 
     await expect.poll(() => sessionDirectory(first.directory, firstSession.sessionID)).toBe(first.directory)
