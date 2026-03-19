@@ -158,7 +158,7 @@ export async function bootstrapDirectory(input: {
     input.sdk.vcs.get().then((x) => {
       const next = x.data ?? input.store.vcs
       input.setStore("vcs", next)
-      if (next?.branch) input.vcsCache.setStore("value", next)
+      input.vcsCache.setStore("value", next?.branch ? { branch: next.branch } : undefined)
     }),
     input.sdk.permission.list().then((x) => {
       const grouped = groupBySession(

@@ -23,6 +23,8 @@ export const dict = {
 
   "command.sidebar.toggle": "Toggle sidebar",
   "command.project.open": "Open project",
+  "command.project.pullRequest.open": "Open pull request",
+  "command.project.pullRequest.open.description": "Open the current pull request in your browser",
   "command.provider.connect": "Connect provider",
   "command.server.switch": "Switch server",
   "command.settings.open": "Open settings",

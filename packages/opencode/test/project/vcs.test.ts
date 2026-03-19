@@ -69,22 +69,22 @@ function nextBranchUpdate(directory: string, timeout = 10_000) {
 describeVcs("Vcs", () => {
   afterEach(() => Instance.disposeAll())
 
-  test("branch() returns current branch name", async () => {
+  test("get() returns current branch name", async () => {
     await using tmp = await tmpdir({ git: true })
 
     await withVcs(tmp.path, async (rt) => {
-      const branch = await rt.runPromise(Vcs.Service.use((s) => s.branch()))
-      expect(branch).toBeDefined()
-      expect(typeof branch).toBe("string")
+      const info = await rt.runPromise(Vcs.Service.use((s) => s.get()))
+      expect(info.branch).toBeDefined()
+      expect(typeof info.branch).toBe("string")
     })
   })
 
-  test("branch() returns undefined for non-git directories", async () => {
+  test("get() returns empty info for non-git directories", async () => {
     await using tmp = await tmpdir()
 
     await withVcs(tmp.path, async (rt) => {
-      const branch = await rt.runPromise(Vcs.Service.use((s) => s.branch()))
-      expect(branch).toBeUndefined()
+      const info = await rt.runPromise(Vcs.Service.use((s) => s.get()))
+      expect(info).toEqual({})
     })
   })
 
@@ -104,7 +104,7 @@ describeVcs("Vcs", () => {
     })
   })
 
-  test("branch() reflects the new branch after HEAD change", async () => {
+  test("get() reflects the new branch after HEAD change", async () => {
     await using tmp = await tmpdir({ git: true })
     const branch = `test-${Math.random().toString(36).slice(2)}`
     await $`git branch ${branch}`.cwd(tmp.path).quiet()
@@ -116,8 +116,8 @@ describeVcs("Vcs", () => {
       await fs.writeFile(head, `ref: refs/heads/${branch}\n`)
 
       await pending
-      const current = await rt.runPromise(Vcs.Service.use((s) => s.branch()))
-      expect(current).toBe(branch)
+      const current = await rt.runPromise(Vcs.Service.use((s) => s.get()))
+      expect(current.branch).toBe(branch)
     })
   })
 })

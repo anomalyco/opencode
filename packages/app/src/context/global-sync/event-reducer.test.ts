@@ -498,7 +498,10 @@ describe("applyDirectoryEvent", () => {
     const [cacheStore, setCacheStore] = createStore({ value: undefined as State["vcs"] })
 
     applyDirectoryEvent({
-      event: { type: "vcs.branch.updated", properties: { branch: "feature/test" } },
+      event: {
+        type: "vcs.branch.updated",
+        properties: { branch: "feature/test", pull_request_url: "https://github.com/acme/repo/pull/1" },
+      },
       store,
       setStore,
       push() {},
@@ -511,8 +514,13 @@ describe("applyDirectoryEvent", () => {
       },
     })
 
-    expect(store.vcs).toEqual({ branch: "feature/test" })
-    expect(cacheStore.value).toEqual({ branch: "feature/test" })
+    expect(store.vcs).toEqual({
+      branch: "feature/test",
+      pull_request_url: "https://github.com/acme/repo/pull/1",
+    })
+    expect(cacheStore.value).toEqual({
+      branch: "feature/test",
+    })
   })
 
   test("routes disposal and lsp events to side-effect handlers", () => {

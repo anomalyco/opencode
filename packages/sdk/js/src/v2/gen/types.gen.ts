@@ -102,6 +102,7 @@ export type EventVcsBranchUpdated = {
   type: "vcs.branch.updated"
   properties: {
     branch?: string
+    pull_request_url?: string
   }
 }
 
@@ -1889,7 +1890,8 @@ export type Path = {
 }
 
 export type VcsInfo = {
-  branch: string
+  branch?: string
+  pull_request_url?: string
 }
 
 export type Command = {

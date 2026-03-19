@@ -138,6 +138,11 @@ export default function Layout(props: ParentProps) {
   }
   const colorSchemeLabel = (scheme: ColorScheme) => language.t(colorSchemeKey[scheme])
   const currentDir = createMemo(() => decode64(params.dir) ?? "")
+  const currentVcs = createMemo(() => {
+    const dir = currentDir()
+    if (!dir) return
+    return globalSync.child(dir, { bootstrap: false })[0].vcs
+  })
 
   const [state, setState] = createStore({
     autoselect: !initialDirectory,
@@ -986,6 +991,18 @@ export default function Layout(props: ParentProps) {
         category: language.t("command.category.project"),
         keybind: "mod+o",
         onSelect: () => chooseProject(),
+      },
+      {
+        id: "project.pullRequest.open",
+        title: language.t("command.project.pullRequest.open"),
+        description: language.t("command.project.pullRequest.open.description"),
+        category: language.t("command.category.project"),
+        disabled: !currentVcs()?.pull_request_url,
+        onSelect: () => {
+          const url = currentVcs()?.pull_request_url
+          if (!url) return
+          platform.openLink(url)
+        },
       },
       {
         id: "provider.connect",

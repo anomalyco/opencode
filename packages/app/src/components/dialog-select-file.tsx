@@ -46,6 +46,7 @@ const COMMON_COMMAND_IDS = [
   "session.next",
   "terminal.toggle",
   "review.toggle",
+  "project.pullRequest.open",
 ] as const
 
 const uniqueEntries = (items: Entry[]) => {

@@ -268,11 +268,16 @@ export function applyDirectoryEvent(input: {
       break
     }
     case "vcs.branch.updated": {
-      const props = event.properties as { branch: string }
-      if (input.store.vcs?.branch === props.branch) break
-      const next = { branch: props.branch }
+      const props = event.properties as { branch?: string; pull_request_url?: string }
+      if (input.store.vcs?.branch === props.branch && input.store.vcs?.pull_request_url === props.pull_request_url) {
+        break
+      }
+      const next = {
+        branch: props.branch,
+        pull_request_url: props.pull_request_url,
+      }
       input.setStore("vcs", next)
-      if (input.vcsCache) input.vcsCache.setStore("value", next)
+      if (input.vcsCache) input.vcsCache.setStore("value", next.branch ? { branch: next.branch } : undefined)
       break
     }
     case "permission.asked": {

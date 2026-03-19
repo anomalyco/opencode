@@ -332,10 +332,7 @@ export namespace Server {
           },
         }),
         async (c) => {
-          const branch = await runPromiseInstance(Vcs.Service.use((s) => s.branch()))
-          return c.json({
-            branch,
-          })
+          return c.json(await runPromiseInstance(Vcs.Service.use((s) => s.get())))
         },
       )
       .get(
