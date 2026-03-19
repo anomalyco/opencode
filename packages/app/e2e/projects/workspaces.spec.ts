@@ -20,7 +20,7 @@ import {
   waitSlug,
 } from "../actions"
 import { dropdownMenuContentSelector, inlineInputSelector, workspaceItemSelector } from "../selectors"
-import { createSdk, dirDecode, dirSlug } from "../utils"
+import { createSdk, dirSlug } from "../utils"
 
 async function setupWorkspaceTest(page: Page, project: { slug: string }) {
   const rootSlug = project.slug
@@ -258,7 +258,7 @@ test("can delete a workspace", async ({ page, withProject }) => {
     await clickMenuItem(menu, /^Delete$/i, { force: true })
     await confirmDialog(page, /^Delete workspace$/i)
 
-    await expect.poll(() => dirDecode(slugFromUrl(page.url()))).toBe(project.directory)
+    await expect.poll(() => base64Decode(slugFromUrl(page.url()))).toBe(project.directory)
 
     await expect
       .poll(
