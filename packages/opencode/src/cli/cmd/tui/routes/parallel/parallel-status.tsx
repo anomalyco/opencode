@@ -47,7 +47,7 @@ function WorkerLane(props: {
       case "spawning":
         return theme.accent
       default:
-        return theme.muted
+        return theme.textMuted
     }
   }
 
@@ -160,9 +160,9 @@ function WorkerLane(props: {
   return (
     <box
       flexDirection="column"
-      backgroundColor={props.selected ? theme.backgroundHover : theme.background}
+      backgroundColor={props.selected ? theme.backgroundElement : theme.background}
       padding={1}
-      borderStyle="round"
+      borderStyle="rounded"
       borderColor={statusColor()}
     >
       {/* Header: status icon + title */}
@@ -178,14 +178,14 @@ function WorkerLane(props: {
 
       {/* Current activity */}
       <Show when={currentActivity()}>
-        <text fg={theme.accent} wrap="wrap">
+        <text fg={theme.accent} wrapMode="word">
           {currentActivity()!.slice(0, 50)}
         </text>
       </Show>
 
       {/* Stats row */}
       <box flexDirection="row" gap={1} marginTop={1}>
-        <text fg={theme.muted}>{stats().tools} tools</text>
+        <text fg={theme.textMuted}>{stats().tools} tools</text>
         <text fg={theme.accent}>{formatCost(cost())}</text>
       </box>
       <Show when={stats().inputTokens > 0 || stats().outputTokens > 0}>
@@ -199,7 +199,7 @@ function WorkerLane(props: {
 
       {/* Error */}
       <Show when={props.worker.error}>
-        <text fg={theme.error} wrap="wrap">
+        <text fg={theme.error} wrapMode="word">
           {props.worker.error!.slice(0, 60)}
         </text>
       </Show>
@@ -214,19 +214,19 @@ function WorkerLane(props: {
 
       {/* Expanded: recent tool history */}
       <Show when={props.expanded && recentTools().length > 0}>
-        <box flexDirection="column" marginTop={1} borderTop={1} borderColor={theme.border} paddingTop={1}>
-          <text fg={theme.muted} attributes={TextAttributes.UNDERLINE}>
+        <box flexDirection="column" marginTop={1} borderStyle="single" borderColor={theme.border} paddingTop={1}>
+          <text fg={theme.textMuted} attributes={TextAttributes.UNDERLINE}>
             Recent tools
           </text>
           <For each={recentTools()}>
             {(tool) => (
               <box flexDirection="row" gap={1}>
-                <text fg={tool.status === "completed" ? theme.success : tool.status === "running" ? theme.warning : tool.status === "error" ? theme.error : theme.muted}>
+                <text fg={tool.status === "completed" ? theme.success : tool.status === "running" ? theme.warning : tool.status === "error" ? theme.error : theme.textMuted}>
                   {tool.status === "completed" ? "✓" : tool.status === "running" ? "●" : tool.status === "error" ? "✗" : "○"}
                 </text>
                 <text fg={theme.text}>{tool.name}</text>
                 <Show when={tool.duration}>
-                  <text fg={theme.muted}>{formatDuration(tool.duration!)}</text>
+                  <text fg={theme.textMuted}>{formatDuration(tool.duration!)}</text>
                 </Show>
               </box>
             )}
@@ -313,27 +313,20 @@ export function ParallelStatus(props: { plan: Plan }) {
   })
 
   useKeyboard((evt) => {
-    switch (evt.key) {
-      case "ArrowUp":
-      case "k":
-        evt.preventDefault()
-        setSelected((s) => Math.max(0, s - 1))
-        break
-      case "ArrowDown":
-      case "j":
-        evt.preventDefault()
-        setSelected((s) => Math.min(total() - 1, s + 1))
-        break
-      case "Enter":
-        evt.preventDefault()
-        setExpanded((e) => (e === selected() ? null : selected()))
-        break
-      case "Escape":
-        evt.preventDefault()
-        if (expanded() !== null) {
-          setExpanded(null)
-        }
-        break
+    if (evt.name === "up" || evt.sequence === "k") {
+      evt.preventDefault()
+      setSelected((s) => Math.max(0, s - 1))
+    } else if (evt.name === "down" || evt.sequence === "j") {
+      evt.preventDefault()
+      setSelected((s) => Math.min(total() - 1, s + 1))
+    } else if (evt.name === "return") {
+      evt.preventDefault()
+      setExpanded((e) => (e === selected() ? null : selected()))
+    } else if (evt.name === "escape") {
+      evt.preventDefault()
+      if (expanded() !== null) {
+        setExpanded(null)
+      }
     }
   })
 
@@ -353,14 +346,14 @@ export function ParallelStatus(props: { plan: Plan }) {
         <Show when={failed() > 0}>
           <text fg={theme.error}>{failed()} failed</text>
         </Show>
-        <text fg={theme.muted}>{formatDuration(elapsed())}</text>
+        <text fg={theme.textMuted}>{formatDuration(elapsed())}</text>
       </box>
 
       {/* Progress bar */}
       <box marginBottom={1}>
         <text fg={theme.success}>{"█".repeat(Math.floor((done() / Math.max(total(), 1)) * 30))}</text>
         <text fg={theme.warning}>{"█".repeat(Math.floor((running() / Math.max(total(), 1)) * 30))}</text>
-        <text fg={theme.muted}>{"░".repeat(Math.max(0, 30 - Math.floor(((done() + running()) / Math.max(total(), 1)) * 30)))}</text>
+        <text fg={theme.textMuted}>{"░".repeat(Math.max(0, 30 - Math.floor(((done() + running()) / Math.max(total(), 1)) * 30)))}</text>
       </box>
 
       {/* Worker lanes */}
@@ -389,15 +382,15 @@ export function ParallelStatus(props: { plan: Plan }) {
       </For>
 
       {/* Totals */}
-      <box marginTop={1} paddingTop={1} borderTop={1} borderColor={theme.border} flexDirection="column" gap={0}>
+      <box marginTop={1} paddingTop={1} borderStyle="single" borderColor={theme.border} flexDirection="column" gap={0}>
         <box flexDirection="row" gap={2}>
           <text fg={theme.text} attributes={TextAttributes.BOLD}>Total:</text>
           <text fg={theme.accent}>{formatCost(totals().cost)}</text>
-          <text fg={theme.muted}>
+          <text fg={theme.textMuted}>
             {formatTokens(totals().input)} in / {formatTokens(totals().output)} out
           </text>
-          <text fg={theme.muted}>{totals().tools} tool calls</text>
-          <text fg={theme.muted}>{formatDuration(elapsed())}</text>
+          <text fg={theme.textMuted}>{totals().tools} tool calls</text>
+          <text fg={theme.textMuted}>{formatDuration(elapsed())}</text>
         </box>
         <box flexDirection="row" gap={2} marginTop={1}>
           <text fg={theme.textMuted}>

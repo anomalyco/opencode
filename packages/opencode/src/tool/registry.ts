@@ -29,6 +29,9 @@ import { LspTool } from "./lsp"
 import { Truncate } from "./truncate"
 
 import { ApplyPatchTool } from "./apply_patch"
+import { ParallelPlanTool } from "./parallel-plan"
+import { ParallelExecuteTool } from "./parallel-execute"
+import { ParallelStatusTool } from "./parallel-status"
 import { Glob } from "../util/glob"
 import { pathToFileURL } from "url"
 
@@ -121,6 +124,9 @@ export namespace ToolRegistry {
       ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
       ...(config.experimental?.batch_tool === true ? [BatchTool] : []),
       ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [PlanExitTool] : []),
+      ParallelPlanTool,
+      ParallelExecuteTool,
+      ParallelStatusTool,
       ...custom,
     ]
   }

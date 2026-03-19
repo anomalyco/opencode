@@ -396,10 +396,59 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
     })
 
+    // --- Parallel config (local state, same pattern as model store) ---
+    const parallelFilePath = path.join(Global.Path.state, "parallel.json")
+    const [parallelStore, setParallelStore] = createStore<{
+      ready: boolean
+      orchestrator_model?: string
+      worker_model?: string
+      max_workers?: number
+    }>({ ready: false })
+
+    function saveParallel() {
+      if (!parallelStore.ready) return
+      const { ready: _, ...data } = parallelStore
+      Filesystem.writeJson(parallelFilePath, data)
+    }
+
+    Filesystem.readJson(parallelFilePath)
+      .then((x: any) => {
+        if (x.orchestrator_model) setParallelStore("orchestrator_model", x.orchestrator_model)
+        if (x.worker_model) setParallelStore("worker_model", x.worker_model)
+        if (x.max_workers) setParallelStore("max_workers", x.max_workers)
+      })
+      .catch(() => {})
+      .finally(() => setParallelStore("ready", true))
+
+    const parallel = {
+      get orchestrator_model() {
+        return parallelStore.orchestrator_model
+      },
+      get worker_model() {
+        return parallelStore.worker_model
+      },
+      get max_workers() {
+        return parallelStore.max_workers
+      },
+      setOrchestratorModel(value: string) {
+        setParallelStore("orchestrator_model", value)
+        saveParallel()
+      },
+      setWorkerModel(value: string) {
+        setParallelStore("worker_model", value)
+        saveParallel()
+      },
+      setMaxWorkers(value: number | undefined) {
+        setParallelStore("max_workers", value)
+        saveParallel()
+      },
+    }
+
     const result = {
       model,
       agent,
       mcp,
+      parallel,
     }
     return result
   },

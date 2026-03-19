@@ -19,7 +19,7 @@ export function ParallelMerge(props: { plan: Plan }) {
       case "merging":
         return theme.warning
       default:
-        return theme.muted
+        return theme.textMuted
     }
   }
 
@@ -52,7 +52,7 @@ export function ParallelMerge(props: { plan: Plan }) {
   return (
     <box
       flexDirection="column"
-      width={() => Math.min(80, dim().width - 2)}
+      width={Math.min(80, dim().width - 2)}
       backgroundColor={theme.backgroundPanel}
       padding={1}
     >
@@ -76,7 +76,7 @@ export function ParallelMerge(props: { plan: Plan }) {
               <box flexDirection="row" gap={2}>
                 <text fg={mergeColor(status)}>{mergeIcon(status)}</text>
                 <text fg={theme.text}>{subtask()?.title}</text>
-                <text fg={theme.muted}>— {status}</text>
+                <text fg={theme.textMuted}>— {status}</text>
                 <Show when={worker.branch}>
                   <text fg={theme.accent}>({worker.branch?.slice(0, 20)})</text>
                 </Show>
@@ -86,8 +86,8 @@ export function ParallelMerge(props: { plan: Plan }) {
         </For>
       </box>
 
-      <box marginTop={1} paddingTop={1} borderTop={1} borderColor={theme.border}>
-        <text fg={theme.muted}>Merging in order of diff size (smallest first)</text>
+      <box marginTop={1} paddingTop={1}>
+        <text fg={theme.textMuted}>Merging in order of diff size (smallest first)</text>
       </box>
     </box>
   )

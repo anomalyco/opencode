@@ -116,10 +116,25 @@ Learn more about [agents](https://opencode.ai/docs/agents).
 
 Run multiple agents in parallel on a single task. An orchestrator decomposes your task into independent subtasks, each executed in an isolated git worktree, then merges the results automatically.
 
-#### Quick start
+#### From the TUI (Orchestrator agent)
+
+Press **Tab** to cycle to the **Orchestrator** agent. Then chat naturally:
+
+1. Describe your task: *"Add user auth, a dashboard page, and integration tests"*
+2. The orchestrator explores the codebase and proposes a parallel plan with subtasks
+3. Refine via chat: *"split auth into login and registration"*, *"use haiku for the test task"*
+4. When ready, say *"run it"* — the orchestrator launches parallel workers in isolated git worktrees
+5. Use **`/workers`** to monitor live progress
+
+#### TUI configuration
+
+- **`/parallel`** or `Ctrl+P` → "Parallel agent config" — set orchestrator model, worker model, and max parallel workers. Settings persist across sessions.
+- **`/workers`** or `Ctrl+P` → "Parallel status" — live dashboard of running workers, token usage, and costs.
+
+#### From the CLI
 
 ```bash
-# From the CLI
+# Basic usage
 opencode parallel "Add user auth with JWT middleware, login/register endpoints, and tests"
 
 # With model overrides
@@ -127,11 +142,12 @@ opencode parallel "Refactor the API layer" \
   --orchestrator-model anthropic/claude-opus-4-6 \
   --worker-model anthropic/claude-sonnet-4-6
 
+# Limit concurrent workers
+opencode parallel "Add dark mode support" --workers 5
+
 # Auto-approve the plan (skip interactive approval)
 opencode parallel "Add dark mode support" --auto-approve
 ```
-
-From the TUI, the orchestrator presents a plan for approval before any work begins. You can edit subtasks, reassign models per subtask, or regenerate the plan.
 
 #### How it works
 
@@ -150,31 +166,20 @@ Three levels of model control:
 | Default worker model | All workers unless overridden | `claude-sonnet-4-6` |
 | Per-subtask override | Assign a specific model to one subtask | `claude-haiku-4-5` for simple tasks |
 
-Per-subtask models can be assigned in the TUI plan approval view: use `j/k` to navigate subtasks, then `m` to pick a model for the selected subtask.
+Per-subtask models can be assigned in the plan approval view: navigate to a subtask with arrow keys, then press `m` to pick a model.
 
-Configure from the TUI via the command palette (`Ctrl+P` → "Parallel agent config") or the `/parallel` slash command. You can also set defaults in your opencode config:
-
-```json
-{
-  "parallel": {
-    "orchestrator_model": "anthropic/claude-opus-4-6",
-    "worker_model": "anthropic/claude-sonnet-4-6",
-    "max_workers": 5
-  }
-}
-```
-
-`max_workers` limits how many agents run simultaneously (default: unlimited — all subtasks at once). Useful for managing API rate limits or system resources.
-
-Or via CLI flags:
+Configure defaults from the TUI (`Ctrl+P` → "Parallel agent config") or via CLI flags:
 
 ```bash
 opencode parallel "your task" \
   --orchestrator-model anthropic/claude-opus-4-6 \
-  --worker-model anthropic/claude-sonnet-4-6
+  --worker-model anthropic/claude-sonnet-4-6 \
+  --workers 5
 ```
 
-Priority: CLI flags > config file > project default model.
+`--workers` limits how many agents run simultaneously (default: unlimited). Useful for managing API rate limits or system resources.
+
+Priority: CLI flags > TUI settings > project default model.
 
 #### Constraints (v1)
 

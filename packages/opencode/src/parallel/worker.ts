@@ -8,6 +8,7 @@ import { Log } from "@/util/log"
 import { GlobalBus } from "@/bus/global"
 import { SessionStatus } from "../session/status"
 import { git } from "../util/git"
+import { SessionID } from "@/session/schema"
 import type { Plan, PlanID, SubtaskID, Subtask, WorkerState } from "./schema"
 
 export namespace WorkerManager {
@@ -217,7 +218,7 @@ export namespace WorkerManager {
               directory: worker.worktreeDir,
               init: InstanceBootstrap,
               fn: async () => {
-                const status = SessionStatus.get(sessionID)
+                const status = SessionStatus.get(SessionID.make(sessionID))
                 return status.type === "idle"
               },
             })
@@ -311,7 +312,12 @@ ${subtask.fileScope.map((f) => `- ${f}`).join("\n")}
     },
   ) {
     // PlanStore.updateWorker already publishes both PlanUpdated and WorkerUpdated events
-    await PlanStore.updateWorker({ id: planID, subtaskID, ...update })
+    await PlanStore.updateWorker({
+      id: planID,
+      subtaskID,
+      ...update,
+      sessionID: update.sessionID ? SessionID.make(update.sessionID) : undefined,
+    } as any)
   }
 }
 

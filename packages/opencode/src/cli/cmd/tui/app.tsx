@@ -505,16 +505,16 @@ function App() {
       value: "parallel.status",
       category: "Agent",
       slash: {
-        name: "agents",
-        aliases: ["workers", "manager"],
+        name: "workers",
+        aliases: ["manager"],
       },
       onSelect: async () => {
         dialog.clear()
         try {
-          const result = await sdk.client.parallel.list()
-          const plans = result.data ?? []
+          const { PlanStore } = await import("@/parallel/plan")
+          const plans = await PlanStore.list()
           const active = plans.find(
-            (p: any) =>
+            (p) =>
               p.status === "running" || p.status === "spawning" || p.status === "merging" || p.status === "proposed",
           )
           if (active) {
@@ -525,7 +525,7 @@ function App() {
             toast.show({ message: "No parallel plans found", variant: "info" })
           }
         } catch {
-          toast.show({ message: "Failed to load parallel plans", variant: "error" })
+          toast.show({ message: "No parallel plans found", variant: "info" })
         }
       },
     },

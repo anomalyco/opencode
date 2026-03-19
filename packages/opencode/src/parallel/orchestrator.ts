@@ -72,7 +72,7 @@ export namespace Orchestrator {
 
       const subtasks = await Decomposition.decompose({
         task: input.task,
-        model: input.orchestratorModel,
+        model: models.orchestratorModel,
       })
 
       const updated = await PlanStore.update({
