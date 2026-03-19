@@ -5,7 +5,6 @@ import type { Plan, WorkerState } from "@/parallel/schema"
 import { TextAttributes } from "@opentui/core"
 import { useSDK } from "@tui/context/sdk"
 import { Spinner } from "@tui/component/spinner"
-import { ParallelEvent } from "@/parallel/events"
 
 type MergeStatus = "clean" | "resolved" | "failed" | "pending" | "merging"
 
@@ -15,15 +14,42 @@ export function ParallelMerge(props: { plan: Plan }) {
   const sdk = useSDK()
   const [progressMap, setProgressMap] = createSignal<Record<string, MergeStatus>>({})
 
+  // Listen to MergeProgress events via SSE
   createEffect(() => {
-    const unsub = sdk.event.on(ParallelEvent.MergeProgress.type, (evt) => {
-      if (evt.properties.planID !== props.plan.id) return
-      setProgressMap((prev) => ({
-        ...prev,
-        [evt.properties.branch]: evt.properties.result,
-      }))
+    const id = props.plan.id
+    if (!id) return
+
+    let es: EventSource | null = null
+
+    // Check if EventSource is available (browser environment)
+    if (typeof EventSource !== "undefined") {
+      try {
+        es = new EventSource(`${sdk.url}/parallel/${id}/events`)
+
+        es.addEventListener("message", (e: MessageEvent) => {
+          try {
+            const data = JSON.parse(e.data)
+            if (data.type === "parallel.merge.progress") {
+              const { branch, result } = data.payload
+              setProgressMap((prev) => ({
+                ...prev,
+                [branch]: result,
+              }))
+            }
+          } catch {}
+        })
+
+        es.addEventListener("error", () => {
+          // Will reconnect automatically
+        })
+      } catch {
+        // EventSource not available
+      }
+    }
+
+    onCleanup(() => {
+      if (es) es.close()
     })
-    onCleanup(unsub)
   })
 
   const mergeColor = (result: MergeStatus) => {
