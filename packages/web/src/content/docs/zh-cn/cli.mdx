@@ -479,13 +479,26 @@ opencode acp
 
 此命令启动一个通过 stdin/stdout 使用 nd-JSON 进行通信的 ACP 服务器。
 
+您也可以连接到正在运行的 `opencode serve` 实例，将 ACP 的 stdio 桥接到该实例，而不是启动本地后端：
+
+```bash
+# Start a headless server in one terminal
+opencode serve
+
+# In another terminal, bridge ACP stdio to it
+opencode acp --attach http://localhost:4096
+```
+
+连接时，`--cwd` 仍然生效，但该路径会在所连接的服务器上解析。
+
 #### 标志
 
-| 标志         | 描述       |
-| ------------ | ---------- |
-| `--cwd`      | 工作目录   |
-| `--port`     | 监听端口   |
-| `--hostname` | 监听主机名 |
+| 标志         | 描述                                                   |
+| ------------ | ------------------------------------------------------ |
+| `--cwd`      | 工作目录                                               |
+| `--attach`   | 连接到正在运行的 opencode 服务器（例如 http://localhost:4096） |
+| `--port`     | 监听端口                                               |
+| `--hostname` | 监听主机名                                             |
 
 ---
 

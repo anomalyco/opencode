@@ -13,22 +13,22 @@ export const AcpCommand = cmd({
   command: "acp",
   describe: "start ACP (Agent Client Protocol) server",
   builder: (yargs) => {
-    return withNetworkOptions(yargs).option("cwd", {
-      describe: "working directory",
-      type: "string",
-      default: process.cwd(),
-    })
+    return withNetworkOptions(yargs)
+      .option("attach", {
+        type: "string",
+        describe: "attach to a running opencode server (e.g., http://localhost:4096)",
+      })
+      .option("cwd", {
+        describe: "working directory",
+        type: "string",
+        default: process.cwd(),
+      })
   },
   handler: async (args) => {
     process.env.OPENCODE_CLIENT = "acp"
-    await bootstrap(process.cwd(), async () => {
-      const opts = await resolveNetworkOptions(args)
-      const server = Server.listen(opts)
+    const dir = args.cwd
 
-      const sdk = createOpencodeClient({
-        baseUrl: `http://${server.hostname}:${server.port}`,
-      })
-
+    async function execute(sdk: ReturnType<typeof createOpencodeClient>) {
       const input = new WritableStream<Uint8Array>({
         write(chunk) {
           return new Promise<void>((resolve, reject) => {
@@ -65,6 +65,24 @@ export const AcpCommand = cmd({
         process.stdin.on("end", resolve)
         process.stdin.on("error", reject)
       })
+    }
+
+    if (args.attach) {
+      const sdk = createOpencodeClient({
+        baseUrl: args.attach,
+        directory: dir,
+      })
+      return await execute(sdk)
+    }
+
+    await bootstrap(dir, async () => {
+      const opts = await resolveNetworkOptions(args)
+      const server = Server.listen(opts)
+      const sdk = createOpencodeClient({
+        baseUrl: `http://${server.hostname}:${server.port}`,
+        directory: dir,
+      })
+      return await execute(sdk)
     })
   },
 })

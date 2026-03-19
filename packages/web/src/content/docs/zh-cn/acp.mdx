@@ -19,6 +19,8 @@ ACP 是一个开放协议，用于标准化代码编辑器与 AI 编码代理之
 
 该命令会将 OpenCode 作为兼容 ACP 的子进程启动，通过 stdio 上的 JSON-RPC 与编辑器进行通信。
 
+你也可以运行 `opencode acp --attach <url>`，将 ACP 的 stdio 桥接到现有的 OpenCode 服务器，而不是启动本地后端。连接时，`--cwd` 仍然生效，但该路径会在所连接的服务器上解析。
+
 以下是支持 ACP 的常用编辑器的配置示例。
 
 ---
