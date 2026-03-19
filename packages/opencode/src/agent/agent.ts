@@ -168,6 +168,7 @@ export namespace Agent {
             parallel_execute: "allow",
             parallel_status: "allow",
             parallel_cancel: "allow",
+            parallel_resume: "allow",
           }),
           user,
         ),

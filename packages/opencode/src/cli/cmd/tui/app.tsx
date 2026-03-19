@@ -307,6 +307,27 @@ function App() {
     })
   })
 
+  // Check for interrupted parallel plans on startup
+  onMount(async () => {
+    try {
+      const { Recovery } = await import("@/parallel/recovery")
+      const { Instance } = await import("@/project/instance")
+      const interrupted = await Recovery.scan(Instance.project.id)
+      if (interrupted.length > 0) {
+        const first = interrupted[0]
+        const done = first.completedWorkers.length
+        const total = first.plan.workers.length
+        toast.show({
+          variant: "info",
+          message: `Interrupted plan: "${first.plan.task}" (${done}/${total} workers done). Switch to Orchestrator and use /resume to recover.`,
+          duration: 8000,
+        })
+      }
+    } catch {
+      // Recovery scan failed silently — not critical
+    }
+  })
+
   let continued = false
   createEffect(() => {
     // When using -c, session list is loaded in blocking phase, so we can navigate at "partial"
@@ -526,6 +547,37 @@ function App() {
           }
         } catch {
           toast.show({ message: "No parallel plans found", variant: "info" })
+        }
+      },
+    },
+    {
+      title: "Resume interrupted plan",
+      value: "parallel.resume",
+      category: "Agent",
+      slash: {
+        name: "resume",
+      },
+      onSelect: async () => {
+        dialog.clear()
+        try {
+          const { Recovery } = await import("@/parallel/recovery")
+          const { Instance } = await import("@/project/instance")
+          const interrupted = await Recovery.scan(Instance.project.id)
+          if (interrupted.length === 0) {
+            toast.show({ message: "No interrupted plans found", variant: "info" })
+            return
+          }
+          // Switch to orchestrator agent and show the interrupted plan
+          local.agent.set("orchestrator")
+          const first = interrupted[0]
+          route.navigate({ type: "parallel", planID: first.plan.id })
+          toast.show({
+            message: `Showing interrupted plan: ${first.plan.task}`,
+            variant: "info",
+            duration: 5000,
+          })
+        } catch {
+          toast.show({ message: "Failed to scan for interrupted plans", variant: "error" })
         }
       },
     },

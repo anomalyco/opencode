@@ -33,6 +33,7 @@ import { ParallelPlanTool } from "./parallel-plan"
 import { ParallelExecuteTool } from "./parallel-execute"
 import { ParallelStatusTool } from "./parallel-status"
 import { ParallelCancelTool } from "./parallel-cancel"
+import { ParallelResumeTool } from "./parallel-resume"
 import { Glob } from "../util/glob"
 import { pathToFileURL } from "url"
 
@@ -129,6 +130,7 @@ export namespace ToolRegistry {
       ParallelExecuteTool,
       ParallelStatusTool,
       ParallelCancelTool,
+      ParallelResumeTool,
       ...custom,
     ]
   }
