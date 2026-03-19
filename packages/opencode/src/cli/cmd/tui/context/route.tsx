@@ -17,6 +17,7 @@ export type SessionRoute = {
 export type ParallelRoute = {
   type: "parallel"
   planID: string
+  returnTo?: HomeRoute | SessionRoute // Track where to return when done
 }
 
 export type Route = HomeRoute | SessionRoute | ParallelRoute
@@ -31,14 +32,28 @@ export const { use: useRoute, provider: RouteProvider } = createSimpleContext({
             type: "home",
           },
     )
+    // Track previous route for navigation back
+    const [history, setHistory] = createStore<Route[]>([])
 
     return {
       get data() {
         return store
       },
+      get previous() {
+        return history.length > 0 ? history[history.length - 1] : null
+      },
       navigate(route: Route) {
         console.log("navigate", route)
+        // Store current route in history before navigating
+        setHistory((prev) => [...prev, store])
         setStore(route)
+      },
+      goBack() {
+        const prev = history[history.length - 1]
+        if (prev) {
+          setHistory((h) => h.slice(0, -1))
+          setStore(prev)
+        }
       },
     }
   },

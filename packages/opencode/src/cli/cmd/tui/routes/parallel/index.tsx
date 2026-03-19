@@ -105,7 +105,7 @@ export function Parallel() {
 
   useKeyboard((evt) => {
     if (evt.name === "escape") {
-      route.navigate({ type: "home" })
+      route.goBack()
       evt.preventDefault()
     }
   })
@@ -146,10 +146,10 @@ export function Parallel() {
           paddingTop={2}
         >
           <Show when={plan.status === "proposed" || plan.status === "draft"}>
-            <ParallelPlan plan={plan} onApproved={() => {}} onCancelled={() => route.navigate({ type: "home" })} />
+            <ParallelPlan plan={plan} onApproved={() => {}} onCancelled={() => route.goBack()} />
           </Show>
           <Show when={plan.status === "approved" || plan.status === "spawning" || plan.status === "running"}>
-            <ParallelStatus plan={plan} onCancelled={() => route.navigate({ type: "home" })} />
+            <ParallelStatus plan={plan} onCancelled={() => route.goBack()} />
           </Show>
           <Show when={plan.status === "merging"}>
             <ParallelMerge plan={plan} />
@@ -166,6 +166,21 @@ export function Parallel() {
                 Complete
               </text>
               <text fg={theme.text}>All subtasks merged successfully</text>
+              <text fg={theme.textMuted}>Press ESC to go back</text>
+            </box>
+          </Show>
+          <Show when={plan.status === "partial_success"}>
+            <box
+              flexDirection="column"
+              width={Math.min(60, dim().width - 2)}
+              backgroundColor={theme.backgroundPanel}
+              padding={2}
+              alignItems="center"
+            >
+              <text attributes={TextAttributes.BOLD} fg={theme.warning}>
+                Partial Success
+              </text>
+              <text fg={theme.text}>Some subtasks completed successfully</text>
               <text fg={theme.textMuted}>Press ESC to go back</text>
             </box>
           </Show>
