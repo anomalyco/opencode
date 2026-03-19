@@ -890,10 +890,10 @@ export const GithubRunCommand = cmd({
         }
 
         let text = ""
-        Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
-          if (evt.properties.part.sessionID !== session.id) return
+        Bus.subscribe(MessageV2.Event.PartUpdated, (evt) => {
+          if (evt.properties.data.part.sessionID !== session.id) return
           //if (evt.properties.part.messageID === messageID) return
-          const part = evt.properties.part
+          const part = evt.properties.data.part
 
           if (part.type === "tool" && part.state.status === "completed") {
             const [tool, color] = TOOL[part.tool] ?? [part.tool, UI.Style.TEXT_INFO_BOLD]

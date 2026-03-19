@@ -73,6 +73,10 @@ export namespace Installation {
     return CHANNEL === "local"
   }
 
+  export function isTesting() {
+    return process.env.NODE_ENV === "test"
+  }
+
   export class UpgradeFailedError extends Schema.TaggedErrorClass<UpgradeFailedError>()("UpgradeFailedError", {
     stderr: Schema.String,
   }) {}

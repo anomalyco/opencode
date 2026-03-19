@@ -50,6 +50,7 @@ Instructions here.
     directory: tmp.path,
     fn: async () => {
       const skills = await Skill.all()
+      console.log(skills)
       expect(skills.length).toBe(1)
       const testSkill = skills.find((s) => s.name === "test-skill")
       expect(testSkill).toBeDefined()

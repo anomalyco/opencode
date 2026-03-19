@@ -6,8 +6,9 @@ import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessag
 import { LSP } from "../lsp"
 import { Snapshot } from "@/snapshot"
 import { fn } from "@/util/fn"
-import { Database, NotFoundError, and, desc, eq, inArray, lt, or } from "@/storage/db"
-import { MessageTable, PartTable, SessionTable } from "./session.sql"
+import { Database, eq, desc, inArray } from "@/storage/db"
+import { SyncEvent } from "../sync"
+import { MessageTable, PartTable } from "./session.sql"
 import { ProviderTransform } from "@/provider/transform"
 import { STATUS_CODES } from "http"
 import { Storage } from "@/storage/storage"
@@ -449,25 +450,34 @@ export namespace MessageV2 {
   export type Info = z.infer<typeof Info>
 
   export const Event = {
-    Updated: BusEvent.define(
-      "message.updated",
-      z.object({
+    Updated: SyncEvent.define({
+      type: "message.updated",
+      version: "v1",
+      aggregate: "sessionID",
+      schema: z.object({
+        sessionID: z.string(),
         info: Info,
       }),
-    ),
-    Removed: BusEvent.define(
-      "message.removed",
-      z.object({
+    }),
+    Removed: SyncEvent.define({
+      type: "message.removed",
+      version: "v1",
+      aggregate: "sessionID",
+      schema: z.object({
         sessionID: SessionID.zod,
         messageID: MessageID.zod,
       }),
-    ),
-    PartUpdated: BusEvent.define(
-      "message.part.updated",
-      z.object({
+    }),
+    PartUpdated: SyncEvent.define({
+      type: "message.part.updated",
+      version: "v1",
+      aggregate: "sessionID",
+      schema: z.object({
+        sessionID: z.string(),
         part: Part,
+        time: z.number(),
       }),
-    ),
+    }),
     PartDelta: BusEvent.define(
       "message.part.delta",
       z.object({
@@ -478,14 +488,16 @@ export namespace MessageV2 {
         delta: z.string(),
       }),
     ),
-    PartRemoved: BusEvent.define(
-      "message.part.removed",
-      z.object({
+    PartRemoved: SyncEvent.define({
+      type: "message.part.removed",
+      version: "v1",
+      aggregate: "sessionID",
+      schema: z.object({
         sessionID: SessionID.zod,
         messageID: MessageID.zod,
         partID: PartID.zod,
       }),
-    ),
+    }),
   }
 
   export const WithParts = z.object({
