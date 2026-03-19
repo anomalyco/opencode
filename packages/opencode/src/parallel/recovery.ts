@@ -24,32 +24,26 @@ export namespace Recovery {
     incompleteWorkers: WorkerState[]
     existingWorktrees: string[]
     canResume: boolean
+    needsCleanup: boolean
     summary: string
   }
 
   /**
    * Scan for interrupted plans belonging to this project.
    * Called on startup to detect plans that were running when the server died.
+   * Also finds failed plans with orphaned worktrees that need cleanup.
    */
   export async function scan(projectID: ProjectID): Promise<InterruptedPlan[]> {
     const plans = await PlanStore.list()
-    const interrupted = plans.filter(
-      (p) => p.projectID === projectID && INTERRUPTED_STATUSES.includes(p.status),
-    )
-
-    if (interrupted.length === 0) return []
+    const interrupted = plans.filter((p) => p.projectID === projectID && INTERRUPTED_STATUSES.includes(p.status))
 
     log.info("found interrupted plans", { count: interrupted.length })
 
     const results: InterruptedPlan[] = []
 
     for (const plan of interrupted) {
-      const completedWorkers = plan.workers.filter(
-        (w) => w.status === "done" || w.status === "merged",
-      )
-      const incompleteWorkers = plan.workers.filter((w) =>
-        INTERRUPTED_WORKER_STATUSES.includes(w.status),
-      )
+      const completedWorkers = plan.workers.filter((w) => w.status === "done" || w.status === "merged")
+      const incompleteWorkers = plan.workers.filter((w) => INTERRUPTED_WORKER_STATUSES.includes(w.status))
 
       // Check which worktrees still exist on disk
       const existingWorktrees: string[] = []
@@ -92,6 +86,39 @@ export namespace Recovery {
         incompleteWorkers,
         existingWorktrees,
         canResume,
+        needsCleanup: false,
+        summary,
+      })
+    }
+
+    // Also check for failed plans with orphaned worktrees
+    const failed = plans.filter((p) => p.projectID === projectID && p.status === "failed")
+    for (const plan of failed) {
+      const existingWorktrees: string[] = []
+      for (const worker of plan.workers) {
+        if (worker.worktreeDir && fs.existsSync(worker.worktreeDir)) {
+          existingWorktrees.push(worker.worktreeDir)
+        }
+      }
+
+      if (existingWorktrees.length === 0) continue
+
+      log.info("found failed plan with orphaned worktrees", { planID: plan.id, worktrees: existingWorktrees.length })
+
+      const summary = [
+        `Plan "${plan.task}" (${plan.id})`,
+        `Status: ${plan.status}`,
+        `Orphaned worktrees: ${existingWorktrees.length}`,
+        "Use 'abandon' action to clean up",
+      ].join("\n")
+
+      results.push({
+        plan,
+        completedWorkers: [],
+        incompleteWorkers: plan.workers,
+        existingWorktrees,
+        canResume: false,
+        needsCleanup: true,
         summary,
       })
     }
@@ -192,14 +219,14 @@ export namespace Recovery {
   }
 
   /**
-   * Abandon an interrupted plan — mark as failed and clean up worktrees.
+   * Abandon an interrupted or failed plan — clean up worktrees and ensure failed status.
    */
   export async function abandon(planID: PlanID): Promise<Plan> {
     const plan = await PlanStore.get(planID)
 
-    log.info("abandoning interrupted plan", { planID })
+    log.info("abandoning plan", { planID, status: plan.status })
 
-    // Mark all incomplete workers as failed
+    // Mark all incomplete workers as failed (for interrupted plans)
     for (const worker of plan.workers) {
       if (INTERRUPTED_WORKER_STATUSES.includes(worker.status)) {
         await PlanStore.updateWorker({

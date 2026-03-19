@@ -2,6 +2,7 @@ import { PlanStore } from "./plan"
 import { Decomposition } from "./decomposition"
 import { WorkerManager } from "./worker"
 import { MergePipeline } from "./merge"
+import { Recovery } from "./recovery"
 import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider"
 import { Instance } from "@/project/instance"
@@ -120,9 +121,13 @@ export namespace Orchestrator {
     activeExecutions.set(planID, controller)
 
     execute(planID, controller.signal)
-      .catch((error) => {
+      .catch(async (error) => {
         log.error("plan execution failed", { planID, error })
-        PlanStore.transition({ id: planID, status: "failed" }).catch(() => {})
+        try {
+          const plan = await PlanStore.get(planID)
+          await Recovery.cleanupWorktrees(plan)
+        } catch {}
+        await PlanStore.transition({ id: planID, status: "failed" }).catch(() => {})
       })
       .finally(() => {
         activeExecutions.delete(planID)

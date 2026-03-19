@@ -6,35 +6,37 @@ import { Instance } from "@/project/instance"
 
 export const ParallelResumeTool = Tool.define("parallel_resume", {
   description:
-    "Resume or abandon an interrupted parallel plan. Use this when a plan was interrupted (server crash, terminal closed) and you want to recover completed work or clean up.",
+    "Resume or abandon an interrupted parallel plan, or clean up failed plans with orphaned worktrees. Use 'scan' to discover plans that need attention.",
   parameters: z.object({
     plan_id: z
       .string()
       .optional()
-      .describe("Plan ID to resume. If omitted, finds the latest interrupted plan for this project."),
+      .describe("Plan ID to resume or abandon. If omitted, finds the latest plan needing attention."),
     action: z
       .enum(["resume", "abandon", "scan"])
       .describe(
-        "Action to take: 'scan' lists interrupted plans, 'resume' recovers completed workers and continues, 'abandon' marks as failed and cleans up worktrees.",
+        "Action to take: 'scan' lists plans needing attention, 'resume' recovers completed workers and continues, 'abandon' cleans up worktrees and marks as failed.",
       ),
   }),
   async execute(params, ctx) {
     const projectID = Instance.project.id
 
     if (params.action === "scan") {
-      const interrupted = await Recovery.scan(projectID)
-      if (interrupted.length === 0) {
+      const found = await Recovery.scan(projectID)
+      if (found.length === 0) {
         return {
-          title: "No interrupted plans",
-          output: "No interrupted parallel plans found for this project.",
+          title: "No plans found",
+          output: "No interrupted or failed plans with orphaned worktrees found for this project.",
           metadata: {} as Record<string, never>,
         }
       }
 
-      const summaries = interrupted.map((ip) => ip.summary).join("\n\n---\n\n")
+      const summaries = found.map((ip) => ip.summary).join("\n\n---\n\n")
+      const resumeCount = found.filter((f) => f.canResume).length
+      const cleanupCount = found.filter((f) => f.needsCleanup).length
       return {
-        title: `Found ${interrupted.length} interrupted plan(s)`,
-        output: `${summaries}\n\nUse parallel_resume with action "resume" or "abandon" to handle these plans.`,
+        title: `Found ${found.length} plan(s) needing attention`,
+        output: `${summaries}\n\n${resumeCount > 0 ? `${resumeCount} can be resumed. ` : ""}${cleanupCount > 0 ? `${cleanupCount} need cleanup. ` : ""}Use parallel_resume with action "resume" or "abandon" to handle these plans.`,
         metadata: {} as Record<string, never>,
       }
     }
@@ -42,15 +44,15 @@ export const ParallelResumeTool = Tool.define("parallel_resume", {
     // Find the plan
     let planID = params.plan_id
     if (!planID) {
-      const interrupted = await Recovery.scan(projectID)
-      if (interrupted.length === 0) {
+      const found = await Recovery.scan(projectID)
+      if (found.length === 0) {
         return {
-          title: "No interrupted plans",
-          output: "No interrupted parallel plans found for this project.",
+          title: "No plans found",
+          output: "No interrupted or failed plans with orphaned worktrees found for this project.",
           metadata: {} as Record<string, never>,
         }
       }
-      planID = interrupted[0].plan.id
+      planID = found[0].plan.id
     }
 
     const plan = await PlanStore.get(planID as any)
