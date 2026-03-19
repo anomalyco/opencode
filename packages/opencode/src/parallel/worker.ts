@@ -6,10 +6,12 @@ import { PlanStore } from "./plan"
 import { Config } from "@/config/config"
 import { Log } from "@/util/log"
 import { GlobalBus } from "@/bus/global"
+import { Bus } from "@/bus"
 import { SessionStatus } from "../session/status"
 import { git } from "../util/git"
 import { SessionID } from "@/session/schema"
 import type { Plan, PlanID, SubtaskID, Subtask, WorkerState } from "./schema"
+import { ParallelEvent } from "./events"
 
 export namespace WorkerManager {
   const log = Log.create({ service: "worker" })
@@ -258,6 +260,7 @@ export namespace WorkerManager {
     const defaultTimeoutMs = 30 * 60 * 1000 // 30 minutes
     const timeoutMs = cfg.parallel?.worker_timeout_ms ?? defaultTimeoutMs
     const startTimes = new Map<string, number>()
+    const warned = new Set<string>() // Track workers that have triggered timeout warning
 
     // Build a map of sessionID -> worker for fast lookup
     const sessionToWorker = new Map<string, { subtaskID: SubtaskID; worktreeDir: string; startTime: number }>()
@@ -339,6 +342,7 @@ export namespace WorkerManager {
 
         pending.delete(sessionID)
         startTimes.delete(sessionID)
+        warned.delete(sessionID)
         log.info("worker completed", { planID, subtaskID: worker.subtaskID })
 
         try {
@@ -377,6 +381,7 @@ export namespace WorkerManager {
         if (fallbackTimer) clearInterval(fallbackTimer)
         if (debounceTimer) clearTimeout(debounceTimer)
         startTimes.clear()
+        warned.clear()
       }
 
       GlobalBus.on("event", handler)
@@ -396,10 +401,33 @@ export namespace WorkerManager {
 
           // Check for timeout
           const elapsed = Date.now() - worker.startTime
+          const warningThreshold = timeoutMs * 0.8
+
+          // Check for timeout warning at 80% threshold
+          if (elapsed > warningThreshold && !warned.has(sessionID)) {
+            warned.add(sessionID)
+            const remainingMs = timeoutMs - elapsed
+            log.warn("worker approaching timeout", {
+              planID,
+              subtaskID: worker.subtaskID,
+              elapsedMs: elapsed,
+              remainingMs,
+              timeoutMs,
+            })
+            Bus.publish(ParallelEvent.WorkerTimeoutWarning, {
+              planID,
+              subtaskID: worker.subtaskID,
+              elapsedMs: elapsed,
+              remainingMs,
+              timeoutMs,
+            })
+          }
+
           if (elapsed > timeoutMs) {
             const minutes = Math.round(timeoutMs / 60000)
             pending.delete(sessionID)
             startTimes.delete(sessionID)
+            warned.delete(sessionID)
             // Queue timeout update instead of calling directly
             pendingUpdates.set(worker.subtaskID, {
               status: "failed",
@@ -422,6 +450,7 @@ export namespace WorkerManager {
             if (idle) {
               pending.delete(sessionID)
               startTimes.delete(sessionID)
+              warned.delete(sessionID)
               const diffStat = await collectDiffStat(worker.worktreeDir)
               // Queue completion instead of calling updateWorker directly
               pendingUpdates.set(worker.subtaskID, { status: "done", diffStat })
@@ -429,6 +458,7 @@ export namespace WorkerManager {
           } catch {
             pending.delete(sessionID)
             startTimes.delete(sessionID)
+            warned.delete(sessionID)
             // Queue failure instead of calling directly
             pendingUpdates.set(worker.subtaskID, {
               status: "failed",
