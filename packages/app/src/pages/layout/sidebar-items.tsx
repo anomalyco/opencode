@@ -94,6 +94,7 @@ const SessionRow = (props: {
   hasPermissions: Accessor<boolean>
   hasError: Accessor<boolean>
   unseenCount: Accessor<number>
+  isActive: Accessor<boolean>
   setHoverSession: (id: string | undefined) => void
   clearHoverProjectSoon: () => void
   sidebarOpened: Accessor<boolean>
@@ -110,6 +111,7 @@ const SessionRow = (props: {
   return (
   <A
     href={`/${props.slug}/session/${props.session.id}`}
+    classList={{ active: props.isActive() }}
     class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none transition-[padding] ${props.mobile ? "pr-7" : ""} group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7 ${props.dense ? "py-0.5" : "py-1"}`}
     onPointerDown={props.warmPress}
     onPointerEnter={props.warmHover}
@@ -261,7 +263,6 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   const hoverReady = createMemo(() => hoverMessages() !== undefined)
   const hoverAllowed = createMemo(() => !props.mobile && props.sidebarExpanded())
   const hoverEnabled = createMemo(() => (props.popover ?? true) && hoverAllowed())
-  const [searchParams] = useSearchParams<{ grid?: string }>()
   const isActive = createMemo(() => {
     if (layout.sidebar.gridMode()) {
       const gridIds = searchParams.grid ? searchParams.grid.split(",") : (params.id ? [params.id] : [])
@@ -325,6 +326,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
       hasPermissions={hasPermissions}
       hasError={hasError}
       unseenCount={unseenCount}
+      isActive={isActive}
       setHoverSession={props.setHoverSession}
       clearHoverProjectSoon={props.clearHoverProjectSoon}
       sidebarOpened={layout.sidebar.opened}
