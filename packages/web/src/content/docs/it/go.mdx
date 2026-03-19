@@ -1,0 +1,147 @@
+---
+title: Go
+description: Abbonamento a basso costo per modelli di programmazione aperti.
+---
+
+import config from "../../../../config.mjs"
+export const console = config.console
+export const email = `mailto:${config.email}`
+
+OpenCode Go è un abbonamento a basso costo — **5 $ per il primo mese**, poi **10 $/mese** — che ti offre un accesso affidabile ai popolari modelli di programmazione aperti.
+
+:::note
+OpenCode Go è attualmente in beta.
+:::
+
+Go funziona come qualsiasi altro provider in OpenCode. Ti abboni a OpenCode Go e
+ottieni la tua chiave API. È **completamente facoltativo** e non hai bisogno di usarlo per
+utilizzare OpenCode.
+
+È progettato principalmente per gli utenti internazionali, con modelli ospitati negli Stati Uniti, nell'Unione Europea e a Singapore per un accesso globale stabile.
+
+---
+
+## Contesto
+
+I modelli aperti sono diventati davvero validi. Ora raggiungono prestazioni vicine a quelle dei modelli proprietari per le attività di programmazione. E poiché molti provider possono fornirli in modo competitivo, di solito sono molto più economici.
+
+Tuttavia, ottenere un accesso affidabile e a bassa latenza può essere difficile. I provider
+variano per qualità e disponibilità.
+
+:::tip
+Abbiamo testato un gruppo selezionato di modelli e provider che funzionano bene con OpenCode.
+:::
+
+Per risolvere questo problema, abbiamo fatto un paio di cose:
+
+1. Abbiamo testato un gruppo selezionato di modelli aperti e parlato con i loro team su come
+   eseguirli al meglio.
+2. Abbiamo quindi collaborato con alcuni provider per assicurarci che venissero forniti
+   correttamente.
+3. Infine, abbiamo eseguito dei benchmark sulla combinazione modello/provider e abbiamo stilato
+   un elenco che ci sentiamo di raccomandare.
+
+OpenCode Go ti dà accesso a questi modelli a **5 $ per il primo mese**, poi a **10 $/mese**.
+
+---
+
+## Come funziona
+
+OpenCode Go funziona come qualsiasi altro provider in OpenCode.
+
+1. Accedi a **<a href={console}>OpenCode Zen</a>**, ti abboni a Go e
+   copi la tua chiave API.
+2. Esegui il comando `/connect` nella TUI, selezioni `OpenCode Go` e incolli
+   la tua chiave API.
+3. Esegui `/models` nella TUI per vedere l'elenco dei modelli disponibili tramite Go.
+
+:::note
+Solo un membro per workspace può abbonarsi a OpenCode Go.
+:::
+
+L'elenco attuale dei modelli include:
+
+- **GLM-5**
+- **Kimi K2.5**
+- **MiniMax M2.5**
+- **MiniMax M2.7**
+
+L'elenco dei modelli potrebbe cambiare man mano che ne testiamo e aggiungiamo di nuovi.
+
+---
+
+## Limiti di utilizzo
+
+OpenCode Go include i seguenti limiti:
+
+- **Limite di 5 ore** — 12 $ di utilizzo
+- **Limite settimanale** — 30 $ di utilizzo
+- **Limite mensile** — 60 $ di utilizzo
+
+I limiti sono definiti in valore in dollari. Questo significa che il conteggio effettivo delle richieste dipende dal modello utilizzato. Modelli più economici come MiniMax M2.5 consentono più richieste, mentre modelli più costosi come GLM-5 ne consentono di meno.
+
+La tabella seguente fornisce una stima del conteggio delle richieste in base a pattern di utilizzo tipici di Go:
+
+|                       | GLM-5 | Kimi K2.5 | MiniMax M2.7 | MiniMax M2.5 |
+| --------------------- | ----- | --------- | ------------ | ------------ |
+| richieste ogni 5 ore  | 1.150 | 1.850     | 14.000       | 20.000       |
+| richieste a settimana | 2.880 | 4.630     | 35.000       | 50.000       |
+| richieste al mese     | 5.750 | 9.250     | 70.000       | 100.000      |
+
+Le stime si basano sui pattern medi di richieste osservati:
+
+- GLM-5 — 700 di input, 52.000 in cache, 150 token di output per richiesta
+- Kimi K2.5 — 870 di input, 55.000 in cache, 200 token di output per richiesta
+- MiniMax M2.7/M2.5 — 300 di input, 55.000 in cache, 125 token di output per richiesta
+
+Puoi monitorare il tuo utilizzo attuale nella **<a href={console}>console</a>**.
+
+:::tip
+Se raggiungi il limite di utilizzo, puoi continuare a usare i modelli gratuiti.
+:::
+
+I limiti di utilizzo potrebbero cambiare man mano che raccogliamo dati sull'utilizzo iniziale e feedback.
+
+---
+
+### Utilizzo oltre i limiti
+
+Se hai anche dei crediti nel tuo saldo Zen, puoi abilitare l'opzione **Use balance**
+nella console. Quando è abilitata, Go ripiegherà sul tuo saldo Zen
+dopo che avrai raggiunto i limiti di utilizzo invece di bloccare le richieste.
+
+---
+
+## Endpoint
+
+Puoi anche accedere ai modelli Go tramite i seguenti endpoint API.
+
+| Modello      | ID Modello   | Endpoint                                         | Pacchetto AI SDK            |
+| ------------ | ------------ | ------------------------------------------------ | --------------------------- |
+| GLM-5        | glm-5        | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K2.5    | kimi-k2.5    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiniMax M2.7 | minimax-m2.7 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| MiniMax M2.5 | minimax-m2.5 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+
+Il [model id](/docs/config/#models) nella tua OpenCode config
+utilizza il formato `opencode-go/<model-id>`. Ad esempio, per Kimi K2.5, useresti
+`opencode-go/kimi-k2.5` nella tua configurazione.
+
+---
+
+## Privacy
+
+Il piano è progettato principalmente per gli utenti internazionali, con modelli ospitati negli Stati Uniti, nell'Unione Europea e a Singapore per un accesso globale stabile.
+
+<a href={email}>Contattaci</a> in caso di domande.
+
+---
+
+## Obiettivi
+
+Abbiamo creato OpenCode Go per:
+
+1. Rendere la programmazione con l'IA **accessibile** a più persone tramite un abbonamento a basso costo.
+2. Fornire un accesso **affidabile** ai migliori modelli di programmazione aperti.
+3. Curare modelli che sono **testati e valutati tramite benchmark** per l'uso con gli agenti di programmazione.
+4. Non avere **nessun lock-in**, permettendoti di utilizzare anche qualsiasi altro provider con OpenCode.
