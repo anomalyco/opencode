@@ -501,6 +501,35 @@ function App() {
       },
     },
     {
+      title: "Agent manager",
+      value: "parallel.status",
+      category: "Agent",
+      slash: {
+        name: "agents",
+        aliases: ["workers", "manager"],
+      },
+      onSelect: async () => {
+        dialog.clear()
+        try {
+          const result = await sdk.client.parallel.list()
+          const plans = result.data ?? []
+          const active = plans.find(
+            (p: any) =>
+              p.status === "running" || p.status === "spawning" || p.status === "merging" || p.status === "proposed",
+          )
+          if (active) {
+            route.navigate({ type: "parallel", planID: active.id })
+          } else if (plans.length > 0) {
+            route.navigate({ type: "parallel", planID: plans[0].id })
+          } else {
+            toast.show({ message: "No parallel plans found", variant: "info" })
+          }
+        } catch {
+          toast.show({ message: "Failed to load parallel plans", variant: "error" })
+        }
+      },
+    },
+    {
       title: "Agent cycle",
       value: "agent.cycle",
       keybind: "agent_cycle",
