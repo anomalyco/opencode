@@ -2,18 +2,7 @@ import { DataProvider } from "@opencode-ai/ui/context"
 import { showToast } from "@opencode-ai/ui/toast"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { Navigate, useLocation, useNavigate, useParams } from "@solidjs/router"
-import {
-  batch,
-  createEffect,
-  createMemo,
-  createResource,
-  Match,
-  type ParentProps,
-  Show,
-  Switch,
-  startTransition,
-} from "solid-js"
-import { createStore } from "solid-js/store"
+import { createMemo, createResource, Match, type ParentProps, Switch } from "solid-js"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useLanguage } from "@/context/language"
 import { LocalProvider } from "@/context/local"
@@ -46,8 +35,10 @@ export default function Layout(props: ParentProps) {
   let invalid = ""
 
   const [resolved] = createResource(
-    () => params.dir,
-    async (b64Dir) => {
+    () => {
+      if (params.dir) return [location.pathname, params.dir] as const
+    },
+    async ([pathname, b64Dir]) => {
       const directory = decode64(b64Dir)
 
       if (!directory) {
@@ -71,7 +62,7 @@ export default function Layout(props: ParentProps) {
           const next = x.data?.directory ?? directory
           invalid = ""
           if (next === directory) return { type: "resolved" as const, resolved: next }
-          const path = location.pathname.slice(b64Dir.length + 1)
+          const path = pathname.slice(b64Dir.length + 1)
           return { type: "redirect" as const, href: `/${base64Encode(next)}${path}${location.search}${location.hash}` }
         })
         .catch(() => {
