@@ -31,6 +31,7 @@ Power users frequently juggle multiple contexts (e.g. looking at a chat with bac
 - Implemented `SessionGrid` (`packages/app/src/pages/session-grid.tsx`).
 - Uses a reactive `createMemo` to compute standard CSS Grid Tailwind classes (`grid-cols-X grid-rows-Y`) based entirely on the array length of active sessions.
 - Added self-contained close buttons and focus-ring states (blue border) for the currently "active" tile.
+- **Real-Time Resizable Grid Panels**: Added native, draggable splitters between all grid panels. Users can hover over the gaps between chats and drag to resize the proportions of the grid horizontally and vertically. This uses custom `pointermove` event handlers that dynamically adjust CSS Grid `fr` (fractional) units in real time, meaning custom layout proportions perfectly adapt to window resizing.
 - **Smart Drag-to-Swap (FLIP Animated)**: Holding `Ctrl` or `Cmd` unlocks drag-and-drop on any grid tile. Dragging one tile over another instantly reorders the surrounding tiles using CSS `order` for a smooth, dynamic "Kanban" feel. Uses a custom microtask-based FLIP (First, Last, Invert, Play) animation to smoothly glide the tiles to their new slots at 60fps. Uses a transparent 1x1 GIF as the drag ghost image to prevent native drag lag. Dropping it updates the URL, making layouts persistent and shareable.
 - **Focus Follows Mouse (Hover-to-Focus)**: Moving the cursor over a tile seamlessly shifts focus and updates the URL without requiring a click.
 - **Auto-Focus Prompt**: When a tile becomes the active session (either by clicking or hovering), the prompt input text box automatically receives focus and places the cursor right back to exactly where the user left off typing, allowing for immediate text entry.
@@ -38,7 +39,9 @@ Power users frequently juggle multiple contexts (e.g. looking at a chat with bac
 ### 4. Sidebar & UI Integration
 - Added `<GridToggleItem>` strictly beneath the "New session" buttons in both the expanded Workspace Panel and the hoverable Project Rail.
 - Updated `SessionItem`'s `onClick` handler to intelligently manage the `?grid` URL array (pushing new IDs, popping existing ones) when Grid Mode is active.
+- **New Session Grid Append**: Clicking "New Session" while Grid Mode is enabled gracefully appends an empty placeholder slot to the grid array instead of destroying the grid layout. When the user submits their first prompt, the newly generated session ID seamlessly replaces the placeholder slot directly inside the grid view.
 - Updated `isActive` computations in the sidebar so *all* currently tiled sessions appear highlighted, rather than just the primary one.
+- Replaced the bulky "Close" button with a sleek, low-profile "x" icon (`IconButton`) in the top-right corner of each grid tile for quick deselection.
 
 ### 5. Glitch Resolution
 - **Tooltip DOM Error**: Fixed a SolidJS `HierarchyRequestError` that fired when collapsing the sidebar by refactoring how the `<Tooltip>` components swap DOM nodes with their fallbacks.
