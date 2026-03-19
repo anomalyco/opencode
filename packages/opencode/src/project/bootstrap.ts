@@ -21,3 +21,14 @@ export async function InstanceBootstrap() {
     }
   })
 }
+
+/**
+ * Lightweight bootstrap for parallel workers.
+ * Skips LSP and plugin initialization which can hang in worktree contexts.
+ */
+export async function ParallelBootstrap() {
+  Log.Default.info("bootstrapping parallel worker", { directory: Instance.directory })
+  // Skip Plugin.init() and LSP.init() - workers don't need them
+  File.init()
+  // No event subscriptions needed for workers
+}

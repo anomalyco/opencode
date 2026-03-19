@@ -1,7 +1,7 @@
 import { Worktree } from "../worktree"
 import { Session } from "../session"
 import { Instance } from "../project/instance"
-import { InstanceBootstrap } from "../project/bootstrap"
+import { InstanceBootstrap, ParallelBootstrap } from "../project/bootstrap"
 import { PlanStore } from "./plan"
 import { Config } from "@/config/config"
 import { Log } from "@/util/log"
@@ -105,7 +105,7 @@ export namespace WorkerManager {
 
     const session = await Instance.provide({
       directory: info.directory,
-      init: InstanceBootstrap,
+      init: ParallelBootstrap, // Use lightweight bootstrap for workers
       fn: async () => {
         return Session.createNext({
           parentID: plan.sessionID,
@@ -113,8 +113,8 @@ export namespace WorkerManager {
           title: `[parallel] ${subtask.title}`,
         })
       },
-      project: Instance.project, // Pass parent project info
-      worktree: info.directory, // Worktree is the directory itself
+      project: Instance.project,
+      worktree: info.directory,
     })
 
     await updateWorker(plan.id, subtask.id, {
@@ -127,7 +127,7 @@ export namespace WorkerManager {
 
     await Instance.provide({
       directory: info.directory,
-      init: InstanceBootstrap,
+      init: ParallelBootstrap, // Use lightweight bootstrap
       fn: async () => {
         const promptText = buildWorkerPrompt(plan.task, subtask, plan.subtasks)
         const { SessionPrompt } = await import("../session/prompt")
