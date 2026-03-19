@@ -1225,6 +1225,17 @@ export namespace Config {
             .min(60000)
             .optional()
             .describe("Timeout in milliseconds for worker execution (default: 1800000 = 30 minutes)"),
+          max_plans_per_project: z
+            .number()
+            .int()
+            .min(1)
+            .max(100)
+            .optional()
+            .describe("Maximum number of parallel plans per project (default: 5)"),
+          require_approval: z
+            .boolean()
+            .optional()
+            .describe("Require explicit approval before executing parallel plans (default: true)"),
         })
         .optional()
         .describe("Parallel agent orchestration configuration"),

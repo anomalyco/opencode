@@ -51,6 +51,18 @@ export namespace Orchestrator {
     return { orchestratorModel, workerModel }
   }
 
+  export async function checkPlanLimit(projectID: Plan["projectID"]): Promise<void> {
+    const cfg = await Config.get()
+    const limit = cfg.parallel?.max_plans_per_project ?? 5
+    const active = await PlanStore.listActiveByProject(projectID)
+    if (active.length >= limit) {
+      throw new Error(
+        `Parallel plan limit reached for project: ${active.length} active plans (max ${limit}). ` +
+          "Cancel or complete existing plans before creating new ones.",
+      )
+    }
+  }
+
   export const create = fn(
     z.object({
       projectID: PlanSchema.shape.projectID,
@@ -60,6 +72,8 @@ export namespace Orchestrator {
       workerModel: PlanSchema.shape.workerModel.optional(),
     }),
     async (input): Promise<Plan> => {
+      await checkPlanLimit(input.projectID)
+
       const models = await resolveModels({
         orchestratorModel: input.orchestratorModel,
         workerModel: input.workerModel,
@@ -87,7 +101,13 @@ export namespace Orchestrator {
         status: "proposed",
       })
 
-      log.info("plan created", { planID: plan.id, subtaskCount: subtasks.length })
+      const cfg = await Config.get()
+      const autoApprove = cfg.parallel?.require_approval === false
+      if (autoApprove) {
+        await approve(updated.id)
+      }
+
+      log.info("plan created", { planID: plan.id, subtaskCount: subtasks.length, autoApprove })
       return updated
     },
   )

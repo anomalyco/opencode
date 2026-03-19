@@ -178,6 +178,23 @@ export namespace PlanStore {
     },
   )
 
+  export async function listActiveByProject(projectID: ProjectID): Promise<Plan[]> {
+    const stmt = Database.use((db) =>
+      db
+        .select()
+        .from(PlanTable)
+        .where(
+          and(
+            eq(PlanTable.project_id, sql.placeholder("project_id")),
+            sql`${PlanTable.status} IN ('draft', 'proposed', 'approved', 'spawning', 'running', 'merging')`,
+          ),
+        )
+        .prepare(),
+    )
+    const rows = stmt.all({ project_id: projectID })
+    return rows.map(fromRow)
+  }
+
   export const transition = fn(
     PlanSchema.pick({ id: true }).extend({
       status: PlanSchema.shape.status,
