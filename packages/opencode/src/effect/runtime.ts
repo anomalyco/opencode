@@ -3,7 +3,7 @@ import { Account } from "@/account/effect"
 import { Auth } from "@/auth/effect"
 import { Instances } from "@/effect/instances"
 import type { InstanceServices } from "@/effect/instances"
-import { Installation } from "@/installation/effect"
+import { Installation } from "@/installation"
 import { Truncate } from "@/tool/truncate-effect"
 import { Instance } from "@/project/instance"
 
