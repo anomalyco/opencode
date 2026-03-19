@@ -7,6 +7,7 @@ import type {
   SessionReviewCommentUpdate,
 } from "@opencode-ai/ui/session-review"
 import type { SelectedLineRange } from "@/context/file"
+import { useOpenFilePath } from "@/context/open-file-path"
 import { useSDK } from "@/context/sdk"
 import { useLayout } from "@/context/layout"
 import type { LineComment } from "@/context/comments"
@@ -45,6 +46,7 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
 
   const sdk = useSDK()
   const layout = useLayout()
+  const open = useOpenFilePath()
 
   const readFile = async (path: string) => {
     return sdk.client.file
@@ -156,6 +158,7 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
       diffStyle={props.diffStyle}
       onDiffStyleChange={props.onDiffStyleChange}
       onViewFile={props.onViewFile}
+      onOpenFile={(file) => open.open({ path: file })}
       focusedFile={props.focusedFile}
       readFile={readFile}
       onLineComment={props.onLineComment}

@@ -131,6 +131,19 @@
     white-space: nowrap;
   }
 
+  button[data-slot="session-review-filename"] {
+    border: none;
+    padding: 0;
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+
+    &:hover,
+    &:focus-visible {
+      text-decoration: underline;
+    }
+  }
+
   [data-slot="session-review-view-button"] {
     display: flex;
     align-items: center;

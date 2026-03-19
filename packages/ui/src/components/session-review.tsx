@@ -87,6 +87,7 @@ export interface SessionReviewProps {
   actions?: JSX.Element
   diffs: ReviewDiff[]
   onViewFile?: (file: string) => void
+  onOpenFile?: (file: string) => void
   readFile?: (path: string) => Promise<FileContent | undefined>
 }
 
@@ -166,7 +167,8 @@ export const SessionReview = (props: SessionReviewProps) => {
     handleChange(next)
   }
 
-  const openFileLabel = () => i18n.t("ui.sessionReview.openFile")
+  const openReviewLabel = () => i18n.t("ui.sessionReview.openInReview")
+  const openExternalLabel = () => i18n.t("ui.sessionReview.openExternally")
 
   const selectionSide = (range: SelectedLineRange) => range.endSide ?? range.side ?? "additions"
 
@@ -407,16 +409,33 @@ export const SessionReview = (props: SessionReviewProps) => {
                                   <Show when={file.includes("/")}>
                                     <span data-slot="session-review-directory">{`\u202A${getDirectory(file)}\u202C`}</span>
                                   </Show>
-                                  <span data-slot="session-review-filename">{getFilename(file)}</span>
-                                  <Show when={props.onViewFile}>
-                                    <Tooltip value={openFileLabel()} placement="top" gutter={4}>
+                                  <Show
+                                    when={props.onViewFile}
+                                    fallback={<span data-slot="session-review-filename">{getFilename(file)}</span>}
+                                  >
+                                    <Tooltip value={openReviewLabel()} placement="top" gutter={4}>
                                       <button
-                                        data-slot="session-review-view-button"
+                                        data-slot="session-review-filename"
                                         type="button"
-                                        aria-label={openFileLabel()}
+                                        aria-label={openReviewLabel()}
                                         onClick={(e) => {
                                           e.stopPropagation()
                                           props.onViewFile?.(file)
+                                        }}
+                                      >
+                                        {getFilename(file)}
+                                      </button>
+                                    </Tooltip>
+                                  </Show>
+                                  <Show when={props.onOpenFile}>
+                                    <Tooltip value={openExternalLabel()} placement="top" gutter={4}>
+                                      <button
+                                        data-slot="session-review-view-button"
+                                        type="button"
+                                        aria-label={openExternalLabel()}
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          props.onOpenFile?.(file)
                                         }}
                                       >
                                         <Icon name="open-file" size="small" />
