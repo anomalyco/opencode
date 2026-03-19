@@ -1,18 +1,10 @@
-import { describe, expect, test, beforeEach, afterEach } from "bun:test"
-import { $ } from "bun"
-import fs from "fs/promises"
-import path from "path"
+import { describe, expect, test } from "bun:test"
 import { Instance } from "../../src/project/instance"
+import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { PlanStore } from "../../src/parallel/plan"
 import { Orchestrator } from "../../src/parallel/orchestrator"
-import { SubtaskID, PlanID } from "../../src/parallel/schema"
-import { Project } from "../../src/project/project"
+import { SubtaskID } from "../../src/parallel/schema"
 import { tmpdir } from "../fixture/fixture"
-import { Database } from "../../src/storage/db"
-import { PlanTable } from "../../src/parallel/plan.sql"
-import { ProjectTable } from "../../src/project/project.sql"
-import { Session } from "../../src/session"
-import { SessionID } from "../../src/session/schema"
 
 describe("Parallel Infrastructure", () => {
   describe("PlanStore", () => {
@@ -21,11 +13,11 @@ describe("Parallel Infrastructure", () => {
 
       await Instance.provide({
         directory: tmp.path,
+        init: InstanceBootstrap,
         fn: async () => {
-          const project = await Project.init({ directory: tmp.path })
           const plan = await PlanStore.create({
-            projectID: project.id,
-            sessionID: SessionID.descending(),
+            projectID: Instance.project.id,
+            sessionID: undefined,
             task: "Test task",
             orchestratorModel: { providerID: "test" as any, modelID: "test-model" as any },
             workerModel: { providerID: "test" as any, modelID: "test-model" as any },
@@ -48,11 +40,11 @@ describe("Parallel Infrastructure", () => {
 
       await Instance.provide({
         directory: tmp.path,
+        init: InstanceBootstrap,
         fn: async () => {
-          const project = await Project.init({ directory: tmp.path })
           const plan = await PlanStore.create({
-            projectID: project.id,
-            sessionID: SessionID.descending(),
+            projectID: Instance.project.id,
+            sessionID: undefined,
             task: "Test task",
             orchestratorModel: { providerID: "test" as any, modelID: "test-model" as any },
             workerModel: { providerID: "test" as any, modelID: "test-model" as any },
@@ -90,11 +82,11 @@ describe("Parallel Infrastructure", () => {
 
       await Instance.provide({
         directory: tmp.path,
+        init: InstanceBootstrap,
         fn: async () => {
-          const project = await Project.init({ directory: tmp.path })
           const plan = await PlanStore.create({
-            projectID: project.id,
-            sessionID: SessionID.descending(),
+            projectID: Instance.project.id,
+            sessionID: undefined,
             task: "Test task",
             orchestratorModel: { providerID: "test" as any, modelID: "test-model" as any },
             workerModel: { providerID: "test" as any, modelID: "test-model" as any },
@@ -136,11 +128,11 @@ describe("Parallel Infrastructure", () => {
 
       await Instance.provide({
         directory: tmp.path,
+        init: InstanceBootstrap,
         fn: async () => {
-          const project = await Project.init({ directory: tmp.path })
           const plan = await PlanStore.create({
-            projectID: project.id,
-            sessionID: SessionID.descending(),
+            projectID: Instance.project.id,
+            sessionID: undefined,
             task: "Test task",
             orchestratorModel: { providerID: "test" as any, modelID: "test-model" as any },
             workerModel: { providerID: "test" as any, modelID: "test-model" as any },
@@ -161,11 +153,11 @@ describe("Parallel Infrastructure", () => {
 
       await Instance.provide({
         directory: tmp.path,
+        init: InstanceBootstrap,
         fn: async () => {
-          const project = await Project.init({ directory: tmp.path })
           const plan = await PlanStore.create({
-            projectID: project.id,
-            sessionID: SessionID.descending(),
+            projectID: Instance.project.id,
+            sessionID: undefined,
             task: "Test task",
             orchestratorModel: { providerID: "test" as any, modelID: "test-model" as any },
             workerModel: { providerID: "test" as any, modelID: "test-model" as any },
@@ -196,18 +188,16 @@ describe("Parallel Infrastructure", () => {
           expect(spawning.workers[0].status).toBe("spawning")
 
           // Update worker to running with session and worktree info
-          const sessionID = SessionID.descending()
           const running = await PlanStore.updateWorker({
             id: plan.id,
             subtaskID,
             status: "running",
-            sessionID,
+            sessionID: undefined,
             worktreeName: "parallel-test",
             worktreeDir: "/tmp/test-worktree",
             branch: "parallel-test-branch",
           })
           expect(running.workers[0].status).toBe("running")
-          expect(running.workers[0].sessionID).toBe(sessionID)
           expect(running.workers[0].worktreeName).toBe("parallel-test")
           expect(running.workers[0].branch).toBe("parallel-test-branch")
 
@@ -231,21 +221,20 @@ describe("Parallel Infrastructure", () => {
 
       await Instance.provide({
         directory: tmp.path,
+        init: InstanceBootstrap,
         fn: async () => {
-          const project = await Project.init({ directory: tmp.path })
-
           // Create multiple plans
           const plan1 = await PlanStore.create({
-            projectID: project.id,
-            sessionID: SessionID.descending(),
+            projectID: Instance.project.id,
+            sessionID: undefined,
             task: "Task 1",
             orchestratorModel: { providerID: "test" as any, modelID: "test-model" as any },
             workerModel: { providerID: "test" as any, modelID: "test-model" as any },
           })
 
           const plan2 = await PlanStore.create({
-            projectID: project.id,
-            sessionID: SessionID.descending(),
+            projectID: Instance.project.id,
+            sessionID: undefined,
             task: "Task 2",
             orchestratorModel: { providerID: "test" as any, modelID: "test-model" as any },
             workerModel: { providerID: "test" as any, modelID: "test-model" as any },
@@ -266,11 +255,11 @@ describe("Parallel Infrastructure", () => {
 
       await Instance.provide({
         directory: tmp.path,
+        init: InstanceBootstrap,
         fn: async () => {
-          const project = await Project.init({ directory: tmp.path })
           const plan = await PlanStore.create({
-            projectID: project.id,
-            sessionID: SessionID.descending(),
+            projectID: Instance.project.id,
+            sessionID: undefined,
             task: "Task to remove",
             orchestratorModel: { providerID: "test" as any, modelID: "test-model" as any },
             workerModel: { providerID: "test" as any, modelID: "test-model" as any },
@@ -293,6 +282,7 @@ describe("Parallel Infrastructure", () => {
 
       await Instance.provide({
         directory: tmp.path,
+        init: InstanceBootstrap,
         fn: async () => {
           const models = await Orchestrator.resolveModels()
           expect(models.orchestratorModel).toBeDefined()

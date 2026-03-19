@@ -120,8 +120,12 @@ describe("Parallel E2E", () => {
 
         await PlanStore.updateWorker({ id: plan.id, subtaskID: st.id, status: "spawning" } as any)
         await PlanStore.updateWorker({
-          id: plan.id, subtaskID: st.id, status: "running",
-          worktreeName: info.name, worktreeDir: info.directory, branch: info.branch,
+          id: plan.id,
+          subtaskID: st.id,
+          status: "running",
+          worktreeName: info.name,
+          worktreeDir: info.directory,
+          branch: info.branch,
         } as any)
       }
       await PlanStore.transition({ id: plan.id, status: "running" })
@@ -172,8 +176,11 @@ describe("Parallel E2E", () => {
         wts.push({ dir: info.directory, branch: info.branch, subtaskID: st.id })
         await PlanStore.updateWorker({ id: plan.id, subtaskID: st.id, status: "spawning" } as any)
         await PlanStore.updateWorker({
-          id: plan.id, subtaskID: st.id, status: "running",
-          worktreeDir: info.directory, branch: info.branch,
+          id: plan.id,
+          subtaskID: st.id,
+          status: "running",
+          worktreeDir: info.directory,
+          branch: info.branch,
         } as any)
       }
       await PlanStore.transition({ id: plan.id, status: "running" })
@@ -201,8 +208,10 @@ describe("Parallel E2E", () => {
       expect(m2.exitCode).not.toBe(0)
       await $`git merge --abort`.cwd(worktree).quiet().nothrow()
       await PlanStore.updateWorker({
-        id: plan.id, subtaskID: wts[1].subtaskID,
-        status: "conflict", error: "Merge conflict",
+        id: plan.id,
+        subtaskID: wts[1].subtaskID,
+        status: "conflict",
+        error: "Merge conflict",
       } as any)
 
       const failed = await PlanStore.transition({ id: plan.id, status: "failed" })
@@ -229,8 +238,11 @@ describe("Parallel E2E", () => {
         wts.push({ dir: info.directory, branch: info.branch, subtaskID: st.id })
         await PlanStore.updateWorker({ id: plan.id, subtaskID: st.id, status: "spawning" } as any)
         await PlanStore.updateWorker({
-          id: plan.id, subtaskID: st.id, status: "running",
-          worktreeDir: info.directory, branch: info.branch,
+          id: plan.id,
+          subtaskID: st.id,
+          status: "running",
+          worktreeDir: info.directory,
+          branch: info.branch,
         } as any)
       }
       await PlanStore.transition({ id: plan.id, status: "running" })
@@ -252,10 +264,12 @@ describe("Parallel E2E", () => {
       const w2 = resumed.workers.find((w) => w.subtaskID === wts[1].subtaskID)
       // Both workers should reach terminal state after recovery + merge
       // Worker 1: had commits → recovered as done → possibly merged
-      expect(["done", "merged"]).toContain(w1?.status)
+      expect(w1).toBeDefined()
+      expect(["done", "merged"]).toContain(w1!.status)
       // Worker 2: no commits → marked failed → but merge of empty branch succeeds (no-op) → may be merged
       // The important thing: recovery completed without crashing and plan reached terminal state
-      expect(["done", "failed", "merged"]).toContain(w2?.status)
+      expect(w2).toBeDefined()
+      expect(["done", "failed", "merged"]).toContain(w2!.status)
       expect(["done", "failed", "running"]).toContain(resumed.status)
 
       for (const wt of wts) await removeWorktree(worktree, wt.dir)
@@ -264,9 +278,7 @@ describe("Parallel E2E", () => {
 
   test("recovery: abandon cleans up worktrees", async () => {
     await withProject(async (projectID, worktree) => {
-      const plan = await createPlan(projectID, [
-        { title: "Update a.ts", files: ["src/a.ts"] },
-      ])
+      const plan = await createPlan(projectID, [{ title: "Update a.ts", files: ["src/a.ts"] }])
 
       await PlanStore.transition({ id: plan.id, status: "approved" })
       await PlanStore.transition({ id: plan.id, status: "spawning" })
@@ -274,19 +286,32 @@ describe("Parallel E2E", () => {
       const info = await createWorktree(worktree, `abandon-${plan.subtasks[0].id.slice(0, 8)}`)
       await PlanStore.updateWorker({ id: plan.id, subtaskID: plan.subtasks[0].id, status: "spawning" } as any)
       await PlanStore.updateWorker({
-        id: plan.id, subtaskID: plan.subtasks[0].id, status: "running",
-        worktreeDir: info.directory, branch: info.branch,
+        id: plan.id,
+        subtaskID: plan.subtasks[0].id,
+        status: "running",
+        worktreeDir: info.directory,
+        branch: info.branch,
       } as any)
       await PlanStore.transition({ id: plan.id, status: "running" })
 
-      expect(await fs.stat(info.directory).then(() => true).catch(() => false)).toBe(true)
+      expect(
+        await fs
+          .stat(info.directory)
+          .then(() => true)
+          .catch(() => false),
+      ).toBe(true)
 
       const abandoned = await Recovery.abandon(plan.id)
       expect(abandoned.status).toBe("failed")
       expect(abandoned.workers[0].error).toBe("Abandoned by user")
 
       // Worktree cleaned up
-      expect(await fs.stat(info.directory).then(() => true).catch(() => false)).toBe(false)
+      expect(
+        await fs
+          .stat(info.directory)
+          .then(() => true)
+          .catch(() => false),
+      ).toBe(false)
     })
   })
 
