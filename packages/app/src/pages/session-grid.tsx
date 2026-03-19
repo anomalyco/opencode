@@ -55,10 +55,11 @@ export function SessionGrid(props: { ids: string[] }) {
   return (
     <div class={`grid gap-2 w-full h-full p-2 bg-background-base ${getGridClass()}`}>
       <For each={props.ids}>
-        {(id) => (
+        {(id, index) => (
           <div 
             class={`relative flex flex-col min-h-0 min-w-0 border rounded-lg overflow-hidden shadow-sm transition-all
               ${id === params.id ? "ring-2 ring-blue-500 z-10" : "border-border-base hover:border-border-strong"}
+              ${count() === 5 && index() === 4 ? "col-span-3" : ""}
             `}
             onClick={(e) => {
               if (id !== params.id) focusSession(id)
