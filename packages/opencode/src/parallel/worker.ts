@@ -42,23 +42,25 @@ export namespace WorkerManager {
       }
     }
 
-    await Promise.all(
-      Array.from({ length: Math.min(maxConcurrency, items.length) }, () => worker()),
-    )
+    await Promise.all(Array.from({ length: Math.min(maxConcurrency, items.length) }, () => worker()))
     return results
   }
 
   export async function spawnAll(plan: Plan, abort: AbortSignal): Promise<void> {
     const cfg = await Config.get()
     const maxWorkers = cfg.parallel?.max_workers
-    log.info("spawning workers", { planID: plan.id, count: plan.subtasks.length, maxWorkers: maxWorkers ?? "unlimited" })
+    log.info("spawning workers", {
+      planID: plan.id,
+      count: plan.subtasks.length,
+      maxWorkers: maxWorkers ?? "unlimited",
+    })
 
     const spawnOne = async (subtask: Subtask) => {
       if (abort.aborted) throw new Error("Aborted")
 
       await updateWorker(plan.id, subtask.id, { status: "spawning" })
 
-      const info = await Worktree.makeWorktreeInfo(`parallel-${plan.id.slice(0, 8)}-${subtask.id.slice(0, 8)}`)
+      const info = await Worktree.makeWorktreeInfo(`parallel-${plan.id.slice(0, 12)}-${subtask.id.slice(0, 20)}`)
       const bootstrap = await Worktree.createFromInfo(info)
 
       await bootstrap()
