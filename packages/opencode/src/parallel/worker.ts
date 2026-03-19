@@ -3,6 +3,7 @@ import { Session } from "../session"
 import { Instance } from "../project/instance"
 import { InstanceBootstrap } from "../project/bootstrap"
 import { PlanStore } from "./plan"
+import { Config } from "@/config/config"
 import { Log } from "@/util/log"
 import { GlobalBus } from "@/bus/global"
 import { SessionStatus } from "../session/status"
@@ -12,61 +13,97 @@ import type { Plan, PlanID, SubtaskID, Subtask, WorkerState } from "./schema"
 export namespace WorkerManager {
   const log = Log.create({ service: "worker" })
 
-  export async function spawnAll(plan: Plan, abort: AbortSignal): Promise<void> {
-    log.info("spawning workers", { planID: plan.id, count: plan.subtasks.length })
+  /**
+   * Run async tasks with a concurrency limit.
+   * If maxConcurrency is undefined, all tasks run in parallel (Promise.allSettled).
+   */
+  async function pooled<T, R>(
+    items: T[],
+    maxConcurrency: number | undefined,
+    fn: (item: T) => Promise<R>,
+  ): Promise<PromiseSettledResult<R>[]> {
+    if (!maxConcurrency || maxConcurrency >= items.length) {
+      return Promise.allSettled(items.map(fn))
+    }
 
-    const results = await Promise.allSettled(
-      plan.subtasks.map(async (subtask) => {
-        if (abort.aborted) throw new Error("Aborted")
+    const results: PromiseSettledResult<R>[] = new Array(items.length)
+    let cursor = 0
 
-        await updateWorker(plan.id, subtask.id, { status: "spawning" })
+    async function worker(): Promise<void> {
+      while (cursor < items.length) {
+        const index = cursor++
+        try {
+          const value = await fn(items[index])
+          results[index] = { status: "fulfilled", value }
+        } catch (reason) {
+          results[index] = { status: "rejected", reason }
+        }
+      }
+    }
 
-        const info = await Worktree.makeWorktreeInfo(`parallel-${plan.id.slice(0, 8)}-${subtask.id.slice(0, 8)}`)
-        const bootstrap = await Worktree.createFromInfo(info)
-
-        await bootstrap()
-
-        const session = await Instance.provide({
-          directory: info.directory,
-          init: InstanceBootstrap,
-          fn: async () => {
-            return Session.createNext({
-              parentID: plan.sessionID,
-              directory: info.directory,
-              title: `[parallel] ${subtask.title}`,
-            })
-          },
-        })
-
-        await updateWorker(plan.id, subtask.id, {
-          status: "running",
-          sessionID: session.id,
-          worktreeName: info.name,
-          worktreeDir: info.directory,
-          branch: info.branch,
-        })
-
-        await Instance.provide({
-          directory: info.directory,
-          init: InstanceBootstrap,
-          fn: async () => {
-            const promptText = buildWorkerPrompt(plan.task, subtask)
-            const { SessionPrompt } = await import("../session/prompt")
-            await SessionPrompt.prompt({
-              sessionID: session.id,
-              parts: [
-                {
-                  type: "text" as const,
-                  text: promptText,
-                },
-              ],
-            })
-          },
-        })
-
-        return { subtaskID: subtask.id, sessionID: session.id }
-      }),
+    await Promise.all(
+      Array.from({ length: Math.min(maxConcurrency, items.length) }, () => worker()),
     )
+    return results
+  }
+
+  export async function spawnAll(plan: Plan, abort: AbortSignal): Promise<void> {
+    const cfg = await Config.get()
+    const maxWorkers = cfg.parallel?.max_workers
+    log.info("spawning workers", { planID: plan.id, count: plan.subtasks.length, maxWorkers: maxWorkers ?? "unlimited" })
+
+    const spawnOne = async (subtask: Subtask) => {
+      if (abort.aborted) throw new Error("Aborted")
+
+      await updateWorker(plan.id, subtask.id, { status: "spawning" })
+
+      const info = await Worktree.makeWorktreeInfo(`parallel-${plan.id.slice(0, 8)}-${subtask.id.slice(0, 8)}`)
+      const bootstrap = await Worktree.createFromInfo(info)
+
+      await bootstrap()
+
+      const session = await Instance.provide({
+        directory: info.directory,
+        init: InstanceBootstrap,
+        fn: async () => {
+          return Session.createNext({
+            parentID: plan.sessionID,
+            directory: info.directory,
+            title: `[parallel] ${subtask.title}`,
+          })
+        },
+      })
+
+      await updateWorker(plan.id, subtask.id, {
+        status: "running",
+        sessionID: session.id,
+        worktreeName: info.name,
+        worktreeDir: info.directory,
+        branch: info.branch,
+      })
+
+      await Instance.provide({
+        directory: info.directory,
+        init: InstanceBootstrap,
+        fn: async () => {
+          const promptText = buildWorkerPrompt(plan.task, subtask)
+          const { SessionPrompt } = await import("../session/prompt")
+          await SessionPrompt.prompt({
+            sessionID: session.id,
+            parts: [
+              {
+                type: "text" as const,
+                text: promptText,
+              },
+            ],
+          })
+        },
+      })
+
+      return { subtaskID: subtask.id, sessionID: session.id }
+    }
+
+    const results = await pooled(plan.subtasks, maxWorkers, spawnOne)
 
     for (let i = 0; i < results.length; i++) {
       const result = results[i]

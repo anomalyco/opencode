@@ -112,6 +112,77 @@ This is used internally and can be invoked using `@general` in messages.
 
 Learn more about [agents](https://opencode.ai/docs/agents).
 
+### Parallel Agents
+
+Run multiple agents in parallel on a single task. An orchestrator decomposes your task into independent subtasks, each executed in an isolated git worktree, then merges the results automatically.
+
+#### Quick start
+
+```bash
+# From the CLI
+opencode parallel "Add user auth with JWT middleware, login/register endpoints, and tests"
+
+# With model overrides
+opencode parallel "Refactor the API layer" \
+  --orchestrator-model anthropic/claude-opus-4-6 \
+  --worker-model anthropic/claude-sonnet-4-6
+
+# Auto-approve the plan (skip interactive approval)
+opencode parallel "Add dark mode support" --auto-approve
+```
+
+From the TUI, the orchestrator presents a plan for approval before any work begins. You can edit subtasks, reassign models per subtask, or regenerate the plan.
+
+#### How it works
+
+1. **Decompose** - The orchestrator agent breaks your task into file-disjoint subtasks
+2. **Approve** - You review the plan in the TUI: approve, edit, regenerate, or cancel
+3. **Execute** - Each subtask runs in its own git worktree with its own agent session
+4. **Merge** - Branches merge sequentially (smallest diff first), with AI-powered conflict resolution
+
+#### Model selection
+
+Three levels of model control:
+
+| Level | Purpose | Example |
+|-------|---------|---------|
+| Orchestrator model | Decomposition + merge conflict resolution | `claude-opus-4-6` |
+| Default worker model | All workers unless overridden | `claude-sonnet-4-6` |
+| Per-subtask override | Assign a specific model to one subtask | `claude-haiku-4-5` for simple tasks |
+
+Per-subtask models can be assigned in the TUI plan approval view: use `j/k` to navigate subtasks, then `m` to pick a model for the selected subtask.
+
+Configure from the TUI via the command palette (`Ctrl+P` → "Parallel agent config") or the `/parallel` slash command. You can also set defaults in your opencode config:
+
+```json
+{
+  "parallel": {
+    "orchestrator_model": "anthropic/claude-opus-4-6",
+    "worker_model": "anthropic/claude-sonnet-4-6",
+    "max_workers": 5
+  }
+}
+```
+
+`max_workers` limits how many agents run simultaneously (default: unlimited — all subtasks at once). Useful for managing API rate limits or system resources.
+
+Or via CLI flags:
+
+```bash
+opencode parallel "your task" \
+  --orchestrator-model anthropic/claude-opus-4-6 \
+  --worker-model anthropic/claude-sonnet-4-6
+```
+
+Priority: CLI flags > config file > project default model.
+
+#### Constraints (v1)
+
+- No cross-agent communication during execution
+- No dynamic re-planning mid-execution
+- One level of hierarchy only (no recursive spawning)
+- Git projects only
+
 ### Documentation
 
 For more info on how to configure OpenCode, [**head over to our docs**](https://opencode.ai/docs).

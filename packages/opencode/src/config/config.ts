@@ -1206,6 +1206,22 @@ export namespace Config {
             .describe("Token buffer for compaction. Leaves enough window to avoid overflow during compaction."),
         })
         .optional(),
+      parallel: z
+        .object({
+          orchestrator_model: ModelId.optional().describe(
+            "Model for the orchestrator agent (task decomposition and merge conflict resolution)",
+          ),
+          worker_model: ModelId.optional().describe("Default model for parallel worker agents"),
+          max_workers: z
+            .number()
+            .int()
+            .min(1)
+            .max(20)
+            .optional()
+            .describe("Maximum number of parallel worker agents (default: no limit, all subtasks run at once)"),
+        })
+        .optional()
+        .describe("Parallel agent orchestration configuration"),
       experimental: z
         .object({
           disable_paste_summary: z.boolean().optional(),

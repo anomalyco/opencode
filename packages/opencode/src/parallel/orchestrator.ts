@@ -2,10 +2,13 @@ import { PlanStore } from "./plan"
 import { Decomposition } from "./decomposition"
 import { WorkerManager } from "./worker"
 import { MergePipeline } from "./merge"
+import { Config } from "@/config/config"
+import { Provider } from "@/provider/provider"
 import { Log } from "@/util/log"
 import { fn } from "@/util/fn"
-import type { Plan, PlanID } from "./schema"
+import type { Plan, PlanID, ModelRef } from "./schema"
 import { Plan as PlanSchema, PlanID as PlanIDSchema } from "./schema"
+import z from "zod"
 
 export namespace Orchestrator {
   const log = Log.create({ service: "orchestrator" })
@@ -13,15 +16,59 @@ export namespace Orchestrator {
   // Track active abort controllers so cancel() can stop running executions
   const activeExecutions = new Map<PlanID, AbortController>()
 
+  /**
+   * Resolve model defaults from config.
+   * Priority: explicit input > config.parallel > project default model
+   */
+  export async function resolveModels(input?: {
+    orchestratorModel?: ModelRef
+    workerModel?: ModelRef
+  }): Promise<{ orchestratorModel: ModelRef; workerModel: ModelRef }> {
+    const cfg = await Config.get()
+    const defaultModel = await Provider.defaultModel()
+
+    function parseConfigModel(modelStr?: string): ModelRef | undefined {
+      if (!modelStr) return undefined
+      const parsed = Provider.parseModel(modelStr)
+      if (!parsed) return undefined
+      return { providerID: parsed.providerID, modelID: parsed.modelID }
+    }
+
+    const orchestratorModel =
+      input?.orchestratorModel ??
+      parseConfigModel(cfg.parallel?.orchestrator_model) ?? {
+        providerID: defaultModel.providerID,
+        modelID: defaultModel.modelID,
+      }
+
+    const workerModel =
+      input?.workerModel ??
+      parseConfigModel(cfg.parallel?.worker_model) ?? {
+        providerID: defaultModel.providerID,
+        modelID: defaultModel.modelID,
+      }
+
+    return { orchestratorModel, workerModel }
+  }
+
   export const create = fn(
-    PlanSchema.pick({
-      sessionID: true,
-      task: true,
-      orchestratorModel: true,
-      workerModel: true,
+    z.object({
+      sessionID: PlanSchema.shape.sessionID,
+      task: PlanSchema.shape.task,
+      orchestratorModel: PlanSchema.shape.orchestratorModel.optional(),
+      workerModel: PlanSchema.shape.workerModel.optional(),
     }),
     async (input): Promise<Plan> => {
-      const plan = await PlanStore.create(input)
+      const models = await resolveModels({
+        orchestratorModel: input.orchestratorModel,
+        workerModel: input.workerModel,
+      })
+
+      const plan = await PlanStore.create({
+        sessionID: input.sessionID,
+        task: input.task,
+        ...models,
+      })
 
       const subtasks = await Decomposition.decompose({
         task: input.task,
