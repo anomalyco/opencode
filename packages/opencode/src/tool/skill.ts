@@ -7,7 +7,7 @@ import { Ripgrep } from "../file/ripgrep"
 import { iife } from "@/util/iife"
 
 export const SkillTool = Tool.define("skill", async (ctx) => {
-  const list = await Skill.available(ctx?.agent).then((x) => x.toSorted((a, b) => a.name.localeCompare(b.name)))
+  const list = await Skill.available(ctx?.agent)
 
   const description =
     list.length === 0
