@@ -4,15 +4,15 @@ import {
   createMemo,
   createSignal,
   For,
+  Index,
   Match,
   onMount,
   Show,
   Switch,
   onCleanup,
-  Index,
   type JSX,
 } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createStore, unwrap } from "solid-js/store"
 import stripAnsi from "strip-ansi"
 import { Dynamic } from "solid-js/web"
 import {
@@ -481,6 +481,15 @@ function partDefaultOpen(part: PartType, shell = false, edit = false) {
   return toolDefaultOpen(part.tool, shell, edit)
 }
 
+function bindMessage<T extends MessageType>(input: T) {
+  const data = useData()
+  const base = structuredClone(unwrap(input)) as T
+  return createMemo(() => {
+    const next = data.store.message?.[base.sessionID]?.find((item) => item.id === base.id)
+    return (next as T | undefined) ?? base
+  })
+}
+
 export function AssistantParts(props: {
   messages: AssistantMessage[]
   showAssistantCopyPartID?: string | null
@@ -521,62 +530,55 @@ export function AssistantParts(props: {
 
   return (
     <Index each={grouped()}>
-      {(entryAccessor) => {
-        const entryType = createMemo(() => entryAccessor().type)
+      {(entry) => {
+        const kind = createMemo(() => entry().type)
+        const parts = createMemo(
+          () => {
+            const value = entry()
+            if (value.type !== "context") return emptyTools
+            return value.refs
+              .map((ref) => part().get(ref.messageID)?.get(ref.partID))
+              .filter((part): part is ToolPart => !!part && isContextGroupTool(part))
+          },
+          emptyTools,
+          { equals: same },
+        )
+        const busy = createMemo(() => props.working && last() === entry().key)
+        const message = createMemo(() => {
+          const value = entry()
+          if (value.type !== "part") return
+          return msgs().get(value.ref.messageID)
+        })
+        const item = createMemo(() => {
+          const value = entry()
+          if (value.type !== "part") return
+          return part().get(value.ref.messageID)?.get(value.ref.partID)
+        })
+        const ready = createMemo(() => {
+          if (kind() !== "part") return
+          const msg = message()
+          const value = item()
+          if (!msg || !value) return
+          return { msg, value }
+        })
 
         return (
-          <Switch>
-            <Match when={entryType() === "context"}>
-              {(() => {
-                const parts = createMemo(
-                  () => {
-                    const entry = entryAccessor()
-                    if (entry.type !== "context") return emptyTools
-                    return entry.refs
-                      .map((ref) => part().get(ref.messageID)?.get(ref.partID))
-                      .filter((part): part is ToolPart => !!part && isContextGroupTool(part))
-                  },
-                  emptyTools,
-                  { equals: same },
-                )
-                const busy = createMemo(() => props.working && last() === entryAccessor().key)
-
-                return (
-                  <Show when={parts().length > 0}>
-                    <ContextToolGroup parts={parts()} busy={busy()} />
-                  </Show>
-                )
-              })()}
-            </Match>
-            <Match when={entryType() === "part"}>
-              {(() => {
-                const message = createMemo(() => {
-                  const entry = entryAccessor()
-                  if (entry.type !== "part") return
-                  return msgs().get(entry.ref.messageID)
-                })
-                const item = createMemo(() => {
-                  const entry = entryAccessor()
-                  if (entry.type !== "part") return
-                  return part().get(entry.ref.messageID)?.get(entry.ref.partID)
-                })
-
-                return (
-                  <Show when={message()}>
-                    <Show when={item()}>
-                      <Part
-                        part={item()!}
-                        message={message()!}
-                        showAssistantCopyPartID={props.showAssistantCopyPartID}
-                        turnDurationMs={props.turnDurationMs}
-                        defaultOpen={partDefaultOpen(item()!, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
-                      />
-                    </Show>
-                  </Show>
-                )
-              })()}
-            </Match>
-          </Switch>
+          <>
+            <Show when={kind() === "context" && parts().length > 0}>
+              <ContextToolGroup parts={parts()} busy={busy()} />
+            </Show>
+            <Show when={ready()}>
+              {(ready) => (
+                <Part
+                  part={ready().value}
+                  message={ready().msg}
+                  showAssistantCopyPartID={props.showAssistantCopyPartID}
+                  turnDurationMs={props.turnDurationMs}
+                  defaultOpen={partDefaultOpen(ready().value, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
+                />
+              )}
+            </Show>
+          </>
         )
       }}
     </Index>
@@ -688,25 +690,22 @@ export function registerPartComponent(type: string, component: PartComponent) {
 }
 
 export function Message(props: MessageProps) {
-  return (
-    <Switch>
-      <Match when={props.message.role === "user" && props.message}>
-        {(userMessage) => (
-          <UserMessageDisplay message={userMessage() as UserMessage} parts={props.parts} actions={props.actions} />
-        )}
-      </Match>
-      <Match when={props.message.role === "assistant" && props.message}>
-        {(assistantMessage) => (
-          <AssistantMessageDisplay
-            message={assistantMessage() as AssistantMessage}
-            parts={props.parts}
-            showAssistantCopyPartID={props.showAssistantCopyPartID}
-            showReasoningSummaries={props.showReasoningSummaries}
-          />
-        )}
-      </Match>
-    </Switch>
-  )
+  if (props.message.role === "user") {
+    return <UserMessageDisplay message={props.message as UserMessage} parts={props.parts} actions={props.actions} />
+  }
+
+  if (props.message.role === "assistant") {
+    return (
+      <AssistantMessageDisplay
+        message={props.message as AssistantMessage}
+        parts={props.parts}
+        showAssistantCopyPartID={props.showAssistantCopyPartID}
+        showReasoningSummaries={props.showReasoningSummaries}
+      />
+    )
+  }
+
+  return undefined
 }
 
 export function AssistantMessageDisplay(props: {
@@ -733,52 +732,42 @@ export function AssistantMessageDisplay(props: {
 
   return (
     <Index each={grouped()}>
-      {(entryAccessor) => {
-        const entryType = createMemo(() => entryAccessor().type)
+      {(entry) => {
+        const kind = createMemo(() => entry().type)
+        const parts = createMemo(
+          () => {
+            const value = entry()
+            if (value.type !== "context") return emptyTools
+            return value.refs
+              .map((ref) => part().get(ref.partID))
+              .filter((part): part is ToolPart => !!part && isContextGroupTool(part))
+          },
+          emptyTools,
+          { equals: same },
+        )
+        const item = createMemo(() => {
+          const value = entry()
+          if (value.type !== "part") return
+          return part().get(value.ref.partID)
+        })
+        const ready = createMemo(() => {
+          if (kind() !== "part") return
+          const value = item()
+          if (!value) return
+          return value
+        })
 
         return (
-          <Switch>
-            <Match when={entryType() === "context"}>
-              {(() => {
-                const parts = createMemo(
-                  () => {
-                    const entry = entryAccessor()
-                    if (entry.type !== "context") return emptyTools
-                    return entry.refs
-                      .map((ref) => part().get(ref.partID))
-                      .filter((part): part is ToolPart => !!part && isContextGroupTool(part))
-                  },
-                  emptyTools,
-                  { equals: same },
-                )
-
-                return (
-                  <Show when={parts().length > 0}>
-                    <ContextToolGroup parts={parts()} />
-                  </Show>
-                )
-              })()}
-            </Match>
-            <Match when={entryType() === "part"}>
-              {(() => {
-                const item = createMemo(() => {
-                  const entry = entryAccessor()
-                  if (entry.type !== "part") return
-                  return part().get(entry.ref.partID)
-                })
-
-                return (
-                  <Show when={item()}>
-                    <Part
-                      part={item()!}
-                      message={props.message}
-                      showAssistantCopyPartID={props.showAssistantCopyPartID}
-                    />
-                  </Show>
-                )
-              })()}
-            </Match>
-          </Switch>
+          <>
+            <Show when={kind() === "context" && parts().length > 0}>
+              <ContextToolGroup parts={parts()} />
+            </Show>
+            <Show when={ready()}>
+              {(ready) => (
+                <Part part={ready()} message={props.message} showAssistantCopyPartID={props.showAssistantCopyPartID} />
+              )}
+            </Show>
+          </>
         )
       }}
     </Index>
@@ -845,11 +834,9 @@ function ContextToolGroup(props: { parts: ToolPart[]; busy?: boolean }) {
       <Collapsible.Content>
         <div data-component="context-tool-group-list">
           <Index each={props.parts}>
-            {(partAccessor) => {
-              const trigger = createMemo(() => contextToolTrigger(partAccessor(), i18n))
-              const running = createMemo(
-                () => partAccessor().state.status === "pending" || partAccessor().state.status === "running",
-              )
+            {(part) => {
+              const trigger = createMemo(() => contextToolTrigger(part(), i18n))
+              const running = createMemo(() => part().state.status === "pending" || part().state.status === "running")
               return (
                 <div data-slot="context-tool-group-item">
                   <div data-component="tool-trigger">
@@ -887,6 +874,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
   const data = useData()
   const dialog = useDialog()
   const i18n = useI18n()
+  const message = bindMessage(props.message)
   const [state, setState] = createStore({
     copied: false,
     busy: undefined as "fork" | "revert" | undefined,
@@ -909,8 +897,8 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
   const agents = createMemo(() => (props.parts?.filter((p) => p.type === "agent") as AgentPart[]) ?? [])
 
   const model = createMemo(() => {
-    const providerID = props.message.model?.providerID
-    const modelID = props.message.model?.modelID
+    const providerID = message().model?.providerID
+    const modelID = message().model?.modelID
     if (!providerID || !modelID) return ""
     const match = data.store.provider?.all?.find((p) => p.id === providerID)
     return match?.models?.[modelID]?.name ?? modelID
@@ -918,13 +906,13 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
   const timefmt = createMemo(() => new Intl.DateTimeFormat(i18n.locale(), { timeStyle: "short" }))
 
   const stamp = createMemo(() => {
-    const created = props.message.time?.created
+    const created = message().time?.created
     if (typeof created !== "number") return ""
     return timefmt().format(created)
   })
 
   const metaHead = createMemo(() => {
-    const agent = props.message.agent
+    const agent = message().agent
     const items = [agent ? agent[0]?.toUpperCase() + agent.slice(1) : "", model()]
     return items.filter((x) => !!x).join("\u00A0\u00B7\u00A0")
   })
@@ -950,8 +938,8 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
     void Promise.resolve()
       .then(() =>
         act({
-          sessionID: props.message.sessionID,
-          messageID: props.message.id,
+          sessionID: message().sessionID,
+          messageID: message().id,
         }),
       )
       .finally(() => {
@@ -1310,27 +1298,27 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   const i18n = useI18n()
   const numfmt = createMemo(() => new Intl.NumberFormat(i18n.locale()))
   const part = () => props.part as TextPart
+  const message = bindMessage(props.message)
   const interrupted = createMemo(
-    () =>
-      props.message.role === "assistant" && (props.message as AssistantMessage).error?.name === "MessageAbortedError",
+    () => message().role === "assistant" && (message() as AssistantMessage).error?.name === "MessageAbortedError",
   )
 
   const model = createMemo(() => {
-    if (props.message.role !== "assistant") return ""
-    const message = props.message as AssistantMessage
-    const match = data.store.provider?.all?.find((p) => p.id === message.providerID)
-    return match?.models?.[message.modelID]?.name ?? message.modelID
+    const current = message()
+    if (current.role !== "assistant") return ""
+    const match = data.store.provider?.all?.find((p) => p.id === current.providerID)
+    return match?.models?.[current.modelID]?.name ?? current.modelID
   })
 
   const duration = createMemo(() => {
-    if (props.message.role !== "assistant") return ""
-    const message = props.message as AssistantMessage
-    const completed = message.time.completed
+    const current = message()
+    if (current.role !== "assistant") return ""
+    const completed = current.time.completed
     const ms =
       typeof props.turnDurationMs === "number"
         ? props.turnDurationMs
         : typeof completed === "number"
-          ? completed - message.time.created
+          ? completed - current.time.created
           : -1
     if (!(ms >= 0)) return ""
     const total = Math.round(ms / 1000)
@@ -1344,8 +1332,9 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   })
 
   const meta = createMemo(() => {
-    if (props.message.role !== "assistant") return ""
-    const agent = (props.message as AssistantMessage).agent
+    const current = message()
+    if (current.role !== "assistant") return ""
+    const agent = current.agent
     const items = [
       agent ? agent[0]?.toUpperCase() + agent.slice(1) : "",
       model(),
@@ -1358,13 +1347,13 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   const displayText = () => (part().text ?? "").trim()
   const throttledText = createThrottledValue(displayText)
   const isLastTextPart = createMemo(() => {
-    const last = (data.store.part?.[props.message.id] ?? [])
+    const last = (data.store.part?.[message().id] ?? [])
       .filter((item): item is TextPart => item?.type === "text" && !!item.text?.trim())
       .at(-1)
     return last?.id === part().id
   })
   const showCopy = createMemo(() => {
-    if (props.message.role !== "assistant") return isLastTextPart()
+    if (message().role !== "assistant") return isLastTextPart()
     if (props.showAssistantCopyPartID === null) return false
     if (typeof props.showAssistantCopyPartID === "string") return props.showAssistantCopyPartID === part().id
     return isLastTextPart()
