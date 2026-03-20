@@ -144,7 +144,8 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         parts: promptParts,
       })
 
-      const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
+      const textParts = result.parts.filter((part): part is MessageV2.TextPart => part.type === "text")
+      const text = textParts.findLast((part) => part.text.trim().length > 0)?.text ?? textParts.at(-1)?.text ?? ""
 
       const output = [
         `task_id: ${session.id} (for resuming to continue this task if needed)`,

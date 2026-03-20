@@ -13,6 +13,8 @@ import { DialogModel } from "./dialog-model"
 import { useKeyboard } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
 import { useToast } from "../ui/toast"
+import { useRoute } from "../context/route"
+import { refreshProviderSession } from "./dialog-provider-refresh"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
   opencode: 0,
@@ -130,6 +132,7 @@ function AutoMethod(props: AutoMethodProps) {
   const sdk = useSDK()
   const dialog = useDialog()
   const sync = useSync()
+  const route = useRoute()
   const toast = useToast()
 
   useKeyboard((evt) => {
@@ -150,8 +153,7 @@ function AutoMethod(props: AutoMethodProps) {
       dialog.clear()
       return
     }
-    await sdk.client.instance.dispose()
-    await sync.bootstrap()
+    await refreshProviderSession({ sdk, sync, route })
     dialog.replace(() => <DialogModel providerID={props.providerID} />)
   })
 
@@ -188,6 +190,7 @@ function CodeMethod(props: CodeMethodProps) {
   const sdk = useSDK()
   const sync = useSync()
   const dialog = useDialog()
+  const route = useRoute()
   const [error, setError] = createSignal(false)
 
   return (
@@ -201,8 +204,7 @@ function CodeMethod(props: CodeMethodProps) {
           code: value,
         })
         if (!error) {
-          await sdk.client.instance.dispose()
-          await sync.bootstrap()
+          await refreshProviderSession({ sdk, sync, route })
           dialog.replace(() => <DialogModel providerID={props.providerID} />)
           return
         }
@@ -229,6 +231,7 @@ function ApiMethod(props: ApiMethodProps) {
   const dialog = useDialog()
   const sdk = useSDK()
   const sync = useSync()
+  const route = useRoute()
   const { theme } = useTheme()
 
   return (
@@ -270,8 +273,7 @@ function ApiMethod(props: ApiMethodProps) {
             key: value,
           },
         })
-        await sdk.client.instance.dispose()
-        await sync.bootstrap()
+        await refreshProviderSession({ sdk, sync, route })
         dialog.replace(() => <DialogModel providerID={props.providerID} />)
       }}
     />
