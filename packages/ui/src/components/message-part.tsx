@@ -216,6 +216,21 @@ function createPacedValue(getValue: () => string, live?: () => boolean) {
   const [value, setValue] = createSignal(getValue())
   let shown = getValue()
   let timeout: ReturnType<typeof setTimeout> | undefined
+  let rafId: number | undefined
+  let last = 0
+  let pending: string | undefined
+
+  const flush = () => {
+    if (pending === undefined) return
+    const next = pending
+    pending = undefined
+    last = Date.now()
+    // Gate on rAF so we only commit values when the browser is ready to paint
+    rafId = requestAnimationFrame(() => {
+      rafId = undefined
+      setValue(next)
+    })
+  }
 
   const clear = () => {
     if (!timeout) return
@@ -223,45 +238,27 @@ function createPacedValue(getValue: () => string, live?: () => boolean) {
     timeout = undefined
   }
 
-  const sync = (text: string) => {
-    shown = text
-    setValue(text)
-  }
+    pending = next
 
-  const run = () => {
-    timeout = undefined
-    const text = getValue()
-    if (!live?.()) {
-      sync(text)
+    const remaining = TEXT_RENDER_THROTTLE_MS - (now - last)
+    if (remaining <= 0) {
+      if (timeout) {
+        clearTimeout(timeout)
+        timeout = undefined
+      }
+      flush()
       return
     }
-    if (!text.startsWith(shown) || text.length <= shown.length) {
-      sync(text)
-      return
-    }
-    const end = next(text, shown.length)
-    sync(text.slice(0, end))
-    if (end < text.length) timeout = setTimeout(run, TEXT_RENDER_PACE_MS)
-  }
-
-  createEffect(() => {
-    const text = getValue()
-    if (!live?.()) {
-      clear()
-      sync(text)
-      return
-    }
-    if (!text.startsWith(shown) || text.length < shown.length) {
-      clear()
-      sync(text)
-      return
-    }
-    if (text.length === shown.length || timeout) return
-    timeout = setTimeout(run, TEXT_RENDER_PACE_MS)
+    if (timeout) clearTimeout(timeout)
+    timeout = setTimeout(() => {
+      timeout = undefined
+      flush()
+    }, remaining)
   })
 
   onCleanup(() => {
-    clear()
+    if (timeout) clearTimeout(timeout)
+    if (rafId !== undefined) cancelAnimationFrame(rafId)
   })
 
   return value
@@ -1518,10 +1515,12 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     return items.filter((x) => !!x).join(" \u00B7 ")
   })
 
-  const streaming = createMemo(
-    () => props.message.role === "assistant" && typeof (props.message as AssistantMessage).time.completed !== "number",
-  )
-  const text = () => readPartText(data.store.part_text_accum_delta, part())
+  const displayText = () => (part.text ?? "").trim()
+  const throttledText = createThrottledValue(displayText)
+  const streaming = createMemo(() => {
+    if (props.message.role !== "assistant") return false
+    return typeof (props.message as AssistantMessage).time.completed !== "number"
+  })
   const isLastTextPart = createMemo(() => {
     const last = (data.store.part?.[props.message.id] ?? [])
       .filter((item): item is TextPart => item?.type === "text" && !!item.text?.trim())
@@ -1549,7 +1548,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     <Show when={text()}>
       <div data-component="text-part" data-timeline-part-id={part().id}>
         <div data-slot="text-part-body">
-          <Markdown text={throttledText()} cacheKey={part.id} eager={props.markdownEager} />
+          <Markdown text={throttledText()} cacheKey={part.id} streaming={streaming()} />
         </div>
         <Show when={showCopy()}>
           <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
@@ -1580,17 +1579,18 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
 }
 
 PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
-  const data = useData()
-  const part = () => props.part as ReasoningPart
-  const streaming = createMemo(
-    () => props.message.role === "assistant" && typeof (props.message as AssistantMessage).time.completed !== "number",
-  )
-  const text = () => readPartText(data.store.part_text_accum_delta, part())
+  const part = props.part as ReasoningPart
+  const text = () => part.text.trim()
+  const throttledText = createThrottledValue(text)
+  const streaming = createMemo(() => {
+    if (props.message.role !== "assistant") return false
+    return typeof (props.message as AssistantMessage).time.completed !== "number"
+  })
 
   return (
     <Show when={throttledText()}>
       <div data-component="reasoning-part">
-        <Markdown text={throttledText()} cacheKey={part.id} eager={props.markdownEager} />
+        <Markdown text={throttledText()} cacheKey={part.id} streaming={streaming()} />
       </div>
     </Show>
   )
