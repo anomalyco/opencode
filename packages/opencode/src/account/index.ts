@@ -1,31 +1,24 @@
 import { Effect, Option } from "effect"
 
-import {
-  Account as AccountSchema,
-  type AccountError,
-  type AccessToken,
-  AccountID,
-  AccountService,
-  OrgID,
-} from "./service"
+import { Account as S, type AccountError, type AccessToken, AccountID, Info as Model, OrgID } from "./effect"
 
-export { AccessToken, AccountID, OrgID } from "./service"
+export { AccessToken, AccountID, OrgID } from "./effect"
 
 import { runtime } from "@/effect/runtime"
 
-function runSync<A>(f: (service: AccountService.Service) => Effect.Effect<A, AccountError>) {
-  return runtime.runSync(AccountService.use(f))
+function runSync<A>(f: (service: S.Interface) => Effect.Effect<A, AccountError>) {
+  return runtime.runSync(S.Service.use(f))
 }
 
-function runPromise<A>(f: (service: AccountService.Service) => Effect.Effect<A, AccountError>) {
-  return runtime.runPromise(AccountService.use(f))
+function runPromise<A>(f: (service: S.Interface) => Effect.Effect<A, AccountError>) {
+  return runtime.runPromise(S.Service.use(f))
 }
 
 export namespace Account {
-  export const Account = AccountSchema
-  export type Account = AccountSchema
+  export const Info = Model
+  export type Info = Model
 
-  export function active(): Account | undefined {
+  export function active(): Info | undefined {
     return Option.getOrUndefined(runSync((service) => service.active()))
   }
 

@@ -13,7 +13,7 @@ export namespace ProviderError {
     /input token count.*exceeds the maximum/i, // Google (Gemini)
     /maximum prompt length is \d+/i, // xAI (Grok)
     /reduce the length of the messages/i, // Groq
-    /maximum context length is \d+ tokens/i, // OpenRouter, DeepSeek
+    /maximum context length is \d+ tokens/i, // OpenRouter, DeepSeek, vLLM
     /exceeds the limit of \d+/i, // GitHub Copilot
     /exceeds the available context size/i, // llama.cpp server
     /greater than the context length/i, // LM Studio
@@ -21,6 +21,8 @@ export namespace ProviderError {
     /exceeded model token limit/i, // Kimi For Coding, Moonshot
     /context[_ ]length[_ ]exceeded/i, // Generic fallback
     /request entity too large/i, // HTTP 413
+    /context length is only \d+ tokens/i, // vLLM
+    /input length.*exceeds.*context length/i, // vLLM
   ]
 
   function isOpenAiErrorRetryable(e: APICallError) {
@@ -167,7 +169,8 @@ export namespace ProviderError {
 
   export function parseAPICallError(input: { providerID: ProviderID; error: APICallError }): ParsedAPICallError {
     const m = message(input.providerID, input.error)
-    if (isOverflow(m) || input.error.statusCode === 413) {
+    const body = json(input.error.responseBody)
+    if (isOverflow(m) || input.error.statusCode === 413 || body?.error?.code === "context_length_exceeded") {
       return {
         type: "context_overflow",
         message: m,

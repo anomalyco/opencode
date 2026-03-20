@@ -291,8 +291,8 @@ export function DialogSelectServer() {
       navigate("/")
       return
     }
-    server.setActive(ServerConnection.key(conn))
     navigate("/")
+    queueMicrotask(() => server.setActive(ServerConnection.key(conn)))
   }
 
   const handleAddChange = (value: string) => {
