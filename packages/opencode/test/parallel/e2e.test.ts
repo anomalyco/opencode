@@ -315,6 +315,54 @@ describe("Parallel E2E", () => {
     })
   })
 
+  test("recovery: abandon removes orphaned parallel worktrees but keeps non-parallel ones", async () => {
+    await withProject(async (projectID, worktree) => {
+      const plan = await createPlan(projectID, [{ title: "Update a.ts", files: ["src/a.ts"] }])
+
+      await PlanStore.transition({ id: plan.id, status: "approved" })
+      await PlanStore.transition({ id: plan.id, status: "spawning" })
+
+      const owned = await createWorktree(worktree, `parallel-owned-${plan.subtasks[0].id.slice(0, 8)}`)
+      const orphan = await createWorktree(worktree, "parallel-orphan")
+      const keep = await createWorktree(worktree, "scratch")
+
+      await PlanStore.updateWorker({ id: plan.id, subtaskID: plan.subtasks[0].id, status: "spawning" } as any)
+      await PlanStore.updateWorker({
+        id: plan.id,
+        subtaskID: plan.subtasks[0].id,
+        status: "running",
+        worktreeDir: owned.directory,
+        branch: owned.branch,
+      } as any)
+      await PlanStore.transition({ id: plan.id, status: "running" })
+
+      await Recovery.abandon(plan.id)
+
+      expect(
+        await fs
+          .stat(owned.directory)
+          .then(() => true)
+          .catch(() => false),
+      ).toBe(false)
+
+      expect(
+        await fs
+          .stat(orphan.directory)
+          .then(() => true)
+          .catch(() => false),
+      ).toBe(false)
+
+      expect(
+        await fs
+          .stat(keep.directory)
+          .then(() => true)
+          .catch(() => false),
+      ).toBe(true)
+
+      await removeWorktree(worktree, keep.directory)
+    })
+  })
+
   test("plan scoping: project-scoped", async () => {
     await withProject(async (projectID) => {
       const plan = await createPlan(projectID, [{ title: "Test", files: ["src/a.ts"] }])

@@ -7,6 +7,8 @@ import { Project } from "../project/project"
 import type { Plan, PlanID, PlanStatus, WorkerState } from "./schema"
 import type { ProjectID } from "../project/schema"
 import * as fs from "fs"
+import path from "path"
+import { Global } from "../global"
 
 export namespace Recovery {
   const log = Log.create({ service: "parallel-recovery" })
@@ -16,6 +18,117 @@ export namespace Recovery {
 
   /** Statuses that indicate an in-flight worker */
   const INTERRUPTED_WORKER_STATUSES = ["pending", "spawning", "running"]
+
+  function norm(input: string): string {
+    const resolved = path.resolve(input)
+    const normalized = path.normalize(resolved)
+    if (process.platform === "win32") return normalized.toLowerCase()
+    return normalized
+  }
+
+  function parse(input: string): Array<{ path: string; branch?: string }> {
+    const rows: Array<{ path: string; branch?: string }> = []
+    let row: { path: string; branch?: string } | undefined
+    for (const line of input.split("\n").map((x) => x.trim())) {
+      if (!line) {
+        row = undefined
+        continue
+      }
+      if (line.startsWith("worktree ")) {
+        row = { path: line.slice("worktree ".length).trim() }
+        rows.push(row)
+        continue
+      }
+      if (!row) continue
+      if (line.startsWith("branch ")) {
+        row.branch = line.slice("branch ".length).trim()
+      }
+    }
+    return rows
+  }
+
+  function match(input: { path: string; branch?: string }, root: string): boolean {
+    if (input.branch?.startsWith("refs/heads/opencode/parallel-")) return true
+
+    const name = path.basename(input.path)
+    if (!name.startsWith("parallel-")) return false
+
+    const key = norm(input.path)
+    const base = norm(root)
+    if (key.startsWith(`${base}${path.sep}`)) return true
+    return false
+  }
+
+  async function drop(input: { cwd: string; dir: string; branch?: string }): Promise<void> {
+    const removed = await git(["worktree", "remove", "--force", input.dir], { cwd: input.cwd })
+    if (removed.exitCode !== 0 && fs.existsSync(input.dir)) {
+      try {
+        fs.rmSync(input.dir, { recursive: true, force: true })
+      } catch (error) {
+        log.warn("failed to remove worktree directory", { dir: input.dir, error })
+      }
+    }
+
+    const branch = (input.branch ?? "").replace(/^refs\/heads\//, "")
+    if (!branch) return
+    await git(["branch", "-D", branch], { cwd: input.cwd }).catch(() => {})
+  }
+
+  async function sweep(input: { projectID: ProjectID; cwd: string }): Promise<void> {
+    const plans = await PlanStore.listByProject(input.projectID)
+    const keep = new Set(
+      plans
+        .flatMap((plan) => plan.workers.map((worker) => worker.worktreeDir).filter((dir): dir is string => !!dir))
+        .map(norm),
+    )
+
+    const seen = new Set<string>()
+    const root = path.join(Global.Path.data, "worktree", String(input.projectID))
+    const primary = norm(input.cwd)
+
+    const list = await git(["worktree", "list", "--porcelain"], { cwd: input.cwd })
+    if (list.exitCode === 0) {
+      const rows = parse(new TextDecoder().decode(list.stdout))
+      for (const row of rows) {
+        const key = norm(row.path)
+        if (key === primary) continue
+        if (keep.has(key)) continue
+        if (!match(row, root)) continue
+        seen.add(key)
+        await drop({
+          cwd: input.cwd,
+          dir: row.path,
+          branch: row.branch,
+        })
+        log.info("cleaned orphaned parallel worktree", {
+          projectID: input.projectID,
+          dir: row.path,
+          branch: row.branch,
+        })
+      }
+    }
+
+    if (!fs.existsSync(root)) return
+    const dirs = fs
+      .readdirSync(root, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && entry.name.startsWith("parallel-"))
+      .map((entry) => path.join(root, entry.name))
+
+    for (const dir of dirs) {
+      const key = norm(dir)
+      if (keep.has(key)) continue
+      if (seen.has(key)) continue
+      await drop({
+        cwd: input.cwd,
+        dir,
+        branch: `refs/heads/opencode/${path.basename(dir)}`,
+      })
+      log.info("cleaned orphaned parallel directory", {
+        projectID: input.projectID,
+        dir,
+      })
+    }
+  }
 
   export interface InterruptedPlan {
     plan: Plan
@@ -39,6 +152,14 @@ export namespace Recovery {
    * Also finds failed plans with orphaned worktrees that need cleanup.
    */
   export async function scan(projectID: ProjectID): Promise<InterruptedPlan[]> {
+    const cwd = Project.get(projectID)?.worktree ?? process.cwd()
+    await sweep({ projectID, cwd }).catch((error) => {
+      log.warn("failed to cleanup orphaned parallel worktrees during scan", {
+        projectID,
+        error,
+      })
+    })
+
     const plans = await PlanStore.list()
     const interrupted = plans.filter((p) => p.projectID === projectID && INTERRUPTED_STATUSES.includes(p.status))
 
@@ -408,29 +529,24 @@ export namespace Recovery {
     // Remove worktree directories for this plan's workers
     for (const worker of plan.workers) {
       if (worker.worktreeDir && fs.existsSync(worker.worktreeDir)) {
-        try {
-          await git(["worktree", "remove", "--force", worker.worktreeDir], { cwd })
-          log.info("removed worktree", { dir: worker.worktreeDir })
-        } catch {
-          // Try direct removal if git worktree remove fails
-          try {
-            fs.rmSync(worker.worktreeDir, { recursive: true, force: true })
-            log.info("force-removed worktree directory", { dir: worker.worktreeDir })
-          } catch (e) {
-            log.warn("failed to remove worktree", { dir: worker.worktreeDir, error: e })
-          }
-        }
+        await drop({
+          cwd,
+          dir: worker.worktreeDir,
+          branch: worker.branch ? `refs/heads/${worker.branch}` : undefined,
+        })
+        log.info("removed plan worktree", { dir: worker.worktreeDir })
       }
 
-      // Remove the branch if it exists
-      if (worker.branch) {
-        try {
-          await git(["branch", "-D", worker.branch], { cwd })
-        } catch {
-          // Branch may already be gone
-        }
-      }
     }
+
+    await sweep({
+      projectID: plan.projectID,
+      cwd,
+    })
+
+    try {
+      await git(["worktree", "prune"], { cwd })
+    } catch {}
   }
 
   /**
