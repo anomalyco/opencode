@@ -10,7 +10,7 @@ export const opencodeMemoMap = Layer.makeMemoMapUnsafe()
 export interface ServiceRuntime<I, S, E> {
   readonly runtime: () => ManagedRuntime.ManagedRuntime<I, E>
   readonly runSync: <A, E>(f: (service: S) => Effect.Effect<A, E>) => A
-  readonly runPromise: <A, E>(f: (service: S) => Effect.Effect<A, E>) => Promise<A>
+  readonly runPromise: <A, E>(f: (service: S) => Effect.Effect<A, E>, options?: Effect.RunOptions) => Promise<A>
 }
 
 export const makeRuntimeGlobal = <I, S, E>(
@@ -33,9 +33,9 @@ export const makeRuntimeInstance = <I, S, E>(
   layer: Layer.Layer<I, E, InstanceContext>,
 ): ServiceRuntime<I, S, E> => {
   const runSync = <A, E>(f: (service: S) => Effect.Effect<A, E>) => getInstanceRuntime(layer).runSync(service.use(f))
-  const runPromise = <A, E>(f: (service: S) => Effect.Effect<A, E>) =>
+  const runPromise = <A, E>(f: (service: S) => Effect.Effect<A, E>, options?: Effect.RunOptions) =>
     new Promise<A>((resolve, reject) => {
-      const fiber = getInstanceRuntime(layer).runFork(service.use(f))
+      const fiber = getInstanceRuntime(layer).runFork(service.use(f), options)
       fiber.addObserver((exit) => {
         if (Exit.isSuccess(exit)) {
           return resolve(exit.value)
