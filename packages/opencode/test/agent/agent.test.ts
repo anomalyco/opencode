@@ -3,7 +3,7 @@ import path from "path"
 import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Agent } from "../../src/agent/agent"
-import { PermissionNext } from "../../src/permission/next"
+import { PermissionNext } from "../../src/permission"
 
 // Helper to evaluate permission for a tool with wildcard pattern
 function evalPerm(agent: Agent.Info | undefined, permission: string): PermissionNext.Action | undefined {
@@ -76,7 +76,7 @@ test("explore agent denies edit and write", async () => {
 })
 
 test("explore agent asks for external directories and allows Truncate.GLOB", async () => {
-  const { Truncate } = await import("../../src/tool/truncation")
+  const { Truncate } = await import("../../src/tool/truncate")
   await using tmp = await tmpdir()
   await Instance.provide({
     directory: tmp.path,
@@ -384,6 +384,32 @@ test("multiple custom agents can be defined", async () => {
   })
 })
 
+test("Agent.list keeps the default agent first and sorts the rest by name", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      default_agent: "plan",
+      agent: {
+        zebra: {
+          description: "Zebra",
+          mode: "subagent",
+        },
+        alpha: {
+          description: "Alpha",
+          mode: "subagent",
+        },
+      },
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const names = (await Agent.list()).map((a) => a.name)
+      expect(names[0]).toBe("plan")
+      expect(names.slice(1)).toEqual(names.slice(1).toSorted((a, b) => a.localeCompare(b)))
+    },
+  })
+})
+
 test("Agent.get returns undefined for non-existent agent", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({
@@ -463,7 +489,7 @@ test("legacy tools config maps write/edit/patch/multiedit to edit permission", a
 })
 
 test("Truncate.GLOB is allowed even when user denies external_directory globally", async () => {
-  const { Truncate } = await import("../../src/tool/truncation")
+  const { Truncate } = await import("../../src/tool/truncate")
   await using tmp = await tmpdir({
     config: {
       permission: {
@@ -483,7 +509,7 @@ test("Truncate.GLOB is allowed even when user denies external_directory globally
 })
 
 test("Truncate.GLOB is allowed even when user denies external_directory per-agent", async () => {
-  const { Truncate } = await import("../../src/tool/truncation")
+  const { Truncate } = await import("../../src/tool/truncate")
   await using tmp = await tmpdir({
     config: {
       agent: {
@@ -507,7 +533,7 @@ test("Truncate.GLOB is allowed even when user denies external_directory per-agen
 })
 
 test("explicit Truncate.GLOB deny is respected", async () => {
-  const { Truncate } = await import("../../src/tool/truncation")
+  const { Truncate } = await import("../../src/tool/truncate")
   await using tmp = await tmpdir({
     config: {
       permission: {

@@ -19,13 +19,28 @@ if (!identifier) {
 if (identifier.startsWith("wrk_")) {
   await printWorkspace(identifier)
 }
-// lookup by API key
+// lookup by API key ID
 else if (identifier.startsWith("key_")) {
   const key = await Database.use((tx) =>
     tx
       .select()
       .from(KeyTable)
       .where(eq(KeyTable.id, identifier))
+      .then((rows) => rows[0]),
+  )
+  if (!key) {
+    console.error("API key not found")
+    process.exit(1)
+  }
+  await printWorkspace(key.workspaceID)
+}
+// lookup by API key value
+else if (identifier.startsWith("sk-")) {
+  const key = await Database.use((tx) =>
+    tx
+      .select()
+      .from(KeyTable)
+      .where(eq(KeyTable.key, identifier))
       .then((rows) => rows[0]),
   )
   if (!key) {
