@@ -34,7 +34,12 @@ function isLocalHost(url: string) {
 }
 
 export function normalizeWorktree(input: string) {
-  return input.trim().replace(/[\/\\]+$/, "")
+  const value = input.trim()
+  const next = value.replace(/[\/\\]+$/, "")
+  if (next) return next
+  if (value.startsWith("\\")) return "\\"
+  if (value.startsWith("/")) return "/"
+  return value
 }
 
 export namespace ServerConnection {
