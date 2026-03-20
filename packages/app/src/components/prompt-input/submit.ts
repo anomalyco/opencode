@@ -14,7 +14,7 @@ import { type ContextItem, type ImageAttachmentPart, type Prompt, usePrompt } fr
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { Identifier } from "@/utils/id"
-import { consumeFreeUsage } from "@/utils/free-usage"
+import { trackProviderUsage } from "@/utils/provider-usage"
 import { Worktree as WorktreeState } from "@/utils/worktree"
 import { buildRequestParts } from "./build-request-parts"
 import { setCursorPosition } from "./editor-dom"
@@ -52,8 +52,7 @@ const draftText = (prompt: Prompt) => prompt.map((part) => ("content" in part ? 
 const draftImages = (prompt: Prompt) => prompt.filter((part): part is ImageAttachmentPart => part.type === "image")
 
 export async function sendFollowupDraft(input: FollowupSendInput) {
-  const usage = consumeFreeUsage(input.draft.sessionDirectory)
-  if (!usage.allowed) throw new Error(usage.message)
+  trackProviderUsage(input.draft.sessionDirectory, input.draft.model.providerID, input.draft.sessionID)
 
   const text = draftText(input.draft.prompt)
   const images = draftImages(input.draft.prompt)
@@ -438,14 +437,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     input.onSubmit?.()
 
     if (mode === "shell") {
-      const usage = consumeFreeUsage(sessionDirectory)
-      if (!usage.allowed) {
-        showToast({
-          title: language.t("prompt.toast.promptSendFailed.title"),
-          description: usage.message,
-        })
-        return
-      }
+      trackProviderUsage(sessionDirectory, model.providerID, session.id)
       clearInput()
       client.session
         .shell({
@@ -469,14 +461,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       const commandName = cmdName.slice(1)
       const customCommand = sync.data.command.find((c) => c.name === commandName)
       if (customCommand) {
-        const usage = consumeFreeUsage(sessionDirectory)
-        if (!usage.allowed) {
-          showToast({
-            title: language.t("prompt.toast.promptSendFailed.title"),
-            description: usage.message,
-          })
-          return
-        }
+        trackProviderUsage(sessionDirectory, model.providerID, session.id)
         clearInput()
         client.session
           .command({
