@@ -277,8 +277,8 @@ export function StatusPopover() {
                         aria-disabled={isBlocked()}
                         onClick={() => {
                           if (isBlocked()) return
-                          server.setActive(key)
                           navigate("/")
+                          queueMicrotask(() => server.setActive(key))
                         }}
                       >
                         <ServerHealthIndicator health={health[key]} />
