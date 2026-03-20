@@ -223,6 +223,7 @@ export namespace PlanStore {
       worktreeDir: PlanSchema.shape.workers.element.shape.worktreeDir.optional(),
       branch: PlanSchema.shape.workers.element.shape.branch.optional(),
       error: PlanSchema.shape.workers.element.shape.error.optional(),
+      resolutionMode: PlanSchema.shape.workers.element.shape.resolutionMode.optional(),
       diffStat: PlanSchema.shape.workers.element.shape.diffStat.optional(),
     }),
     async (input): Promise<Plan> => {
@@ -246,6 +247,7 @@ export namespace PlanStore {
         ...(input.worktreeDir !== undefined && { worktreeDir: input.worktreeDir }),
         ...(input.branch !== undefined && { branch: input.branch }),
         ...(input.error !== undefined && { error: input.error }),
+        ...(input.resolutionMode !== undefined && { resolutionMode: input.resolutionMode }),
         ...(input.diffStat !== undefined && { diffStat: input.diffStat }),
       }
 

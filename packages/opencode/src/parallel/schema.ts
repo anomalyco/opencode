@@ -80,6 +80,9 @@ export const WorkerStatus = z.enum([
 ])
 export type WorkerStatus = z.infer<typeof WorkerStatus>
 
+export const WorkerResolutionMode = z.enum(["clean", "smart", "ai", "failed"])
+export type WorkerResolutionMode = z.infer<typeof WorkerResolutionMode>
+
 export const WorkerState = z.object({
   subtaskID: SubtaskID.zod,
   status: WorkerStatus,
@@ -88,6 +91,7 @@ export const WorkerState = z.object({
   worktreeDir: z.string().optional(),
   branch: z.string().optional(),
   error: z.string().optional(),
+  resolutionMode: WorkerResolutionMode.optional(),
   diffStat: z
     .object({
       additions: z.number(),

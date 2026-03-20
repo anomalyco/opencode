@@ -16,7 +16,7 @@ export const ParallelEvent = {
     z.object({
       planID: PlanID.zod,
       branch: z.string(),
-      result: z.enum(["clean", "resolved", "failed"]),
+      result: z.enum(["clean", "smart", "ai", "failed"]),
     }),
   ),
   WorkerTimeoutWarning: BusEvent.define(

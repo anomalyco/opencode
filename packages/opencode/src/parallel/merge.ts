@@ -17,6 +17,8 @@ export type FileScopeViolation = {
   outOfScopeFiles: string[]
 }
 
+type MergeResult = "clean" | "smart" | "ai" | "failed"
+
 export namespace MergePipeline {
   const log = Log.create({ service: "merge" })
 
@@ -132,12 +134,14 @@ export namespace MergePipeline {
           subtaskID: worker.subtaskID,
           status: "conflict",
           error: "Merge conflict could not be resolved",
+          resolutionMode: "failed",
         })
       } else {
         await PlanStore.updateWorker({
           id: planID,
           subtaskID: worker.subtaskID,
           status: "merged",
+          resolutionMode: result,
         })
       }
     }
@@ -149,7 +153,7 @@ export namespace MergePipeline {
     return allSuccess
   }
 
-  async function mergeBranch(planID: PlanID, branch: string, cwd: string): Promise<"clean" | "resolved" | "failed"> {
+  async function mergeBranch(planID: PlanID, branch: string, cwd: string): Promise<MergeResult> {
     // Get plan and worker info for better merge message
     const plan = await PlanStore.get(planID)
     const worker = plan.workers.find((w) => w.branch === branch)
@@ -179,10 +183,10 @@ export namespace MergePipeline {
     }
 
     log.info("merge needs resolution", { planID, branch, subtaskTitle, exitCode: merge.exitCode })
-    const resolved = await resolveConflicts(planID, branch, cwd)
-    if (resolved) {
+    const result = await resolveConflicts(planID, branch, cwd)
+    if (result) {
       const merged = await git(["merge-base", "--is-ancestor", branch, "HEAD"], { cwd })
-      if (merged.exitCode === 0) return "resolved"
+      if (merged.exitCode === 0) return result
       log.error("merge verification failed after resolution", { planID, branch, subtaskTitle })
       return "failed"
     }
@@ -192,7 +196,7 @@ export namespace MergePipeline {
     return "failed"
   }
 
-  async function resolveConflicts(planID: PlanID, branch: string, cwd: string): Promise<boolean> {
+  async function resolveConflicts(planID: PlanID, branch: string, cwd: string): Promise<false | "smart" | "ai"> {
     const status = await git(["diff", "--name-only", "--diff-filter=U"], { cwd })
     const conflictedFiles = outputText(status.stdout).split("\n").filter(Boolean)
 
@@ -217,6 +221,7 @@ export namespace MergePipeline {
       return content
     }
 
+    let mode: "smart" | "ai" = "smart"
     for (const file of conflictedFiles) {
       log.info("resolving file", { planID, branch, file })
       const content = await Bun.file(path.join(cwd, file)).text()
@@ -227,6 +232,7 @@ export namespace MergePipeline {
         log.info("file resolved", { planID, branch, file, result: "smart" })
         continue
       }
+      mode = "ai"
       const oursContent = await cachedGitShow("HEAD", file)
       const theirsContent = await cachedGitShow(branch, file)
       const baseContent = baseRef ? await cachedGitShow(baseRef, file) : ""
@@ -259,7 +265,8 @@ export namespace MergePipeline {
     if (commit.exitCode !== 0) {
       log.error("commit failed after resolution", { planID, branch, exitCode: commit.exitCode })
     }
-    return commit.exitCode === 0
+    if (commit.exitCode !== 0) return false
+    return mode
   }
 
   async function resolveWithAI(input: {

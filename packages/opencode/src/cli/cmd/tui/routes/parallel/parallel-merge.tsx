@@ -6,7 +6,7 @@ import { TextAttributes } from "@opentui/core"
 import { useSDK } from "@tui/context/sdk"
 import { Spinner } from "@tui/component/spinner"
 
-type MergeStatus = "clean" | "resolved" | "failed" | "pending" | "merging"
+type MergeStatus = "clean" | "smart" | "ai" | "resolved" | "failed" | "pending" | "merging"
 
 /** Displays merge progress for parallel execution workers with real-time SSE updates */
 export function ParallelMerge(props: { plan: Plan }) {
@@ -58,6 +58,9 @@ export function ParallelMerge(props: { plan: Plan }) {
     switch (result) {
       case "clean":
         return theme.success
+      case "smart":
+        return theme.accent
+      case "ai":
       case "resolved":
         return theme.warning
       case "failed":
@@ -73,6 +76,9 @@ export function ParallelMerge(props: { plan: Plan }) {
     switch (result) {
       case "clean":
         return "✓"
+      case "smart":
+        return "~"
+      case "ai":
       case "resolved":
         return "✓"
       case "failed":
@@ -84,8 +90,17 @@ export function ParallelMerge(props: { plan: Plan }) {
     }
   }
 
+  const mergeLabel = (result: MergeStatus) => {
+    switch (result) {
+      case "resolved":
+        return "ai"
+      default:
+        return result
+    }
+  }
+
   const workerMergeStatus = (worker: WorkerState): MergeStatus => {
-    if (worker.status === "merged") return "clean"
+    if (worker.status === "merged") return (worker.resolutionMode as MergeStatus | undefined) ?? "clean"
     if (worker.status === "conflict") return "failed"
     if (worker.status === "done") {
       const branchProgress = progressMap()[worker.branch ?? ""]
@@ -135,7 +150,7 @@ export function ParallelMerge(props: { plan: Plan }) {
                   <Spinner color={theme.warning} />
                 </Show>
                 <text fg={theme.text}>{subtask()?.title}</text>
-                <text fg={theme.textMuted}>— {status()}</text>
+                <text fg={theme.textMuted}>— {mergeLabel(status())}</text>
                 <Show when={worker.branch}>
                   <text fg={theme.accent}>({worker.branch?.slice(0, 20)})</text>
                 </Show>

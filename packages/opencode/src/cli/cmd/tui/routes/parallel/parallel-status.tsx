@@ -73,6 +73,13 @@ function WorkerLane(props: {
     }
   }
 
+  const statusText = () => {
+    if ((props.worker.status === "merged" || props.worker.status === "conflict") && props.worker.resolutionMode) {
+      return `${props.worker.status} (${props.worker.resolutionMode})`
+    }
+    return props.worker.status
+  }
+
   // Get live session data from sync store
   const messages = createMemo(() => {
     if (!props.worker.sessionID) return []
@@ -177,7 +184,7 @@ function WorkerLane(props: {
       </box>
 
       {/* Status line */}
-      <text fg={statusColor()}>{props.worker.status}</text>
+      <text fg={statusColor()}>{statusText()}</text>
 
       {/* Current activity */}
       <Show when={currentActivity()}>
