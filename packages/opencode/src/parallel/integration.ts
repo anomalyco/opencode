@@ -1,12 +1,12 @@
 import path from "path"
+import { unlink } from "fs/promises"
 import { NamedError } from "@opencode-ai/util/error"
 import z from "zod"
 import { git } from "@/util/git"
 import { Instance } from "@/project/instance"
 import { PlanStore } from "./plan"
 import { Log } from "@/util/log"
-import { Bus } from "@/bus"
-import { ParallelEvent } from "./events"
+import { MergePipeline } from "./merge"
 import type { PlanID, Plan } from "./schema"
 
 export const PublishMode = z.enum(["new-branch", "unstaged", "direct"])
@@ -132,7 +132,6 @@ export namespace Integration {
 
     const originalBranch = await getCurrentBranch(cwd)
     const workerBranches = await getWorkerBranches(plan)
-
     if (workerBranches.length === 0) {
       throw new IntegrationError({
         code: "no_workers",
@@ -141,50 +140,42 @@ export namespace Integration {
       })
     }
 
-    if (await branchExists(integrationBranch, cwd)) {
-      log.info("removing existing integration branch", { planID, branch: integrationBranch })
-      await checkoutBranch(originalBranch, cwd)
-      await git(["branch", "-D", integrationBranch], { cwd })
-    }
+    await PlanStore.update({ id: planID, integrationBranch })
 
-    await createBranch(integrationBranch, originalBranch, cwd)
-    log.info("created integration branch", { planID, branch: integrationBranch, base: originalBranch })
-
-    const merged: string[] = []
-    const failed: string[] = []
-
-    for (const branch of workerBranches) {
-      const worker = plan.workers.find((w) => w.branch === branch)
-      const subtask = worker ? plan.subtasks.find((s) => s.id === worker.subtaskID) : undefined
-      const subtaskTitle = subtask?.title ?? "Unknown subtask"
-      const message = `integrate: ${subtaskTitle}\n\nWorker: ${branch}\nPlan: ${planID.slice(0, 12)}`
-
-      log.info("merging worker branch", { planID, branch, subtaskTitle })
-      const success = await mergeBranch(branch, message, cwd)
-
-      if (success) {
-        merged.push(branch)
-        log.info("worker branch merged", { planID, branch })
-        Bus.publish(ParallelEvent.MergeProgress, { planID, branch, result: "clean" })
-      } else {
-        failed.push(branch)
-        log.error("worker branch merge failed", { planID, branch })
-        Bus.publish(ParallelEvent.MergeProgress, { planID, branch, result: "failed" })
+    try {
+      if (await branchExists(integrationBranch, cwd)) {
+        log.info("removing existing integration branch", { planID, branch: integrationBranch })
+        await checkoutBranch(originalBranch, cwd)
+        await git(["branch", "-D", integrationBranch], { cwd })
       }
+
+      await createBranch(integrationBranch, originalBranch, cwd)
+      log.info("created integration branch", { planID, branch: integrationBranch, base: originalBranch })
+
+      const result = await MergePipeline.run(planID)
+      const merged = result.workers.filter((w) => w.resolutionMode !== "failed").map((w) => w.branch)
+      const failed = result.workers.filter((w) => w.resolutionMode === "failed").map((w) => w.branch)
+
+      log.info("integration complete", {
+        planID,
+        branch: integrationBranch,
+        merged: merged.length,
+        failed: failed.length,
+      })
+
+      return {
+        branch: integrationBranch,
+        merged,
+        failed,
+        success: result.success && failed.length === 0,
+        error: failed.length > 0 && merged.length === 0 ? "No worker branches could be integrated" : undefined,
+      }
+    } finally {
+      await checkoutBranch(originalBranch, cwd).catch(() => {})
     }
-
-    log.info("integration complete", {
-      planID,
-      branch: integrationBranch,
-      merged: merged.length,
-      failed: failed.length,
-    })
-
-    return { branch: integrationBranch, merged, failed, success: true }
   }
 
   export async function publish(planID: PlanID, mode: PublishMode): Promise<PublishResult> {
-    const plan = await PlanStore.get(planID)
     const cwd = Instance.worktree
     const integrationBranch = `parallel/${planID}`
 
@@ -203,42 +194,36 @@ export namespace Integration {
       return { mode, branch: integrationBranch, success: true }
     }
 
+    const currentBranch = await getCurrentBranch(cwd)
+    if (currentBranch === integrationBranch) {
+      throw new IntegrationError({
+        code: "wrong_branch",
+        message: `Current branch is ${integrationBranch}. Checkout the target branch before publishing in ${mode} mode.`,
+        planID,
+      })
+    }
+
     if (await isWorktreeDirty(cwd)) {
       throw new DirtyWorktreeError({
         message: `Worktree has uncommitted changes. Please commit or stash before using ${mode} mode.`,
       })
     }
 
-    const currentBranch = await getCurrentBranch(cwd)
-
     if (mode === "unstaged") {
-      await checkoutBranch(integrationBranch, cwd)
-
-      const diffResult = await git(["diff", currentBranch], { cwd })
+      const diffResult = await git(["diff", "--binary", `${currentBranch}..${integrationBranch}`], { cwd })
       const diff = outputText(diffResult.stdout)
 
-      await checkoutBranch(currentBranch, cwd)
-
       if (diff) {
-        const apply = await git(["apply", "--index"], { cwd, env: { GIT_DIFF: diff } })
+        const patch = path.join(process.env.TMPDIR ?? "/tmp", `opencode-${planID}-${Date.now()}.patch`)
+        await Bun.write(patch, diff)
+        const apply = await git(["apply", "--whitespace=nowarn", patch], { cwd })
+        await unlink(patch).catch(() => {})
         if (apply.exitCode !== 0) {
-          const pipe = new WritableStream({
-            write(chunk) {
-              process.stdin.write(chunk)
-            },
+          throw new IntegrationError({
+            code: "apply_failed",
+            message: `Failed to apply changes to working tree: ${outputText(apply.stderr)}`,
+            planID,
           })
-          const writer = pipe.getWriter()
-          writer.write(Buffer.from(diff))
-          writer.close()
-
-          const applyWithPipe = await git(["apply", "--index"], { cwd })
-          if (applyWithPipe.exitCode !== 0) {
-            throw new IntegrationError({
-              code: "apply_failed",
-              message: `Failed to apply changes to working tree: ${outputText(applyWithPipe.stderr)}`,
-              planID,
-            })
-          }
         }
       }
 
@@ -247,8 +232,6 @@ export namespace Integration {
     }
 
     if (mode === "direct") {
-      await checkoutBranch(currentBranch, cwd)
-
       const message = `merge: parallel plan ${planID.slice(0, 12)}\n\nIntegration branch: ${integrationBranch}`
       const success = await mergeBranch(integrationBranch, message, cwd)
 

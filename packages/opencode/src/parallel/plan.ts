@@ -4,6 +4,7 @@ import { Bus } from "@/bus"
 import { ParallelEvent } from "./events"
 import { validateTransition, validateWorkerTransition } from "./transitions"
 import { ConflictError } from "./errors"
+import z from "zod"
 import type {
   Plan,
   PlanID,
@@ -15,7 +16,7 @@ import type {
   ModelRef,
   PublishMode,
 } from "./schema"
-import { PlanID as PlanIDSchema, SubtaskID as SubtaskIDSchema, Plan as PlanSchema } from "./schema"
+import { PlanID as PlanIDSchema, SubtaskID as SubtaskIDSchema, Plan as PlanSchema, PublishMode as PublishModeSchema } from "./schema"
 import { SessionID } from "@/session/schema"
 import { ProjectID } from "@/project/schema"
 import { fn } from "@/util/fn"
@@ -102,6 +103,7 @@ export namespace PlanStore {
       task: true,
       orchestratorModel: true,
       workerModel: true,
+      publishMode: true,
     }),
     async (input): Promise<Plan> => {
       const plan: Plan = {
@@ -115,6 +117,7 @@ export namespace PlanStore {
         workerModel: input.workerModel,
         subtasks: [],
         workers: [],
+        publishMode: input.publishMode ?? "new-branch",
         version: 0,
         time: {
           created: Date.now(),
@@ -159,6 +162,8 @@ export namespace PlanStore {
       error: PlanSchema.shape.error.nullable().optional(),
       subtasks: PlanSchema.shape.subtasks.optional(),
       workers: PlanSchema.shape.workers.optional(),
+      integrationBranch: z.string().optional(),
+      publishMode: PublishModeSchema.optional(),
     }),
     async (input): Promise<Plan> => {
       const existing = await get(input.id)
@@ -186,6 +191,12 @@ export namespace PlanStore {
       if (input.workers !== undefined) {
         updates.workers = input.workers as any
       }
+      if (input.integrationBranch !== undefined) {
+        updates.integration_branch = input.integrationBranch
+      }
+      if (input.publishMode !== undefined) {
+        updates.publish_mode = input.publishMode as any
+      }
 
       return Database.use((db) => {
         const row = db
@@ -210,7 +221,7 @@ export namespace PlanStore {
         .where(
           and(
             eq(PlanTable.project_id, sql.placeholder("project_id")),
-            sql`${PlanTable.status} IN ('draft', 'proposed', 'approved', 'spawning', 'running', 'merging')`,
+            sql`${PlanTable.status} IN ('draft', 'proposed', 'approved', 'spawning', 'running', 'merging', 'integrating', 'integrated', 'publishing')`,
           ),
         )
         .prepare(),

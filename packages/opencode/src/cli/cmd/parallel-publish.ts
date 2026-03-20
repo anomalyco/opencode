@@ -2,6 +2,7 @@ import type { Argv } from "yargs"
 import { cmd } from "./cmd"
 import { bootstrap } from "../bootstrap"
 import { UI } from "../ui"
+import { Config } from "../../config/config"
 import { PlanStore } from "../../parallel/plan"
 import { PlanID as PlanIDSchema } from "../../parallel/schema"
 
@@ -24,20 +25,24 @@ export const ParallelPublishCommand = cmd({
   handler: async (args) => {
     await bootstrap(process.cwd(), async () => {
       const { Orchestrator } = await import("../../parallel/orchestrator")
+      const cfg = await Config.get()
 
       try {
         const planID = PlanIDSchema.make(args.planID as string)
         const plan = await PlanStore.get(planID)
 
         // Only allow publishing from certain states
-        const allowedStatuses = ["done", "partial_success", "merging"]
+        const allowedStatuses = ["integrated", "done", "partial_success", "merging", "publishing"]
         if (!allowedStatuses.includes(plan.status)) {
           UI.error(`Cannot publish plan with status '${plan.status}'. Must be: ${allowedStatuses.join(", ")}`)
           process.exit(1)
         }
 
         const mode =
-          (args.mode as "new-branch" | "unstaged" | "direct" | undefined) ?? (plan as any).publishMode ?? "new-branch"
+          (args.mode as "new-branch" | "unstaged" | "direct" | undefined) ??
+          plan.publishMode ??
+          cfg.parallel?.publish_mode ??
+          "new-branch"
 
         UI.println(`Publishing plan ${planID} with mode: ${mode}`)
 
@@ -48,7 +53,7 @@ export const ParallelPublishCommand = cmd({
 
         // Show integration branch if available
         const updated = await PlanStore.get(planID)
-        const branch = (updated as any).integrationBranch
+        const branch = updated.integrationBranch
         if (branch && mode === "new-branch") {
           UI.println(`Integration branch: ${branch}`)
         }

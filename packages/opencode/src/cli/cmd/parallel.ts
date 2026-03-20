@@ -42,7 +42,6 @@ export const ParallelCommand = cmd({
         describe: "Publish mode for integrating changes",
         type: "string",
         choices: ["new-branch", "unstaged", "direct"],
-        default: "new-branch",
       })
       .option("json", {
         describe: "Output as JSON",
@@ -66,6 +65,7 @@ export const ParallelCommand = cmd({
       const { Config } = await import("../../config/config")
       const { Provider } = await import("../../provider/provider")
       const { Session } = await import("../../session")
+      const cfg = await Config.get()
 
       // Parse model overrides from CLI flags
       const orchestratorModel = args["orchestrator-model"]
@@ -91,6 +91,7 @@ export const ParallelCommand = cmd({
       })
 
       UI.println(`Creating parallel plan for: ${args.task}`)
+      const mode = (args["publish-mode"] as "new-branch" | "unstaged" | "direct" | undefined) ?? cfg.parallel?.publish_mode ?? "new-branch"
 
       const plan = await Orchestrator.create({
         projectID: Instance.project.id,
@@ -100,7 +101,7 @@ export const ParallelCommand = cmd({
           ? { providerID: orchestratorModel.providerID, modelID: orchestratorModel.modelID }
           : undefined,
         workerModel: workerModel ? { providerID: workerModel.providerID, modelID: workerModel.modelID } : undefined,
-        publishMode: args["publish-mode"] as "new-branch" | "unstaged" | "direct",
+        publishMode: mode,
       })
 
       if (args.json) {
@@ -109,7 +110,7 @@ export const ParallelCommand = cmd({
         UI.println("")
         UI.println(UI.Style.TEXT_SUCCESS_BOLD + `Plan created: ${plan.id}` + UI.Style.TEXT_NORMAL)
         UI.println(`Status: ${plan.status}`)
-        UI.println(`Publish mode: ${args["publish-mode"]}`)
+        UI.println(`Publish mode: ${plan.publishMode ?? mode}`)
         UI.println(`Orchestrator: ${plan.orchestratorModel.providerID}/${plan.orchestratorModel.modelID}`)
         UI.println(`Worker default: ${plan.workerModel.providerID}/${plan.workerModel.modelID}`)
         if (args.workers) UI.println(`Max workers: ${args.workers}`)
@@ -165,7 +166,7 @@ export const ParallelListCommand = cmd({
         UI.println("-".repeat(header.length))
         for (const plan of plans) {
           const truncatedTask = plan.task.length > 40 ? plan.task.slice(0, 37) + "..." : plan.task
-          const mode = (plan as any).publishMode ?? "new-branch"
+          const mode = plan.publishMode ?? "new-branch"
           const line = `${plan.id.padEnd(maxIdWidth)}  ${plan.status.padEnd(10)}  ${mode.padEnd(12)}  ${truncatedTask}`
           UI.println(line)
         }
@@ -192,8 +193,8 @@ export const ParallelShowCommand = cmd({
         // Build enhanced output with publish information
         const output = {
           ...plan,
-          publishMode: (plan as any).publishMode ?? "new-branch",
-          integrationBranch: (plan as any).integrationBranch,
+          publishMode: plan.publishMode ?? "new-branch",
+          integrationBranch: plan.integrationBranch,
         }
 
         console.log(JSON.stringify(output, null, 2))
