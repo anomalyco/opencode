@@ -73,7 +73,7 @@ export namespace Integration {
   }
 
   async function branchExists(branch: string, cwd: string): Promise<boolean> {
-    const result = await git(["show-ref", "--verify", `--refs/heads/${branch}`], { cwd })
+    const result = await git(["show-ref", "--verify", "--quiet", `refs/heads/${branch}`], { cwd })
     return result.exitCode === 0
   }
 

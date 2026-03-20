@@ -30,7 +30,20 @@ export namespace Orchestrator {
     at: number
   }
 
+  function pick(err: unknown, key: "code" | "stage" | "message"): string | undefined {
+    if (!err || typeof err !== "object") return
+    if (!("data" in err)) return
+    const data = err.data
+    if (!data || typeof data !== "object") return
+    if (!(key in data)) return
+    const value = data[key as keyof typeof data]
+    if (typeof value !== "string") return
+    return value
+  }
+
   function text(err: unknown): string {
+    const msg = pick(err, "message")
+    if (msg) return msg
     if (err instanceof Error) return err.message
     return String(err)
   }
@@ -43,8 +56,14 @@ export namespace Orchestrator {
   }
 
   function detail(err: unknown): Detail {
-    const code = err instanceof Error && "code" in err && typeof err.code === "string" ? err.code : "unknown"
-    const stage = err instanceof Error && "stage" in err && typeof err.stage === "string" ? err.stage : "unknown"
+    const code =
+      (err instanceof Error && "code" in err && typeof err.code === "string" ? err.code : undefined) ??
+      pick(err, "code") ??
+      "unknown"
+    const stage =
+      (err instanceof Error && "stage" in err && typeof err.stage === "string" ? err.stage : undefined) ??
+      pick(err, "stage") ??
+      "unknown"
     return {
       code,
       stage,
