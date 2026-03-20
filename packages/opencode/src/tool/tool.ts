@@ -1,7 +1,7 @@
 import z from "zod"
 import type { MessageV2 } from "../session/message-v2"
 import type { Agent } from "../agent/agent"
-import type { PermissionNext } from "../permission"
+import type { Permission as PermissionNext } from "../permission/service"
 import type { SessionID, MessageID } from "../session/schema"
 import { Truncate } from "./truncate"
 
