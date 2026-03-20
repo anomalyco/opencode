@@ -221,6 +221,7 @@ export const dict = {
   "common.cancel": "Otkaži",
   "common.connect": "Poveži",
   "common.disconnect": "Prekini vezu",
+  "common.continue": "Pošalji",
   "common.submit": "Pošalji",
   "common.save": "Sačuvaj",
   "common.saving": "Čuvanje...",
