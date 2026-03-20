@@ -53,10 +53,17 @@ import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
-import { messageAgentColor } from "@/utils/agent"
-import { sessionTitle } from "@/utils/session-title"
-import { makeTimer } from "@solid-primitives/timer"
-import { MessageComment, SummaryDiff, Timeline, TimelineRow, TimelineRowMap } from "./message-timeline.data"
+import { parseCommentNote, readCommentMetadata } from "@/utils/comment-note"
+import { Virtualizer, type VirtualizerHandle } from "virtua/solid"
+
+type MessageComment = {
+  path: string
+  comment: string
+  selection?: {
+    startLine: number
+    endLine: number
+  }
+}
 
 const emptyMessages: MessageType[] = []
 const emptyParts: PartType[] = []
@@ -112,6 +119,17 @@ const taskDescription = (part: PartType, sessionID: string) => {
 
 const pace = (width: number) => Math.round(Math.max(1200, Math.min(3200, (Math.max(width, 360) * 2000) / 900)))
 
+const partHeight = (part: Part) => {
+  if (part.type === "text" || part.type === "reasoning") {
+    const len = part.text?.length ?? 0
+    return Math.min(560, 80 + len * 0.11)
+  }
+  if (part.type === "tool") return 96
+  if (part.type === "step-start") return 40
+  if (part.type === "snapshot") return 32
+  return 56
+}
+
 const boundaryTarget = (root: HTMLElement, target: EventTarget | null) => {
   const current = target instanceof Element ? target : undefined
   const nested = current?.closest("[data-scrollable]")
@@ -148,35 +166,33 @@ function TimelineThinkingRow(props: { reasoningHeading?: string; showReasoningSu
 
 type TimelineStageInput = {
   sessionKey: () => string
-  turnStart: () => number
   messages: () => UserMessage[]
   scroller: () => HTMLDivElement | undefined
   config: StageConfig
 }
 
 /**
- * Defer-mounts small timeline windows so revealing older turns does not
+ * Defer-mounts timeline windows so session switches and history reveals do not
  * block first paint with a large DOM mount.
  *
- * Once staging completes for a session it never re-stages — backfill and
- * new messages render immediately.
+ * Staging runs on session switches so the first paint stays responsive even
+ * when the next session contains heavy markdown/LaTeX content.
  */
 function createTimelineStaging(input: TimelineStageInput) {
   const [state, setState] = createStore({
     activeSession: "",
-    completedSession: "",
-    stagedSession: "",
     count: 0,
   })
 
   const stagedCount = createMemo(() => {
     const total = input.messages().length
-    if (input.turnStart() <= 0) return total
-    if (state.completedSession === input.sessionKey()) return total
-    const init = Math.min(total, input.config.init)
-    if (state.count <= init) return init
-    if (state.count >= total) return total
-    return state.count
+    if (state.activeSession === input.sessionKey()) {
+      const init = Math.min(total, input.config.init)
+      if (state.count <= init) return init
+      if (state.count >= total) return total
+      return state.count
+    }
+    return total
   })
 
   const stagedUserMessages = createMemo(() => {
@@ -195,16 +211,14 @@ function createTimelineStaging(input: TimelineStageInput) {
 
   createEffect(
     on(
-      () => [input.sessionKey(), input.turnStart() > 0, input.messages().length] as const,
-      ([sessionKey, isWindowed, total]) => {
+      () => [input.sessionKey(), input.messages().length] as const,
+      ([sessionKey, total], prev) => {
         cancel()
-        const shouldStage =
-          isWindowed &&
-          total > input.config.init &&
-          state.completedSession !== sessionKey &&
-          state.stagedSession !== sessionKey &&
-          state.activeSession !== sessionKey
-        if (!shouldStage) {
+        if (sessionKey === prev?.[0]) {
+          if (state.activeSession !== sessionKey) setState({ activeSession: "", count: total })
+          return
+        }
+        if (total <= input.config.init) {
           setState({ activeSession: "", count: total })
           return
         }
@@ -230,7 +244,7 @@ function createTimelineStaging(input: TimelineStageInput) {
             })
           }
           if (count >= currentTotal) {
-            setState({ completedSession: sessionKey, activeSession: "" })
+            setState({ activeSession: "", count: currentTotal })
             frame = undefined
             return
           }
@@ -242,12 +256,9 @@ function createTimelineStaging(input: TimelineStageInput) {
   )
 }
 
-function TimelineDiffSummaryRow(props: { diffs: SummaryDiff[] }) {
-  const language = useLanguage()
-  const maxFiles = 10
-  const [state, setState] = createStore({
-    showAll: false,
-    expanded: [] as string[],
+  const isStaging = createMemo(() => {
+    const key = input.sessionKey()
+    return state.activeSession === key
   })
   const showAll = () => state.showAll
   const expanded = () => state.expanded
@@ -350,9 +361,15 @@ export function MessageTimeline(props: {
   onAutoScrollInteraction: (event: MouseEvent) => void
   shouldAnchorBottom: () => boolean
   centered: boolean
+  scrollRef: () => HTMLDivElement | undefined
+  onVirtualizedChange?: (value: boolean) => void
   setContentRef: (el: HTMLDivElement) => void
-  historyShift: boolean
-  userMessages: UserMessage[]
+  setVirtualizerRef: (handle: VirtualizerHandle | undefined) => void
+  turnStart: number
+  historyMore: boolean
+  historyLoading: boolean
+  onLoadEarlier: () => void
+  renderedUserMessages: UserMessage[]
   anchor: (id: string) => string
   setRevealMessage?: (fn: (id: string) => void) => void
 }) {
@@ -369,7 +386,24 @@ export function MessageTimeline(props: {
   const { params, sessionKey } = useSessionKey()
   const platform = usePlatform()
 
-  let virtualizer: VirtualizerHandle | undefined
+  const rendered = createMemo(() => props.renderedUserMessages.map((message) => message.id))
+  const shouldVirtualize = createMemo(() => platform.platform === "desktop" && rendered().length > 6)
+  createEffect(() => props.onVirtualizedChange?.(shouldVirtualize()))
+  const itemSize = createMemo(() => {
+    const list = props.renderedUserMessages
+    if (list.length === 0) return 520
+
+    const recent = list.slice(Math.max(0, list.length - 8))
+    const total = recent.reduce((sum, message) => {
+      const parts = sync.data.part[message.id] ?? []
+      const comments = messageComments(parts)
+      const body = parts.reduce((value, part) => value + partHeight(part), 120)
+      const notes = comments.length * 88
+      return sum + body + notes + 48
+    }, 0)
+
+    return Math.max(320, Math.min(1200, Math.round(total / recent.length)))
+  })
   const sessionID = createMemo(() => params.id)
   const sessionMessages = createMemo(() => {
     const id = sessionID()
@@ -475,10 +509,9 @@ export function MessageTimeline(props: {
     return language.t("command.session.new")
   })
   const showHeader = createMemo(() => !!(titleValue() || parentID()))
-  const stageCfg = { init: 1, batch: 3 }
+  const stageCfg = platform.platform === "desktop" ? { init: 1, batch: 1 } : { init: 1, batch: 3 }
   const staging = createTimelineStaging({
     sessionKey,
-    turnStart: () => props.turnStart,
     messages: () => props.renderedUserMessages,
     scroller: () => scroll,
     config: stageCfg,
@@ -1335,9 +1368,11 @@ export function MessageTimeline(props: {
 
             <div
               role="log"
-              class="flex flex-col gap-12 items-start justify-start pb-16 transition-[margin]"
+              class="items-start justify-start pb-16 transition-[margin]"
               classList={{
                 "w-full": true,
+                "flex flex-col gap-12": !shouldVirtualize(),
+                block: shouldVirtualize(),
                 "mt-0.5": props.centered,
                 "mt-0": !props.centered,
               }}
@@ -1362,91 +1397,25 @@ export function MessageTimeline(props: {
                   </Button>
                 </div>
               </Show>
-              <For each={rendered()}>
-                {(messageID) => {
-                  const active = createMemo(() => activeMessageID() === messageID)
-                  const comments = createMemo(() => messageComments(sync.data.part[messageID] ?? []), [], {
-                    equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
-                  })
-                  const commentCount = createMemo(() => comments().length)
-                  return (
-                    <div
-                      id={props.anchor(messageID)}
-                      data-message-id={messageID}
-                      classList={{
-                        "min-w-0 w-full max-w-full": true,
-                      }}
-                      style={{
-                        "content-visibility": "auto",
-                        "contain-intrinsic-size": "auto 500px",
-                        "max-width": props.centered ? "var(--session-content-width, 60rem)" : undefined,
-                        "margin-left": props.centered ? "auto" : undefined,
-                        "margin-right": props.centered ? "auto" : undefined,
-                      }}
-                    >
-                      <Show when={commentCount() > 0}>
-                        <div class="w-full px-4 md:px-5 pb-2">
-                          <div class="ml-auto max-w-[82%] overflow-x-auto no-scrollbar">
-                            <div class="flex w-max min-w-full justify-end gap-2">
-                              <Index each={comments()}>
-                                {(commentAccessor: () => MessageComment) => {
-                                  const comment = createMemo(() => commentAccessor())
-                                  return (
-                                    <Show when={comment()}>
-                                      {(c) => (
-                                        <div class="shrink-0 max-w-[260px] rounded-[6px] border border-border-weak-base bg-background-stronger px-2.5 py-2">
-                                          <div class="flex items-center gap-1.5 min-w-0 text-11-medium text-text-strong">
-                                            <FileIcon
-                                              node={{ path: c().path, type: "file" }}
-                                              class="size-3.5 shrink-0"
-                                            />
-                                            <span class="truncate">{getFilename(c().path)}</span>
-                                            <Show when={c().selection}>
-                                              {(selection) => (
-                                                <span class="shrink-0 text-text-weak">
-                                                  {selection().startLine === selection().endLine
-                                                    ? `:${selection().startLine}`
-                                                    : `:${selection().startLine}-${selection().endLine}`}
-                                                </span>
-                                              )}
-                                            </Show>
-                                          </div>
-                                          <div class="pt-1 text-12-regular text-text-strong whitespace-pre-wrap break-words">
-                                            {c().comment}
-                                          </div>
-                                        </div>
-                                      )}
-                                    </Show>
-                                  </div>
-                                  <div class="pt-1 text-12-regular text-text-strong whitespace-pre-wrap break-words">
-                                    {comment.comment}
-                                  </div>
-                                </div>
-                              )}
-                            </For>
-                          </div>
-                        </div>
-                      </Show>
-                      <SessionTurn
-                        sessionID={sessionID() ?? ""}
-                        messageID={messageID}
-                        actions={props.actions}
-                        active={active()}
-                        status={active() ? sessionStatus() : undefined}
-                        showReasoningSummaries={settings.general.showReasoningSummaries()}
-                        showCustomHookParts={settings.general.showCustomHookParts()}
-                        shellToolDefaultOpen={settings.general.shellToolPartsExpanded()}
-                        editToolDefaultOpen={settings.general.editToolPartsExpanded()}
-                        classes={{
-                          root: "min-w-0 w-full relative",
-                          content: "flex flex-col justify-between !overflow-visible",
-                          container: "w-full px-4 md:px-5",
-                        }}
-                      />
-                    </div>
-                  )
-                }}
-              </For>
+              <Show
+                when={shouldVirtualize()}
+                fallback={
+                  <For each={rendered()}>
+                    {(messageID, index) => <TimelineItem index={index()} messageID={messageID} />}
+                  </For>
+                }
+              >
+                <Virtualizer
+                  data={rendered()}
+                  scrollRef={props.scrollRef()}
+                  shift
+                  itemSize={itemSize()}
+                  keepMounted={rendered().length > 0 ? [Math.max(0, rendered().length - 1)] : []}
+                  ref={props.setVirtualizerRef}
+                >
+                  {(messageID, index) => <TimelineItem index={index()} messageID={messageID} />}
+                </Virtualizer>
+              </Show>
             </div>
           </div>
         </Show>
@@ -1480,4 +1449,86 @@ export function MessageTimeline(props: {
       </ScrollView>
     </div>
   )
+
+  function TimelineItem(item: { messageID: string; index: number }) {
+    const active = createMemo(() => activeMessageID() === item.messageID)
+    const eager = createMemo(() => rendered().length - item.index <= 2)
+    const comments = createMemo(() => messageComments(sync.data.part[item.messageID] ?? []), [], {
+      equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+    })
+    const commentCount = createMemo(() => comments().length)
+
+    return (
+      <div
+        id={props.anchor(item.messageID)}
+        data-message-id={item.messageID}
+        classList={{
+          "min-w-0 w-full max-w-full": true,
+          "pb-12": shouldVirtualize(),
+        }}
+        style={{
+          "content-visibility": shouldVirtualize() ? undefined : "auto",
+          "contain-intrinsic-size": shouldVirtualize() ? undefined : "auto 500px",
+          "max-width": props.centered ? "var(--session-content-width, 60rem)" : undefined,
+          "margin-left": props.centered ? "auto" : undefined,
+          "margin-right": props.centered ? "auto" : undefined,
+        }}
+      >
+        <Show when={commentCount() > 0}>
+          <div class="w-full px-4 md:px-5 pb-2">
+            <div class="ml-auto max-w-[82%] overflow-x-auto no-scrollbar">
+              <div class="flex w-max min-w-full justify-end gap-2">
+                <Index each={comments()}>
+                  {(commentAccessor: () => MessageComment) => {
+                    const comment = createMemo(() => commentAccessor())
+                    return (
+                      <Show when={comment()}>
+                        {(c) => (
+                          <div class="shrink-0 max-w-[260px] rounded-[6px] border border-border-weak-base bg-background-stronger px-2.5 py-2">
+                            <div class="flex items-center gap-1.5 min-w-0 text-11-medium text-text-strong">
+                              <FileIcon node={{ path: c().path, type: "file" }} class="size-3.5 shrink-0" />
+                              <span class="truncate">{getFilename(c().path)}</span>
+                              <Show when={c().selection}>
+                                {(selection) => (
+                                  <span class="shrink-0 text-text-weak">
+                                    {selection().startLine === selection().endLine
+                                      ? `:${selection().startLine}`
+                                      : `:${selection().startLine}-${selection().endLine}`}
+                                  </span>
+                                )}
+                              </Show>
+                            </div>
+                            <div class="pt-1 text-12-regular text-text-strong whitespace-pre-wrap break-words">
+                              {c().comment}
+                            </div>
+                          </div>
+                        )}
+                      </Show>
+                    )
+                  }}
+                </Index>
+              </div>
+            </div>
+          </div>
+        </Show>
+        <SessionTurn
+          sessionID={sessionID() ?? ""}
+          messageID={item.messageID}
+          actions={props.actions}
+          active={active()}
+          status={active() ? sessionStatus() : undefined}
+          showReasoningSummaries={settings.general.showReasoningSummaries()}
+          showCustomHookParts={settings.general.showCustomHookParts()}
+          shellToolDefaultOpen={settings.general.shellToolPartsExpanded()}
+          editToolDefaultOpen={settings.general.editToolPartsExpanded()}
+          markdownEager={eager()}
+          classes={{
+            root: "min-w-0 w-full relative",
+            content: "flex flex-col justify-between !overflow-visible",
+            container: "w-full px-4 md:px-5",
+          }}
+        />
+      </div>
+    )
+  }
 }

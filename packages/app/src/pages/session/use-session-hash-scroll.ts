@@ -8,21 +8,22 @@ export const useSessionHashScroll = (input: {
   sessionID: () => string | undefined
   messagesReady: () => boolean
   visibleUserMessages: () => UserMessage[]
-  historyMore: () => boolean
-  historyLoading: () => boolean
-  loadMore: (sessionID: string) => Promise<void>
+  renderedUserMessages?: () => UserMessage[]
+  turnStart: () => number
   currentMessageId: () => string | undefined
   pendingMessage: () => string | undefined
   setPendingMessage: (value: string | undefined) => void
   setActiveMessage: (message: UserMessage | undefined) => void
   autoScroll: { pause: () => void; forceScrollToBottom: () => void }
   scroller: () => HTMLDivElement | undefined
+  seekMessage?: (id: string, behavior: ScrollBehavior) => boolean
   anchor: (id: string) => string
   revealMessage?: (id: string) => void
   scheduleScrollState: (el: HTMLDivElement) => void
   consumePendingMessage: (key: string) => string | undefined
 }) => {
   const visibleUserMessages = createMemo(() => input.visibleUserMessages())
+  const renderedUserMessages = createMemo(() => input.renderedUserMessages?.() ?? visibleUserMessages())
   const messageById = createMemo(() => new Map(visibleUserMessages().map((m) => [m.id, m])))
   let pendingKey = ""
   let clearing = false
@@ -75,7 +76,7 @@ export const useSessionHashScroll = (input: {
   }
 
   const seek = (id: string, behavior: ScrollBehavior, left = 4): boolean => {
-    input.revealMessage?.(id)
+    if (input.seekMessage?.(id, behavior)) return true
     const el = document.getElementById(input.anchor(id))
     if (el) return scrollToElement(el, behavior)
     if (left <= 0) return false
@@ -142,6 +143,8 @@ export const useSessionHashScroll = (input: {
     if (!input.sessionID() || !input.messagesReady()) return
 
     visibleUserMessages()
+    renderedUserMessages()
+    input.turnStart()
 
     let targetId = input.pendingMessage()
     if (!targetId) {

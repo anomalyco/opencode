@@ -26,38 +26,9 @@ import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Select } from "@opencode-ai/ui/select"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
-import { SessionReview } from "@opencode-ai/ui/session-review"
-import { Mark } from "@opencode-ai/ui/logo"
-
-import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
-import type { DragEvent } from "@thisbeyond/solid-dnd"
-import { useSync } from "@/context/sync"
-import { useTerminal, type LocalPTY } from "@/context/terminal"
-import { useLayout } from "@/context/layout"
-import { Terminal } from "@/components/terminal"
-import { checksum, base64Encode } from "@opencode-ai/util/encode"
-import { findLast } from "@opencode-ai/util/array"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { DialogSelectFile } from "@/components/dialog-select-file"
-import FileTree from "@/components/file-tree"
-import { DialogSelectModel } from "@/components/dialog-select-model"
-import { DialogSelectMcp } from "@/components/dialog-select-mcp"
-import { DialogSelectSkill } from "@/components/dialog-select-skill"
-import { DialogFork } from "@/components/dialog-fork"
-import { useCommand } from "@/context/command"
-import { useLanguage } from "@/context/language"
-import { useSettings } from "@/context/settings"
-import { useNavigate, useParams } from "@solidjs/router"
-import { UserMessage } from "@opencode-ai/sdk/v2"
-import type { FileDiff } from "@opencode-ai/sdk/v2/client"
-import { useSDK } from "@/context/sdk"
-import { usePrompt } from "@/context/prompt"
-import { useComments, type LineComment } from "@/context/comments"
-import { extractPromptFromParts } from "@/utils/prompt"
-import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
-import { usePermission } from "@/context/permission"
-import { usePlatform } from "@/context/platform"
-import { useServer } from "@/context/server"
+import type { VirtualizerHandle } from "virtua/solid"
+import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
+import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@opencode-ai/ui/toast"
 import { checksum } from "@opencode-ai/core/util/encode"
 import { useLocation, useSearchParams } from "@solidjs/router"
@@ -110,6 +81,7 @@ type SessionHistoryWindowInput = {
   loadMore: (sessionID: string) => Promise<void>
   userScrolled: () => boolean
   scroller: () => HTMLDivElement | undefined
+  virtualized: () => boolean
 }
 
 /**
@@ -168,6 +140,11 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
   }
 
   const preserveScroll = (fn: () => void) => {
+    if (input.virtualized()) {
+      fn()
+      return
+    }
+
     const el = input.scroller()
     if (!el) {
       fn()
@@ -1742,6 +1719,8 @@ export default function Page() {
   )
 
   let fill = () => {}
+  let virtualizer: VirtualizerHandle | undefined
+  let virtualized = false
 
   const setScrollRef = (el: HTMLDivElement | undefined) => {
     scroller = el
@@ -1773,6 +1752,7 @@ export default function Page() {
     loadMore: (sessionID) => sync.session.history.loadMore(sessionID),
     userScrolled: autoScroll.userScrolled,
     scroller: () => scroller,
+    virtualized: () => virtualized,
   })
 
   fill = () => {
@@ -2110,15 +2090,25 @@ export default function Page() {
     sessionID: () => params.id,
     messagesReady,
     visibleUserMessages,
-    historyMore,
-    historyLoading,
-    loadMore: (sessionID) => sync.session.history.loadMore(sessionID),
+    renderedUserMessages: historyWindow.renderedUserMessages,
+    turnStart: historyWindow.turnStart,
     currentMessageId: () => store.messageId,
     pendingMessage: () => ui.pendingMessage,
     setPendingMessage: (value) => setUi("pendingMessage", value),
     setActiveMessage,
     autoScroll,
     scroller: () => scroller,
+    seekMessage: (id, behavior) => {
+      const msgs = visibleUserMessages()
+      const index = msgs.findIndex((m) => m.id === id)
+      if (index < 0) return false
+      if (!virtualizer) return false
+      virtualizer.scrollToIndex(index, {
+        align: "start",
+        smooth: behavior === "smooth",
+      })
+      return true
+    },
     anchor,
     revealMessage: (id) => revealMessage(id),
     scheduleScrollState,
@@ -2281,218 +2271,29 @@ export default function Page() {
                       !location.hash && !store.messageId && !ui.pendingMessage && !autoScroll.userScrolled()
                     }
                     centered={centered()}
+                    scrollRef={() => scroller}
+                    onVirtualizedChange={(value) => {
+                      virtualized = value
+                    }}
                     setContentRef={(el) => {
                       content = el
                       autoScroll.contentRef(el)
 
-                          if (!(nested instanceof HTMLElement)) {
-                            markScrollGesture(root)
-                            return
-                          }
-
-                          const max = nested.scrollHeight - nested.clientHeight
-                          if (max <= 1) {
-                            markScrollGesture(root)
-                            return
-                          }
-
-                          const delta =
-                            e.deltaMode === 1
-                              ? e.deltaY * 40
-                              : e.deltaMode === 2
-                                ? e.deltaY * root.clientHeight
-                                : e.deltaY
-                          if (!delta) return
-
-                          if (delta < 0) {
-                            if (nested.scrollTop + delta <= 0) markScrollGesture(root)
-                            return
-                          }
-
-                          const remaining = max - nested.scrollTop
-                          if (delta > remaining) markScrollGesture(root)
-                        }}
-                        onTouchStart={(e) => {
-                          touchGesture = e.touches[0]?.clientY
-                        }}
-                        onTouchMove={(e) => {
-                          const next = e.touches[0]?.clientY
-                          const prev = touchGesture
-                          touchGesture = next
-                          if (next === undefined || prev === undefined) return
-
-                          const delta = prev - next
-                          if (!delta) return
-
-                          const root = e.currentTarget
-                          const target = e.target instanceof Element ? e.target : undefined
-                          const nested = target?.closest("[data-scrollable]")
-                          if (!nested || nested === root) {
-                            markScrollGesture(root)
-                            return
-                          }
-
-                          if (!(nested instanceof HTMLElement)) {
-                            markScrollGesture(root)
-                            return
-                          }
-
-                          const max = nested.scrollHeight - nested.clientHeight
-                          if (max <= 1) {
-                            markScrollGesture(root)
-                            return
-                          }
-
-                          if (delta < 0) {
-                            if (nested.scrollTop + delta <= 0) markScrollGesture(root)
-                            return
-                          }
-
-                          const remaining = max - nested.scrollTop
-                          if (delta > remaining) markScrollGesture(root)
-                        }}
-                        onTouchEnd={() => {
-                          touchGesture = undefined
-                        }}
-                        onTouchCancel={() => {
-                          touchGesture = undefined
-                        }}
-                        onPointerDown={(e) => {
-                          if (e.target !== e.currentTarget) return
-                          markScrollGesture(e.currentTarget)
-                        }}
-                        onScroll={(e) => {
-                          if (!hasScrollGesture()) return
-                          autoScroll.handleScroll()
-                          markScrollGesture(e.currentTarget)
-                          if (isDesktop()) scheduleScrollSpy(e.currentTarget)
-                        }}
-                        onClick={autoScroll.handleInteraction}
-                        class="relative min-w-0 w-full h-full overflow-y-auto session-scroller"
-                        style={{ "--session-title-height": info()?.title || info()?.parentID ? "40px" : "0px" }}
-                      >
-                        <Show when={info()?.title || info()?.parentID}>
-                          <div
-                            classList={{
-                              "sticky top-0 z-30 bg-background-stronger": true,
-                              "w-full": true,
-                              "px-4 md:px-6": true,
-                            }}
-                            style={{
-                              "max-width": centered() ? "var(--session-content-width)" : undefined,
-                              "margin-left": centered() ? "auto" : undefined,
-                              "margin-right": centered() ? "auto" : undefined,
-                            }}
-                          >
-                            <div class="h-10 flex items-center gap-1">
-                              <Show when={info()?.parentID}>
-                                <IconButton
-                                  tabIndex={-1}
-                                  icon="arrow-left"
-                                  variant="ghost"
-                                  onClick={() => {
-                                    navigate(`/${params.dir}/session/${info()?.parentID}`)
-                                  }}
-                                  aria-label={language.t("common.goBack")}
-                                />
-                              </Show>
-                              <Show when={info()?.title}>
-                                <h1 class="text-16-medium text-text-strong truncate">{info()?.title}</h1>
-                              </Show>
-                            </div>
-                          </div>
-                        </Show>
-
-                        <div
-                          ref={autoScroll.contentRef}
-                          role="log"
-                          class="flex flex-col gap-32 items-start justify-start pb-[calc(var(--prompt-height,8rem)+64px)] md:pb-[calc(var(--prompt-height,10rem)+64px)] transition-[margin]"
-                          classList={{
-                            "w-full": true,
-                            "mt-0.5": centered(),
-                            "mt-0": !centered(),
-                          }}
-                          style={{
-                            "max-width": centered() ? "var(--session-content-width)" : undefined,
-                            "margin-left": centered() ? "auto" : undefined,
-                            "margin-right": centered() ? "auto" : undefined,
-                          }}
-                        >
-                          <Show when={store.turnStart > 0}>
-                            <div class="w-full flex justify-center">
-                              <Button
-                                variant="ghost"
-                                size="large"
-                                class="text-12-medium opacity-50"
-                                onClick={() => setStore("turnStart", 0)}
-                              >
-                                {language.t("session.messages.renderEarlier")}
-                              </Button>
-                            </div>
-                          </Show>
-                          <Show when={historyMore()}>
-                            <div class="w-full flex justify-center">
-                              <Button
-                                variant="ghost"
-                                size="large"
-                                class="text-12-medium opacity-50"
-                                disabled={historyLoading()}
-                                onClick={() => {
-                                  const id = params.id
-                                  if (!id) return
-                                  setStore("turnStart", 0)
-                                  sync.session.history.loadMore(id)
-                                }}
-                              >
-                                {historyLoading()
-                                  ? language.t("session.messages.loadingEarlier")
-                                  : language.t("session.messages.loadEarlier")}
-                              </Button>
-                            </div>
-                          </Show>
-                          <For each={renderedUserMessages()}>
-                            {(message) => {
-                              if (import.meta.env.DEV) {
-                                onMount(() => {
-                                  const id = params.id
-                                  if (!id) return
-                                  navMark({ dir: params.dir, to: id, name: "session:first-turn-mounted" })
-                                })
-                              }
-
-                              return (
-                                <div
-                                  id={anchor(message.id)}
-                                  data-message-id={message.id}
-                                  classList={{
-                                    "min-w-0 w-full max-w-full": true,
-                                  }}
-                                  style={{
-                                    "max-width": centered() ? "var(--session-content-width)" : undefined,
-                                  }}
-                                >
-                                  <SessionTurn
-                                    sessionID={params.id!}
-                                    messageID={message.id}
-                                    lastUserMessageID={lastUserMessage()?.id}
-                                    stepsExpanded={store.expanded[message.id] ?? false}
-                                    onStepsExpandedToggle={() =>
-                                      setStore("expanded", message.id, (open: boolean | undefined) => !open)
-                                    }
-                                    classes={{
-                                      root: "min-w-0 w-full relative",
-                                      content: "flex flex-col justify-between !overflow-visible",
-                                      container: "w-full px-4 md:px-6",
-                                    }}
-                                  />
-                                </div>
-                              )
-                            }}
-                          </For>
-                        </div>
-                      </div>
-                    </div>
-                  </Show>
+                      const root = scroller
+                      if (root) scheduleScrollState(root)
+                    }}
+                    setVirtualizerRef={(handle) => {
+                      virtualizer = handle
+                    }}
+                    turnStart={historyWindow.turnStart()}
+                    historyMore={historyMore()}
+                    historyLoading={historyLoading()}
+                    onLoadEarlier={() => {
+                      void historyWindow.loadAndReveal()
+                    }}
+                    renderedUserMessages={historyWindow.renderedUserMessages()}
+                    anchor={anchor}
+                  />
                 </Show>
               </Match>
               <Match when={true}>

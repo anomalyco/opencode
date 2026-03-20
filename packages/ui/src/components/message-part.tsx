@@ -168,6 +168,7 @@ export interface MessageProps {
   showAssistantCopyPartID?: string | null
   showReasoningSummaries?: boolean
   showCustomHookParts?: boolean
+  markdownEager?: boolean
 }
 
 export type SessionAction = (input: { sessionID: string; messageID: string }) => Promise<void> | void
@@ -185,6 +186,7 @@ export interface MessagePartProps {
   deferToolContent?: boolean
   showAssistantCopyPartID?: string | null
   turnDurationMs?: number
+  markdownEager?: boolean
 }
 
 export type PartComponent = Component<MessagePartProps>
@@ -583,6 +585,7 @@ export function AssistantParts(props: {
   showCustomHookParts?: boolean
   shellToolDefaultOpen?: boolean
   editToolDefaultOpen?: boolean
+  markdownEager?: boolean
 }) {
   const data = useData()
   const emptyParts: PartType[] = []
@@ -611,43 +614,30 @@ export function AssistantParts(props: {
     { equals: sameGroups },
   )
 
-    const parts = props.messages.flatMap((message) =>
-      list(data.store.part?.[message.id], emptyParts)
-        .filter((part) => renderable(part, props.showReasoningSummaries ?? true, props.showCustomHookParts ?? true))
-        .map((part) => ({ message, part })),
-    )
+    let ctx: ToolPart[] = []
+    let ctxKey = ""
 
-    let start = -1
-
-    const flush = (end: number) => {
-      if (start < 0) return
-      const first = parts[start]
-      const last = parts[end]
-      if (!first || !last) {
-        start = -1
-        return
-      }
-      push(`context:${first.part.id}`, {
-        type: "context",
-        parts: parts
-          .slice(start, end + 1)
-          .map((x) => x.part)
-          .filter((part): part is ToolPart => isContextGroupTool(part)),
-      })
-      start = -1
+    const flush = () => {
+      if (ctx.length === 0) return
+      push(ctxKey, { type: "context", parts: ctx })
+      ctx = []
+      ctxKey = ""
     }
 
-    parts.forEach((item, index) => {
-      if (isContextGroupTool(item.part)) {
-        if (start < 0) start = index
-        return
+    for (const message of props.messages) {
+      for (const part of list(data.store.part?.[message.id], emptyParts)) {
+        if (!renderable(part, props.showReasoningSummaries ?? true, props.showCustomHookParts ?? true)) continue
+        if (isContextGroupTool(part)) {
+          if (ctx.length === 0) ctxKey = `context:${part.id}`
+          ctx.push(part)
+          continue
+        }
+        flush()
+        push(`part:${message.id}:${part.id}`, { type: "part", part, message })
       }
+    }
 
-      flush(index - 1)
-      push(`part:${item.message.id}:${item.part.id}`, { type: "part", part: item.part, message: item.message })
-    })
-
-    flush(parts.length - 1)
+    flush()
 
     return { keys, items }
   })
@@ -672,58 +662,23 @@ export function AssistantParts(props: {
         })
         const tail = createMemo(() => last() === key)
         return (
-          <Switch>
-            <Match when={entryType() === "context"}>
-              {(() => {
-                const parts = createMemo(
-                  () => {
-                    const entry = entryAccessor()
-                    if (entry.type !== "context") return emptyTools
-                    return entry.refs
-                      .map((ref) => part().get(ref.messageID)?.get(ref.partID))
-                      .filter((part): part is ToolPart => !!part && isContextGroupTool(part))
-                  },
-                  emptyTools,
-                  { equals: same },
-                )
-                const busy = createMemo(() => props.working && last() === entryAccessor().key)
-
-                return (
-                  <Show when={parts().length > 0}>
-                    <ContextToolGroup parts={parts()} busy={busy()} />
-                  </Show>
-                )
-              })()}
-            </Match>
-            <Match when={entryType() === "part"}>
-              {(() => {
-                const message = createMemo(() => {
-                  const entry = entryAccessor()
-                  if (entry.type !== "part") return
-                  return msgs().get(entry.ref.messageID)
-                })
-                const item = createMemo(() => {
-                  const entry = entryAccessor()
-                  if (entry.type !== "part") return
-                  return part().get(entry.ref.messageID)?.get(entry.ref.partID)
-                })
-
-                return (
-                  <Show when={message()}>
-                    <Show when={item()}>
-                      <Part
-                        part={item()!}
-                        message={message()!}
-                        showAssistantCopyPartID={props.showAssistantCopyPartID}
-                        turnDurationMs={props.turnDurationMs}
-                        defaultOpen={partDefaultOpen(item()!, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
-                      />
-                    </Show>
-                  </Show>
-                )
-              })()}
-            </Match>
-          </Switch>
+          <>
+            <Show when={ctx()}>
+              {(entry) => <ContextToolGroup parts={entry().parts} busy={props.working && tail()} />}
+            </Show>
+            <Show when={part()}>
+              {(entry) => (
+                <Part
+                  part={entry().part}
+                  message={entry().message}
+                  showAssistantCopyPartID={props.showAssistantCopyPartID}
+                  turnDurationMs={props.turnDurationMs}
+                  defaultOpen={partDefaultOpen(entry().part, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
+                  markdownEager={props.markdownEager}
+                />
+              )}
+            </Show>
+          </>
         )
       }}
     </Index>
@@ -823,6 +778,7 @@ export function Message(props: MessageProps) {
             parts={props.parts}
             interrupted={props.interrupted}
             showCustomHookParts={props.showCustomHookParts}
+            markdownEager={props.markdownEager}
           />
         )}
       </Match>
@@ -834,6 +790,7 @@ export function Message(props: MessageProps) {
             showAssistantCopyPartID={props.showAssistantCopyPartID}
             showReasoningSummaries={props.showReasoningSummaries}
             showCustomHookParts={props.showCustomHookParts}
+            markdownEager={props.markdownEager}
           />
         )}
       </Match>
@@ -847,6 +804,7 @@ export function AssistantMessageDisplay(props: {
   showAssistantCopyPartID?: string | null
   showReasoningSummaries?: boolean
   showCustomHookParts?: boolean
+  markdownEager?: boolean
 }) {
   const grouped = createMemo(() => {
     const keys: string[] = []
@@ -908,48 +866,19 @@ export function AssistantMessageDisplay(props: {
           return value
         })
         return (
-          <Switch>
-            <Match when={entryType() === "context"}>
-              {(() => {
-                const parts = createMemo(
-                  () => {
-                    const entry = entryAccessor()
-                    if (entry.type !== "context") return emptyTools
-                    return entry.refs
-                      .map((ref) => part().get(ref.partID))
-                      .filter((part): part is ToolPart => !!part && isContextGroupTool(part))
-                  },
-                  emptyTools,
-                  { equals: same },
-                )
-
-                return (
-                  <Show when={parts().length > 0}>
-                    <ContextToolGroup parts={parts()} />
-                  </Show>
-                )
-              })()}
-            </Match>
-            <Match when={entryType() === "part"}>
-              {(() => {
-                const item = createMemo(() => {
-                  const entry = entryAccessor()
-                  if (entry.type !== "part") return
-                  return part().get(entry.ref.partID)
-                })
-
-                return (
-                  <Show when={item()}>
-                    <Part
-                      part={item()!}
-                      message={props.message}
-                      showAssistantCopyPartID={props.showAssistantCopyPartID}
-                    />
-                  </Show>
-                )
-              })()}
-            </Match>
-          </Switch>
+          <>
+            <Show when={ctx()}>{(entry) => <ContextToolGroup parts={entry().parts} />}</Show>
+            <Show when={part()}>
+              {(entry) => (
+                <Part
+                  part={entry().part}
+                  message={props.message}
+                  showAssistantCopyPartID={props.showAssistantCopyPartID}
+                  markdownEager={props.markdownEager}
+                />
+              )}
+            </Show>
+          </>
         )
       }}
     </Index>
@@ -1073,6 +1002,7 @@ export function UserMessageDisplay(props: {
   parts: PartType[]
   interrupted?: boolean
   showCustomHookParts?: boolean
+  markdownEager?: boolean
 }) {
   const data = useData()
   const dialog = useDialog()
@@ -1209,64 +1139,10 @@ export function UserMessageDisplay(props: {
         </div>
       </Show>
       <Show when={text()}>
-        <div data-slot="user-message-text">
-          <Markdown text={text()} cacheKey={textPart()?.id} />
-          <div data-slot="user-message-meta-bar">
-            <span data-slot="user-message-meta-wrap">
-              <Show when={agent()}>
-                <span data-slot="user-message-meta-agent" class="text-12-regular cursor-default">
-                  {agent()}
-                </span>
-              </Show>
-              <Show when={agent() && (provider() || model())}>
-                <span data-slot="user-message-meta-sep" class="text-12-regular cursor-default">
-                  {"\u00A0\u00B7\u00A0"}
-                </span>
-              </Show>
-              <Show when={provider()}>
-                <span data-slot="user-message-meta-provider" class="text-12-regular cursor-default">
-                  {provider()}
-                </span>
-              </Show>
-              <Show when={provider() && model()}>
-                <span data-slot="user-message-meta-sep" class="text-12-regular cursor-default">
-                  {"\u00A0\u00B7\u00A0"}
-                </span>
-              </Show>
-              <Show when={model()}>
-                <span data-slot="user-message-meta-model" class="text-12-regular cursor-default">
-                  {model()}
-                </span>
-              </Show>
-              <Show when={(agent() || provider() || model()) && metaTail()}>
-                <span data-slot="user-message-meta-sep" class="text-12-regular cursor-default">
-                  {"\u00A0\u00B7\u00A0"}
-                </span>
-              </Show>
-              <Show when={metaTail()}>
-                <span data-slot="user-message-meta-tail" class="text-12-regular cursor-default">
-                  {metaTail()}
-                </span>
-              </Show>
-            </span>
-            <div data-slot="user-message-copy-wrapper" data-interrupted={props.interrupted ? "" : undefined}>
-              <Tooltip
-                value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
-                placement="top"
-                gutter={4}
-              >
-                <IconButton
-                  icon={copied() ? "check" : "copy"}
-                  size="normal"
-                  variant="ghost"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    handleCopy()
-                  }}
-                  aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
-                />
-              </Tooltip>
+        <>
+          <div data-slot="user-message-body">
+            <div data-slot="user-message-text">
+              <Markdown text={text()} cacheKey={textPart()?.id} eager={props.markdownEager} />
             </div>
           </div>
           <div data-slot="user-message-meta-bar">
@@ -1371,13 +1247,15 @@ export function UserMessageDisplay(props: {
           }}
         >
           <div data-slot="user-message-skill-content">
-            <Markdown text={skillTemplatePart()!.text} />
+            <Markdown text={skillTemplatePart()!.text} eager={props.markdownEager} />
           </div>
         </BasicTool>
       </Show>
       <Show when={hooks().length > 0}>
         <div data-slot="user-message-hooks">
-          <For each={hooks()}>{(part) => <Part part={part} message={props.message} />}</For>
+          <For each={hooks()}>
+            {(part) => <Part part={part} message={props.message} markdownEager={props.markdownEager} />}
+          </For>
         </div>
       </Show>
     </div>
@@ -1397,6 +1275,7 @@ export function Part(props: MessagePartProps) {
         deferToolContent={props.deferToolContent}
         showAssistantCopyPartID={props.showAssistantCopyPartID}
         turnDurationMs={props.turnDurationMs}
+        markdownEager={props.markdownEager}
       />
     </Show>
   )
@@ -1414,6 +1293,7 @@ export interface ToolProps {
   deferContent?: boolean
   forceOpen?: boolean
   locked?: boolean
+  markdownEager?: boolean
 }
 
 export type ToolComponent = Component<ToolProps>
@@ -1552,7 +1432,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
               status={part().state.status}
               hideDetails={props.hideDetails}
               defaultOpen={props.defaultOpen}
-              deferContent={props.deferToolContent}
+              markdownEager={props.markdownEager}
             />
           </Match>
         </Switch>
@@ -1669,9 +1549,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     <Show when={text()}>
       <div data-component="text-part" data-timeline-part-id={part().id}>
         <div data-slot="text-part-body">
-          <Show when={streaming()} fallback={<Markdown text={text()} cacheKey={part().id} streaming={false} />}>
-            <PacedMarkdown text={text()} cacheKey={part().id} streaming={streaming()} />
-          </Show>
+          <Markdown text={throttledText()} cacheKey={part.id} eager={props.markdownEager} />
         </div>
         <Show when={showCopy()}>
           <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
@@ -1710,11 +1588,9 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
   const text = () => readPartText(data.store.part_text_accum_delta, part())
 
   return (
-    <Show when={text()}>
-      <div data-component="reasoning-part" data-timeline-part-id={part().id}>
-        <Show when={streaming()} fallback={<Markdown text={text()} cacheKey={part().id} streaming={false} />}>
-          <PacedMarkdown text={text()} cacheKey={part().id} streaming={streaming()} />
-        </Show>
+    <Show when={throttledText()}>
+      <div data-component="reasoning-part">
+        <Markdown text={throttledText()} cacheKey={part.id} eager={props.markdownEager} />
       </div>
     </Show>
   )
@@ -1776,9 +1652,11 @@ ToolRegistry.register({
         }}
       >
         <Show when={props.output}>
-          <div data-component="tool-output" data-scrollable>
-            <Markdown text={props.output!} />
-          </div>
+          {(output) => (
+            <div data-component="tool-output" data-scrollable>
+              <Markdown text={output()} eager={props.markdownEager} />
+            </div>
+          )}
         </Show>
       </BasicTool>
     )
@@ -1801,9 +1679,11 @@ ToolRegistry.register({
         }}
       >
         <Show when={props.output}>
-          <div data-component="tool-output" data-scrollable>
-            <Markdown text={props.output!} />
-          </div>
+          {(output) => (
+            <div data-component="tool-output" data-scrollable>
+              <Markdown text={output()} eager={props.markdownEager} />
+            </div>
+          )}
         </Show>
       </BasicTool>
     )
@@ -1829,9 +1709,11 @@ ToolRegistry.register({
         }}
       >
         <Show when={props.output}>
-          <div data-component="tool-output" data-scrollable>
-            <Markdown text={props.output!} />
-          </div>
+          {(output) => (
+            <div data-component="tool-output" data-scrollable>
+              <Markdown text={output()} eager={props.markdownEager} />
+            </div>
+          )}
         </Show>
       </BasicTool>
     )
@@ -2013,7 +1895,7 @@ ToolRegistry.register({
         <Show when={props.output && !pending()}>
           {(output) => (
             <div data-component="tool-output" data-scrollable>
-              <Markdown text={String(output())} />
+              <Markdown text={String(output())} eager={props.markdownEager} />
             </div>
           )}
         </Show>
@@ -2103,7 +1985,7 @@ ToolRegistry.register({
         <Show when={props.output}>
           {(output) => (
             <div data-component="tool-output" data-scrollable>
-              <Markdown text={String(output())} />
+              <Markdown text={String(output())} eager={props.markdownEager} />
             </div>
           )}
         </Show>
