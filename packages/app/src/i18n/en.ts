@@ -221,6 +221,7 @@ export const dict = {
   "common.open": "Open",
   "common.connect": "Connect",
   "common.disconnect": "Disconnect",
+  "common.continue": "Continue",
   "common.submit": "Submit",
   "common.save": "Save",
   "common.saving": "Saving...",

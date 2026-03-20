@@ -1,16 +1,15 @@
-import { batch, createEffect, createMemo, Show, type ParentProps } from "solid-js"
-import { createStore } from "solid-js/store"
+import { DataProvider } from "@opencode-ai/ui/context"
+import { showToast } from "@opencode-ai/ui/toast"
+import { base64Encode } from "@opencode-ai/util/encode"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
+import { createMemo, createResource, type ParentProps, Show } from "solid-js"
+import { useGlobalSDK } from "@/context/global-sdk"
+import { useLanguage } from "@/context/language"
+import { LocalProvider } from "@/context/local"
 import { SDKProvider } from "@/context/sdk"
 import { SyncProvider, useSync } from "@/context/sync"
-import { LocalProvider } from "@/context/local"
-import { useGlobalSDK } from "@/context/global-sdk"
-
-import { DataProvider } from "@opencode-ai/ui/context"
-import { base64Encode } from "@opencode-ai/util/encode"
 import { decode64 } from "@/utils/base64"
-import { showToast } from "@opencode-ai/ui/toast"
-import { useLanguage } from "@/context/language"
+
 function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
   const navigate = useNavigate()
   const sync = useSync()
@@ -30,57 +29,53 @@ function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
 
 export default function Layout(props: ParentProps) {
   const params = useParams()
-  const navigate = useNavigate()
   const location = useLocation()
   const language = useLanguage()
   const globalSDK = useGlobalSDK()
-  const directory = createMemo(() => decode64(params.dir) ?? "")
-  const [state, setState] = createStore({ invalid: "", resolved: "" })
+  const navigate = useNavigate()
+  let invalid = ""
 
-  createEffect(() => {
-    if (!params.dir) return
-    const raw = directory()
-    if (!raw) {
-      if (state.invalid === params.dir) return
-      setState("invalid", params.dir)
-      showToast({
-        variant: "error",
-        title: language.t("common.requestFailed"),
-        description: language.t("directory.error.invalidUrl"),
-      })
-      navigate("/", { replace: true })
-      return
-    }
+  const [resolved] = createResource(
+    () => {
+      if (params.dir) return [location.pathname, params.dir] as const
+    },
+    async ([pathname, b64Dir]) => {
+      const directory = decode64(b64Dir)
 
-    const current = params.dir
-    globalSDK
-      .createClient({
-        directory: raw,
-        throwOnError: true,
-      })
-      .path.get()
-      .then((x) => {
-        if (params.dir !== current) return
-        const next = x.data?.directory ?? raw
-        batch(() => {
-          setState("invalid", "")
-          setState("resolved", next)
+      if (!directory) {
+        if (invalid === params.dir) return
+        invalid = b64Dir
+        showToast({
+          variant: "error",
+          title: language.t("common.requestFailed"),
+          description: language.t("directory.error.invalidUrl"),
         })
-        if (next === raw) return
-        const path = location.pathname.slice(current.length + 1)
-        navigate(`/${base64Encode(next)}${path}${location.search}${location.hash}`, { replace: true })
-      })
-      .catch(() => {
-        if (params.dir !== current) return
-        batch(() => {
-          setState("invalid", "")
-          setState("resolved", raw)
+        navigate("/", { replace: true })
+        return
+      }
+
+      return await globalSDK
+        .createClient({
+          directory,
+          throwOnError: true,
         })
-      })
-  })
+        .path.get()
+        .then((x) => {
+          const next = x.data?.directory ?? directory
+          invalid = ""
+          if (next === directory) return next
+          const path = pathname.slice(b64Dir.length + 1)
+          navigate(`/${base64Encode(next)}${path}${location.search}${location.hash}`, { replace: true })
+        })
+        .catch(() => {
+          invalid = ""
+          return directory
+        })
+    },
+  )
 
   return (
-    <Show when={state.resolved} keyed>
+    <Show when={resolved()} keyed>
       {(resolved) => (
         <SDKProvider directory={() => resolved}>
           <SyncProvider>

@@ -2,7 +2,7 @@ import { $ } from "bun"
 import { afterEach, describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { Deferred, Effect, Fiber, Option } from "effect"
+import { Deferred, Effect, Option } from "effect"
 import { tmpdir } from "../fixture/fixture"
 import { watcherConfigLayer, withServices } from "../fixture/instance"
 import { FileWatcher } from "../../src/file/watcher"
@@ -25,6 +25,7 @@ function withWatcher<E>(directory: string, body: Effect.Effect<void, E>) {
     directory,
     FileWatcher.layer,
     async (rt) => {
+      await rt.runPromise(FileWatcher.Service.use(() => Effect.void))
       await Effect.runPromise(ready(directory))
       await Effect.runPromise(body)
     },
@@ -54,24 +55,29 @@ function listen(directory: string, check: (evt: WatcherEvent) => boolean, hit: (
 }
 
 function wait(directory: string, check: (evt: WatcherEvent) => boolean) {
-  return Effect.callback<WatcherEvent>((resume) => {
-    const cleanup = listen(directory, check, (evt) => {
-      cleanup()
-      resume(Effect.succeed(evt))
+  return Effect.gen(function* () {
+    const deferred = yield* Deferred.make<WatcherEvent>()
+    const cleanup = yield* Effect.sync(() => {
+      let off = () => {}
+      off = listen(directory, check, (evt) => {
+        off()
+        Deferred.doneUnsafe(deferred, Effect.succeed(evt))
+      })
+      return off
     })
-    return Effect.sync(cleanup)
-  }).pipe(Effect.timeout("5 seconds"))
+    return { cleanup, deferred }
+  })
 }
 
 function nextUpdate<E>(directory: string, check: (evt: WatcherEvent) => boolean, trigger: Effect.Effect<void, E>) {
   return Effect.acquireUseRelease(
-    wait(directory, check).pipe(Effect.forkChild({ startImmediately: true })),
-    (fiber) =>
+    wait(directory, check),
+    ({ deferred }) =>
       Effect.gen(function* () {
         yield* trigger
-        return yield* Fiber.join(fiber)
+        return yield* Deferred.await(deferred).pipe(Effect.timeout("5 seconds"))
       }),
-    Fiber.interrupt,
+    ({ cleanup }) => Effect.sync(cleanup),
   )
 }
 
@@ -82,23 +88,15 @@ function noUpdate<E>(
   trigger: Effect.Effect<void, E>,
   ms = 500,
 ) {
-  return Effect.gen(function* () {
-    const deferred = yield* Deferred.make<WatcherEvent>()
-
-    yield* Effect.acquireUseRelease(
-      Effect.sync(() =>
-        listen(directory, check, (evt) => {
-          Effect.runSync(Deferred.succeed(deferred, evt))
-        }),
-      ),
-      () =>
-        Effect.gen(function* () {
-          yield* trigger
-          expect(yield* Deferred.await(deferred).pipe(Effect.timeoutOption(`${ms} millis`))).toEqual(Option.none())
-        }),
-      (cleanup) => Effect.sync(cleanup),
-    )
-  })
+  return Effect.acquireUseRelease(
+    wait(directory, check),
+    ({ deferred }) =>
+      Effect.gen(function* () {
+        yield* trigger
+        expect(yield* Deferred.await(deferred).pipe(Effect.timeoutOption(`${ms} millis`))).toEqual(Option.none())
+      }),
+    ({ cleanup }) => Effect.sync(cleanup),
+  )
 }
 
 function ready(directory: string) {
