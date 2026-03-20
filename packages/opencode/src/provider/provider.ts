@@ -47,8 +47,6 @@ import { ProviderTransform } from "./transform"
 import { Installation } from "../installation"
 import { ModelID, ProviderID } from "./schema"
 
-const DEFAULT_CHUNK_TIMEOUT = 300_000
-
 export namespace Provider {
   const log = Log.create({ service: "provider" })
 
@@ -150,8 +148,7 @@ export namespace Provider {
         autoload: false,
         options: {
           headers: {
-            "anthropic-beta":
-              "claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
+            "anthropic-beta": "interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
           },
         },
       }
@@ -179,6 +176,15 @@ export namespace Provider {
       }
     },
     openai: async () => {
+      return {
+        autoload: false,
+        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+          return sdk.responses(modelID)
+        },
+        options: {},
+      }
+    },
+    xai: async () => {
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
@@ -1131,7 +1137,7 @@ export namespace Provider {
       if (existing) return existing
 
       const customFetch = options["fetch"]
-      const chunkTimeout = options["chunkTimeout"] || DEFAULT_CHUNK_TIMEOUT
+      const chunkTimeout = options["chunkTimeout"]
       delete options["chunkTimeout"]
 
       options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {

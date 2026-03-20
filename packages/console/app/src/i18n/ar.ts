@@ -644,6 +644,8 @@ export const dict = {
     "تم تصميم الخطة بشكل أساسي للمستخدمين الدوليين، مع استضافة النماذج في الولايات المتحدة والاتحاد الأوروبي وسنغافورة للحصول على وصول عالمي مستقر. قد تتغير الأسعار وحدود الاستخدام بناءً على تعلمنا من الاستخدام المبكر والملاحظات.",
   "workspace.lite.promo.subscribe": "الاشتراك في Go",
   "workspace.lite.promo.subscribing": "جارٍ إعادة التوجيه...",
+  "workspace.lite.promo.otherMethods": "طرق دفع أخرى",
+  "workspace.lite.promo.selectMethod": "اختر طريقة الدفع",
 
   "download.title": "OpenCode | تنزيل",
   "download.meta.description": "نزّل OpenCode لـ macOS، Windows، وLinux",
