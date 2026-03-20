@@ -9,6 +9,7 @@ import { FileTime } from "../file/time"
 import DESCRIPTION from "./read.txt"
 import { Instance } from "../project/instance"
 import { assertExternalDirectory } from "./external-directory"
+import { resolveToolPath } from "./shared"
 import { InstructionPrompt } from "../session/instruction"
 import { Filesystem } from "../util/filesystem"
 
@@ -29,10 +30,7 @@ export const ReadTool = Tool.define("read", {
     if (params.offset !== undefined && params.offset < 1) {
       throw new Error("offset must be greater than or equal to 1")
     }
-    let filepath = params.filePath
-    if (!path.isAbsolute(filepath)) {
-      filepath = path.resolve(Instance.directory, filepath)
-    }
+    const filepath = resolveToolPath(params.filePath)
     const title = path.relative(Instance.worktree, filepath)
 
     const stat = Filesystem.stat(filepath)

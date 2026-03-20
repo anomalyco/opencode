@@ -7,8 +7,8 @@ import { Process } from "../util/process"
 
 import DESCRIPTION from "./grep.txt"
 import { Instance } from "../project/instance"
-import path from "path"
 import { assertExternalDirectory } from "./external-directory"
+import { resolveToolPath } from "./shared"
 
 const MAX_LINE_LENGTH = 2000
 
@@ -35,8 +35,7 @@ export const GrepTool = Tool.define("grep", {
       },
     })
 
-    let searchPath = params.path ?? Instance.directory
-    searchPath = path.isAbsolute(searchPath) ? searchPath : path.resolve(Instance.directory, searchPath)
+    const searchPath = resolveToolPath(params.path ?? Instance.directory)
     await assertExternalDirectory(ctx, searchPath, { kind: "directory" })
 
     const rgPath = await Ripgrep.filepath()
