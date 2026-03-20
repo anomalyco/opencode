@@ -276,9 +276,11 @@ export const dict = {
   "prompt.context.removeActiveFile": "Fjern aktiv fil fra kontekst",
   "prompt.context.removeFile": "Fjern fil fra kontekst",
   "prompt.action.attachFile": "Legg ved fil",
+  "prompt.action.expand": "Utvid editor",
   "prompt.attachment.remove": "Fjern vedlegg",
   "prompt.action.send": "Send",
   "prompt.action.stop": "Stopp",
+  "prompt.editor.title": "Rediger prompt",
 
   "prompt.toast.pasteUnsupported.title": "Liming ikke støttet",
   "prompt.toast.pasteUnsupported.description": "Kun bilder eller PDF-er kan limes inn her.",

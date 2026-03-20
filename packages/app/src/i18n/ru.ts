@@ -273,9 +273,11 @@ export const dict = {
   "prompt.context.removeActiveFile": "Удалить активный файл из контекста",
   "prompt.context.removeFile": "Удалить файл из контекста",
   "prompt.action.attachFile": "Прикрепить файл",
+  "prompt.action.expand": "Развернуть редактор",
   "prompt.attachment.remove": "Удалить вложение",
   "prompt.action.send": "Отправить",
   "prompt.action.stop": "Остановить",
+  "prompt.editor.title": "Редактировать промпт",
 
   "prompt.toast.pasteUnsupported.title": "Неподдерживаемая вставка",
   "prompt.toast.pasteUnsupported.description": "Сюда можно вставлять только изображения или PDF.",

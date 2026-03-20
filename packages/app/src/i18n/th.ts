@@ -273,9 +273,11 @@ export const dict = {
   "prompt.context.removeActiveFile": "เอาไฟล์ที่ใช้งานอยู่ออกจากบริบท",
   "prompt.context.removeFile": "เอาไฟล์ออกจากบริบท",
   "prompt.action.attachFile": "แนบไฟล์",
+  "prompt.action.expand": "ขยายตัวแก้ไข",
   "prompt.attachment.remove": "เอาไฟล์แนบออก",
   "prompt.action.send": "ส่ง",
   "prompt.action.stop": "หยุด",
+  "prompt.editor.title": "แก้ไขพรอมป์",
 
   "prompt.toast.pasteUnsupported.title": "การวางไม่รองรับ",
   "prompt.toast.pasteUnsupported.description": "สามารถวางรูปภาพหรือ PDF เท่านั้น",

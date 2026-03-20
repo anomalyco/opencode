@@ -60,6 +60,8 @@ import { createModelAutocomplete, createAutocompleteSettings } from "./prompt-in
 import { GhostText } from "./prompt-input/ghost-text"
 import { shouldRender } from "./prompt-input/sync"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
+import { DialogPromptEditor } from "@/components/dialog-prompt-editor"
+import { merge, value } from "./prompt-input/expand"
 
 interface PromptInputProps {
   class?: string
@@ -1077,6 +1079,29 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     addPart,
   })
 
+  const apply = (raw: string, base: Prompt) => {
+    const text = raw.replace(/\r\n?/g, "\n")
+    const next = merge(text, base)
+    const cursor = promptLength(next)
+    closePopover()
+    resetHistoryNavigation(true)
+    prompt.set(next, cursor)
+    queueScroll()
+    schedulePrediction()
+    setTimeout(() => {
+      editorRef?.focus()
+      setCursorPosition(editorRef, cursor)
+      queueScroll()
+    }, 120)
+  }
+
+  const expand = () => {
+    const base = prompt.current()
+    dialog.show(() => (
+      <DialogPromptEditor text={value(base)} placeholder={placeholder()} save={(text) => apply(text, base)} />
+    ))
+  }
+
   const accepting = createMemo(() => {
     const id = params.id
     if (!id) return false
@@ -1331,7 +1356,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             if (!(target instanceof HTMLElement)) return
             if (
               target.closest(
-                '[data-action="prompt-attach"], [data-action="prompt-submit"], [data-action="prompt-permissions"]',
+                '[data-action="prompt-attach"], [data-action="prompt-expand"], [data-action="prompt-submit"], [data-action="prompt-permissions"]',
               )
             ) {
               return
@@ -1417,6 +1442,23 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   <Icon name="plus" class="size-4.5" />
                 </Button>
               </TooltipKeybind>
+
+              <Show when={platform.platform === "desktop"}>
+                <Tooltip placement="top" value={language.t("prompt.action.expand")}>
+                  <IconButton
+                    data-action="prompt-expand"
+                    type="button"
+                    icon="expand"
+                    variant="ghost"
+                    class="size-8"
+                    style={buttons()}
+                    onClick={expand}
+                    disabled={store.mode !== "normal"}
+                    tabIndex={store.mode === "normal" ? undefined : -1}
+                    aria-label={language.t("prompt.action.expand")}
+                  />
+                </Tooltip>
+              </Show>
 
               <Tooltip
                 placement="top"
