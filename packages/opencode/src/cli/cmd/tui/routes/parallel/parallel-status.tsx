@@ -1,6 +1,6 @@
 import { useTheme } from "@tui/context/theme"
 import { useTerminalDimensions, useKeyboard } from "@opentui/solid"
-import { For, Show, createSignal, createMemo, createEffect } from "solid-js"
+import { For, Show, createSignal, createMemo, createEffect, onCleanup } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
@@ -361,6 +361,14 @@ export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void; on
   const [expanded, setExpanded] = createSignal<number | null>(null)
   const [showLogs, setShowLogs] = createSignal<number | null>(null)
   const [elapsed, setElapsed] = createSignal(0)
+  const workerSessions = createMemo(() =>
+    props.plan.workers.flatMap((worker) => (worker.sessionID ? [worker.sessionID] : [])),
+  )
+  const activeSessions = createMemo(() =>
+    props.plan.workers.flatMap((worker) =>
+      worker.sessionID && (worker.status === "spawning" || worker.status === "running") ? [worker.sessionID] : [],
+    ),
+  )
 
   // Elapsed time timer
   const startTime = props.plan.time.approved ?? props.plan.time.created
@@ -368,7 +376,25 @@ export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void; on
     const timer = setInterval(() => {
       setElapsed(Date.now() - startTime)
     }, 1000)
-    return () => clearInterval(timer)
+    onCleanup(() => clearInterval(timer))
+  })
+
+  // Ensure worker sessions are synced so timeline/stats can render immediately.
+  createEffect(() => {
+    for (const sessionID of workerSessions()) {
+      void sync.session.sync(sessionID).catch(() => {})
+    }
+  })
+
+  // Poll active workers to keep stats live even if message events are delayed/missed.
+  createEffect(() => {
+    if (activeSessions().length === 0) return
+    const timer = setInterval(() => {
+      for (const sessionID of activeSessions()) {
+        void sync.session.refresh(sessionID).catch(() => {})
+      }
+    }, 2000)
+    onCleanup(() => clearInterval(timer))
   })
 
   const running = () => props.plan.workers.filter((w) => w.status === "running").length

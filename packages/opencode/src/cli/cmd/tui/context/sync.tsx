@@ -442,6 +442,41 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     })
 
     const fullSyncedSessions = new Set<string>()
+    const syncing = new Map<string, Promise<void>>()
+
+    async function load(sessionID: string) {
+      const [session, messages, todo, diff] = await Promise.all([
+        sdk.client.session.get({ sessionID }, { throwOnError: true }),
+        sdk.client.session.messages({ sessionID, limit: 100 }),
+        sdk.client.session.todo({ sessionID }),
+        sdk.client.session.diff({ sessionID }),
+      ])
+      setStore(
+        produce((draft) => {
+          const match = Binary.search(draft.session, sessionID, (s) => s.id)
+          if (match.found) draft.session[match.index] = session.data!
+          if (!match.found) draft.session.splice(match.index, 0, session.data!)
+          draft.todo[sessionID] = todo.data ?? []
+          draft.message[sessionID] = messages.data!.map((x) => x.info)
+          for (const message of messages.data!) {
+            draft.part[message.info.id] = message.parts
+          }
+          draft.session_diff[sessionID] = diff.data ?? []
+        }),
+      )
+      fullSyncedSessions.add(sessionID)
+    }
+
+    function syncSession(sessionID: string, force: boolean) {
+      if (!force && fullSyncedSessions.has(sessionID)) return Promise.resolve()
+      const inFlight = syncing.get(sessionID)
+      if (inFlight) return inFlight
+      const run = load(sessionID).finally(() => {
+        syncing.delete(sessionID)
+      })
+      syncing.set(sessionID, run)
+      return run
+    }
     const result = {
       data: store,
       set: setStore,
@@ -468,27 +503,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           return last.time.completed ? "idle" : "working"
         },
         async sync(sessionID: string) {
-          if (fullSyncedSessions.has(sessionID)) return
-          const [session, messages, todo, diff] = await Promise.all([
-            sdk.client.session.get({ sessionID }, { throwOnError: true }),
-            sdk.client.session.messages({ sessionID, limit: 100 }),
-            sdk.client.session.todo({ sessionID }),
-            sdk.client.session.diff({ sessionID }),
-          ])
-          setStore(
-            produce((draft) => {
-              const match = Binary.search(draft.session, sessionID, (s) => s.id)
-              if (match.found) draft.session[match.index] = session.data!
-              if (!match.found) draft.session.splice(match.index, 0, session.data!)
-              draft.todo[sessionID] = todo.data ?? []
-              draft.message[sessionID] = messages.data!.map((x) => x.info)
-              for (const message of messages.data!) {
-                draft.part[message.info.id] = message.parts
-              }
-              draft.session_diff[sessionID] = diff.data ?? []
-            }),
-          )
-          fullSyncedSessions.add(sessionID)
+          await syncSession(sessionID, false)
+        },
+        async refresh(sessionID: string) {
+          await syncSession(sessionID, true)
         },
       },
       workspace: {
