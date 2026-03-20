@@ -46,6 +46,7 @@ function fromRow(row: PlanRow): Plan {
     projectID: row.project_id,
     sessionID: row.session_id ?? undefined,
     status: row.status,
+    error: row.error ?? undefined,
     task: row.task,
     orchestratorModel: row.orchestrator_model,
     workerModel: row.worker_model,
@@ -66,6 +67,7 @@ function toRow(plan: Plan) {
     project_id: plan.projectID,
     session_id: plan.sessionID ?? null,
     status: plan.status,
+    error: plan.error ?? null,
     task: plan.task,
     orchestrator_model: plan.orchestratorModel,
     worker_model: plan.workerModel,
@@ -93,6 +95,7 @@ export namespace PlanStore {
         projectID: input.projectID,
         sessionID: input.sessionID,
         status: "draft",
+        error: undefined,
         task: input.task,
         orchestratorModel: input.orchestratorModel,
         workerModel: input.workerModel,
@@ -139,6 +142,7 @@ export namespace PlanStore {
   export const update = fn(
     PlanSchema.pick({ id: true }).extend({
       status: PlanSchema.shape.status.optional(),
+      error: PlanSchema.shape.error.nullable().optional(),
       subtasks: PlanSchema.shape.subtasks.optional(),
       workers: PlanSchema.shape.workers.optional(),
     }),
@@ -149,6 +153,9 @@ export namespace PlanStore {
       if (input.status !== undefined) {
         validateTransition(existing.status, input.status)
         updates.status = input.status
+        if (input.status !== "failed" && input.error === undefined) {
+          updates.error = null
+        }
         if (input.status === "approved") {
           updates.time_approved = Date.now()
         }
@@ -158,6 +165,9 @@ export namespace PlanStore {
       }
       if (input.subtasks !== undefined) {
         updates.subtasks = input.subtasks as any
+      }
+      if (input.error !== undefined) {
+        updates.error = input.error as any
       }
       if (input.workers !== undefined) {
         updates.workers = input.workers as any

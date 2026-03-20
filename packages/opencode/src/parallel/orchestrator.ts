@@ -6,10 +6,14 @@ import { Recovery } from "./recovery"
 import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider"
 import { Instance } from "@/project/instance"
+import { Project } from "@/project/project"
 import { Log } from "@/util/log"
 import { fn } from "@/util/fn"
 import type { Plan, PlanID, ModelRef, SubtaskID } from "./schema"
 import { Plan as PlanSchema, PlanID as PlanIDSchema, SubtaskID as SubtaskIDSchema } from "./schema"
+import { git } from "@/util/git"
+import { access } from "fs/promises"
+import { constants } from "fs"
 import z from "zod"
 
 export namespace Orchestrator {
@@ -17,6 +21,143 @@ export namespace Orchestrator {
 
   // Track active abort controllers so cancel() can stop running executions
   const activeExecutions = new Map<PlanID, AbortController>()
+
+  type Detail = {
+    code: string
+    stage: string
+    message: string
+    at: number
+  }
+
+  function text(err: unknown): string {
+    if (err instanceof Error) return err.message
+    return String(err)
+  }
+
+  function issue(input: { code: string; stage: string; message: string }) {
+    const err = new Error(input.message) as Error & { code?: string; stage?: string }
+    err.code = input.code
+    err.stage = input.stage
+    return err
+  }
+
+  function detail(err: unknown): Detail {
+    const code = err instanceof Error && "code" in err && typeof err.code === "string" ? err.code : "unknown"
+    const stage = err instanceof Error && "stage" in err && typeof err.stage === "string" ? err.stage : "unknown"
+    return {
+      code,
+      stage,
+      message: text(err),
+      at: Date.now(),
+    }
+  }
+
+  async function fail(planID: PlanID, err: unknown) {
+    const data = detail(err)
+    await PlanStore.update({ id: planID, status: "failed", error: data }).catch(async () => {
+      await PlanStore.update({ id: planID, error: data }).catch(() => {})
+      await PlanStore.transition({ id: planID, status: "failed" }).catch(() => {})
+    })
+  }
+
+  async function stage<T>(name: string, fn: () => Promise<T>) {
+    try {
+      return await fn()
+    } catch (err) {
+      throw issue({
+        code: `${name}_failed`,
+        stage: name,
+        message: text(err),
+      })
+    }
+  }
+
+  async function preflight(plan: Plan): Promise<void> {
+    const root =
+      Project.get(plan.projectID)?.worktree ??
+      plan.workers.find((w) => w.worktreeDir)?.worktreeDir ??
+      process.cwd()
+
+    const gitCheck = await git(["rev-parse", "--is-inside-work-tree"], { cwd: root })
+    if (gitCheck.exitCode !== 0) {
+      throw issue({
+        code: "git_not_ready",
+        stage: "preflight",
+        message: `Git worktree check failed at ${root}`,
+      })
+    }
+
+    const writable = await access(root, constants.W_OK)
+      .then(() => true)
+      .catch(() => false)
+    if (!writable) {
+      throw issue({
+        code: "worktree_readonly",
+        stage: "preflight",
+        message: `Worktree is not writable: ${root}`,
+      })
+    }
+
+    const ids = new Set(plan.subtasks.map((subtask) => subtask.id))
+    for (const subtask of plan.subtasks) {
+      for (const dep of subtask.dependencies) {
+        if (ids.has(dep)) continue
+        throw issue({
+          code: "dependency_missing",
+          stage: "preflight",
+          message: `Subtask "${subtask.title}" references missing dependency ${dep}`,
+        })
+      }
+    }
+
+    const seen = new Set<string>()
+    const refs = [plan.orchestratorModel, plan.workerModel, ...plan.subtasks.flatMap((subtask) => (subtask.model ? [subtask.model] : []))]
+    for (const ref of refs) {
+      const key = `${ref.providerID}/${ref.modelID}`
+      if (seen.has(key)) continue
+      seen.add(key)
+
+      const model = await Provider.getModel(ref.providerID, ref.modelID).catch(() => {
+        throw issue({
+          code: "model_not_found",
+          stage: "preflight",
+          message: `Model unavailable: ${key}`,
+        })
+      })
+
+      await Provider.getLanguage(model).catch(() => {
+        throw issue({
+          code: "model_unavailable",
+          stage: "preflight",
+          message: `Model failed preflight: ${key}`,
+        })
+      })
+    }
+
+    const marks = new Map<string, number>()
+    const graph = new Map(plan.subtasks.map((subtask) => [String(subtask.id), subtask.dependencies.map(String)]))
+    const walk = (id: string): boolean => {
+      const mark = marks.get(id) ?? 0
+      if (mark === 1) return true
+      if (mark === 2) return false
+      marks.set(id, 1)
+      const deps = graph.get(id) ?? []
+      for (const dep of deps) {
+        if (walk(dep)) return true
+      }
+      marks.set(id, 2)
+      return false
+    }
+
+    for (const id of graph.keys()) {
+      if (!walk(id)) continue
+      throw issue({
+        code: "dependency_cycle",
+        stage: "preflight",
+        message: "Subtask dependency graph has a cycle",
+      })
+    }
+  }
 
   /**
    * Resolve model defaults from config.
@@ -158,18 +299,19 @@ export namespace Orchestrator {
   export async function execute(planID: PlanID, abort: AbortSignal): Promise<void> {
     log.info("executing plan", { planID })
 
-    await PlanStore.transition({ id: planID, status: "spawning" })
-    const plan = await PlanStore.get(planID)
+    await stage("spawning", async () => {
+      await PlanStore.transition({ id: planID, status: "spawning" })
+      const plan = await PlanStore.get(planID)
+      await WorkerManager.spawnAll(plan, abort)
+    })
 
-    await WorkerManager.spawnAll(plan, abort)
-
-    await PlanStore.transition({ id: planID, status: "running" })
-
-    await WorkerManager.waitAll(planID, abort)
+    await stage("running", async () => {
+      await PlanStore.transition({ id: planID, status: "running" })
+      await WorkerManager.waitAll(planID, abort)
+    })
 
     await PlanStore.transition({ id: planID, status: "merging" })
-
-    const mergeSuccess = await MergePipeline.run(planID)
+    const mergeSuccess = await stage("merging", () => MergePipeline.run(planID))
 
     // Determine final status based on worker outcomes
     const finalPlan = await PlanStore.get(planID)
@@ -200,6 +342,13 @@ export namespace Orchestrator {
   }
 
   export const approve = fn(PlanIDSchema.zod, async (planID): Promise<Plan> => {
+    const current = await PlanStore.get(planID)
+    await preflight(current).catch(async (err) => {
+      const data = detail(err)
+      await PlanStore.update({ id: planID, error: data }).catch(() => {})
+      throw err
+    })
+
     const plan = await PlanStore.transition({ id: planID, status: "approved" })
     log.info("plan approved", { planID })
 
@@ -214,7 +363,7 @@ export namespace Orchestrator {
           const plan = await PlanStore.get(planID)
           await Recovery.cleanupWorktrees(plan)
         } catch {}
-        await PlanStore.transition({ id: planID, status: "failed" }).catch(() => {})
+        await fail(planID, error)
       })
       .finally(() => {
         activeExecutions.delete(planID)

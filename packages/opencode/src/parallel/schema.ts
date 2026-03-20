@@ -60,6 +60,14 @@ export const PlanStatus = z.enum([
 ])
 export type PlanStatus = z.infer<typeof PlanStatus>
 
+export const PlanError = z.object({
+  code: z.string(),
+  message: z.string(),
+  stage: z.string(),
+  at: z.number(),
+})
+export type PlanError = z.infer<typeof PlanError>
+
 export const WorkerStatus = z.enum([
   "pending",
   "spawning",
@@ -95,6 +103,7 @@ export const Plan = z.object({
   projectID: ProjectID.zod,
   sessionID: SessionID.zod.optional(),
   status: PlanStatus,
+  error: PlanError.optional(),
   task: z.string(),
   orchestratorModel: ModelRef,
   workerModel: ModelRef,

@@ -2,7 +2,7 @@ import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core"
 import { ProjectTable } from "../project/project.sql"
 import { SessionTable } from "../session/session.sql"
 import { Timestamps } from "../storage/schema.sql"
-import type { PlanID, PlanStatus, ModelRef, Subtask, WorkerState } from "./schema"
+import type { PlanID, PlanStatus, ModelRef, PlanError, Subtask, WorkerState } from "./schema"
 import type { SessionID } from "../session/schema"
 import type { ProjectID } from "../project/schema"
 
@@ -18,6 +18,7 @@ export const PlanTable = sqliteTable(
       .$type<SessionID>()
       .references(() => SessionTable.id, { onDelete: "set null" }),
     status: text().$type<PlanStatus>().notNull(),
+    error: text({ mode: "json" }).$type<PlanError | null>(),
     task: text().notNull(),
     orchestrator_model: text({ mode: "json" }).notNull().$type<ModelRef>(),
     worker_model: text({ mode: "json" }).notNull().$type<ModelRef>(),

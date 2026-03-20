@@ -13,8 +13,6 @@ function SubtaskModelPicker(props: { subtask: Subtask; workerDefault: ModelRef; 
   const sync = useSync()
   const dialog = useDialog()
 
-  const current = () => props.subtask.model ?? props.workerDefault
-
   const options = createMemo(() =>
     pipe(
       sync.data.provider,
@@ -49,29 +47,37 @@ export function ParallelPlan(props: { plan: Plan; onApproved: () => void; onCanc
   const toast = useToast()
   const dialog = useDialog()
   const [selected, setSelected] = createSignal(0)
-  const [subtaskModels, setSubtaskModels] = createSignal<Record<string, ModelRef>>({})
+  const [edits, setEdits] = createSignal<Record<string, ModelRef | null>>({})
 
   const width = () => Math.min(80, dim().width - 2)
 
+  const has = (id: string): boolean => Object.prototype.hasOwnProperty.call(edits(), id)
+
   const resolvedModelLabel = (subtask: Subtask): string => {
-    const override = subtaskModels()[subtask.id]
+    const override = edits()[subtask.id]
     if (override) return override.modelID
+    if (has(subtask.id)) return props.plan.workerModel.modelID
     if (subtask.model) return subtask.model.modelID
     return props.plan.workerModel.modelID
   }
 
   const isOverridden = (subtask: Subtask): boolean => {
-    return !!(subtaskModels()[subtask.id] || subtask.model)
+    return has(subtask.id) || !!subtask.model
   }
 
   const handleApprove = async () => {
     try {
-      const overrides = subtaskModels()
+      const overrides = edits()
+      const touched = (id: string) => Object.prototype.hasOwnProperty.call(overrides, id)
       const editedSubtasks =
         Object.keys(overrides).length > 0
           ? props.plan.subtasks.map((st) => {
+              if (!touched(st.id)) return st
               const override = overrides[st.id]
-              return override ? { ...st, model: override } : st
+              if (override) return { ...st, model: override }
+              const next = { ...st }
+              delete next.model
+              return next
             })
           : undefined
 
@@ -136,8 +142,62 @@ export function ParallelPlan(props: { plan: Plan; onApproved: () => void; onCanc
         subtask={subtask}
         workerDefault={props.plan.workerModel}
         onSelect={(model) => {
-          setSubtaskModels((prev) => ({ ...prev, [subtask.id]: model }))
+          setEdits((prev) => ({ ...prev, [subtask.id]: model }))
         }}
+      />
+    ))
+  }
+
+  const clearModel = (index: number) => {
+    const subtask = props.plan.subtasks[index]
+    if (!subtask) return
+    setEdits((prev) => ({ ...prev, [subtask.id]: null }))
+  }
+
+  const openBulk = () => {
+    const subtask = props.plan.subtasks[selected()]
+    if (!subtask) return
+
+    const pick = edits()[subtask.id] ?? subtask.model ?? props.plan.workerModel
+
+    dialog.replace(() => (
+      <DialogSelect
+        title="Bulk Model Actions"
+        options={[
+          {
+            title: "Copy selected model to all",
+            value: "copy",
+            description: `${pick.modelID} for every subtask`,
+            onSelect: () => {
+              setEdits(Object.fromEntries(props.plan.subtasks.map((item) => [item.id, pick])))
+              dialog.clear()
+            },
+          },
+          {
+            title: "Clear all task overrides",
+            value: "clear",
+            description: "Use worker default for every subtask",
+            onSelect: () => {
+              setEdits(Object.fromEntries(props.plan.subtasks.map((item) => [item.id, null])))
+              dialog.clear()
+            },
+          },
+          {
+            title: "Reset local edits",
+            value: "reset",
+            description: "Discard only unsaved model edits",
+            onSelect: () => {
+              setEdits({})
+              dialog.clear()
+            },
+          },
+          {
+            title: "Close",
+            value: "close",
+            description: "Return to plan",
+            onSelect: () => dialog.clear(),
+          },
+        ]}
       />
     ))
   }
@@ -161,6 +221,14 @@ export function ParallelPlan(props: { plan: Plan; onApproved: () => void; onCanc
       evt.preventDefault()
       evt.stopPropagation()
       openModelPicker(selected())
+    } else if (evt.name === "u" || (evt.sequence === "u" && !evt.ctrl)) {
+      evt.preventDefault()
+      evt.stopPropagation()
+      clearModel(selected())
+    } else if (evt.name === "b" || (evt.sequence === "b" && !evt.ctrl)) {
+      evt.preventDefault()
+      evt.stopPropagation()
+      openBulk()
     } else if (evt.name === "up" || (evt.sequence === "k" && !evt.ctrl)) {
       evt.preventDefault()
       evt.stopPropagation()
@@ -187,6 +255,17 @@ export function ParallelPlan(props: { plan: Plan; onApproved: () => void; onCanc
         <text fg={theme.textMuted}> | Worker default: </text>
         <text fg={theme.text}>{props.plan.workerModel.modelID}</text>
       </box>
+
+      <Show when={props.plan.error}>
+        <box marginBottom={1} flexDirection="column">
+          <text fg={theme.textMuted}>
+            {props.plan.error!.code} @ {props.plan.error!.stage}
+          </text>
+          <text fg={theme.error} wrapMode="word">
+            {props.plan.error!.message}
+          </text>
+        </box>
+      </Show>
 
       <box flexDirection="column" gap={1} marginBottom={1}>
         <text attributes={TextAttributes.UNDERLINE} fg={theme.text}>
@@ -230,6 +309,12 @@ export function ParallelPlan(props: { plan: Plan; onApproved: () => void; onCanc
         <box onMouseUp={() => openModelPicker(selected())} paddingX={2} paddingY={1}>
           <text fg={theme.text}>[m]odel</text>
         </box>
+        <box onMouseUp={() => clearModel(selected())} paddingX={2} paddingY={1}>
+          <text fg={theme.text}>[u]nset</text>
+        </box>
+        <box onMouseUp={openBulk} paddingX={2} paddingY={1}>
+          <text fg={theme.text}>[b]ulk</text>
+        </box>
         <box onMouseUp={handleRegenerate} paddingX={2} paddingY={1}>
           <text fg={theme.text}>[r]egenerate</text>
         </box>
@@ -239,7 +324,9 @@ export function ParallelPlan(props: { plan: Plan; onApproved: () => void; onCanc
       </box>
 
       <box marginTop={1}>
-        <text fg={theme.textMuted}>arrows to navigate | m change model | a approve | r regenerate | c cancel</text>
+        <text fg={theme.textMuted}>
+          arrows to navigate | m model | u unset | b bulk | a approve | r regenerate | c cancel
+        </text>
       </box>
     </box>
   )

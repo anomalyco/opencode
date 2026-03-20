@@ -16,6 +16,7 @@ import { ParallelEvent } from "./events"
 
 export namespace WorkerManager {
   const log = Log.create({ service: "worker" })
+  const RETRY_LIMIT = 3
 
   /**
    * Run async tasks with a concurrency limit.
@@ -215,6 +216,45 @@ export namespace WorkerManager {
     // Spawn workers respecting dependencies and concurrency
     const spawnPromises: Promise<{ subtaskID: SubtaskID; status: "fulfilled" | "rejected"; error?: string }>[] = []
 
+    function retryable(msg: string): boolean {
+      const text = msg.toLowerCase()
+      return (
+        text.includes("timeout") ||
+        text.includes("tempor") ||
+        text.includes("429") ||
+        text.includes("503") ||
+        text.includes("network") ||
+        text.includes("econn") ||
+        text.includes("worktree")
+      )
+    }
+
+    async function wait(ms: number) {
+      return new Promise<void>((resolve) => setTimeout(resolve, ms))
+    }
+
+    async function spawn(plan: Plan, st: Subtask, abort: AbortSignal) {
+      let last = "Spawn failed"
+      for (const attempt of Array.from({ length: RETRY_LIMIT }, (_, i) => i + 1)) {
+        if (abort.aborted) throw new Error("Aborted")
+        try {
+          return await spawnOne(plan, st, abort)
+        } catch (err) {
+          last = err instanceof Error ? err.message : "Spawn failed"
+          if (attempt >= RETRY_LIMIT || !retryable(last)) break
+          const backoff = 250 * 2 ** attempt
+          log.warn("worker spawn retry", {
+            subtaskID: st.id,
+            attempt,
+            backoff,
+            error: last,
+          })
+          await wait(backoff)
+        }
+      }
+      throw new Error(last)
+    }
+
     async function spawnNextBatch(): Promise<void> {
       const ready = getReadySubtasks()
       if (ready.length === 0) return
@@ -228,7 +268,7 @@ export namespace WorkerManager {
         running.add(st.id)
         await updateWorker(plan.id, st.id, { status: "spawning" })
 
-        const spawnPromise = spawnOne(plan, st, abort)
+        const spawnPromise = spawn(plan, st, abort)
           .then(({ subtaskID }) => {
             completed.add(subtaskID)
             running.delete(subtaskID)
@@ -297,6 +337,9 @@ export namespace WorkerManager {
     )
     if (allFailedOrBlocked) {
       throw new Error("All workers failed to spawn or were blocked by failed dependencies")
+    }
+    if (plan.subtasks.length > 0 && completed.size === 0 && failed.size === 0 && blocked.length === 0) {
+      throw new Error("No ready subtasks to spawn. Check dependency graph.")
     }
 
     log.info("workers spawned", {

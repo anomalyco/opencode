@@ -217,6 +217,14 @@ export function Parallel() {
                   ? "No workers started. Check /parallel config and selected models."
                   : "Plan execution failed"}
               </text>
+              <Show when={plan.error}>
+                <text fg={theme.textMuted}>
+                  {plan.error!.code} @ {plan.error!.stage}
+                </text>
+                <text fg={theme.error} wrapMode="word">
+                  {plan.error!.message}
+                </text>
+              </Show>
               <text fg={theme.textMuted}>Press ESC to go back</text>
             </box>
           </Show>

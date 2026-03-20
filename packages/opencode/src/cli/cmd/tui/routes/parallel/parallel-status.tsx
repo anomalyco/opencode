@@ -368,6 +368,7 @@ export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void; on
   const done = () => props.plan.workers.filter((w) => w.status === "done" || w.status === "merged").length
   const failed = () => props.plan.workers.filter((w) => w.status === "failed" || w.status === "conflict").length
   const total = () => props.plan.workers.length
+  const width = () => Math.min(100, dim().width - 2)
 
   // Aggregate cost and tokens across all worker sessions
   const totals = createMemo(() => {
@@ -392,7 +393,48 @@ export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void; on
     return { cost: totalCost, input: totalInput, output: totalOutput, tools: totalTools }
   })
 
-  const width = () => Math.min(100, dim().width - 2)
+  const timeline = createMemo(() => {
+    const items: { time: number; text: string; tone: "muted" | "accent" | "success" | "warning" }[] = [
+      { time: props.plan.time.created, text: "Plan created", tone: "muted" },
+    ]
+
+    if (props.plan.time.approved) {
+      items.push({ time: props.plan.time.approved, text: "Plan approved", tone: "accent" })
+    }
+
+    if (props.plan.time.completed) {
+      items.push({
+        time: props.plan.time.completed,
+        text: `Plan ${props.plan.status}`,
+        tone: props.plan.status === "done" ? "success" : "warning",
+      })
+    }
+
+    for (const worker of props.plan.workers) {
+      if (!worker.sessionID) continue
+      const msgs = sync.data.message[worker.sessionID] ?? []
+      const subtask = props.plan.subtasks.find((item) => item.id === worker.subtaskID)
+      const title = subtask?.title ?? String(worker.subtaskID).slice(0, 8)
+      const user = msgs.find((msg) => msg.role === "user")
+      if (user) {
+        items.push({
+          time: user.time.created,
+          text: `Prompt sent: ${title}`,
+          tone: "accent",
+        })
+      }
+      const assistant = msgs.find((msg) => msg.role === "assistant")
+      if (assistant) {
+        items.push({
+          time: assistant.time.created,
+          text: `Worker active: ${title}`,
+          tone: "success",
+        })
+      }
+    }
+
+    return items.toSorted((a, b) => b.time - a.time).slice(0, 8)
+  })
 
   // Responsive columns: expanded=1, wide=3, medium=2, narrow=1
   const columns = () => {
@@ -454,14 +496,18 @@ export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void; on
 
   useKeyboard((evt) => {
     if (dialog.stack.length > 0) return
+    if (evt.defaultPrevented) return
     if (evt.name === "up" || evt.sequence === "k") {
       evt.preventDefault()
+      evt.stopPropagation()
       setSelected((s) => Math.max(0, s - 1))
     } else if (evt.name === "down" || evt.sequence === "j") {
       evt.preventDefault()
+      evt.stopPropagation()
       setSelected((s) => Math.min(total() - 1, s + 1))
     } else if (evt.name === "return") {
       evt.preventDefault()
+      evt.stopPropagation()
       setExpanded((e) => (e === selected() ? null : selected()))
     } else if (evt.name === "escape") {
       evt.preventDefault()
@@ -477,9 +523,11 @@ export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void; on
       props.onBack?.()
     } else if (evt.name === "l" || (evt.sequence === "l" && !evt.ctrl)) {
       evt.preventDefault()
+      evt.stopPropagation()
       setShowLogs((l) => (l === selected() ? null : selected()))
     } else if (evt.name === "c" || (evt.sequence === "c" && !evt.ctrl)) {
       evt.preventDefault()
+      evt.stopPropagation()
       handleCancel()
     }
   })
@@ -511,6 +559,41 @@ export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void; on
           {"░".repeat(Math.max(0, 30 - Math.floor(((done() + running()) / Math.max(total(), 1)) * 30)))}
         </text>
       </box>
+
+      <Show when={timeline().length > 0}>
+        <box
+          marginBottom={1}
+          padding={1}
+          borderStyle="single"
+          borderColor={theme.border}
+          flexDirection="column"
+          gap={0}
+        >
+          <text fg={theme.textMuted} attributes={TextAttributes.UNDERLINE}>
+            Timeline
+          </text>
+          <For each={timeline()}>
+            {(item) => (
+              <box flexDirection="row" gap={1}>
+                <text fg={theme.textMuted}>{formatTime(item.time)}</text>
+                <text
+                  fg={
+                    item.tone === "success"
+                      ? theme.success
+                      : item.tone === "warning"
+                        ? theme.warning
+                        : item.tone === "accent"
+                          ? theme.accent
+                          : theme.text
+                  }
+                >
+                  {item.text.slice(0, 72)}
+                </text>
+              </box>
+            )}
+          </For>
+        </box>
+      </Show>
 
       {/* Worker lanes */}
       <For each={rows()}>
