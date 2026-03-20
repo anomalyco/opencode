@@ -221,6 +221,7 @@ export const dict = {
   "common.open": "Open",
   "common.connect": "Connect",
   "common.disconnect": "Disconnect",
+  "common.continue": "Continue",
   "common.submit": "Submit",
   "common.save": "Save",
   "common.saving": "Saving...",
@@ -674,6 +675,8 @@ export const dict = {
   "sidebar.project.recentSessions": "Recent sessions",
   "sidebar.project.viewAllSessions": "View all sessions",
   "sidebar.project.clearNotifications": "Clear notifications",
+  "sidebar.empty.title": "No projects open",
+  "sidebar.empty.description": "Open a project to get started",
 
   "debugBar.ariaLabel": "Development performance diagnostics",
   "debugBar.na": "n/a",
