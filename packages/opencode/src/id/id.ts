@@ -14,6 +14,7 @@ export namespace Identifier {
     team: "tea",
     team_task: "ttk",
     team_message: "tmg",
+    workspace: "wrk",
   } as const
 
   export function schema(prefix: keyof typeof prefixes) {

@@ -1,4 +1,7 @@
-import { createEffect, createSignal, For, Match, on, onCleanup, Show, Switch, type JSX } from "solid-js"
+import { createEffect, For, Match, on, onCleanup, Show, Switch, type JSX } from "solid-js"
+import { animate, type AnimationPlaybackControls } from "motion"
+import { useI18n } from "../context/i18n"
+import { createStore } from "solid-js/store"
 import { Collapsible } from "./collapsible"
 import type { IconProps } from "./icon"
 import { TextShimmer } from "./text-shimmer"
@@ -29,12 +32,19 @@ export interface BasicToolProps {
   forceOpen?: boolean
   defer?: boolean
   locked?: boolean
+  animated?: boolean
   onSubtitleClick?: () => void
 }
 
+const SPRING = { type: "spring" as const, visualDuration: 0.35, bounce: 0 }
+
 export function BasicTool(props: BasicToolProps) {
-  const [open, setOpen] = createSignal(props.defaultOpen ?? false)
-  const [ready, setReady] = createSignal(open())
+  const [state, setState] = createStore({
+    open: props.defaultOpen ?? false,
+    ready: props.defaultOpen ?? false,
+  })
+  const open = () => state.open
+  const ready = () => state.ready
   const pending = () => props.status === "pending" || props.status === "running"
 
   let frame: number | undefined
@@ -48,7 +58,7 @@ export function BasicTool(props: BasicToolProps) {
   onCleanup(cancel)
 
   createEffect(() => {
-    if (props.forceOpen) setOpen(true)
+    if (props.forceOpen) setState("open", true)
   })
 
   createEffect(
@@ -58,7 +68,7 @@ export function BasicTool(props: BasicToolProps) {
         if (!props.defer) return
         if (!value) {
           cancel()
-          setReady(false)
+          setState("ready", false)
           return
         }
 
@@ -66,17 +76,49 @@ export function BasicTool(props: BasicToolProps) {
         frame = requestAnimationFrame(() => {
           frame = undefined
           if (!open()) return
-          setReady(true)
+          setState("ready", true)
         })
       },
       { defer: true },
     ),
   )
 
+  // Animated height for collapsible open/close
+  let contentRef: HTMLDivElement | undefined
+  let heightAnim: AnimationPlaybackControls | undefined
+  const initialOpen = open()
+
+  createEffect(
+    on(
+      open,
+      (isOpen) => {
+        if (!props.animated || !contentRef) return
+        heightAnim?.stop()
+        if (isOpen) {
+          contentRef.style.overflow = "hidden"
+          heightAnim = animate(contentRef, { height: "auto" }, SPRING)
+          heightAnim.finished.then(() => {
+            if (!contentRef || !open()) return
+            contentRef.style.overflow = "visible"
+            contentRef.style.height = "auto"
+          })
+        } else {
+          contentRef.style.overflow = "hidden"
+          heightAnim = animate(contentRef, { height: "0px" }, SPRING)
+        }
+      },
+      { defer: true },
+    ),
+  )
+
+  onCleanup(() => {
+    heightAnim?.stop()
+  })
+
   const handleOpenChange = (value: boolean) => {
     if (pending()) return
     if (props.locked && !value) return
-    setOpen(value)
+    setState("open", value)
   }
 
   return (
@@ -96,9 +138,7 @@ export function BasicTool(props: BasicToolProps) {
                             [trigger().titleClass ?? ""]: !!trigger().titleClass,
                           }}
                         >
-                          <Show when={pending()} fallback={trigger().title}>
-                            <TextShimmer text={trigger().title} />
-                          </Show>
+                          <TextShimmer text={trigger().title} active={pending()} />
                         </span>
                         <Show when={!pending()}>
                           <Show when={trigger().subtitle}>
@@ -147,7 +187,20 @@ export function BasicTool(props: BasicToolProps) {
           </Show>
         </div>
       </Collapsible.Trigger>
-      <Show when={props.children && !props.hideDetails}>
+      <Show when={props.animated && props.children && !props.hideDetails}>
+        <div
+          ref={contentRef}
+          data-slot="collapsible-content"
+          data-animated
+          style={{
+            height: initialOpen ? "auto" : "0px",
+            overflow: initialOpen ? "visible" : "hidden",
+          }}
+        >
+          {props.children}
+        </div>
+      </Show>
+      <Show when={!props.animated && props.children && !props.hideDetails}>
         <Collapsible.Content>
           <Show when={!props.defer || ready()}>{props.children}</Show>
         </Collapsible.Content>
@@ -156,6 +209,43 @@ export function BasicTool(props: BasicToolProps) {
   )
 }
 
-export function GenericTool(props: { tool: string; status?: string; hideDetails?: boolean }) {
-  return <BasicTool icon="mcp" status={props.status} trigger={{ title: props.tool }} hideDetails={props.hideDetails} />
+function label(input: Record<string, unknown> | undefined) {
+  const keys = ["description", "query", "url", "filePath", "path", "pattern", "name"]
+  return keys.map((key) => input?.[key]).find((value): value is string => typeof value === "string" && value.length > 0)
+}
+
+function args(input: Record<string, unknown> | undefined) {
+  if (!input) return []
+  const skip = new Set(["description", "query", "url", "filePath", "path", "pattern", "name"])
+  return Object.entries(input)
+    .filter(([key]) => !skip.has(key))
+    .flatMap(([key, value]) => {
+      if (typeof value === "string") return [`${key}=${value}`]
+      if (typeof value === "number") return [`${key}=${value}`]
+      if (typeof value === "boolean") return [`${key}=${value}`]
+      return []
+    })
+    .slice(0, 3)
+}
+
+export function GenericTool(props: {
+  tool: string
+  status?: string
+  hideDetails?: boolean
+  input?: Record<string, unknown>
+}) {
+  const i18n = useI18n()
+
+  return (
+    <BasicTool
+      icon="mcp"
+      status={props.status}
+      trigger={{
+        title: i18n.t("ui.basicTool.called", { tool: props.tool }),
+        subtitle: label(props.input),
+        args: args(props.input),
+      }}
+      hideDetails={props.hideDetails}
+    />
+  )
 }

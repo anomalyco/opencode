@@ -117,6 +117,78 @@ try {
 
 ---
 
+## Sortie structurée
+
+Vous pouvez demander une sortie JSON structurée au modèle en spécifiant un `format` avec un schéma JSON. Le modèle utilisera un outil `StructuredOutput` pour renvoyer un JSON validé correspondant à votre schéma.
+
+### Utilisation de base
+
+```typescript
+const result = await client.session.prompt({
+  path: { id: sessionId },
+  body: {
+    parts: [{ type: "text", text: "Research Anthropic and provide company info" }],
+    format: {
+      type: "json_schema",
+      schema: {
+        type: "object",
+        properties: {
+          company: { type: "string", description: "Company name" },
+          founded: { type: "number", description: "Year founded" },
+          products: {
+            type: "array",
+            items: { type: "string" },
+            description: "Main products",
+          },
+        },
+        required: ["company", "founded"],
+      },
+    },
+  },
+})
+
+// Access the structured output
+console.log(result.data.info.structured_output)
+// { company: "Anthropic", founded: 2021, products: ["Claude", "Claude API"] }
+```
+
+### Types de format de sortie
+
+| Type          | Description                                                       |
+| ------------- | ----------------------------------------------------------------- |
+| `text`        | Par défaut. Réponse textuelle standard (pas de sortie structurée) |
+| `json_schema` | Renvoie un JSON validé correspondant au schéma fourni             |
+
+### Format de schéma JSON
+
+Lors de l'utilisation de `type: 'json_schema'`, fournissez :
+
+| Champ        | Type            | Description                                                     |
+| ------------ | --------------- | --------------------------------------------------------------- |
+| `type`       | `'json_schema'` | Requis. Spécifie le mode de schéma JSON                         |
+| `schema`     | `object`        | Requis. Objet JSON Schema définissant la structure de sortie    |
+| `retryCount` | `number`        | Facultatif. Nombre de tentatives de validation (par défaut : 2) |
+
+### Gestion des erreurs
+
+Si le modèle ne parvient pas à produire une sortie structurée valide après toutes les tentatives, la réponse inclura une `StructuredOutputError` :
+
+```typescript
+if (result.data.info.error?.name === "StructuredOutputError") {
+  console.error("Failed to produce structured output:", result.data.info.error.message)
+  console.error("Attempts:", result.data.info.error.retries)
+}
+```
+
+### Bonnes pratiques
+
+1. **Fournissez des descriptions claires** dans les propriétés de votre schéma pour aider le modèle à comprendre quelles données extraire
+2. **Utilisez `required`** pour spécifier quels champs doivent être présents
+3. **Gardez les schémas ciblés** - les schémas imbriqués complexes peuvent être plus difficiles à remplir correctement pour le modèle
+4. **Définissez un `retryCount` approprié** - augmentez-le pour les schémas complexes, diminuez-le pour les simples
+
+---
+
 ## APIs
 
 Le SDK expose toutes les API du serveur via un client de type sécurisé.
@@ -226,27 +298,27 @@ const { providers, default: defaults } = await client.config.providers()
 
 ### Séances
 
-| Méthode                                                    | Descriptif                                  | Remarques                                                                                                                                                         |
-| ---------------------------------------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `session.list()`                                           | Liste des séances                           | Renvoie <a href={typesUrl}><code>Session[]</code></a>                                                                                                             |
-| `session.get({ path })`                                    | Obtenir une session                         | Renvoie <a href={typesUrl}><code>Session</code></a>                                                                                                               |
-| `session.children({ path })`                               | Liste des sessions enfants                  | Renvoie <a href={typesUrl}><code>Session[]</code></a>                                                                                                             |
-| `session.create({ body })`                                 | Créer une séance                            | Renvoie <a href={typesUrl}><code>Session</code></a>                                                                                                               |
-| `session.delete({ path })`                                 | Supprimer la séance                         | Renvoie `boolean`                                                                                                                                                 |
-| `session.update({ path, body })`                           | Mettre à jour les propriétés de la session  | Renvoie <a href={typesUrl}><code>Session</code></a>                                                                                                               |
-| `session.init({ path, body })`                             | Analysez l'application et créez `AGENTS.md` | Renvoie `boolean`                                                                                                                                                 |
-| `session.abort({ path })`                                  | Abandonner une session en cours             | Renvoie `boolean`                                                                                                                                                 |
-| `session.share({ path })`                                  | Séance de partage                           | Renvoie <a href={typesUrl}><code>Session</code></a>                                                                                                               |
-| `session.unshare({ path })`                                | Annuler le partage de la session            | Renvoie <a href={typesUrl}><code>Session</code></a>                                                                                                               |
-| `session.summarize({ path, body })`                        | Résumer la séance                           | Renvoie `boolean`                                                                                                                                                 |
-| `session.messages({ path })`                               | Liste des messages dans une session         | Renvoie `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}[]`                                           |
-| `session.message({ path })`                                | Obtenir les détails du message              | Renvoie `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                                             |
-| `session.prompt({ path, body })`                           | Envoyer un message d'invite                 | `body.noReply: true` renvoie UserMessage (contexte uniquement). La valeur par défaut renvoie <a href={typesUrl}><code>AssistantMessage</code></a> avec réponse IA |
-| `session.command({ path, body })`                          | Envoyer la commande à la session            | Renvoie `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                                    |
-| `session.shell({ path, body })`                            | Exécuter une commande shell                 | Renvoie <a href={typesUrl}><code>AssistantMessage</code></a>                                                                                                      |
-| `session.revert({ path, body })`                           | Rétablir un message                         | Renvoie <a href={typesUrl}><code>Session</code></a>                                                                                                               |
-| `session.unrevert({ path })`                               | Restaurer les messages annulés              | Renvoie <a href={typesUrl}><code>Session</code></a>                                                                                                               |
-| `postSessionByIdPermissionsByPermissionId({ path, body })` | Répondre à une demande d'autorisation       | Renvoie `boolean`                                                                                                                                                 |
+| Méthode                                                    | Descriptif                                  | Remarques                                                                                                                                                                                                                                           |
+| ---------------------------------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `session.list()`                                           | Liste des séances                           | Renvoie <a href={typesUrl}><code>Session[]</code></a>                                                                                                                                                                                               |
+| `session.get({ path })`                                    | Obtenir une session                         | Renvoie <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                                                 |
+| `session.children({ path })`                               | Liste des sessions enfants                  | Renvoie <a href={typesUrl}><code>Session[]</code></a>                                                                                                                                                                                               |
+| `session.create({ body })`                                 | Créer une séance                            | Renvoie <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                                                 |
+| `session.delete({ path })`                                 | Supprimer la séance                         | Renvoie `boolean`                                                                                                                                                                                                                                   |
+| `session.update({ path, body })`                           | Mettre à jour les propriétés de la session  | Renvoie <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                                                 |
+| `session.init({ path, body })`                             | Analysez l'application et créez `AGENTS.md` | Renvoie `boolean`                                                                                                                                                                                                                                   |
+| `session.abort({ path })`                                  | Abandonner une session en cours             | Renvoie `boolean`                                                                                                                                                                                                                                   |
+| `session.share({ path })`                                  | Séance de partage                           | Renvoie <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                                                 |
+| `session.unshare({ path })`                                | Annuler le partage de la session            | Renvoie <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                                                 |
+| `session.summarize({ path, body })`                        | Résumer la séance                           | Renvoie `boolean`                                                                                                                                                                                                                                   |
+| `session.messages({ path })`                               | Liste des messages dans une session         | Renvoie `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}[]`                                                                                                                             |
+| `session.message({ path })`                                | Obtenir les détails du message              | Renvoie `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                                                                                                                               |
+| `session.prompt({ path, body })`                           | Envoyer un message d'invite                 | `body.noReply: true` renvoie UserMessage (contexte uniquement). La valeur par défaut renvoie <a href={typesUrl}><code>AssistantMessage</code></a> avec réponse IA. Prend en charge `body.outputFormat` pour [sortie structurée](#structured-output) |
+| `session.command({ path, body })`                          | Envoyer la commande à la session            | Renvoie `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                                                                                                                      |
+| `session.shell({ path, body })`                            | Exécuter une commande shell                 | Renvoie <a href={typesUrl}><code>AssistantMessage</code></a>                                                                                                                                                                                        |
+| `session.revert({ path, body })`                           | Rétablir un message                         | Renvoie <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                                                 |
+| `session.unrevert({ path })`                               | Restaurer les messages annulés              | Renvoie <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                                                 |
+| `postSessionByIdPermissionsByPermissionId({ path, body })` | Répondre à une demande d'autorisation       | Renvoie `boolean`                                                                                                                                                                                                                                   |
 
 ---
 

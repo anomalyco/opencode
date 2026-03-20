@@ -84,6 +84,37 @@ opencode'daki diğer sağlayıcılar gibi çalışır ve kullanımı tamamen ist
 
 ---
 
+## OpenCode Go
+
+OpenCode Go, opencode ile iyi çalıştığı test edilmiş ve doğrulanmış, opencode ekibi tarafından sağlanan popüler açık kodlama modellerine güvenilir erişim sağlayan düşük maliyetli bir abonelik planıdır.
+
+1. TUI'de `/connect` komutunu çalıştırın, `OpenCode Go`'yu seçin ve [opencode.ai/auth](https://opencode.ai/zen) adresine gidin.
+
+   ```txt
+   /connect
+   ```
+
+2. Oturum açın, fatura ayrıntılarınızı ekleyin ve API anahtarınızı kopyalayın.
+
+3. API anahtarınızı yapıştırın.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Önerdiğimiz modellerin listesini görmek için TUI'de `/models` komutunu çalıştırın.
+
+   ```txt
+   /models
+   ```
+
+opencode'daki diğer sağlayıcılar gibi çalışır ve kullanımı tamamen isteğe bağlıdır.
+
+---
+
 ## Dizin
 
 Sağlayıcılardan bazılarına ayrıntılı olarak bakalım. Bir sağlayıcı eklemek istiyorsanız
@@ -1474,6 +1505,39 @@ SAP AI Core, birleşik bir platform aracılığıyla OpenAI, Anthropic, Google, 
    :::
 
 5. 40'tan fazla mevcut model arasından seçim yapmak için `/models` komutunu çalıştırın.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### STACKIT
+
+STACKIT AI Model Serving, Llama, Mistral ve Qwen gibi LLM'lere odaklanarak, Avrupa altyapısında maksimum veri egemenliğine sahip AI modelleri için tam olarak yönetilen bağımsız barındırma ortamı sağlar.
+
+1. [STACKIT Portal](https://portal.stackit.cloud) adresine gidin, **AI Model Serving**'e gidin ve projeniz için bir yetkilendirme belirteci oluşturun.
+
+   :::tip
+   Yetkilendirme belirteçleri oluşturmadan önce bir STACKIT müşteri hesabına, kullanıcı hesabına ve projesine ihtiyacınız vardır.
+   :::
+
+2. `/connect` komutunu çalıştırın ve **STACKIT**'i arayın.
+
+   ```txt
+   /connect
+   ```
+
+3. STACKIT AI Model Serving yetkilendirme belirtecinizi girin.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. _Qwen3-VL 235B_ veya _Llama 3.3 70B_ gibi mevcut modellerden seçim yapmak için `/models` komutunu çalıştırın.
 
    ```txt
    /models

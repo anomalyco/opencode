@@ -7,6 +7,9 @@ export const dict = {
   "ui.sessionReview.title.lastTurn": "Änderungen der letzten Runde",
   "ui.sessionReview.diffStyle.unified": "Vereinheitlicht",
   "ui.sessionReview.diffStyle.split": "Geteilt",
+  "ui.sessionReview.openFile": "Datei öffnen",
+  "ui.sessionReview.selection.line": "Zeile {{line}}",
+  "ui.sessionReview.selection.lines": "Zeilen {{start}}-{{end}}",
   "ui.sessionReview.expandAll": "Alle erweitern",
   "ui.sessionReview.collapseAll": "Alle reduzieren",
 
@@ -42,6 +45,9 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "erneuter Versuch",
   "ui.sessionTurn.retry.inSeconds": "in {{seconds}}s",
+  "ui.sessionTurn.retry.attempt": "Versuch #{{attempt}}",
+  "ui.sessionTurn.retry.attemptLine": "{{line}} - Versuch #{{attempt}}",
+  "ui.sessionTurn.retry.geminiHot": "gemini ist gerade sehr überlastet",
   "ui.sessionTurn.error.freeUsageExceeded": "Kostenloses Nutzungslimit überschritten",
   "ui.sessionTurn.error.addCredits": "Guthaben aufladen",
 
@@ -58,6 +64,14 @@ export const dict = {
   "ui.sessionTurn.status.gatheringThoughts": "Gedanken sammeln",
   "ui.sessionTurn.status.consideringNextSteps": "Nächste Schritte erwägen",
 
+  "ui.messagePart.questions.dismissed": "Fragen verworfen",
+  "ui.messagePart.compaction": "Sitzung komprimiert",
+  "ui.messagePart.context.read.one": "{{count}} Lesevorgang",
+  "ui.messagePart.context.read.other": "{{count}} Lesevorgänge",
+  "ui.messagePart.context.search.one": "{{count}} Suche",
+  "ui.messagePart.context.search.other": "{{count}} Suchen",
+  "ui.messagePart.context.list.one": "{{count}} Liste",
+  "ui.messagePart.context.list.other": "{{count}} Listen",
   "ui.messagePart.diagnostic.error": "Fehler",
   "ui.messagePart.title.edit": "Bearbeiten",
   "ui.messagePart.title.write": "Schreiben",
@@ -77,6 +91,7 @@ export const dict = {
   "ui.textField.copied": "Kopiert",
 
   "ui.imagePreview.alt": "Bildvorschau",
+  "ui.scrollView.ariaLabel": "scrollbarer Inhalt",
 
   "ui.tool.read": "Lesen",
   "ui.tool.loaded": "Geladen",
@@ -84,12 +99,15 @@ export const dict = {
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "Webabruf",
+  "ui.tool.websearch": "Websuche",
+  "ui.tool.codesearch": "Codesuche",
   "ui.tool.shell": "Shell",
   "ui.tool.patch": "Patch",
   "ui.tool.todos": "Aufgaben",
   "ui.tool.todos.read": "Aufgaben lesen",
   "ui.tool.questions": "Fragen",
   "ui.tool.agent": "{{type}} Agent",
+  "ui.tool.agent.default": "Agent",
 
   "ui.common.file.one": "Datei",
   "ui.common.file.other": "Dateien",
@@ -113,9 +131,12 @@ export const dict = {
   "ui.message.collapse": "Nachricht reduzieren",
   "ui.message.copy": "Kopieren",
   "ui.message.copyMessage": "Nachricht kopieren",
+  "ui.message.forkMessage": "In neue Sitzung abzweigen",
+  "ui.message.revertMessage": "Auf diesen Punkt zurücksetzen",
   "ui.message.copyResponse": "Antwort kopieren",
   "ui.message.copied": "Kopiert!",
   "ui.message.interrupted": "Unterbrochen",
+  "ui.message.queued": "In Warteschlange",
   "ui.message.attachment.alt": "Anhang",
 
   "ui.patch.action.deleted": "Gelöscht",
@@ -129,4 +150,16 @@ export const dict = {
   "ui.question.multiHint": "Alle zutreffenden auswählen",
   "ui.question.singleHint": "Eine Antwort auswählen",
   "ui.question.custom.placeholder": "Geben Sie Ihre Antwort ein...",
+
+  "ui.fileSearch.placeholder": "Suchen",
+  "ui.fileSearch.previousMatch": "Vorheriges Ergebnis",
+  "ui.fileSearch.nextMatch": "Nächstes Ergebnis",
+  "ui.fileSearch.close": "Suche schließen",
+  "ui.tool.task": "Aufgabe",
+  "ui.tool.skill": "Fähigkeit",
+  "ui.basicTool.called": "`{{tool}}` aufgerufen",
+  "ui.toolErrorCard.failed": "Fehlgeschlagen",
+  "ui.toolErrorCard.copyError": "Fehler kopieren",
+  "ui.message.duration.seconds": "{{count}}s",
+  "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
 } satisfies Partial<Record<Keys, string>>
