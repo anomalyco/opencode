@@ -11,7 +11,7 @@ import { ConstrainDragXAxis } from "@/utils/solid-dnd"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { type LocalProject } from "@/context/layout"
-import { UserMenu } from "@/others"
+import { UserMenu, CreateProjectButton } from "@/others"
 
 export const SidebarContent = (props: {
   mobile?: boolean
@@ -86,6 +86,7 @@ export const SidebarContent = (props: {
                   aria-label={typeof props.openProjectLabel === "string" ? props.openProjectLabel : undefined}
                 />
               </Tooltip>
+              <CreateProjectButton placement={placement()} />
             </div>
             <DragOverlay>{props.renderProjectOverlay()}</DragOverlay>
           </DragDropProvider>

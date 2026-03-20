@@ -45,7 +45,7 @@ import { PermissionRoutes } from "./routes/permission"
 import { GlobalRoutes } from "./routes/global"
 import { MDNS } from "./mdns"
 import { lazy } from "@/util/lazy"
-import { createAuthMiddleware, AuthRoutes, OthersConfigRoutes } from "@/others"
+import { registerOthersRoutes, extractSpacePathFromToken } from "@/others"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -57,7 +57,7 @@ export namespace Server {
 
   export const createApp = (opts: { cors?: string[] }): Hono => {
     const app = new Hono()
-    return app
+    app
       .onError((err, c) => {
         log.error("failed", {
           error: err,
@@ -128,16 +128,9 @@ export namespace Server {
           },
         }),
       )
-      // ============================================
-      // Others 模块 - 登录认证路由 (不需要认证)
-      // ============================================
-      .route("/others/auth", AuthRoutes())
-      // Others 模块 - 配置路由 (不需要认证)
-      .route("/others/config", OthersConfigRoutes())
-      // ============================================
-      // 认证中间件 - 保护后续所有路由
-      // ============================================
-      .use(createAuthMiddleware())
+
+    // 注册 Others 模块路由（包含认证中间件），继续链式调用
+    return registerOthersRoutes(app)
       // ============================================
       // 以下是需要认证的路由
       // ============================================
@@ -207,7 +200,9 @@ export namespace Server {
       .use(async (c, next) => {
         if (c.req.path === "/log") return next()
         const rawWorkspaceID = c.req.query("workspace") || c.req.header("x-opencode-workspace")
-        const raw = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
+        // 尝试从 token 解析 space_path 作为默认 directory
+        const tokenDirectory = await extractSpacePathFromToken(c)
+        const raw = c.req.query("directory") || c.req.header("x-opencode-directory") || tokenDirectory || process.cwd()
         const directory = Filesystem.resolve(
           (() => {
             try {
@@ -317,8 +312,12 @@ export namespace Server {
           },
         }),
         async (c) => {
+          // 尝试从 token 解析 space_path 作为 home
+          const spacePath = await extractSpacePathFromToken(c)
+          const home = spacePath ?? Global.Path.home
+
           return c.json({
-            home: Global.Path.home,
+            home,
             state: Global.Path.state,
             config: Global.Path.config,
             worktree: Instance.worktree,

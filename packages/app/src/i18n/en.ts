@@ -23,6 +23,7 @@ export const dict = {
 
   "command.sidebar.toggle": "Toggle sidebar",
   "command.project.open": "Open project",
+  "command.project.create": "Create project",
   "command.provider.connect": "Connect provider",
   "command.server.switch": "Switch server",
   "command.settings.open": "Open settings",
@@ -354,6 +355,13 @@ export const dict = {
   "dialog.project.edit.worktree.startup": "Workspace startup script",
   "dialog.project.edit.worktree.startup.description": "Runs after creating a new workspace (worktree).",
   "dialog.project.edit.worktree.startup.placeholder": "e.g. bun install",
+  "dialog.project.create.title": "Create Project",
+  "dialog.project.create.name": "Project Name",
+  "dialog.project.create.placeholder": "Enter project name",
+  "dialog.project.create.button": "Create",
+  "dialog.project.create.creating": "Creating...",
+  "dialog.project.create.success": "Project created successfully",
+  "dialog.project.create.error": "Failed to create project",
 
   "dialog.releaseNotes.action.getStarted": "Get started",
   "dialog.releaseNotes.action.next": "Next",

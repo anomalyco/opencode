@@ -1,11 +1,18 @@
 /**
- * Others 模块
- * 包含登录认证等扩展功能
+ * Others 模块前端导出
+ * 包含登录认证、配置管理等扩展功能的组件和上下文
  */
 
-export { useAuth, AuthProvider, createAuthFetch } from "./context/auth"
-export type { User, AuthState } from "./context/auth"
-export { LoginPage } from "./pages/login"
-export { UserMenu } from "./components/user-menu"
+// 认证相关
+export { useAuth, AuthProvider } from "./context/auth"
+
+// 配置相关
 export { useOthersConfig, OthersConfigProvider } from "./context/others-config"
-export type { UIElementConfig, OthersConfig } from "./context/others-config"
+
+// 页面
+export { LoginPage } from "./pages/login"
+
+// 组件
+export { UserMenu } from "./components/user-menu"
+export { CreateProjectButton } from "./create-project-button"
+export { DialogCreateProject } from "@/components/dialog-create-project"

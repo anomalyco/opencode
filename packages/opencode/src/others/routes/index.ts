@@ -5,3 +5,4 @@
 
 export { AuthRoutes } from "./auth"
 export { OthersConfigRoutes } from "./config"
+export { ProjectRoutes } from "./project"
