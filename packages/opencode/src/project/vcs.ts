@@ -1,16 +1,16 @@
-import { BusEvent } from "@/bus/bus-event"
+import { Effect, Layer, ServiceMap } from "effect"
 import { Bus } from "@/bus"
-import z from "zod"
-import { Log } from "@/util/log"
-import { Instance } from "./instance"
+import { BusEvent } from "@/bus/bus-event"
 import { InstanceContext } from "@/effect/instance-context"
 import { FileWatcher } from "@/file/watcher"
+import { Log } from "@/util/log"
 import { git } from "@/util/git"
-import { Effect, Layer, ServiceMap } from "effect"
-
-const log = Log.create({ service: "vcs" })
+import { Instance } from "./instance"
+import z from "zod"
 
 export namespace Vcs {
+  const log = Log.create({ service: "vcs" })
+
   export const Event = {
     BranchUpdated: BusEvent.define(
       "vcs.branch.updated",
@@ -28,24 +28,21 @@ export namespace Vcs {
       ref: "VcsInfo",
     })
   export type Info = z.infer<typeof Info>
-}
 
-export namespace VcsService {
-  export interface Service {
-    readonly init: () => Effect.Effect<void>
+  export interface Interface {
     readonly branch: () => Effect.Effect<string | undefined>
   }
-}
 
-export class VcsService extends ServiceMap.Service<VcsService, VcsService.Service>()("@opencode/Vcs") {
-  static readonly layer = Layer.effect(
-    VcsService,
+  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Vcs") {}
+
+  export const layer = Layer.effect(
+    Service,
     Effect.gen(function* () {
       const instance = yield* InstanceContext
-      let current: string | undefined
+      let currentBranch: string | undefined
 
       if (instance.project.vcs === "git") {
-        const currentBranch = async () => {
+        const getCurrentBranch = async () => {
           const result = await git(["rev-parse", "--abbrev-ref", "HEAD"], {
             cwd: instance.project.worktree,
           })
@@ -54,29 +51,31 @@ export class VcsService extends ServiceMap.Service<VcsService, VcsService.Servic
           return text || undefined
         }
 
-        current = yield* Effect.promise(() => currentBranch())
-        log.info("initialized", { branch: current })
+        currentBranch = yield* Effect.promise(() => getCurrentBranch())
+        log.info("initialized", { branch: currentBranch })
 
-        const unsubscribe = Bus.subscribe(
-          FileWatcher.Event.Updated,
-          Instance.bind(async (evt) => {
-            if (!evt.properties.file.endsWith("HEAD")) return
-            const next = await currentBranch()
-            if (next !== current) {
-              log.info("branch changed", { from: current, to: next })
-              current = next
-              Bus.publish(Vcs.Event.BranchUpdated, { branch: next })
-            }
-          }),
+        yield* Effect.acquireRelease(
+          Effect.sync(() =>
+            Bus.subscribe(
+              FileWatcher.Event.Updated,
+              Instance.bind(async (evt) => {
+                if (!evt.properties.file.endsWith("HEAD")) return
+                const next = await getCurrentBranch()
+                if (next !== currentBranch) {
+                  log.info("branch changed", { from: currentBranch, to: next })
+                  currentBranch = next
+                  Bus.publish(Event.BranchUpdated, { branch: next })
+                }
+              }),
+            ),
+          ),
+          (unsubscribe) => Effect.sync(unsubscribe),
         )
-
-        yield* Effect.addFinalizer(() => Effect.sync(unsubscribe))
       }
 
-      return VcsService.of({
-        init: Effect.fn("VcsService.init")(function* () {}),
-        branch: Effect.fn("VcsService.branch")(function* () {
-          return current
+      return Service.of({
+        branch: Effect.fn("Vcs.branch")(function* () {
+          return currentBranch
         }),
       })
     }),
