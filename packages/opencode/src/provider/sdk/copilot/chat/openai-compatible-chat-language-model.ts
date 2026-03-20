@@ -272,6 +272,11 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
       providerMetadata[this.providerOptionsName].rejectedPredictionTokens =
         completionTokenDetails?.rejected_prediction_tokens
     }
+    if (responseBody.usage?.prompt_tokens_details?.cache_write_tokens != null) {
+      providerMetadata[this.providerOptionsName].usage = {
+        cacheWriteInputTokens: responseBody.usage?.prompt_tokens_details?.cache_write_tokens,
+      }
+    }
 
     return {
       content,
@@ -343,6 +348,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
       promptTokens: number | undefined
       promptTokensDetails: {
         cachedTokens: number | undefined
+        cacheWriteTokens: number | undefined
       }
       totalTokens: number | undefined
     } = {
@@ -355,6 +361,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
       promptTokens: undefined,
       promptTokensDetails: {
         cachedTokens: undefined,
+        cacheWriteTokens: undefined,
       },
       totalTokens: undefined,
     }
@@ -429,6 +436,9 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
               }
               if (prompt_tokens_details?.cached_tokens != null) {
                 usage.promptTokensDetails.cachedTokens = prompt_tokens_details?.cached_tokens
+              }
+              if (prompt_tokens_details?.cache_write_tokens != null) {
+                usage.promptTokensDetails.cacheWriteTokens = prompt_tokens_details?.cache_write_tokens
               }
             }
 
@@ -666,6 +676,11 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
               providerMetadata[providerOptionsName].rejectedPredictionTokens =
                 usage.completionTokensDetails.rejectedPredictionTokens
             }
+            if (usage.promptTokensDetails.cacheWriteTokens != null) {
+              providerMetadata[providerOptionsName].usage = {
+                cacheWriteInputTokens: usage.promptTokensDetails.cacheWriteTokens,
+              }
+            }
 
             controller.enqueue({
               type: "finish",
@@ -696,6 +711,7 @@ const openaiCompatibleTokenUsageSchema = z
     prompt_tokens_details: z
       .object({
         cached_tokens: z.number().nullish(),
+        cache_write_tokens: z.number().nullish(),
       })
       .nullish(),
     completion_tokens_details: z

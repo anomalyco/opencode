@@ -278,6 +278,30 @@ describe("session.getUsage", () => {
     expect(result.tokens.cache.read).toBe(200)
   })
 
+  test("handles cache write tokens from usage payload", () => {
+    const model = createModel({ context: 100_000, output: 32_000, npm: "@ai-sdk/openai-compatible" })
+    const result = Session.getUsage({
+      model,
+      usage: {
+        inputTokens: 10_000,
+        outputTokens: 500,
+        totalTokens: 10_500,
+        cachedInputTokens: 2_000,
+      },
+      metadata: {
+        openrouter: {
+          usage: {
+            cacheWriteInputTokens: 1_500,
+          },
+        },
+      },
+    })
+
+    expect(result.tokens.input).toBe(6_500)
+    expect(result.tokens.cache.read).toBe(2_000)
+    expect(result.tokens.cache.write).toBe(1_500)
+  })
+
   test("handles anthropic cache write metadata", () => {
     const model = createModel({ context: 100_000, output: 32_000 })
     const result = Session.getUsage({

@@ -810,6 +810,8 @@ export namespace Session {
           input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
           // @ts-expect-error
           input.metadata?.["venice"]?.["usage"]?.["cacheCreationInputTokens"] ??
+          // @ts-expect-error
+          input.metadata?.["openrouter"]?.["usage"]?.["cacheWriteInputTokens"] ??
           0) as number,
       )
 
