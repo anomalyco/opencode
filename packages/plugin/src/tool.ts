@@ -17,6 +17,7 @@ export type ToolContext = {
   abort: AbortSignal
   metadata(input: { title?: string; metadata?: { [key: string]: any } }): void
   ask(input: AskInput): Promise<void>
+  askQuestion(input: { questions: QuestionInput[] }): Promise<QuestionAnswer[]>
 }
 
 type AskInput = {
@@ -25,6 +26,22 @@ type AskInput = {
   always: string[]
   metadata: { [key: string]: any }
 }
+
+export type QuestionOption = {
+  label: string
+  description: string
+}
+
+export type QuestionInput = {
+  question: string
+  header: string
+  options: QuestionOption[]
+  multiple?: boolean
+  custom?: boolean
+}
+
+/** Each answer is an array of selected labels */
+export type QuestionAnswer = string[]
 
 export function tool<Args extends z.ZodRawShape>(input: {
   description: string
