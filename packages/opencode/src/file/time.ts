@@ -1,5 +1,5 @@
 import { DateTime, Effect, Layer, Semaphore, ServiceMap } from "effect"
-import { runPromiseInstance } from "@/effect/runtime"
+import { makeRuntimeInstance } from "@/effect/runtime"
 import { Flag } from "@/flag/flag"
 import type { SessionID } from "@/session/schema"
 import { Filesystem } from "../util/filesystem"
@@ -92,19 +92,21 @@ export namespace FileTime {
     }),
   )
 
+  export const { runtime, runSync, runPromise } = makeRuntimeInstance(Service, Layer.fresh(layer))
+
   export function read(sessionID: SessionID, file: string) {
-    return runPromiseInstance(Service.use((s) => s.read(sessionID, file)))
+    return runPromise((s) => s.read(sessionID, file))
   }
 
   export function get(sessionID: SessionID, file: string) {
-    return runPromiseInstance(Service.use((s) => s.get(sessionID, file)))
+    return runPromise((s) => s.get(sessionID, file))
   }
 
   export async function assert(sessionID: SessionID, filepath: string) {
-    return runPromiseInstance(Service.use((s) => s.assert(sessionID, filepath)))
+    return runPromise((s) => s.assert(sessionID, filepath))
   }
 
   export async function withLock<T>(filepath: string, fn: () => Promise<T>): Promise<T> {
-    return runPromiseInstance(Service.use((s) => s.withLock(filepath, fn)))
+    return runPromise((s) => s.withLock(filepath, fn))
   }
 }

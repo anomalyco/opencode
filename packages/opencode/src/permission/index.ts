@@ -1,4 +1,3 @@
-import { runPromiseInstance } from "@/effect/runtime"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { Config } from "@/config/config"
@@ -14,6 +13,7 @@ import { Deferred, Effect, Layer, Schema, ServiceMap } from "effect"
 import os from "os"
 import z from "zod"
 import { PermissionID } from "./schema"
+import { makeRuntimeInstance } from "@/effect/runtime"
 
 export namespace PermissionNext {
   const log = Log.create({ service: "permission" })
@@ -246,6 +246,8 @@ export namespace PermissionNext {
     }),
   )
 
+  export const { runtime, runSync, runPromise } = makeRuntimeInstance(Service, Layer.fresh(layer))
+
   function expand(pattern: string): string {
     if (pattern.startsWith("~/")) return os.homedir() + pattern.slice(1)
     if (pattern === "~") return os.homedir()
@@ -272,12 +274,12 @@ export namespace PermissionNext {
     return rulesets.flat()
   }
 
-  export const ask = fn(AskInput, async (input) => runPromiseInstance(Service.use((svc) => svc.ask(input))))
+  export const ask = fn(AskInput, async (input) => runPromise((svc) => svc.ask(input)))
 
-  export const reply = fn(ReplyInput, async (input) => runPromiseInstance(Service.use((svc) => svc.reply(input))))
+  export const reply = fn(ReplyInput, async (input) => runPromise((svc) => svc.reply(input)))
 
   export async function list() {
-    return runPromiseInstance(Service.use((svc) => svc.list()))
+    return runPromise((svc) => svc.list())
   }
 
   const EDIT_TOOLS = ["edit", "write", "apply_patch", "multiedit"]

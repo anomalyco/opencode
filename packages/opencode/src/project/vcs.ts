@@ -1,4 +1,5 @@
 import { Effect, Layer, ServiceMap } from "effect"
+import { makeRuntimeInstance } from "@/effect/runtime"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { InstanceContext } from "@/effect/instance-context"
@@ -80,4 +81,6 @@ export namespace Vcs {
       })
     }),
   )
+
+  export const { runtime, runSync, runPromise } = makeRuntimeInstance(Service, Layer.fresh(layer))
 }

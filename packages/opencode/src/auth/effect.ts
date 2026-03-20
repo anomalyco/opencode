@@ -1,5 +1,6 @@
 import path from "path"
 import { Effect, Layer, Record, Result, Schema, ServiceMap } from "effect"
+import { makeRuntimeGlobal } from "@/effect/runtime"
 import { Global } from "../global"
 import { Filesystem } from "../util/filesystem"
 
@@ -91,4 +92,6 @@ export namespace AuthEffect {
       return Service.of({ get, all, set, remove })
     }),
   )
+
+  export const { runtime, runSync, runPromise } = makeRuntimeGlobal(Service, layer)
 }

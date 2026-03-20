@@ -1,5 +1,4 @@
 import { Effect, Layer, ServiceMap } from "effect"
-import { runPromiseInstance } from "@/effect/runtime"
 import { InstanceContext } from "@/effect/instance-context"
 import path from "path"
 import { mergeDeep } from "remeda"
@@ -11,6 +10,7 @@ import { Instance } from "../project/instance"
 import { Process } from "../util/process"
 import { Log } from "../util/log"
 import * as Formatter from "./formatter"
+import { makeRuntimeInstance } from "@/effect/runtime"
 
 export namespace Format {
   const log = Log.create({ service: "format" })
@@ -151,7 +151,9 @@ export namespace Format {
     }),
   )
 
+  export const { runtime, runSync, runPromise } = makeRuntimeInstance(Service, Layer.fresh(layer))
+
   export async function status() {
-    return runPromiseInstance(Service.use((s) => s.status()))
+    return runPromise((s) => s.status())
   }
 }

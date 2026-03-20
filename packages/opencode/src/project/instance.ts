@@ -1,11 +1,11 @@
 import { GlobalBus } from "@/bus/global"
-import { disposeInstance } from "@/effect/instance-registry"
 import { Filesystem } from "@/util/filesystem"
 import { iife } from "@/util/iife"
 import { Log } from "@/util/log"
 import { Context } from "../util/context"
 import { Project } from "./project"
 import { State } from "./state"
+import { disposeInstanceRuntimes } from "@/effect/runtime"
 
 interface Context {
   directory: string
@@ -119,7 +119,7 @@ export const Instance = {
   async reload(input: { directory: string; init?: () => Promise<any>; project?: Project.Info; worktree?: string }) {
     const directory = Filesystem.resolve(input.directory)
     Log.Default.info("reloading instance", { directory })
-    await Promise.all([State.dispose(directory), disposeInstance(directory)])
+    await Promise.all([State.dispose(directory), disposeInstanceRuntimes(directory)])
     cache.delete(directory)
     const next = track(directory, boot({ ...input, directory }))
     emit(directory)
@@ -128,7 +128,7 @@ export const Instance = {
   async dispose() {
     const directory = Instance.directory
     Log.Default.info("disposing instance", { directory })
-    await Promise.all([State.dispose(directory), disposeInstance(directory)])
+    await Promise.all([State.dispose(directory), disposeInstanceRuntimes(directory)])
     cache.delete(directory)
     emit(directory)
   },

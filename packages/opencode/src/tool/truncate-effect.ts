@@ -8,6 +8,7 @@ import { Identifier } from "../id/id"
 import { Log } from "../util/log"
 import { ToolID } from "./schema"
 import { TRUNCATION_DIR } from "./truncation-dir"
+import { makeRuntimeGlobal } from "@/effect/runtime"
 
 export namespace TruncateEffect {
   const log = Log.create({ service: "truncation" })
@@ -134,4 +135,6 @@ export namespace TruncateEffect {
   )
 
   export const defaultLayer = layer.pipe(Layer.provide(AppFileSystem.defaultLayer), Layer.provide(NodePath.layer))
+
+  export const { runtime, runSync, runPromise } = makeRuntimeGlobal(Service, defaultLayer)
 }

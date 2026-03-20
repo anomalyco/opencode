@@ -1,6 +1,6 @@
 import { BusEvent } from "@/bus/bus-event"
 import { InstanceContext } from "@/effect/instance-context"
-import { runPromiseInstance } from "@/effect/runtime"
+import { makeRuntimeInstance } from "@/effect/runtime"
 import { git } from "@/util/git"
 import { Effect, Fiber, Layer, Scope, ServiceMap } from "effect"
 import { formatPatch, structuredPatch } from "diff"
@@ -84,23 +84,23 @@ export namespace File {
   }
 
   export function init() {
-    return runPromiseInstance(Service.use((svc) => svc.init()))
+    return runPromise((svc) => svc.init())
   }
 
   export async function status() {
-    return runPromiseInstance(Service.use((svc) => svc.status()))
+    return runPromise((svc) => svc.status())
   }
 
   export async function read(file: string): Promise<Content> {
-    return runPromiseInstance(Service.use((svc) => svc.read(file)))
+    return runPromise((svc) => svc.read(file))
   }
 
   export async function list(dir?: string) {
-    return runPromiseInstance(Service.use((svc) => svc.list(dir)))
+    return runPromise((svc) => svc.list(dir))
   }
 
   export async function search(input: { query: string; limit?: number; dirs?: boolean; type?: "file" | "directory" }) {
-    return runPromiseInstance(Service.use((svc) => svc.search(input)))
+    return runPromise((svc) => svc.search(input))
   }
 
   const log = Log.create({ service: "file" })
@@ -692,4 +692,6 @@ export namespace File {
       return Service.of({ init, status, read, list, search })
     }),
   )
+
+  export const { runtime, runSync, runPromise } = makeRuntimeInstance(Service, Layer.fresh(layer))
 }

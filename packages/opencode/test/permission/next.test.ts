@@ -2,8 +2,6 @@ import { afterEach, test, expect } from "bun:test"
 import os from "os"
 import { Effect } from "effect"
 import { Bus } from "../../src/bus"
-import { runtime } from "../../src/effect/runtime"
-import { Instances } from "../../src/effect/instances"
 import { PermissionNext } from "../../src/permission"
 import { PermissionNext as S } from "../../src/permission"
 import { PermissionID } from "../../src/permission/schema"
@@ -1004,7 +1002,7 @@ test("ask - abort should clear pending request", async () => {
     directory: tmp.path,
     fn: async () => {
       const ctl = new AbortController()
-      const ask = runtime.runPromise(
+      const ask = PermissionNext.runtime().runPromise(
         S.Service.use((svc) =>
           svc.ask({
             sessionID: SessionID.make("session_test"),
@@ -1014,7 +1012,7 @@ test("ask - abort should clear pending request", async () => {
             always: [],
             ruleset: [{ permission: "bash", pattern: "*", action: "ask" }],
           }),
-        ).pipe(Effect.provide(Instances.get(Instance.directory))),
+        ),
         { signal: ctl.signal },
       )
 

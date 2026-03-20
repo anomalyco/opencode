@@ -4,11 +4,11 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import path from "path"
 import z from "zod"
 import { InstanceContext } from "@/effect/instance-context"
-import { runPromiseInstance } from "@/effect/runtime"
 import { AppFileSystem } from "@/filesystem"
 import { Config } from "../config/config"
 import { Global } from "../global"
 import { Log } from "../util/log"
+import { makeRuntimeInstance } from "@/effect/runtime"
 
 export namespace Snapshot {
   export const Patch = z.object({
@@ -32,31 +32,31 @@ export namespace Snapshot {
   export type FileDiff = z.infer<typeof FileDiff>
 
   export async function cleanup() {
-    return runPromiseInstance(Service.use((svc) => svc.cleanup()))
+    return runPromise((svc) => svc.cleanup())
   }
 
   export async function track() {
-    return runPromiseInstance(Service.use((svc) => svc.track()))
+    return runPromise((svc) => svc.track())
   }
 
   export async function patch(hash: string) {
-    return runPromiseInstance(Service.use((svc) => svc.patch(hash)))
+    return runPromise((svc) => svc.patch(hash))
   }
 
   export async function restore(snapshot: string) {
-    return runPromiseInstance(Service.use((svc) => svc.restore(snapshot)))
+    return runPromise((svc) => svc.restore(snapshot))
   }
 
   export async function revert(patches: Patch[]) {
-    return runPromiseInstance(Service.use((svc) => svc.revert(patches)))
+    return runPromise((svc) => svc.revert(patches))
   }
 
   export async function diff(hash: string) {
-    return runPromiseInstance(Service.use((svc) => svc.diff(hash)))
+    return runPromise((svc) => svc.diff(hash))
   }
 
   export async function diffFull(from: string, to: string) {
-    return runPromiseInstance(Service.use((svc) => svc.diffFull(from, to)))
+    return runPromise((svc) => svc.diffFull(from, to))
   }
 
   const log = Log.create({ service: "snapshot" })
@@ -341,9 +341,12 @@ export namespace Snapshot {
   )
 
   export const defaultLayer = layer.pipe(
+    Layer.fresh,
     Layer.provide(NodeChildProcessSpawner.layer),
     Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(NodeFileSystem.layer), // needed by NodeChildProcessSpawner
     Layer.provide(NodePath.layer),
   )
+
+  export const { runtime, runSync, runPromise } = makeRuntimeInstance(Service, defaultLayer)
 }

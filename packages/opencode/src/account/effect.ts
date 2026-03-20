@@ -23,6 +23,7 @@ import {
   PollSuccess,
   UserCode,
 } from "./schema"
+import { makeRuntimeGlobal } from "@/effect/runtime"
 
 export * from "./schema"
 
@@ -357,4 +358,6 @@ export namespace AccountEffect {
   )
 
   export const defaultLayer = layer.pipe(Layer.provide(AccountRepo.layer), Layer.provide(FetchHttpClient.layer))
+
+  export const { runtime, runSync, runPromise } = makeRuntimeGlobal(Service, defaultLayer)
 }

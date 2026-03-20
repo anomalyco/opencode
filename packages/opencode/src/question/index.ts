@@ -1,5 +1,5 @@
 import { Deferred, Effect, Layer, Schema, ServiceMap } from "effect"
-import { runPromiseInstance } from "@/effect/runtime"
+import { makeRuntimeInstance } from "@/effect/runtime"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { SessionID, MessageID } from "@/session/schema"
@@ -171,23 +171,25 @@ export namespace Question {
     }),
   )
 
+  export const { runtime, runSync, runPromise } = makeRuntimeInstance(Service, Layer.fresh(layer))
+
   export async function ask(input: {
     sessionID: SessionID
     questions: Info[]
     tool?: { messageID: MessageID; callID: string }
   }): Promise<Answer[]> {
-    return runPromiseInstance(Service.use((svc) => svc.ask(input)))
+    return runPromise((svc) => svc.ask(input))
   }
 
   export async function reply(input: { requestID: QuestionID; answers: Answer[] }): Promise<void> {
-    return runPromiseInstance(Service.use((svc) => svc.reply(input)))
+    return runPromise((svc) => svc.reply(input))
   }
 
   export async function reject(requestID: QuestionID): Promise<void> {
-    return runPromiseInstance(Service.use((svc) => svc.reject(requestID)))
+    return runPromise((svc) => svc.reject(requestID))
   }
 
   export async function list(): Promise<Request[]> {
-    return runPromiseInstance(Service.use((svc) => svc.list()))
+    return runPromise((svc) => svc.list())
   }
 }

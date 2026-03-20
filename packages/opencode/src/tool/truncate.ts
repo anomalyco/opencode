@@ -1,5 +1,4 @@
 import type { Agent } from "../agent/agent"
-import { runtime } from "@/effect/runtime"
 import { TruncateEffect as S } from "./truncate-effect"
 
 export namespace Truncate {
@@ -13,6 +12,6 @@ export namespace Truncate {
   export type Options = S.Options
 
   export async function output(text: string, options: Options = {}, agent?: Agent.Info): Promise<Result> {
-    return runtime.runPromise(S.Service.use((s) => s.output(text, options, agent)))
+    return S.runPromise((s) => s.output(text, options, agent))
   }
 }

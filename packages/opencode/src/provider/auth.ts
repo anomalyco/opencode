@@ -1,11 +1,11 @@
 import type { AuthOuathResult } from "@opencode-ai/plugin"
 import { NamedError } from "@opencode-ai/util/error"
 import * as Auth from "@/auth/effect"
-import { runPromiseInstance } from "@/effect/runtime"
 import { fn } from "@/util/fn"
 import { ProviderID } from "./schema"
-import { Array as Arr, Effect, Layer, Record, Result, ServiceMap, Struct } from "effect"
+import { Array as Arr, Effect, Layer, Record, Result, ServiceMap } from "effect"
 import z from "zod"
+import { makeRuntimeGlobal } from "@/effect/runtime"
 
 export namespace ProviderAuth {
   export const Method = z
@@ -215,8 +215,10 @@ export namespace ProviderAuth {
 
   export const defaultLayer = layer.pipe(Layer.provide(Auth.AuthEffect.layer))
 
+  export const { runtime, runSync, runPromise } = makeRuntimeGlobal(Service, defaultLayer)
+
   export async function methods() {
-    return runPromiseInstance(Service.use((svc) => svc.methods()))
+    return runPromise((svc) => svc.methods())
   }
 
   export const authorize = fn(
@@ -225,7 +227,7 @@ export namespace ProviderAuth {
       method: z.number(),
       inputs: z.record(z.string(), z.string()).optional(),
     }),
-    async (input): Promise<Authorization | undefined> => runPromiseInstance(Service.use((svc) => svc.authorize(input))),
+    async (input): Promise<Authorization | undefined> => runPromise((svc) => svc.authorize(input)),
   )
 
   export const callback = fn(
@@ -234,6 +236,6 @@ export namespace ProviderAuth {
       method: z.number(),
       code: z.string().optional(),
     }),
-    async (input) => runPromiseInstance(Service.use((svc) => svc.callback(input))),
+    async (input) => runPromise((svc) => svc.callback(input)),
   )
 }

@@ -7,7 +7,6 @@ import { NamedError } from "@opencode-ai/util/error"
 import type { Agent } from "@/agent/agent"
 import { Bus } from "@/bus"
 import { InstanceContext } from "@/effect/instance-context"
-import { runPromiseInstance } from "@/effect/runtime"
 import { Flag } from "@/flag/flag"
 import { Global } from "@/global"
 import { PermissionNext } from "@/permission"
@@ -17,6 +16,7 @@ import { ConfigMarkdown } from "../config/markdown"
 import { Glob } from "../util/glob"
 import { Log } from "../util/log"
 import { Discovery } from "./discovery"
+import { makeRuntimeInstance } from "@/effect/runtime"
 
 export namespace Skill {
   const log = Log.create({ service: "skill" })
@@ -214,23 +214,26 @@ export namespace Skill {
   )
 
   export const defaultLayer: Layer.Layer<Service, never, InstanceContext> = layer.pipe(
+    Layer.fresh,
     Layer.provide(Discovery.defaultLayer),
   )
 
+  export const { runtime, runSync, runPromise } = makeRuntimeInstance(Service, defaultLayer)
+
   export async function get(name: string) {
-    return runPromiseInstance(Service.use((skill) => skill.get(name)))
+    return runPromise((skill) => skill.get(name))
   }
 
   export async function all() {
-    return runPromiseInstance(Service.use((skill) => skill.all()))
+    return runPromise((skill) => skill.all())
   }
 
   export async function dirs() {
-    return runPromiseInstance(Service.use((skill) => skill.dirs()))
+    return runPromise((skill) => skill.dirs())
   }
 
   export async function available(agent?: Agent.Info) {
-    return runPromiseInstance(Service.use((skill) => skill.available(agent)))
+    return runPromise((skill) => skill.available(agent))
   }
 
   export function fmt(list: Info[], opts: { verbose: boolean }) {
