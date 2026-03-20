@@ -250,6 +250,7 @@ export namespace Orchestrator {
       task: PlanSchema.shape.task,
       orchestratorModel: PlanSchema.shape.orchestratorModel.optional(),
       workerModel: PlanSchema.shape.workerModel.optional(),
+      publishMode: z.enum(["new-branch", "unstaged", "direct"]).optional(),
     }),
     async (input): Promise<Plan> => {
       await checkPlanLimit(input.projectID)
@@ -266,6 +267,10 @@ export namespace Orchestrator {
         task: input.task,
         ...models,
       })
+
+      // Store publish mode separately (will be in schema updates)
+      const planWithMode = plan as Plan & { publishMode?: string }
+      planWithMode.publishMode = input.publishMode ?? "new-branch"
 
       const codebaseContext = await Decomposition.gatherCodebaseContext(Instance.directory)
       const formattedContext = Decomposition.formatCodebaseContext(codebaseContext)
@@ -294,7 +299,12 @@ export namespace Orchestrator {
         await approve(updated.id)
       }
 
-      log.info("plan created", { planID: plan.id, subtaskCount: subtasks.length, autoApprove })
+      log.info("plan created", {
+        planID: plan.id,
+        subtaskCount: subtasks.length,
+        autoApprove,
+        publishMode: input.publishMode ?? "new-branch",
+      })
       return updated
     },
   )
@@ -500,4 +510,11 @@ export namespace Orchestrator {
       return PlanStore.get(planID)
     },
   )
+
+  export async function publish(planID: PlanID, opts: { mode: "new-branch" | "unstaged" | "direct" }): Promise<void> {
+    log.info("publishing plan", { planID, mode: opts.mode })
+    // Publish implementation handled by integration layer
+    // This stub allows the CLI to compile while schema changes are finalized
+    throw new Error("Publish not yet implemented - schema updates pending")
+  }
 }
