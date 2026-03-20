@@ -163,7 +163,7 @@ Still open and likely worth migrating:
 
 - [x] `Plugin`
 - [ ] `ToolRegistry`
-- [ ] `Pty`
+- [x] `Pty`
 - [ ] `Worktree`
 - [ ] `Bus`
 - [x] `Command`
