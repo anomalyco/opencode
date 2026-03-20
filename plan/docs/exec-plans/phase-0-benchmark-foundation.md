@@ -2,13 +2,14 @@
 
 ## BMK-001 Build upstream benchmark catalog
 
-- Status: `done`
+- Status: `blocked`
 - Owner: `codex-eda-agent`
 - Started at: `2026-03-20T10:08:45Z`
 - Completed at: `2026-03-20T10:18:08Z`
 - Benchmark: `pass`
 - Artifact root: `/workspaces/Github/opencode/benchmark/26-03-20/18-18-08`
 - Commit: `458ac87ff15137e88ae13adff546ac4526bc629c`
+- Publish: `failed to push xiaokang: Could not read from remote repository`
 - Goal: scan upstream job manifests and build a local catalog grouped by suite.
 - Depends on: `none`
 - Deliverables: case inventory, suite grouping, stable catalog format.

@@ -22,7 +22,7 @@
 
 | ID | Status | Title | Depends On | Benchmark Gate |
 | --- | --- | --- | --- | --- |
-| BMK-001 | done | Build upstream benchmark catalog | none | catalog self-check |
+| BMK-001 | blocked | Build upstream benchmark catalog | none | catalog self-check |
 | BMK-002 | todo | Define benchmark manifest schema | BMK-001 | catalog self-check |
 | BMK-003 | todo | Create timestamped benchmark workspace | BMK-002 | catalog self-check |
 | BMK-004 | todo | Run `smic110-adder` dry-run smoke | BMK-003 | adder smoke |
@@ -35,7 +35,7 @@
 
 ### Latest Runs
 
-- `BMK-001`: `pass` at `/workspaces/Github/opencode/benchmark/26-03-20/18-18-08`; commit: `458ac87ff15137e88ae13adff546ac4526bc629c`
+- `BMK-001`: benchmark `pass` at `/workspaces/Github/opencode/benchmark/26-03-20/18-18-08`; commit: `458ac87ff15137e88ae13adff546ac4526bc629c`; push to `xiaokang` failed with SSH access error
 
 | ID | Status | Title | Depends On | Benchmark Gate |
 | --- | --- | --- | --- | --- |
