@@ -61,9 +61,9 @@ export namespace Process {
 
     const proc = launch(cmd[0], cmd.slice(1), {
       cwd: opts.cwd,
+      shell: opts.shell,
       env: opts.env === null ? {} : opts.env ? { ...process.env, ...opts.env } : undefined,
       stdio: [opts.stdin ?? "ignore", opts.stdout ?? "ignore", opts.stderr ?? "ignore"],
-      shell: opts.shell,
       windowsHide: process.platform === "win32",
     })
 
