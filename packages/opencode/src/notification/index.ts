@@ -1,6 +1,7 @@
 import { Bus } from "@/bus"
 import { SessionStatus } from "@/session/status"
 import { Session } from "@/session"
+import { SessionID } from "@/session/schema"
 import { Log } from "@/util/log"
 import { Config } from "@/config/config"
 
@@ -27,13 +28,12 @@ export namespace Notification {
   }
 
   async function sendCompletionNotification(sessionID: string) {
-    const session = await Session.get(sessionID)
+    const id = SessionID.make(sessionID)
+    const session = await Session.get(id)
     if (!session) return
 
-    const messagesWithParts = await Session.messages({ sessionID, limit: 10 })
-    const lastAssistant = messagesWithParts
-      .filter((m) => m.info.role === "assistant")
-      .pop()
+    const messagesWithParts = await Session.messages({ sessionID: id, limit: 10 })
+    const lastAssistant = messagesWithParts.filter((m) => m.info.role === "assistant").pop()
 
     // Build notification content
     const title = session.title || "OpenCode"
@@ -79,10 +79,13 @@ export namespace Notification {
 
     try {
       // Get window name, session name, window index, and pane ID
-      const proc = Bun.spawn(["tmux", "display-message", "-p", "#{window_name}\t#{session_name}\t#{window_index}\t#{pane_id}"], {
-        stdout: "pipe",
-        stderr: "ignore",
-      })
+      const proc = Bun.spawn(
+        ["tmux", "display-message", "-p", "#{window_name}\t#{session_name}\t#{window_index}\t#{pane_id}"],
+        {
+          stdout: "pipe",
+          stderr: "ignore",
+        },
+      )
       const output = await new Response(proc.stdout).text()
       await proc.exited
       const [windowName, sessionName, windowIndex, pane] = output.trim().split("\t")
