@@ -200,7 +200,7 @@ for (const item of targets) {
   })
 
   // Smoke test: only run if binary is for current platform
-  if (item.os === process.platform && item.arch === process.arch) {
+  if (item.os === process.platform && item.arch === process.arch && !item.abi) {
     const binaryPath = `dist/${name}/bin/opencode`
     console.log(`Running smoke test: ${binaryPath} --version`)
     try {
