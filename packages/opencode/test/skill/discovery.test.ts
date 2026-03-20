@@ -1,5 +1,7 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test"
+import { Effect } from "effect"
 import { Discovery } from "../../src/skill/discovery"
+import { Global } from "../../src/global"
 import { Filesystem } from "../../src/util/filesystem"
 import { rm } from "fs/promises"
 import path from "path"
@@ -9,9 +11,10 @@ let server: ReturnType<typeof Bun.serve>
 let downloadCount = 0
 
 const fixturePath = path.join(import.meta.dir, "../fixture/skills")
+const cacheDir = path.join(Global.Path.cache, "skills")
 
 beforeAll(async () => {
-  await rm(Discovery.dir(), { recursive: true, force: true })
+  await rm(cacheDir, { recursive: true, force: true })
 
   server = Bun.serve({
     port: 0,
@@ -40,22 +43,25 @@ beforeAll(async () => {
 
 afterAll(async () => {
   server?.stop()
-  await rm(Discovery.dir(), { recursive: true, force: true })
+  await rm(cacheDir, { recursive: true, force: true })
 })
 
 describe("Discovery.pull", () => {
+  const pull = (url: string) =>
+    Effect.runPromise(Discovery.Service.use((s) => s.pull(url)).pipe(Effect.provide(Discovery.defaultLayer)))
+
   test("downloads skills from cloudflare url", async () => {
-    const dirs = await Discovery.pull(CLOUDFLARE_SKILLS_URL)
+    const dirs = await pull(CLOUDFLARE_SKILLS_URL)
     expect(dirs.length).toBeGreaterThan(0)
     for (const dir of dirs) {
-      expect(dir).toStartWith(Discovery.dir())
+      expect(dir).toStartWith(cacheDir)
       const md = path.join(dir, "SKILL.md")
       expect(await Filesystem.exists(md)).toBe(true)
     }
   })
 
   test("url without trailing slash works", async () => {
-    const dirs = await Discovery.pull(CLOUDFLARE_SKILLS_URL.replace(/\/$/, ""))
+    const dirs = await pull(CLOUDFLARE_SKILLS_URL.replace(/\/$/, ""))
     expect(dirs.length).toBeGreaterThan(0)
     for (const dir of dirs) {
       const md = path.join(dir, "SKILL.md")
@@ -64,18 +70,18 @@ describe("Discovery.pull", () => {
   })
 
   test("returns empty array for invalid url", async () => {
-    const dirs = await Discovery.pull(`http://localhost:${server.port}/invalid-url/`)
+    const dirs = await pull(`http://localhost:${server.port}/invalid-url/`)
     expect(dirs).toEqual([])
   })
 
   test("returns empty array for non-json response", async () => {
     // any url not explicitly handled in server returns 404 text "Not Found"
-    const dirs = await Discovery.pull(`http://localhost:${server.port}/some-other-path/`)
+    const dirs = await pull(`http://localhost:${server.port}/some-other-path/`)
     expect(dirs).toEqual([])
   })
 
   test("downloads reference files alongside SKILL.md", async () => {
-    const dirs = await Discovery.pull(CLOUDFLARE_SKILLS_URL)
+    const dirs = await pull(CLOUDFLARE_SKILLS_URL)
     // find a skill dir that should have reference files (e.g. agents-sdk)
     const agentsSdk = dirs.find((d) => d.endsWith(path.sep + "agents-sdk"))
     expect(agentsSdk).toBeDefined()
@@ -90,17 +96,17 @@ describe("Discovery.pull", () => {
 
   test("caches downloaded files on second pull", async () => {
     // clear dir and downloadCount
-    await rm(Discovery.dir(), { recursive: true, force: true })
+    await rm(cacheDir, { recursive: true, force: true })
     downloadCount = 0
 
     // first pull to populate cache
-    const first = await Discovery.pull(CLOUDFLARE_SKILLS_URL)
+    const first = await pull(CLOUDFLARE_SKILLS_URL)
     expect(first.length).toBeGreaterThan(0)
     const firstCount = downloadCount
     expect(firstCount).toBeGreaterThan(0)
 
     // second pull should return same results from cache
-    const second = await Discovery.pull(CLOUDFLARE_SKILLS_URL)
+    const second = await pull(CLOUDFLARE_SKILLS_URL)
     expect(second.length).toBe(first.length)
     expect(second.sort()).toEqual(first.sort())
 

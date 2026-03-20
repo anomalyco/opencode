@@ -1050,18 +1050,8 @@
     line-height: var(--line-height-large);
     color: var(--text-base);
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  [data-slot="question-option"][data-custom="true"] {
-    [data-slot="option-description"] {
-      overflow: visible;
-      text-overflow: clip;
-      white-space: normal;
-      overflow-wrap: anywhere;
-    }
+    overflow-wrap: anywhere;
+    white-space: normal;
   }
 
   [data-slot="question-custom"] {
