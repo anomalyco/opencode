@@ -105,16 +105,16 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
 
     if (!plainText) return
 
-    if (largePaste(plainText)) {
-      if (input.addPart({ type: "text", content: plainText, start: 0, end: 0 })) return
-      input.focusEditor()
-      if (input.addPart({ type: "text", content: plainText, start: 0, end: 0 })) return
-    }
+    // Normalize line breaks to prevent extra blank lines when pasting
+    const normalizedText = plainText.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
 
-    const inserted = typeof document.execCommand === "function" && document.execCommand("insertText", false, plainText)
-    if (inserted) return
+    // Always use addPart to ensure consistent text handling
+    // This bypasses document.execCommand which can create unexpected DOM structures
+    if (input.addPart({ type: "text", content: normalizedText, start: 0, end: 0 })) return
 
-    input.addPart({ type: "text", content: plainText, start: 0, end: 0 })
+    // If addPart fails (e.g., editor not focused), focus and retry
+    input.focusEditor()
+    input.addPart({ type: "text", content: normalizedText, start: 0, end: 0 })
   }
 
   // HTML5 drag events — only used for intra-page dragging (text/@mention)
