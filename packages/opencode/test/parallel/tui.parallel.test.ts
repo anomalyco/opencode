@@ -913,4 +913,167 @@ describe("Parallel TUI Keypath Tests", () => {
       })
     })
   })
+
+  describe("Artifact Dependency Display Tests", () => {
+    test("plan view shows implicit dependencies when detected", async () => {
+      await using tmp = await tmpdir({ git: true })
+
+      await Instance.provide({
+        directory: tmp.path,
+        init: InstanceBootstrap,
+        fn: async () => {
+          const plan = await PlanStore.create({
+            projectID: Instance.project.id,
+            sessionID: undefined,
+            task: "Test implicit deps",
+            orchestratorModel: { providerID: "test" as any, modelID: "test-model" as any },
+            workerModel: { providerID: "test" as any, modelID: "test-model" as any },
+          })
+
+          // Create subtasks with implicit dependency
+          const subtask1ID = SubtaskID.ascending()
+          const subtask2ID = SubtaskID.ascending()
+
+          const subtasks: Subtask[] = [
+            {
+              id: subtask1ID,
+              title: "Create types",
+              description: "Define type definitions",
+              fileScope: ["src/types.ts"],
+              dependencies: [],
+            },
+            {
+              id: subtask2ID,
+              title: "Implement API",
+              description: "Uses types from types module",
+              fileScope: ["src/api.ts"],
+              dependencies: [],
+            },
+          ]
+
+          const updated = await PlanStore.update({
+            id: plan.id,
+            subtasks,
+            workers: subtasks.map((st) => ({ subtaskID: st.id, status: "pending" })),
+            status: "proposed",
+          })
+
+          // Verify implicit dependency would be detected
+          const { analyze } = await import("../../src/parallel/artifact")
+          const report = analyze(updated.subtasks)
+
+          expect(report.diagnostics.length).toBeGreaterThan(0)
+          expect(report.missingDependencies.size).toBeGreaterThan(0)
+
+          return updated
+        },
+      })
+    })
+
+    test("strict mode blocks plan with implicit dependencies", async () => {
+      await using tmp = await tmpdir({ git: true })
+
+      await Instance.provide({
+        directory: tmp.path,
+        init: InstanceBootstrap,
+        fn: async () => {
+          const plan = await PlanStore.create({
+            projectID: Instance.project.id,
+            sessionID: undefined,
+            task: "Test strict mode",
+            orchestratorModel: { providerID: "test" as any, modelID: "test-model" as any },
+            workerModel: { providerID: "test" as any, modelID: "test-model" as any },
+          })
+
+          const subtask1ID = SubtaskID.ascending()
+          const subtask2ID = SubtaskID.ascending()
+
+          const subtasks: Subtask[] = [
+            {
+              id: subtask1ID,
+              title: "Create base",
+              description: "Base implementation",
+              fileScope: ["src/base.ts"],
+              dependencies: [],
+            },
+            {
+              id: subtask2ID,
+              title: "Extend base",
+              description: "Uses base module features",
+              fileScope: ["src/extended.ts"],
+              dependencies: [],
+            },
+          ]
+
+          await PlanStore.update({
+            id: plan.id,
+            subtasks,
+            workers: subtasks.map((st) => ({ subtaskID: st.id, status: "pending" })),
+            status: "proposed",
+          })
+
+          // Verify strict mode would fail
+          const { validate } = await import("../../src/parallel/artifact")
+          const result = validate(subtasks, "strict")
+
+          expect(result.valid).toBe(false)
+          expect(result.error).toContain("implicit")
+
+          return plan
+        },
+      })
+    })
+
+    test("disjoint subtasks show no implicit dependencies", async () => {
+      await using tmp = await tmpdir({ git: true })
+
+      await Instance.provide({
+        directory: tmp.path,
+        init: InstanceBootstrap,
+        fn: async () => {
+          const plan = await PlanStore.create({
+            projectID: Instance.project.id,
+            sessionID: undefined,
+            task: "Test disjoint subtasks",
+            orchestratorModel: { providerID: "test" as any, modelID: "test-model" as any },
+            workerModel: { providerID: "test" as any, modelID: "test-model" as any },
+          })
+
+          const subtasks: Subtask[] = [
+            {
+              id: SubtaskID.ascending(),
+              title: "Frontend work",
+              description: "UI components",
+              fileScope: ["src/ui.tsx"],
+              dependencies: [],
+            },
+            {
+              id: SubtaskID.ascending(),
+              title: "Backend work",
+              description: "API routes",
+              fileScope: ["src/routes.ts"],
+              dependencies: [],
+            },
+          ]
+
+          const updated = await PlanStore.update({
+            id: plan.id,
+            subtasks,
+            workers: subtasks.map((st) => ({ subtaskID: st.id, status: "pending" })),
+            status: "proposed",
+          })
+
+          const { analyze } = await import("../../src/parallel/artifact")
+          const report = analyze(updated.subtasks)
+
+          // No implicit dependencies for disjoint subtasks
+          expect(report.diagnostics).toHaveLength(0)
+          expect(report.missingDependencies.size).toBe(0)
+          expect(report.valid).toBe(true)
+
+          return updated
+        },
+      })
+    })
+  })
 })

@@ -1270,6 +1270,12 @@ export namespace Config {
             .describe(
               "Parallel plan lint mode: 'off' disables linting, 'warn' shows diagnostics only, 'auto' rewrites overlapping plans, 'strict' fails approval on any overlap (default: off)",
             ),
+          artifact_mode: z
+            .enum(["off", "warn", "auto", "strict"])
+            .optional()
+            .describe(
+              "Artifact dependency analyzer mode: 'off' skips analysis, 'warn' reports only, 'auto' adds missing dependency edges, 'strict' fails if implicit deps found (default: off)",
+            ),
         })
         .optional()
         .describe("Parallel agent orchestration configuration"),

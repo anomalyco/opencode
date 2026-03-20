@@ -139,6 +139,66 @@ opencode config set parallel.lint_mode strict
 opencode config set parallel.lint_mode warn
 ```
 
+#### Parallel Artifact Dependency Analyzer
+
+OpenCode includes an artifact dependency analyzer that detects implicit dependencies between subtasks, preventing false-parallel plans where one subtask produces artifacts that another consumes.
+
+**Artifact Analysis Modes:**
+
+| Mode     | Behavior                                                                  |
+| -------- | ------------------------------------------------------------------------- |
+| `off`    | Skip artifact analysis (default)                                          |
+| `warn`   | Show diagnostics in plan review, no changes                               |
+| `auto`   | Automatically add missing dependency edges to ensure safe execution order |
+| `strict` | Fail plan approval if any implicit dependencies are detected              |
+
+**What the Analyzer Detects:**
+
+- **Import dependencies**: Subtasks that import from files another subtask produces
+- **Reference dependencies**: Subtasks that reference artifacts in titles/descriptions
+- **Build-order violations**: Subtasks that must run after another produces required artifacts
+
+**Example - Before Auto-Dependency:**
+
+```json
+{
+  "subtasks": [
+    { "id": "1", "title": "Create types", "fileScope": ["src/types.ts"] },
+    { "id": "2", "title": "Implement API", "fileScope": ["src/api.ts"], "description": "Uses types" }
+  ]
+}
+```
+
+**Example - After Auto-Dependency (auto mode):**
+
+```json
+{
+  "subtasks": [
+    { "id": "1", "title": "Create types", "fileScope": ["src/types.ts"] },
+    {
+      "id": "2",
+      "title": "Implement API",
+      "fileScope": ["src/api.ts"],
+      "description": "Uses types",
+      "dependencies": ["1"]
+    }
+  ]
+}
+```
+
+**Configuration:**
+
+```bash
+# Enable auto mode to add missing dependencies
+opencode config set parallel.artifact_mode auto
+
+# Use strict mode to block unsafe plans
+opencode config set parallel.artifact_mode strict
+
+# Show warnings only
+opencode config set parallel.artifact_mode warn
+```
+
 #### Configuration
 
 Configure publish mode in your `AGENTS.md` or via CLI:

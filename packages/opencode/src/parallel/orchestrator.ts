@@ -6,6 +6,7 @@ import { Integration } from "./integration"
 import * as Scheduler from "./scheduler"
 import { lint } from "./lint"
 import { rewrite, validate } from "./rewrite"
+import { analyze as analyzeArtifacts, validate as validateArtifacts, rewrite as rewriteArtifacts } from "./artifact"
 import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider"
 import { Instance } from "@/project/instance"
@@ -160,8 +161,11 @@ export namespace Orchestrator {
       })
     }
 
-    const ids = new Set(plan.subtasks.map((subtask) => subtask.id))
-    for (const subtask of plan.subtasks) {
+    let subtasks = plan.subtasks
+    let changed = false
+
+    const ids = new Set(subtasks.map((subtask) => subtask.id))
+    for (const subtask of subtasks) {
       for (const dep of subtask.dependencies) {
         if (ids.has(dep)) continue
         throw issue({
@@ -176,7 +180,7 @@ export namespace Orchestrator {
     const refs = [
       plan.orchestratorModel,
       plan.workerModel,
-      ...plan.subtasks.flatMap((subtask) => (subtask.model ? [subtask.model] : [])),
+      ...subtasks.flatMap((subtask) => (subtask.model ? [subtask.model] : [])),
     ]
     for (const ref of refs) {
       const key = `${ref.providerID}/${ref.modelID}`
@@ -201,7 +205,7 @@ export namespace Orchestrator {
     }
 
     const marks = new Map<string, number>()
-    const graph = new Map(plan.subtasks.map((subtask) => [String(subtask.id), subtask.dependencies.map(String)]))
+    const graph = new Map(subtasks.map((subtask) => [String(subtask.id), subtask.dependencies.map(String)]))
     const walk = (id: string): boolean => {
       const mark = marks.get(id) ?? 0
       if (mark === 1) return true
@@ -227,7 +231,7 @@ export namespace Orchestrator {
     // Validate file scope overlaps based on scheduler mode
     const cfg = await Config.get()
     const schedulerMode = cfg.parallel?.scheduler_mode ?? "off"
-    const validation = Scheduler.validatePlan(plan.subtasks, schedulerMode)
+    const validation = Scheduler.validatePlan(subtasks, schedulerMode)
 
     if (!validation.valid) {
       throw issue({
@@ -250,8 +254,8 @@ export namespace Orchestrator {
     // Validate and optionally rewrite based on lint_mode
     const lintMode = cfg.parallel?.lint_mode ?? "off"
     if (lintMode !== "off") {
-      const lintReport = lint(plan.subtasks)
-      const lintValidation = validate(plan.subtasks, lintMode)
+      const lintReport = lint(subtasks)
+      const lintValidation = validate(subtasks, lintMode)
 
       if (lintMode === "strict" && !lintValidation.valid) {
         throw issue({
@@ -272,24 +276,76 @@ export namespace Orchestrator {
         }
       }
 
-      if (lintMode === "auto" && !lintReport.valid) {
-        const rewritten = rewrite(plan.subtasks, lintReport)
+      if (lintMode === "auto" && lintReport.issues.length > 0) {
+        const rewritten = rewrite(subtasks, lintReport)
         if (rewritten.addedWiringSubtask) {
           log.info("plan auto-rewritten to isolate shared files", {
-            originalSubtasks: plan.subtasks.length,
+            originalSubtasks: subtasks.length,
             rewrittenSubtasks: rewritten.rewrittenSubtasks.length,
             wiringSubtask: String(rewritten.wiringSubtaskId),
           })
-
-          // Update plan with rewritten subtasks
-          await PlanStore.update({
-            id: plan.id,
-            subtasks: rewritten.rewrittenSubtasks,
-            status: plan.status,
-          })
+          subtasks = rewritten.rewrittenSubtasks
+          changed = true
         }
       }
     }
+
+    // Validate and optionally rewrite based on artifact_mode
+    const artifactMode = cfg.parallel?.artifact_mode ?? "off"
+    if (artifactMode !== "off") {
+      const artifactReport = analyzeArtifacts(subtasks)
+      const artifactValidation = validateArtifacts(subtasks, artifactMode)
+
+      if (artifactMode === "strict" && !artifactValidation.valid) {
+        throw issue({
+          code: "artifact_deps_failed",
+          stage: "preflight",
+          message: artifactValidation.error ?? "Artifact dependency validation failed",
+        })
+      }
+
+      if (artifactMode === "warn" && artifactReport.diagnostics.length > 0) {
+        for (const diagnostic of artifactReport.diagnostics) {
+          log.warn(`[${diagnostic.code}] ${diagnostic.message}`, {
+            severity: diagnostic.severity,
+            subtasks: diagnostic.subtasks.map(String),
+            artifacts: diagnostic.artifacts,
+            recommendation: diagnostic.recommendation,
+          })
+        }
+      }
+
+      if (artifactMode === "auto" && artifactReport.missingDependencies.size > 0) {
+        const { rewritten, addedDeps } = rewriteArtifacts(subtasks, artifactReport)
+        if (addedDeps > 0) {
+          log.info("plan auto-rewritten to add implicit dependencies", {
+            originalSubtasks: subtasks.length,
+            rewrittenSubtasks: rewritten.length,
+            addedDependencies: addedDeps,
+          })
+          subtasks = rewritten
+          changed = true
+        }
+      }
+    }
+
+    if (!changed) return
+
+    const workers = subtasks.map((subtask) => {
+      const existing = plan.workers.find((worker) => worker.subtaskID === subtask.id)
+      if (existing) return existing
+      return {
+        subtaskID: subtask.id,
+        status: "pending" as const,
+      }
+    })
+
+    await PlanStore.update({
+      id: plan.id,
+      subtasks,
+      workers,
+      status: plan.status,
+    })
   }
 
   /**

@@ -7,6 +7,7 @@ import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useSync } from "@tui/context/sync"
 import { lint } from "@/parallel/lint"
+import { analyze as analyzeArtifacts } from "@/parallel/artifact"
 import { TextAttributes } from "@opentui/core"
 import { pipe, flatMap, entries, sortBy, map, filter } from "remeda"
 
@@ -298,6 +299,45 @@ export function ParallelPlan(props: { plan: Plan; onApproved: () => void; onCanc
                 </box>
               )}
             </For>
+          </box>
+        )
+      })()}
+
+      {/* Artifact dependency warnings */}
+      {(() => {
+        const report = analyzeArtifacts(props.plan.subtasks)
+        if (report.diagnostics.length === 0) return null
+        return (
+          <box marginBottom={1} flexDirection="column" borderStyle="single" borderColor={theme.warning} padding={1}>
+            <text fg={theme.warning} attributes={TextAttributes.UNDERLINE}>
+              Implicit Dependencies Detected ({report.summary.error} errors, {report.summary.warn} warnings)
+            </text>
+            <For each={report.diagnostics.filter((d) => d.severity !== "info").slice(0, 5)}>
+              {(diagnostic) => (
+                <box flexDirection="row" gap={1}>
+                  <text
+                    fg={
+                      diagnostic.severity === "error"
+                        ? theme.error
+                        : diagnostic.severity === "warn"
+                          ? theme.warning
+                          : theme.textMuted
+                    }
+                  >
+                    [{diagnostic.severity}]
+                  </text>
+                  <text fg={theme.text}>{diagnostic.code}</text>
+                  <text fg={theme.textMuted} wrapMode="word">
+                    {diagnostic.message.slice(0, 60)}
+                  </text>
+                </box>
+              )}
+            </For>
+            {report.missingDependencies.size > 0 && (
+              <text fg={theme.accent}>
+                Auto mode will add {report.missingDependencies.size} missing dependency edges
+              </text>
+            )}
           </box>
         )
       })()}

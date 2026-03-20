@@ -379,4 +379,158 @@ describe("Parallel Infrastructure", () => {
       expect(result.failed).toBe(2)
     })
   })
+
+  describe("Artifact Analyzer Integration", () => {
+    test("detects implicit import dependency in preflight", async () => {
+      await using tmp = await tmpdir({ git: true })
+
+      await Instance.provide({
+        directory: tmp.path,
+        init: InstanceBootstrap,
+        fn: async () => {
+          const { analyze } = await import("../../src/parallel/artifact")
+
+          const subtasks = [
+            {
+              id: SubtaskID.make("producer"),
+              title: "Create library",
+              description: "Build shared library",
+              fileScope: ["src/lib.ts"],
+              dependencies: [],
+            },
+            {
+              id: SubtaskID.make("consumer"),
+              title: "Use library",
+              description: "Imports from lib",
+              fileScope: ["src/feature.ts"],
+              dependencies: [],
+            },
+          ]
+
+          const report = analyze(subtasks)
+
+          expect(report.edges.length).toBeGreaterThan(0)
+          expect(report.missingDependencies.size).toBeGreaterThan(0)
+
+          return report
+        },
+      })
+    })
+
+    test("auto mode adds missing edges deterministically", async () => {
+      await using tmp = await tmpdir({ git: true })
+
+      await Instance.provide({
+        directory: tmp.path,
+        init: InstanceBootstrap,
+        fn: async () => {
+          const { analyze, rewrite } = await import("../../src/parallel/artifact")
+
+          const subtasks = [
+            {
+              id: SubtaskID.make("1"),
+              title: "Create types",
+              description: "Define types",
+              fileScope: ["src/types.ts"],
+              dependencies: [],
+            },
+            {
+              id: SubtaskID.make("2"),
+              title: "Implement API",
+              description: "Uses types",
+              fileScope: ["src/api.ts"],
+              dependencies: [],
+            },
+          ]
+
+          const report = analyze(subtasks)
+          const { rewritten, addedDeps } = rewrite(subtasks, report)
+
+          expect(addedDeps).toBeGreaterThan(0)
+          expect(rewritten[1].dependencies).toContain(subtasks[0].id)
+
+          // Deterministic - same result on re-analysis
+          const report2 = analyze(rewritten)
+          expect(report2.missingDependencies.size).toBe(0)
+
+          return { rewritten, addedDeps }
+        },
+      })
+    })
+
+    test("strict mode blocks unsafe plan", async () => {
+      await using tmp = await tmpdir({ git: true })
+
+      await Instance.provide({
+        directory: tmp.path,
+        init: InstanceBootstrap,
+        fn: async () => {
+          const { validate } = await import("../../src/parallel/artifact")
+
+          const subtasks = [
+            {
+              id: SubtaskID.make("1"),
+              title: "Create base",
+              description: "Base module",
+              fileScope: ["src/base.ts"],
+              dependencies: [],
+            },
+            {
+              id: SubtaskID.make("2"),
+              title: "Extend",
+              description: "Uses base",
+              fileScope: ["src/ext.ts"],
+              dependencies: [],
+            },
+          ]
+
+          const result = validate(subtasks, "strict")
+
+          expect(result.valid).toBe(false)
+          expect(result.error).toBeDefined()
+
+          return result
+        },
+      })
+    })
+
+    test("no false positives on disjoint subtasks", async () => {
+      await using tmp = await tmpdir({ git: true })
+
+      await Instance.provide({
+        directory: tmp.path,
+        init: InstanceBootstrap,
+        fn: async () => {
+          const { analyze, validate } = await import("../../src/parallel/artifact")
+
+          const subtasks = [
+            {
+              id: SubtaskID.make("1"),
+              title: "Frontend",
+              description: "UI work",
+              fileScope: ["src/ui.tsx"],
+              dependencies: [],
+            },
+            {
+              id: SubtaskID.make("2"),
+              title: "Backend",
+              description: "API work",
+              fileScope: ["src/api.ts"],
+              dependencies: [],
+            },
+          ]
+
+          const report = analyze(subtasks)
+          const result = validate(subtasks, "strict")
+
+          // No implicit dependencies between disjoint subtasks
+          expect(report.diagnostics).toHaveLength(0)
+          expect(report.missingDependencies.size).toBe(0)
+          expect(result.valid).toBe(true)
+
+          return report
+        },
+      })
+    })
+  })
 })
