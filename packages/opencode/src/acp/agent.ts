@@ -1746,7 +1746,7 @@ export namespace ACP {
       const baseModelInfo = provider.models[baseModelId]
       if (baseModelInfo?.variants && candidateVariant in baseModelInfo.variants) {
         return {
-          model: { providerID: parsed.providerID, modelID: baseModelId },
+          model: { providerID: parsed.providerID, modelID: ModelID.make(baseModelId) },
           variant: candidateVariant,
         }
       }

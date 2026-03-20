@@ -887,8 +887,8 @@ export namespace Provider {
     // Add Kiro provider with Claude models
     const kiroModels: Record<string, Model> = {
       "claude-sonnet-4-5": {
-        id: "claude-sonnet-4-5",
-        providerID: "kiro",
+        id: ModelID.make("claude-sonnet-4-5"),
+        providerID: ProviderID.kiro,
         name: "Claude Sonnet 4.5",
         family: "claude-sonnet",
         api: {
@@ -927,8 +927,8 @@ export namespace Provider {
         },
       },
       "claude-opus-4-5": {
-        id: "claude-opus-4-5",
-        providerID: "kiro",
+        id: ModelID.make("claude-opus-4-5"),
+        providerID: ProviderID.kiro,
         name: "Claude Opus 4.5",
         family: "claude-opus",
         api: {
@@ -967,8 +967,8 @@ export namespace Provider {
         },
       },
       "claude-opus-4-6": {
-        id: "claude-opus-4-6",
-        providerID: "kiro",
+        id: ModelID.make("claude-opus-4-6"),
+        providerID: ProviderID.kiro,
         name: "Claude Opus 4.6",
         family: "claude-opus",
         api: {
@@ -1007,8 +1007,8 @@ export namespace Provider {
         },
       },
       "claude-sonnet-4-6": {
-        id: "claude-sonnet-4-6",
-        providerID: "kiro",
+        id: ModelID.make("claude-sonnet-4-6"),
+        providerID: ProviderID.kiro,
         name: "Claude Sonnet 4.6",
         family: "claude-sonnet",
         api: {
@@ -1047,8 +1047,8 @@ export namespace Provider {
         },
       },
       "claude-haiku-4-5": {
-        id: "claude-haiku-4-5",
-        providerID: "kiro",
+        id: ModelID.make("claude-haiku-4-5"),
+        providerID: ProviderID.kiro,
         name: "Claude Haiku 4.5",
         family: "claude-haiku",
         api: {
@@ -1074,8 +1074,8 @@ export namespace Provider {
         variants: {},
       },
       "claude-sonnet-4": {
-        id: "claude-sonnet-4",
-        providerID: "kiro",
+        id: ModelID.make("claude-sonnet-4"),
+        providerID: ProviderID.kiro,
         name: "Claude Sonnet 4",
         family: "claude-sonnet",
         api: {
@@ -1101,8 +1101,8 @@ export namespace Provider {
         variants: {},
       },
       "claude-3-7-sonnet": {
-        id: "claude-3-7-sonnet",
-        providerID: "kiro",
+        id: ModelID.make("claude-3-7-sonnet"),
+        providerID: ProviderID.kiro,
         name: "Claude 3.7 Sonnet",
         family: "claude-sonnet",
         api: {
@@ -1130,7 +1130,7 @@ export namespace Provider {
     }
 
     database["kiro"] = {
-      id: "kiro",
+      id: ProviderID.kiro,
       name: "Kiro (AWS)",
       source: "custom",
       env: [],
