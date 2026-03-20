@@ -13,7 +13,7 @@ import { LLM } from "./llm"
 import { Config } from "@/config/config"
 import { SessionCompaction } from "./compaction"
 import { PermissionNext } from "@/permission"
-import { Question } from "@/question"
+import { Question } from "@/question/service"
 import { PartID } from "./schema"
 import type { SessionID, MessageID } from "./schema"
 
