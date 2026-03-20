@@ -171,7 +171,9 @@ export namespace ProviderTransform {
     return msgs
   }
 
-  function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
+  function applyCaching(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>): ModelMessage[] {
+    if (model.providerID === "anthropic" && options.authType === "oauth") return msgs
+
     const system = msgs.filter((msg) => msg.role === "system").slice(0, 2)
     const final = msgs.filter((msg) => msg.role !== "system").slice(-2)
 
@@ -261,7 +263,7 @@ export namespace ProviderTransform {
         model.api.npm === "@ai-sdk/anthropic") &&
       model.api.npm !== "@ai-sdk/gateway"
     ) {
-      msgs = applyCaching(msgs, model)
+      msgs = applyCaching(msgs, model, options)
     }
 
     // Remap providerOptions keys from stored providerID to expected SDK key

@@ -1660,6 +1660,32 @@ describe("ProviderTransform.message - cache control on gateway", () => {
       },
     })
   })
+
+  test("anthropic oauth skips ephemeral cache control", () => {
+    const model = createModel({
+      providerID: "anthropic",
+      api: {
+        id: "claude-sonnet-4",
+        url: "https://api.anthropic.com",
+        npm: "@ai-sdk/anthropic",
+      },
+    })
+    const msgs = [
+      {
+        role: "system",
+        content: "You are a helpful assistant",
+      },
+      {
+        role: "user",
+        content: "Hello",
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, { authType: "oauth" }) as any[]
+
+    expect(result[0].content[0]?.providerOptions).toBeUndefined()
+    expect(result[0].providerOptions).toBeUndefined()
+  })
 })
 
 describe("ProviderTransform.variants", () => {
