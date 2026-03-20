@@ -154,7 +154,7 @@ function refreshToken(refresh: string): { access: string; refresh: string; expir
 
 export async function AnthropicAuthPlugin(input: PluginInput): Promise<Hooks> {
   return {
-    "experimental.chat.system.transform": (_input, output) => {
+    "experimental.chat.system.transform": async (_input, output) => {
       const prefix = "You are Claude Code, Anthropic's official CLI for Claude."
       if (_input.model?.providerID === "anthropic") {
         output.system.unshift(prefix)
@@ -360,7 +360,6 @@ export async function AnthropicAuthPlugin(input: PluginInput): Promise<Hooks> {
           },
         },
         {
-          provider: "anthropic",
           label: "Manually enter API Key",
           type: "api",
         },
