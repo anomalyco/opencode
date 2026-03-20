@@ -299,8 +299,14 @@ export namespace SessionPrompt {
     const abort = resume_existing ? resume(sessionID) : start(sessionID)
     if (!abort) {
       return new Promise<MessageV2.WithParts>((resolve, reject) => {
-        const callbacks = state()[sessionID].callbacks
-        callbacks.push({ resolve, reject })
+        const current = state()
+        const sessionState = current[sessionID]
+        // Check if session state exists to prevent hanging on race conditions
+        if (!sessionState) {
+          reject(new DOMException("Session state not found", "AbortError"))
+          return
+        }
+        sessionState.callbacks.push({ resolve, reject })
       })
     }
 
