@@ -707,6 +707,22 @@ export namespace ProviderTransform {
           return Object.fromEntries(WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
         }
         return {}
+
+      case "@ai-sdk/kiro":
+        return {
+          high: {
+            thinking: {
+              type: "enabled",
+              budgetTokens: 16000,
+            },
+          },
+          max: {
+            thinking: {
+              type: "enabled",
+              budgetTokens: 31999,
+            },
+          },
+        }
     }
     return {}
   }
