@@ -369,6 +369,7 @@ export namespace MessageV2 {
     system: z.string().optional(),
     tools: z.record(z.string(), z.boolean()).optional(),
     variant: z.string().optional(),
+    temperature: z.number().min(0).max(2).optional(),
   }).meta({
     ref: "UserMessage",
   })

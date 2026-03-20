@@ -23,6 +23,12 @@ const parameters = z.object({
     )
     .optional(),
   command: z.string().describe("The command that triggered this task").optional(),
+  temperature: z
+    .number()
+    .min(0)
+    .max(2)
+    .describe("Override the agent's temperature for this task (0.0 to 2.0)")
+    .optional(),
 })
 
 export const TaskTool = Tool.define("task", async (ctx) => {
@@ -142,6 +148,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
         },
         parts: promptParts,
+        temperature: params.temperature,
       })
 
       const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""

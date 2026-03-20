@@ -112,6 +112,7 @@ export namespace SessionPrompt {
     format: MessageV2.Format.optional(),
     system: z.string().optional(),
     variant: z.string().optional(),
+    temperature: z.number().min(0).max(2).optional(),
     parts: z.array(
       z.discriminatedUnion("type", [
         MessageV2.TextPart.omit({
@@ -986,6 +987,7 @@ export namespace SessionPrompt {
       system: input.system,
       format: input.format,
       variant,
+      temperature: input.temperature,
     }
     using _ = defer(() => InstructionPrompt.clear(info.id))
 

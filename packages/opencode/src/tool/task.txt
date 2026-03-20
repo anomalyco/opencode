@@ -22,6 +22,7 @@ Usage notes:
 4. The agent's outputs should generally be trusted
 5. Clearly tell the agent whether you expect it to write code or just to do research (search, file reads, web fetches, etc.), since it is not aware of the user's intent. Tell it how to verify its work if possible (e.g., relevant test commands).
 6. If the agent description mentions that it should be used proactively, then you should try your best to use it without the user having to ask for it first. Use your judgement.
+7. You can optionally override the agent's temperature setting by providing a temperature parameter (0.0 to 2.0). Lower values (e.g., 0.2) make the output more deterministic and focused, while higher values (e.g., 0.8) make it more creative and varied. Use this when you need fine-grained control over the subagent's behavior for specific tasks.
 
 Example usage (NOTE: The agents below are fictional examples for illustration only - use the actual agents listed above):
 
