@@ -89,7 +89,7 @@ test("Kiro: models have correct capabilities", async () => {
           expect(sonnet.capabilities.input.text).toBe(true)
           expect(sonnet.capabilities.input.image).toBe(true)
           expect(sonnet.capabilities.input.pdf).toBe(true)
-          expect(sonnet.limit.context).toBe(210000)
+          expect(sonnet.limit.context).toBe(200000)
           expect(sonnet.cost.input).toBe(0) // Subscription model
           expect(sonnet.cost.output).toBe(0)
         }
