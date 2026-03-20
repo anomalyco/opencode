@@ -178,9 +178,7 @@ it.effect("config sends the selected org header", () =>
       }),
     )
 
-    const cfg = yield* Account.Service.use((s) => s.config(id, OrgID.make("org-9"))).pipe(
-      Effect.provide(live(client)),
-    )
+    const cfg = yield* Account.Service.use((s) => s.config(id, OrgID.make("org-9"))).pipe(Effect.provide(live(client)))
 
     expect(Option.getOrThrow(cfg)).toEqual({ theme: "light", seats: 5 })
     expect(seen).toEqual({
