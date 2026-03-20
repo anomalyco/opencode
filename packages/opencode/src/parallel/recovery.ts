@@ -3,11 +3,10 @@ import { Database, eq } from "../storage/db"
 import { PlanTable } from "./plan.sql"
 import { Log } from "@/util/log"
 import { git } from "../util/git"
-import { Instance } from "../project/instance"
+import { Project } from "../project/project"
 import type { Plan, PlanID, PlanStatus, WorkerState } from "./schema"
 import type { ProjectID } from "../project/schema"
 import * as fs from "fs"
-import * as path from "path"
 
 export namespace Recovery {
   const log = Log.create({ service: "parallel-recovery" })
@@ -393,9 +392,14 @@ export namespace Recovery {
    * Runs `git worktree prune` and removes any parallel-* worktree directories.
    */
   export async function cleanupWorktrees(plan: Plan): Promise<void> {
+    const cwd =
+      Project.get(plan.projectID)?.worktree ??
+      plan.workers.find((w) => w.worktreeDir && fs.existsSync(w.worktreeDir))?.worktreeDir ??
+      process.cwd()
+
     // Prune stale worktree references
     try {
-      await git(["worktree", "prune"], { cwd: Instance.worktree })
+      await git(["worktree", "prune"], { cwd })
       log.info("pruned stale worktrees")
     } catch (e) {
       log.warn("failed to prune worktrees", { error: e })
@@ -405,7 +409,7 @@ export namespace Recovery {
     for (const worker of plan.workers) {
       if (worker.worktreeDir && fs.existsSync(worker.worktreeDir)) {
         try {
-          await git(["worktree", "remove", "--force", worker.worktreeDir], { cwd: Instance.worktree })
+          await git(["worktree", "remove", "--force", worker.worktreeDir], { cwd })
           log.info("removed worktree", { dir: worker.worktreeDir })
         } catch {
           // Try direct removal if git worktree remove fails
@@ -421,7 +425,7 @@ export namespace Recovery {
       // Remove the branch if it exists
       if (worker.branch) {
         try {
-          await git(["branch", "-D", worker.branch], { cwd: Instance.worktree })
+          await git(["branch", "-D", worker.branch], { cwd })
         } catch {
           // Branch may already be gone
         }

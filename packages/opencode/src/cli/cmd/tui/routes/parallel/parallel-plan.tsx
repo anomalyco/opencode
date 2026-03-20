@@ -135,12 +135,8 @@ export function ParallelPlan(props: { plan: Plan; onApproved: () => void; onCanc
       <SubtaskModelPicker
         subtask={subtask}
         workerDefault={props.plan.workerModel}
-        onSelect={async (model) => {
+        onSelect={(model) => {
           setSubtaskModels((prev) => ({ ...prev, [subtask.id]: model }))
-          // Persist immediately so it survives even if user doesn't approve
-          const { PlanStore } = await import("@/parallel/plan")
-          const updatedSubtasks = props.plan.subtasks.map((st) => (st.id === subtask.id ? { ...st, model } : st))
-          await PlanStore.update({ id: props.plan.id, subtasks: updatedSubtasks })
         }}
       />
     ))
@@ -148,23 +144,30 @@ export function ParallelPlan(props: { plan: Plan; onApproved: () => void; onCanc
 
   useKeyboard((evt) => {
     if (dialog.stack.length > 0) return
+    if (evt.defaultPrevented) return
     if (evt.name === "a" || (evt.sequence === "a" && !evt.ctrl)) {
       evt.preventDefault()
+      evt.stopPropagation()
       handleApprove()
     } else if (evt.name === "r" || (evt.sequence === "r" && !evt.ctrl)) {
       evt.preventDefault()
+      evt.stopPropagation()
       handleRegenerate()
     } else if (evt.name === "c" || (evt.sequence === "c" && !evt.ctrl)) {
       evt.preventDefault()
+      evt.stopPropagation()
       handleCancel()
     } else if (evt.name === "m" || (evt.sequence === "m" && !evt.ctrl)) {
       evt.preventDefault()
+      evt.stopPropagation()
       openModelPicker(selected())
-    } else if (evt.name === "up") {
+    } else if (evt.name === "up" || (evt.sequence === "k" && !evt.ctrl)) {
       evt.preventDefault()
+      evt.stopPropagation()
       setSelected((s) => Math.max(0, s - 1))
-    } else if (evt.name === "down") {
+    } else if (evt.name === "down" || (evt.sequence === "j" && !evt.ctrl)) {
       evt.preventDefault()
+      evt.stopPropagation()
       setSelected((s) => Math.min(props.plan.subtasks.length - 1, s + 1))
     }
   })

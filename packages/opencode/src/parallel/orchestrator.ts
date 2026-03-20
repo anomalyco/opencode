@@ -205,8 +205,9 @@ export namespace Orchestrator {
 
     const controller = new AbortController()
     activeExecutions.set(planID, controller)
+    const run = Instance.bind((id: PlanID, abort: AbortSignal) => execute(id, abort))
 
-    execute(planID, controller.signal)
+    run(planID, controller.signal)
       .catch(async (error) => {
         log.error("plan execution failed", { planID, error })
         try {

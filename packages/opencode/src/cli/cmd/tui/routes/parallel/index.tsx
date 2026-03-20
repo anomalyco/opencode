@@ -212,7 +212,11 @@ export function Parallel() {
               <text attributes={TextAttributes.BOLD} fg={theme.error}>
                 Failed
               </text>
-              <text fg={theme.text}>Plan execution failed</text>
+              <text fg={theme.text}>
+                {plan.workers.length > 0 && plan.workers.every((w) => w.status === "pending")
+                  ? "No workers started. Check /parallel config and selected models."
+                  : "Plan execution failed"}
+              </text>
               <text fg={theme.textMuted}>Press ESC to go back</text>
             </box>
           </Show>

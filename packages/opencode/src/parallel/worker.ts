@@ -2,6 +2,7 @@ import { Worktree } from "../worktree"
 import { Session } from "../session"
 import { Instance } from "../project/instance"
 import { ParallelBootstrap } from "../project/bootstrap"
+import { Project } from "../project/project"
 import { PlanStore } from "./plan"
 import { Config } from "@/config/config"
 import { Log } from "@/util/log"
@@ -107,6 +108,7 @@ export namespace WorkerManager {
     if (!worktreeResult.ready) {
       throw new Error(`Worktree failed to become ready: ${worktreeResult.error}`)
     }
+    const project = Project.get(plan.projectID) ?? (await Project.fromDirectory(info.directory)).project
 
     const session = await Instance.provide({
       directory: info.directory,
@@ -118,7 +120,7 @@ export namespace WorkerManager {
           title: `[parallel] ${subtask.title}`,
         })
       },
-      project: Instance.project,
+      project,
       worktree: info.directory,
     })
 
@@ -135,9 +137,11 @@ export namespace WorkerManager {
       init: ParallelBootstrap, // Use lightweight bootstrap
       fn: async () => {
         const promptText = buildWorkerPrompt(plan.task, subtask, plan.subtasks)
+        const model = subtask.model ?? plan.workerModel
         const { SessionPrompt } = await import("../session/prompt")
         await SessionPrompt.prompt({
           sessionID: session.id,
+          model,
           parts: [
             {
               type: "text" as const,
@@ -146,7 +150,7 @@ export namespace WorkerManager {
           ],
         })
       },
-      project: Instance.project,
+      project,
       worktree: info.directory,
     })
 
@@ -155,8 +159,16 @@ export namespace WorkerManager {
 
   export async function spawnAll(plan: Plan, abort: AbortSignal): Promise<void> {
     const cfg = await Config.get()
-    const maxWorkers = cfg.parallel?.max_workers
+    const rawMaxWorkers = cfg.parallel?.max_workers
+    const maxWorkers =
+      typeof rawMaxWorkers === "number" && Number.isInteger(rawMaxWorkers) && rawMaxWorkers > 0
+        ? rawMaxWorkers
+        : undefined
     const spawnStartTime = Date.now()
+
+    if (rawMaxWorkers !== undefined && maxWorkers === undefined) {
+      log.warn("invalid max_workers config, using unlimited", { raw: rawMaxWorkers })
+    }
 
     // Build dependency graph
     const subtaskMap = new Map<SubtaskID, Subtask>()

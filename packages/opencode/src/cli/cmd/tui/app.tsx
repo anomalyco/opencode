@@ -546,13 +546,28 @@ function App() {
           const { PlanStore } = await import("@/parallel/plan")
           const plans = (await PlanStore.list()).sort((a, b) => b.time.created - a.time.created)
           const back = parent()
+          const sid =
+            route.data.type === "session"
+              ? route.data.sessionID
+              : route.data.type === "parallel"
+                ? route.data.returnTo?.type === "session"
+                  ? route.data.returnTo.sessionID
+                  : undefined
+                : undefined
           const run = plans.find(
             (p) =>
               p.status === "approved" || p.status === "spawning" || p.status === "running" || p.status === "merging",
           )
           const prep = plans.find((p) => p.status === "draft" || p.status === "proposed")
-          const plan = run ?? prep
+          const last = sid ? plans.find((p) => p.sessionID === sid) : undefined
+          const plan = run ?? prep ?? last
           if (plan) {
+            if (!run && !prep && plan.status !== "done") {
+              toast.show({
+                message: `No active parallel plans. Showing latest (${plan.status}).`,
+                variant: "info",
+              })
+            }
             route.navigate({ type: "parallel", planID: plan.id, returnTo: back })
           } else {
             toast.show({ message: "No active parallel plans", variant: "info" })
