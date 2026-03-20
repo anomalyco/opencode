@@ -596,6 +596,23 @@
   }
 }
 
+[data-component="dialog"] [data-component="tabs"],
+[data-component="popover-content"] [data-component="tabs"] {
+  background-color: transparent;
+
+  [data-slot="tabs-list"] {
+    background-color: transparent;
+
+    &::after {
+      background-color: transparent;
+    }
+  }
+
+  [data-slot="tabs-content"] {
+    background-color: transparent;
+  }
+}
+
 [data-component="tabs-drag-preview"] {
   position: relative;
   display: flex;

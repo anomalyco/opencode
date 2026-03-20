@@ -128,7 +128,8 @@ export function ModelSelectorPopover(props: {
       </Kobalte.Trigger>
       <Kobalte.Portal>
         <Kobalte.Content
-          class="w-72 h-80 flex flex-col p-2 rounded-md border border-border-base bg-surface-raised-stronger-non-alpha shadow-md z-50 outline-none overflow-hidden"
+          class="w-72 h-80 flex flex-col p-2 rounded-xl border bg-[color:rgb(12_12_14_/_0.34)] shadow-[var(--shadow-lg-border-base)] z-50 outline-none overflow-hidden backdrop-blur-[40px] saturate-[1.5] [-webkit-backdrop-filter:blur(40px)_saturate(1.5)]"
+          style={{ border: "1px solid rgb(255 255 255 / 0.04)" }}
           onEscapeKeyDown={(event) => {
             setStore("dismiss", "escape")
             setStore("open", false)
