@@ -109,6 +109,9 @@ export const GlobalRoutes = lazy(() =>
           }
 
           stream.onAbort(stop)
+          // Secondary cleanup: fires when the underlying TCP connection closes,
+          // even when stream.onAbort() doesn't (e.g. behind a reverse proxy).
+          c.req.raw.signal.addEventListener("abort", stop)
 
           try {
             for await (const data of q) {

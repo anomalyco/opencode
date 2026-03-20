@@ -22,6 +22,46 @@ import { lazy } from "../../util/lazy"
 
 const log = Log.create({ service: "server" })
 
+const COMPACT_LIMIT = 4096
+
+// Truncate large fields in message list responses to reduce payload size.
+// Full data is still available via GET /session/:id/message/:messageID.
+function compactMessages(messages: MessageV2.WithParts[]) {
+  return messages.map((msg) => {
+    let info = msg.info as any
+    // Strip full file diffs from summary — they can be 10s of MBs for sessions
+    // with many file changes. Keep metadata (additions/deletions/files), drop before/after.
+    if (info?.summary?.diffs) {
+      info = {
+        ...info,
+        summary: {
+          ...info.summary,
+          diffs: info.summary.diffs.map((d: any) => ({
+            file: d.file,
+            additions: d.additions,
+            deletions: d.deletions,
+            status: d.status,
+          })),
+        },
+      }
+    }
+    return {
+      ...msg,
+      info,
+      parts: msg.parts.map((p) => {
+        if (p.type !== "tool") return p
+        const state = (p as any).state
+        if (!state) return p
+        const next = { ...state }
+        if (typeof next.output === "string" && next.output.length > COMPACT_LIMIT)
+          next.output = next.output.slice(0, COMPACT_LIMIT) + "\n… (truncated)"
+        if (next.metadata !== undefined) delete next.metadata
+        return { ...p, state: next }
+      }),
+    }
+  })
+}
+
 export const SessionRoutes = lazy(() =>
   new Hono()
     .get(
@@ -605,13 +645,13 @@ export const SessionRoutes = lazy(() =>
         if (query.limit === undefined) {
           await Session.get(sessionID)
           const messages = await Session.messages({ sessionID })
-          return c.json(messages)
+          return c.json(compactMessages(messages))
         }
 
         if (query.limit === 0) {
           await Session.get(sessionID)
           const messages = await Session.messages({ sessionID })
-          return c.json(messages)
+          return c.json(compactMessages(messages))
         }
 
         const page = await MessageV2.page({
@@ -627,7 +667,7 @@ export const SessionRoutes = lazy(() =>
           c.header("Link", `<${url.toString()}>; rel=\"next\"`)
           c.header("X-Next-Cursor", page.cursor)
         }
-        return c.json(page.items)
+        return c.json(compactMessages(page.items))
       },
     )
     .get(

@@ -21,12 +21,20 @@ export function WorkspaceServerRoutes() {
         void send({ type: "server.heartbeat", properties: {} })
       }, 10_000)
 
+      let done = false
+      const stop = () => {
+        if (done) return
+        done = true
+        clearInterval(heartbeat)
+        GlobalBus.off("event", handler)
+      }
+      stream.onAbort(stop)
+      // Secondary cleanup: fires when the underlying TCP connection closes,
+      // even when stream.onAbort() doesn't (e.g. behind a reverse proxy).
+      c.req.raw.signal.addEventListener("abort", stop)
       await new Promise<void>((resolve) => {
-        stream.onAbort(() => {
-          clearInterval(heartbeat)
-          GlobalBus.off("event", handler)
-          resolve()
-        })
+        stream.onAbort(resolve)
+        c.req.raw.signal.addEventListener("abort", () => resolve())
       })
     })
   })
