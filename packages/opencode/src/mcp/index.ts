@@ -455,9 +455,8 @@ export namespace MCP {
         cwd,
         env: {
           ...process.env,
-          ...(cmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
           ...mcp.environment,
-        },
+        } as any,
       })
       transport.stderr?.on("data", (chunk: Buffer) => {
         log.info(`mcp stderr: ${chunk.toString()}`, { key })

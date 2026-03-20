@@ -4,7 +4,7 @@ import { Bus } from "../bus"
 import { Log } from "../util/log"
 import { createOpencodeClient } from "@opencode-ai/sdk"
 import { Server } from "../server/server"
-import { BunProc } from "../bun"
+import { Npm } from "../npm"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
 import { CodexAuthPlugin } from "./codex"
@@ -30,7 +30,9 @@ export namespace Plugin {
         : undefined,
       fetch: async (...args) => Server.Default().fetch(...args),
     })
+    log.info("loading config")
     const config = await Config.get()
+    log.info("config loaded")
     const hooks: Hooks[] = []
     const input: PluginInput = {
       client,
@@ -40,7 +42,8 @@ export namespace Plugin {
       get serverUrl(): URL {
         return Server.url ?? new URL("http://localhost:4096")
       },
-      $: Bun.$,
+      // @ts-expect-error
+      $: typeof Bun === "undefined" ? undefined : Bun.$,
     }
 
     for (const plugin of INTERNAL_PLUGINS) {
@@ -59,16 +62,13 @@ export namespace Plugin {
       if (plugin.includes("opencode-openai-codex-auth") || plugin.includes("opencode-copilot-auth")) continue
       log.info("loading plugin", { path: plugin })
       if (!plugin.startsWith("file://")) {
-        const lastAtIndex = plugin.lastIndexOf("@")
-        const pkg = lastAtIndex > 0 ? plugin.substring(0, lastAtIndex) : plugin
-        const version = lastAtIndex > 0 ? plugin.substring(lastAtIndex + 1) : "latest"
-        plugin = await BunProc.install(pkg, version).catch((err) => {
+        plugin = await Npm.add(plugin).catch((err) => {
           const cause = err instanceof Error ? err.cause : err
           const detail = cause instanceof Error ? cause.message : String(cause ?? err)
-          log.error("failed to install plugin", { pkg, version, error: detail })
+          log.error("failed to install plugin", { plugin, error: detail })
           Bus.publish(Session.Event.Error, {
             error: new NamedError.Unknown({
-              message: `Failed to install plugin ${pkg}@${version}: ${detail}`,
+              message: `Failed to install plugin ${plugin}: ${detail}`,
             }).toObject(),
           })
           return ""
