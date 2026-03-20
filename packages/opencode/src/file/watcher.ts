@@ -137,5 +137,5 @@ export namespace FileWatcher {
         return Effect.succeed(Service.of({}))
       }),
     ),
-  )
+  ).pipe(Layer.orDie, Layer.fresh)
 }
