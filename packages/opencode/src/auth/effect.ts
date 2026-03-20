@@ -37,7 +37,7 @@ const file = path.join(Global.Path.data, "auth.json")
 
 const fail = (message: string) => (cause: unknown) => new AuthError({ message, cause })
 
-export namespace AuthEffect {
+export namespace Auth {
   export interface Interface {
     readonly get: (providerID: string) => Effect.Effect<Info | undefined, AuthError>
     readonly all: () => Effect.Effect<Record<string, Info>, AuthError>
