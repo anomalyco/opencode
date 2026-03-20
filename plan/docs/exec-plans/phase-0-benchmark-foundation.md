@@ -8,7 +8,7 @@
 - Completed at: `2026-03-20T10:18:08Z`
 - Benchmark: `pass`
 - Artifact root: `/workspaces/Github/opencode/benchmark/26-03-20/18-18-08`
-- Commit: `pending`
+- Commit: `458ac87ff15137e88ae13adff546ac4526bc629c`
 - Goal: scan upstream job manifests and build a local catalog grouped by suite.
 - Depends on: `none`
 - Deliverables: case inventory, suite grouping, stable catalog format.

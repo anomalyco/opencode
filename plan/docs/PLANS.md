@@ -35,7 +35,7 @@
 
 ### Latest Runs
 
-- `BMK-001`: `pass` at `/workspaces/Github/opencode/benchmark/26-03-20/18-18-08`; commit: `pending`
+- `BMK-001`: `pass` at `/workspaces/Github/opencode/benchmark/26-03-20/18-18-08`; commit: `458ac87ff15137e88ae13adff546ac4526bc629c`
 
 | ID | Status | Title | Depends On | Benchmark Gate |
 | --- | --- | --- | --- | --- |
