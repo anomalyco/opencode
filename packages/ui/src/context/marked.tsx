@@ -571,18 +571,22 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
   name: "Marked",
   init: (props: { nativeParser?: NativeMarkdownParser; mathOutput?: MathOutput }) => {
     const output = props.mathOutput ?? "htmlAndMathml"
-    const jsParser = marked.use(
-      {
-        renderer: {
-          link({ href, title, text }) {
-            const normalized = href ? normalizeAutolink(href, text) : undefined
-            const safeHref = normalized?.href ?? href
-            const safeText = normalized?.text ?? text
-            const titleAttr = title ? ` title="${title}"` : ""
-            return `<a href="${safeHref}"${titleAttr} class="external-link" target="_blank" rel="noopener noreferrer">${safeText}</a>`
-          },
+
+    const linkRenderer = {
+      renderer: {
+        link({ href, title, text }: { href: string; title?: string | null; text: string }) {
+          const normalized = href ? normalizeAutolink(href, text) : undefined
+          const safeHref = normalized?.href ?? href
+          const safeText = normalized?.text ?? text
+          const titleAttr = title ? ` title="${title}"` : ""
+          return `<a href="${safeHref}"${titleAttr} class="external-link" target="_blank" rel="noopener noreferrer">${safeText}</a>`
         },
       },
+    }
+
+    // Full parser with shiki highlighting — used for final render
+    const fullParser = marked.use(
+      linkRenderer,
       markedKatex({
         output,
         throwOnError: false,
@@ -606,6 +610,16 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
       }),
     )
 
+    // Fast parser without shiki — used during active streaming
+    const fastParser = marked.use(
+      linkRenderer,
+      markedKatex({
+        output,
+        throwOnError: false,
+        nonStandard: true,
+      }),
+    )
+
     if (props.nativeParser) {
       const nativeParser = props.nativeParser
       return {
@@ -614,12 +628,20 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
           const withMath = renderMathExpressions(html, output)
           return highlightCodeBlocks(withMath)
         },
+        async parseFast(markdown: string): Promise<string> {
+          const html = await nativeParser(markdown)
+          return renderMathExpressions(html, output)
+        },
       }
     }
 
     return {
       async parse(markdown: string): Promise<string> {
-        const html = await jsParser.parse(normalizeDisplayMath(markdown))
+        const html = await fullParser.parse(normalizeDisplayMath(markdown))
+        return renderMathExpressions(html, output)
+      },
+      async parseFast(markdown: string): Promise<string> {
+        const html = await fastParser.parse(normalizeDisplayMath(markdown))
         return renderMathExpressions(html, output)
       },
     }

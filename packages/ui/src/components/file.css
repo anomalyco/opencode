@@ -6,6 +6,14 @@
   overflow: hidden;
 }
 
+[data-component="file"][data-mode="markdown"] {
+  overflow: hidden;
+
+  [data-slot="file-markdown-preview"] {
+    min-height: 0;
+  }
+}
+
 [data-component="file"][data-mode="diff"] {
   [data-slot="diff-hunk-separator-line-number"] {
     position: sticky;

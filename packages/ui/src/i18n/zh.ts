@@ -29,6 +29,8 @@ export const dict = {
   "ui.fileMedia.binary.title": "二进制文件",
   "ui.fileMedia.binary.description.path": "无法显示 {{path}}，因为它是二进制文件。",
   "ui.fileMedia.binary.description.default": "无法显示此文件，因为它是二进制文件。",
+  "ui.file.preview": "预览",
+  "ui.file.source": "源码",
 
   "ui.lineComment.label.prefix": "评论 ",
   "ui.lineComment.label.suffix": "",
