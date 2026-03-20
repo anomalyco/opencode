@@ -33,7 +33,8 @@ export namespace ProviderAuth {
       method: z.number(),
       inputs: z.record(z.string(), z.string()).optional(),
     }),
-    async (input): Promise<Authorization | undefined> => runPromiseInstance(S.Service.use((svc) => svc.authorize(input))),
+    async (input): Promise<Authorization | undefined> =>
+      runPromiseInstance(S.Service.use((svc) => svc.authorize(input))),
   )
 
   export const callback = fn(
