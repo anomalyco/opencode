@@ -6,6 +6,7 @@ import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useToast } from "@tui/ui/toast"
 import type { Plan, WorkerState, Subtask } from "@/parallel/schema"
+import { buildWaves } from "@/parallel/scheduler"
 import { TextAttributes } from "@opentui/core"
 import { pipe, sumBy } from "remeda"
 
@@ -403,6 +404,12 @@ export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void; on
   const total = () => props.plan.workers.length
   const width = () => Math.min(100, dim().width - 2)
 
+  // Compute execution waves from subtasks
+  const waves = createMemo(() => {
+    if (props.plan.subtasks.length === 0) return null
+    return buildWaves(props.plan.subtasks)
+  })
+
   // Aggregate cost and tokens across all worker sessions
   const totals = createMemo(() => {
     let totalCost = 0
@@ -592,6 +599,21 @@ export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void; on
           {"░".repeat(Math.max(0, 30 - Math.floor(((done() + running()) / Math.max(total(), 1)) * 30)))}
         </text>
       </box>
+
+      {/* Wave info */}
+      <Show when={waves()}>
+        <box flexDirection="row" gap={2} marginBottom={1}>
+          <text fg={theme.textMuted}>Waves:</text>
+          <For each={waves()?.waves}>
+            {(wave) => (
+              <text fg={wave.type === "parallel" ? theme.success : theme.warning}>
+                {wave.type === "parallel" ? "P" : "S"}
+                {wave.index + 1}({wave.subtasks.length})
+              </text>
+            )}
+          </For>
+        </box>
+      </Show>
 
       <Show when={timeline().length > 0}>
         <box

@@ -28,6 +28,48 @@ When parallel execution completes, you can choose how to publish changes with th
 | `unstaged`   | Leaves changes as unstaged files in current worktree | Manual review before committing         |
 | `direct`     | Commits changes directly to the current branch       | Quick fixes, trusted automation         |
 
+#### Conflict-Aware Parallel Scheduler
+
+OpenCode includes a built-in scheduler that analyzes subtask file scopes to prevent merge conflicts. When subtasks have overlapping file scopes, they are automatically scheduled into serial waves instead of running in parallel.
+
+**Scheduler Modes:**
+
+| Mode     | Behavior                                                               |
+| -------- | ---------------------------------------------------------------------- |
+| `auto`   | Automatically creates execution waves, warns about file scope overlaps |
+| `strict` | Fails plan approval if any file scope overlaps exist without override  |
+| `off`    | Disables wave scheduling - all subtasks run in parallel (default)      |
+
+**How Wave Scheduling Works:**
+
+- **Parallel waves**: Subtasks with disjoint file scopes run concurrently
+- **Serial waves**: Subtasks with overlapping file scopes run sequentially
+- Waves are computed deterministically based on dependency order and file overlaps
+
+**Configuration:**
+
+```bash
+# Enable auto mode with wave scheduling
+opencode config set parallel.scheduler_mode auto
+
+# Use strict mode for overlap-free guarantees
+opencode config set parallel.scheduler_mode strict
+
+# Disable scheduling (default behavior)
+opencode config set parallel.scheduler_mode off
+```
+
+**Config file example:**
+
+```json
+{
+  "parallel": {
+    "scheduler_mode": "auto",
+    "publish_mode": "new-branch"
+  }
+}
+```
+
 #### Configuration
 
 Configure publish mode in your `AGENTS.md` or via CLI:

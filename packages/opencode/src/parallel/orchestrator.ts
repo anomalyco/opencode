@@ -3,6 +3,7 @@ import { Decomposition } from "./decomposition"
 import { WorkerManager } from "./worker"
 import { Recovery } from "./recovery"
 import { Integration } from "./integration"
+import * as Scheduler from "./scheduler"
 import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider"
 import { Instance } from "@/project/instance"
@@ -28,6 +29,47 @@ export namespace Orchestrator {
     stage: string
     message: string
     at: number
+  }
+
+  type Outcome = {
+    status: "done" | "partial_success" | "failed"
+    merged: number
+    failed: number
+    unresolved: number
+  }
+
+  function unresolved(workers: Plan["workers"]) {
+    return workers.filter((worker) => !["merged", "failed", "conflict"].includes(worker.status))
+  }
+
+  function inflight(workers: Plan["workers"]) {
+    return workers.filter((worker) => ["pending", "spawning", "running", "stopping"].includes(worker.status))
+  }
+
+  export function resolveOutcome(input: {
+    workers: Plan["workers"]
+    integrationSuccess: boolean
+    publishSuccess: boolean
+  }): Outcome {
+    const merged = input.workers.filter((worker) => worker.status === "merged").length
+    const failed = input.workers.filter((worker) => worker.status === "failed" || worker.status === "conflict").length
+    const open = unresolved(input.workers).length
+
+    if (
+      input.integrationSuccess &&
+      input.publishSuccess &&
+      failed === 0 &&
+      open === 0 &&
+      merged === input.workers.length
+    ) {
+      return { status: "done", merged, failed, unresolved: open }
+    }
+
+    if (open === 0 && merged > 0) {
+      return { status: "partial_success", merged, failed, unresolved: open }
+    }
+
+    return { status: "failed", merged, failed, unresolved: open }
   }
 
   function pick(err: unknown, key: "code" | "stage" | "message"): string | undefined {
@@ -177,6 +219,29 @@ export namespace Orchestrator {
         code: "dependency_cycle",
         stage: "preflight",
         message: "Subtask dependency graph has a cycle",
+      })
+    }
+
+    // Validate file scope overlaps based on scheduler mode
+    const cfg = await Config.get()
+    const schedulerMode = cfg.parallel?.scheduler_mode ?? "off"
+    const validation = Scheduler.validatePlan(plan.subtasks, schedulerMode)
+
+    if (!validation.valid) {
+      throw issue({
+        code: "file_scope_overlap",
+        stage: "preflight",
+        message: validation.error ?? "File scope overlaps detected",
+      })
+    }
+
+    // Log wave scheduling info in auto mode
+    if (schedulerMode === "auto" && validation.analysis.overlaps.length > 0) {
+      log.warn("file scope overlaps detected - using wave scheduling", {
+        overlaps: validation.analysis.overlaps.length,
+        waves: validation.analysis.waves.length,
+        parallelizable: validation.analysis.parallelizableCount,
+        serial: validation.analysis.serialCount,
       })
     }
   }

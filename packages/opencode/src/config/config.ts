@@ -1258,6 +1258,12 @@ export namespace Config {
             .describe(
               "Publish mode for parallel execution results: 'new-branch' creates a new branch with changes, 'unstaged' leaves changes unstaged in working directory, 'direct' commits directly to current branch (default: new-branch)",
             ),
+          scheduler_mode: z
+            .enum(["auto", "strict", "off"])
+            .optional()
+            .describe(
+              "Conflict-aware scheduler mode: 'auto' creates waves automatically and warns on overlaps, 'strict' fails plan approval if file overlaps exist, 'off' disables wave scheduling (default: off)",
+            ),
         })
         .optional()
         .describe("Parallel agent orchestration configuration"),
