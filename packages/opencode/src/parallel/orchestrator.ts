@@ -3,6 +3,7 @@ import { Decomposition } from "./decomposition"
 import { WorkerManager } from "./worker"
 import { MergePipeline } from "./merge"
 import { Recovery } from "./recovery"
+import { Integration } from "./integration"
 import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider"
 import { Instance } from "@/project/instance"
@@ -316,13 +317,30 @@ export namespace Orchestrator {
     await PlanStore.transition({ id: planID, status: "merging" })
     const mergeSuccess = await stage("merging", () => MergePipeline.run(planID))
 
-    // Determine final status based on worker outcomes
+    // Integration phase - always runs after merging
+    await PlanStore.transition({ id: planID, status: "integrating" })
+    const integrationResult = await stage("integrating", async () => {
+      const plan = await PlanStore.get(planID)
+      return Integration.integrate(plan)
+    })
+
+    // Publish phase - mode-dependent
+    const cfg = await Config.get()
+    const publishMode = cfg.parallel?.publish_mode ?? "new-branch"
+
+    await PlanStore.transition({ id: planID, status: "publishing" })
+    const publishResult = await stage("publishing", async () => {
+      const plan = await PlanStore.get(planID)
+      return Integration.publish(plan, publishMode, integrationResult.branch)
+    })
+
+    // Determine final status based on all outcomes
     const finalPlan = await PlanStore.get(planID)
     const mergedWorkers = finalPlan.workers.filter((w) => w.status === "merged")
     const failedWorkers = finalPlan.workers.filter((w) => w.status === "failed" || w.status === "conflict")
 
     let finalStatus: "done" | "partial_success" | "failed"
-    if (mergeSuccess && failedWorkers.length === 0) {
+    if (mergeSuccess && !integrationResult.error && !publishResult.error && failedWorkers.length === 0) {
       finalStatus = "done"
     } else if (mergedWorkers.length > 0) {
       finalStatus = "partial_success"
@@ -330,6 +348,8 @@ export namespace Orchestrator {
         planID,
         merged: mergedWorkers.length,
         failed: failedWorkers.length,
+        integrationBranch: integrationResult.branch,
+        publishMode,
       })
     } else {
       finalStatus = "failed"
@@ -342,7 +362,12 @@ export namespace Orchestrator {
       await Recovery.cleanupWorktrees(finalPlan)
     }
 
-    log.info("plan execution complete", { planID, status: finalStatus })
+    log.info("plan execution complete", {
+      planID,
+      status: finalStatus,
+      integrationBranch: integrationResult.branch,
+      publishMode,
+    })
   }
 
   export const approve = fn(PlanIDSchema.zod, async (planID): Promise<Plan> => {
@@ -478,9 +503,28 @@ export namespace Orchestrator {
 
           if (allDone && !hasFailures && updated.status === "running") {
             await PlanStore.transition({ id: planID, status: "merging" })
-            const success = await MergePipeline.run(planID)
-            await PlanStore.transition({ id: planID, status: success ? "done" : "failed" })
-            if (!success) {
+            const mergeSuccess = await MergePipeline.run(planID)
+
+            if (mergeSuccess) {
+              // Integration phase
+              await PlanStore.transition({ id: planID, status: "integrating" })
+              const integrationResult = await Integration.integrate(updated)
+
+              // Publish phase
+              const cfg = await Config.get()
+              const publishMode = cfg.parallel?.publish_mode ?? "new-branch"
+              await PlanStore.transition({ id: planID, status: "publishing" })
+              const publishResult = await Integration.publish(updated, publishMode, integrationResult.branch)
+
+              const finalStatus = publishResult.success ? "done" : "failed"
+              await PlanStore.transition({ id: planID, status: finalStatus })
+
+              if (!publishResult.success) {
+                const finalPlan = await PlanStore.get(planID)
+                await Recovery.cleanupWorktrees(finalPlan)
+              }
+            } else {
+              await PlanStore.transition({ id: planID, status: "failed" })
               const finalPlan = await PlanStore.get(planID)
               await Recovery.cleanupWorktrees(finalPlan)
             }

@@ -1243,6 +1243,12 @@ export namespace Config {
             .boolean()
             .optional()
             .describe("Require explicit approval before executing parallel plans (default: true)"),
+          publish_mode: z
+            .enum(["new-branch", "unstaged", "direct"])
+            .optional()
+            .describe(
+              "Publish mode for parallel execution results: 'new-branch' creates a new branch with changes, 'unstaged' leaves changes unstaged in working directory, 'direct' commits directly to current branch (default: new-branch)",
+            ),
         })
         .optional()
         .describe("Parallel agent orchestration configuration"),
