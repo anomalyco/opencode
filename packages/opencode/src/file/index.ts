@@ -385,18 +385,58 @@ export namespace File {
 
             next.dirs = Array.from(dirs).toSorted()
           } else {
-            const seen = new Set<string>()
-            for await (const file of Ripgrep.files({ cwd: Instance.directory, follow: true })) {
+            const seenDirs = new Set<string>()
+            const seenFiles = new Set<string>()
+            const seenLinkedTargets = new Set<string>()
+            const key = (value: string) => {
+              const normalized = value.replaceAll("\\", "/")
+              return process.platform === "win32" ? normalized.toLowerCase() : normalized
+            }
+            const addFile = (file: string) => {
+              const fileKey = key(file)
+              if (seenFiles.has(fileKey)) return
+              seenFiles.add(fileKey)
               next.files.push(file)
+
               let current = file
               while (true) {
                 const dir = path.dirname(current)
                 if (dir === ".") break
                 if (dir === current) break
                 current = dir
-                if (seen.has(dir)) continue
-                seen.add(dir)
+                const dirKey = key(dir)
+                if (seenDirs.has(dirKey)) continue
+                seenDirs.add(dirKey)
                 next.dirs.push(dir + "/")
+              }
+            }
+
+            for await (const file of Ripgrep.files({ cwd: Instance.directory })) {
+              addFile(file)
+            }
+
+            const entries = await fs.promises
+              .readdir(Instance.directory, { withFileTypes: true })
+              .catch(() => [] as fs.Dirent[])
+
+            for (const entry of entries) {
+              if (!entry.isSymbolicLink()) continue
+              const linkPath = path.join(Instance.directory, entry.name)
+              const target = await fs.promises.realpath(linkPath).catch(() => undefined)
+              if (!target) continue
+              const targetStat = await fs.promises.stat(target).catch(() => undefined)
+              if (!targetStat?.isDirectory()) continue
+
+              const targetKey = key(target)
+              if (seenLinkedTargets.has(targetKey)) continue
+              seenLinkedTargets.add(targetKey)
+
+              try {
+                for await (const linkedFile of Ripgrep.files({ cwd: linkPath })) {
+                  addFile(path.join(entry.name, linkedFile))
+                }
+              } catch {
+                continue
               }
             }
           }
