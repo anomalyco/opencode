@@ -93,7 +93,8 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     customOn: cached?.customOn ?? ([] as boolean[]),
     images: cached?.images ?? ([] as Image[][]),
     editing: false,
-    focus: 0,
+    sending: false,
+    focusedOption: -1, // -1 means no option focused, 0-n for options, options.length for custom
   })
 
   let root: HTMLDivElement | undefined
@@ -206,7 +207,58 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     const scroller = document.querySelector(".scroll-view__viewport")
     createResizeObserver([dock, scroller], update)
 
+    // Keyboard navigation
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (store.sending) return
+
+      // Handle cmd+enter for submit
+      if (e.key === "Enter" && e.metaKey) {
+        // If textarea is focused, let it handle cmd+enter (commitCustom)
+        if (e.target instanceof HTMLTextAreaElement && e.target.dataset.slot === "question-custom-input") {
+          return
+        }
+        e.preventDefault()
+        next()
+        return
+      }
+
+      // Arrow key navigation
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        // Don't interfere if textarea is focused
+        if (e.target instanceof HTMLTextAreaElement) return
+
+        e.preventDefault()
+        const totalOptions = options().length + 1 // +1 for custom option
+
+        if (e.key === "ArrowDown") {
+          setStore("focusedOption", (current) => {
+            if (current === -1) return 0
+            return (current + 1) % totalOptions
+          })
+        } else {
+          setStore("focusedOption", (current) => {
+            if (current === -1) return totalOptions - 1
+            return (current - 1 + totalOptions) % totalOptions
+          })
+        }
+        return
+      }
+
+      // Enter key to select focused option
+      if (e.key === "Enter" && store.focusedOption !== -1) {
+        if (e.target instanceof HTMLTextAreaElement) return
+        e.preventDefault()
+        selectOption(store.focusedOption)
+        return
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+
     onCleanup(() => {
+      window.removeEventListener("resize", update)
+      window.removeEventListener("keydown", handleKeyDown)
+      observer.disconnect()
       if (raf !== undefined) cancelAnimationFrame(raf)
     })
 
@@ -479,7 +531,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     const tab = store.tab + 1
     setStore("tab", tab)
     setStore("editing", false)
-    focus(pickFocus(tab))
+    setStore("focusedOption", -1)
   }
 
   const back = () => {
@@ -488,14 +540,14 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     const tab = store.tab - 1
     setStore("tab", tab)
     setStore("editing", false)
-    focus(pickFocus(tab))
+    setStore("focusedOption", -1)
   }
 
   const jump = (tab: number) => {
     if (sending()) return
     setStore("tab", tab)
     setStore("editing", false)
-    focus(pickFocus(tab))
+    setStore("focusedOption", -1)
   }
 
   return (
@@ -560,18 +612,39 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
       </Show>
       <div data-slot="question-options">
         <For each={options()}>
-          {(opt, i) => (
-            <Option
-              multi={multi()}
-              picked={picked(opt.label)}
-              label={opt.label}
-              description={opt.description}
-              disabled={sending()}
-              ref={(el) => (optsRef[i()] = el)}
-              onFocus={() => setStore("focus", i())}
-              onClick={() => selectOption(i())}
-            />
-          )}
+          {(opt, i) => {
+            const picked = () => store.answers[store.tab]?.includes(opt.label) ?? false
+            const focused = () => store.focusedOption === i()
+            return (
+              <button
+                data-slot="question-option"
+                data-picked={picked()}
+                data-focused={focused()}
+                role={multi() ? "checkbox" : "radio"}
+                aria-checked={picked()}
+                disabled={store.sending}
+                onClick={() => selectOption(i())}
+              >
+                <span data-slot="question-option-check" aria-hidden="true">
+                  <span
+                    data-slot="question-option-box"
+                    data-type={multi() ? "checkbox" : "radio"}
+                    data-picked={picked()}
+                  >
+                    <Show when={multi()} fallback={<span data-slot="question-option-radio-dot" />}>
+                      <Icon name="check-small" size="small" />
+                    </Show>
+                  </span>
+                </span>
+                <span data-slot="question-option-main">
+                  <span data-slot="option-label">{opt.label}</span>
+                  <Show when={opt.description}>
+                    <span data-slot="option-description">{opt.description}</span>
+                  </Show>
+                </span>
+              </button>
+            )
+          }}
         </For>
 
         <Show
@@ -581,6 +654,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
               data-slot="question-option"
               data-custom="true"
               data-picked={on()}
+              data-focused={store.focusedOption === options().length}
               role={multi() ? "checkbox" : "radio"}
               aria-checked={on()}
               aria-disabled={store.sending}
@@ -618,6 +692,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
             data-slot="question-option"
             data-custom="true"
             data-picked={on()}
+            data-focused={store.focusedOption === options().length}
             role={multi() ? "checkbox" : "radio"}
             aria-checked={on()}
             onMouseDown={(e) => {

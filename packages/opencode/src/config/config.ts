@@ -90,6 +90,7 @@ async function substituteWellKnownRemoteConfig(input: {
 
   export async function installDependencies(dir: string) {
     const pkg = path.join(dir, "package.json")
+    const targetVersion = Installation.isPreview() ? "*" : Installation.VERSION
 
     if (!(await Bun.file(pkg).exists())) {
       await Bun.write(pkg, "{}")
@@ -108,7 +109,80 @@ async function substituteWellKnownRemoteConfig(input: {
 
     // Install any additional dependencies defined in the package.json
     // This allows local plugins and custom tools to use external packages
-    await BunProc.run(["install"], { cwd: dir }).catch(() => {})
+    await BunProc.run(
+      [
+        "install",
+        // TODO: get rid of this case (see: https://github.com/oven-sh/bun/issues/19936)
+        ...(proxied() || process.env.CI ? ["--no-cache"] : []),
+      ],
+      { cwd: dir },
+    ).catch((err) => {
+      if (err instanceof Process.RunFailedError) {
+        const detail = {
+          dir,
+          cmd: err.cmd,
+          code: err.code,
+          stdout: err.stdout.toString(),
+          stderr: err.stderr.toString(),
+        }
+        if (Flag.OPENCODE_STRICT_CONFIG_DEPS) {
+          log.error("failed to install dependencies", detail)
+          throw err
+        }
+        log.warn("failed to install dependencies", detail)
+        return
+      }
+
+      if (Flag.OPENCODE_STRICT_CONFIG_DEPS) {
+        log.error("failed to install dependencies", { dir, error: err })
+        throw err
+      }
+      log.warn("failed to install dependencies", { dir, error: err })
+    })
+  }
+
+  async function isWritable(dir: string) {
+    try {
+      await fs.access(dir, constants.W_OK)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  export async function needsInstall(dir: string) {
+    // Some config dirs may be read-only.
+    // Installing deps there will fail; skip installation in that case.
+    const writable = await isWritable(dir)
+    if (!writable) {
+      log.debug("config dir is not writable, skipping dependency install", { dir })
+      return false
+    }
+
+    const nodeModules = path.join(dir, "node_modules")
+    if (!existsSync(nodeModules)) return true
+
+    const pkg = path.join(dir, "package.json")
+    const pkgExists = await Filesystem.exists(pkg)
+    if (!pkgExists) return true
+
+    const parsed = await Filesystem.readJson<{ dependencies?: Record<string, string> }>(pkg).catch(() => null)
+    const dependencies = parsed?.dependencies ?? {}
+    const depVersion = dependencies["@opencode-ai/plugin"]
+    if (!depVersion) return true
+
+    const targetVersion = Installation.isPreview() ? "latest" : Installation.VERSION
+    if (targetVersion === "latest") {
+      const isOutdated = await PackageRegistry.isOutdated("@opencode-ai/plugin", depVersion, dir)
+      if (!isOutdated) return false
+      log.info("Cached version is outdated, proceeding with install", {
+        pkg: "@opencode-ai/plugin",
+        cachedVersion: depVersion,
+      })
+      return true
+    }
+    if (depVersion === targetVersion) return false
+    return true
   }
 
   function rel(item: string, patterns: string[]) {
