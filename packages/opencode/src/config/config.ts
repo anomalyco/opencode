@@ -1052,7 +1052,6 @@ export namespace Config {
         })
         .optional(),
       plugin: z.string().array().optional(),
-<<<<<<< HEAD
       snapshot: z
         .union([z.boolean(), z.number().int().nonnegative()])
         .optional()
