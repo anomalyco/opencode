@@ -35,6 +35,7 @@ export function getChannelPath() {
 }
 
 export const Path = iife(() => {
+  if (Flag.OPENCODE_DB_PATH) return path.resolve(Flag.OPENCODE_DB_PATH)
   if (Flag.OPENCODE_DB) {
     if (Flag.OPENCODE_DB === ":memory:" || path.isAbsolute(Flag.OPENCODE_DB)) return Flag.OPENCODE_DB
     return path.join(Global.Path.data, Flag.OPENCODE_DB)
