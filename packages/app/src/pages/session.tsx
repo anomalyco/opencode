@@ -22,6 +22,7 @@ import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Select } from "@opencode-ai/ui/select"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
+import type { VirtualizerHandle } from "virtua/solid"
 import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
 import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@opencode-ai/ui/toast"
@@ -68,6 +69,7 @@ type SessionHistoryWindowInput = {
   loadMore: (sessionID: string) => Promise<void>
   userScrolled: () => boolean
   scroller: () => HTMLDivElement | undefined
+  virtualized: () => boolean
 }
 
 /**
@@ -141,6 +143,11 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
   }
 
   const preserveScroll = (fn: () => void) => {
+    if (input.virtualized()) {
+      fn()
+      return
+    }
+
     const el = input.scroller()
     if (!el) {
       fn()
@@ -1295,6 +1302,8 @@ export default function Page() {
   )
 
   let fill = () => {}
+  let virtualizer: VirtualizerHandle | undefined
+  let virtualized = false
 
   const setScrollRef = (el: HTMLDivElement | undefined) => {
     scroller = el
@@ -1327,6 +1336,7 @@ export default function Page() {
     loadMore: (sessionID) => sync.session.history.loadMore(sessionID),
     userScrolled: autoScroll.userScrolled,
     scroller: () => scroller,
+    virtualized: () => virtualized,
   })
 
   fill = () => {
@@ -1677,6 +1687,7 @@ export default function Page() {
     sessionID: () => params.id,
     messagesReady,
     visibleUserMessages,
+    renderedUserMessages: historyWindow.renderedUserMessages,
     turnStart: historyWindow.turnStart,
     currentMessageId: () => store.messageId,
     pendingMessage: () => ui.pendingMessage,
@@ -1685,6 +1696,17 @@ export default function Page() {
     setTurnStart: historyWindow.setTurnStart,
     autoScroll,
     scroller: () => scroller,
+    seekMessage: (id, behavior) => {
+      const msgs = visibleUserMessages()
+      const index = msgs.findIndex((m) => m.id === id)
+      if (index < 0) return false
+      if (!virtualizer) return false
+      virtualizer.scrollToIndex(index, {
+        align: "start",
+        smooth: behavior === "smooth",
+      })
+      return true
+    },
     anchor,
     scheduleScrollState,
     consumePendingMessage: layout.pendingMessage.consume,
@@ -1773,12 +1795,19 @@ export default function Page() {
                     onTurnBackfillScroll={historyWindow.onScrollerScroll}
                     onAutoScrollInteraction={autoScroll.handleInteraction}
                     centered={centered()}
+                    scrollRef={() => scroller}
+                    onVirtualizedChange={(value) => {
+                      virtualized = value
+                    }}
                     setContentRef={(el) => {
                       content = el
                       autoScroll.contentRef(el)
 
                       const root = scroller
                       if (root) scheduleScrollState(root)
+                    }}
+                    setVirtualizerRef={(handle) => {
+                      virtualizer = handle
                     }}
                     turnStart={historyWindow.turnStart()}
                     historyMore={historyMore()}

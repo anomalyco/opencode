@@ -227,6 +227,7 @@ export function SessionTurn(
     showCustomHookParts?: boolean
     shellToolDefaultOpen?: boolean
     editToolDefaultOpen?: boolean
+    markdownEager?: boolean
     active?: boolean
     status?: SessionStatus
     onUserInteracted?: () => void
@@ -384,23 +385,6 @@ export function SessionTurn(
   const error = createMemo(
     () => assistantMessages().find((m) => m.error && m.error.name !== "MessageAbortedError")?.error,
   )
-  const showAssistantCopyPartID = createMemo(() => {
-    const messages = assistantMessages()
-
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const message = messages[i]
-      if (!message) continue
-
-      const parts = list(data.store.part?.[message.id], emptyParts)
-      for (let j = parts.length - 1; j >= 0; j--) {
-        const part = parts[j]
-        if (!part || part.type !== "text" || !part.text?.trim()) continue
-        return part.id
-      }
-    }
-
-    return undefined
-  })
   const errorText = createMemo(() => {
     const msg = error()?.data?.message
     if (typeof msg === "string") return unwrap(msg)
@@ -441,59 +425,50 @@ export function SessionTurn(
 
   const working = createMemo(() => stableWorking())
   const showReasoningSummaries = createMemo(() => props.showReasoningSummaries ?? true)
+  const assistantSummary = createMemo(() => {
+    let copy: string | undefined
+    let visible = 0
+    let headingText: string | undefined
+    let end: number | undefined
+
+    for (const message of assistantMessages()) {
+      const completed = message.time.completed
+      if (typeof completed === "number") end = end === undefined ? completed : Math.max(end, completed)
+
+      const parts = list(data.store.part?.[message.id], emptyParts)
+      for (const part of parts) {
+        const state = partState(part, showReasoningSummaries(), props.showCustomHookParts ?? true)
+        if (state !== "visible") continue
+        visible++
+        if (part.type === "text" && part.text?.trim()) copy = part.id
+        if (part.type === "reasoning") {
+          const value = heading(part.text)
+          if (value) headingText = value
+        }
+      }
+    }
+
+    return { copy, visible, headingText, end }
+  })
 
   const assistantCopyPartID = createMemo(() => {
     if (working()) return null
-    return showAssistantCopyPartID() ?? null
+    return assistantSummary().copy ?? null
   })
   const turnDurationMs = createMemo(() => {
     const start = message()?.time.created
     if (typeof start !== "number") return undefined
 
-    const end = assistantMessages().reduce<number | undefined>((max, item) => {
-      const completed = item.time.completed
-      if (typeof completed !== "number") return max
-      if (max === undefined) return completed
-      return Math.max(max, completed)
-    }, undefined)
+    const end = assistantSummary().end
 
     if (typeof end !== "number") return undefined
     if (end < start) return undefined
     return end - start
   })
-  const assistantVisible = createMemo(() =>
-    assistantMessages().reduce((count, message) => {
-      const parts = list(data.store.part?.[message.id], emptyParts)
-      return (
-        count +
-        parts.filter(
-          (part) => partState(part, showReasoningSummaries(), props.showCustomHookParts ?? true) === "visible",
-        ).length
-      )
-    }, 0),
-  )
-  const assistantTailVisible = createMemo(() =>
-    assistantMessages()
-      .flatMap((message) => list(data.store.part?.[message.id], emptyParts))
-      .flatMap((part) => {
-        if (partState(part, showReasoningSummaries(), props.showCustomHookParts ?? true) !== "visible") return []
-        if (part.type === "text") return ["text" as const]
-        return ["other" as const]
-      })
-      .at(-1),
-  )
-  const reasoningHeading = createMemo(() =>
-    assistantMessages()
-      .flatMap((message) => list(data.store.part?.[message.id], emptyParts))
-      .filter((part): part is PartType & { type: "reasoning"; text: string } => part.type === "reasoning")
-      .map((part) => heading(part.text))
-      .filter((text): text is string => !!text)
-      .at(-1),
-  )
   const showThinking = createMemo(() => {
     if (!working() || !!error()) return false
     if (status().type === "retry") return false
-    if (showReasoningSummaries()) return assistantVisible() === 0
+    if (showReasoningSummaries()) return assistantSummary().visible === 0
     return true
   })
 
@@ -528,6 +503,7 @@ export function SessionTurn(
                     interrupted={interrupted()}
                     showReasoningSummaries={showReasoningSummaries()}
                     showCustomHookParts={props.showCustomHookParts}
+                    markdownEager={props.markdownEager}
                   />
                 </div>
                 <Show when={divider()}>
@@ -538,7 +514,7 @@ export function SessionTurn(
                 <Show when={compaction()}>
                   {(part) => (
                     <div data-slot="session-turn-compaction">
-                      <Part part={part()} message={msg()} hideDetails />
+                      <Part part={part()} message={msg()} hideDetails markdownEager={props.markdownEager} />
                     </div>
                   )}
                 </Show>
@@ -553,6 +529,7 @@ export function SessionTurn(
                       showCustomHookParts={props.showCustomHookParts}
                       shellToolDefaultOpen={props.shellToolDefaultOpen}
                       editToolDefaultOpen={props.editToolDefaultOpen}
+                      markdownEager={props.markdownEager}
                     />
                   </div>
                 </Show>
@@ -561,7 +538,7 @@ export function SessionTurn(
                     <TextShimmer text={i18n.t("ui.sessionTurn.status.thinking")} />
                     <Show when={!showReasoningSummaries()}>
                       <TextReveal
-                        text={reasoningHeading()}
+                        text={assistantSummary().headingText}
                         class="session-turn-thinking-heading"
                         travel={25}
                         duration={700}
