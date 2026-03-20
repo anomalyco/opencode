@@ -4,7 +4,6 @@ import { InstanceState } from "@/effect"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { Git } from "@/git"
 import { Effect, Layer, Context, Scope } from "effect"
-import * as Stream from "effect/Stream"
 import { formatPatch, structuredPatch } from "diff"
 import fuzzysort from "fuzzysort"
 import ignore from "ignore"
@@ -12,9 +11,9 @@ import path from "path"
 import z from "zod"
 import { Global } from "../global"
 import { Instance } from "../project/instance"
+import { Glob } from "../util/glob"
 import { Log } from "../util"
 import { Protected } from "./protected"
-import { Ripgrep } from "./ripgrep"
 
 export const Info = z
   .object({
@@ -343,7 +342,6 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const appFs = yield* AppFileSystem.Service
-    const rg = yield* Ripgrep.Service
     const git = yield* Git.Service
     const scope = yield* Scope.Scope
 
@@ -385,10 +383,15 @@ export const layer = Layer.effect(
 
         next.dirs = Array.from(dirs).toSorted()
       } else {
-        const files = yield* rg.files({ cwd: ctx.directory }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) => [...chunk]),
-        )
+        const files = (
+          yield* Effect.promise(() =>
+            Glob.scan("**/*", {
+              cwd: ctx.directory,
+              include: "file",
+              dot: true,
+            }),
+          )
+        ).toSorted((a, b) => a.localeCompare(b))
         const seen = new Set<string>()
         for (const file of files) {
           next.files.push(file)
@@ -656,7 +659,6 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(
-  Layer.provide(Ripgrep.defaultLayer),
   Layer.provide(AppFileSystem.defaultLayer),
   Layer.provide(Git.defaultLayer),
 )
