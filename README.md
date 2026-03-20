@@ -120,10 +120,10 @@ Run multiple agents in parallel on a single task. An orchestrator decomposes you
 
 Press **Tab** to cycle to the **Orchestrator** agent. Then chat naturally:
 
-1. Describe your task: *"Add user auth, a dashboard page, and integration tests"*
+1. Describe your task: _"Add user auth, a dashboard page, and integration tests"_
 2. The orchestrator explores the codebase and proposes a parallel plan with subtasks
-3. Refine via chat: *"split auth into login and registration"*, *"use haiku for the test task"*
-4. When ready, say *"run it"* — the orchestrator launches parallel workers in isolated git worktrees
+3. Refine via chat: _"split auth into login and registration"_, _"use haiku for the test task"_
+4. When ready, say _"run it"_ — the orchestrator launches parallel workers in isolated git worktrees
 5. Use **`/workers`** to monitor live progress
 
 #### TUI configuration
@@ -160,11 +160,11 @@ opencode parallel "Add dark mode support" --auto-approve
 
 Three levels of model control:
 
-| Level | Purpose | Example |
-|-------|---------|---------|
-| Orchestrator model | Decomposition + merge conflict resolution | `claude-opus-4-6` |
-| Default worker model | All workers unless overridden | `claude-sonnet-4-6` |
-| Per-subtask override | Assign a specific model to one subtask | `claude-haiku-4-5` for simple tasks |
+| Level                | Purpose                                   | Example                             |
+| -------------------- | ----------------------------------------- | ----------------------------------- |
+| Orchestrator model   | Decomposition + merge conflict resolution | `claude-opus-4-6`                   |
+| Default worker model | All workers unless overridden             | `claude-sonnet-4-6`                 |
+| Per-subtask override | Assign a specific model to one subtask    | `claude-haiku-4-5` for simple tasks |
 
 Per-subtask models can be assigned in the plan approval view: navigate to a subtask with arrow keys, then press `m` to pick a model.
 
@@ -187,6 +187,68 @@ Priority: CLI flags > TUI settings > project default model.
 - No dynamic re-planning mid-execution
 - One level of hierarchy only (no recursive spawning)
 - Git projects only
+
+#### Artifact Dependency Analyzer (v2)
+
+The parallel planner now detects implicit artifact dependencies between subtasks, preventing false-parallel plans that would fail during execution.
+
+**The Problem**
+
+When decomposing tasks, the orchestrator previously identified only explicit file dependencies (when subtasks declare which files they modify). However, subtasks often have hidden dependencies:
+
+- One subtask reads a file that another creates
+- A subtask modifies a configuration that another depends on
+- Generated code in one subtask is imported by another
+
+Without detecting these implicit dependencies, the planner could create a parallel plan where workers conflict or fail because required artifacts don't exist yet.
+
+**Configuration**
+
+Control dependency analysis with `artifact_mode`:
+
+| Mode       | Description                                          | Use When                                                          |
+| ---------- | ---------------------------------------------------- | ----------------------------------------------------------------- |
+| `none`     | Skip dependency analysis (v1 behavior)               | You know subtasks are truly independent                           |
+| `existing` | Analyze only existing files for dependencies         | You want minimal overhead, trust the orchestrator's decomposition |
+| `full`     | **Default** - Analyze existing and planned artifacts | Maximum safety, recommended for most tasks                        |
+
+Configure in TUI: `/parallel` → "Parallel agent config"  
+Configure via CLI:
+
+```bash
+opencode parallel "your task" --artifact-mode full
+```
+
+**Plan Output with Dependencies**
+
+When dependencies are detected, the plan displays them:
+
+```
+Subtask 1: Create database schema
+  └─ Files: schema.sql, models.py
+
+Subtask 2: Generate API endpoints
+  └─ Files: routes.py
+  └─ Depends on: Subtask 1 (models.py)
+
+Subtask 3: Add tests
+  └─ Files: test_api.py
+  └─ Depends on: Subtask 2 (routes.py)
+```
+
+Dependencies create a partial ordering. Workers execute in parallel where safe, but dependent subtasks wait for their prerequisites to complete.
+
+**Usage Recommendations**
+
+| Scenario                         | Recommended Mode     | Reason                                                            |
+| -------------------------------- | -------------------- | ----------------------------------------------------------------- |
+| Simple, unrelated changes        | `none`               | Fastest, no overhead                                              |
+| Refactoring across modules       | `existing`           | Catches import dependencies without over-analyzing                |
+| Building new features end-to-end | `full`               | Catches all cross-subtask dependencies, prevents runtime failures |
+| Working in unfamiliar codebase   | `full`               | Safer default when dependency structure is unknown                |
+| Performance-critical planning    | `none` or `existing` | Reduce planning time when you understand the dependencies         |
+
+The analyzer runs during plan approval, so you can review detected dependencies before execution begins.
 
 ### Documentation
 
