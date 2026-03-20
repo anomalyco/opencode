@@ -4,6 +4,7 @@ import path from "path"
 import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Provider } from "../../src/provider/provider"
+import { ProviderID } from "@/provider/schema"
 
 // Mock fetch for dynamic model discovery tests
 let originalFetch: typeof global.fetch
@@ -64,7 +65,7 @@ test("dynamic model discovery - successful", async () => {
     directory: tmp.path,
     fn: async () => {
       const providers = await Provider.list()
-      const provider = providers["test-openai-compatible"]
+      const provider = providers[ProviderID.make("test-openai-compatible")]
 
       expect(provider).toBeDefined()
       expect(provider.models["model-1"]).toBeDefined()
@@ -111,7 +112,7 @@ test("dynamic model discovery - discoverModelsFromEndpoint with small context fl
     directory: tmp.path,
     fn: async () => {
       const providers = await Provider.list()
-      const provider = providers["test-openai-compatible"]
+      const provider = providers[ProviderID.make("test-openai-compatible")]
 
       expect(provider).toBeDefined()
       expect(provider.models["small-model"]).toBeDefined()
@@ -157,11 +158,11 @@ test("dynamic model discovery - discoverModelsFromEndpoint missing max_context_l
     directory: tmp.path,
     fn: async () => {
       const providers = await Provider.list()
-      const provider = providers["test-openai-compatible"]
+      const provider = providers[ProviderID.make("test-openai-compatible")]
 
       expect(provider).toBeDefined()
       expect(provider.models["model-no-context"]).toBeDefined()
-      // Should use default 8k
+      // Should use default 128k
       expect(provider.models["model-no-context"].limit.context).toBe(131072)
     },
   })
@@ -200,7 +201,7 @@ test("dynamic model discovery - discoverModelsFromEndpoint handles non-200 respo
     directory: tmp.path,
     fn: async () => {
       const providers = await Provider.list()
-      const provider = providers["test-openai-compatible"]
+      const provider = providers[ProviderID.make("test-openai-compatible")]
 
       // Should not load the provider when discovery fails and no explicit models
       expect(provider).toBeUndefined()
@@ -241,7 +242,7 @@ test("dynamic model discovery - discoverModelsFromEndpoint handles invalid respo
     directory: tmp.path,
     fn: async () => {
       const providers = await Provider.list()
-      const provider = providers["test-openai-compatible"]
+      const provider = providers[ProviderID.make("test-openai-compatible")]
 
       // Should not load the provider when discovery fails and no explicit models
       expect(provider).toBeUndefined()
@@ -278,7 +279,7 @@ test("dynamic model discovery - endpoint request without auth when no apiKey", a
       json: () =>
         Promise.resolve({
           data: [{ id: "model-1" }],
-        }),
+    }),
     })
   })
 
@@ -286,7 +287,7 @@ test("dynamic model discovery - endpoint request without auth when no apiKey", a
     directory: tmp.path,
     fn: async () => {
       const providers = await Provider.list()
-      const provider = providers["test-openai-compatible"]
+      const provider = providers[ProviderID.make("test-openai-compatible")]
 
       expect(provider).toBeDefined()
       expect(provider.models["model-1"]).toBeDefined()
@@ -337,7 +338,7 @@ test("dynamic model discovery - endpoint request includes auth headers", async (
     },
     fn: async () => {
       const providers = await Provider.list()
-      const provider = providers["test-openai-compatible"]
+      const provider = providers[ProviderID.make("test-openai-compatible")]
 
       expect(provider).toBeDefined()
       expect(provider.models["model-1"]).toBeDefined()
@@ -389,7 +390,7 @@ test("dynamic model discovery - local config API key overrides the global one", 
     },
     fn: async () => {
       const providers = await Provider.list()
-      const provider = providers["test-openai-compatible"]
+      const provider = providers[ProviderID.make("test-openai-compatible")]
 
       expect(provider).toBeDefined()
       expect(provider.models["model-1"]).toBeDefined()
@@ -423,7 +424,7 @@ test("dynamic model discovery - provider doesn't load when dynamicModelList: fal
     fn: async () => {
       const providers = await Provider.list()
       // Should not load the provider when dynamicModelList is false
-      expect(providers["test-openai-compatible"]).toBeUndefined()
+      expect(providers[ProviderID.make("test-openai-compatible")]).toBeUndefined()
     },
   })
 })
@@ -468,7 +469,7 @@ test("dynamic model discovery - explicitly configured models returned when speci
     directory: tmp.path,
     fn: async () => {
       const providers = await Provider.list()
-      const provider = providers["test-openai-compatible"]
+      const provider = providers[ProviderID.make("test-openai-compatible")]
 
       expect(provider).toBeDefined()
       expect(provider.models["explicit-model"]).toBeDefined()
@@ -517,7 +518,7 @@ test("dynamic model discovery - uses explicit models when both configured", asyn
     directory: tmp.path,
     fn: async () => {
       const providers = await Provider.list()
-      const provider = providers["test-openai-compatible"]
+      const provider = providers[ProviderID.make("test-openai-compatible")]
 
       // Explicit models should take precedence
       expect(provider).toBeDefined()
