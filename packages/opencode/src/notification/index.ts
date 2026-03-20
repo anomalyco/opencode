@@ -17,7 +17,7 @@ export namespace Notification {
     Bus.subscribe(SessionStatus.Event.Idle, async (event) => {
       const config = await Config.get()
       // Default to true if not explicitly set to false
-      if (config.notifications === false) return
+      if (Reflect.get(config, "notifications") === false) return
 
       try {
         await sendCompletionNotification(event.properties.sessionID)
