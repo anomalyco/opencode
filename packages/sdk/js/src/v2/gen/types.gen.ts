@@ -1872,6 +1872,16 @@ export type Path = {
 
 export type VcsInfo = {
   branch: string
+  branches?: Array<string>
+  worktrees?: Array<{
+    path: string
+    branch?: string
+    head?: string
+    bare?: boolean
+    detached?: boolean
+    locked?: string
+    prunable?: string
+  }>
 }
 
 export type Command = {
