@@ -317,7 +317,7 @@ function App() {
         const total = first.plan.workers.length
         toast.show({
           variant: "info",
-          message: `Interrupted plan: "${first.plan.task}" (${done}/${total} workers done). Switch to Orchestrator and use /resume to recover.`,
+          message: `Interrupted plan: "${first.plan.task}" (${done}/${total} workers done). Switch to Orchestrator and use /parallel-resume to recover.`,
           duration: 8000,
         })
       }
@@ -588,7 +588,7 @@ function App() {
       value: "parallel.resume",
       category: "Agent",
       slash: {
-        name: "resume",
+        name: "parallel-resume",
       },
       onSelect: async () => {
         dialog.clear()
