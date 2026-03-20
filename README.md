@@ -128,7 +128,7 @@ If you are working on a project that's related to OpenCode and is using "opencod
 
 #### How is this different from Claude Code?
 
-It's very similar to Claude Code in terms of capability. Here are the key differences:
+It's very similar to Claude Code in terms of capability. Here are the key differences::
 
 - 100% open source
 - Not coupled to any provider. Although we recommend the models we provide through [OpenCode Zen](https://opencode.ai/zen), OpenCode can be used with Claude, OpenAI, Google, or even local models. As models evolve, the gaps between them will close and pricing will drop, so being provider-agnostic is important.
