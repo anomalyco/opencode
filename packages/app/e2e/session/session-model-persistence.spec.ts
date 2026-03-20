@@ -1,6 +1,14 @@
 import type { Locator, Page } from "@playwright/test"
 import { test, expect } from "../fixtures"
-import { openSidebar, resolveSlug, sessionIDFromUrl, setWorkspacesEnabled, waitSessionIdle, waitSlug } from "../actions"
+import {
+  openSidebar,
+  resolveSlug,
+  sessionIDFromUrl,
+  setWorkspacesEnabled,
+  waitSession,
+  waitSessionIdle,
+  waitSlug,
+} from "../actions"
 import {
   promptAgentSelector,
   promptModelSelector,
@@ -29,8 +37,6 @@ const text = async (locator: Locator) => ((await locator.textContent()) ?? "").t
 
 const modelKey = (state: Probe | null) => (state?.model ? `${state.model.providerID}:${state.model.modelID}` : null)
 
-const dirKey = (state: Probe | null) => state?.dir ?? ""
-
 async function probe(page: Page): Promise<Probe | null> {
   return page.evaluate(() => {
     const win = window as Window & {
@@ -42,21 +48,6 @@ async function probe(page: Page): Promise<Probe | null> {
     }
     return win.__opencode_e2e?.model?.current ?? null
   })
-}
-
-async function currentDir(page: Page) {
-  let hit = ""
-  await expect
-    .poll(
-      async () => {
-        const next = dirKey(await probe(page))
-        if (next) hit = next
-        return next
-      },
-      { timeout: 30_000 },
-    )
-    .not.toBe("")
-  return hit
 }
 
 async function read(page: Page): Promise<Footer> {
@@ -187,8 +178,7 @@ async function chooseOtherModel(page: Page): Promise<Footer> {
 
 async function goto(page: Page, directory: string, sessionID?: string) {
   await page.goto(sessionPath(directory, sessionID))
-  await expect(page.locator(promptSelector)).toBeVisible()
-  await expect.poll(async () => dirKey(await probe(page)), { timeout: 30_000 }).toBe(directory)
+  await waitSession(page, { directory, sessionID })
 }
 
 async function submit(page: Page, value: string) {
@@ -224,7 +214,7 @@ async function createWorkspace(page: Page, root: string, seen: string[]) {
   await page.getByRole("button", { name: "New workspace" }).first().click()
 
   const next = await resolveSlug(await waitSlug(page, [root, ...seen]))
-  await expect(page).toHaveURL(new RegExp(`/${next.slug}/session(?:[/?#]|$)`))
+  await waitSession(page, { directory: next.directory })
   return next
 }
 
@@ -256,9 +246,7 @@ async function newWorkspaceSession(page: Page, slug: string) {
   await button.click({ force: true })
 
   const next = await resolveSlug(await waitSlug(page))
-  await expect(page).toHaveURL(new RegExp(`/${next.slug}/session(?:[/?#]|$)`))
-  await expect(page.locator(promptSelector)).toBeVisible()
-  return currentDir(page)
+  return waitSession(page, { directory: next.directory }).then((item) => item.directory)
 }
 
 test("session model and variant restore per session without leaking into new sessions", async ({
@@ -277,7 +265,7 @@ test("session model and variant restore per session without leaking into new ses
     await waitUser(directory, first)
 
     await page.reload()
-    await expect(page.locator(promptSelector)).toBeVisible()
+    await waitSession(page, { directory, sessionID: first })
     await waitFooter(page, firstState)
 
     await gotoSession()
