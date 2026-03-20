@@ -51,8 +51,8 @@ export namespace Bus {
     })
     const pending = []
     for (const key of [def.type, "*"]) {
-      const match = state().subscriptions.get(key)
-      for (const sub of match ?? []) {
+      const match = [...(state().subscriptions.get(key) ?? [])]
+      for (const sub of match) {
         pending.push(sub(payload))
       }
     }

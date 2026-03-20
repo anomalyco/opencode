@@ -1,5 +1,4 @@
-import { Database as BunDatabase } from "bun:sqlite"
-import { drizzle, type SQLiteBunDatabase } from "drizzle-orm/bun-sqlite"
+import { type SQLiteBunDatabase } from "drizzle-orm/bun-sqlite"
 import { migrate } from "drizzle-orm/bun-sqlite/migrator"
 import { type SQLiteTransaction } from "drizzle-orm/sqlite-core"
 export * from "drizzle-orm"
@@ -11,9 +10,10 @@ import { NamedError } from "@opencode-ai/util/error"
 import z from "zod"
 import path from "path"
 import { readFileSync, readdirSync, existsSync } from "fs"
-import * as schema from "./schema"
 import { Installation } from "../installation"
 import { Flag } from "../flag/flag"
+import { iife } from "@/util/iife"
+import { init } from "#db"
 
 declare const OPENCODE_MIGRATIONS: { sql: string; timestamp: number; name: string }[] | undefined
 
@@ -27,26 +27,19 @@ export const NotFoundError = NamedError.create(
 const log = Log.create({ service: "db" })
 
 export namespace Database {
-  export function file(channel: string) {
-    if (channel === "latest" || Flag.OPENCODE_DISABLE_CHANNEL_DB) return "opencode.db"
+  export const Path = iife(() => {
+    const channel = Installation.CHANNEL
+    if (["latest", "beta"].includes(channel) || Flag.OPENCODE_DISABLE_CHANNEL_DB)
+      return path.join(Global.Path.data, "opencode.db")
     const safe = channel.replace(/[^a-zA-Z0-9._-]/g, "-")
-    return `opencode-${safe}.db`
-  }
+    return path.join(Global.Path.data, `opencode-${safe}.db`)
+  })
 
-  export const Path = (() => {
-    return path.join(Global.Path.data, file(Installation.CHANNEL))
-  })()
+  export type Transaction = SQLiteTransaction<"sync", void>
 
-  type Schema = typeof schema
-  export type Transaction = SQLiteTransaction<"sync", void, Schema>
-
-  type Client = SQLiteBunDatabase<Schema>
+  type Client = SQLiteBunDatabase
 
   type Journal = { sql: string; timestamp: number; name: string }[]
-
-  const state = {
-    sqlite: undefined as BunDatabase | undefined,
-  }
 
   function time(tag: string) {
     const match = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/.exec(tag)
@@ -84,17 +77,14 @@ export namespace Database {
   export const Client = lazy(() => {
     log.info("opening database", { path: Path })
 
-    const sqlite = new BunDatabase(Path, { create: true })
-    state.sqlite = sqlite
+    const db = init(Path)
 
-    sqlite.run("PRAGMA journal_mode = WAL")
-    sqlite.run("PRAGMA synchronous = NORMAL")
-    sqlite.run("PRAGMA busy_timeout = 5000")
-    sqlite.run("PRAGMA cache_size = -64000")
-    sqlite.run("PRAGMA foreign_keys = ON")
-    sqlite.run("PRAGMA wal_checkpoint(PASSIVE)")
-
-    const db = drizzle({ client: sqlite, schema })
+    db.run("PRAGMA journal_mode = WAL")
+    db.run("PRAGMA synchronous = NORMAL")
+    db.run("PRAGMA busy_timeout = 5000")
+    db.run("PRAGMA cache_size = -64000")
+    db.run("PRAGMA foreign_keys = ON")
+    db.run("PRAGMA wal_checkpoint(PASSIVE)")
 
     // Apply schema migrations
     const entries =
@@ -106,6 +96,11 @@ export namespace Database {
         count: entries.length,
         mode: typeof OPENCODE_MIGRATIONS !== "undefined" ? "bundled" : "dev",
       })
+      if (Flag.OPENCODE_SKIP_MIGRATIONS) {
+        for (const item of entries) {
+          item.sql = "select 1;"
+        }
+      }
       migrate(db, entries)
     }
 
@@ -113,10 +108,7 @@ export namespace Database {
   })
 
   export function close() {
-    const sqlite = state.sqlite
-    if (!sqlite) return
-    sqlite.close()
-    state.sqlite = undefined
+    Client().$client.close()
     Client.reset()
   }
 

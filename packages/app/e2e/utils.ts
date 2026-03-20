@@ -7,6 +7,22 @@ export const serverPort = process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"
 export const serverUrl = `http://${serverHost}:${serverPort}`
 export const serverName = `${serverHost}:${serverPort}`
 
+const localHosts = ["127.0.0.1", "localhost"]
+
+const serverLabels = (() => {
+  const url = new URL(serverUrl)
+  if (!localHosts.includes(url.hostname)) return [serverName]
+  return localHosts.map((host) => `${host}:${url.port}`)
+})()
+
+export const serverNames = [...new Set(serverLabels)]
+
+export const serverUrls = serverNames.map((name) => `http://${name}`)
+
+const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+
+export const serverNamePattern = new RegExp(`(?:${serverNames.map(escape).join("|")})`)
+
 export const modKey = process.platform === "darwin" ? "Meta" : "Control"
 export const terminalToggleKey = "Control+Backquote"
 
@@ -41,7 +57,7 @@ export function sessionPath(directory: string, sessionID?: string) {
 }
 
 export function workspacePersistKey(directory: string, key: string) {
-  const head = directory.slice(0, 12) || "workspace"
+  const head = (directory.slice(0, 12) || "workspace").replace(/[^a-zA-Z0-9._-]/g, "-")
   const sum = checksum(directory) ?? "0"
   return `opencode.workspace.${head}.${sum}.dat:workspace:${key}`
 }
