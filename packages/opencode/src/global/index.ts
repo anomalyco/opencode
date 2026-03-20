@@ -18,7 +18,7 @@ export namespace Global {
       return process.env.OPENCODE_TEST_HOME || os.homedir()
     },
     data,
-    bin: path.join(data, "bin"),
+    bin: path.join(cache, "bin"),
     log: path.join(data, "log"),
     // Allow override via OPENCODE_TEST_CACHE for test isolation
     get cache() {
