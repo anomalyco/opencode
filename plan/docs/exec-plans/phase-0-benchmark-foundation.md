@@ -76,12 +76,16 @@
 
 ## BMK-005 Load fullflow suite from repo-local jobs
 
-- Status: `in_progress`
+- Status: `ready`
 - Owner: `codex-cyzh-1514615-20260320123645`
 - Branch: `plan/bmk-005-codex-cyzh-1514615-20260320123645-20260320123834`
 - Base: `xiaokang/cyzh/eco-agent@7574c7e432619bca8d7add5422dae106c80c3a02`
 - Started at: `2026-03-20T12:38:47Z`
-- Heartbeat at: `2026-03-20T12:38:47Z`
+- Heartbeat at: `2026-03-20T12:44:06Z`
+- Ready at: `2026-03-20T12:44:06Z`
+- Benchmark: `pass`
+- Artifact root: `/workspaces/Github/opencode/benchmark/26-03-20/20-42-47`
+- Feature commit: `0fb3333cc5b22a3f3abf22cd1707c2171fcefb1a`
 - Goal: turn repo-local `*.json` jobs into the `fullflow` suite.
 - Depends on: `BMK-004`
 - Deliverables: fullflow suite loader and suite manifest.
