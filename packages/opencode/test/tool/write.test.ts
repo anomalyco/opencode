@@ -99,7 +99,7 @@ describe("tool.write", () => {
         directory: tmp.path,
         fn: async () => {
           const { FileTime } = await import("../../src/file/time")
-          FileTime.read(ctx.sessionID, filepath)
+          await FileTime.read(ctx.sessionID, filepath)
 
           const write = await WriteTool.init()
           const result = await write.execute(
@@ -128,7 +128,7 @@ describe("tool.write", () => {
         directory: tmp.path,
         fn: async () => {
           const { FileTime } = await import("../../src/file/time")
-          FileTime.read(ctx.sessionID, filepath)
+          await FileTime.read(ctx.sessionID, filepath)
 
           const write = await WriteTool.init()
           const result = await write.execute(
@@ -306,7 +306,7 @@ describe("tool.write", () => {
         directory: tmp.path,
         fn: async () => {
           const { FileTime } = await import("../../src/file/time")
-          FileTime.read(ctx.sessionID, readonlyPath)
+          await FileTime.read(ctx.sessionID, readonlyPath)
 
           const write = await WriteTool.init()
           await expect(
