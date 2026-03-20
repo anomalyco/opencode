@@ -453,16 +453,20 @@ function math(el: Element) {
   )
 }
 
+// Debounce delay before upgrading from fast parse to full parse (with shiki)
+const HIGHLIGHT_DEBOUNCE_MS = 600
+
 export function Markdown(
   props: ComponentProps<"div"> & {
     text: string
     cacheKey?: string
     class?: string
     classList?: Record<string, boolean>
+    streaming?: boolean
   },
 ) {
   const id = ++seq
-  const [local, others] = splitProps(props, ["text", "cacheKey", "class", "classList"])
+  const [local, others] = splitProps(props, ["text", "cacheKey", "class", "classList", "streaming"])
   const marked = useMarked()
   const i18n = useI18n()
   const [root, setRoot] = createSignal<HTMLDivElement>()
@@ -470,7 +474,14 @@ export function Markdown(
     copy: i18n.t("ui.message.copy"),
     copied: i18n.t("ui.message.copied"),
   }))
-  const [html] = createResource(
+
+  // Track whether we used fast parse (no shiki) for the current content
+  let usedFastParse = false
+  let highlightTimer: ReturnType<typeof setTimeout> | undefined
+  // Monotonically increasing generation counter to discard stale full-parse results
+  let parseGeneration = 0
+
+  const [html, { mutate: setHtml }] = createResource(
     () => local.text,
     async (markdown) => {
       if (isServer) return fallback(markdown)
@@ -486,24 +497,69 @@ export function Markdown(
         if (cached && cached.hash === hash) {
           log(id, "render cache hit", { key, hash, text: markdown.length, html: cached.html.length })
           touch(key, cached)
+          usedFastParse = false
           return cached.html
         }
       }
 
+      // During streaming, use fast parse (no shiki highlighting) to reduce main thread blocking
+      const streaming = local.streaming
+      const parseFn = streaming && marked.parseFast ? marked.parseFast : marked.parse
+
       let safe = ""
       try {
-        log(id, "render parse", { key, hash, text: markdown.length })
-        safe = sanitize(await marked.parse(normalized))
+        log(id, streaming ? "render parse (fast)" : "render parse", { key, hash, text: markdown.length })
+        safe = sanitize(await parseFn(normalized))
       } catch (err) {
         console.error("markdown render failed", err)
         safe = fallback(normalized)
       }
       log(id, "render done", { key, hash, html: safe.length, ms: Math.round(performance.now() - start) })
-      if (key && hash) touch(key, { hash, html: safe })
+
+      if (streaming) {
+        usedFastParse = true
+        // Don't cache fast-parsed results — they lack syntax highlighting
+      } else {
+        usedFastParse = false
+        if (key && hash) touch(key, { hash, html: safe })
+      }
+
       return safe
     },
     { initialValue: isServer ? fallback(local.text) : "" },
   )
+
+  // When streaming stops, schedule a full re-parse with shiki highlighting
+  createEffect(() => {
+    const streaming = local.streaming
+    const text = local.text
+
+    if (highlightTimer) {
+      clearTimeout(highlightTimer)
+      highlightTimer = undefined
+    }
+
+    if (!streaming && usedFastParse && text) {
+      const gen = ++parseGeneration
+      highlightTimer = setTimeout(async () => {
+        try {
+          const normalized = normalize(text)
+          const hash = checksum(normalized)
+          const key = local.cacheKey ?? hash
+          log(id, "render upgrade (full shiki)", { key, text: text.length })
+          const safe = sanitize(await marked.parse(normalized))
+          // Only apply if content hasn't changed since we scheduled the upgrade
+          if (gen === parseGeneration) {
+            setHtml(safe)
+            usedFastParse = false
+            if (key && hash) touch(key, { hash, html: safe })
+          }
+        } catch (err) {
+          console.error("markdown highlight upgrade failed", err)
+        }
+      }, HIGHLIGHT_DEBOUNCE_MS)
+    }
+  })
 
   let copySetupTimer: ReturnType<typeof setTimeout> | undefined
   let copyCleanup: (() => void) | undefined
@@ -569,7 +625,64 @@ export function Markdown(
     }
 
     const next = untrack(labels)
+    const prevHtml = container.dataset.html ?? ""
+    const isStreaming = local.streaming
 
+    // Fast-append path: during streaming, if new HTML starts with the previous HTML,
+    // find the common top-level node boundary and only morphdom the tail.
+    if (isStreaming && prevHtml && content.startsWith(prevHtml.slice(0, Math.max(0, prevHtml.lastIndexOf("<"))))) {
+      // Find how many top-level children are stable
+      const existingCount = container.childNodes.length
+      if (existingCount > 0) {
+        const temp = document.createElement("div")
+        temp.innerHTML = content
+        wrapCodeBlocks(temp)
+        const newCount = temp.childNodes.length
+
+        // Check how many leading children are identical
+        let stableCount = 0
+        const limit = Math.min(existingCount, newCount)
+        for (let i = 0; i < limit - 1; i++) {
+          const existing = container.childNodes[i]
+          const incoming = temp.childNodes[i]
+          if (existing && incoming && existing.isEqualNode(incoming)) {
+            stableCount++
+          } else {
+            break
+          }
+        }
+
+        if (stableCount > 0 && stableCount >= existingCount - 1) {
+          log(id, "patch incremental", {
+            stable: stableCount,
+            existing: existingCount,
+            incoming: newCount,
+          })
+
+          // Remove unstable trailing nodes from container
+          while (container.childNodes.length > stableCount) {
+            container.removeChild(container.lastChild!)
+          }
+          // Append all nodes from stableCount onward from temp
+          while (temp.childNodes.length > stableCount) {
+            const node = temp.childNodes[stableCount]
+            container.appendChild(node)
+          }
+
+          container.dataset.html = content
+
+          if (copySetupTimer) clearTimeout(copySetupTimer)
+          copySetupTimer = setTimeout(() => {
+            if (copyCleanup) copyCleanup()
+            copyCleanup = setupCodeCopy(container, next)
+            setLabels(container, next)
+          }, 150)
+          return
+        }
+      }
+    }
+
+    // Full morphdom path
     const temp = document.createElement("div")
     temp.innerHTML = content
     wrapCodeBlocks(temp)
@@ -577,7 +690,7 @@ export function Markdown(
     let keep = 0
 
     log(id, "patch start", {
-      prev: container.dataset.html?.length ?? 0,
+      prev: prevHtml.length,
       next: content.length,
       katex: {
         from: count(container, ".katex, .katex-display"),
@@ -647,6 +760,7 @@ export function Markdown(
     obs?.disconnect()
     if (copySetupTimer) clearTimeout(copySetupTimer)
     if (copyCleanup) copyCleanup()
+    if (highlightTimer) clearTimeout(highlightTimer)
   })
 
   return (

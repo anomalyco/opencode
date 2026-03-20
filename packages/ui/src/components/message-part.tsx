@@ -129,11 +129,27 @@ const TEXT_RENDER_THROTTLE_MS = 100
 function createThrottledValue(getValue: () => string) {
   const [value, setValue] = createSignal(getValue())
   let timeout: ReturnType<typeof setTimeout> | undefined
+  let rafId: number | undefined
   let last = 0
+  let pending: string | undefined
+
+  const flush = () => {
+    if (pending === undefined) return
+    const next = pending
+    pending = undefined
+    last = Date.now()
+    // Gate on rAF so we only commit values when the browser is ready to paint
+    rafId = requestAnimationFrame(() => {
+      rafId = undefined
+      setValue(next)
+    })
+  }
 
   createEffect(() => {
     const next = getValue()
     const now = Date.now()
+
+    pending = next
 
     const remaining = TEXT_RENDER_THROTTLE_MS - (now - last)
     if (remaining <= 0) {
@@ -141,20 +157,19 @@ function createThrottledValue(getValue: () => string) {
         clearTimeout(timeout)
         timeout = undefined
       }
-      last = now
-      setValue(next)
+      flush()
       return
     }
     if (timeout) clearTimeout(timeout)
     timeout = setTimeout(() => {
-      last = Date.now()
-      setValue(next)
       timeout = undefined
+      flush()
     }, remaining)
   })
 
   onCleanup(() => {
     if (timeout) clearTimeout(timeout)
+    if (rafId !== undefined) cancelAnimationFrame(rafId)
   })
 
   return value
@@ -1465,6 +1480,10 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
 
   const displayText = () => (part.text ?? "").trim()
   const throttledText = createThrottledValue(displayText)
+  const streaming = createMemo(() => {
+    if (props.message.role !== "assistant") return false
+    return typeof (props.message as AssistantMessage).time.completed !== "number"
+  })
   const isLastTextPart = createMemo(() => {
     const last = (data.store.part?.[props.message.id] ?? [])
       .filter((item): item is TextPart => item?.type === "text" && !!item.text?.trim())
@@ -1491,7 +1510,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     <Show when={throttledText()}>
       <div data-component="text-part">
         <div data-slot="text-part-body">
-          <Markdown text={throttledText()} cacheKey={part.id} />
+          <Markdown text={throttledText()} cacheKey={part.id} streaming={streaming()} />
         </div>
         <Show when={showCopy()}>
           <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
@@ -1525,11 +1544,15 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
   const part = props.part as ReasoningPart
   const text = () => part.text.trim()
   const throttledText = createThrottledValue(text)
+  const streaming = createMemo(() => {
+    if (props.message.role !== "assistant") return false
+    return typeof (props.message as AssistantMessage).time.completed !== "number"
+  })
 
   return (
     <Show when={throttledText()}>
       <div data-component="reasoning-part">
-        <Markdown text={throttledText()} cacheKey={part.id} />
+        <Markdown text={throttledText()} cacheKey={part.id} streaming={streaming()} />
       </div>
     </Show>
   )

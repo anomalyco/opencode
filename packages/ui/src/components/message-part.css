@@ -318,6 +318,7 @@
 [data-component="text-part"] {
   width: 100%;
   margin-top: 24px;
+  contain: layout style;
 
   [data-slot="text-part-body"] {
     margin-top: 0;
@@ -425,6 +426,7 @@
   width: 100%;
   color: var(--text-base);
   line-height: var(--line-height-normal);
+  contain: layout style;
 
   [data-component="markdown"] {
     margin-top: 24px;
@@ -1315,8 +1317,13 @@
       background-color: var(--background-base);
     }
 
+    &[data-focused="true"]:not([data-picked="true"]) {
+      background-color: light-dark(#fffacd, rgba(215, 153, 33, 0.15));
+      border-color: light-dark(#d79921, rgba(215, 153, 33, 0.4));
+    }
+
     &[data-picked="true"] {
-      background-color: var(--surface-interactive-weak);
+      background-color: var(--surface-interactive-base);
       border-color: transparent;
       box-shadow: var(--shadow-xs-border-hover);
     }
@@ -1407,11 +1414,11 @@
   }
 
   [data-slot="option-description"] {
-    font-family: var(--font-family-sans);
-    font-size: 14px;
+    font-family: var(--font-family-mono);
+    font-size: 15px;
     font-weight: var(--font-weight-regular);
     line-height: var(--line-height-large);
-    color: var(--text-base);
+    color: var(--amber-darkalpha-10);
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1439,7 +1446,7 @@
 
   [data-slot="question-custom-input"] {
     width: 100%;
-    padding: 4px 2px;
+    padding: 0px;
     border: 0;
     border-radius: 0;
     background: transparent;
