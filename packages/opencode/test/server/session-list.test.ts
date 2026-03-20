@@ -87,4 +87,60 @@ describe("Session.list", () => {
       },
     })
   })
+
+  test("filters by directory with backslash variation", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const session = await Session.create({ title: "backslash-test" })
+
+        // Query with backslashes should match forward slashes
+        const backSlash = projectRoot.replace(/\//g, "\\")
+        const sessions = [...Session.list({ directory: backSlash })]
+        const ids = sessions.map((s) => s.id)
+
+        expect(ids).toContain(session.id)
+      },
+    })
+  })
+
+  test("filters by directory with case variation (Windows)", async () => {
+    if (process.platform !== "win32") {
+      return
+    }
+
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const session = await Session.create({ title: "case-variation-test" })
+
+        // Query with lowercase drive letter should match
+        const lowerCase = projectRoot.replace(/^([A-Z]):/, (_, d) => d.toLowerCase() + ":")
+        const sessions = [...Session.list({ directory: lowerCase })]
+        const ids = sessions.map((s) => s.id)
+
+        expect(ids).toContain(session.id)
+      },
+    })
+  })
+
+  test("filters by directory with mixed variations", async () => {
+    if (process.platform !== "win32") {
+      return
+    }
+
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const session = await Session.create({ title: "mixed-variation-test" })
+
+        // Query with mixed backslashes and lowercase drive letter
+        const mixed = projectRoot.replace(/\//g, "\\").replace(/^([A-Z]):/, (_, d) => d.toLowerCase() + ":")
+        const sessions = [...Session.list({ directory: mixed })]
+        const ids = sessions.map((s) => s.id)
+
+        expect(ids).toContain(session.id)
+      },
+    })
+  })
 })
