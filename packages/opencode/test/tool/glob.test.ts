@@ -4,7 +4,6 @@ import { Cause, Effect, Exit, Layer } from "effect"
 import { GlobTool } from "../../src/tool/glob"
 import { SessionID, MessageID } from "../../src/session/schema"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
-import { Ripgrep } from "../../src/file/ripgrep"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { Truncate } from "../../src/tool"
 import { Agent } from "../../src/agent/agent"
@@ -15,7 +14,6 @@ const it = testEffect(
   Layer.mergeAll(
     CrossSpawnSpawner.defaultLayer,
     AppFileSystem.defaultLayer,
-    Ripgrep.defaultLayer,
     Truncate.defaultLayer,
     Agent.defaultLayer,
   ),

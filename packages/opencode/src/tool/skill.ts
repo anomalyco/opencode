@@ -2,8 +2,8 @@ import path from "path"
 import { pathToFileURL } from "url"
 import z from "zod"
 import { Effect } from "effect"
-import * as Stream from "effect/Stream"
-import { Ripgrep } from "../file/ripgrep"
+import { Fff } from "../file/fff"
+import { Glob } from "../util/glob"
 import { Skill } from "../skill"
 import * as Tool from "./tool"
 import DESCRIPTION from "./skill.txt"
@@ -16,7 +16,6 @@ export const SkillTool = Tool.define(
   "skill",
   Effect.gen(function* () {
     const skill = yield* Skill.Service
-    const rg = yield* Ripgrep.Service
 
     return {
       description: DESCRIPTION,
@@ -40,13 +39,22 @@ export const SkillTool = Tool.define(
           const dir = path.dirname(info.location)
           const base = pathToFileURL(dir).href
           const limit = 10
-          const files = yield* rg.files({ cwd: dir, follow: false, hidden: true, signal: ctx.abort }).pipe(
-            Stream.filter((file) => !file.includes("SKILL.md")),
-            Stream.map((file) => path.resolve(dir, file)),
-            Stream.take(limit),
-            Stream.runCollect,
-            Effect.map((chunk) => [...chunk].map((file) => `<file>${file}</file>`).join("\n")),
-          )
+          const files = yield* Effect.promise(async () => {
+            ctx.abort.throwIfAborted()
+            return (
+              await Glob.scan("**/*", {
+                cwd: dir,
+                include: "file",
+                dot: true,
+              })
+            )
+              .map((file) => file.replaceAll("\\", "/"))
+              .filter((file) => Fff.allowed({ rel: file, hidden: true, glob: ["!node_modules/*", "!.git/*"] }))
+              .filter((file) => !file.includes("SKILL.md"))
+              .slice(0, limit)
+              .map((file) => `<file>${path.resolve(dir, file)}</file>`)
+              .join("\n")
+          })
 
           return {
             title: `Loaded skill: ${info.name}`,
