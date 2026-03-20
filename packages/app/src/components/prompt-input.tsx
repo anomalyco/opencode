@@ -1389,11 +1389,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               onChange={(e) => {
                 const list = e.currentTarget.files
                 if (list) {
-                  void (async () => {
-                    for (const file of Array.from(list)) {
-                      await addAttachment(file)
-                    }
-                  })()
+                  for (const file of Array.from(list)) {
+                    void addAttachment(file)
+                  }
                 }
                 e.currentTarget.value = ""
               }}
