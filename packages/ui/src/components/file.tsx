@@ -16,7 +16,19 @@ import {
 } from "@pierre/diffs"
 import { type PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 import { createMediaQuery } from "@solid-primitives/media"
-import { ComponentProps, createEffect, createMemo, createSignal, onCleanup, onMount, Show, splitProps } from "solid-js"
+import {
+  type ComponentProps,
+  createEffect,
+  createMemo,
+  createSignal,
+  type JSX,
+  on,
+  onCleanup,
+  onMount,
+  Show,
+  splitProps,
+} from "solid-js"
+import { useI18n } from "../context/i18n"
 import { createDefaultOptions, styleVariables } from "../pierre"
 import { markCommentedDiffLines, markCommentedFileLines } from "../pierre/commented-lines"
 import { fixDiffSelection, findDiffSide, type DiffSelectionSide } from "../pierre/diff-selection"
@@ -42,6 +54,8 @@ import { acquireVirtualizer, virtualMetrics } from "../pierre/virtualizer"
 import { getWorkerPool } from "../pierre/worker"
 import { FileMedia, type FileMediaOptions } from "./file-media"
 import { FileSearchBar } from "./file-search"
+import { Markdown } from "./markdown"
+import { RadioGroup } from "./radio-group"
 
 const VIRTUALIZE_BYTES = 500_000
 
@@ -108,6 +122,28 @@ const sharedKeys = [
 
 const textKeys = ["file", ...sharedKeys] as const
 const diffKeys = ["before", "after", ...sharedKeys] as const
+
+function fileText(file: FileContents) {
+  const value = file.contents as unknown
+  if (typeof value === "string") return value
+  if (Array.isArray(value)) return value.join("\n")
+  if (value == null) return ""
+  return String(value)
+}
+
+function fileBytes(file: FileContents) {
+  const value = file.contents as unknown
+  if (typeof value === "string") return value.length
+  if (Array.isArray(value)) {
+    return value.reduce((sum, part) => sum + (typeof part === "string" ? part.length + 1 : String(part).length + 1), 0)
+  }
+  if (value == null) return 0
+  return String(value).length
+}
+
+function markdownFile(name: string) {
+  return /\.(md|markdown|mdx)$/i.test(name)
+}
 
 // ---------------------------------------------------------------------------
 // Shared viewer hook
@@ -633,44 +669,62 @@ function diffSelectionSide(node: Node | null) {
 // Shared JSX shell
 // ---------------------------------------------------------------------------
 
-function ViewerShell(props: {
-  mode: "text" | "diff"
-  viewer: ReturnType<typeof useFileViewer>
+function FileRoot(props: {
+  mode: "text" | "diff" | "markdown"
   class: string | undefined
   classList: ComponentProps<"div">["classList"] | undefined
+  children: JSX.Element
 }) {
   return (
     <div
       data-component="file"
       data-mode={props.mode}
       style={styleVariables}
-      class="relative outline-none"
       classList={{
         ...(props.classList || {}),
         [props.class ?? ""]: !!props.class,
       }}
-      ref={(el) => (props.viewer.wrapper = el)}
-      tabIndex={0}
-      onPointerDown={props.viewer.find.onPointerDown}
-      onFocus={props.viewer.find.onFocus}
     >
-      <Show when={props.viewer.find.open()}>
-        <FileSearchBar
-          pos={props.viewer.find.pos}
-          query={props.viewer.find.query}
-          count={props.viewer.find.count}
-          index={props.viewer.find.index}
-          setInput={props.viewer.find.setInput}
-          onInput={props.viewer.find.setQuery}
-          onKeyDown={props.viewer.find.onInputKeyDown}
-          onClose={props.viewer.find.close}
-          onPrev={() => props.viewer.find.next(-1)}
-          onNext={() => props.viewer.find.next(1)}
-        />
-      </Show>
-      <div ref={(el) => (props.viewer.container = el)} />
-      <div ref={(el) => (props.viewer.overlay = el)} class="pointer-events-none absolute inset-0 z-0" />
+      {props.children}
     </div>
+  )
+}
+
+function ViewerShell(props: {
+  mode: "text" | "diff"
+  viewer: ReturnType<typeof useFileViewer>
+  class: string | undefined
+  classList: ComponentProps<"div">["classList"] | undefined
+  head?: JSX.Element
+}) {
+  return (
+    <FileRoot mode={props.mode} class={props.class} classList={props.classList}>
+      <div
+        class="relative outline-none"
+        ref={(el) => (props.viewer.wrapper = el)}
+        tabIndex={0}
+        onPointerDown={props.viewer.find.onPointerDown}
+        onFocus={props.viewer.find.onFocus}
+      >
+        {props.head}
+        <Show when={props.viewer.find.open()}>
+          <FileSearchBar
+            pos={props.viewer.find.pos}
+            query={props.viewer.find.query}
+            count={props.viewer.find.count}
+            index={props.viewer.find.index}
+            setInput={props.viewer.find.setInput}
+            onInput={props.viewer.find.setQuery}
+            onKeyDown={props.viewer.find.onInputKeyDown}
+            onClose={props.viewer.find.close}
+            onPrev={() => props.viewer.find.next(-1)}
+            onNext={() => props.viewer.find.next(1)}
+          />
+        </Show>
+        <div ref={(el) => (props.viewer.container = el)} />
+        <div ref={(el) => (props.viewer.overlay = el)} class="pointer-events-none absolute inset-0 z-0" />
+      </div>
+    </FileRoot>
   )
 }
 
@@ -678,19 +732,17 @@ function ViewerShell(props: {
 // TextViewer
 // ---------------------------------------------------------------------------
 
-function TextViewer<T>(props: TextFileProps<T>) {
+type SourceProps<T> = TextFileProps<T> & {
+  head?: JSX.Element
+}
+
+function SourceViewer<T>(props: SourceProps<T>) {
   let instance: PierreFile<T> | VirtualizedFile<T> | undefined
   let viewer!: Viewer
 
-  const [local, others] = splitProps(props, textKeys)
+  const [local, others] = splitProps(props, [...textKeys, "head"] as const)
 
-  const text = () => {
-    const value = local.file.contents as unknown
-    if (typeof value === "string") return value
-    if (Array.isArray(value)) return value.join("\n")
-    if (value == null) return ""
-    return String(value)
-  }
+  const text = () => fileText(local.file)
 
   const lineCount = () => {
     const value = text()
@@ -698,18 +750,7 @@ function TextViewer<T>(props: TextFileProps<T>) {
     return Math.max(1, total)
   }
 
-  const bytes = createMemo(() => {
-    const value = local.file.contents as unknown
-    if (typeof value === "string") return value.length
-    if (Array.isArray(value)) {
-      return value.reduce(
-        (sum, part) => sum + (typeof part === "string" ? part.length + 1 : String(part).length + 1),
-        0,
-      )
-    }
-    if (value == null) return 0
-    return String(value).length
-  })
+  const bytes = createMemo(() => fileBytes(local.file))
 
   const virtual = createMemo(() => bytes() > VIRTUALIZE_BYTES)
 
@@ -886,7 +927,63 @@ function TextViewer<T>(props: TextFileProps<T>) {
     virtuals.cleanup()
   })
 
-  return <ViewerShell mode="text" viewer={viewer} class={local.class} classList={local.classList} />
+  return <ViewerShell mode="text" viewer={viewer} class={local.class} classList={local.classList} head={local.head} />
+}
+
+function TextViewer<T>(props: TextFileProps<T>) {
+  const i18n = useI18n()
+  const md = () => markdownFile(props.file.name)
+  const Source = SourceViewer as (props: SourceProps<T>) => JSX.Element
+  const text = createMemo(() => fileText(props.file))
+
+  if (!md()) return SourceViewer<T>(props)
+
+  const [mode, setMode] = createSignal<"preview" | "source">(props.enableLineSelection === true ? "source" : "preview")
+  const bar = (
+    <div
+      data-slot="file-markdown-actions"
+      class="flex items-center justify-end border-b border-border-weak-base bg-background-base px-3 py-2"
+    >
+      <RadioGroup
+        options={["preview", "source"] as const}
+        current={mode()}
+        size="small"
+        pad="none"
+        value={(value) => value}
+        label={(value) => i18n.t(value === "preview" ? "ui.file.preview" : "ui.file.source")}
+        onSelect={(value) => value && setMode(value)}
+      />
+    </div>
+  )
+
+  createEffect(
+    on(
+      () => [mode(), props.file.cacheKey, text()],
+      ([next]) => {
+        if (next !== "preview") return
+        requestAnimationFrame(() => props.onRendered?.())
+      },
+      { defer: true },
+    ),
+  )
+
+  return (
+    <Show
+      when={mode() === "source"}
+      fallback={
+        <FileRoot mode="markdown" class={props.class} classList={props.classList}>
+          <div class="flex min-h-0 flex-col overflow-hidden">
+            {bar}
+            <div data-slot="file-markdown-preview" class="overflow-auto px-4 py-4">
+              <Markdown text={text()} cacheKey={props.file.name} />
+            </div>
+          </div>
+        </FileRoot>
+      }
+    >
+      <Source {...props} head={bar} />
+    </Show>
+  )
 }
 
 // ---------------------------------------------------------------------------

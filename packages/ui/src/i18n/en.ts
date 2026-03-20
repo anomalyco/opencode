@@ -26,6 +26,8 @@ export const dict: Record<string, string> = {
   "ui.fileMedia.binary.title": "Binary file",
   "ui.fileMedia.binary.description.path": "{{path}} is binary.",
   "ui.fileMedia.binary.description.default": "Binary content",
+  "ui.file.preview": "Preview",
+  "ui.file.source": "Source",
 
   "ui.lineComment.label.prefix": "Comment on ",
   "ui.lineComment.label.suffix": "",
