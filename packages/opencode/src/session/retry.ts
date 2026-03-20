@@ -1,8 +1,11 @@
 import type { NamedError } from "@opencode-ai/util/error"
 import { MessageV2 } from "./message-v2"
 import { iife } from "@/util/iife"
+import { Log } from "@/util/log"
 
 export namespace SessionRetry {
+  const log = Log.create({ service: "session-retry" })
+  
   export const RETRY_INITIAL_DELAY = 2000
   export const RETRY_BACKOFF_FACTOR = 2
   export const RETRY_MAX_DELAY_NO_HEADERS = 30_000 // 30 seconds
@@ -97,5 +100,25 @@ export namespace SessionRetry {
     } catch {
       return undefined
     }
+  }
+
+  export function shouldFallbackToAlternativeModel(error: ReturnType<NamedError["toObject"]>): boolean {
+    log.debug("checking fallback", { errorType: error.name })
+    
+    if (MessageV2.ContextOverflowError.isInstance(error)) {
+      log.debug("context overflow - no fallback")
+      return false
+    }
+    if (MessageV2.AuthError.isInstance(error)) {
+      log.debug("auth error - should fallback")
+      return true
+    }
+    if (MessageV2.APIError.isInstance(error) && !error.data.isRetryable) {
+      log.debug("api error (non-retryable) - should fallback")
+      return true
+    }
+    
+    log.debug("default case - no fallback")
+    return false
   }
 }

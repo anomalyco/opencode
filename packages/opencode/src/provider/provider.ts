@@ -1395,4 +1395,26 @@ export namespace Provider {
       providerID: ProviderID.zod,
     }),
   )
+
+  export async function getFallbackModel(failedModel: Model): Promise<Model> {
+    log.debug("fallback started", { failedModel: failedModel.id })
+    const config = await Config.get()
+    const providers = await list()
+
+    const alternativeProviders = Object.values(providers).filter(
+      (p) => p.id !== failedModel.providerID && Object.keys(p.models).length > 0
+    )
+
+    log.debug("alternatives found", { count: alternativeProviders.length })
+
+    if (alternativeProviders.length > 0) {
+      const altProvider = alternativeProviders[0]
+      const [bestModel] = sort(Object.values(altProvider.models))
+      log.debug("switching provider", { from: failedModel.providerID, to: altProvider.id, model: bestModel.id })
+      return getModel(ProviderID.make(altProvider.id), ModelID.make(bestModel.id))
+    }
+
+    log.debug("fallback to opencode/zen")
+    return getModel(ProviderID.make("opencode"), ModelID.make("zen"))
+  }
 }

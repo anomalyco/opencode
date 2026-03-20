@@ -190,3 +190,43 @@ describe("session.message-v2.fromError", () => {
     expect(result.data.isRetryable).toBe(true)
   })
 })
+
+describe("shouldFallbackToAlternativeModel", () => {
+  test("should return true for AuthError", () => {
+    const error = new MessageV2.AuthError({
+      message: "Authentication failed",
+      responseBody: '{"error":"invalid_api_key"}',
+    }).toObject() as ReturnType<NamedError["toObject"]>
+    
+    expect(SessionRetry.shouldFallbackToAlternativeModel(error)).toBe(true)
+  })
+  
+  test("should return false for ContextOverflowError", () => {
+    const error = new MessageV2.ContextOverflowError({
+      message: "Input exceeds context window of this model",
+      responseBody: '{"error":{"code":"context_length_exceeded"}}',
+    }).toObject() as ReturnType<NamedError["toObject"]>
+    
+    expect(SessionRetry.shouldFallbackToAlternativeModel(error)).toBe(false)
+  })
+  
+  test("should return true for non-retryable APIError", () => {
+    const error = new MessageV2.APIError({
+      message: "API error",
+      isRetryable: false,
+      responseHeaders: {},
+    }).toObject() as MessageV2.APIError
+    
+    expect(SessionRetry.shouldFallbackToAlternativeModel(error)).toBe(true)
+  })
+  
+  test("should return false for retryable APIError", () => {
+    const error = new MessageV2.APIError({
+      message: "API error",
+      isRetryable: true,
+      responseHeaders: {},
+    }).toObject() as MessageV2.APIError
+    
+    expect(SessionRetry.shouldFallbackToAlternativeModel(error)).toBe(false)
+  })
+})

@@ -214,6 +214,15 @@ export namespace Session {
         error: MessageV2.Assistant.shape.error,
       }),
     ),
+    ModelFallback: BusEvent.define(
+      "session.model-fallback",
+      z.object({
+        sessionID: SessionID.zod,
+        fromModel: z.string(),
+        toModel: z.string(),
+        reason: z.string(),
+      }),
+    ),
   }
 
   export const create = fn(

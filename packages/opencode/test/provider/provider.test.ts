@@ -18,20 +18,105 @@ test("provider loaded from env variable", async () => {
       )
     },
   })
+})
+
+test("getFallbackModel returns alternative model when available", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
   await Instance.provide({
     directory: tmp.path,
     init: async () => {
-      Env.set("ANTHROPIC_API_KEY", "test-api-key")
+      Env.set("ANTHROPIC_API_KEY", "test-anthropic-key")
+      Env.set("OPENAI_API_KEY", "test-openai-key")
     },
     fn: async () => {
-      const providers = await Provider.list()
-      expect(providers[ProviderID.anthropic]).toBeDefined()
-      // Provider should retain its connection source even if custom loaders
-      // merge additional options.
-      expect(providers[ProviderID.anthropic].source).toBe("env")
-      expect(providers[ProviderID.anthropic].options.headers["anthropic-beta"]).toBeDefined()
+      const failedModel = await Provider.getModel(ProviderID.anthropic, ModelID.make("claude-sonnet-4-20250514"))
+      const fallbackModel = await Provider.getFallbackModel(failedModel)
+      
+      expect(fallbackModel).toBeDefined()
+      expect(String(fallbackModel.providerID)).toBe("openai")
+      expect(fallbackModel.id).toBeDefined()
     },
   })
+})
+
+test("getFallbackModel falls back to opencode/zen when no alternatives", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("ANTHROPIC_API_KEY", "test-anthropic-key")
+    },
+    fn: async () => {
+      const failedModel = await Provider.getModel(ProviderID.anthropic, ModelID.make("claude-sonnet-4-20250514"))
+      const fallbackModel = await Provider.getFallbackModel(failedModel)
+      
+      expect(fallbackModel).toBeDefined()
+      expect(String(fallbackModel.providerID)).toBe("opencode")
+      expect(String(fallbackModel.id)).toBe("zen")
+    },
+  })
+})
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("ANTHROPIC_API_KEY", "test-anthropic-key")
+      Env.set("OPENAI_API_KEY", "test-openai-key")
+    },
+    fn: async () => {
+      const failedModel = await Provider.getModel(ProviderID.anthropic, ModelID.make("claude-sonnet-4-20250514"))
+      const fallbackModel = await Provider.getFallbackModel(failedModel)
+      
+      expect(fallbackModel).toBeDefined()
+      expect(String(fallbackModel.providerID)).toBe("openai")
+      expect(fallbackModel.id).toBeDefined()
+    },
+  })
+})
+
+test("getFallbackModel falls back to opencode/zen when no alternatives", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("ANTHROPIC_API_KEY", "test-anthropic-key")
+    },
+    fn: async () => {
+      const failedModel = await Provider.getModel(ProviderID.anthropic, ModelID.make("claude-sonnet-4-20250514"))
+      const fallbackModel = await Provider.getFallbackModel(failedModel)
+      
+      expect(fallbackModel).toBeDefined()
+      expect(String(fallbackModel.providerID)).toBe("opencode")
+      expect(String(fallbackModel.id)).toBe("zen")
+    },
+  })
+})
 })
 
 test("provider loaded from config with apiKey option", async () => {

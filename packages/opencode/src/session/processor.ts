@@ -377,6 +377,26 @@ export namespace SessionProcessor {
                 await SessionRetry.sleep(delay, input.abort).catch(() => {})
                 continue
               }
+              if (SessionRetry.shouldFallbackToAlternativeModel(error)) {
+                log.debug("starting fallback", { sessionID: input.sessionID })
+                const fallbackModel = await Provider.getFallbackModel(input.model)
+                
+                log.debug("selected fallback", { from: `${input.model.providerID}/${input.model.id}`, to: `${fallbackModel.providerID}/${fallbackModel.id}` })
+                
+                input.assistantMessage.model = fallbackModel
+                await Session.updateMessage(input.sessionID, input.assistantMessage)
+                
+                log.debug("publishing fallback event")
+                Bus.publish(Session.Event.ModelFallback, {
+                  sessionID: input.sessionID,
+                  fromModel: `${input.model.providerID}/${input.model.id}`,
+                  toModel: `${fallbackModel.providerID}/${fallbackModel.id}`,
+                  reason: error.message,
+                })
+                
+                input.model = fallbackModel
+                continue
+              }
               input.assistantMessage.error = error
               Bus.publish(Session.Event.Error, {
                 sessionID: input.assistantMessage.sessionID,
