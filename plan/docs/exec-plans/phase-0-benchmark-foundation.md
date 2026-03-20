@@ -9,7 +9,7 @@
 - Benchmark: `pass`
 - Artifact root: `/workspaces/Github/opencode/benchmark/26-03-20/18-18-08`
 - Commit: `458ac87ff15137e88ae13adff546ac4526bc629c`
-- Publish: `failed to push xiaokang: Could not read from remote repository`
+- Publish: `failed to push xiaokang/cyzh/eco-agent: Could not read from remote repository`
 - Goal: scan the repo-local job manifests under `/workspaces/Github/opencode/tests/cases/jobs` and build a local catalog grouped by suite.
 - Depends on: `none`
 - Deliverables: case inventory, suite grouping, stable catalog format.
@@ -25,7 +25,7 @@
 - Benchmark: `pass`
 - Artifact root: `/workspaces/Github/opencode/benchmark/26-03-20/19-17-00`
 - Commit: `fa49d9bb97ea8fc68248c04af6a36cc633fceac3`
-- Publish: `pushed to xiaokang branch cyzh/eco-agent with --no-verify after a local Bun pre-push hook version mismatch`
+- Publish: `pushed to xiaokang/cyzh/eco-agent with --no-verify after a local Bun pre-push hook version mismatch`
 - Goal: define the local manifest schema used by the benchmark runner.
 - Depends on: `BMK-001`
 - Deliverables: schema, validation layer, manifest examples.
@@ -34,11 +34,20 @@
 
 ## BMK-003 Create timestamped benchmark workspace
 
-- Status: `todo`
+- Status: `ready`
+- Owner: `codex-cyzh-1440009-20260320115600`
+- Branch: `plan/bmk-003-codex-cyzh-1440009-20260320115600-20260320115658`
+- Base: `xiaokang/cyzh/eco-agent@c5140a599ebef5bab2050dc6beab07e9e38c6707`
+- Started at: `2026-03-20T11:56:58Z`
+- Heartbeat at: `2026-03-20T12:05:26Z`
+- Ready at: `2026-03-20T12:05:26Z`
+- Benchmark: `pass`
+- Artifact root: `/workspaces/Github/opencode/benchmark/26-03-20/20-05-13`
+- Feature commit: `3d9b19ed1d68eee642453e1aa6812a0acda3a210`
 - Goal: create the required benchmark artifact root at `/workspaces/Github/opencode/benchmark/YY-MM-DD/HH-MM-SS`.
 - Depends on: `BMK-002`
-- Deliverables: directory creator, manifest bootstrap, summary placeholders.
-- Done when: each run gets a clean timestamp root with stable subdirectories.
+- Deliverables: directory creator, manifest bootstrap, summary placeholders, collision-safe root allocation.
+- Done when: each run gets a clean timestamp root with stable subdirectories and concurrent sessions cannot claim the same root.
 - Benchmark gate: `catalog self-check`
 
 ## BMK-004 Run `smic110-adder` dry-run smoke
