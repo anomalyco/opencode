@@ -54,8 +54,10 @@ describe("MergePipeline", () => {
         await PlanStore.transition({ id: plan.id, status: "running" })
         await PlanStore.transition({ id: plan.id, status: "merging" })
 
-        const ok = await MergePipeline.run(plan.id)
-        expect(ok).toBe(false)
+        const result = await MergePipeline.run(plan.id)
+        expect(result.success).toBe(false)
+        expect(result.workers).toHaveLength(1)
+        expect(result.workers[0].resolutionMode).toBe("failed")
 
         const updated = await PlanStore.get(plan.id)
         expect(updated.workers[0].status).toBe("conflict")
