@@ -1158,6 +1158,18 @@ export namespace Provider {
       log.info("found", { providerID })
     }
 
+    const gitlab = ProviderID.make("gitlab")
+    if (discoveryLoaders[gitlab] && providers[gitlab]) {
+      await (async () => {
+        const discovered = await discoveryLoaders[gitlab]()
+        for (const [modelID, model] of Object.entries(discovered)) {
+          if (!providers[gitlab].models[modelID]) {
+            providers[gitlab].models[modelID] = model
+          }
+        }
+      })().catch((e) => log.warn("state discovery error", { id: "gitlab", error: e }))
+    }
+
     return {
       models: languages,
       providers,
