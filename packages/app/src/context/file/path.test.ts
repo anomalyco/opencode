@@ -27,6 +27,17 @@ describe("file path helpers", () => {
     expect(stripQueryAndHash("a/b.ts")).toBe("a/b.ts")
   })
 
+  test("should NOT decode literal %20 in raw Windows path", () => {
+    const path = createPathHelpers(() => "D:\\First%20Second")
+    // Input is a raw path, not a file:// URL — %20 is a literal folder name character
+    expect(path.normalize("D:\\First%20Second\\file.txt")).toBe("file.txt")
+  })
+
+  test("should decode %20 in file:// URL path", () => {
+    const path = createPathHelpers(() => "/home/user/My Documents")
+    expect(path.normalize("file:///home/user/My%20Documents/file.txt")).toBe("file.txt")
+  })
+
   test("unquotes git escaped octal path strings", () => {
     expect(unquoteGitPath('"a/\\303\\251.txt"')).toBe("a/\u00e9.txt")
     expect(unquoteGitPath('"plain\\nname"')).toBe("plain\nname")

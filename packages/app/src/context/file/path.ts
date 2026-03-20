@@ -105,7 +105,14 @@ export function createPathHelpers(scope: () => string) {
   const normalize = (input: string) => {
     const root = scope()
 
-    let path = unquoteGitPath(decodeFilePath(stripQueryAndHash(stripFileProtocol(input))))
+    // Only decode percent-encoding for file:// URLs — raw filesystem paths may
+    // contain literal % characters (e.g. D:\First%20Second) that must be preserved.
+    const isUrl = input.startsWith("file://") || input.startsWith("file:\\\\")
+    let path = unquoteGitPath(
+      isUrl
+        ? decodeFilePath(stripQueryAndHash(stripFileProtocol(input)))
+        : stripQueryAndHash(stripFileProtocol(input)),
+    )
 
     // Separator-agnostic prefix stripping for Cygwin/native Windows compatibility
     // Only case-insensitive on Windows (drive letter or UNC paths)
