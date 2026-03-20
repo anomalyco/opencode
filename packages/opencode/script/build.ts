@@ -235,6 +235,12 @@ for (const item of targets) {
     }
   }
 
+  // Bun compile can emit darwin binaries with an invalid linker-generated signature.
+  // Re-sign the compiled Mach-O so macOS will execute the artifact consistently.
+  if (item.os === "darwin" && process.platform === "darwin") {
+    await $`codesign --force --sign - dist/${name}/bin/opencode`
+  }
+
   await $`rm -rf ./dist/${name}/bin/tui`
   await Bun.file(`dist/${name}/package.json`).write(
     JSON.stringify(
