@@ -15,6 +15,7 @@ import { git } from "@/util/git"
 import { access } from "fs/promises"
 import { constants } from "fs"
 import z from "zod"
+import { Metrics } from "./metrics"
 
 export namespace Orchestrator {
   const log = Log.create({ service: "orchestrator" })
@@ -74,9 +75,7 @@ export namespace Orchestrator {
 
   async function preflight(plan: Plan): Promise<void> {
     const root =
-      Project.get(plan.projectID)?.worktree ??
-      plan.workers.find((w) => w.worktreeDir)?.worktreeDir ??
-      process.cwd()
+      Project.get(plan.projectID)?.worktree ?? plan.workers.find((w) => w.worktreeDir)?.worktreeDir ?? process.cwd()
 
     const gitCheck = await git(["rev-parse", "--is-inside-work-tree"], { cwd: root })
     if (gitCheck.exitCode !== 0) {
@@ -111,7 +110,11 @@ export namespace Orchestrator {
     }
 
     const seen = new Set<string>()
-    const refs = [plan.orchestratorModel, plan.workerModel, ...plan.subtasks.flatMap((subtask) => (subtask.model ? [subtask.model] : []))]
+    const refs = [
+      plan.orchestratorModel,
+      plan.workerModel,
+      ...plan.subtasks.flatMap((subtask) => (subtask.model ? [subtask.model] : [])),
+    ]
     for (const ref of refs) {
       const key = `${ref.providerID}/${ref.modelID}`
       if (seen.has(key)) continue
@@ -333,6 +336,7 @@ export namespace Orchestrator {
     }
 
     await PlanStore.transition({ id: planID, status: finalStatus })
+    Metrics.recordPlanOutcome(finalStatus)
 
     if (finalStatus === "failed") {
       await Recovery.cleanupWorktrees(finalPlan)
@@ -359,6 +363,7 @@ export namespace Orchestrator {
     run(planID, controller.signal)
       .catch(async (error) => {
         log.error("plan execution failed", { planID, error })
+        Metrics.recordPlanOutcome("failed")
         try {
           const plan = await PlanStore.get(planID)
           await Recovery.cleanupWorktrees(plan)

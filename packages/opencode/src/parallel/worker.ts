@@ -13,6 +13,7 @@ import { git } from "../util/git"
 import { SessionID } from "@/session/schema"
 import type { Plan, PlanID, SubtaskID, Subtask, WorkerState } from "./schema"
 import { ParallelEvent } from "./events"
+import { Metrics } from "./metrics"
 
 export namespace WorkerManager {
   const log = Log.create({ service: "worker" })
@@ -93,6 +94,9 @@ export namespace WorkerManager {
   ): Promise<{ subtaskID: SubtaskID; sessionID: string }> {
     if (abort.aborted) throw new Error("Aborted")
 
+    Metrics.recordSpawnAttempt()
+    const spawnStart = Date.now()
+
     const info = await Worktree.makeWorktreeInfo(`parallel-${plan.id.slice(0, 12)}-${subtask.id.slice(0, 20)}`)
     const bootstrap = await Worktree.createFromInfo(info, undefined, ParallelBootstrap)
 
@@ -101,61 +105,71 @@ export namespace WorkerManager {
     // so a listener registered after would miss the event entirely.
     const readyPromise = waitForWorktreeReady(info.directory, 30_000)
 
-    // Start worktree initialization (emits Event.Ready when done)
-    await bootstrap()
+    try {
+      // Start worktree initialization (emits Event.Ready when done)
+      await bootstrap()
 
-    // Wait for the ready event (may already be resolved)
-    const worktreeResult = await readyPromise
-    if (!worktreeResult.ready) {
-      throw new Error(`Worktree failed to become ready: ${worktreeResult.error}`)
+      // Wait for the ready event (may already be resolved)
+      const worktreeResult = await readyPromise
+      if (!worktreeResult.ready) {
+        throw new Error(`Worktree failed to become ready: ${worktreeResult.error}`)
+      }
+
+      const duration = Date.now() - spawnStart
+      Metrics.recordSpawnSuccess()
+      Metrics.recordWorkerStartup(duration)
+
+      const project = Project.get(plan.projectID) ?? (await Project.fromDirectory(info.directory)).project
+
+      const session = await Instance.provide({
+        directory: info.directory,
+        init: ParallelBootstrap, // Use lightweight bootstrap for workers
+        fn: async () => {
+          return Session.createNext({
+            parentID: plan.sessionID,
+            directory: info.directory,
+            title: `[parallel] ${subtask.title}`,
+          })
+        },
+        project,
+        worktree: info.directory,
+      })
+
+      await updateWorker(plan.id, subtask.id, {
+        status: "running",
+        sessionID: session.id,
+        worktreeName: info.name,
+        worktreeDir: info.directory,
+        branch: info.branch,
+      })
+
+      await Instance.provide({
+        directory: info.directory,
+        init: ParallelBootstrap, // Use lightweight bootstrap
+        fn: async () => {
+          const promptText = buildWorkerPrompt(plan.task, subtask, plan.subtasks)
+          const model = subtask.model ?? plan.workerModel
+          const { SessionPrompt } = await import("../session/prompt")
+          await SessionPrompt.prompt({
+            sessionID: session.id,
+            model,
+            parts: [
+              {
+                type: "text" as const,
+                text: promptText,
+              },
+            ],
+          })
+        },
+        project,
+        worktree: info.directory,
+      })
+
+      return { subtaskID: subtask.id, sessionID: session.id }
+    } catch (err) {
+      Metrics.recordSpawnFailure()
+      throw err
     }
-    const project = Project.get(plan.projectID) ?? (await Project.fromDirectory(info.directory)).project
-
-    const session = await Instance.provide({
-      directory: info.directory,
-      init: ParallelBootstrap, // Use lightweight bootstrap for workers
-      fn: async () => {
-        return Session.createNext({
-          parentID: plan.sessionID,
-          directory: info.directory,
-          title: `[parallel] ${subtask.title}`,
-        })
-      },
-      project,
-      worktree: info.directory,
-    })
-
-    await updateWorker(plan.id, subtask.id, {
-      status: "running",
-      sessionID: session.id,
-      worktreeName: info.name,
-      worktreeDir: info.directory,
-      branch: info.branch,
-    })
-
-    await Instance.provide({
-      directory: info.directory,
-      init: ParallelBootstrap, // Use lightweight bootstrap
-      fn: async () => {
-        const promptText = buildWorkerPrompt(plan.task, subtask, plan.subtasks)
-        const model = subtask.model ?? plan.workerModel
-        const { SessionPrompt } = await import("../session/prompt")
-        await SessionPrompt.prompt({
-          sessionID: session.id,
-          model,
-          parts: [
-            {
-              type: "text" as const,
-              text: promptText,
-            },
-          ],
-        })
-      },
-      project,
-      worktree: info.directory,
-    })
-
-    return { subtaskID: subtask.id, sessionID: session.id }
   }
 
   export async function spawnAll(plan: Plan, abort: AbortSignal): Promise<void> {
@@ -535,6 +549,7 @@ export namespace WorkerManager {
             pending.delete(sessionID)
             startTimes.delete(sessionID)
             warned.delete(sessionID)
+            Metrics.recordTimeout(planID, worker.subtaskID)
             // Queue timeout update instead of calling directly
             pendingUpdates.set(worker.subtaskID, {
               status: "failed",

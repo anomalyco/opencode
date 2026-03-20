@@ -4,6 +4,8 @@ import { bootstrap } from "../bootstrap"
 import { UI } from "../ui"
 import { PlanStore } from "../../parallel/plan"
 import { Instance } from "../../project/instance"
+import { ParallelDoctorCommand } from "./parallel-doctor"
+import { ParallelExportCommand } from "./parallel-export"
 
 export const ParallelCommand = cmd({
   command: "parallel [task]",
@@ -42,7 +44,9 @@ export const ParallelCommand = cmd({
       })
       .command(ParallelListCommand)
       .command(ParallelShowCommand)
-      .command(ParallelCancelCommand),
+      .command(ParallelCancelCommand)
+      .command(ParallelDoctorCommand)
+      .command(ParallelExportCommand),
   handler: async (args) => {
     if (!args.task) {
       // No task provided — show help
