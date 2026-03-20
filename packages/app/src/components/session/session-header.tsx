@@ -302,11 +302,14 @@ export function SessionHeader() {
     if (!canOpen() || !platform.openPath) return
     const directory = projectDirectory()
     if (!directory) return
-    if (!canOpen()) return
     if (app === "wezterm" && platform.openInEditor) {
-      Promise.resolve(platform.openInEditor("WezTerm", directory)).catch((err: unknown) =>
-        showRequestError(language, err),
-      )
+      setOpenRequest("app", app)
+      platform
+        .openInEditor("WezTerm", directory)
+        .catch((err: unknown) => showRequestError(language, err))
+        .finally(() => {
+          setOpenRequest("app", undefined)
+        })
       return
     }
 
