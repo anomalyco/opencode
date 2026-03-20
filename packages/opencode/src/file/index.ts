@@ -691,5 +691,5 @@ export namespace File {
       log.info("init")
       return Service.of({ init, status, read, list, search })
     }),
-  )
+  ).pipe(Layer.fresh)
 }

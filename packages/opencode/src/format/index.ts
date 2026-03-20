@@ -149,7 +149,7 @@ export namespace Format {
 
       return Service.of({ status })
     }),
-  )
+  ).pipe(Layer.fresh)
 
   export async function status() {
     return runPromiseInstance(Service.use((s) => s.status()))

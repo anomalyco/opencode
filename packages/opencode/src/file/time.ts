@@ -90,7 +90,7 @@ export namespace FileTime {
 
       return Service.of({ read, get, assert, withLock })
     }),
-  )
+  ).pipe(Layer.orDie, Layer.fresh)
 
   export function read(sessionID: SessionID, file: string) {
     return runPromiseInstance(Service.use((s) => s.read(sessionID, file)))

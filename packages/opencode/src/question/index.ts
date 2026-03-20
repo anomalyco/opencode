@@ -169,7 +169,7 @@ export namespace Question {
 
       return Service.of({ ask, reply, reject, list })
     }),
-  )
+  ).pipe(Layer.fresh)
 
   export async function ask(input: {
     sessionID: SessionID

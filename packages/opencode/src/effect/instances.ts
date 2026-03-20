@@ -36,16 +36,16 @@ export type InstanceServices =
 function lookup(_key: string) {
   const ctx = Layer.sync(InstanceContext, () => InstanceContext.of(Instance.current))
   return Layer.mergeAll(
-    Layer.fresh(Question.layer),
-    Layer.fresh(PermissionNext.layer),
-    Layer.fresh(ProviderAuth.defaultLayer),
-    Layer.fresh(FileWatcher.layer).pipe(Layer.orDie),
-    Layer.fresh(Vcs.layer),
-    Layer.fresh(FileTime.layer).pipe(Layer.orDie),
-    Layer.fresh(Format.layer),
-    Layer.fresh(File.layer),
-    Layer.fresh(Skill.defaultLayer),
-    Layer.fresh(Snapshot.defaultLayer),
+    Question.layer,
+    PermissionNext.layer,
+    ProviderAuth.defaultLayer,
+    FileWatcher.layer,
+    Vcs.layer,
+    FileTime.layer,
+    Format.layer,
+    File.layer,
+    Skill.defaultLayer,
+    Snapshot.defaultLayer,
   ).pipe(Layer.provide(ctx))
 }
 

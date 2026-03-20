@@ -211,7 +211,7 @@ export namespace Skill {
 
       return Service.of({ get, all, dirs, available })
     }),
-  )
+  ).pipe(Layer.fresh)
 
   export const defaultLayer: Layer.Layer<Service, never, InstanceContext> = layer.pipe(
     Layer.provide(Discovery.defaultLayer),

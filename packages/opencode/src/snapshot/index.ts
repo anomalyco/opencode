@@ -338,7 +338,7 @@ export namespace Snapshot {
 
       return Service.of({ cleanup, track, patch, restore, revert, diff, diffFull })
     }),
-  )
+  ).pipe(Layer.fresh)
 
   export const defaultLayer = layer.pipe(
     Layer.provide(NodeChildProcessSpawner.layer),

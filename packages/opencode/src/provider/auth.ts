@@ -211,7 +211,7 @@ export namespace ProviderAuth {
 
       return Service.of({ methods, authorize, callback })
     }),
-  )
+  ).pipe(Layer.fresh)
 
   export const defaultLayer = layer.pipe(Layer.provide(Auth.Auth.layer))
 
