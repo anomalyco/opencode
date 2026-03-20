@@ -123,6 +123,7 @@ Fully migrated (single namespace, InstanceState where needed, flattened facade):
 - [x] `Truncate` — `tool/truncate.ts`
 - [x] `Vcs` — `project/vcs.ts`
 - [x] `Discovery` — `skill/discovery.ts`
+- [x] `SessionStatus`
 
 Still open and likely worth migrating:
 
