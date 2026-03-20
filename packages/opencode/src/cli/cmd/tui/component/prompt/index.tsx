@@ -930,6 +930,28 @@ export function Prompt(props: PromptProps) {
                   event.preventDefault()
                   return
                 }
+                  // ===== 新增：检测剪贴板图片二进制数据 =====
+                  // Windows 终端无法通过 bracketed paste 传输图片二进制数据
+                  // 需要直接从 clipboardData 检测图片
+                  if (event.clipboardData?.items) {
+                    for (const item of event.clipboardData.items) {
+                      if (item.type.startsWith("image/")) {
+                        event.preventDefault()
+                        const file = item.getAsFile()
+                        if (file) {
+                          const buffer = await file.arrayBuffer()
+                          const base64 = Buffer.from(buffer).toString("base64")
+                          await pasteImage({
+                            filename: "clipboard",
+                            mime: item.type,
+                            content: base64,
+                          })
+                          return
+                        }
+                      }
+                    }
+                  }
+                  // ===== 新增结束
 
                 // Normalize line endings at the boundary
                 // Windows ConPTY/Terminal often sends CR-only newlines in bracketed paste
