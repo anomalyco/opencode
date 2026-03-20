@@ -9,36 +9,55 @@
 - **Output**: creates `migration/<timestamp>_<slug>/migration.sql` and `snapshot.json`.
 - **Tests**: migration tests should read the per-folder layout (no `_journal.json`).
 
-# opencode Effect guide
+# opencode Effect rules
 
-Instructions to follow when writing Effect.
+Use these rules when writing or migrating Effect code.
 
-## Schemas
+See `specs/effect-migration.md` for the compact pattern reference and examples.
 
-- Use `Schema.Class` for data types with multiple fields.
-- Use branded schemas (`Schema.brand`) for single-value types.
-
-## Services
-
-- Services use `ServiceMap.Service<ServiceName, ServiceName.Service>()("@console/<Name>")`.
-- In `Layer.effect`, always return service implementations with `ServiceName.of({ ... })`, never a plain object.
-
-## Errors
-
-- Use `Schema.TaggedErrorClass` for typed errors.
-- For defect-like causes, use `Schema.Defect` instead of `unknown`.
-- In `Effect.gen`, prefer `yield* new MyError(...)` over `yield* Effect.fail(new MyError(...))` for direct early-failure branches.
-
-## Effects
+## Core
 
 - Use `Effect.gen(function* () { ... })` for composition.
-- Use `Effect.fn("ServiceName.method")` for named/traced effects and `Effect.fnUntraced` for internal helpers.
-- `Effect.fn` / `Effect.fnUntraced` accept pipeable operators as extra arguments, so avoid unnecessary `flow` or outer `.pipe()` wrappers.
-
-## Time
-
+- Use `Effect.fn("Domain.method")` for named/traced effects and `Effect.fnUntraced` for internal helpers.
+- `Effect.fn` / `Effect.fnUntraced` accept pipeable operators as extra arguments, so avoid unnecessary outer `.pipe()` wrappers.
+- Use `Effect.callback` for callback-based APIs.
 - Prefer `DateTime.nowAsDate` over `new Date(yield* Clock.currentTimeMillis)` when you need a `Date`.
 
-## Errors
+## Schemas and errors
 
-- In `Effect.gen/fn`, prefer `yield* new MyError(...)` over `yield* Effect.fail(new MyError(...))` for direct early-failure branches.
+- Use `Schema.Class` for multi-field data.
+- Use branded schemas (`Schema.brand`) for single-value types.
+- Use `Schema.TaggedErrorClass` for typed errors.
+- Use `Schema.Defect` instead of `unknown` for defect-like causes.
+- In `Effect.gen` / `Effect.fn`, prefer `yield* new MyError(...)` over `yield* Effect.fail(new MyError(...))` for direct early-failure branches.
+
+## Runtime vs Instances
+
+- Use the shared runtime for process-wide services with one lifecycle for the whole app.
+- Use `src/effect/instances.ts` for per-directory or per-project services that need `InstanceContext`, per-instance state, or per-instance cleanup.
+- If two open directories should not share one copy of the service, it belongs in `Instances`.
+- Instance-scoped services should read context from `InstanceContext`, not `Instance.*` globals.
+
+## Preferred Effect services
+
+- In effectified services, prefer yielding existing Effect services over dropping down to ad hoc platform APIs.
+- Prefer `FileSystem.FileSystem` instead of raw `fs/promises` for effectful file I/O.
+- Prefer `ChildProcessSpawner.ChildProcessSpawner` with `ChildProcess.make(...)` instead of custom process wrappers.
+- Prefer `HttpClient.HttpClient` instead of raw `fetch`.
+- Prefer `Path.Path`, `Config`, `Clock`, and `DateTime` when those concerns are already inside Effect code.
+- For background loops or scheduled tasks, use `Effect.repeat` or `Effect.schedule` with `Effect.forkScoped` in the layer definition.
+
+## Instance.bind — ALS for native callbacks
+
+`Instance.bind(fn)` captures the current Instance AsyncLocalStorage context and restores it synchronously when called.
+
+Use it for native addon callbacks (`@parcel/watcher`, `node-pty`, native `fs.watch`, etc.) that need to call `Bus.publish`, `Instance.state()`, or anything that reads `Instance.directory`.
+
+You do not need it for `setTimeout`, `Promise.then`, `EventEmitter.on`, or Effect fibers.
+
+```typescript
+const cb = Instance.bind((err, evts) => {
+  Bus.publish(MyEvent, { ... })
+})
+nativeAddon.subscribe(dir, cb)
+```
