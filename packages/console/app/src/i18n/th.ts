@@ -648,6 +648,8 @@ export const dict = {
     "แผนนี้ออกแบบมาสำหรับผู้ใช้งานต่างประเทศเป็นหลัก โดยมีโมเดลโฮสต์อยู่ในสหรัฐอเมริกา สหภาพยุโรป และสิงคโปร์ เพื่อการเข้าถึงที่เสถียรทั่วโลก ราคาและขีดจำกัดการใช้งานอาจมีการเปลี่ยนแปลงตามที่เราได้เรียนรู้จากการใช้งานในช่วงแรกและข้อเสนอแนะ",
   "workspace.lite.promo.subscribe": "สมัครสมาชิก Go",
   "workspace.lite.promo.subscribing": "กำลังเปลี่ยนเส้นทาง...",
+  "workspace.lite.promo.otherMethods": "วิธีการชำระเงินอื่นๆ",
+  "workspace.lite.promo.selectMethod": "เลือกวิธีการชำระเงิน",
 
   "download.title": "OpenCode | ดาวน์โหลด",
   "download.meta.description": "ดาวน์โหลด OpenCode สำหรับ macOS, Windows และ Linux",
