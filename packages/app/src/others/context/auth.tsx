@@ -8,6 +8,9 @@ import type { ServerConnection } from "@/context/server"
  */
 export interface User {
   username: string
+  role: string
+  enabled: boolean
+  space_path: string
   permissions: string[]
   workspace?: string
 }
@@ -151,6 +154,9 @@ export const { use: useAuth, provider: AuthProvider } = createSimpleContext({
 
         const user: User = {
           username: data.user.username,
+          role: data.user.role,
+          enabled: data.user.enabled,
+          space_path: data.user.space_path,
           permissions: data.user.permissions,
           workspace: data.user.workspace,
         }

@@ -6,6 +6,9 @@ import z from "zod"
 export const AccountSchema = z.object({
   username: z.string(),
   password: z.string(),
+  role: z.string().default("user"),
+  enabled: z.boolean().default(true),
+  space_path: z.string(),
   permissions: z.array(z.string()).default([]),
   workspace: z.string().optional(),
 })
@@ -24,6 +27,9 @@ export type AccountsFile = z.infer<typeof AccountsFileSchema>
  */
 export const TokenPayloadSchema = z.object({
   username: z.string(),
+  role: z.string(),
+  enabled: z.boolean(),
+  space_path: z.string(),
   permissions: z.array(z.string()),
   workspace: z.string().optional(),
   iat: z.number(),
@@ -51,6 +57,9 @@ export const LoginResponseSchema = z.object({
   user: z
     .object({
       username: z.string(),
+      role: z.string(),
+      enabled: z.boolean(),
+      space_path: z.string(),
       permissions: z.array(z.string()),
       workspace: z.string().optional(),
     })
@@ -65,6 +74,9 @@ export type LoginResponse = z.infer<typeof LoginResponseSchema>
  */
 export interface UserInfo {
   username: string
+  role: string
+  enabled: boolean
+  space_path: string
   permissions: string[]
   workspace?: string
 }

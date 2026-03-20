@@ -67,6 +67,9 @@ export namespace Token {
     const now = Math.floor(Date.now() / 1000)
     const payload: TokenPayload = {
       username: user.username,
+      role: user.role,
+      enabled: user.enabled,
+      space_path: user.space_path,
       permissions: user.permissions,
       workspace: user.workspace,
       iat: now,
@@ -128,6 +131,9 @@ export namespace Token {
 
     return {
       username: payload.username,
+      role: payload.role,
+      enabled: payload.enabled,
+      space_path: payload.space_path,
       permissions: payload.permissions,
       workspace: payload.workspace,
     }

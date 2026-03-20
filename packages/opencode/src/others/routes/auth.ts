@@ -66,6 +66,9 @@ export function AuthRoutes() {
       // 生成 Token
       const token = await Token.generate({
         username: account.username,
+        role: account.role,
+        enabled: account.enabled,
+        space_path: account.space_path,
         permissions: account.permissions,
         workspace: account.workspace,
       })
@@ -75,6 +78,9 @@ export function AuthRoutes() {
         token,
         user: {
           username: account.username,
+          role: account.role,
+          enabled: account.enabled,
+          space_path: account.space_path,
           permissions: account.permissions,
           workspace: account.workspace,
         },
@@ -130,6 +136,9 @@ export function AuthRoutes() {
                   success: z.literal(true),
                   user: z.object({
                     username: z.string(),
+                    role: z.string(),
+                    enabled: z.boolean(),
+                    space_path: z.string(),
                     permissions: z.array(z.string()),
                     workspace: z.string().optional(),
                   }),
@@ -170,6 +179,9 @@ export function AuthRoutes() {
         success: true,
         user: {
           username: user.username,
+          role: user.role,
+          enabled: user.enabled,
+          space_path: user.space_path,
           permissions: user.permissions,
           workspace: user.workspace,
         },
@@ -198,6 +210,9 @@ export function AuthRoutes() {
                   user: z
                     .object({
                       username: z.string(),
+                      role: z.string(),
+                      enabled: z.boolean(),
+                      space_path: z.string(),
                       permissions: z.array(z.string()),
                       workspace: z.string().optional(),
                     })
@@ -227,6 +242,9 @@ export function AuthRoutes() {
         valid: true,
         user: {
           username: user.username,
+          role: user.role,
+          enabled: user.enabled,
+          space_path: user.space_path,
           permissions: user.permissions,
           workspace: user.workspace,
         },
