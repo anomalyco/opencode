@@ -63,14 +63,14 @@ export namespace LLM {
       Provider.getProvider(input.model.providerID),
       Auth.get(input.model.providerID),
     ])
-    const isCodex = provider.id === "openai" && auth?.type === "oauth"
+    // TODO: move this to a proper hook
+    const isOpenaiOauth = provider.id === "openai" && auth?.type === "oauth"
 
-    const system = []
+    const system: string[] = []
     system.push(
       [
         // use agent prompt otherwise provider prompt
-        // For Codex sessions, skip SystemPrompt.provider() since it's sent via options.instructions
-        ...(input.agent.prompt ? [input.agent.prompt] : isCodex ? [] : SystemPrompt.provider(input.model)),
+        ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)),
         // any custom prompt passed into this call
         ...input.system,
         // any custom prompt from last user message
@@ -108,9 +108,21 @@ export namespace LLM {
       mergeDeep(input.agent.options),
       mergeDeep(variant),
     )
-    if (isCodex) {
-      options.instructions = SystemPrompt.instructions()
+    if (isOpenaiOauth) {
+      options.instructions = system.join("\n")
     }
+
+    const messages = isOpenaiOauth
+      ? input.messages
+      : [
+          ...system.map(
+            (x): ModelMessage => ({
+              role: "system",
+              content: x,
+            }),
+          ),
+          ...input.messages,
+        ]
 
     const params = await Plugin.trigger(
       "chat.params",
@@ -146,7 +158,9 @@ export namespace LLM {
     )
 
     const maxOutputTokens =
-      isCodex || provider.id.includes("github-copilot") ? undefined : ProviderTransform.maxOutputTokens(input.model)
+      isOpenaiOauth || provider.id.includes("github-copilot")
+        ? undefined
+        : ProviderTransform.maxOutputTokens(input.model)
 
     const tools = await resolveTools(input)
 
@@ -207,31 +221,17 @@ export namespace LLM {
       maxOutputTokens,
       abortSignal: input.abort,
       headers: {
-        ...(input.model.providerID.startsWith("opencode")
-          ? {
-              "x-opencode-project": Instance.project.id,
-              "x-opencode-session": input.sessionID,
-              "x-opencode-request": input.user.id,
-              "x-opencode-client": Flag.OPENCODE_CLIENT,
-            }
-          : input.model.providerID !== "anthropic"
-            ? {
-                "User-Agent": `opencode/${Installation.VERSION}`,
-              }
-            : undefined),
+        ...(input.model.providerID.startsWith("opencode") && {
+          "x-opencode-project": Instance.project.id,
+          "x-opencode-session": input.sessionID,
+          "x-opencode-request": input.user.id,
+          "x-opencode-client": Flag.OPENCODE_CLIENT,
+        }),
         ...input.model.headers,
         ...headers,
       },
       maxRetries: input.retries ?? 0,
-      messages: [
-        ...system.map(
-          (x): ModelMessage => ({
-            role: "system",
-            content: x,
-          }),
-        ),
-        ...input.messages,
-      ],
+      messages,
       model: wrapLanguageModel({
         model: language,
         middleware: [
