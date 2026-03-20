@@ -17,7 +17,18 @@ export type FileScopeViolation = {
   outOfScopeFiles: string[]
 }
 
-type MergeResult = "clean" | "smart" | "ai" | "failed"
+export type WorkerResolutionMode = "clean" | "smart" | "ai" | "failed"
+
+export type WorkerMergeResult = {
+  subtaskID: SubtaskID
+  branch: string
+  resolutionMode: WorkerResolutionMode
+}
+
+export type MergePipelineResult = {
+  success: boolean
+  workers: WorkerMergeResult[]
+}
 
 export namespace MergePipeline {
   const log = Log.create({ service: "merge" })
@@ -68,7 +79,7 @@ export namespace MergePipeline {
     return violations
   }
 
-  export async function run(planID: PlanID): Promise<boolean> {
+  export async function run(planID: PlanID): Promise<MergePipelineResult> {
     const mergeStartTime = Date.now()
     const plan = await PlanStore.get(planID)
     const cwd = Instance.worktree
@@ -77,7 +88,7 @@ export namespace MergePipeline {
 
     if (completed.length === 0) {
       log.warn("no completed workers to merge", { planID })
-      return false
+      return { success: false, workers: [] }
     }
 
     // Validate file scope compliance before merging
@@ -115,6 +126,7 @@ export namespace MergePipeline {
     withDiffs.sort((a, b) => a.diffSize - b.diffSize)
 
     let allSuccess = true
+    const workerResults: WorkerMergeResult[] = []
 
     for (const { worker } of withDiffs) {
       log.info("merge start", { planID, branch: worker.branch! })
@@ -124,6 +136,12 @@ export namespace MergePipeline {
         planID,
         branch: worker.branch!,
         result,
+      })
+
+      workerResults.push({
+        subtaskID: worker.subtaskID,
+        branch: worker.branch!,
+        resolutionMode: result,
       })
 
       if (result === "failed") {
@@ -148,12 +166,12 @@ export namespace MergePipeline {
 
     await cleanupPlan(planID, allSuccess)
 
-    log.info("all merges complete", { planID, durationMs: Date.now() - mergeStartTime })
+    log.info("all merges complete", { planID, durationMs: Date.now() - mergeStartTime, workerResults })
 
-    return allSuccess
+    return { success: allSuccess, workers: workerResults }
   }
 
-  async function mergeBranch(planID: PlanID, branch: string, cwd: string): Promise<MergeResult> {
+  async function mergeBranch(planID: PlanID, branch: string, cwd: string): Promise<WorkerResolutionMode> {
     // Get plan and worker info for better merge message
     const plan = await PlanStore.get(planID)
     const worker = plan.workers.find((w) => w.branch === branch)
@@ -196,7 +214,11 @@ export namespace MergePipeline {
     return "failed"
   }
 
-  async function resolveConflicts(planID: PlanID, branch: string, cwd: string): Promise<false | "smart" | "ai"> {
+  async function resolveConflicts(
+    planID: PlanID,
+    branch: string,
+    cwd: string,
+  ): Promise<false | Exclude<WorkerResolutionMode, "clean" | "failed">> {
     const status = await git(["diff", "--name-only", "--diff-filter=U"], { cwd })
     const conflictedFiles = outputText(status.stdout).split("\n").filter(Boolean)
 

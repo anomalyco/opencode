@@ -6,6 +6,7 @@ import { PlanStore } from "../../parallel/plan"
 import { Instance } from "../../project/instance"
 import { ParallelDoctorCommand } from "./parallel-doctor"
 import { ParallelExportCommand } from "./parallel-export"
+import { ParallelPublishCommand } from "./parallel-publish"
 
 export const ParallelCommand = cmd({
   command: "parallel [task]",
@@ -37,6 +38,11 @@ export const ParallelCommand = cmd({
         type: "boolean",
         default: false,
       })
+      .option("publish-mode", {
+        describe: "Publish mode for integrating changes",
+        type: "string",
+        choices: ["new-branch", "unstaged", "direct"],
+      })
       .option("json", {
         describe: "Output as JSON",
         type: "boolean",
@@ -46,7 +52,8 @@ export const ParallelCommand = cmd({
       .command(ParallelShowCommand)
       .command(ParallelCancelCommand)
       .command(ParallelDoctorCommand)
-      .command(ParallelExportCommand),
+      .command(ParallelExportCommand)
+      .command(ParallelPublishCommand),
   handler: async (args) => {
     if (!args.task) {
       // No task provided — show help
@@ -58,6 +65,7 @@ export const ParallelCommand = cmd({
       const { Config } = await import("../../config/config")
       const { Provider } = await import("../../provider/provider")
       const { Session } = await import("../../session")
+      const cfg = await Config.get()
 
       // Parse model overrides from CLI flags
       const orchestratorModel = args["orchestrator-model"]
@@ -83,6 +91,7 @@ export const ParallelCommand = cmd({
       })
 
       UI.println(`Creating parallel plan for: ${args.task}`)
+      const mode = (args["publish-mode"] as "new-branch" | "unstaged" | "direct" | undefined) ?? cfg.parallel?.publish_mode ?? "new-branch"
 
       const plan = await Orchestrator.create({
         projectID: Instance.project.id,
@@ -92,6 +101,7 @@ export const ParallelCommand = cmd({
           ? { providerID: orchestratorModel.providerID, modelID: orchestratorModel.modelID }
           : undefined,
         workerModel: workerModel ? { providerID: workerModel.providerID, modelID: workerModel.modelID } : undefined,
+        publishMode: mode,
       })
 
       if (args.json) {
@@ -100,6 +110,7 @@ export const ParallelCommand = cmd({
         UI.println("")
         UI.println(UI.Style.TEXT_SUCCESS_BOLD + `Plan created: ${plan.id}` + UI.Style.TEXT_NORMAL)
         UI.println(`Status: ${plan.status}`)
+        UI.println(`Publish mode: ${plan.publishMode ?? mode}`)
         UI.println(`Orchestrator: ${plan.orchestratorModel.providerID}/${plan.orchestratorModel.modelID}`)
         UI.println(`Worker default: ${plan.workerModel.providerID}/${plan.workerModel.modelID}`)
         if (args.workers) UI.println(`Max workers: ${args.workers}`)
@@ -150,12 +161,13 @@ export const ParallelListCommand = cmd({
           return
         }
         const maxIdWidth = Math.max(20, ...plans.map((p) => p.id.length))
-        const header = `Plan ID${" ".repeat(maxIdWidth - 7)}  Status    Task`
+        const header = `Plan ID${" ".repeat(maxIdWidth - 7)}  Status    Publish Mode  Task`
         UI.println(header)
         UI.println("-".repeat(header.length))
         for (const plan of plans) {
           const truncatedTask = plan.task.length > 40 ? plan.task.slice(0, 37) + "..." : plan.task
-          const line = `${plan.id.padEnd(maxIdWidth)}  ${plan.status.padEnd(10)}  ${truncatedTask}`
+          const mode = plan.publishMode ?? "new-branch"
+          const line = `${plan.id.padEnd(maxIdWidth)}  ${plan.status.padEnd(10)}  ${mode.padEnd(12)}  ${truncatedTask}`
           UI.println(line)
         }
       }
@@ -177,7 +189,15 @@ export const ParallelShowCommand = cmd({
     await bootstrap(process.cwd(), async () => {
       try {
         const plan = await PlanStore.get(args.planID as any)
-        console.log(JSON.stringify(plan, null, 2))
+
+        // Build enhanced output with publish information
+        const output = {
+          ...plan,
+          publishMode: plan.publishMode ?? "new-branch",
+          integrationBranch: plan.integrationBranch,
+        }
+
+        console.log(JSON.stringify(output, null, 2))
       } catch {
         UI.error(`Plan not found: ${args.planID}`)
         process.exit(1)

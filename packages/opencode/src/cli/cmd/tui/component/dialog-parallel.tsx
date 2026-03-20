@@ -98,6 +98,51 @@ export function DialogParallelConfig() {
         ))
       },
     },
+    {
+      value: "publish_mode",
+      title: "Publish mode",
+      description: local.parallel.publish_mode ?? "Using config default",
+      category: "Publish",
+      onSelect() {
+        dialog.replace(() => (
+          <DialogSelect
+            title="Publish Mode"
+            options={[
+              {
+                value: "new-branch",
+                title: "New branch",
+                description: "Keep merges on the integration branch",
+                category: "Publish",
+                onSelect() {
+                  dialog.clear()
+                  local.parallel.setPublishMode("new-branch")
+                },
+              },
+              {
+                value: "unstaged",
+                title: "Unstaged",
+                description: "Apply integrated changes without staging them",
+                category: "Publish",
+                onSelect() {
+                  dialog.clear()
+                  local.parallel.setPublishMode("unstaged")
+                },
+              },
+              {
+                value: "direct",
+                title: "Direct",
+                description: "Merge the integration branch into the current branch",
+                category: "Publish",
+                onSelect() {
+                  dialog.clear()
+                  local.parallel.setPublishMode("direct")
+                },
+              },
+            ]}
+          />
+        ))
+      },
+    },
   ])
 
   return <DialogSelect title="Parallel Agent Config" options={options()} />

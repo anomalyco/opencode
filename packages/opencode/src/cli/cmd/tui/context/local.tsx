@@ -99,6 +99,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       orchestrator_model?: string
       worker_model?: string
       max_workers?: number
+      publish_mode?: "new-branch" | "unstaged" | "direct"
     }>({ ready: false })
 
     const model = iife(() => {
@@ -426,6 +427,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         if (x.orchestrator_model) setParallelStore("orchestrator_model", x.orchestrator_model)
         if (x.worker_model) setParallelStore("worker_model", x.worker_model)
         if (x.max_workers) setParallelStore("max_workers", x.max_workers)
+        if (x.publish_mode) setParallelStore("publish_mode", x.publish_mode)
       })
       .catch(() => {})
       .finally(() => setParallelStore("ready", true))
@@ -440,6 +442,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       get max_workers() {
         return parallelStore.max_workers
       },
+      get publish_mode() {
+        return parallelStore.publish_mode
+      },
       setOrchestratorModel(value: string) {
         setParallelStore("orchestrator_model", value)
         saveParallel()
@@ -450,6 +455,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       },
       setMaxWorkers(value: number | undefined) {
         setParallelStore("max_workers", value)
+        saveParallel()
+      },
+      setPublishMode(value: "new-branch" | "unstaged" | "direct" | undefined) {
+        setParallelStore("publish_mode", value)
         saveParallel()
       },
     }

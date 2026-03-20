@@ -1,8 +1,8 @@
 import { PlanStore } from "./plan"
 import { Decomposition } from "./decomposition"
 import { WorkerManager } from "./worker"
-import { MergePipeline } from "./merge"
 import { Recovery } from "./recovery"
+import { Integration } from "./integration"
 import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider"
 import { Instance } from "@/project/instance"
@@ -211,7 +211,10 @@ export namespace Orchestrator {
     const active = await PlanStore.listByProjectAndStatus(projectID, "running")
     const spawning = await PlanStore.listByProjectAndStatus(projectID, "spawning")
     const merging = await PlanStore.listByProjectAndStatus(projectID, "merging")
-    const running = [...active, ...spawning, ...merging]
+    const integrating = await PlanStore.listByProjectAndStatus(projectID, "integrating")
+    const integrated = await PlanStore.listByProjectAndStatus(projectID, "integrated")
+    const publishing = await PlanStore.listByProjectAndStatus(projectID, "publishing")
+    const running = [...active, ...spawning, ...merging, ...integrating, ...integrated, ...publishing]
 
     if (running.length > 0) {
       const existingPlan = running[0]
@@ -250,6 +253,7 @@ export namespace Orchestrator {
       task: PlanSchema.shape.task,
       orchestratorModel: PlanSchema.shape.orchestratorModel.optional(),
       workerModel: PlanSchema.shape.workerModel.optional(),
+      publishMode: z.enum(["new-branch", "unstaged", "direct"]).optional(),
     }),
     async (input): Promise<Plan> => {
       await checkPlanLimit(input.projectID)
@@ -259,12 +263,15 @@ export namespace Orchestrator {
         orchestratorModel: input.orchestratorModel,
         workerModel: input.workerModel,
       })
+      const cfg = await Config.get()
+      const mode = input.publishMode ?? cfg.parallel?.publish_mode ?? "new-branch"
 
       const plan = await PlanStore.create({
         projectID: input.projectID,
         sessionID: input.sessionID,
         task: input.task,
         ...models,
+        publishMode: mode,
       })
 
       const codebaseContext = await Decomposition.gatherCodebaseContext(Instance.directory)
@@ -288,13 +295,18 @@ export namespace Orchestrator {
         status: "proposed",
       })
 
-      const cfg = await Config.get()
-      const autoApprove = cfg.parallel?.require_approval === false
+      const cfg2 = await Config.get()
+      const autoApprove = cfg2.parallel?.require_approval === false
       if (autoApprove) {
         await approve(updated.id)
       }
 
-      log.info("plan created", { planID: plan.id, subtaskCount: subtasks.length, autoApprove })
+      log.info("plan created", {
+        planID: plan.id,
+        subtaskCount: subtasks.length,
+        autoApprove,
+        publishMode: mode,
+      })
       return updated
     },
   )
@@ -314,15 +326,39 @@ export namespace Orchestrator {
     })
 
     await PlanStore.transition({ id: planID, status: "merging" })
-    const mergeSuccess = await stage("merging", () => MergePipeline.run(planID))
+    const integrationResult = await stage("integrating", async () => Integration.integrate(planID))
 
-    // Determine final status based on worker outcomes
+    if (integrationResult.merged.length === 0) {
+      await PlanStore.transition({ id: planID, status: "failed" })
+      const finalPlan = await PlanStore.get(planID)
+      await Recovery.cleanupWorktrees(finalPlan)
+      Metrics.recordPlanOutcome("failed")
+      log.info("plan execution complete", {
+        planID,
+        status: "failed",
+        integrationBranch: integrationResult.branch,
+        publishMode: undefined,
+      })
+      return
+    }
+
+    await PlanStore.transition({ id: planID, status: "integrated" })
+
+    // Publish phase - mode-dependent
+    const cfg = await Config.get()
+    const plan = await PlanStore.get(planID)
+    const publishMode = plan.publishMode ?? cfg.parallel?.publish_mode ?? "new-branch"
+
+    await PlanStore.transition({ id: planID, status: "publishing" })
+    const publishResult = await stage("publishing", async () => Integration.publish(planID, publishMode))
+
+    // Determine final status based on all outcomes
     const finalPlan = await PlanStore.get(planID)
     const mergedWorkers = finalPlan.workers.filter((w) => w.status === "merged")
     const failedWorkers = finalPlan.workers.filter((w) => w.status === "failed" || w.status === "conflict")
 
     let finalStatus: "done" | "partial_success" | "failed"
-    if (mergeSuccess && failedWorkers.length === 0) {
+    if (integrationResult.success && publishResult.success && failedWorkers.length === 0) {
       finalStatus = "done"
     } else if (mergedWorkers.length > 0) {
       finalStatus = "partial_success"
@@ -330,6 +366,8 @@ export namespace Orchestrator {
         planID,
         merged: mergedWorkers.length,
         failed: failedWorkers.length,
+        integrationBranch: integrationResult.branch,
+        publishMode,
       })
     } else {
       finalStatus = "failed"
@@ -342,7 +380,12 @@ export namespace Orchestrator {
       await Recovery.cleanupWorktrees(finalPlan)
     }
 
-    log.info("plan execution complete", { planID, status: finalStatus })
+    log.info("plan execution complete", {
+      planID,
+      status: finalStatus,
+      integrationBranch: integrationResult.branch,
+      publishMode,
+    })
   }
 
   export const approve = fn(PlanIDSchema.zod, async (planID): Promise<Plan> => {
@@ -478,10 +521,36 @@ export namespace Orchestrator {
 
           if (allDone && !hasFailures && updated.status === "running") {
             await PlanStore.transition({ id: planID, status: "merging" })
-            const success = await MergePipeline.run(planID)
-            await PlanStore.transition({ id: planID, status: success ? "done" : "failed" })
-            if (!success) {
+            const integrationResult = await Integration.integrate(planID)
+
+            if (integrationResult.merged.length === 0) {
+              await PlanStore.transition({ id: planID, status: "failed" })
               const finalPlan = await PlanStore.get(planID)
+              await Recovery.cleanupWorktrees(finalPlan)
+              return
+            }
+
+            await PlanStore.transition({ id: planID, status: "integrated" })
+
+            const cfg = await Config.get()
+            const plan = await PlanStore.get(planID)
+            const publishMode = plan.publishMode ?? cfg.parallel?.publish_mode ?? "new-branch"
+            await PlanStore.transition({ id: planID, status: "publishing" })
+            const publishResult = await Integration.publish(planID, publishMode)
+
+            const finalPlan = await PlanStore.get(planID)
+            const mergedWorkers = finalPlan.workers.filter((w) => w.status === "merged")
+            const failedWorkers = finalPlan.workers.filter((w) => w.status === "failed" || w.status === "conflict")
+
+            const finalStatus =
+              publishResult.success && failedWorkers.length === 0
+                ? "done"
+                : mergedWorkers.length > 0
+                  ? "partial_success"
+                  : "failed"
+            await PlanStore.transition({ id: planID, status: finalStatus })
+
+            if (finalStatus === "failed") {
               await Recovery.cleanupWorktrees(finalPlan)
             }
           }
@@ -500,4 +569,17 @@ export namespace Orchestrator {
       return PlanStore.get(planID)
     },
   )
+
+  export async function publish(planID: PlanID, opts: { mode: "new-branch" | "unstaged" | "direct" }): Promise<void> {
+    const plan = await PlanStore.get(planID)
+    const cfg = await Config.get()
+    const mode = opts.mode ?? plan.publishMode ?? cfg.parallel?.publish_mode ?? "new-branch"
+
+    log.info("publishing plan", { planID, mode })
+
+    const result = await Integration.publish(planID, mode)
+    if (plan.status === "integrated" && result.success) {
+      await PlanStore.transition({ id: planID, status: "done" })
+    }
+  }
 }

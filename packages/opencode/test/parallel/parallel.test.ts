@@ -35,6 +35,38 @@ describe("Parallel Infrastructure", () => {
       })
     })
 
+    test("persists publish metadata", async () => {
+      await using tmp = await tmpdir({ git: true })
+
+      await Instance.provide({
+        directory: tmp.path,
+        init: InstanceBootstrap,
+        fn: async () => {
+          const plan = await PlanStore.create({
+            projectID: Instance.project.id,
+            sessionID: undefined,
+            task: "Test task",
+            orchestratorModel: { providerID: "test" as any, modelID: "test-model" as any },
+            workerModel: { providerID: "test" as any, modelID: "test-model" as any },
+            publishMode: "direct",
+          })
+
+          expect(plan.publishMode).toBe("direct")
+
+          const updated = await PlanStore.update({
+            id: plan.id,
+            integrationBranch: `parallel/${plan.id}`,
+            publishMode: "unstaged",
+          })
+
+          expect(updated.integrationBranch).toBe(`parallel/${plan.id}`)
+          expect(updated.publishMode).toBe("unstaged")
+
+          return updated
+        },
+      })
+    })
+
     test("updates plan with subtasks and workers", async () => {
       await using tmp = await tmpdir({ git: true })
 
@@ -113,7 +145,16 @@ describe("Parallel Infrastructure", () => {
           const merging = await PlanStore.transition({ id: plan.id, status: "merging" })
           expect(merging.status).toBe("merging")
 
-          // merging -> done
+          // merging -> integrating -> integrated -> publishing -> done
+          const integrating = await PlanStore.transition({ id: plan.id, status: "integrating" })
+          expect(integrating.status).toBe("integrating")
+
+          const integrated = await PlanStore.transition({ id: plan.id, status: "integrated" })
+          expect(integrated.status).toBe("integrated")
+
+          const publishing = await PlanStore.transition({ id: plan.id, status: "publishing" })
+          expect(publishing.status).toBe("publishing")
+
           const done = await PlanStore.transition({ id: plan.id, status: "done" })
           expect(done.status).toBe("done")
           expect(done.time.completed).toBeGreaterThan(0)

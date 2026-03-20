@@ -4,8 +4,19 @@ import { Bus } from "@/bus"
 import { ParallelEvent } from "./events"
 import { validateTransition, validateWorkerTransition } from "./transitions"
 import { ConflictError } from "./errors"
-import type { Plan, PlanID, SubtaskID, WorkerState, PlanStatus, WorkerStatus, Subtask, ModelRef } from "./schema"
-import { PlanID as PlanIDSchema, SubtaskID as SubtaskIDSchema, Plan as PlanSchema } from "./schema"
+import z from "zod"
+import type {
+  Plan,
+  PlanID,
+  SubtaskID,
+  WorkerState,
+  PlanStatus,
+  WorkerStatus,
+  Subtask,
+  ModelRef,
+  PublishMode,
+} from "./schema"
+import { PlanID as PlanIDSchema, SubtaskID as SubtaskIDSchema, Plan as PlanSchema, PublishMode as PublishModeSchema } from "./schema"
 import { SessionID } from "@/session/schema"
 import { ProjectID } from "@/project/schema"
 import { fn } from "@/util/fn"
@@ -52,6 +63,8 @@ function fromRow(row: PlanRow): Plan {
     workerModel: row.worker_model,
     subtasks: row.subtasks,
     workers: row.workers,
+    integrationBranch: row.integration_branch ?? undefined,
+    publishMode: row.publish_mode ?? undefined,
     version: row.version,
     time: {
       created: row.time_created,
@@ -73,6 +86,8 @@ function toRow(plan: Plan) {
     worker_model: plan.workerModel,
     subtasks: plan.subtasks,
     workers: plan.workers,
+    integration_branch: plan.integrationBranch ?? null,
+    publish_mode: plan.publishMode ?? null,
     version: plan.version,
     time_created: plan.time.created,
     time_approved: plan.time.approved ?? null,
@@ -88,6 +103,7 @@ export namespace PlanStore {
       task: true,
       orchestratorModel: true,
       workerModel: true,
+      publishMode: true,
     }),
     async (input): Promise<Plan> => {
       const plan: Plan = {
@@ -101,6 +117,7 @@ export namespace PlanStore {
         workerModel: input.workerModel,
         subtasks: [],
         workers: [],
+        publishMode: input.publishMode ?? "new-branch",
         version: 0,
         time: {
           created: Date.now(),
@@ -145,6 +162,8 @@ export namespace PlanStore {
       error: PlanSchema.shape.error.nullable().optional(),
       subtasks: PlanSchema.shape.subtasks.optional(),
       workers: PlanSchema.shape.workers.optional(),
+      integrationBranch: z.string().optional(),
+      publishMode: PublishModeSchema.optional(),
     }),
     async (input): Promise<Plan> => {
       const existing = await get(input.id)
@@ -172,6 +191,12 @@ export namespace PlanStore {
       if (input.workers !== undefined) {
         updates.workers = input.workers as any
       }
+      if (input.integrationBranch !== undefined) {
+        updates.integration_branch = input.integrationBranch
+      }
+      if (input.publishMode !== undefined) {
+        updates.publish_mode = input.publishMode as any
+      }
 
       return Database.use((db) => {
         const row = db
@@ -196,7 +221,7 @@ export namespace PlanStore {
         .where(
           and(
             eq(PlanTable.project_id, sql.placeholder("project_id")),
-            sql`${PlanTable.status} IN ('draft', 'proposed', 'approved', 'spawning', 'running', 'merging')`,
+            sql`${PlanTable.status} IN ('draft', 'proposed', 'approved', 'spawning', 'running', 'merging', 'integrating', 'integrated', 'publishing')`,
           ),
         )
         .prepare(),
