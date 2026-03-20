@@ -1265,6 +1265,7 @@ export namespace Config {
             .optional()
             .describe(
               "How to publish changes from parallel execution: 'new-branch' creates a new branch, 'unstaged' leaves changes unstaged, 'direct' commits directly to current branch",
+              "Publish mode for parallel execution results: 'new-branch' creates a new branch with changes, 'unstaged' leaves changes unstaged in working directory, 'direct' commits directly to current branch (default: new-branch)",
             ),
         })
         .optional()
