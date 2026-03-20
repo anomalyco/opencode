@@ -64,19 +64,19 @@ const seed = Effect.fn("TaskToolTest.seed")(function* (title = "Pinned") {
   return { chat, assistant }
 })
 
-function stubOps(opts?: { onPrompt?: (input: SessionPrompt.PromptInput) => void; text?: string }): TaskPromptOps {
+function stubOps(opts?: { onPrompt?: (input: SessionPrompt.PromptInput) => void; text?: string; error?: MessageV2.ErrorInfo }): TaskPromptOps {
   return {
     cancel() {},
     resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
     prompt: (input) =>
       Effect.sync(() => {
         opts?.onPrompt?.(input)
-        return reply(input, opts?.text ?? "done")
+        return reply(input, opts?.text ?? "done", opts?.error)
       }),
   }
 }
 
-function reply(input: SessionPrompt.PromptInput, text: string): MessageV2.WithParts {
+function reply(input: SessionPrompt.PromptInput, text: string, error?: MessageV2.ErrorInfo): MessageV2.WithParts {
   const id = MessageID.ascending()
   return {
     info: {
@@ -93,6 +93,7 @@ function reply(input: SessionPrompt.PromptInput, text: string): MessageV2.WithPa
       providerID: input.model?.providerID ?? ref.providerID,
       time: { created: Date.now() },
       finish: "stop",
+      ...(error ? { error } : {}),
     },
     parts: [
       {
@@ -379,6 +380,58 @@ describe("tool.task", () => {
           },
           experimental: {
             primary_tools: ["bash", "read"],
+          },
+        },
+      },
+    ),
+  )
+
+  it.live("execute throws when subagent ends with provider error", () =>
+    provideTmpdirInstance(
+      () =>
+        Effect.gen(function* () {
+          const { chat, assistant } = yield* seed()
+          const tool = yield* TaskTool
+          const def = yield* tool.init()
+          const error = new MessageV2.APIError({
+            message: "You are rate-limited",
+            isRetryable: false,
+            statusCode: 429,
+          }).toObject()
+          const promptOps = stubOps({ error })
+
+          const result = yield* Effect.either(
+            def.execute(
+              {
+                description: "Check provider state",
+                prompt: "Inspect provider state",
+                subagent_type: "general",
+              },
+              {
+                sessionID: chat.id,
+                messageID: assistant.id,
+                agent: "build",
+                abort: new AbortController().signal,
+                extra: { promptOps },
+                messages: [],
+                metadata: () => Effect.void,
+                ask: () => Effect.void,
+              },
+            ),
+          )
+
+          if (result._tag === "Right") {
+            throw new Error("Expected error but got success")
+          }
+          const failure = result.left
+          expect(failure.message).toContain("Sub-agent failed: You are rate-limited")
+        }),
+      {
+        config: {
+          agent: {
+            general: {
+              mode: "subagent",
+            },
           },
         },
       },

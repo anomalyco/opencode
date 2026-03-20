@@ -40,6 +40,7 @@ export const TaskTool = Tool.define(
     const run = Effect.fn("TaskTool.execute")(function* (params: z.infer<typeof parameters>, ctx: Tool.Context) {
       const cfg = yield* config.get()
 
+      // Skip permission check when user explicitly invoked via @ or command subtask
       if (!ctx.extra?.bypassAgentCheck) {
         yield* ctx.ask({
           permission: id,
@@ -121,6 +122,14 @@ export const TaskTool = Tool.define(
         ops.cancel(nextSession.id)
       }
 
+      function getSubagentFailureMessage(result: MessageV2.WithParts) {
+        const info = result.info
+        if (info.role !== "assistant" || !info.error) return
+        if (info.error.name === "MessageAbortedError") return
+        const detail = info.error.data.message?.trim()
+        return detail ? `Sub-agent failed: ${detail}` : "Sub-agent failed"
+      }
+
       return yield* Effect.acquireUseRelease(
         Effect.sync(() => {
           ctx.abort.addEventListener("abort", cancel)
@@ -143,6 +152,9 @@ export const TaskTool = Tool.define(
               },
               parts,
             })
+
+            const failure = getSubagentFailureMessage(result)
+            if (failure) return yield* Effect.fail(new Error(failure))
 
             return {
               title: params.description,
