@@ -77,6 +77,7 @@ export function Titlebar() {
 
   const canBack = createMemo(() => history.index > 0)
   const canForward = createMemo(() => history.index < history.stack.length - 1)
+  const hasProjects = createMemo(() => layout.projects.list().length > 0)
 
   const back = () => {
     const next = backPath(history)
@@ -217,47 +218,72 @@ export function Titlebar() {
           </TooltipKeybind>
           <div class="hidden xl:flex items-center shrink-0">
             <Show when={params.dir}>
-              <TooltipKeybind
-                placement="bottom"
-                title={language.t("command.session.new")}
-                keybind={command.keybind("session.new")}
-                openDelay={2000}
+              <div
+                class="flex items-center shrink-0 w-8 mr-1"
+                aria-hidden={layout.sidebar.opened() ? "true" : undefined}
               >
-                <Button
-                  variant="ghost"
-                  icon={creating() ? "new-session-active" : "new-session"}
-                  class="titlebar-icon w-8 h-6 p-0 box-border"
-                  onClick={() => {
-                    if (!params.dir) return
-                    navigate(`/${params.dir}/session`)
+                <div
+                  class="transition-opacity"
+                  classList={{
+                    "opacity-100 duration-120 ease-out": !layout.sidebar.opened(),
+                    "opacity-0 duration-120 ease-in delay-0 pointer-events-none": layout.sidebar.opened(),
                   }}
-                  aria-label={language.t("command.session.new")}
-                  aria-current={creating() ? "page" : undefined}
-                />
-              </TooltipKeybind>
+                >
+                  <TooltipKeybind
+                    placement="bottom"
+                    title={language.t("command.session.new")}
+                    keybind={command.keybind("session.new")}
+                    openDelay={2000}
+                  >
+                    <Button
+                      variant="ghost"
+                      icon={creating() ? "new-session-active" : "new-session"}
+                      class="titlebar-icon w-8 h-6 p-0 box-border"
+                      disabled={layout.sidebar.opened()}
+                      tabIndex={layout.sidebar.opened() ? -1 : undefined}
+                      onClick={() => {
+                        if (!params.dir) return
+                        navigate(`/${params.dir}/session`)
+                      }}
+                      aria-label={language.t("command.session.new")}
+                      aria-current={creating() ? "page" : undefined}
+                    />
+                  </TooltipKeybind>
+                </div>
+              </div>
             </Show>
-            <div class="flex items-center gap-0" classList={{ "ml-1": !!params.dir }}>
-              <Tooltip placement="bottom" value={language.t("common.goBack")} openDelay={2000}>
-                <Button
-                  variant="ghost"
-                  icon="chevron-left"
-                  class="titlebar-icon w-6 h-6 p-0 box-border"
-                  disabled={!canBack()}
-                  onClick={back}
-                  aria-label={language.t("common.goBack")}
-                />
-              </Tooltip>
-              <Tooltip placement="bottom" value={language.t("common.goForward")} openDelay={2000}>
-                <Button
-                  variant="ghost"
-                  icon="chevron-right"
-                  class="titlebar-icon w-6 h-6 p-0 box-border"
-                  disabled={!canForward()}
-                  onClick={forward}
-                  aria-label={language.t("common.goForward")}
-                />
-              </Tooltip>
-            </div>
+            <Show when={hasProjects()}>
+              <div
+                class="flex items-center gap-0 transition-transform"
+                classList={{
+                  "translate-x-0": !layout.sidebar.opened(),
+                  "-translate-x-[36px]": layout.sidebar.opened(),
+                  "duration-180 ease-out": !layout.sidebar.opened(),
+                  "duration-180 ease-in": layout.sidebar.opened(),
+                }}
+              >
+                <Tooltip placement="bottom" value={language.t("common.goBack")} openDelay={2000}>
+                  <Button
+                    variant="ghost"
+                    icon="chevron-left"
+                    class="titlebar-icon w-6 h-6 p-0 box-border"
+                    disabled={!canBack()}
+                    onClick={back}
+                    aria-label={language.t("common.goBack")}
+                  />
+                </Tooltip>
+                <Tooltip placement="bottom" value={language.t("common.goForward")} openDelay={2000}>
+                  <Button
+                    variant="ghost"
+                    icon="chevron-right"
+                    class="titlebar-icon w-6 h-6 p-0 box-border"
+                    disabled={!canForward()}
+                    onClick={forward}
+                    aria-label={language.t("common.goForward")}
+                  />
+                </Tooltip>
+              </div>
+            </Show>
           </div>
         </div>
         <div id="opencode-titlebar-left" class="flex items-center gap-3 min-w-0 px-2" />

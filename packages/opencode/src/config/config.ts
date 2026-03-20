@@ -1052,7 +1052,13 @@ export namespace Config {
         })
         .optional(),
       plugin: z.string().array().optional(),
-      snapshot: z.union([z.boolean(), z.number().int().nonnegative()]).optional(),
+<<<<<<< HEAD
+      snapshot: z
+        .union([z.boolean(), z.number().int().nonnegative()])
+        .optional()
+        .describe(
+          "Enable or disable snapshot tracking. When false, filesystem snapshots are not recorded and undoing or reverting will not undo/redo file changes. Defaults to true. Can also be set to a number to specify the maximum number of snapshots to keep.",
+        ),
       share: z
         .enum(["manual", "auto", "disabled"])
         .optional()
