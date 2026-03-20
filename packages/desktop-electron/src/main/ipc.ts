@@ -6,6 +6,11 @@ import type { InitStep, ServerReadyData, SqliteMigrationProgress, TitlebarTheme,
 import { getStore } from "./store"
 import { setTitlebar } from "./windows"
 
+const pickerFilters = (ext?: string[]) => {
+  if (!ext || ext.length === 0) return undefined
+  return [{ name: "Files", extensions: ext }]
+}
+
 type Deps = {
   killSidecar: () => void
   installCli: () => Promise<string>
@@ -94,11 +99,15 @@ export function registerIpcHandlers(deps: Deps) {
 
   ipcMain.handle(
     "open-file-picker",
-    async (_event: IpcMainInvokeEvent, opts?: { multiple?: boolean; title?: string; defaultPath?: string }) => {
+    async (
+      _event: IpcMainInvokeEvent,
+      opts?: { multiple?: boolean; title?: string; defaultPath?: string; accept?: string[]; extensions?: string[] },
+    ) => {
       const result = await dialog.showOpenDialog({
         properties: ["openFile", ...(opts?.multiple ? ["multiSelections" as const] : [])],
         title: opts?.title ?? "Choose a file",
         defaultPath: opts?.defaultPath,
+        filters: pickerFilters(opts?.extensions),
       })
       if (result.canceled) return null
       return opts?.multiple ? result.filePaths : result.filePaths[0]
