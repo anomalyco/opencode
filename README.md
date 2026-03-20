@@ -76,6 +76,13 @@
 - **md 预览**: `.md` 文件提供预览功能
 - **重载后端**: 新增重载后端命令
 
+<p align="center">
+
+<img src="image/README/1774018220930.png" width="32%" />
+<img src="image/README/1774018327446.png" width="32%" />
+<img src="image/README/1774018439717.png" width="32%" />
+</p>
+
 ### ⌨️ 新增快捷键
 
 | 快捷键          | 功能         | 说明                                    |
