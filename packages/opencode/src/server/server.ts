@@ -45,7 +45,7 @@ import { PermissionRoutes } from "./routes/permission"
 import { GlobalRoutes } from "./routes/global"
 import { MDNS } from "./mdns"
 import { lazy } from "@/util/lazy"
-import { createAuthMiddleware, AuthRoutes } from "@/others"
+import { createAuthMiddleware, AuthRoutes, OthersConfigRoutes } from "@/others"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -132,6 +132,8 @@ export namespace Server {
       // Others 模块 - 登录认证路由 (不需要认证)
       // ============================================
       .route("/others/auth", AuthRoutes())
+      // Others 模块 - 配置路由 (不需要认证)
+      .route("/others/config", OthersConfigRoutes())
       // ============================================
       // 认证中间件 - 保护后续所有路由
       // ============================================

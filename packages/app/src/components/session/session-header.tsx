@@ -24,6 +24,7 @@ import { messageAgentColor } from "@/utils/agent"
 import { decode64 } from "@/utils/base64"
 import { Persist, persisted } from "@/utils/persist"
 import { StatusPopover } from "../status-popover"
+import { useOthersConfig } from "@/others"
 
 const OPEN_APPS = [
   "vscode",
@@ -137,6 +138,7 @@ export function SessionHeader() {
   const sync = useSync()
   const terminal = useTerminal()
   const { params, view } = useSessionLayout()
+  const othersConfig = useOthersConfig()
 
   const projectDirectory = createMemo(() => decode64(params.dir) ?? "")
   const project = createMemo(() => {
@@ -419,21 +421,23 @@ export function SessionHeader() {
                 <Tooltip placement="bottom" value={language.t("status.popover.trigger")}>
                   <StatusPopover />
                 </Tooltip>
-                <TooltipKeybind
-                  title={language.t("command.terminal.toggle")}
-                  keybind={command.keybind("terminal.toggle")}
-                >
-                  <Button
-                    variant="ghost"
-                    class="group/terminal-toggle titlebar-icon w-8 h-6 p-0 box-border shrink-0"
-                    onClick={toggleTerminal}
-                    aria-label={language.t("command.terminal.toggle")}
-                    aria-expanded={view().terminal.opened()}
-                    aria-controls="terminal-panel"
+                <Show when={othersConfig.shouldShowUIElement("terminalToggle")}>
+                  <TooltipKeybind
+                    title={language.t("command.terminal.toggle")}
+                    keybind={command.keybind("terminal.toggle")}
                   >
-                    <Icon size="small" name={view().terminal.opened() ? "terminal-active" : "terminal"} />
-                  </Button>
-                </TooltipKeybind>
+                    <Button
+                      variant="ghost"
+                      class="group/terminal-toggle titlebar-icon w-8 h-6 p-0 box-border shrink-0"
+                      onClick={toggleTerminal}
+                      aria-label={language.t("command.terminal.toggle")}
+                      aria-expanded={view().terminal.opened()}
+                      aria-controls="terminal-panel"
+                    >
+                      <Icon size="small" name={view().terminal.opened() ? "terminal-active" : "terminal"} />
+                    </Button>
+                  </TooltipKeybind>
+                </Show>
 
                 <div class="hidden md:flex items-center gap-1 shrink-0">
                   <TooltipKeybind

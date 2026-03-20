@@ -8,7 +8,7 @@ import { dict as zh } from "@/i18n/zh"
 import { handleNotificationClick } from "@/utils/notification-click"
 import pkg from "../package.json"
 import { ServerConnection } from "./context/server"
-import { AuthProvider, useAuth, LoginPage } from "./others"
+import { AuthProvider, useAuth, LoginPage, OthersConfigProvider } from "./others"
 import { Show, type JSX } from "solid-js"
 
 const DEFAULT_SERVER_URL_KEY = "opencode.settings.dat:defaultServerUrl"
@@ -162,13 +162,15 @@ if (root instanceof HTMLElement) {
       <PlatformProvider value={platform}>
         <AppBaseProviders>
           <AuthProvider serverUrl={defaultUrl}>
-            <AuthGate>
-              <AppInterface
-                defaultServer={ServerConnection.Key.make(defaultUrl)}
-                servers={[server]}
-                disableHealthCheck
-              />
-            </AuthGate>
+            <OthersConfigProvider serverUrl={defaultUrl}>
+              <AuthGate>
+                <AppInterface
+                  defaultServer={ServerConnection.Key.make(defaultUrl)}
+                  servers={[server]}
+                  disableHealthCheck
+                />
+              </AuthGate>
+            </OthersConfigProvider>
           </AuthProvider>
         </AppBaseProviders>
       </PlatformProvider>

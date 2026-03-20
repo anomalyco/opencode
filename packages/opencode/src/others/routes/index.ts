@@ -4,3 +4,4 @@
  */
 
 export { AuthRoutes } from "./auth"
+export { OthersConfigRoutes } from "./config"

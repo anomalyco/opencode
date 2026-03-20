@@ -18,6 +18,7 @@ import { terminalTabLabel } from "@/pages/session/terminal-label"
 import { createSizing, focusTerminalById } from "@/pages/session/helpers"
 import { getTerminalHandoff, setTerminalHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
+import { useOthersConfig } from "@/others"
 
 export function TerminalPanel() {
   const layout = useLayout()
@@ -25,6 +26,7 @@ export function TerminalPanel() {
   const language = useLanguage()
   const command = useCommand()
   const { params, view } = useSessionLayout()
+  const othersConfig = useOthersConfig()
 
   const opened = createMemo(() => view().terminal.opened())
   const size = createSizing()
@@ -177,21 +179,22 @@ export function TerminalPanel() {
   }
 
   return (
-    <div
-      ref={root}
-      id="terminal-panel"
-      role="region"
-      aria-label={language.t("terminal.title")}
-      aria-hidden={!opened()}
-      inert={!opened()}
-      class="relative w-full shrink-0 overflow-hidden bg-background-stronger"
-      classList={{
-        "border-t border-border-weak-base": opened(),
-        "transition-[height] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[height] motion-reduce:transition-none":
-          !size.active(),
-      }}
-      style={{ height: opened() ? `${pane()}px` : "0px" }}
-    >
+    <Show when={othersConfig.shouldShowUIElement("terminalToggle")}>
+      <div
+        ref={root}
+        id="terminal-panel"
+        role="region"
+        aria-label={language.t("terminal.title")}
+        aria-hidden={!opened()}
+        inert={!opened()}
+        class="relative w-full shrink-0 overflow-hidden bg-background-stronger"
+        classList={{
+          "border-t border-border-weak-base": opened(),
+          "transition-[height] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[height] motion-reduce:transition-none":
+            !size.active(),
+        }}
+        style={{ height: opened() ? `${pane()}px` : "0px" }}
+      >
       <div
         class="absolute inset-x-0 top-0 flex flex-col"
         classList={{
@@ -312,5 +315,6 @@ export function TerminalPanel() {
         </Show>
       </div>
     </div>
+    </Show>
   )
 }

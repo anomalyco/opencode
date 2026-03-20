@@ -5,3 +5,5 @@
 
 export * from "./auth"
 export { AuthRoutes } from "./routes/auth"
+export { OthersConfigService, OthersConfig, UIElementConfig } from "./config"
+export { OthersConfigRoutes } from "./routes/config"
