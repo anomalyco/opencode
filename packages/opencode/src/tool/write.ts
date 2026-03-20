@@ -8,6 +8,7 @@ import { Bus } from "../bus"
 import { File } from "../file"
 import { FileWatcher } from "../file/watcher"
 import { FileTime } from "../file/time"
+import { Format } from "../format"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { trimDiff } from "./edit"
@@ -42,6 +43,7 @@ export const WriteTool = Tool.define("write", {
     })
 
     await Filesystem.write(filepath, params.content)
+    await Format.run(filepath)
     await Bus.publish(File.Event.Edited, {
       file: filepath,
     })

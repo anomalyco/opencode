@@ -13,6 +13,7 @@ import { File } from "../file"
 import { FileWatcher } from "../file/watcher"
 import { Bus } from "../bus"
 import { FileTime } from "../file/time"
+import { Format } from "../format"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Snapshot } from "@/snapshot"
@@ -71,6 +72,7 @@ export const EditTool = Tool.define("edit", {
           },
         })
         await Filesystem.write(filePath, params.newString)
+        await Format.run(filePath)
         await Bus.publish(File.Event.Edited, {
           file: filePath,
         })
@@ -108,6 +110,7 @@ export const EditTool = Tool.define("edit", {
       })
 
       await Filesystem.write(filePath, contentNew)
+      await Format.run(filePath)
       await Bus.publish(File.Event.Edited, {
         file: filePath,
       })

@@ -1,12 +1,13 @@
 import z from "zod"
+import { Effect, Layer, PubSub, ServiceMap, Stream } from "effect"
 import { Log } from "../util/log"
 import { Instance } from "../project/instance"
 import { BusEvent } from "./bus-event"
 import { GlobalBus } from "./global"
+import { runCallbackInstance, runPromiseInstance } from "../effect/runtime"
 
 export namespace Bus {
   const log = Log.create({ service: "bus" })
-  type Subscription = (event: any) => void
 
   export const InstanceDisposed = BusEvent.define(
     "server.instance.disposed",
@@ -15,91 +16,130 @@ export namespace Bus {
     }),
   )
 
-  const state = Instance.state(
-    () => {
-      const subscriptions = new Map<any, Subscription[]>()
+  // ---------------------------------------------------------------------------
+  // Service definition
+  // ---------------------------------------------------------------------------
 
-      return {
-        subscriptions,
+  type Payload<D extends BusEvent.Definition = BusEvent.Definition> = {
+    type: D["type"]
+    properties: z.infer<D["properties"]>
+  }
+
+  export interface Interface {
+    readonly publish: <D extends BusEvent.Definition>(
+      def: D,
+      properties: z.output<D["properties"]>,
+    ) => Effect.Effect<void>
+    readonly subscribe: <D extends BusEvent.Definition>(def: D) => Stream.Stream<Payload<D>>
+    readonly subscribeAll: () => Stream.Stream<Payload>
+  }
+
+  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Bus") {}
+
+  export const layer = Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      const pubsubs = new Map<string, PubSub.PubSub<Payload>>()
+      const wildcardPubSub = yield* PubSub.unbounded<Payload>()
+
+      const getOrCreate = Effect.fnUntraced(function* (type: string) {
+        let ps = pubsubs.get(type)
+        if (!ps) {
+          ps = yield* PubSub.unbounded<Payload>()
+          pubsubs.set(type, ps)
+        }
+        return ps
+      })
+
+      function publish<D extends BusEvent.Definition>(def: D, properties: z.output<D["properties"]>) {
+        return Effect.gen(function* () {
+          const payload: Payload = { type: def.type, properties }
+          log.info("publishing", { type: def.type })
+
+          const ps = pubsubs.get(def.type)
+          if (ps) yield* PubSub.publish(ps, payload)
+          yield* PubSub.publish(wildcardPubSub, payload)
+
+          GlobalBus.emit("event", {
+            directory: Instance.directory,
+            payload,
+          })
+        })
       }
-    },
-    async (entry) => {
-      const wildcard = entry.subscriptions.get("*")
-      if (!wildcard) return
-      const event = {
-        type: InstanceDisposed.type,
-        properties: {
-          directory: Instance.directory,
-        },
+
+      function subscribe<D extends BusEvent.Definition>(def: D): Stream.Stream<Payload<D>> {
+        log.info("subscribing", { type: def.type })
+        return Stream.unwrap(
+          Effect.gen(function* () {
+            const ps = yield* getOrCreate(def.type)
+            return Stream.fromPubSub(ps) as Stream.Stream<Payload<D>>
+          }),
+        ).pipe(Stream.ensuring(Effect.sync(() => log.info("unsubscribing", { type: def.type }))))
       }
-      for (const sub of [...wildcard]) {
-        sub(event)
+
+      function subscribeAll(): Stream.Stream<Payload> {
+        log.info("subscribing", { type: "*" })
+        return Stream.fromPubSub(wildcardPubSub).pipe(
+          Stream.ensuring(Effect.sync(() => log.info("unsubscribing", { type: "*" }))),
+        )
       }
-    },
+
+      // Shut down all PubSubs when the layer is torn down.
+      // This causes Stream.fromPubSub consumers to end, triggering
+      // their ensuring/finalizers.
+      yield* Effect.addFinalizer(() =>
+        Effect.gen(function* () {
+          log.info("shutting down PubSubs")
+          yield* PubSub.shutdown(wildcardPubSub)
+          for (const ps of pubsubs.values()) {
+            yield* PubSub.shutdown(ps)
+          }
+        }),
+      )
+
+      return Service.of({ publish, subscribe, subscribeAll })
+    }),
   )
 
-  export async function publish<Definition extends BusEvent.Definition>(
-    def: Definition,
-    properties: z.output<Definition["properties"]>,
-  ) {
-    const payload = {
-      type: def.type,
-      properties,
-    }
-    log.info("publishing", {
-      type: def.type,
-    })
-    const pending = []
-    for (const key of [def.type, "*"]) {
-      const match = [...(state().subscriptions.get(key) ?? [])]
-      for (const sub of match) {
-        pending.push(sub(payload))
-      }
-    }
-    GlobalBus.emit("event", {
-      directory: Instance.directory,
-      payload,
-    })
-    return Promise.all(pending)
+  // ---------------------------------------------------------------------------
+  // Legacy adapters — plain function API wrapping the Effect service
+  // ---------------------------------------------------------------------------
+
+  function runStream(stream: (svc: Interface) => Stream.Stream<Payload>, callback: (event: any) => void) {
+    return runCallbackInstance(
+      Service.use((svc) => stream(svc).pipe(Stream.runForEach((msg) => Effect.sync(() => callback(msg))))),
+    )
   }
 
-  export function subscribe<Definition extends BusEvent.Definition>(
-    def: Definition,
-    callback: (event: { type: Definition["type"]; properties: z.infer<Definition["properties"]> }) => void,
-  ) {
-    return raw(def.type, callback)
+  export function publish<D extends BusEvent.Definition>(def: D, properties: z.output<D["properties"]>) {
+    return runPromiseInstance(Service.use((svc) => svc.publish(def, properties)))
   }
 
-  export function once<Definition extends BusEvent.Definition>(
-    def: Definition,
-    callback: (event: {
-      type: Definition["type"]
-      properties: z.infer<Definition["properties"]>
-    }) => "done" | undefined,
-  ) {
-    const unsub = subscribe(def, (event) => {
-      if (callback(event)) unsub()
-    })
+  export function subscribe<D extends BusEvent.Definition>(def: D, callback: (event: Payload<D>) => void) {
+    return runStream((svc) => svc.subscribe(def), callback)
   }
 
   export function subscribeAll(callback: (event: any) => void) {
-    return raw("*", callback)
-  }
+    const directory = Instance.directory
 
-  function raw(type: string, callback: (event: any) => void) {
-    log.info("subscribing", { type })
-    const subscriptions = state().subscriptions
-    let match = subscriptions.get(type) ?? []
-    match.push(callback)
-    subscriptions.set(type, match)
+    // InstanceDisposed is delivered via GlobalBus because the legacy
+    // adapter's fiber starts asynchronously and may not be running when
+    // disposal happens. In the Effect-native path, forkScoped + scope
+    // closure handles this correctly. This bridge can be removed once
+    // upstream PubSub.shutdown properly wakes suspended subscribers:
+    // https://github.com/Effect-TS/effect-smol/pull/1800
+    const onDispose = (evt: { directory?: string; payload: any }) => {
+      if (evt.payload.type !== InstanceDisposed.type) return
+      if (evt.directory !== directory) return
+      callback(evt.payload)
+      GlobalBus.off("event", onDispose)
+    }
+    GlobalBus.on("event", onDispose)
 
+    const interrupt = runStream((svc) => svc.subscribeAll(), callback)
     return () => {
-      log.info("unsubscribing", { type })
-      const match = subscriptions.get(type)
-      if (!match) return
-      const index = match.indexOf(callback)
-      if (index === -1) return
-      match.splice(index, 1)
+      GlobalBus.off("event", onDispose)
+      interrupt()
     }
   }
 }

@@ -4,9 +4,7 @@ import { InstanceContext } from "@/effect/instance-context"
 import path from "path"
 import { mergeDeep } from "remeda"
 import z from "zod"
-import { Bus } from "../bus"
 import { Config } from "../config/config"
-import { File } from "../file"
 import { Instance } from "../project/instance"
 import { Process } from "../util/process"
 import { Log } from "../util/log"
@@ -27,6 +25,7 @@ export namespace Format {
   export type Status = z.infer<typeof Status>
 
   export interface Interface {
+    readonly run: (filepath: string) => Effect.Effect<void>
     readonly status: () => Effect.Effect<Status[]>
   }
 
@@ -90,48 +89,44 @@ export namespace Format {
         return result
       }
 
-      yield* Effect.acquireRelease(
-        Effect.sync(() =>
-          Bus.subscribe(
-            File.Event.Edited,
-            Instance.bind(async (payload) => {
-              const file = payload.properties.file
-              log.info("formatting", { file })
-              const ext = path.extname(file)
+      const run = Effect.fn("Format.run")(function* (filepath: string) {
+        log.info("formatting", { file: filepath })
+        const ext = path.extname(filepath)
 
-              for (const item of await getFormatter(ext)) {
-                log.info("running", { command: item.command })
-                try {
-                  const proc = Process.spawn(
-                    item.command.map((x) => x.replace("$FILE", file)),
-                    {
-                      cwd: instance.directory,
-                      env: { ...process.env, ...item.environment },
-                      stdout: "ignore",
-                      stderr: "ignore",
-                    },
-                  )
-                  const exit = await proc.exited
-                  if (exit !== 0) {
-                    log.error("failed", {
-                      command: item.command,
-                      ...item.environment,
-                    })
-                  }
-                } catch (error) {
-                  log.error("failed to format file", {
-                    error,
-                    command: item.command,
-                    ...item.environment,
-                    file,
-                  })
-                }
+        for (const item of yield* Effect.promise(() => getFormatter(ext))) {
+          log.info("running", { command: item.command })
+          yield* Effect.tryPromise({
+            try: async () => {
+              const proc = Process.spawn(
+                item.command.map((x) => x.replace("$FILE", filepath)),
+                {
+                  cwd: instance.directory,
+                  env: { ...process.env, ...item.environment },
+                  stdout: "ignore",
+                  stderr: "ignore",
+                },
+              )
+              const exit = await proc.exited
+              if (exit !== 0) {
+                log.error("failed", {
+                  command: item.command,
+                  ...item.environment,
+                })
               }
-            }),
-          ),
-        ),
-        (unsubscribe) => Effect.sync(unsubscribe),
-      )
+            },
+            catch: (error) => {
+              log.error("failed to format file", {
+                error,
+                command: item.command,
+                ...item.environment,
+                file: filepath,
+              })
+              return error
+            },
+          }).pipe(Effect.ignore)
+        }
+      })
+
       log.info("init")
 
       const status = Effect.fn("Format.status")(function* () {
@@ -147,9 +142,13 @@ export namespace Format {
         return result
       })
 
-      return Service.of({ status })
+      return Service.of({ run, status })
     }),
   )
+
+  export async function run(filepath: string) {
+    return runPromiseInstance(Service.use((s) => s.run(filepath)))
+  }
 
   export async function status() {
     return runPromiseInstance(Service.use((s) => s.status()))

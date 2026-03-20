@@ -10,6 +10,7 @@ import { createTwoFilesPatch, diffLines } from "diff"
 import { assertExternalDirectory } from "./external-directory"
 import { trimDiff } from "./edit"
 import { LSP } from "../lsp"
+import { Format } from "../format"
 import { Filesystem } from "../util/filesystem"
 import DESCRIPTION from "./apply_patch.txt"
 import { File } from "../file"
@@ -220,6 +221,7 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
       }
 
       if (edited) {
+        await Format.run(edited)
         await Bus.publish(File.Event.Edited, {
           file: edited,
         })

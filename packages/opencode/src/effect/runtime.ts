@@ -18,6 +18,12 @@ export function runPromiseInstance<A, E>(effect: Effect.Effect<A, E, InstanceSer
   return runtime.runPromise(effect.pipe(Effect.provide(Instances.get(Instance.directory))))
 }
 
+export function runCallbackInstance<A, E>(
+  effect: Effect.Effect<A, E, InstanceServices>,
+): (interruptor?: number) => void {
+  return runtime.runCallback(effect.pipe(Effect.provide(Instances.get(Instance.directory))))
+}
+
 export function disposeRuntime() {
   return runtime.dispose()
 }
