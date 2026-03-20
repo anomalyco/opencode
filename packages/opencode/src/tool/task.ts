@@ -33,10 +33,11 @@ export const TaskTool = Tool.define("task", async (ctx) => {
   const accessibleAgents = caller
     ? agents.filter((a) => PermissionNext.evaluate("task", a.name, caller.permission).action !== "deny")
     : agents
+  const list = accessibleAgents.toSorted((a, b) => a.name.localeCompare(b.name))
 
   const description = DESCRIPTION.replace(
     "{agents}",
-    accessibleAgents
+    list
       .map((a) => `- ${a.name}: ${a.description ?? "This subagent should only be called manually by the user."}`)
       .join("\n"),
   )
