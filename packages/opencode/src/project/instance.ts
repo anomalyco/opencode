@@ -1,12 +1,11 @@
-import { Effect } from "effect"
+import { GlobalBus } from "@/bus/global"
+import { disposeInstance } from "@/effect/instance-registry"
+import { Filesystem } from "@/util/filesystem"
+import { iife } from "@/util/iife"
 import { Log } from "@/util/log"
 import { Context } from "../util/context"
 import { Project } from "./project"
 import { State } from "./state"
-import { iife } from "@/util/iife"
-import { GlobalBus } from "@/bus/global"
-import { Filesystem } from "@/util/filesystem"
-import { InstanceState } from "@/util/instance-state"
 
 interface Context {
   directory: string
@@ -81,6 +80,9 @@ export const Instance = {
       return input.fn()
     })
   },
+  get current() {
+    return context.use()
+  },
   get directory() {
     return context.use().directory
   },
@@ -102,23 +104,33 @@ export const Instance = {
     if (Instance.worktree === "/") return false
     return Filesystem.contains(Instance.worktree, filepath)
   },
+  /**
+   * Captures the current instance ALS context and returns a wrapper that
+   * restores it when called. Use this for callbacks that fire outside the
+   * instance async context (native addons, event emitters, timers, etc.).
+   */
+  bind<F extends (...args: any[]) => any>(fn: F): F {
+    const ctx = context.use()
+    return ((...args: any[]) => context.provide(ctx, () => fn(...args))) as F
+  },
   state<S>(init: () => S, dispose?: (state: Awaited<S>) => Promise<void>): () => S {
     return State.create(() => Instance.directory, init, dispose)
   },
   async reload(input: { directory: string; init?: () => Promise<any>; project?: Project.Info; worktree?: string }) {
     const directory = Filesystem.resolve(input.directory)
     Log.Default.info("reloading instance", { directory })
-    await Promise.all([State.dispose(directory), Effect.runPromise(InstanceState.dispose(directory))])
+    await Promise.all([State.dispose(directory), disposeInstance(directory)])
     cache.delete(directory)
     const next = track(directory, boot({ ...input, directory }))
     emit(directory)
     return await next
   },
   async dispose() {
-    Log.Default.info("disposing instance", { directory: Instance.directory })
-    await Promise.all([State.dispose(Instance.directory), Effect.runPromise(InstanceState.dispose(Instance.directory))])
-    cache.delete(Instance.directory)
-    emit(Instance.directory)
+    const directory = Instance.directory
+    Log.Default.info("disposing instance", { directory })
+    await Promise.all([State.dispose(directory), disposeInstance(directory)])
+    cache.delete(directory)
+    emit(directory)
   },
   async disposeAll() {
     if (disposal.all) return disposal.all

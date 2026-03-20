@@ -15,6 +15,7 @@ import { childMapByParent, displayName, sortedRootSessions } from "./helpers"
 
 export type ProjectSidebarContext = {
   currentDir: Accessor<string>
+  currentProject: Accessor<LocalProject | undefined>
   sidebarOpened: Accessor<boolean>
   sidebarHovering: Accessor<boolean>
   hoverProject: Accessor<string | undefined>
@@ -278,11 +279,7 @@ export const SortableProject = (props: {
   const globalSync = useGlobalSync()
   const language = useLanguage()
   const sortable = createSortable(props.project.worktree)
-  const selected = createMemo(
-    () =>
-      props.project.worktree === props.ctx.currentDir() ||
-      props.project.sandboxes?.includes(props.ctx.currentDir()) === true,
-  )
+  const selected = createMemo(() => props.ctx.currentProject()?.worktree === props.project.worktree)
   const workspaces = createMemo(() => props.ctx.workspaceIds(props.project).slice(0, 2))
   const workspaceEnabled = createMemo(() => props.ctx.workspacesEnabled(props.project))
   const dirs = createMemo(() => props.ctx.workspaceIds(props.project))
