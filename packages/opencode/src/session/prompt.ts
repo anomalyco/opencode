@@ -319,11 +319,7 @@ export namespace SessionPrompt {
       }
 
       if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
-      if (
-        lastAssistant?.finish &&
-        !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
-        lastUser.id < lastAssistant.id
-      ) {
+      if (shouldExitLoop(lastUser, lastAssistant)) {
         log.info("exiting loop", { sessionID })
         break
       }
@@ -1994,5 +1990,16 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         throw err
       })
     }
+  }
+
+  /** @internal Exported for testing — determines whether the prompt loop should exit */
+  export function shouldExitLoop(
+    lastUser: MessageV2.User | undefined,
+    lastAssistant: MessageV2.Assistant | undefined,
+  ): boolean {
+    if (!lastUser) return false
+    if (!lastAssistant?.finish) return false
+    if (["tool-calls", "unknown"].includes(lastAssistant.finish)) return false
+    return lastAssistant.parentID === lastUser.id
   }
 }
