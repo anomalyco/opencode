@@ -204,6 +204,8 @@ export namespace MergePipeline {
     log.info("resolving conflicts", { planID, branch, fileCount: conflictedFiles.length, files: conflictedFiles })
 
     const plan = await PlanStore.get(planID)
+    const base = await git(["merge-base", "HEAD", branch], { cwd })
+    const baseRef = outputText(base.stdout)
 
     // Cache for git show results to avoid redundant calls
     const showCache = new Map<string, string>()
@@ -218,8 +220,16 @@ export namespace MergePipeline {
     for (const file of conflictedFiles) {
       log.info("resolving file", { planID, branch, file })
       const content = await Bun.file(path.join(cwd, file)).text()
+      const smart = resolveSmart(content)
+      if (smart) {
+        await Bun.write(path.join(cwd, file), smart)
+        await git(["add", file], { cwd })
+        log.info("file resolved", { planID, branch, file, result: "smart" })
+        continue
+      }
       const oursContent = await cachedGitShow("HEAD", file)
       const theirsContent = await cachedGitShow(branch, file)
+      const baseContent = baseRef ? await cachedGitShow(baseRef, file) : ""
 
       const worker = plan.workers.find((w) => w.branch === branch)
       const subtask = plan.subtasks.find((s) => s.id === worker?.subtaskID)
@@ -227,16 +237,21 @@ export namespace MergePipeline {
       const resolution = await resolveWithAI({
         file,
         conflictedContent: content,
+        baseContent,
         oursContent,
         theirsContent,
         globalTask: plan.task,
         subtaskDescription: subtask?.description ?? "",
         model: plan.orchestratorModel,
       })
+      if (hasConflictMarker(resolution)) {
+        log.error("ai resolution still contains conflict markers", { planID, branch, file })
+        return false
+      }
 
       await Bun.write(path.join(cwd, file), resolution)
       await git(["add", file], { cwd })
-      log.info("file resolved", { planID, branch, file, result: "success" })
+      log.info("file resolved", { planID, branch, file, result: "ai" })
     }
 
     log.info("committing resolved conflicts", { planID, branch, fileCount: conflictedFiles.length })
@@ -250,6 +265,7 @@ export namespace MergePipeline {
   async function resolveWithAI(input: {
     file: string
     conflictedContent: string
+    baseContent: string
     oursContent: string
     theirsContent: string
     globalTask: string
@@ -322,15 +338,17 @@ Multiple agents worked on different parts of a task simultaneously, each in an i
 Your job: produce the CORRECT merged version of the file that incorporates BOTH sides' intent.
 
 Rules:
-1. Understand what each side was trying to accomplish from the context provided.
+1. Use base, ours, and theirs to perform a true 3-way merge.
 2. Produce a version that satisfies both changes. Do NOT drop either side's work.
-3. If the changes are truly incompatible (e.g., both rename the same function differently), prefer the change that better aligns with the global task description.
+3. If changes conflict semantically, prefer correctness and global task alignment.
 4. The resolved file must be syntactically valid.
-5. Return the COMPLETE file content, not a diff.`
+5. Do not include conflict markers.
+6. Return the COMPLETE file content, not a diff.`
 
 function buildConflictContext(input: {
   file: string
   conflictedContent: string
+  baseContent: string
   oursContent: string
   theirsContent: string
   globalTask: string
@@ -343,6 +361,11 @@ ${input.globalTask}
 
 ## Incoming Branch's Subtask
 ${input.subtaskDescription}
+
+## Merge base version:
+\`\`\`
+${input.baseContent}
+\`\`\`
 
 ## Current version (already merged branches):
 \`\`\`
@@ -360,4 +383,91 @@ ${input.conflictedContent}
 \`\`\`
 
 Produce the resolved file content.`
+}
+
+function hasConflictMarker(input: string): boolean {
+  return /^(<<<<<<< |=======|>>>>>>> )/m.test(input)
+}
+
+function resolveSmart(input: string): string | undefined {
+  if (!hasConflictMarker(input)) return undefined
+  const rows = input.split("\n")
+  const out: string[] = []
+  let seen = false
+  let i = 0
+  while (i < rows.length) {
+    if (!rows[i].startsWith("<<<<<<< ")) {
+      out.push(rows[i])
+      i++
+      continue
+    }
+    seen = true
+    i++
+    const left: string[] = []
+    while (i < rows.length && !rows[i].startsWith("=======")) {
+      left.push(rows[i])
+      i++
+    }
+    if (i >= rows.length) return undefined
+    i++
+    const right: string[] = []
+    while (i < rows.length && !rows[i].startsWith(">>>>>>> ")) {
+      right.push(rows[i])
+      i++
+    }
+    if (i >= rows.length) return undefined
+    i++
+    const merged = mergeChunk(left, right)
+    if (!merged) return undefined
+    out.push(...merged)
+  }
+  if (!seen) return undefined
+  return out.join("\n")
+}
+
+function mergeChunk(left: string[], right: string[]): string[] | undefined {
+  if (sameLines(left, right)) return left
+  if (left.length === 0) return right
+  if (right.length === 0) return left
+  if (isImport(left) && isImport(right)) return uniq(left, right)
+  if (isChain(left) && isChain(right)) return uniq(left, right)
+  if (isList(left) && isList(right)) return uniq(left, right)
+  return undefined
+}
+
+function sameLines(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) return false
+  return left.every((row, i) => row.trim() === (right[i] ?? "").trim())
+}
+
+function uniq(left: string[], right: string[]): string[] {
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const row of [...left, ...right]) {
+    const key = row.trim()
+    if (!key) continue
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(row)
+  }
+  if (out.length > 0) return out
+  return left
+}
+
+function isImport(rows: string[]): boolean {
+  const list = rows.map((row) => row.trim()).filter(Boolean)
+  if (list.length === 0) return false
+  return list.every((row) => row.startsWith("import ") || row.startsWith("export "))
+}
+
+function isChain(rows: string[]): boolean {
+  const list = rows.map((row) => row.trim()).filter(Boolean)
+  if (list.length === 0) return false
+  return list.every((row) => /^\.[a-zA-Z0-9_]+\(/.test(row))
+}
+
+function isList(rows: string[]): boolean {
+  const list = rows.map((row) => row.trim()).filter(Boolean)
+  if (list.length === 0) return false
+  return list.every((row) => row.endsWith(","))
 }
