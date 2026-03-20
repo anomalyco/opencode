@@ -468,6 +468,7 @@ export namespace WorkerManager {
         log.info("worker completed", { planID, subtaskID: worker.subtaskID })
 
         try {
+          await snapshot(worker.worktreeDir, worker.subtaskID)
           // Collect diff stats
           const diffStat = await collectDiffStat(worker.worktreeDir)
           pendingUpdates.set(worker.subtaskID, { status: "done", diffStat })
@@ -573,6 +574,7 @@ export namespace WorkerManager {
               pending.delete(sessionID)
               startTimes.delete(sessionID)
               warned.delete(sessionID)
+              await snapshot(worker.worktreeDir, worker.subtaskID)
               const diffStat = await collectDiffStat(worker.worktreeDir)
               // Queue completion instead of calling updateWorker directly
               pendingUpdates.set(worker.subtaskID, { status: "done", diffStat })
@@ -622,18 +624,50 @@ export namespace WorkerManager {
     worktreeDir: string,
   ): Promise<{ additions: number; deletions: number; files: number } | undefined> {
     try {
-      const stat = await git(["diff", "--stat", "HEAD"], { cwd: worktreeDir })
-      const output = outputText(stat.stdout)
-      const lines = output.split("\n")
-      const lastLine = lines[lines.length - 1] ?? ""
-      const files = parseInt(lastLine.match(/(\d+) file/)?.[1] ?? "0")
-      const additions = parseInt(lastLine.match(/(\d+) insertion/)?.[1] ?? "0")
-      const deletions = parseInt(lastLine.match(/(\d+) deletion/)?.[1] ?? "0")
-      if (files === 0 && additions === 0 && deletions === 0) return undefined
-      return { additions, deletions, files }
+      const dirty = await git(["diff", "--stat", "HEAD"], { cwd: worktreeDir })
+      const local = parseStat(outputText(dirty.stdout))
+      if (local) return local
+
+      const commit = await git(["show", "--stat", "--format=", "HEAD"], { cwd: worktreeDir })
+      return parseStat(outputText(commit.stdout))
     } catch {
       return undefined
     }
+  }
+
+  async function snapshot(worktreeDir: string, subtaskID: SubtaskID): Promise<void> {
+    const status = await git(["status", "--porcelain"], { cwd: worktreeDir })
+    if (status.exitCode !== 0) {
+      throw new Error("Failed to read worker git status")
+    }
+    if (!outputText(status.stdout)) return
+
+    const added = await git(["add", "-A"], { cwd: worktreeDir })
+    if (added.exitCode !== 0) {
+      throw new Error("Failed to stage worker changes")
+    }
+
+    const msg = `parallel: snapshot ${String(subtaskID).slice(0, 10)}`
+    const commit = await git(
+      [
+        "-c",
+        "user.name=opencode-parallel",
+        "-c",
+        "user.email=parallel@opencode.local",
+        "commit",
+        "-m",
+        msg,
+      ],
+      { cwd: worktreeDir },
+    )
+
+    if (commit.exitCode === 0) return
+
+    const stderr = outputText(commit.stderr)
+    const stdout = outputText(commit.stdout)
+    const text = `${stderr}\n${stdout}`.toLowerCase()
+    if (text.includes("nothing to commit")) return
+    throw new Error(stderr || stdout || "Failed to commit worker snapshot")
   }
 
   function buildWorkerPrompt(globalTask: string, subtask: Subtask, allSubtasks: Subtask[]): string {
@@ -695,4 +729,14 @@ ${subtask.fileScope.map((f) => `- ${f}`).join("\n")}
 function outputText(input: Uint8Array | undefined): string {
   if (!input?.length) return ""
   return new TextDecoder().decode(input).trim()
+}
+
+function parseStat(output: string): { additions: number; deletions: number; files: number } | undefined {
+  const lines = output.split("\n")
+  const lastLine = lines[lines.length - 1] ?? ""
+  const files = parseInt(lastLine.match(/(\d+) file/)?.[1] ?? "0")
+  const additions = parseInt(lastLine.match(/(\d+) insertion/)?.[1] ?? "0")
+  const deletions = parseInt(lastLine.match(/(\d+) deletion/)?.[1] ?? "0")
+  if (files === 0 && additions === 0 && deletions === 0) return undefined
+  return { additions, deletions, files }
 }

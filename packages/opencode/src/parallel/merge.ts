@@ -142,7 +142,7 @@ export namespace MergePipeline {
       }
     }
 
-    await cleanupPlan(planID)
+    await cleanupPlan(planID, allSuccess)
 
     log.info("all merges complete", { planID, durationMs: Date.now() - mergeStartTime })
 
@@ -169,13 +169,23 @@ export namespace MergePipeline {
     const merge = await git(["merge", "--no-ff", "-m", mergeMessage, branch], { cwd })
 
     if (merge.exitCode === 0) {
-      log.info("merge clean", { planID, branch, subtaskTitle, exitCode: merge.exitCode })
-      return "clean"
+      const merged = await git(["merge-base", "--is-ancestor", branch, "HEAD"], { cwd })
+      if (merged.exitCode === 0) {
+        log.info("merge clean", { planID, branch, subtaskTitle, exitCode: merge.exitCode })
+        return "clean"
+      }
+      log.error("merge verification failed", { planID, branch, subtaskTitle })
+      return "failed"
     }
 
     log.info("merge needs resolution", { planID, branch, subtaskTitle, exitCode: merge.exitCode })
     const resolved = await resolveConflicts(planID, branch, cwd)
-    if (resolved) return "resolved"
+    if (resolved) {
+      const merged = await git(["merge-base", "--is-ancestor", branch, "HEAD"], { cwd })
+      if (merged.exitCode === 0) return "resolved"
+      log.error("merge verification failed after resolution", { planID, branch, subtaskTitle })
+      return "failed"
+    }
 
     log.error("merge resolution failed", { planID, branch, subtaskTitle })
     await git(["merge", "--abort"], { cwd })
@@ -272,16 +282,30 @@ export namespace MergePipeline {
     return outputText(result.stdout)
   }
 
-  async function cleanupPlan(planID: PlanID): Promise<void> {
+  async function cleanupPlan(planID: PlanID, allSuccess: boolean): Promise<void> {
     const plan = await PlanStore.get(planID)
-    const workersToRemove = plan.workers.filter((w) => w.worktreeDir)
-    log.info("cleanup worktrees", { planID, worktreeCount: workersToRemove.length })
+    const workersToRemove = allSuccess
+      ? plan.workers.filter((w) => w.worktreeDir)
+      : plan.workers.filter((w) => w.status === "merged" && w.worktreeDir)
+    log.info("cleanup worktrees", {
+      planID,
+      mode: allSuccess ? "all" : "merged-only",
+      worktreeCount: workersToRemove.length,
+    })
     await Promise.allSettled(
       workersToRemove.map((w) => {
         log.info("removing worktree", { planID, branch: w.branch, worktreeDir: w.worktreeDir! })
         return Worktree.remove({ directory: w.worktreeDir! })
       }),
     )
+    if (!allSuccess) {
+      const kept = plan.workers.filter((w) => w.status !== "merged" && w.worktreeDir)
+      log.warn("kept unmerged worktrees for recovery", {
+        planID,
+        count: kept.length,
+        dirs: kept.map((w) => w.worktreeDir),
+      })
+    }
     log.info("cleanup complete", { planID })
   }
 }
