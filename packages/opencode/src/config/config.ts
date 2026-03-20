@@ -256,6 +256,23 @@ export namespace Config {
       result.compaction = { ...result.compaction, prune: false }
     }
 
+    // Validate parallel publish_mode config
+    if (result.parallel?.publish_mode === "staged") {
+      throw new InvalidError({
+        path: "parallel.publish_mode",
+        issues: [
+          {
+            message:
+              "The 'staged' publish mode is no longer supported. Please use 'unstaged' instead. The 'unstaged' mode leaves changes unstaged in the working directory, which is the recommended approach for parallel execution.",
+            path: ["parallel", "publish_mode"],
+            code: "invalid_enum_value",
+            received: "staged",
+            options: ["new-branch", "unstaged", "direct"],
+          },
+        ],
+      })
+    }
+
     result.plugin = deduplicatePlugins(result.plugin ?? [])
 
     return {
@@ -1243,6 +1260,12 @@ export namespace Config {
             .boolean()
             .optional()
             .describe("Require explicit approval before executing parallel plans (default: true)"),
+          publish_mode: z
+            .enum(["new-branch", "unstaged", "direct"])
+            .optional()
+            .describe(
+              "How to publish changes from parallel execution: 'new-branch' creates a new branch, 'unstaged' leaves changes unstaged, 'direct' commits directly to current branch",
+            ),
         })
         .optional()
         .describe("Parallel agent orchestration configuration"),
