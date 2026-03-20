@@ -681,9 +681,7 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          File.init()
-          // Give the background scan time to populate
-          await new Promise((r) => setTimeout(r, 500))
+          await File.init()
 
           const result = await File.search({ query: "", type: "file" })
           expect(result.length).toBeGreaterThan(0)
@@ -697,8 +695,7 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          File.init()
-          await new Promise((r) => setTimeout(r, 500))
+          await File.init()
 
           const result = await File.search({ query: "", type: "directory" })
           expect(result.length).toBeGreaterThan(0)
@@ -718,8 +715,7 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          File.init()
-          await new Promise((r) => setTimeout(r, 500))
+          await File.init()
 
           const result = await File.search({ query: "main", type: "file" })
           expect(result.some((f) => f.includes("main"))).toBe(true)
@@ -733,8 +729,7 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          File.init()
-          await new Promise((r) => setTimeout(r, 500))
+          await File.init()
 
           const result = await File.search({ query: "", type: "file" })
           // Files don't end with /
@@ -751,8 +746,7 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          File.init()
-          await new Promise((r) => setTimeout(r, 500))
+          await File.init()
 
           const result = await File.search({ query: "", type: "directory" })
           // Directories end with /
@@ -769,8 +763,7 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          File.init()
-          await new Promise((r) => setTimeout(r, 500))
+          await File.init()
 
           const result = await File.search({ query: "", type: "file", limit: 2 })
           expect(result.length).toBeLessThanOrEqual(2)
@@ -784,8 +777,7 @@ describe("file/index Filesystem patterns", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          File.init()
-          await new Promise((r) => setTimeout(r, 500))
+          await File.init()
 
           const result = await File.search({ query: ".hidden", type: "directory" })
           expect(result.length).toBeGreaterThan(0)
