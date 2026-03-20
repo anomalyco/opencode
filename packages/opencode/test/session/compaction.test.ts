@@ -6,6 +6,7 @@ import { Instance } from "../../src/project/instance"
 import { Log } from "../../src/util/log"
 import { tmpdir } from "../fixture/fixture"
 import { Session } from "../../src/session"
+import { Identifier } from "../../src/id/id"
 import type { Provider } from "../../src/provider/provider"
 
 Log.init({ print: false })
@@ -240,6 +241,149 @@ describe("util.token.estimate", () => {
 
   test("returns 0 for empty string", () => {
     expect(Token.estimate("")).toBe(0)
+  })
+})
+
+describe("session.compaction.prune", () => {
+  test("aggressive mode compacts old tool outputs even when below prune minimum", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const sessionID = session.id
+
+        const user1 = await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "user",
+          sessionID,
+          agent: "default",
+          model: { providerID: "openai", modelID: "gpt-4" },
+          time: { created: Date.now() },
+        })
+        await Session.updatePart({
+          id: Identifier.ascending("part"),
+          messageID: user1.id,
+          sessionID,
+          type: "text",
+          text: "u1",
+        })
+
+        const assistant1 = await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "assistant",
+          parentID: user1.id,
+          sessionID,
+          mode: "default",
+          agent: "default",
+          path: { cwd: tmp.path, root: tmp.path },
+          cost: 0,
+          tokens: {
+            output: 0,
+            input: 0,
+            reasoning: 0,
+            cache: { read: 0, write: 0 },
+          },
+          modelID: "gpt-4",
+          providerID: "openai",
+          time: { created: Date.now() },
+          finish: "tool-calls",
+        })
+        const tool = await Session.updatePart({
+          id: Identifier.ascending("part"),
+          messageID: assistant1.id,
+          sessionID,
+          type: "tool",
+          callID: "call-1",
+          tool: "bash",
+          state: {
+            status: "completed",
+            input: { cmd: "echo hi" },
+            title: "Bash",
+            metadata: {},
+            output: "small output",
+            time: { start: Date.now(), end: Date.now() },
+          },
+        })
+
+        const user2 = await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "user",
+          sessionID,
+          agent: "default",
+          model: { providerID: "openai", modelID: "gpt-4" },
+          time: { created: Date.now() },
+        })
+        await Session.updatePart({
+          id: Identifier.ascending("part"),
+          messageID: user2.id,
+          sessionID,
+          type: "text",
+          text: "u2",
+        })
+        const assistant2 = await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "assistant",
+          parentID: user2.id,
+          sessionID,
+          mode: "default",
+          agent: "default",
+          path: { cwd: tmp.path, root: tmp.path },
+          cost: 0,
+          tokens: {
+            output: 0,
+            input: 0,
+            reasoning: 0,
+            cache: { read: 0, write: 0 },
+          },
+          modelID: "gpt-4",
+          providerID: "openai",
+          time: { created: Date.now() },
+          finish: "end_turn",
+        })
+        await Session.updatePart({
+          id: Identifier.ascending("part"),
+          messageID: assistant2.id,
+          sessionID,
+          type: "text",
+          text: "a2",
+        })
+
+        const user3 = await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "user",
+          sessionID,
+          agent: "default",
+          model: { providerID: "openai", modelID: "gpt-4" },
+          time: { created: Date.now() },
+        })
+        await Session.updatePart({
+          id: Identifier.ascending("part"),
+          messageID: user3.id,
+          sessionID,
+          type: "text",
+          text: "u3",
+        })
+
+        await SessionCompaction.prune({ sessionID })
+        const before = await Session.messages({ sessionID })
+        const beforeTool = before.flatMap((msg) => msg.parts).find((part) => part.id === tool.id)
+        if (!beforeTool || beforeTool.type !== "tool" || beforeTool.state.status !== "completed") {
+          throw new Error("expected completed tool part")
+        }
+        expect(beforeTool.state.time.compacted).toBeUndefined()
+
+        await SessionCompaction.prune({ sessionID, aggressive: true })
+        const after = await Session.messages({ sessionID })
+        const afterTool = after.flatMap((msg) => msg.parts).find((part) => part.id === tool.id)
+        if (!afterTool || afterTool.type !== "tool" || afterTool.state.status !== "completed") {
+          throw new Error("expected completed tool part")
+        }
+        expect(afterTool.state.time.compacted).toBeDefined()
+
+        await Session.remove(sessionID)
+      },
+    })
   })
 })
 

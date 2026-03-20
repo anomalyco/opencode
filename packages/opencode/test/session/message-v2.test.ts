@@ -494,7 +494,10 @@ describe("session.message-v2.toModelMessage", () => {
             type: "tool-result",
             toolCallId: "call-1",
             toolName: "bash",
-            output: { type: "text", value: "[Old tool result content cleared]" },
+            output: {
+              type: "text",
+              value: "[Tool output removed during compaction. Re-run this tool if you need the full result.]",
+            },
           },
         ],
       },
