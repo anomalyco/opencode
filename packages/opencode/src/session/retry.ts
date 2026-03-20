@@ -51,6 +51,15 @@ export function delay(attempt: number, error?: MessageV2.APIError) {
   return cap(Math.min(RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1), RETRY_MAX_DELAY_NO_HEADERS))
 }
 
+const rateLimited = (input: string | undefined) => {
+  if (!input) return false
+  return /too many requests|rate[_\s-]?limit/i.test(input)
+}
+const quotaLimited = (input: string | undefined) => {
+  if (!input) return false
+  return /insufficient[_\s-]?quota|quota exceeded|freeusagelimiterror|usage_not_included/i.test(input)
+}
+
 export function retryable(error: Err) {
   // context overflow errors should not be retried
   if (MessageV2.ContextOverflowError.isInstance(error)) return undefined
@@ -58,22 +67,16 @@ export function retryable(error: Err) {
     const status = error.data.statusCode
     // 5xx errors are transient server failures and should always be retried,
     // even when the provider SDK doesn't explicitly mark them as retryable.
-    if (!error.data.isRetryable && !(status !== undefined && status >= 500)) return undefined
+    if (!error.data.isRetryable && !(status !== undefined && status >= 500)) {
+      // However, 429s should be retried if they look like transient rate limits
+      if (status === 429 && !quotaLimited(error.data.message) && !quotaLimited(error.data.responseBody)) {
+        if (rateLimited(error.data.message) || rateLimited(error.data.responseBody)) return "Too Many Requests"
+        return error.data.message || "Too Many Requests"
+      }
+      return undefined
+    }
     if (error.data.responseBody?.includes("FreeUsageLimitError")) return GO_UPSELL_MESSAGE
     return error.data.message.includes("Overloaded") ? "Provider is overloaded" : error.data.message
-  }
-
-  // Check for rate limit patterns in plain text error messages
-  const msg = error.data?.message
-  if (typeof msg === "string") {
-    const lower = msg.toLowerCase()
-    if (
-      lower.includes("rate increased too quickly") ||
-      lower.includes("rate limit") ||
-      lower.includes("too many requests")
-    ) {
-      return msg
-    }
   }
 
   const json = iife(() => {

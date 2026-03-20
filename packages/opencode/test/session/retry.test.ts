@@ -169,6 +169,28 @@ describe("session.retry.retryable", () => {
     expect(SessionRetry.retryable(error)).toBe(msg)
   })
 
+  test("retries 429 API errors even when isRetryable is false", () => {
+    const error = new MessageV2.APIError({
+      message: "Rate limit reached for requests per min",
+      statusCode: 429,
+      isRetryable: false,
+      responseBody: '{"error":{"message":"Too many requests"}}',
+    }).toObject() as ReturnType<NamedError["toObject"]>
+
+    expect(SessionRetry.retryable(error)).toBe("Too Many Requests")
+  })
+
+  test("does not retry 429 quota exhaustion errors", () => {
+    const error = new MessageV2.APIError({
+      message: "insufficient_quota",
+      statusCode: 429,
+      isRetryable: false,
+      responseBody: '{"error":{"code":"insufficient_quota"}}',
+    }).toObject() as ReturnType<NamedError["toObject"]>
+
+    expect(SessionRetry.retryable(error)).toBeUndefined()
+  })
+
   test("does not retry context overflow errors", () => {
     const error = new MessageV2.ContextOverflowError({
       message: "Input exceeds context window of this model",
