@@ -1,36 +1,40 @@
-import { Effect, ManagedRuntime } from "effect"
-import z from "zod"
-
+import { runPromiseInstance } from "@/effect/runtime"
 import { fn } from "@/util/fn"
-import * as S from "./auth-service"
 import { ProviderID } from "./schema"
-
-// Separate runtime: ProviderAuthService can't join the shared runtime because
-// runtime.ts → auth-service.ts → provider/auth.ts creates a circular import.
-// AuthService is stateless file I/O so the duplicate instance is harmless.
-const rt = ManagedRuntime.make(S.ProviderAuthService.defaultLayer)
-
-function runPromise<A>(f: (service: S.ProviderAuthService.Service) => Effect.Effect<A, S.ProviderAuthError>) {
-  return rt.runPromise(S.ProviderAuthService.use(f))
-}
+import z from "zod"
+import { ProviderAuth as S } from "./auth-service"
 
 export namespace ProviderAuth {
   export const Method = S.Method
   export type Method = S.Method
 
-  export async function methods() {
-    return runPromise((service) => service.methods())
-  }
-
   export const Authorization = S.Authorization
   export type Authorization = S.Authorization
+
+  export const OauthMissing = S.OauthMissing
+  export const OauthCodeMissing = S.OauthCodeMissing
+  export const OauthCallbackFailed = S.OauthCallbackFailed
+  export const ValidationFailed = S.ValidationFailed
+  export type Error = S.Error
+
+  export type Interface = S.Interface
+
+  export const Service = S.Service
+  export const layer = S.layer
+  export const defaultLayer = S.defaultLayer
+
+  export async function methods() {
+    return runPromiseInstance(S.Service.use((svc) => svc.methods()))
+  }
 
   export const authorize = fn(
     z.object({
       providerID: ProviderID.zod,
       method: z.number(),
+      inputs: z.record(z.string(), z.string()).optional(),
     }),
-    async (input): Promise<Authorization | undefined> => runPromise((service) => service.authorize(input)),
+    async (input): Promise<Authorization | undefined> =>
+      runPromiseInstance(S.Service.use((svc) => svc.authorize(input))),
   )
 
   export const callback = fn(
@@ -39,18 +43,6 @@ export namespace ProviderAuth {
       method: z.number(),
       code: z.string().optional(),
     }),
-    async (input) => runPromise((service) => service.callback(input)),
+    async (input) => runPromiseInstance(S.Service.use((svc) => svc.callback(input))),
   )
-
-  export const api = fn(
-    z.object({
-      providerID: ProviderID.zod,
-      key: z.string(),
-    }),
-    async (input) => runPromise((service) => service.api(input)),
-  )
-
-  export import OauthMissing = S.OauthMissing
-  export import OauthCodeMissing = S.OauthCodeMissing
-  export import OauthCallbackFailed = S.OauthCallbackFailed
 }
