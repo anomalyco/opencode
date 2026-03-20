@@ -83,7 +83,7 @@ function log(id: number, event: string, data?: unknown) {
   console.log(`[markdown:${id}] ${event}`, data)
 }
 
-function count(root: ParentNode, sel: string) {
+function count(root: Element, sel: string) {
   return root.querySelectorAll(sel).length
 }
 
