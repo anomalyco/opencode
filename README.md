@@ -68,6 +68,8 @@ nix run nixpkgs#opencode           # or github:anomalyco/opencode for latest dev
 
 OpenCode is also available as a desktop application. Download directly from the [releases page](https://github.com/anomalyco/opencode/releases) or [opencode.ai/download](https://opencode.ai/download).
 
+OpenCode Desktop also supports `opencode://` deep links for opening a specific project or starting a new session. See the [Desktop guide](https://opencode.ai/docs/desktop).
+
 | Platform              | Download                              |
 | --------------------- | ------------------------------------- |
 | macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
