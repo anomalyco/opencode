@@ -55,7 +55,19 @@
 
 ## BMK-004 Run `smic110-adder` dry-run smoke
 
-- Status: `todo`
+- Status: `done`
+- Owner: `codex-cyzh-1467224-20260320201044`
+- Branch: `plan/bmk-004-codex-cyzh-1467224-20260320201044-20260320201115`
+- Base: `xiaokang/cyzh/eco-agent@827df6d97d06039f8ecce830de50bbbb421fd11a`
+- Started at: `2026-03-20T12:11:15Z`
+- Heartbeat at: `2026-03-20T12:21:13Z`
+- Ready at: `2026-03-20T12:19:44Z`
+- Completed at: `2026-03-20T12:21:13Z`
+- Benchmark: `pass`
+- Artifact root: `/workspaces/Github/opencode/benchmark/26-03-20/20-19-36`
+- Feature commit: `84ba0e6e6e561707fa84a893ff620236577b9f94`
+- Merged commit: `84ba0e6e6e561707fa84a893ff620236577b9f94`
+- Publish: `pushed to xiaokang/cyzh/eco-agent`
 - Goal: make the harness run the smallest repo-local case end to end in dry-run mode.
 - Depends on: `BMK-003`
 - Deliverables: smoke runner, smoke result record, smoke artifact root.
@@ -64,7 +76,12 @@
 
 ## BMK-005 Load fullflow suite from repo-local jobs
 
-- Status: `todo`
+- Status: `in_progress`
+- Owner: `codex-cyzh-1514615-20260320123645`
+- Branch: `plan/bmk-005-codex-cyzh-1514615-20260320123645-20260320123834`
+- Base: `xiaokang/cyzh/eco-agent@7574c7e432619bca8d7add5422dae106c80c3a02`
+- Started at: `2026-03-20T12:38:47Z`
+- Heartbeat at: `2026-03-20T12:38:47Z`
 - Goal: turn repo-local `*.json` jobs into the `fullflow` suite.
 - Depends on: `BMK-004`
 - Deliverables: fullflow suite loader and suite manifest.

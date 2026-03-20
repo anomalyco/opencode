@@ -20,6 +20,9 @@ export namespace BenchmarkCatalog {
   export const Counts = BenchmarkManifest.Counts
   export type Counts = BenchmarkManifest.Counts
 
+  export const File = BenchmarkManifest.SuiteFile
+  export type File = BenchmarkManifest.SuiteFile
+
   export const Smoke = z
     .object({
       suite: z.literal("fullflow"),
@@ -154,6 +157,10 @@ export namespace BenchmarkCatalog {
       suites,
       manifests: BenchmarkManifest.build(cwd, suites),
     })
+  }
+
+  export async function load(suite: Suite, input?: string) {
+    return File.parse((await build(input)).manifests[suite])
   }
 
   export async function check(input?: string) {

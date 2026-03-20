@@ -50,6 +50,7 @@ export namespace BenchmarkSmoke {
   }
 
   function lines(run: {
+    gate: string
     status: string
     root: string
     suite: string
@@ -68,7 +69,7 @@ export namespace BenchmarkSmoke {
     notes: string[]
   }) {
     return [
-      `gate: ${GATE}`,
+      `gate: ${run.gate}`,
       `status: ${run.status}`,
       `artifact_root: ${run.root}`,
       `suite: ${run.suite}`,
@@ -116,21 +117,24 @@ export namespace BenchmarkSmoke {
     now?: Date
     tag?: string
     name?: string
+    gate?: string
+    manifest?: BenchmarkManifest.SuiteFile
   }) {
     const now = input?.now ?? new Date()
+    const gate = input?.gate ?? GATE
     const jobs = path.resolve(input?.jobs ?? process.env.OPENCODE_BENCHMARK_JOBS_ROOT ?? BenchmarkCatalog.ROOT)
     const repo = path.resolve(input?.repo ?? path.join(jobs, "..", "..", ".."))
     const out = (
       await BenchmarkWorkspace.claim({
         root: input?.root,
         now,
-        gate: GATE,
+        gate,
         tag: input?.tag,
       })
     ).root
-    const catalog = await BenchmarkCatalog.build(jobs)
-    const name = input?.name ?? catalog.smoke.job ?? BenchmarkCatalog.SMOKE
-    const item = catalog.suites.fullflow.find((row) => row.job === name || row.name === name || row.stem === name)
+    const man = BenchmarkManifest.SuiteFile.parse(input?.manifest ?? (await BenchmarkCatalog.load("fullflow", jobs)))
+    const name = input?.name ?? man.smoke?.job ?? man.smoke?.name ?? BenchmarkCatalog.SMOKE
+    const item = man.cases.find((row) => row.job === name || row.name === name || row.stem === name)
     const load = item?.job
       ? await Bun.file(path.join(jobs, item.job))
           .json()
@@ -147,12 +151,12 @@ export namespace BenchmarkSmoke {
         : ["dry-run launch recorded"]
     const steps = flow(item?.start ?? "design")
     const end = new Date()
-    const suite = item?.suite ?? "fullflow"
+    const suite = item?.suite ?? man.suite
     const job = item?.job ?? name
     const scope = (await BenchmarkWorkspace.scope(out, suite, item?.name ?? path.basename(name, ".json"))).root
     const stages = steps.map((step, i, list) => stage(step, i, list, miss))
     const run = {
-      gate: GATE,
+      gate,
       root: out,
       suite,
       name: item?.name ?? path.basename(name, ".json"),
@@ -180,7 +184,7 @@ export namespace BenchmarkSmoke {
         JSON.stringify(
           {
             kind: "benchmark",
-            gate: GATE,
+            gate,
             root: out,
             benchmark_root: jobs,
             repo_root: repo,
@@ -200,7 +204,7 @@ export namespace BenchmarkSmoke {
         path.join(out, "summary.json"),
         JSON.stringify(
           {
-            gate: GATE,
+            gate,
             artifact_root: out,
             status: run.status,
             suite: run.suite,
@@ -217,6 +221,7 @@ export namespace BenchmarkSmoke {
       Bun.write(path.join(out, "summary.md"), text),
       Bun.write(path.join(out, "logs", "smoke.log"), text),
       Bun.write(path.join(out, "artifacts", "launch.json"), JSON.stringify(run, null, 2)),
+      Bun.write(path.join(out, "artifacts", "manifests", `${man.suite}.json`), JSON.stringify(man, null, 2)),
       Bun.write(path.join(out, "artifacts", "resolved.json"), JSON.stringify(list, null, 2)),
       Bun.write(path.join(out, "artifacts", "stages.json"), JSON.stringify(stages, null, 2)),
       Bun.write(path.join(scope, "result.json"), JSON.stringify(run, null, 2)),

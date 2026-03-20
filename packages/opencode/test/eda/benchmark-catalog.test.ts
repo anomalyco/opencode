@@ -75,6 +75,7 @@ describe("BenchmarkCatalog", () => {
       suite: "fullflow",
       root: tmp.extra,
     })
+    expect(await BenchmarkCatalog.load("fullflow", tmp.extra)).toEqual(info.manifests.fullflow)
     expect(info.manifests.fullflow.cases.map((row) => row.name)).toEqual(["alpha", "beta"])
     expect(info.counts).toEqual({
       fullflow: 2,
