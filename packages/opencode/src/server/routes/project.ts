@@ -29,7 +29,7 @@ export const ProjectRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        const projects = await Project.list()
+        const projects = Project.list()
         return c.json(projects)
       },
     )

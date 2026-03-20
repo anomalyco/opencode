@@ -544,6 +544,47 @@ Cloudflare AI Gateway lets you access models from OpenAI, Anthropic, Workers AI,
 
 ---
 
+### Cloudflare Workers AI
+
+Cloudflare Workers AI lets you run AI models on Cloudflare's global network directly via REST API, with no separate provider accounts needed for supported models.
+
+1. Head over to the [Cloudflare dashboard](https://dash.cloudflare.com/), navigate to **Workers AI**, and select **Use REST API** to get your Account ID and create an API token.
+
+2. Set your Account ID as an environment variable.
+
+   ```bash title="~/.bash_profile"
+   export CLOUDFLARE_ACCOUNT_ID=your-32-character-account-id
+   ```
+
+3. Run the `/connect` command and search for **Cloudflare Workers AI**.
+
+   ```txt
+   /connect
+   ```
+
+4. Enter your Cloudflare API token.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+   Or set it as an environment variable.
+
+   ```bash title="~/.bash_profile"
+   export CLOUDFLARE_API_KEY=your-api-token
+   ```
+
+5. Run the `/models` command to select a model.
+
+   ```txt
+   /models
+   ```
+
+---
+
 ### Cortecs
 
 1. Head over to the [Cortecs console](https://cortecs.ai/), create an account, and generate an API key.
