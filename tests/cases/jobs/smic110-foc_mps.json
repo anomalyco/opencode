@@ -1,0 +1,12 @@
+{
+  "pdk": "tests/cases/pdks/smic110-pdk",
+  "rtl": {
+    "root": "tests/cases/rtls/foc_mps-rtl",
+    "flist": "mi6.flist",
+    "tb_flist": "mi6.tb.flist",
+    "sim_path": "SIM/sim.sh"
+  },
+  "design": "tests/cases/designs/smic110-foc-r0",
+  "spec": "## The ISSUE\nThe space vector pulse width modulation unit (svpwm.v) generates 3 pulse width modulation signals for controlling three inverters.  It treats the 3 phase inverter voltages as a single rotating vector in 2 dimensional hexagon plane. Specifically, it calculates the required on-time for the inverter switches to approximate a reference vector voltage from within specific sectors of the hexagon. This offers higher output voltage, lower total harmonic distortion and improved efficiency as compared with a regular pulse width modulation unit.\n\nThe design architecture uses a sincos generator, which generates cartesian co-ordinates for 1 quadrant of a cosine wave using a look up table, which feeds a cartesian to polar converter which finally drives the space vector pulse with modulation unit which generates the 3 pwm signals. The output of the polar converter includes: theta (the phase angle) and rho.\n\nThe issue is that for very small cartesian co-ordinates (eg x,y ==0) we expect theta to be 512 and rho to be 0 (or 1). Instead we see theta is 0. Generation of these underflow cases occurs when the theta_i input to the sincos generator triggers illegal combinations of subtractions. This is discussed below.\n\nThis is an underflow bug.\n### Directed Test Bench to reproduce the issue\nThe following test bench to show the underflow issue is provided:\n\n- SIM/tb_svpwm_new.v\n\nWhen running this test bench with the original code using the Xilinx simulator we see:\n```\nUnderflow test\nTest theta=3000: o_cos= -1806 (expected ~-1828), o_sin=-16284 (expected ~-16276)\nForced underflow (x=y=-1): rho=   0 (expected ~1), phi=   0 (expected 1536 for 135°)\nForced small positive (x=y=1): rho=   1 (expected ~1), phi= 160 (expected 512 for 45°). Theta i\\\ns  160 Underflow_mode is 1\nError: Underflow for o_theta expected to be 512\n```",
+  "spec_type": "rtl_new_feature"
+}

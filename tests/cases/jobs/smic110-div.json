@@ -1,0 +1,10 @@
+{
+  "pdk": "tests/cases/pdks/smic110-pdk",
+   "rtl": {
+    "root": "tests/cases/rtls/div-rtl-r0",
+    "flist": "mi6.flist"
+  },
+  "design": "tests/cases/designs/smic110-div-r0",
+  "spec": "I have a Verilog module that performs signed division. I need to modify it to add a post-processing scaling stage before the output register to handle large magnitudes. Please update the code with the following logic: calculate the absolute value of the division result (abs_res). Implement `ECO-friendly` magnitude detection: high_mag is true if any bit in abs_res[15:12] is 1; mid_mag is true if any bit in abs_res[15:8] is 1. Create a scaled_res signal using arithmetic shifts to avoid multipliers: if high_mag is true, scale by 0.75 (x - (x >>> 2)); else if mid_mag is true, scale by 0.875 (x - (x >>> 3)); otherwise pass the result through. Register scaled_res into output y. Keep the interface the same. Use as few signal/reg/wire declarations as possible.",
+  "spec_type": "rtl_bug_fix"
+}

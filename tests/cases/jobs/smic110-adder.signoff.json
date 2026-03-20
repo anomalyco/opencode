@@ -1,0 +1,17 @@
+{
+  "pdk": "tests/cases/pdks/smic110-pdk",
+  "rtl": {
+    "root": "tests/cases/rtls/adder_bug-rtl",
+    "flist": "mi6.flist"
+  },
+  "design": "tests/cases/designs/smic110-adder",
+  "spec": "There is a bug in this adder; please fix it.",
+  "spec_type": "rtl_bug_fix",
+  "start_agent": "signoff",
+  "new_rtl_path": "tests/cases/rtls/adder_bug-rtl-r1",
+  "map_g3_v_output": "tests/cases/designs/smic110-adder/data/adder.map.g3.v",
+  "signoff_design": {
+    "def_path": "tests/cases/designs/smic110-adder/data/signoff-r1.def",
+    "verilog": "tests/cases/designs/smic110-adder/data/signoff-r1.logic.v"
+  }
+}

@@ -1,0 +1,11 @@
+
+{
+  "pdk": "tests/cases/pdks/smic110-pdk",
+  "rtl": {
+    "root": "tests/cases/rtls/foc-rtl-r0",
+    "flist" : "mi6.flist"
+  },
+  "design": "tests/cases/designs/smic110-foc-r0",
+  "spec": "Please fix the bug in RTL/foc/svpwm.v. The bug details are: At large advance angles, all three phases activate at once (short-circuiting the bridge), masking B/EMF signals and breaking sensorless position detection. Sector-safe angle wrapping is needed (0-4095 ≡ 0-360°).",
+  "spec_type": "rtl_new_feature"
+}

@@ -1,0 +1,12 @@
+{
+  "pdk": "tests/cases/pdks/smic110-pdk",
+  "rtl": {
+    "root": "tests/cases/rtls/ffoc-rtl",
+    "flist": "mi6.flist",
+    "tb_flist": "mi6.tb.flist",
+    "sim_path": "SIM/docker_sim.sh"
+  },
+  "design": "tests/cases/designs/smic110-foc-r0",
+  "spec": "## The ISSUE\nThe space vector pulse width modulation unit (svpwm.v) generates 3 pulse width modulation signals for controlling three inverters.  It treats the 3 phase inverter voltages as a single rotating vector in 2 dimensional hexagon plane. Specifically, it calculates the required on-time for the inverter switches to approximate a reference vector voltage from within specific sectors of the hexagon. This offers higher output voltage, lower total harmonic distortion and improved efficiency as compared with a regular pulse width modulation unit.\nThe design architecture uses a sincos generator, which generates cartesian co-ordinates for 1 quadrant of a cosine wave using a look up table, which feeds a cartesian to polar converter which finally drives the space vector pulse with modulation unit which generates the 3 pwm signals. The output of the polar converter includes: theta (the phase angle) and rho (the magnitude).\nThe issue is that for very small cartesian co-ordinates (eg x,y ==0) we expect theta to be 512 and rho to be 0 (or 1). Instead we see theta is 0. Generation of these underflow cases occurs when the theta_i input to the sincos generator triggers illegal combinations of subtractions. This is discussed below. \nThis is an underflow bug. Small x/y cause the underlying algorithm to fail. To fix this the original code was modified to include scaling so that small x/y values are scaled up to the algorithm converges and then the resulting magnitude (rpho) number scaled back.\n## Bug所示如下\nForced underflow (x=-1, y=-1): rho=1 (expected 1), phi=2208 (expected 2560)\nForced underflow (x=1, y=1): rho=1 (expected 1), phi=160 (expected 512)\nForced underflow (x=1, y=2): rho=2 (expected 2), phi=864 (expected 722)\nForced underflow (x=2, y=1): rho=2 (expected 2), phi=160 (expected 302)\n",
+  "spec_type": "rtl_bug_fix"
+}

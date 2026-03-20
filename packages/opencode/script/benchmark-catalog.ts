@@ -55,7 +55,9 @@ const lines = [
 
 await mkdir(path.join(out, "logs"), { recursive: true })
 await mkdir(path.join(out, "artifacts"), { recursive: true })
+await mkdir(path.join(out, "artifacts", "manifests"), { recursive: true })
 await mkdir(path.join(caseRoot, "artifacts"), { recursive: true })
+await mkdir(path.join(caseRoot, "eda"), { recursive: true })
 
 await Bun.write(
   path.join(out, "manifest.json"),
@@ -76,7 +78,30 @@ await Bun.write(path.join(out, "summary.json"), JSON.stringify({ ...result, arti
 await Bun.write(path.join(out, "summary.md"), `${lines.join("\n")}\n`)
 await Bun.write(path.join(out, "logs", "selfcheck.log"), `${lines.join("\n")}\n`)
 await Bun.write(path.join(out, "artifacts", "catalog.json"), JSON.stringify(run.catalog, null, 2))
+await Promise.all(
+  BenchmarkCatalog.Suite.options.map((suite) =>
+    Bun.write(
+      path.join(out, "artifacts", "manifests", `${suite}.json`),
+      JSON.stringify(run.catalog.manifests[suite], null, 2),
+    ),
+  ),
+)
 await Bun.write(path.join(caseRoot, "result.json"), JSON.stringify({ ...result, job_root: run.catalog.root }, null, 2))
+await Bun.write(path.join(caseRoot, "stdout.log"), `${lines.join("\n")}\n`)
+await Bun.write(path.join(caseRoot, "stderr.log"), "")
+await Bun.write(
+  path.join(caseRoot, "job.json"),
+  JSON.stringify(
+    {
+      gate: "catalog self-check",
+      root: run.catalog.root,
+      smoke: run.catalog.smoke,
+    },
+    null,
+    2,
+  ),
+)
+await Bun.write(path.join(caseRoot, "artifacts", "catalog.json"), JSON.stringify(run.catalog, null, 2))
 
 console.log(JSON.stringify({ artifact_root: out, status: run.status, counts: run.counts }, null, 2))
 

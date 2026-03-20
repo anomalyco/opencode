@@ -1,0 +1,10 @@
+{
+  "pdk": "tests/cases/pdks/smic110-pdk",
+   "rtl": {
+    "root": "tests/cases/rtls/gng-rtl",
+    "flist": "mi6.flist"
+  },
+  "design": "tests/cases/designs/smic110-gng",
+  "spec": "ECO Requirement 2 (Invalid-Cycle Output Quiescent): Without changing valid_out timing/latency or any interfaces, when valid_out==0 the data_out behavior shall be made deterministic: either (A) force data_out to 16'sd0, or (B) hold the last value produced when valid_out==1. When valid_out==1, data_out must match the current signoff implementation bit-for-bit (except where clamped by an approved saturation feature). Do not add new top-level ports; implement only as a final-stage mux/enable change near data_out.",
+  "spec_type": "rtl_new_feature"
+}

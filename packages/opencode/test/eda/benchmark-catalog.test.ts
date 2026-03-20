@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdir } from "fs/promises"
 import path from "path"
 import { BenchmarkCatalog } from "../../src/eda/benchmark/catalog"
+import { BenchmarkManifest } from "../../src/eda/benchmark/manifest"
 import { tmpdir } from "../fixture/fixture"
 
 async function write(root: string, name: string, data: unknown) {
@@ -9,7 +10,7 @@ async function write(root: string, name: string, data: unknown) {
 }
 
 describe("BenchmarkCatalog", () => {
-  test("groups upstream jobs into stable suites and derives design cases", async () => {
+  test("groups repo jobs into stable suites and derives design cases", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
         const root = path.join(dir, "jobs")
@@ -69,6 +70,12 @@ describe("BenchmarkCatalog", () => {
       job: "alpha.func.json",
       start: "function_eco",
     })
+    expect(info.manifests.fullflow).toMatchObject({
+      kind: "benchmark_manifest",
+      suite: "fullflow",
+      root: tmp.extra,
+    })
+    expect(info.manifests.fullflow.cases.map((row) => row.name)).toEqual(["alpha", "beta"])
     expect(info.counts).toEqual({
       fullflow: 2,
       design: 2,
@@ -114,8 +121,25 @@ describe("BenchmarkCatalog", () => {
       },
     })
 
+    const catalog = await BenchmarkCatalog.build(tmp.extra)
+    const suites = BenchmarkManifest.Suite.options.map((suite) =>
+      BenchmarkManifest.SuiteFile.parse(catalog.manifests[suite]),
+    )
     const info = await BenchmarkCatalog.check(tmp.extra)
 
+    expect(suites.map((row) => row.suite)).toEqual(BenchmarkManifest.Suite.options)
+    expect(catalog.manifests.fullflow.smoke).toEqual({
+      name: "smic110-adder",
+      job: "smic110-adder.json",
+    })
+    expect(catalog.manifests.design.smoke).toEqual({
+      name: "smic110-adder",
+      from: "smic110-adder.json",
+    })
+    expect(catalog.manifests.function_eco.smoke).toEqual({
+      name: "smic110-adder",
+      job: "smic110-adder.func.json",
+    })
     expect(info.status).toBe("pass")
     expect(info.notes).toEqual([])
   })

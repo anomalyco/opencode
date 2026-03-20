@@ -1,0 +1,13 @@
+{
+  "pdk": "tests/cases/pdks/smic110-pdk",
+  "rtl": {
+    "root": "tests/cases/rtls/spdif-rtl-r0",
+    "flist": "mi6.flist"
+  },
+  "design": "tests/cases/designs/smic110-spdif",
+  "spec": "这段 Verilog 是一个 SPDIF transmitter。现象：部分接收端能锁定，但右声道经常被当作 invalid/mute，左声道正常。怀疑是 V bit (valid bit) 在 B subframe 编码时有错误（可能被反相或取错来源）。",
+  "spec_type": "rtl_bug_fix",
+  "start_agent": "physical_eco",
+  "new_rtl_path": "tests/cases/rtls/spdif-rtl-r0",
+  "map_g3_v_output": "tests/cases/designs/smic110-spdif/data/spdif.map.g3.v"
+}

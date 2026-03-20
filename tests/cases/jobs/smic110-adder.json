@@ -1,0 +1,10 @@
+{
+  "pdk": "tests/cases/pdks/smic110-pdk",
+  "rtl": {
+    "root": "tests/cases/rtls/adder_bug-rtl",
+    "flist": "mi6.flist"
+  },
+  "design": "tests/cases/designs/smic110-adder",
+  "spec": "There is a bug in this adder; please fix it.",
+  "spec_type": "rtl_bug_fix"
+}

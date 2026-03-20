@@ -1,0 +1,10 @@
+{
+  "pdk": "tests/cases/pdks/smic110-pdk",
+  "rtl": {
+    "root": "tests/cases/rtls/asset-rtl",
+    "flist": "mi6.flist"
+  },
+  "design": "tests/cases/designs/smic110-asset",
+  "spec": "feature:add a loopback_enable",
+  "spec_type": "rtl_new_feature"
+}

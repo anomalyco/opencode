@@ -1,0 +1,13 @@
+{
+  "pdk": "tests/cases/pdks/smic110-pdk",
+  "rtl": {
+    "root": "tests/cases/rtls/asset-rtl",
+    "flist": "mi6.flist"
+  },
+  "design": "tests/cases/designs/smic110-asset",
+  "spec": "feature:add a loopback_enable",
+  "spec_type": "rtl_new_feature",
+  "start_agent": "physical_eco",
+  "new_rtl_path": "tests/cases/rtls/asset-rtl",
+  "map_g3_v_output": "tests/cases/designs/smic110-asset/data/apb_uart_sv.map.g3.v"
+}
