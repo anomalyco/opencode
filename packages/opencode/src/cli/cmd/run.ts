@@ -1,13 +1,14 @@
 import type { Argv } from "yargs"
 import path from "path"
 import { pathToFileURL } from "url"
+import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
 import { Flag } from "../../flag/flag"
 import { bootstrap } from "../bootstrap"
 import { EOL } from "os"
 import { Filesystem } from "../../util/filesystem"
-import { createOpencodeClient, type Message, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
+import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
 import { Server } from "../../server/server"
 import { Provider } from "../../provider/provider"
 import { Agent } from "../../agent/agent"
@@ -297,6 +298,11 @@ export const RunCommand = cmd({
         type: "string",
         describe: "model variant (provider-specific reasoning effort, e.g., high, max, minimal)",
       })
+      .option("quiet", {
+        alias: ["q"],
+        type: "boolean",
+        describe: "only output the final text response, suppressing tool call details",
+      })
       .option("thinking", {
         type: "boolean",
         describe: "show thinking blocks",
@@ -398,11 +404,12 @@ export const RunCommand = cmd({
       if (!cfg.data) return
       if (cfg.data.share !== "auto" && !Flag.OPENCODE_AUTO_SHARE && !args.share) return
       const res = await sdk.session.share({ sessionID }).catch((error) => {
-        if (error instanceof Error && error.message.includes("disabled")) {
+        if (!args.quiet && args.format !== "json" && error instanceof Error && error.message.includes("disabled")) {
           UI.println(UI.Style.TEXT_DANGER_BOLD + "!  " + error.message)
         }
         return { error }
       })
+      if (args.quiet || args.format === "json") return
       if (!res.error && "data" in res && res.data?.share?.url) {
         UI.println(UI.Style.TEXT_INFO_BOLD + "~  " + res.data.share.url)
       }
@@ -430,6 +437,12 @@ export const RunCommand = cmd({
         }
       }
 
+      const sessionID = await session(sdk)
+      if (!sessionID) {
+        UI.error("Session not found")
+        process.exit(1)
+      }
+
       function emit(type: string, data: Record<string, unknown>) {
         if (args.format === "json") {
           process.stdout.write(JSON.stringify({ type, timestamp: Date.now(), sessionID, ...data }) + EOL)
@@ -440,122 +453,198 @@ export const RunCommand = cmd({
 
       const events = await sdk.event.subscribe()
       let error: string | undefined
+      const buf: string[] = []
+      let spin: ReturnType<typeof prompts.spinner> | null = null
 
-      async function loop() {
+      function stop() {
+        if (!spin) return
+        if (error) {
+          spin.stop("Failed", 1)
+        } else {
+          spin.stop("Done")
+        }
+        spin = null
+      }
+
+      function flush() {
+        if (!args.quiet || buf.length === 0 || error) return
+        const text = buf.join(EOL + EOL)
+        const piped = !process.stdout.isTTY
+        if (!piped) UI.println()
+        process.stdout.write((piped ? text : UI.markdown(text)) + EOL)
+        if (!piped) UI.println()
+      }
+
+      if (args.quiet && process.stdout.isTTY && args.format !== "json") {
+        await Bun.sleep(10)
+        spin = prompts.spinner()
+        spin.start("Working...")
+      }
+
+      const proc = (async () => {
         const toggles = new Map<string, boolean>()
 
-        for await (const event of events.stream) {
-          if (
-            event.type === "message.updated" &&
-            event.properties.info.role === "assistant" &&
-            args.format !== "json" &&
-            toggles.get("start") !== true
-          ) {
-            UI.empty()
-            UI.println(`> ${event.properties.info.agent} · ${event.properties.info.modelID}`)
-            UI.empty()
-            toggles.set("start", true)
-          }
+        try {
+          for await (const event of events.stream) {
+            if (
+              event.type === "message.updated" &&
+              event.properties.info.role === "assistant" &&
+              args.format !== "json" &&
+              !args.quiet &&
+              toggles.get("start") !== true
+            ) {
+              UI.empty()
+              UI.println(`> ${event.properties.info.agent} · ${event.properties.info.modelID}`)
+              UI.empty()
+              toggles.set("start", true)
+            }
 
-          if (event.type === "message.part.updated") {
-            const part = event.properties.part
-            if (part.sessionID !== sessionID) continue
+            if (event.type === "message.part.updated") {
+              const part = event.properties.part
+              if (part.sessionID !== sessionID) continue
 
-            if (part.type === "tool" && (part.state.status === "completed" || part.state.status === "error")) {
-              if (emit("tool_use", { part })) continue
-              if (part.state.status === "completed") {
-                tool(part)
+              if (part.type === "tool" && (part.state.status === "completed" || part.state.status === "error")) {
+                if (emit("tool_use", { part })) continue
+                if (part.state.status === "completed") {
+                  if (!args.quiet) tool(part)
+                  continue
+                }
+                if (!args.quiet) {
+                  inline({
+                    icon: "✗",
+                    title: `${part.tool} failed`,
+                  })
+                  UI.error(part.state.error)
+                }
                 continue
               }
-              inline({
-                icon: "✗",
-                title: `${part.tool} failed`,
-              })
-              UI.error(part.state.error)
+
+              if (
+                part.type === "tool" &&
+                part.tool === "task" &&
+                part.state.status === "running" &&
+                args.format !== "json" &&
+                !args.quiet
+              ) {
+                if (toggles.get(part.id) === true) continue
+                task(props<typeof TaskTool>(part))
+                toggles.set(part.id, true)
+              }
+
+              if (part.type === "step-start") {
+                if (emit("step_start", { part })) continue
+              }
+
+              if (part.type === "step-finish") {
+                if (emit("step_finish", { part })) continue
+              }
+
+              if (part.type === "text" && part.time?.end) {
+                if (emit("text", { part })) continue
+                const text = part.text.trim()
+                if (!text) continue
+                if (args.quiet) {
+                  buf.push(part.text)
+                  continue
+                }
+                const piped = !process.stdout.isTTY
+                if (!piped) UI.println()
+                process.stdout.write((piped ? part.text : UI.markdown(part.text)) + EOL)
+                if (!piped) UI.println()
+              }
+
+              if (part.type === "reasoning" && part.time?.end && args.thinking) {
+                if (emit("reasoning", { part })) continue
+                if (args.quiet) continue
+                const text = part.text.trim()
+                if (!text) continue
+                const line = `Thinking: ${text}`
+                if (process.stdout.isTTY) {
+                  UI.empty()
+                  UI.println(`${UI.Style.TEXT_DIM}\u001b[3m${line}\u001b[0m${UI.Style.TEXT_NORMAL}`)
+                  UI.empty()
+                  continue
+                }
+                process.stdout.write(line + EOL)
+              }
+            }
+
+            if (event.type === "session.error") {
+              const props = event.properties
+              if (props.sessionID !== sessionID || !props.error) continue
+              let err = String(props.error.name)
+              if ("data" in props.error && props.error.data && "message" in props.error.data) {
+                err = String(props.error.data.message)
+              }
+              error = error ? error + EOL + err : err
+              stop()
+              if (emit("error", { error: props.error })) continue
+              UI.error(err)
+            }
+
+            if (event.type === "session.idle" && event.properties.sessionID === sessionID) {
+              stop()
+              flush()
+              break
             }
 
             if (
-              part.type === "tool" &&
-              part.tool === "task" &&
-              part.state.status === "running" &&
-              args.format !== "json"
+              event.type === "session.status" &&
+              event.properties.sessionID === sessionID &&
+              event.properties.status.type === "idle"
             ) {
-              if (toggles.get(part.id) === true) continue
-              task(props<typeof TaskTool>(part))
-              toggles.set(part.id, true)
+              stop()
+              flush()
+              break
             }
 
-            if (part.type === "step-start") {
-              if (emit("step_start", { part })) continue
-            }
-
-            if (part.type === "step-finish") {
-              if (emit("step_finish", { part })) continue
-            }
-
-            if (part.type === "text" && part.time?.end) {
-              if (emit("text", { part })) continue
-              const text = part.text.trim()
-              if (!text) continue
+            if (event.type === "permission.asked") {
+              const permission = event.properties
+              if (permission.sessionID !== sessionID) continue
+              if (args.quiet) {
+                await sdk.permission.reply({
+                  requestID: permission.id,
+                  reply: "reject",
+                })
+                continue
+              }
               if (!process.stdout.isTTY) {
-                process.stdout.write(text + EOL)
+                UI.println(
+                  UI.Style.TEXT_WARNING_BOLD + "!",
+                  UI.Style.TEXT_NORMAL +
+                    `permission requested: ${permission.permission} (${permission.patterns.join(", ")}); auto-rejecting`,
+                )
+                await sdk.permission.reply({
+                  requestID: permission.id,
+                  reply: "reject",
+                })
                 continue
               }
-              UI.empty()
-              UI.println(text)
-              UI.empty()
+              const result = await prompts
+                .select({
+                  message: `Permission required: ${permission.permission} (${permission.patterns.join(", ")})`,
+                  options: [
+                    { value: "once", label: "Allow once" },
+                    { value: "always", label: "Always allow: " + permission.always.join(", ") },
+                    { value: "reject", label: "Reject" },
+                  ],
+                  initialValue: "once",
+                })
+                .catch(() => "reject")
+              const reply = (result.toString().includes("cancel") ? "reject" : result) as "once" | "always" | "reject"
+              await sdk.permission.reply({
+                requestID: permission.id,
+                reply,
+              })
             }
-
-            if (part.type === "reasoning" && part.time?.end && args.thinking) {
-              if (emit("reasoning", { part })) continue
-              const text = part.text.trim()
-              if (!text) continue
-              const line = `Thinking: ${text}`
-              if (process.stdout.isTTY) {
-                UI.empty()
-                UI.println(`${UI.Style.TEXT_DIM}\u001b[3m${line}\u001b[0m${UI.Style.TEXT_NORMAL}`)
-                UI.empty()
-                continue
-              }
-              process.stdout.write(line + EOL)
-            }
           }
-
-          if (event.type === "session.error") {
-            const props = event.properties
-            if (props.sessionID !== sessionID || !props.error) continue
-            let err = String(props.error.name)
-            if ("data" in props.error && props.error.data && "message" in props.error.data) {
-              err = String(props.error.data.message)
-            }
-            error = error ? error + EOL + err : err
-            if (emit("error", { error: props.error })) continue
-            UI.error(err)
-          }
-
-          if (
-            event.type === "session.status" &&
-            event.properties.sessionID === sessionID &&
-            event.properties.status.type === "idle"
-          ) {
-            break
-          }
-
-          if (event.type === "permission.asked") {
-            const permission = event.properties
-            if (permission.sessionID !== sessionID) continue
-            UI.println(
-              UI.Style.TEXT_WARNING_BOLD + "!",
-              UI.Style.TEXT_NORMAL +
-                `permission requested: ${permission.permission} (${permission.patterns.join(", ")}); auto-rejecting`,
-            )
-            await sdk.permission.reply({
-              requestID: permission.id,
-              reply: "reject",
-            })
-          }
+        } finally {
+          stop()
         }
-      }
+      })().catch((err) => {
+        console.error(err)
+        process.exit(1)
+      })
 
       // Validate agent if specified
       const agent = await (async () => {
@@ -618,18 +707,7 @@ export const RunCommand = cmd({
         }
         return args.agent
       })()
-
-      const sessionID = await session(sdk)
-      if (!sessionID) {
-        UI.error("Session not found")
-        process.exit(1)
-      }
       await share(sdk, sessionID)
-
-      loop().catch((e) => {
-        console.error(e)
-        process.exit(1)
-      })
 
       if (args.command) {
         await sdk.session.command({
@@ -650,6 +728,8 @@ export const RunCommand = cmd({
           parts: [...files, { type: "text", text: message }],
         })
       }
+      await proc
+      if (error) process.exit(1)
     }
 
     if (args.attach) {
