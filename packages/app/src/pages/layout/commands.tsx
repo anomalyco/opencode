@@ -1,7 +1,12 @@
-import type { Accessor } from "solid-js"
+import type { Accessor, JSX } from "solid-js"
+import { showToast } from "@opencode-ai/ui/toast"
+import { DialogSelectProvider } from "@/components/dialog-select-provider"
+import { DialogSelectServer } from "@/components/dialog-select-server"
+import { DialogSettings } from "@/components/dialog-settings"
 import { type CommandOption } from "@/context/command"
 import type { LocalProject } from "@/context/layout"
 import type { Locale } from "@/context/language"
+import type { Session } from "@opencode-ai/sdk/v2/client"
 import type { ColorScheme } from "@opencode-ai/ui/theme"
 
 type ThemeEntry = {
@@ -16,6 +21,9 @@ type Input = {
     dir?: string
     id?: string
   }
+  dialog: {
+    show: (render: () => JSX.Element, onClose?: () => void) => void
+  }
   language: {
     t: (key: string, args?: Record<string, string | number | boolean>) => string
     locales: readonly Locale[]
@@ -24,22 +32,21 @@ type Input = {
   layout: {
     sidebar: {
       toggle: () => void
+      workspaces: (directory: string) => Accessor<boolean>
+      toggleWorkspaces: (directory: string) => void
     }
   }
   currentProject: Accessor<LocalProject | undefined>
+  currentSessions: Accessor<Session[]>
   workspaceSetting: Accessor<boolean>
   availableThemeEntries: Accessor<[string, ThemeEntry][]>
   colorSchemeOrder: readonly ColorScheme[]
   colorSchemeLabel: (scheme: ColorScheme) => string
   chooseProject: () => void | Promise<void>
-  connectProvider: () => void
-  openServer: () => void
-  openSettings: () => void
   navigateSessionByOffset: (offset: number) => void
   navigateSessionByUnseen: (offset: number) => void
-  archiveCurrentSession: () => void
-  createCurrentWorkspace: () => void | Promise<void>
-  toggleWorkspace: () => void
+  archiveSession: (session: Session) => void | Promise<void>
+  createWorkspace: (project: LocalProject) => void | Promise<void>
   cycleTheme: (direction?: number) => void
   cycleColorScheme: (direction?: number) => void
   cycleLanguage: (direction?: number) => void
@@ -50,6 +57,39 @@ type Input = {
     cancelPreview: () => void
     previewColorScheme: (scheme: ColorScheme) => void
   }
+}
+
+export const showProviderDialog = (dialog: Input["dialog"]) => dialog.show(() => <DialogSelectProvider />)
+
+export const showServerDialog = (dialog: Input["dialog"]) => dialog.show(() => <DialogSelectServer />)
+
+export const showSettingsDialog = (dialog: Input["dialog"]) => dialog.show(() => <DialogSettings />)
+
+const archiveCurrentSession = (input: Input) => {
+  const session = input.currentSessions().find((item) => item.id === input.params.id)
+  if (session) input.archiveSession(session)
+}
+
+const createCurrentWorkspace = (input: Input) => {
+  const project = input.currentProject()
+  if (!project) return
+  return input.createWorkspace(project)
+}
+
+const toggleWorkspace = (input: Input) => {
+  const project = input.currentProject()
+  if (!project) return
+  if (project.vcs !== "git") return
+  const wasEnabled = input.layout.sidebar.workspaces(project.worktree)()
+  input.layout.sidebar.toggleWorkspaces(project.worktree)
+  showToast({
+    title: wasEnabled
+      ? input.language.t("toast.workspace.disabled.title")
+      : input.language.t("toast.workspace.enabled.title"),
+    description: wasEnabled
+      ? input.language.t("toast.workspace.disabled.description")
+      : input.language.t("toast.workspace.enabled.description"),
+  })
 }
 
 export function registerLayoutCommands(input: Input) {
@@ -73,20 +113,20 @@ export function registerLayoutCommands(input: Input) {
         id: "provider.connect",
         title: input.language.t("command.provider.connect"),
         category: input.language.t("command.category.provider"),
-        onSelect: () => input.connectProvider(),
+        onSelect: () => showProviderDialog(input.dialog),
       },
       {
         id: "server.switch",
         title: input.language.t("command.server.switch"),
         category: input.language.t("command.category.server"),
-        onSelect: () => input.openServer(),
+        onSelect: () => showServerDialog(input.dialog),
       },
       {
         id: "settings.open",
         title: input.language.t("command.settings.open"),
         category: input.language.t("command.category.settings"),
         keybind: "mod+comma",
-        onSelect: () => input.openSettings(),
+        onSelect: () => showSettingsDialog(input.dialog),
       },
       {
         id: "session.previous",
@@ -122,7 +162,7 @@ export function registerLayoutCommands(input: Input) {
         category: input.language.t("command.category.session"),
         keybind: "mod+shift+backspace",
         disabled: !input.params.dir || !input.params.id,
-        onSelect: () => input.archiveCurrentSession(),
+        onSelect: () => archiveCurrentSession(input),
       },
       {
         id: "workspace.new",
@@ -130,7 +170,7 @@ export function registerLayoutCommands(input: Input) {
         category: input.language.t("command.category.workspace"),
         keybind: "mod+shift+w",
         disabled: !input.workspaceSetting(),
-        onSelect: () => input.createCurrentWorkspace(),
+        onSelect: () => createCurrentWorkspace(input),
       },
       {
         id: "workspace.toggle",
@@ -139,7 +179,7 @@ export function registerLayoutCommands(input: Input) {
         category: input.language.t("command.category.workspace"),
         slash: "workspace",
         disabled: !input.currentProject() || input.currentProject()?.vcs !== "git",
-        onSelect: () => input.toggleWorkspace(),
+        onSelect: () => toggleWorkspace(input),
       },
       {
         id: "theme.cycle",

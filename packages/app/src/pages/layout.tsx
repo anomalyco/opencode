@@ -57,9 +57,6 @@ import { setSessionHandoff } from "@/pages/session/handoff"
 
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
-import { DialogSelectProvider } from "@/components/dialog-select-provider"
-import { DialogSelectServer } from "@/components/dialog-select-server"
-import { DialogSettings } from "@/components/dialog-settings"
 import { useCommand } from "@/context/command"
 import { ConstrainDragXAxis, getDraggableId } from "@/utils/solid-dnd"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
@@ -76,7 +73,7 @@ import {
   sortedRootSessions,
   workspaceKey,
 } from "./layout/helpers"
-import { registerLayoutCommands } from "./layout/commands"
+import { registerLayoutCommands, showProviderDialog, showSettingsDialog } from "./layout/commands"
 import {
   collectNewSessionDeepLinks,
   collectOpenProjectDeepLinks,
@@ -987,68 +984,29 @@ export default function Layout(props: ParentProps) {
     }
   }
 
-  const archiveCurrentSession = () => {
-    const session = currentSessions().find((s) => s.id === params.id)
-    if (session) archiveSession(session)
-  }
-
-  const createCurrentWorkspace = () => {
-    const project = currentProject()
-    if (!project) return
-    return createWorkspace(project)
-  }
-
-  const toggleWorkspace = () => {
-    const project = currentProject()
-    if (!project) return
-    if (project.vcs !== "git") return
-    const wasEnabled = layout.sidebar.workspaces(project.worktree)()
-    layout.sidebar.toggleWorkspaces(project.worktree)
-    showToast({
-      title: wasEnabled ? language.t("toast.workspace.disabled.title") : language.t("toast.workspace.enabled.title"),
-      description: wasEnabled
-        ? language.t("toast.workspace.disabled.description")
-        : language.t("toast.workspace.enabled.description"),
-    })
-  }
-
   registerLayoutCommands({
     command,
     params,
+    dialog,
     language,
     layout,
     currentProject,
+    currentSessions,
     workspaceSetting,
     availableThemeEntries,
     colorSchemeOrder,
     colorSchemeLabel,
     chooseProject,
-    connectProvider,
-    openServer,
-    openSettings,
     navigateSessionByOffset,
     navigateSessionByUnseen,
-    archiveCurrentSession,
-    createCurrentWorkspace,
-    toggleWorkspace,
+    archiveSession,
+    createWorkspace: (project) => createWorkspace(project),
     cycleTheme,
     cycleColorScheme,
     cycleLanguage,
     setLocale,
     theme,
   })
-
-  function connectProvider() {
-    dialog.show(() => <DialogSelectProvider />)
-  }
-
-  function openServer() {
-    dialog.show(() => <DialogSelectServer />)
-  }
-
-  function openSettings() {
-    dialog.show(() => <DialogSettings />)
-  }
 
   function projectRoot(directory: string) {
     const key = workspaceKey(directory)
@@ -2136,7 +2094,7 @@ export default function Layout(props: ParentProps) {
                 </div>
               </div>
               <div data-component="getting-started-actions">
-                <Button size="large" icon="plus-small" onClick={connectProvider}>
+                <Button size="large" icon="plus-small" onClick={() => showProviderDialog(dialog)}>
                   {language.t("command.provider.connect")}
                 </Button>
                 <Button size="large" variant="ghost" onClick={() => setStore("gettingStartedDismissed", true)}>
@@ -2170,7 +2128,7 @@ export default function Layout(props: ParentProps) {
       renderProjectOverlay={projectOverlay}
       settingsLabel={() => language.t("sidebar.settings")}
       settingsKeybind={() => command.keybind("settings.open")}
-      onOpenSettings={openSettings}
+      onOpenSettings={() => showSettingsDialog(dialog)}
       helpLabel={() => language.t("sidebar.help")}
       onOpenHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
       renderPanel={() =>
