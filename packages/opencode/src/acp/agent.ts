@@ -1738,6 +1738,20 @@ export namespace ACP {
       }
     }
 
+    // Fallback: try extracting variant from hyphen-joined modelID (e.g., "claude-opus-4-6-high" -> model: "claude-opus-4-6", variant: "high")
+    const lastHyphen = parsed.modelID.lastIndexOf("-")
+    if (lastHyphen > 0) {
+      const candidateVariant = parsed.modelID.slice(lastHyphen + 1)
+      const baseModelId = parsed.modelID.slice(0, lastHyphen)
+      const baseModelInfo = provider.models[baseModelId]
+      if (baseModelInfo?.variants && candidateVariant in baseModelInfo.variants) {
+        return {
+          model: { providerID: parsed.providerID, modelID: baseModelId },
+          variant: candidateVariant,
+        }
+      }
+    }
+
     return { model: parsed, variant: undefined }
   }
 }

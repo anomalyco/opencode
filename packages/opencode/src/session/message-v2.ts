@@ -295,9 +295,9 @@ export namespace MessageV2 {
     .object({
       status: z.literal("completed"),
       input: z.record(z.string(), z.any()),
-      output: z.string(),
-      title: z.string(),
-      metadata: z.record(z.string(), z.any()),
+      output: z.string().default(""),
+      title: z.string().default(""),
+      metadata: z.record(z.string(), z.any()).default({}),
       time: z.object({
         start: z.number(),
         end: z.number(),
@@ -697,8 +697,10 @@ export namespace MessageV2 {
           if (part.type === "tool") {
             toolNames.add(part.tool)
             if (part.state.status === "completed") {
-              const outputText = part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output
-              const attachments = part.state.time.compacted || options?.stripMedia ? [] : (part.state.attachments ?? [])
+              const outputText = part.state.time.compacted
+                ? "[Tool output removed during compaction. Re-run this tool if you need the full result.]"
+                : part.state.output
+              const attachments = part.state.time.compacted ? [] : (part.state.attachments ?? [])
 
               // For providers that don't support media in tool results, extract media files
               // (images, PDFs) to be sent as a separate user message
