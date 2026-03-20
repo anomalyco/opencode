@@ -1483,6 +1483,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       />
       <DockShellForm
         onSubmit={handleSubmit}
+        data-slot="prompt-shell"
         classList={{
           "group/prompt-input": true,
           "focus-within:shadow-xs-border": true,
@@ -1530,7 +1531,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             editorRef?.focus()
           }}
         >
-          <div class="relative max-h-[240px] overflow-y-auto no-scrollbar" ref={(el) => (scrollRef = el)}>
+          <div class="relative min-h-[104px] max-h-[240px] overflow-y-auto no-scrollbar" ref={(el) => (scrollRef = el)}>
             <div
               data-component="prompt-input"
               ref={(el) => {

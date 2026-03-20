@@ -1,6 +1,15 @@
 @import "@opencode-ai/ui/styles/tailwind";
 
 @layer components {
+  [data-dock-surface="shell"][data-slot="prompt-shell"] {
+    background: light-dark(
+      color-mix(in oklch, var(--surface-success-weak) 28%, var(--surface-raised-stronger-non-alpha)),
+      color-mix(in oklch, var(--surface-success-strong) 18%, var(--surface-raised-stronger-non-alpha))
+    );
+    border-top-left-radius: 18px;
+    border-top-right-radius: 18px;
+  }
+
   [data-component="getting-started"] {
     container-type: inline-size;
     container-name: getting-started;
