@@ -13,6 +13,15 @@ const SUPPORTED_IDES = [
   { name: "VSCodium" as const, cmd: "codium" },
 ]
 
+export type EditorSelection = {
+  file: string
+  startLine: number
+  startColumn: number
+  endLine: number
+  endColumn: number
+  text?: string
+}
+
 export namespace Ide {
   const log = Log.create({ service: "ide" })
 
@@ -21,6 +30,17 @@ export namespace Ide {
       "ide.installed",
       z.object({
         ide: z.string(),
+      }),
+    ),
+    SelectionChanged: BusEvent.define(
+      "ide.selection.changed",
+      z.object({
+        file: z.string(),
+        startLine: z.number(),
+        startColumn: z.number(),
+        endLine: z.number(),
+        endColumn: z.number(),
+        text: z.string().optional(),
       }),
     ),
   }
@@ -70,5 +90,21 @@ export namespace Ide {
     if (stdout.includes("already installed")) {
       throw new AlreadyInstalledError({})
     }
+  }
+
+  export async function publishSelection(selection: EditorSelection) {
+    log.info("selection changed", {
+      file: selection.file,
+      startLine: selection.startLine,
+      endLine: selection.endLine,
+    })
+    await Bus.publish(Event.SelectionChanged, {
+      file: selection.file,
+      startLine: selection.startLine,
+      startColumn: selection.startColumn,
+      endLine: selection.endLine,
+      endColumn: selection.endColumn,
+      text: selection.text,
+    })
   }
 }
