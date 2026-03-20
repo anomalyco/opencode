@@ -278,9 +278,11 @@ export const dict = {
   "prompt.context.removeActiveFile": "從上下文移除目前檔案",
   "prompt.context.removeFile": "從上下文移除檔案",
   "prompt.action.attachFile": "附加檔案",
+  "prompt.action.expand": "展開編輯器",
   "prompt.attachment.remove": "移除附件",
   "prompt.action.send": "傳送",
   "prompt.action.stop": "停止",
+  "prompt.editor.title": "編輯提示詞",
 
   "prompt.toast.pasteUnsupported.title": "不支援的附件",
   "prompt.toast.pasteUnsupported.description": "此處僅能附加圖片、PDF 或文字檔案。",

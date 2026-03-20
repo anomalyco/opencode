@@ -70,6 +70,9 @@ import { createPromptPair } from "./prompt-input/autocomplete-pair"
 import { createModelAutocomplete, createAutocompleteSettings } from "./prompt-input/autocomplete-model"
 import { GhostText } from "./prompt-input/ghost-text"
 import { shouldRender } from "./prompt-input/sync"
+import { useSpring } from "@opencode-ai/ui/motion-spring"
+import { DialogPromptEditor } from "@/components/dialog-prompt-editor"
+import { merge, value } from "./prompt-input/expand"
 
 interface PromptInputProps {
   class?: string
@@ -1121,6 +1124,29 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     addPart,
   })
 
+  const apply = (raw: string, base: Prompt) => {
+    const text = raw.replace(/\r\n?/g, "\n")
+    const next = merge(text, base)
+    const cursor = promptLength(next)
+    closePopover()
+    resetHistoryNavigation(true)
+    prompt.set(next, cursor)
+    queueScroll()
+    schedulePrediction()
+    setTimeout(() => {
+      editorRef?.focus()
+      setCursorPosition(editorRef, cursor)
+      queueScroll()
+    }, 120)
+  }
+
+  const expand = () => {
+    const base = prompt.current()
+    dialog.show(() => (
+      <DialogPromptEditor text={value(base)} placeholder={placeholder()} save={(text) => apply(text, base)} />
+    ))
+  }
+
   const accepting = createMemo(() => {
     const id = params.id
     if (!id) return false
@@ -1348,22 +1374,183 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         commandKeybind={command.keybind}
         t={(key) => language.t(key as Parameters<typeof language.t>[0])}
       />
-      <Switch>
-        <Match when={USE_V2_INPUT}>
-          <DockShellForm
-            data-component={newSession() ? "session-new-composer" : "session-composer"}
-            onSubmit={handleSubmit}
-            classList={{
-              "select-text": true,
-              "w-full p-3 pr-12 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
-              "[&_[data-type=file]]:text-syntax-property": true,
-              "[&_[data-type=agent]]:text-syntax-type": true,
-              "font-mono!": true,
-            }}
-          />
-          <Show when={!prompt.dirty()}>
-            <div class="absolute top-0 inset-x-0 p-3 pr-12 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate">
-              {placeholder()}
+      <DockShellForm
+        onSubmit={handleSubmit}
+        classList={{
+          "group/prompt-input": true,
+          "focus-within:shadow-xs-border": true,
+          "border-icon-info-active border-dashed": store.draggingType !== null,
+          [props.class ?? ""]: !!props.class,
+        }}
+      >
+        <PromptDragOverlay
+          type={store.draggingType}
+          label={language.t(store.draggingType === "@mention" ? "prompt.dropzone.file.label" : "prompt.dropzone.label")}
+        />
+        <PromptContextItems
+          items={contextItems()}
+          active={(item) => {
+            const active = comments.active()
+            return !!item.commentID && item.commentID === active?.id && item.path === active?.file
+          }}
+          openComment={openComment}
+          remove={(item) => {
+            if (item.commentID) comments.remove(item.path, item.commentID)
+            prompt.context.remove(item.key)
+          }}
+          t={(key) => language.t(key as Parameters<typeof language.t>[0])}
+        />
+        <PromptImageAttachments
+          attachments={imageAttachments()}
+          onOpen={(attachment) =>
+            dialog.show(() => <ImagePreview src={attachment.dataUrl} alt={attachment.filename} />)
+          }
+          onRemove={removeImageAttachment}
+          removeLabel={language.t("prompt.attachment.remove")}
+        />
+        <div
+          class="relative"
+          onMouseDown={(e) => {
+            const target = e.target
+            if (!(target instanceof HTMLElement)) return
+            if (
+              target.closest(
+                '[data-action="prompt-attach"], [data-action="prompt-expand"], [data-action="prompt-submit"], [data-action="prompt-permissions"]',
+              )
+            ) {
+              return
+            }
+            editorRef?.focus()
+          }}
+        >
+          <div class="relative max-h-[240px] overflow-y-auto no-scrollbar" ref={(el) => (scrollRef = el)}>
+            <div
+              data-component="prompt-input"
+              ref={(el) => {
+                editorRef = el
+                props.ref?.(el)
+              }}
+              role="textbox"
+              aria-multiline="true"
+              aria-label={placeholder()}
+              contenteditable="true"
+              autocapitalize="off"
+              autocorrect="off"
+              spellcheck={false}
+              onInput={handleInput}
+              onPaste={handlePaste}
+              onCompositionStart={handleCompositionStart}
+              onCompositionEnd={handleCompositionEnd}
+              onBlur={handleBlur}
+              onKeyDown={handleKeyDown}
+              classList={{
+                "select-text": true,
+                "w-full pl-3 pr-2 pt-2 pb-11 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
+                "[&_[data-type=file]]:text-syntax-property": true,
+                "[&_[data-type=agent]]:text-syntax-type": true,
+                "font-mono!": true,
+              }}
+            />
+            <Show when={!prompt.dirty()}>
+              <div
+                class="absolute top-0 inset-x-0 pl-3 pr-2 pt-2 pb-11 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate"
+                classList={{ "font-mono!": store.mode === "shell" }}
+              >
+                {placeholder()}
+              </div>
+            </Show>
+          </div>
+
+          <div class="pointer-events-none absolute bottom-2 right-2 flex items-center gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={ACCEPTED_FILE_TYPES.join(",")}
+              class="hidden"
+              onChange={(e) => {
+                const file = e.currentTarget.files?.[0]
+                if (file) addImageAttachment(file)
+                e.currentTarget.value = ""
+              }}
+            />
+
+            <div
+              aria-hidden={store.mode !== "normal"}
+              class="flex items-center gap-1 transition-all duration-200 ease-out"
+              classList={{
+                "opacity-100 translate-y-0 scale-100 pointer-events-auto": store.mode === "normal",
+                "opacity-0 translate-y-2 scale-95 pointer-events-none": store.mode !== "normal",
+              }}
+            >
+              <TooltipKeybind
+                placement="top"
+                title={language.t("prompt.action.attachFile")}
+                keybind={command.keybind("file.attach")}
+              >
+                <Button
+                  data-action="prompt-attach"
+                  type="button"
+                  variant="ghost"
+                  class="size-8 p-0"
+                  style={buttons()}
+                  onClick={pick}
+                  disabled={store.mode !== "normal"}
+                  tabIndex={store.mode === "normal" ? undefined : -1}
+                  aria-label={language.t("prompt.action.attachFile")}
+                >
+                  <Icon name="plus" class="size-4.5" />
+                </Button>
+              </TooltipKeybind>
+
+              <Show when={platform.platform === "desktop"}>
+                <Tooltip placement="top" value={language.t("prompt.action.expand")}>
+                  <IconButton
+                    data-action="prompt-expand"
+                    type="button"
+                    icon="expand"
+                    variant="ghost"
+                    class="size-8"
+                    style={buttons()}
+                    onClick={expand}
+                    disabled={store.mode !== "normal"}
+                    tabIndex={store.mode === "normal" ? undefined : -1}
+                    aria-label={language.t("prompt.action.expand")}
+                  />
+                </Tooltip>
+              </Show>
+
+              <Tooltip
+                placement="top"
+                inactive={!prompt.dirty() && !working()}
+                value={
+                  <Switch>
+                    <Match when={working()}>
+                      <div class="flex items-center gap-2">
+                        <span>{language.t("prompt.action.stop")}</span>
+                        <span class="text-icon-base text-12-medium text-[10px]!">{language.t("common.key.esc")}</span>
+                      </div>
+                    </Match>
+                    <Match when={true}>
+                      <div class="flex items-center gap-2">
+                        <span>{language.t("prompt.action.send")}</span>
+                        <Icon name="enter" size="small" class="text-icon-base" />
+                      </div>
+                    </Match>
+                  </Switch>
+                }
+              >
+                <IconButton
+                  data-action="prompt-submit"
+                  type="submit"
+                  disabled={store.mode !== "normal" || (!prompt.dirty() && !working() && commentCount() === 0)}
+                  tabIndex={store.mode === "normal" ? undefined : -1}
+                  icon={working() ? "stop" : "arrow-up"}
+                  variant="primary"
+                  class="size-8"
+                  style={buttons()}
+                  aria-label={working() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
+                />
+              </Tooltip>
             </div>
           </Show>
         </div>

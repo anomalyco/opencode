@@ -273,9 +273,11 @@ export const dict = {
   "prompt.context.removeActiveFile": "Fjern aktiv fil fra kontekst",
   "prompt.context.removeFile": "Fjern fil fra kontekst",
   "prompt.action.attachFile": "Vedhæft fil",
+  "prompt.action.expand": "Udvid editor",
   "prompt.attachment.remove": "Fjern vedhæftning",
   "prompt.action.send": "Send",
   "prompt.action.stop": "Stop",
+  "prompt.editor.title": "Rediger prompt",
 
   "prompt.toast.pasteUnsupported.title": "Ikke understøttet vedhæftning",
   "prompt.toast.pasteUnsupported.description": "Kun billeder, PDF'er eller tekstfiler kan vedhæftes her.",
