@@ -182,6 +182,12 @@ export function Session() {
     return new CustomSpeedScroll(3)
   })
 
+  createEffect(() => {
+    if (session()?.workspaceID) {
+      sdk.setWorkspace(session()?.workspaceID)
+    }
+  })
+
   createEffect(async () => {
     await sync.session
       .sync(route.sessionID)
@@ -377,7 +383,12 @@ export function Session() {
             sessionID: route.sessionID,
           })
           .then((res) => copy(res.data!.share!.url))
-          .catch(() => toast.show({ message: "Failed to share session", variant: "error" }))
+          .catch((error) => {
+            toast.show({
+              message: error instanceof Error ? error.message : "Failed to share session",
+              variant: "error",
+            })
+          })
         dialog.clear()
       },
     },
@@ -480,7 +491,12 @@ export function Session() {
             sessionID: route.sessionID,
           })
           .then(() => toast.show({ message: "Session unshared successfully", variant: "success" }))
-          .catch(() => toast.show({ message: "Failed to unshare session", variant: "error" }))
+          .catch((error) => {
+            toast.show({
+              message: error instanceof Error ? error.message : "Failed to unshare session",
+              variant: "error",
+            })
+          })
         dialog.clear()
       },
     },
@@ -891,12 +907,12 @@ export function Session() {
             const filename = options.filename.trim()
             const filepath = path.join(exportDir, filename)
 
-            await Bun.write(filepath, transcript)
+            await Filesystem.write(filepath, transcript)
 
             // Open with EDITOR if available
             const result = await Editor.open({ value: transcript, renderer })
             if (result !== undefined) {
-              await Bun.write(filepath, result)
+              await Filesystem.write(filepath, result)
             }
 
             toast.show({ message: `Session exported to ${filename}`, variant: "success" })

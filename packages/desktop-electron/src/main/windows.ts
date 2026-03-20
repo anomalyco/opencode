@@ -1,15 +1,25 @@
 import windowState from "electron-window-state"
-import { app, BrowserWindow, nativeImage } from "electron"
+import { app, BrowserWindow, nativeImage, nativeTheme } from "electron"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
+import type { TitlebarTheme } from "../preload/types"
 
 type Globals = {
   updaterEnabled: boolean
-  wsl: boolean
   deepLinks?: string[]
 }
 
 const root = dirname(fileURLToPath(import.meta.url))
+
+let backgroundColor: string | undefined
+
+export function setBackgroundColor(color: string) {
+  backgroundColor = color
+}
+
+export function getBackgroundColor(): string | undefined {
+  return backgroundColor
+}
 
 function iconsDir() {
   return app.isPackaged ? join(process.resourcesPath, "icons") : join(root, "../../resources/icons")
@@ -18,6 +28,24 @@ function iconsDir() {
 function iconPath() {
   const ext = process.platform === "win32" ? "ico" : "png"
   return join(iconsDir(), `icon.${ext}`)
+}
+
+function tone() {
+  return nativeTheme.shouldUseDarkColors ? "dark" : "light"
+}
+
+function overlay(theme: Partial<TitlebarTheme> = {}) {
+  const mode = theme.mode ?? tone()
+  return {
+    color: "#00000000",
+    symbolColor: mode === "dark" ? "white" : "black",
+    height: 40,
+  }
+}
+
+export function setTitlebar(win: BrowserWindow, theme: Partial<TitlebarTheme> = {}) {
+  if (process.platform !== "win32") return
+  win.setTitleBarOverlay(overlay(theme))
 }
 
 export function setDockIcon() {
@@ -31,6 +59,7 @@ export function createMainWindow(globals: Globals) {
     defaultHeight: 800,
   })
 
+  const mode = tone()
   const win = new BrowserWindow({
     x: state.x,
     y: state.y,
@@ -39,6 +68,7 @@ export function createMainWindow(globals: Globals) {
     show: true,
     title: "OpenCode",
     icon: iconPath(),
+    backgroundColor,
     ...(process.platform === "darwin"
       ? {
           titleBarStyle: "hidden" as const,
@@ -49,11 +79,7 @@ export function createMainWindow(globals: Globals) {
       ? {
           frame: false,
           titleBarStyle: "hidden" as const,
-          titleBarOverlay: {
-            color: "transparent",
-            symbolColor: "#999",
-            height: 40,
-          },
+          titleBarOverlay: overlay({ mode }),
         }
       : {}),
     webPreferences: {
@@ -71,6 +97,7 @@ export function createMainWindow(globals: Globals) {
 }
 
 export function createLoadingWindow(globals: Globals) {
+  const mode = tone()
   const win = new BrowserWindow({
     width: 640,
     height: 480,
@@ -78,16 +105,13 @@ export function createLoadingWindow(globals: Globals) {
     center: true,
     show: true,
     icon: iconPath(),
+    backgroundColor,
     ...(process.platform === "darwin" ? { titleBarStyle: "hidden" as const } : {}),
     ...(process.platform === "win32"
       ? {
           frame: false,
           titleBarStyle: "hidden" as const,
-          titleBarOverlay: {
-            color: "transparent",
-            symbolColor: "#999",
-            height: 40,
-          },
+          titleBarOverlay: overlay({ mode }),
         }
       : {}),
     webPreferences: {
@@ -118,7 +142,6 @@ function injectGlobals(win: BrowserWindow, globals: Globals) {
     const deepLinks = globals.deepLinks ?? []
     const data = {
       updaterEnabled: globals.updaterEnabled,
-      wsl: globals.wsl,
       deepLinks: Array.isArray(deepLinks) ? deepLinks.splice(0) : deepLinks,
     }
     void win.webContents.executeJavaScript(

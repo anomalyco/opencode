@@ -1,14 +1,16 @@
 import z from "zod"
-import { Identifier } from "@/id/id"
+import { setTimeout as sleep } from "node:timers/promises"
 import { fn } from "@/util/fn"
 import { Database, eq } from "@/storage/db"
 import { Project } from "@/project/project"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { Log } from "@/util/log"
+import { ProjectID } from "@/project/schema"
 import { WorkspaceTable } from "./workspace.sql"
 import { getAdaptor } from "./adaptors"
 import { WorkspaceInfo } from "./types"
+import { WorkspaceID } from "./schema"
 import { parseSSE } from "./sse"
 
 export namespace Workspace {
@@ -45,15 +47,15 @@ export namespace Workspace {
   }
 
   const CreateInput = z.object({
-    id: Identifier.schema("workspace").optional(),
+    id: WorkspaceID.zod.optional(),
     type: Info.shape.type,
     branch: Info.shape.branch,
-    projectID: Info.shape.projectID,
+    projectID: ProjectID.zod,
     extra: Info.shape.extra,
   })
 
   export const create = fn(CreateInput, async (input) => {
-    const id = Identifier.ascending("workspace", input.id)
+    const id = WorkspaceID.ascending(input.id)
     const adaptor = await getAdaptor(input.type)
 
     const config = await adaptor.configure({ ...input, id, name: null, directory: null })
@@ -93,13 +95,13 @@ export namespace Workspace {
     return rows.map(fromRow).sort((a, b) => a.id.localeCompare(b.id))
   }
 
-  export const get = fn(Identifier.schema("workspace"), async (id) => {
+  export const get = fn(WorkspaceID.zod, async (id) => {
     const row = Database.use((db) => db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, id)).get())
     if (!row) return
     return fromRow(row)
   })
 
-  export const remove = fn(Identifier.schema("workspace"), async (id) => {
+  export const remove = fn(WorkspaceID.zod, async (id) => {
     const row = Database.use((db) => db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, id)).get())
     if (row) {
       const info = fromRow(row)
@@ -116,7 +118,7 @@ export namespace Workspace {
       const adaptor = await getAdaptor(space.type)
       const res = await adaptor.fetch(space, "/event", { method: "GET", signal: stop }).catch(() => undefined)
       if (!res || !res.ok || !res.body) {
-        await Bun.sleep(1000)
+        await sleep(1000)
         continue
       }
       await parseSSE(res.body, stop, (event) => {
@@ -126,7 +128,7 @@ export namespace Workspace {
         })
       })
       // Wait 250ms and retry if SSE connection fails
-      await Bun.sleep(250)
+      await sleep(250)
     }
   }
 

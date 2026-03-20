@@ -21,6 +21,7 @@ export const dict = {
   "footer.github": "GitHub",
   "footer.docs": "Docs",
   "footer.changelog": "Changelog",
+  "footer.feishu": "Feishu",
   "footer.discord": "Discord",
   "footer.x": "X",
 
@@ -247,7 +248,7 @@ export const dict = {
 
   "go.title": "OpenCode Go | Low cost coding models for everyone",
   "go.meta.description":
-    "Go is a $10/month subscription with generous 5-hour request limits for GLM-5, Kimi K2.5, and MiniMax M2.5.",
+    "Go starts at $5 for your first month, then $10/month, with generous 5-hour request limits for GLM-5, Kimi K2.5, MiniMax M2.5, and MiniMax M2.7.",
   "go.hero.title": "Low cost coding models for everyone",
   "go.hero.body":
     "Go brings agentic coding to programmers around the world. Offering generous limits and reliable access to the most capable open-source models, so you can build with powerful agents without worrying about cost or availability.",
@@ -256,7 +257,8 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Subscribe to Go",
   "go.cta.price": "$10/month",
-  "go.pricing.body": "Use with any agent. Top up credit if needed. Cancel any time.",
+  "go.cta.promo": "$5 first month",
+  "go.pricing.body": "Use with any agent. $5 first month, then $10/month. Top up credit if needed. Cancel any time.",
   "go.graph.free": "Free",
   "go.graph.freePill": "Big Pickle and free models",
   "go.graph.go": "Go",
@@ -288,20 +290,20 @@ export const dict = {
   "go.testimonials.frank.quote": "I wish I was still at Nvidia.",
   "go.problem.title": "What problem is Go solving?",
   "go.problem.body":
-    "We're focused on bringing the OpenCode experience to as many people as possible. OpenCode Go is a low cost ($10/month) subscription designed to bring agentic coding to programmers around the world. It provides generous limits and reliable access to the most capable open source models.",
+    "We're focused on bringing the OpenCode experience to as many people as possible. OpenCode Go is a low cost subscription: $5 for your first month, then $10/month. It provides generous limits and reliable access to the most capable open source models.",
   "go.problem.subtitle": " ",
   "go.problem.item1": "Low cost subscription pricing",
   "go.problem.item2": "Generous limits and reliable access",
   "go.problem.item3": "Built for as many programmers as possible",
-  "go.problem.item4": "Includes GLM-5, Kimi K2.5, and MiniMax M2.5",
+  "go.problem.item4": "Includes GLM-5, Kimi K2.5, MiniMax M2.5, and MiniMax M2.7",
   "go.how.title": "How Go works",
-  "go.how.body": "Go is a $10/month subscription you can use with OpenCode or any agent.",
+  "go.how.body": "Go starts at $5 for your first month, then $10/month. You can use it with OpenCode or any agent.",
   "go.how.step1.title": "Create an account",
   "go.how.step1.beforeLink": "follow the",
   "go.how.step1.link": "setup instructions",
   "go.how.step2.title": "Subscribe to Go",
-  "go.how.step2.link": "$10/month",
-  "go.how.step2.afterLink": "with generous limits",
+  "go.how.step2.link": "$5 first month",
+  "go.how.step2.afterLink": "then $10/month with generous limits",
   "go.how.step3.title": "Start coding",
   "go.how.step3.body": "with reliable access to open-source models",
   "go.privacy.title": "Your privacy is important to us",
@@ -315,14 +317,15 @@ export const dict = {
   "go.faq.a1":
     "Go is a low-cost subscription that gives you reliable access to capable open-source models for agentic coding.",
   "go.faq.q2": "What models does Go include?",
-  "go.faq.a2": "Go includes GLM-5, Kimi K2.5, and MiniMax M2.5, with generous limits and reliable access.",
+  "go.faq.a2":
+    "Go includes GLM-5, Kimi K2.5, MiniMax M2.5, and MiniMax M2.7, with generous limits and reliable access.",
   "go.faq.q3": "Is Go the same as Zen?",
   "go.faq.a3":
-    "No. Zen is pay-as-you-go, while Go is a $10/month subscription with generous limits and reliable access to open-source models GLM-5, Kimi K2.5, and MiniMax M2.5.",
+    "No. Zen is pay-as-you-go, while Go starts at $5 for your first month, then $10/month, with generous limits and reliable access to open-source models GLM-5, Kimi K2.5, MiniMax M2.5, and MiniMax M2.7.",
   "go.faq.q4": "How much does Go cost?",
   "go.faq.a4.p1.beforePricing": "Go costs",
-  "go.faq.a4.p1.pricingLink": "$10/month",
-  "go.faq.a4.p1.afterPricing": "with generous limits.",
+  "go.faq.a4.p1.pricingLink": "$5 first month",
+  "go.faq.a4.p1.afterPricing": "then $10/month with generous limits.",
   "go.faq.a4.p2.beforeAccount": "You can manage your subscription in your",
   "go.faq.a4.p2.accountLink": "account",
   "go.faq.a4.p3": "Cancel any time.",
@@ -342,7 +345,7 @@ export const dict = {
 
   "go.faq.q9": "What is the difference between free models and Go?",
   "go.faq.a9":
-    "Free models include Big Pickle plus promotional models available at the time, with a quota of 200 requests/day. Go includes GLM-5, Kimi K2.5, and MiniMax M2.5 with higher request quotas enforced across rolling windows (5-hour, weekly, and monthly), roughly equivalent to $12 per 5 hours, $30 per week, and $60 per month (actual request counts vary by model and usage).",
+    "Free models include Big Pickle plus promotional models available at the time, with a quota of 200 requests/day. Go includes GLM-5, Kimi K2.5, MiniMax M2.5, and MiniMax M2.7 with higher request quotas enforced across rolling windows (5-hour, weekly, and monthly), roughly equivalent to $12 per 5 hours, $30 per week, and $60 per month (actual request counts vary by model and usage).",
 
   "zen.api.error.rateLimitExceeded": "Rate limit exceeded. Please try again later.",
   "zen.api.error.modelNotSupported": "Model {{model}} not supported",
@@ -410,12 +413,15 @@ export const dict = {
   "black.subscribe.success.chargeNotice": "Your card will be charged when your subscription is activated",
 
   "workspace.nav.zen": "Zen",
+  "workspace.nav.go": "Go",
+  "workspace.nav.usage": "Usage",
   "workspace.nav.apiKeys": "API Keys",
   "workspace.nav.members": "Members",
   "workspace.nav.billing": "Billing",
   "workspace.nav.settings": "Settings",
 
   "workspace.home.banner.beforeLink": "Reliable optimized models for coding agents.",
+  "workspace.lite.banner.beforeLink": "Low cost coding models for everyone.",
   "workspace.home.billing.loading": "Loading...",
   "workspace.home.billing.enable": "Enable billing",
   "workspace.home.billing.currentBalance": "Current balance",
@@ -480,7 +486,6 @@ export const dict = {
   "workspace.cost.deletedSuffix": "(deleted)",
   "workspace.cost.empty": "No usage data available for the selected period.",
   "workspace.cost.subscriptionShort": "sub",
-  "workspace.cost.liteShort": "lite",
 
   "workspace.keys.title": "API Keys",
   "workspace.keys.subtitle": "Manage your API keys for accessing opencode services.",
@@ -536,6 +541,8 @@ export const dict = {
   "workspace.billing.loading": "Loading...",
   "workspace.billing.addAction": "Add",
   "workspace.billing.addBalance": "Add Balance",
+  "workspace.billing.alipay": "Alipay",
+  "workspace.billing.wechat": "WeChat Pay",
   "workspace.billing.linkedToStripe": "Linked to Stripe",
   "workspace.billing.manage": "Manage",
   "workspace.billing.enable": "Enable Billing",
@@ -618,7 +625,6 @@ export const dict = {
   "workspace.lite.time.minute": "minute",
   "workspace.lite.time.minutes": "minutes",
   "workspace.lite.time.fewSeconds": "a few seconds",
-  "workspace.lite.subscription.title": "Go Subscription",
   "workspace.lite.subscription.message": "You are subscribed to OpenCode Go.",
   "workspace.lite.subscription.manage": "Manage Subscription",
   "workspace.lite.subscription.rollingUsage": "Rolling Usage",
@@ -628,17 +634,20 @@ export const dict = {
   "workspace.lite.subscription.useBalance": "Use your available balance after reaching the usage limits",
   "workspace.lite.subscription.selectProvider":
     'Select "OpenCode Go" as the provider in your opencode configuration to use Go models.',
-  "workspace.lite.other.title": "Go Subscription",
+  "workspace.lite.black.message":
+    "You're currently subscribed to OpenCode Black or on the waitlist. Please unsubscribe first if you'd like to switch to Go.",
   "workspace.lite.other.message":
     "Another member in this workspace is already subscribed to OpenCode Go. Only one member per workspace can subscribe.",
-  "workspace.lite.promo.title": "OpenCode Go",
   "workspace.lite.promo.description":
-    "OpenCode Go is a $10 per month subscription that provides reliable access to popular open coding models with generous usage limits.",
+    "OpenCode Go starts at {{price}}, then $10/month, and provides reliable access to popular open coding models with generous usage limits.",
+  "workspace.lite.promo.price": "$5 for your first month",
   "workspace.lite.promo.modelsTitle": "What's Included",
   "workspace.lite.promo.footer":
     "The plan is designed primarily for international users, with models hosted in the US, EU, and Singapore for stable global access. Pricing and usage limits may change as we learn from early usage and feedback.",
   "workspace.lite.promo.subscribe": "Subscribe to Go",
   "workspace.lite.promo.subscribing": "Redirecting...",
+  "workspace.lite.promo.otherMethods": "Other payment methods",
+  "workspace.lite.promo.selectMethod": "Select payment method",
 
   "download.title": "OpenCode | Download",
   "download.meta.description": "Download OpenCode for macOS, Windows, and Linux",
@@ -683,8 +692,12 @@ export const dict = {
   "enterprise.form.name.placeholder": "Jeff Bezos",
   "enterprise.form.role.label": "Role",
   "enterprise.form.role.placeholder": "Executive Chairman",
+  "enterprise.form.company.label": "Company",
+  "enterprise.form.company.placeholder": "Acme Inc",
   "enterprise.form.email.label": "Company email",
   "enterprise.form.email.placeholder": "jeff@amazon.com",
+  "enterprise.form.phone.label": "Phone number",
+  "enterprise.form.phone.placeholder": "+1 234 567 8900",
   "enterprise.form.message.label": "What problem are you trying to solve?",
   "enterprise.form.message.placeholder": "We need help with...",
   "enterprise.form.send": "Send",

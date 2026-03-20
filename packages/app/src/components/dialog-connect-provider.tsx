@@ -15,7 +15,6 @@ import { Link } from "@/components/link"
 import { useLanguage } from "@/context/language"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
-import { usePlatform } from "@/context/platform"
 import { DialogSelectModel } from "./dialog-select-model"
 import { DialogSelectProvider } from "./dialog-select-provider"
 
@@ -23,7 +22,6 @@ export function DialogConnectProvider(props: { provider: string }) {
   const dialog = useDialog()
   const globalSync = useGlobalSync()
   const globalSDK = useGlobalSDK()
-  const platform = usePlatform()
   const language = useLanguage()
 
   const alive = { value: true }
@@ -49,13 +47,14 @@ export function DialogConnectProvider(props: { provider: string }) {
   const [store, setStore] = createStore({
     methodIndex: undefined as undefined | number,
     authorization: undefined as undefined | ProviderAuthAuthorization,
-    state: "pending" as undefined | "pending" | "complete" | "error",
+    state: "pending" as undefined | "pending" | "complete" | "error" | "prompt",
     error: undefined as string | undefined,
   })
 
   type Action =
     | { type: "method.select"; index: number }
     | { type: "method.reset" }
+    | { type: "auth.prompt" }
     | { type: "auth.pending" }
     | { type: "auth.complete"; authorization: ProviderAuthAuthorization }
     | { type: "auth.error"; error: string }
@@ -74,6 +73,11 @@ export function DialogConnectProvider(props: { provider: string }) {
           draft.methodIndex = undefined
           draft.authorization = undefined
           draft.state = undefined
+          draft.error = undefined
+          return
+        }
+        if (action.type === "auth.prompt") {
+          draft.state = "prompt"
           draft.error = undefined
           return
         }
@@ -120,7 +124,7 @@ export function DialogConnectProvider(props: { provider: string }) {
     return fallback
   }
 
-  async function selectMethod(index: number) {
+  async function selectMethod(index: number, inputs?: Record<string, string>) {
     if (timer.current !== undefined) {
       clearTimeout(timer.current)
       timer.current = undefined
@@ -130,6 +134,10 @@ export function DialogConnectProvider(props: { provider: string }) {
     dispatch({ type: "method.select", index })
 
     if (method.type === "oauth") {
+      if (method.prompts?.length && !inputs) {
+        dispatch({ type: "auth.prompt" })
+        return
+      }
       dispatch({ type: "auth.pending" })
       const start = Date.now()
       await globalSDK.client.provider.oauth
@@ -137,6 +145,7 @@ export function DialogConnectProvider(props: { provider: string }) {
           {
             providerID: props.provider,
             method: index,
+            inputs,
           },
           { throwOnError: true },
         )
@@ -161,6 +170,122 @@ export function DialogConnectProvider(props: { provider: string }) {
           dispatch({ type: "auth.error", error: formatError(e, language.t("common.requestFailed")) })
         })
     }
+  }
+
+  function OAuthPromptsView() {
+    const [formStore, setFormStore] = createStore({
+      value: {} as Record<string, string>,
+      index: 0,
+    })
+
+    const prompts = createMemo(() => method()?.prompts ?? [])
+    const matches = (prompt: NonNullable<ReturnType<typeof prompts>[number]>, value: Record<string, string>) => {
+      if (!prompt.when) return true
+      const actual = value[prompt.when.key]
+      if (actual === undefined) return false
+      return prompt.when.op === "eq" ? actual === prompt.when.value : actual !== prompt.when.value
+    }
+    const current = createMemo(() => {
+      const all = prompts()
+      const index = all.findIndex((prompt, index) => index >= formStore.index && matches(prompt, formStore.value))
+      if (index === -1) return
+      return {
+        index,
+        prompt: all[index],
+      }
+    })
+    const valid = createMemo(() => {
+      const item = current()
+      if (!item || item.prompt.type !== "text") return false
+      const value = formStore.value[item.prompt.key] ?? ""
+      return value.trim().length > 0
+    })
+
+    async function next(index: number, value: Record<string, string>) {
+      if (store.methodIndex === undefined) return
+      const next = prompts().findIndex((prompt, i) => i > index && matches(prompt, value))
+      if (next !== -1) {
+        setFormStore("index", next)
+        return
+      }
+      await selectMethod(store.methodIndex, value)
+    }
+
+    async function handleSubmit(e: SubmitEvent) {
+      e.preventDefault()
+      const item = current()
+      if (!item || item.prompt.type !== "text") return
+      if (!valid()) return
+      await next(item.index, formStore.value)
+    }
+
+    const item = () => current()
+    const text = createMemo(() => {
+      const prompt = item()?.prompt
+      if (!prompt || prompt.type !== "text") return
+      return prompt
+    })
+    const select = createMemo(() => {
+      const prompt = item()?.prompt
+      if (!prompt || prompt.type !== "select") return
+      return prompt
+    })
+
+    return (
+      <form onSubmit={handleSubmit} class="flex flex-col items-start gap-4">
+        <Switch>
+          <Match when={item()?.prompt.type === "text"}>
+            <TextField
+              type="text"
+              label={text()?.message ?? ""}
+              placeholder={text()?.placeholder}
+              value={text() ? (formStore.value[text()!.key] ?? "") : ""}
+              onChange={(value) => {
+                const prompt = text()
+                if (!prompt) return
+                setFormStore("value", prompt.key, value)
+              }}
+            />
+            <Button class="w-auto" type="submit" size="large" variant="primary" disabled={!valid()}>
+              {language.t("common.continue")}
+            </Button>
+          </Match>
+          <Match when={item()?.prompt.type === "select"}>
+            <div class="w-full flex flex-col gap-1.5">
+              <div class="text-14-regular text-text-base">{select()?.message}</div>
+              <div>
+                <List
+                  items={select()?.options ?? []}
+                  key={(x) => x.value}
+                  current={select()?.options.find((x) => x.value === formStore.value[select()!.key])}
+                  onSelect={(value) => {
+                    if (!value) return
+                    const prompt = select()
+                    if (!prompt) return
+                    const nextValue = {
+                      ...formStore.value,
+                      [prompt.key]: value.value,
+                    }
+                    setFormStore("value", prompt.key, value.value)
+                    void next(item()!.index, nextValue)
+                  }}
+                >
+                  {(option) => (
+                    <div class="w-full flex items-center gap-x-2">
+                      <div class="w-4 h-2 rounded-[1px] bg-input-base shadow-xs-border-base flex items-center justify-center">
+                        <div class="w-2.5 h-0.5 ml-0 bg-icon-strong-base hidden" data-slot="list-item-extra-icon" />
+                      </div>
+                      <span>{option.label}</span>
+                      <span class="text-14-regular text-text-weak">{option.hint}</span>
+                    </div>
+                  )}
+                </List>
+              </div>
+            </div>
+          </Match>
+        </Switch>
+      </form>
+    )
   }
 
   let listRef: ListRef | undefined
@@ -301,7 +426,7 @@ export function DialogConnectProvider(props: { provider: string }) {
             error={formStore.error}
           />
           <Button class="w-auto" type="submit" size="large" variant="primary">
-            {language.t("common.submit")}
+            {language.t("common.continue")}
           </Button>
         </form>
       </div>
@@ -312,12 +437,6 @@ export function DialogConnectProvider(props: { provider: string }) {
     const [formStore, setFormStore] = createStore({
       value: "",
       error: undefined as string | undefined,
-    })
-
-    onMount(() => {
-      if (store.authorization?.method === "code" && store.authorization?.url) {
-        platform.openLink(store.authorization.url)
-      }
     })
 
     async function handleSubmit(e: SubmitEvent) {
@@ -368,7 +487,7 @@ export function DialogConnectProvider(props: { provider: string }) {
             error={formStore.error}
           />
           <Button class="w-auto" type="submit" size="large" variant="primary">
-            {language.t("common.submit")}
+            {language.t("common.continue")}
           </Button>
         </form>
       </div>
@@ -386,10 +505,6 @@ export function DialogConnectProvider(props: { provider: string }) {
 
     onMount(() => {
       void (async () => {
-        if (store.authorization?.url) {
-          platform.openLink(store.authorization.url)
-        }
-
         const result = await globalSDK.client.provider.oauth
           .callback({
             providerID: props.provider,
@@ -469,6 +584,9 @@ export function DialogConnectProvider(props: { provider: string }) {
                     <span>{language.t("provider.connect.status.inProgress")}</span>
                   </div>
                 </div>
+              </Match>
+              <Match when={store.state === "prompt"}>
+                <OAuthPromptsView />
               </Match>
               <Match when={store.state === "error"}>
                 <div class="text-14-regular text-text-base">

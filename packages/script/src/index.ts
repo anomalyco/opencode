@@ -1,4 +1,5 @@
-import { $, semver } from "bun"
+import { $ } from "bun"
+import semver from "semver"
 import path from "path"
 import { previewVersion, sanitizeChannel, sanitizePreviewVersion } from "./version"
 

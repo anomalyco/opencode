@@ -5,16 +5,22 @@ import { EditTool } from "../../src/tool/edit"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import { FileTime } from "../../src/file/time"
+import { SessionID, MessageID } from "../../src/session/schema"
 
 const ctx = {
-  sessionID: "test-edit-session",
-  messageID: "",
+  sessionID: SessionID.make("ses_test-edit-session"),
+  messageID: MessageID.make(""),
   callID: "",
   agent: "build",
   abort: AbortSignal.any([]),
   messages: [],
   metadata: () => {},
   ask: async () => {},
+}
+
+async function touch(file: string, time: number) {
+  const date = new Date(time)
+  await fs.utimes(file, date, date)
 }
 
 describe("tool.edit", () => {
@@ -110,7 +116,7 @@ describe("tool.edit", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          FileTime.read(ctx.sessionID, filepath)
+          await FileTime.read(ctx.sessionID, filepath)
 
           const edit = await EditTool.init()
           const result = await edit.execute(
@@ -137,7 +143,7 @@ describe("tool.edit", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          FileTime.read(ctx.sessionID, filepath)
+          await FileTime.read(ctx.sessionID, filepath)
 
           const edit = await EditTool.init()
           await expect(
@@ -185,7 +191,7 @@ describe("tool.edit", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          FileTime.read(ctx.sessionID, filepath)
+          await FileTime.read(ctx.sessionID, filepath)
 
           const edit = await EditTool.init()
           await expect(
@@ -229,18 +235,17 @@ describe("tool.edit", () => {
       await using tmp = await tmpdir()
       const filepath = path.join(tmp.path, "file.txt")
       await fs.writeFile(filepath, "original content", "utf-8")
+      await touch(filepath, 1_000)
 
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
           // Read first
-          FileTime.read(ctx.sessionID, filepath)
-
-          // Wait a bit to ensure different timestamps
-          await new Promise((resolve) => setTimeout(resolve, 100))
+          await FileTime.read(ctx.sessionID, filepath)
 
           // Simulate external modification
           await fs.writeFile(filepath, "modified externally", "utf-8")
+          await touch(filepath, 2_000)
 
           // Try to edit with the new content
           const edit = await EditTool.init()
@@ -266,7 +271,7 @@ describe("tool.edit", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          FileTime.read(ctx.sessionID, filepath)
+          await FileTime.read(ctx.sessionID, filepath)
 
           const edit = await EditTool.init()
           await edit.execute(
@@ -293,7 +298,7 @@ describe("tool.edit", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          FileTime.read(ctx.sessionID, filepath)
+          await FileTime.read(ctx.sessionID, filepath)
 
           const { Bus } = await import("../../src/bus")
           const { File } = await import("../../src/file")
@@ -331,7 +336,7 @@ describe("tool.edit", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          FileTime.read(ctx.sessionID, filepath)
+          await FileTime.read(ctx.sessionID, filepath)
 
           const edit = await EditTool.init()
           await edit.execute(
@@ -357,7 +362,7 @@ describe("tool.edit", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          FileTime.read(ctx.sessionID, filepath)
+          await FileTime.read(ctx.sessionID, filepath)
 
           const edit = await EditTool.init()
           await edit.execute(
@@ -406,7 +411,7 @@ describe("tool.edit", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          FileTime.read(ctx.sessionID, dirpath)
+          await FileTime.read(ctx.sessionID, dirpath)
 
           const edit = await EditTool.init()
           await expect(
@@ -431,7 +436,7 @@ describe("tool.edit", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          FileTime.read(ctx.sessionID, filepath)
+          await FileTime.read(ctx.sessionID, filepath)
 
           const edit = await EditTool.init()
           const result = await edit.execute(
@@ -451,6 +456,189 @@ describe("tool.edit", () => {
     })
   })
 
+  describe("line endings", () => {
+    const old = "alpha\nbeta\ngamma"
+    const next = "alpha\nbeta-updated\ngamma"
+    const alt = "alpha\nbeta\nomega"
+
+    const normalize = (text: string, ending: "\n" | "\r\n") => {
+      const normalized = text.replaceAll("\r\n", "\n")
+      if (ending === "\n") return normalized
+      return normalized.replaceAll("\n", "\r\n")
+    }
+
+    const count = (content: string) => {
+      const crlf = content.match(/\r\n/g)?.length ?? 0
+      const lf = content.match(/\n/g)?.length ?? 0
+      return {
+        crlf,
+        lf: lf - crlf,
+      }
+    }
+
+    const expectLf = (content: string) => {
+      const counts = count(content)
+      expect(counts.crlf).toBe(0)
+      expect(counts.lf).toBeGreaterThan(0)
+    }
+
+    const expectCrlf = (content: string) => {
+      const counts = count(content)
+      expect(counts.lf).toBe(0)
+      expect(counts.crlf).toBeGreaterThan(0)
+    }
+
+    type Input = {
+      content: string
+      oldString: string
+      newString: string
+      replaceAll?: boolean
+    }
+
+    const apply = async (input: Input) => {
+      await using tmp = await tmpdir({
+        init: async (dir) => {
+          await Bun.write(path.join(dir, "test.txt"), input.content)
+        },
+      })
+
+      return await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const edit = await EditTool.init()
+          const filePath = path.join(tmp.path, "test.txt")
+          await FileTime.read(ctx.sessionID, filePath)
+          await edit.execute(
+            {
+              filePath,
+              oldString: input.oldString,
+              newString: input.newString,
+              replaceAll: input.replaceAll,
+            },
+            ctx,
+          )
+          return await Bun.file(filePath).text()
+        },
+      })
+    }
+
+    test("preserves LF with LF multi-line strings", async () => {
+      const content = normalize(old + "\n", "\n")
+      const output = await apply({
+        content,
+        oldString: normalize(old, "\n"),
+        newString: normalize(next, "\n"),
+      })
+      expect(output).toBe(normalize(next + "\n", "\n"))
+      expectLf(output)
+    })
+
+    test("preserves CRLF with CRLF multi-line strings", async () => {
+      const content = normalize(old + "\n", "\r\n")
+      const output = await apply({
+        content,
+        oldString: normalize(old, "\r\n"),
+        newString: normalize(next, "\r\n"),
+      })
+      expect(output).toBe(normalize(next + "\n", "\r\n"))
+      expectCrlf(output)
+    })
+
+    test("preserves LF when old/new use CRLF", async () => {
+      const content = normalize(old + "\n", "\n")
+      const output = await apply({
+        content,
+        oldString: normalize(old, "\r\n"),
+        newString: normalize(next, "\r\n"),
+      })
+      expect(output).toBe(normalize(next + "\n", "\n"))
+      expectLf(output)
+    })
+
+    test("preserves CRLF when old/new use LF", async () => {
+      const content = normalize(old + "\n", "\r\n")
+      const output = await apply({
+        content,
+        oldString: normalize(old, "\n"),
+        newString: normalize(next, "\n"),
+      })
+      expect(output).toBe(normalize(next + "\n", "\r\n"))
+      expectCrlf(output)
+    })
+
+    test("preserves LF when newString uses CRLF", async () => {
+      const content = normalize(old + "\n", "\n")
+      const output = await apply({
+        content,
+        oldString: normalize(old, "\n"),
+        newString: normalize(next, "\r\n"),
+      })
+      expect(output).toBe(normalize(next + "\n", "\n"))
+      expectLf(output)
+    })
+
+    test("preserves CRLF when newString uses LF", async () => {
+      const content = normalize(old + "\n", "\r\n")
+      const output = await apply({
+        content,
+        oldString: normalize(old, "\r\n"),
+        newString: normalize(next, "\n"),
+      })
+      expect(output).toBe(normalize(next + "\n", "\r\n"))
+      expectCrlf(output)
+    })
+
+    test("preserves LF with mixed old/new line endings", async () => {
+      const content = normalize(old + "\n", "\n")
+      const output = await apply({
+        content,
+        oldString: "alpha\nbeta\r\ngamma",
+        newString: "alpha\r\nbeta\nomega",
+      })
+      expect(output).toBe(normalize(alt + "\n", "\n"))
+      expectLf(output)
+    })
+
+    test("preserves CRLF with mixed old/new line endings", async () => {
+      const content = normalize(old + "\n", "\r\n")
+      const output = await apply({
+        content,
+        oldString: "alpha\r\nbeta\ngamma",
+        newString: "alpha\nbeta\r\nomega",
+      })
+      expect(output).toBe(normalize(alt + "\n", "\r\n"))
+      expectCrlf(output)
+    })
+
+    test("replaceAll preserves LF for multi-line blocks", async () => {
+      const blockOld = "alpha\nbeta"
+      const blockNew = "alpha\nbeta-updated"
+      const content = normalize(blockOld + "\n" + blockOld + "\n", "\n")
+      const output = await apply({
+        content,
+        oldString: normalize(blockOld, "\n"),
+        newString: normalize(blockNew, "\n"),
+        replaceAll: true,
+      })
+      expect(output).toBe(normalize(blockNew + "\n" + blockNew + "\n", "\n"))
+      expectLf(output)
+    })
+
+    test("replaceAll preserves CRLF for multi-line blocks", async () => {
+      const blockOld = "alpha\nbeta"
+      const blockNew = "alpha\nbeta-updated"
+      const content = normalize(blockOld + "\n" + blockOld + "\n", "\r\n")
+      const output = await apply({
+        content,
+        oldString: normalize(blockOld, "\r\n"),
+        newString: normalize(blockNew, "\r\n"),
+        replaceAll: true,
+      })
+      expect(output).toBe(normalize(blockNew + "\n" + blockNew + "\n", "\r\n"))
+      expectCrlf(output)
+    })
+  })
+
   describe("concurrent editing", () => {
     test("serializes concurrent edits to same file", async () => {
       await using tmp = await tmpdir()
@@ -460,7 +648,7 @@ describe("tool.edit", () => {
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          FileTime.read(ctx.sessionID, filepath)
+          await FileTime.read(ctx.sessionID, filepath)
 
           const edit = await EditTool.init()
 
@@ -475,7 +663,7 @@ describe("tool.edit", () => {
           )
 
           // Need to read again since FileTime tracks per-session
-          FileTime.read(ctx.sessionID, filepath)
+          await FileTime.read(ctx.sessionID, filepath)
 
           const promise2 = edit.execute(
             {
