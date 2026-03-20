@@ -1176,53 +1176,11 @@ export namespace Provider {
       sdk,
       modelLoaders,
       varsLoaders,
-      discoveryLoaders,
     }
   })
 
   export async function list() {
     return state().then((state) => state.providers)
-  }
-
-  const discoveryCache = new Map<string, Promise<void>>()
-
-  export async function discoverModels(providerID: ProviderID): Promise<void> {
-    log.debug("discoverModels called", { providerID })
-    const cached = discoveryCache.get(providerID)
-    if (cached) {
-      log.debug("discoverModels returning cached", { providerID })
-      return cached
-    }
-
-    const promise = (async () => {
-      const s = await state()
-      const loader = s.discoveryLoaders[providerID]
-      if (!loader) {
-        log.debug("discoverModels no loader", { providerID, loaders: Object.keys(s.discoveryLoaders) })
-        return
-      }
-
-      const provider = s.providers[providerID]
-      if (!provider) {
-        log.debug("discoverModels no provider", { providerID })
-        return
-      }
-
-      const discovered = await loader()
-      log.debug("discoverModels discovered", { providerID, count: Object.keys(discovered).length })
-      for (const [modelID, model] of Object.entries(discovered)) {
-        if (!provider.models[modelID]) {
-          provider.models[modelID] = model
-        }
-      }
-    })()
-
-    promise.catch(() => {
-      discoveryCache.delete(providerID)
-    })
-
-    discoveryCache.set(providerID, promise)
-    return promise
   }
 
   async function getSDK(model: Model) {

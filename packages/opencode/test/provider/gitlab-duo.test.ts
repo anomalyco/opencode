@@ -384,40 +384,7 @@ describe("GitLab Duo: workflow model routing", () => {
   })
 })
 
-describe("GitLab Duo: discoverModels", () => {
-  test("discoverModels no-ops when provider not connected", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        await Bun.write(path.join(dir, "opencode.json"), JSON.stringify({ $schema: "https://opencode.ai/config.json" }))
-      },
-    })
-    await Instance.provide({
-      directory: tmp.path,
-      init: async () => {},
-      fn: async () => {
-        await expect(Provider.discoverModels(ProviderID.make("nonexistent"))).resolves.toBeUndefined()
-      },
-    })
-  })
-
-  test("discoverModels resolves without error on repeated calls", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        await Bun.write(path.join(dir, "opencode.json"), JSON.stringify({ $schema: "https://opencode.ai/config.json" }))
-      },
-    })
-    await Instance.provide({
-      directory: tmp.path,
-      init: async () => {
-        Env.set("GITLAB_TOKEN", "test-token")
-      },
-      fn: async () => {
-        await expect(Provider.discoverModels(ProviderID.gitlab)).resolves.toBeUndefined()
-        await expect(Provider.discoverModels(ProviderID.gitlab)).resolves.toBeUndefined()
-      },
-    })
-  })
-
+describe("GitLab Duo: static models", () => {
   test("static duo-chat models always present regardless of discovery", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
