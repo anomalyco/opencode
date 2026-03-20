@@ -257,19 +257,11 @@ export namespace Config {
     }
 
     // Validate parallel publish_mode config
-    if (result.parallel?.publish_mode === "staged") {
+    if ((result.parallel?.publish_mode as string) === "staged") {
       throw new InvalidError({
         path: "parallel.publish_mode",
-        issues: [
-          {
-            message:
-              "The 'staged' publish mode is no longer supported. Please use 'unstaged' instead. The 'unstaged' mode leaves changes unstaged in the working directory, which is the recommended approach for parallel execution.",
-            path: ["parallel", "publish_mode"],
-            code: "invalid_enum_value",
-            received: "staged",
-            options: ["new-branch", "unstaged", "direct"],
-          },
-        ],
+        message:
+          "The 'staged' publish mode is no longer supported. Please use 'unstaged' instead. The 'unstaged' mode leaves changes unstaged in the working directory, which is the recommended approach for parallel execution.",
       })
     }
 
@@ -1264,7 +1256,6 @@ export namespace Config {
             .enum(["new-branch", "unstaged", "direct"])
             .optional()
             .describe(
-              "How to publish changes from parallel execution: 'new-branch' creates a new branch, 'unstaged' leaves changes unstaged, 'direct' commits directly to current branch",
               "Publish mode for parallel execution results: 'new-branch' creates a new branch with changes, 'unstaged' leaves changes unstaged in working directory, 'direct' commits directly to current branch (default: new-branch)",
             ),
         })

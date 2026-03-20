@@ -330,8 +330,7 @@ export namespace Orchestrator {
     // Integration phase - always runs after merging
     await PlanStore.transition({ id: planID, status: "integrating" })
     const integrationResult = await stage("integrating", async () => {
-      const plan = await PlanStore.get(planID)
-      return Integration.integrate(plan)
+      return Integration.integrate(planID)
     })
 
     // Publish phase - mode-dependent
@@ -340,8 +339,7 @@ export namespace Orchestrator {
 
     await PlanStore.transition({ id: planID, status: "publishing" })
     const publishResult = await stage("publishing", async () => {
-      const plan = await PlanStore.get(planID)
-      return Integration.publish(plan, publishMode, integrationResult.branch)
+      return Integration.publish(planID, publishMode)
     })
 
     // Determine final status based on all outcomes
@@ -518,13 +516,13 @@ export namespace Orchestrator {
             if (mergeSuccess) {
               // Integration phase
               await PlanStore.transition({ id: planID, status: "integrating" })
-              const integrationResult = await Integration.integrate(updated)
+              const integrationResult = await Integration.integrate(planID)
 
               // Publish phase
               const cfg = await Config.get()
               const publishMode = cfg.parallel?.publish_mode ?? "new-branch"
               await PlanStore.transition({ id: planID, status: "publishing" })
-              const publishResult = await Integration.publish(updated, publishMode, integrationResult.branch)
+              const publishResult = await Integration.publish(planID, publishMode)
 
               const finalStatus = publishResult.success ? "done" : "failed"
               await PlanStore.transition({ id: planID, status: finalStatus })

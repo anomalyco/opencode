@@ -1,8 +1,8 @@
 import path from "path"
 import { NamedError } from "@opencode-ai/util/error"
 import z from "zod"
-import { git } from "../util/git"
-import { Instance } from "../project/instance"
+import { git } from "@/util/git"
+import { Instance } from "@/project/instance"
 import { PlanStore } from "./plan"
 import { Log } from "@/util/log"
 import { Bus } from "@/bus"
@@ -43,6 +43,8 @@ export namespace Integration {
     branch: string
     merged: string[]
     failed: string[]
+    error?: string
+    success: boolean
   }
 
   export interface PublishResult {
@@ -50,6 +52,8 @@ export namespace Integration {
     branch?: string
     applied?: boolean
     merged?: boolean
+    error?: string
+    success: boolean
   }
 
   function outputText(input: Uint8Array | undefined): string {
@@ -176,7 +180,7 @@ export namespace Integration {
       failed: failed.length,
     })
 
-    return { branch: integrationBranch, merged, failed }
+    return { branch: integrationBranch, merged, failed, success: true }
   }
 
   export async function publish(planID: PlanID, mode: PublishMode): Promise<PublishResult> {
@@ -196,7 +200,7 @@ export namespace Integration {
 
     if (mode === "new-branch") {
       log.info("publish complete - leaving on integration branch", { planID, branch: integrationBranch })
-      return { mode, branch: integrationBranch }
+      return { mode, branch: integrationBranch, success: true }
     }
 
     if (await isWorktreeDirty(cwd)) {
@@ -239,7 +243,7 @@ export namespace Integration {
       }
 
       log.info("publish complete - applied to working tree", { planID })
-      return { mode, applied: true }
+      return { mode, applied: true, success: true }
     }
 
     if (mode === "direct") {
@@ -258,7 +262,7 @@ export namespace Integration {
       await git(["branch", "-D", integrationBranch], { cwd })
 
       log.info("publish complete - merged to current branch", { planID, branch: currentBranch })
-      return { mode, branch: currentBranch, merged: true }
+      return { mode, branch: currentBranch, merged: true, success: true }
     }
 
     throw new IntegrationError({
