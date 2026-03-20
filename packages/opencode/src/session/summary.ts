@@ -9,6 +9,7 @@ import { Snapshot } from "@/snapshot"
 
 import { Storage } from "@/storage/storage"
 import { Bus } from "@/bus"
+import { NotFoundError } from "@/storage/db"
 
 export namespace SessionSummary {
   function unquoteGitPath(input: string) {
@@ -73,11 +74,17 @@ export namespace SessionSummary {
       messageID: MessageID.zod,
     }),
     async (input) => {
-      const all = await Session.messages({ sessionID: input.sessionID })
-      await Promise.all([
-        summarizeSession({ sessionID: input.sessionID, messages: all }),
-        summarizeMessage({ messageID: input.messageID, messages: all }),
-      ])
+      await Session.messages({ sessionID: input.sessionID })
+        .then((all) =>
+          Promise.all([
+            summarizeSession({ sessionID: input.sessionID, messages: all }),
+            summarizeMessage({ messageID: input.messageID, messages: all }),
+          ]),
+        )
+        .catch((err) => {
+          if (NotFoundError.isInstance(err)) return
+          throw err
+        })
     },
   )
 
@@ -102,7 +109,8 @@ export namespace SessionSummary {
     const messages = input.messages.filter(
       (m) => m.info.id === input.messageID || (m.info.role === "assistant" && m.info.parentID === input.messageID),
     )
-    const msgWithParts = messages.find((m) => m.info.id === input.messageID)!
+    const msgWithParts = messages.find((m) => m.info.id === input.messageID)
+    if (!msgWithParts) return
     const userMsg = msgWithParts.info as MessageV2.User
     const diffs = await computeDiff({ messages })
     userMsg.summary = {

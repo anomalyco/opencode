@@ -54,6 +54,56 @@ description: Skill for tool tests.
     }
   })
 
+  test("description sorts skills by name and is stable across calls", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      init: async (dir) => {
+        for (const [name, description] of [
+          ["zeta-skill", "Zeta skill."],
+          ["alpha-skill", "Alpha skill."],
+          ["middle-skill", "Middle skill."],
+        ]) {
+          const skillDir = path.join(dir, ".opencode", "skill", name)
+          await Bun.write(
+            path.join(skillDir, "SKILL.md"),
+            `---
+name: ${name}
+description: ${description}
+---
+
+# ${name}
+`,
+          )
+        }
+      },
+    })
+
+    const home = process.env.OPENCODE_TEST_HOME
+    process.env.OPENCODE_TEST_HOME = tmp.path
+
+    try {
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const first = await SkillTool.init()
+          const second = await SkillTool.init()
+
+          expect(first.description).toBe(second.description)
+
+          const alpha = first.description.indexOf("**alpha-skill**: Alpha skill.")
+          const middle = first.description.indexOf("**middle-skill**: Middle skill.")
+          const zeta = first.description.indexOf("**zeta-skill**: Zeta skill.")
+
+          expect(alpha).toBeGreaterThan(-1)
+          expect(middle).toBeGreaterThan(alpha)
+          expect(zeta).toBeGreaterThan(middle)
+        },
+      })
+    } finally {
+      process.env.OPENCODE_TEST_HOME = home
+    }
+  })
+
   test("execute returns skill content block with files", async () => {
     await using tmp = await tmpdir({
       git: true,
