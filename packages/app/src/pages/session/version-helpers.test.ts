@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { hasSessionChanges, sameVersionItems } from "./version-helpers"
+import { hasSessionChanges, sameVersionItems, versionBranchState } from "./version-helpers"
 
 const session = (overrides?: Partial<{ id: string; title: string; updated: number; number: number; latestID: string }>) => ({
   id: overrides?.id ?? "ses_1",
@@ -40,5 +40,20 @@ describe("hasSessionChanges", () => {
       true,
     )
     expect(hasSessionChanges([session()], [session({ title: "Renamed" })])).toBe(true)
+  })
+})
+
+describe("versionBranchState", () => {
+  test("returns active when the viewed session matches the worktree branch", () => {
+    expect(versionBranchState({ git: { branch: "numeral/ses_1" } }, "numeral/ses_1")).toBe("active")
+  })
+
+  test("returns inactive when the worktree is on another version branch", () => {
+    expect(versionBranchState({ git: { branch: "numeral/ses_1" } }, "numeral/ses_2")).toBe("inactive")
+  })
+
+  test("returns unknown when branch metadata is missing", () => {
+    expect(versionBranchState(undefined, "numeral/ses_1")).toBe("unknown")
+    expect(versionBranchState({ git: { branch: "numeral/ses_1" } }, undefined)).toBe("unknown")
   })
 })

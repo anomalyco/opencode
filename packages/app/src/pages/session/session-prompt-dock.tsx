@@ -18,6 +18,10 @@ export function SessionPromptDock(props: {
   responding: boolean
   onDecide: (response: "once" | "always" | "reject") => void
   readOnly: boolean
+  versionState: "active" | "inactive" | "unknown"
+  openedVersionLabel?: string
+  switchingVersion: boolean
+  onOpenVersion: () => void
   onContinueVersion: () => void
   inputRef: (el: HTMLDivElement) => void
   newSessionWorktree: string
@@ -118,29 +122,43 @@ export function SessionPromptDock(props: {
 
         <Show when={!props.blocked}>
           <Show
-            when={props.readOnly}
+            when={props.versionState === "inactive"}
             fallback={
               <Show
-                when={props.promptReady}
+                when={props.readOnly}
                 fallback={
-                  <div class="w-full min-h-32 md:min-h-40 rounded-md border border-border-weak-base bg-background-base/50 px-4 py-3 text-text-weak whitespace-pre-wrap pointer-events-none">
-                    {props.handoffPrompt || props.t("prompt.loading")}
-                  </div>
+                  <Show
+                    when={props.promptReady}
+                    fallback={
+                      <div class="w-full min-h-32 md:min-h-40 rounded-md border border-border-weak-base bg-background-base/50 px-4 py-3 text-text-weak whitespace-pre-wrap pointer-events-none">
+                        {props.handoffPrompt || props.t("prompt.loading")}
+                      </div>
+                    }
+                  >
+                    <PromptInput
+                      ref={props.inputRef}
+                      newSessionWorktree={props.newSessionWorktree}
+                      onNewSessionWorktreeReset={props.onNewSessionWorktreeReset}
+                      onSubmit={props.onSubmit}
+                    />
+                  </Show>
                 }
               >
-                <PromptInput
-                  ref={props.inputRef}
-                  newSessionWorktree={props.newSessionWorktree}
-                  onNewSessionWorktreeReset={props.onNewSessionWorktreeReset}
-                  onSubmit={props.onSubmit}
-                />
+                <div class="w-full rounded-md border border-border-weak-base bg-background-base px-4 py-3 pointer-events-auto flex items-center justify-between gap-3">
+                  <div class="text-14-regular text-text-weak">{props.t("session.version.readOnly")}</div>
+                  <Button variant="secondary" size="small" onClick={props.onContinueVersion}>
+                    {props.t("session.version.continue")}
+                  </Button>
+                </div>
               </Show>
             }
           >
             <div class="w-full rounded-md border border-border-weak-base bg-background-base px-4 py-3 pointer-events-auto flex items-center justify-between gap-3">
-              <div class="text-14-regular text-text-weak">{props.t("session.version.readOnly")}</div>
-              <Button variant="secondary" size="small" onClick={props.onContinueVersion}>
-                {props.t("session.version.continue")}
+              <div class="text-14-regular text-text-weak">
+                {props.t("session.version.viewing", { target: props.openedVersionLabel ?? props.t("session.version.unknownTarget") })}
+              </div>
+              <Button variant="secondary" size="small" onClick={props.onOpenVersion} disabled={props.switchingVersion}>
+                {props.t("session.version.open")}
               </Button>
             </div>
           </Show>

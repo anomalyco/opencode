@@ -44,7 +44,11 @@ export function MessageTimeline(props: {
   currentVersionLabel?: string
   versionOptions: { id: string; label: string }[]
   currentVersionID?: string
+  versionState: "active" | "inactive" | "unknown"
+  openedVersionLabel?: string
+  switchingVersion: boolean
   onSelectVersion: (sessionID: string) => void
+  onOpenVersion: () => void
   onNavigateParent: () => void
   sessionID: string
   onArchiveSession: (sessionID: string) => void
@@ -232,20 +236,42 @@ export function MessageTimeline(props: {
                 </div>
                 <Show when={props.currentVersionLabel}>
                   {(label) => (
-                    <div class="shrink-0 flex items-center gap-2">
-                      <Show
-                        when={props.versionOptions.length > 1}
-                        fallback={<span class="text-12-medium text-text-weak">{label()}</span>}
-                      >
-                        <Select
-                          options={props.versionOptions}
-                          current={props.versionOptions.find((item) => item.id === props.currentVersionID)}
-                          value={(item) => item.id}
-                          label={(item) => item.label}
-                          onSelect={(item) => item && props.onSelectVersion(item.id)}
-                          variant="ghost"
-                          size="small"
-                        />
+                    <div class="shrink-0 flex flex-col items-end gap-1">
+                      <div class="flex items-center gap-2">
+                        <Show
+                          when={props.versionOptions.length > 1}
+                          fallback={<span class="text-12-medium text-text-weak">{label()}</span>}
+                        >
+                          <Select
+                            options={props.versionOptions}
+                            current={props.versionOptions.find((item) => item.id === props.currentVersionID)}
+                            value={(item) => item.id}
+                            label={(item) => item.label}
+                            onSelect={(item) => item && props.onSelectVersion(item.id)}
+                            variant="ghost"
+                            size="small"
+                          />
+                        </Show>
+                        <Show when={props.versionState === "inactive"}>
+                          <Button
+                            variant="ghost"
+                            size="small"
+                            disabled={props.switchingVersion}
+                            onClick={props.onOpenVersion}
+                          >
+                            {props.t("session.version.open")}
+                          </Button>
+                        </Show>
+                      </div>
+                      <Show when={props.versionState === "active"}>
+                        <span class="text-11-medium text-text-weak">{props.t("session.version.opened")}</span>
+                      </Show>
+                      <Show when={props.versionState === "inactive"}>
+                        <span class="text-11-medium text-text-weak">
+                          {props.t("session.version.viewing", {
+                            target: props.openedVersionLabel ?? props.t("session.version.unknownTarget"),
+                          })}
+                        </span>
                       </Show>
                     </div>
                   )}

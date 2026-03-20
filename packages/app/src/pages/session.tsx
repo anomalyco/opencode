@@ -64,7 +64,7 @@ import { SessionPromptDock } from "@/pages/session/session-prompt-dock"
 import { SessionMobileTabs } from "@/pages/session/session-mobile-tabs"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
-import { hasSessionChanges, sameVersionItems } from "@/pages/session/version-helpers"
+import { hasSessionChanges, sameVersionItems, versionBranchState } from "@/pages/session/version-helpers"
 
 type HandoffSession = {
   prompt: string
@@ -315,10 +315,10 @@ export default function Page() {
   const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
   const [versions, setVersions] = createStore({
     loading: false,
+    selecting: false,
     items: [] as SDKSession[],
   })
   let versionToken = 0
-  let loadedVersionID: string | undefined
 
   const versionLabel = (item: { lineage?: { number?: number } } | undefined) => `v${item?.lineage?.number ?? 1}`
 
@@ -354,6 +354,18 @@ export default function Page() {
   const latestVersion = createMemo(() => {
     const items = family()
     return items[items.length - 1] ?? currentVersion()
+  })
+  const activeBranch = createMemo(() => sync.data.vcs?.branch)
+  const currentVersionState = createMemo(() => versionBranchState(currentVersion(), activeBranch()))
+  const openedVersion = createMemo(() => {
+    const branch = activeBranch()
+    if (!branch) return currentVersionState() === "active" ? currentVersion() : undefined
+    return family().find((item) => item.git?.branch === branch)
+  })
+  const openedVersionLabel = createMemo(() => {
+    const item = openedVersion()
+    if (item) return versionLabel(item)
+    return activeBranch()
   })
   const readOnlyVersion = createMemo(() => {
     const current = currentVersion()
@@ -429,33 +441,64 @@ export default function Page() {
     const token = ++versionToken
     setVersions("loading", true)
     try {
-      const [selected, family] = await Promise.all([
-        sdk.client.session.select({ sessionID }),
-        sdk.client.session.family({ sessionID }),
-      ])
+      const selected = sync.session.get(sessionID) ?? info()
+      const family = await sdk.client.session.family({ sessionID })
       if (token !== versionToken) return
-      const items = familyItems(family.data, selected.data).toSorted((a: SDKSession, b: SDKSession) => {
+      const items = familyItems(family.data, selected).toSorted((a: SDKSession, b: SDKSession) => {
         const left = a.lineage?.number ?? a.time.created
         const right = b.lineage?.number ?? b.time.created
         if (left !== right) return left - right
         return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
       })
-      const all = [...items, ...(selected.data ? [selected.data] : [])]
+      const all = [...items, ...(selected ? [selected] : [])]
       const next = items.length > 0 ? items : all
-      const merged = mergeSessions(all)
+      mergeSessions(all)
       const changed = !sameVersionItems(versions.items, next)
-      const switched = loadedVersionID !== sessionID
       if (changed) setVersions("items", next)
-      loadedVersionID = sessionID
-      if (merged || changed || switched) await refreshVersionView()
     } catch (err) {
       if (token !== versionToken) return
       showToast({
-        title: language.t("session.version.selectFailed.title"),
+        title: language.t("common.requestFailed"),
         description: errorMessage(err),
       })
     } finally {
       if (token === versionToken) setVersions("loading", false)
+    }
+  }
+
+  const selectVersion = async (sessionID: string) => {
+    if (versions.selecting) return
+    setVersions("selecting", true)
+    try {
+      const selected = await sdk.client.session
+        .select({ sessionID })
+        .then((x: { data?: SDKSession }) => x.data)
+        .catch((err: unknown) => {
+          showToast({
+            title: language.t("session.version.selectFailed.title"),
+            description: errorMessage(err),
+          })
+          return undefined
+        })
+      if (!selected) return
+
+      mergeSessions([selected])
+      const nextBranch = await sdk.client.vcs
+        .get()
+        .then((x) => x.data)
+        .catch(() => undefined)
+      if (nextBranch) sync.set("vcs", nextBranch)
+
+      await refreshVersionView()
+      if (params.id === sessionID) {
+        await sync.session.sync(sessionID).catch(() => undefined)
+        return
+      }
+
+      layout.handoff.setTabs(params.dir ?? "", sessionID)
+      navigate(`/${params.dir}/session/${sessionID}`)
+    } finally {
+      setVersions("selecting", false)
     }
   }
 
@@ -474,6 +517,12 @@ export default function Page() {
       })
     if (!next) return
     mergeSessions([next])
+    const nextBranch = await sdk.client.vcs
+      .get()
+      .then((x) => x.data)
+      .catch(() => undefined)
+    if (nextBranch) sync.set("vcs", nextBranch)
+    await refreshVersionView()
     layout.handoff.setTabs(params.dir ?? "", next.id)
     navigate(`/${params.dir}/session/${next.id}`)
   }
@@ -821,13 +870,14 @@ export default function Page() {
       ([, id]) => {
         if (!id) {
           versionToken += 1
-          loadedVersionID = undefined
-          setVersions({ loading: false, items: [] })
+          setVersions({ loading: false, selecting: false, items: [] })
           return
         }
         untrack(() => {
-          void sync.session.sync(id)
-          void loadVersions(id)
+          void sync.session
+            .sync(id)
+            .then(() => loadVersions(id))
+            .catch(() => loadVersions(id))
         })
       },
     ),
@@ -1765,9 +1815,14 @@ export default function Page() {
                     currentVersionLabel={versionLabel(currentVersion())}
                     versionOptions={versionOptions()}
                     currentVersionID={params.id}
-                    onSelectVersion={(sessionID) => {
-                      if (sessionID === params.id) return
-                      navigate(`/${params.dir}/session/${sessionID}`)
+                    versionState={currentVersionState()}
+                    openedVersionLabel={openedVersionLabel()}
+                    switchingVersion={versions.selecting}
+                    onSelectVersion={(sessionID) => void selectVersion(sessionID)}
+                    onOpenVersion={() => {
+                      const sessionID = params.id
+                      if (!sessionID) return
+                      void selectVersion(sessionID)
                     }}
                     onNavigateParent={() => {
                       navigate(`/${params.dir}/session/${info()?.parentID}`)
@@ -1841,6 +1896,14 @@ export default function Page() {
             responding={ui.responding}
             onDecide={decide}
             readOnly={readOnlyVersion()}
+            versionState={currentVersionState()}
+            openedVersionLabel={openedVersionLabel()}
+            switchingVersion={versions.selecting}
+            onOpenVersion={() => {
+              const sessionID = params.id
+              if (!sessionID) return
+              void selectVersion(sessionID)
+            }}
             onContinueVersion={() => void createVersion()}
             inputRef={(el) => {
               inputRef = el

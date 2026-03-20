@@ -26,3 +26,12 @@ export function hasSessionChanges(current: readonly SessionVersion[], next: read
   const seen = new Map(current.map((item) => [item.id, item]))
   return next.some((item) => !sameVersion(seen.get(item.id), item))
 }
+
+export function versionBranchState(
+  session: Pick<SDKSession, "git"> | undefined,
+  branch: string | undefined,
+): "active" | "inactive" | "unknown" {
+  if (!session?.git?.branch || !branch) return "unknown"
+  if (session.git.branch === branch) return "active"
+  return "inactive"
+}
