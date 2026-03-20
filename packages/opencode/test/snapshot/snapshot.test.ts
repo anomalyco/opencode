@@ -1178,3 +1178,37 @@ test("diffFull with whitespace changes", async () => {
     },
   })
 })
+
+test("revert with overlapping files across patches uses first patch hash", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      // Write initial content and snapshot
+      await Filesystem.write(`${tmp.path}/shared.txt`, "v1")
+      const snap1 = await Snapshot.track()
+      expect(snap1).toBeTruthy()
+
+      // Modify and snapshot again
+      await Filesystem.write(`${tmp.path}/shared.txt`, "v2")
+      const snap2 = await Snapshot.track()
+      expect(snap2).toBeTruthy()
+
+      // Modify once more so both patches include shared.txt
+      await Filesystem.write(`${tmp.path}/shared.txt`, "v3")
+
+      const patch1 = await Snapshot.patch(snap1!)
+      const patch2 = await Snapshot.patch(snap2!)
+
+      // Both patches should include shared.txt
+      expect(patch1.files).toContain(fwd(tmp.path, "shared.txt"))
+      expect(patch2.files).toContain(fwd(tmp.path, "shared.txt"))
+
+      // Revert with patch1 first — should use snap1's hash (restoring "v1")
+      await Snapshot.revert([patch1, patch2])
+
+      const content = await fs.readFile(`${tmp.path}/shared.txt`, "utf-8")
+      expect(content).toBe("v1")
+    },
+  })
+})

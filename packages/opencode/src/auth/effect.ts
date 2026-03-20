@@ -28,31 +28,31 @@ export class WellKnown extends Schema.Class<WellKnown>("WellKnownAuth")({
 export const Info = Schema.Union([Oauth, Api, WellKnown])
 export type Info = Schema.Schema.Type<typeof Info>
 
-export class AuthServiceError extends Schema.TaggedErrorClass<AuthServiceError>()("AuthServiceError", {
+export class AuthError extends Schema.TaggedErrorClass<AuthError>()("AuthError", {
   message: Schema.String,
   cause: Schema.optional(Schema.Defect),
 }) {}
 
 const file = path.join(Global.Path.data, "auth.json")
 
-const fail = (message: string) => (cause: unknown) => new AuthServiceError({ message, cause })
+const fail = (message: string) => (cause: unknown) => new AuthError({ message, cause })
 
-export namespace AuthService {
-  export interface Service {
-    readonly get: (providerID: string) => Effect.Effect<Info | undefined, AuthServiceError>
-    readonly all: () => Effect.Effect<Record<string, Info>, AuthServiceError>
-    readonly set: (key: string, info: Info) => Effect.Effect<void, AuthServiceError>
-    readonly remove: (key: string) => Effect.Effect<void, AuthServiceError>
+export namespace AuthEffect {
+  export interface Interface {
+    readonly get: (providerID: string) => Effect.Effect<Info | undefined, AuthError>
+    readonly all: () => Effect.Effect<Record<string, Info>, AuthError>
+    readonly set: (key: string, info: Info) => Effect.Effect<void, AuthError>
+    readonly remove: (key: string) => Effect.Effect<void, AuthError>
   }
-}
 
-export class AuthService extends ServiceMap.Service<AuthService, AuthService.Service>()("@opencode/Auth") {
-  static readonly layer = Layer.effect(
-    AuthService,
+  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Auth") {}
+
+  export const layer = Layer.effect(
+    Service,
     Effect.gen(function* () {
       const decode = Schema.decodeUnknownOption(Info)
 
-      const all = Effect.fn("AuthService.all")(() =>
+      const all = Effect.fn("Auth.all")(() =>
         Effect.tryPromise({
           try: async () => {
             const data = await Filesystem.readJson<Record<string, unknown>>(file).catch(() => ({}))
@@ -62,11 +62,11 @@ export class AuthService extends ServiceMap.Service<AuthService, AuthService.Ser
         }),
       )
 
-      const get = Effect.fn("AuthService.get")(function* (providerID: string) {
+      const get = Effect.fn("Auth.get")(function* (providerID: string) {
         return (yield* all())[providerID]
       })
 
-      const set = Effect.fn("AuthService.set")(function* (key: string, info: Info) {
+      const set = Effect.fn("Auth.set")(function* (key: string, info: Info) {
         const norm = key.replace(/\/+$/, "")
         const data = yield* all()
         if (norm !== key) delete data[key]
@@ -77,7 +77,7 @@ export class AuthService extends ServiceMap.Service<AuthService, AuthService.Ser
         })
       })
 
-      const remove = Effect.fn("AuthService.remove")(function* (key: string) {
+      const remove = Effect.fn("Auth.remove")(function* (key: string) {
         const norm = key.replace(/\/+$/, "")
         const data = yield* all()
         delete data[key]
@@ -88,14 +88,7 @@ export class AuthService extends ServiceMap.Service<AuthService, AuthService.Ser
         })
       })
 
-      return AuthService.of({
-        get,
-        all,
-        set,
-        remove,
-      })
+      return Service.of({ get, all, set, remove })
     }),
   )
-
-  static readonly defaultLayer = AuthService.layer
 }
