@@ -316,13 +316,11 @@ export namespace WorkerManager {
     )
 
     if (failures.length > 0) {
-      await Promise.all(
-        failures.map(({ subtaskID, error }) =>
-          updateWorker(plan.id, subtaskID, { status: "failed", error }).catch((err) => {
-            log.warn("failed to mark worker as failed", { subtaskID, error: err })
-          }),
-        ),
-      )
+      for (const item of failures) {
+        await updateWorker(plan.id, item.subtaskID, { status: "failed", error: item.error }).catch((err) => {
+          log.warn("failed to mark worker as failed", { subtaskID: item.subtaskID, error: err })
+        })
+      }
     }
 
     // Check for dependency failures - mark dependent subtasks as blocked
@@ -337,13 +335,11 @@ export namespace WorkerManager {
     }
 
     if (blocked.length > 0) {
-      await Promise.all(
-        blocked.map(({ subtaskID, error }) =>
-          updateWorker(plan.id, subtaskID, { status: "failed", error }).catch((err) => {
-            log.warn("failed to mark worker as blocked", { subtaskID, error: err })
-          }),
-        ),
-      )
+      for (const item of blocked) {
+        await updateWorker(plan.id, item.subtaskID, { status: "failed", error: item.error }).catch((err) => {
+          log.warn("failed to mark worker as blocked", { subtaskID: item.subtaskID, error: err })
+        })
+      }
     }
 
     const allFailedOrBlocked = plan.subtasks.every(
@@ -421,20 +417,18 @@ export namespace WorkerManager {
         // Deduplicate by keeping only the last update per subtask
         const uniqueUpdates = new Map(updates)
 
-        await Promise.all(
-          Array.from(uniqueUpdates.entries()).map(async ([subtaskID, update]) => {
-            try {
-              if (update.status === "done") {
-                await updateWorker(planID, subtaskID, { status: "done", diffStat: update.diffStat })
-              } else {
-                await updateWorker(planID, subtaskID, { status: "failed", error: update.error })
-              }
-            } catch (err) {
-              // If update fails (e.g., already in target state), log but don't fail
-              log.warn("worker update skipped", { planID, subtaskID, error: err })
+        for (const [subtaskID, update] of Array.from(uniqueUpdates.entries())) {
+          try {
+            if (update.status === "done") {
+              await updateWorker(planID, subtaskID, { status: "done", diffStat: update.diffStat })
+            } else {
+              await updateWorker(planID, subtaskID, { status: "failed", error: update.error })
             }
-          }),
-        )
+          } catch (err) {
+            // If update fails (e.g., already in target state), log but don't fail
+            log.warn("worker update skipped", { planID, subtaskID, error: err })
+          }
+        }
       }
 
       // Listen to GlobalBus for session.idle events from any instance
