@@ -76,6 +76,19 @@ export function IconAlipay(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
   )
 }
 
+export function IconUpi(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
+  return (
+    <svg {...props} viewBox="10 16 100 28" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+      <path d="M95.678 42.9 110 29.835l-6.784-13.516Z" />
+      <path d="M90.854 42.9 105.176 29.835l-6.784-13.516Z" />
+      <path
+        d="M22.41 16.47 16.38 37.945l21.407.15 5.88-21.625h5.427l-7.05 25.14c-.27.96-1.298 1.74-2.295 1.74H12.31c-1.664 0-2.65-1.3-2.2-2.9l6.724-23.98Zm66.182-.15h5.427l-7.538 27.03h-5.58ZM49.698 27.582l27.136-.15 1.81-5.707H51.054l1.658-5.256 29.4-.27c1.83-.017 2.92 1.4 2.438 3.167L81.78 29.49c-.483 1.766-2.36 3.197-4.19 3.197H53.316L50.454 43.8h-5.28Z"
+        fill-rule="evenodd"
+      />
+    </svg>
+  )
+}
+
 export function IconWechat(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
   return (
     <svg {...props} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
