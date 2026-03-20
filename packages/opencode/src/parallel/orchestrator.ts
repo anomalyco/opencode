@@ -326,6 +326,7 @@ export namespace Orchestrator {
     })
 
     await PlanStore.transition({ id: planID, status: "merging" })
+    await PlanStore.transition({ id: planID, status: "integrating" })
     const integrationResult = await stage("integrating", async () => Integration.integrate(planID))
 
     if (integrationResult.merged.length === 0) {
@@ -521,6 +522,7 @@ export namespace Orchestrator {
 
           if (allDone && !hasFailures && updated.status === "running") {
             await PlanStore.transition({ id: planID, status: "merging" })
+            await PlanStore.transition({ id: planID, status: "integrating" })
             const integrationResult = await Integration.integrate(planID)
 
             if (integrationResult.merged.length === 0) {

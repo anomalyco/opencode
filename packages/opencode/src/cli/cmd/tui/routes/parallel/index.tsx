@@ -22,7 +22,14 @@ export function Parallel() {
   const [switchedOnComplete, setSwitchedOnComplete] = createSignal(false)
   const isStatus = () => {
     const s = parallel.plan?.status
-    return s === "approved" || s === "spawning" || s === "running"
+    return (
+      s === "approved" ||
+      s === "spawning" ||
+      s === "running" ||
+      s === "merging" ||
+      s === "integrating" ||
+      s === "publishing"
+    )
   }
   const back = () => {
     if (route.previous) {
@@ -168,8 +175,24 @@ export function Parallel() {
           <Show when={plan.status === "approved" || plan.status === "spawning" || plan.status === "running"}>
             <ParallelStatus plan={plan} onCancelled={back} onBack={back} />
           </Show>
-          <Show when={plan.status === "merging"}>
+          <Show when={plan.status === "merging" || plan.status === "integrating" || plan.status === "publishing"}>
             <ParallelMerge plan={plan} />
+          </Show>
+          <Show when={plan.status === "integrated"}>
+            <box
+              flexDirection="column"
+              width={Math.min(60, dim().width - 2)}
+              backgroundColor={theme.backgroundPanel}
+              padding={2}
+              alignItems="center"
+            >
+              <text attributes={TextAttributes.BOLD} fg={theme.info}>
+                Integrated
+              </text>
+              <text fg={theme.text}>Workers merged into integration branch</text>
+              <text fg={theme.textMuted}>Publish step can be triggered from CLI or resume flow</text>
+              <text fg={theme.textMuted}>Press ESC to go back</text>
+            </box>
           </Show>
           <Show when={plan.status === "done"}>
             <box

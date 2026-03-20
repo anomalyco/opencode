@@ -556,7 +556,13 @@ function App() {
                 : undefined
           const run = plans.find(
             (p) =>
-              p.status === "approved" || p.status === "spawning" || p.status === "running" || p.status === "merging",
+              p.status === "approved" ||
+              p.status === "spawning" ||
+              p.status === "running" ||
+              p.status === "merging" ||
+              p.status === "integrating" ||
+              p.status === "integrated" ||
+              p.status === "publishing",
           )
           const prep = plans.find((p) => p.status === "draft" || p.status === "proposed")
           const last = sid ? plans.find((p) => p.sessionID === sid) : undefined
