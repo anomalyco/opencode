@@ -12,6 +12,7 @@ import {
   jsonSchema,
 } from "ai"
 import { mergeDeep, pipe } from "remeda"
+import { GitLabWorkflowLanguageModel } from "gitlab-ai-provider"
 import { ProviderTransform } from "@/provider/transform"
 import { Config } from "@/config/config"
 import { Instance } from "@/project/instance"
@@ -182,6 +183,34 @@ export namespace LLM {
         inputSchema: jsonSchema({ type: "object", properties: {} }),
         execute: async () => ({ output: "", title: "", metadata: {} }),
       })
+    }
+
+    // Wire up toolExecutor for DWS workflow models so that tool calls
+    // from the workflow service are executed via opencode's tool system
+    // and results sent back over the WebSocket.
+    if (language instanceof GitLabWorkflowLanguageModel) {
+      const workflowModel = language
+      workflowModel.toolExecutor = async (toolName, argsJson, _requestID) => {
+        const t = tools[toolName]
+        if (!t || !t.execute) {
+          return { result: "", error: `Unknown tool: ${toolName}` }
+        }
+        try {
+          const result = await t.execute!(JSON.parse(argsJson), {
+            toolCallId: _requestID,
+            messages: input.messages,
+            abortSignal: input.abort,
+          })
+          const output = typeof result === "string" ? result : (result?.output ?? JSON.stringify(result))
+          return {
+            result: output,
+            metadata: typeof result === "object" ? result?.metadata : undefined,
+            title: typeof result === "object" ? result?.title : undefined,
+          }
+        } catch (e: any) {
+          return { result: "", error: e.message ?? String(e) }
+        }
+      }
     }
 
     return streamText({
