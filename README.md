@@ -97,6 +97,13 @@ OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bas
 XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 ```
 
+If you build OpenCode locally instead of using the install script, copy the compiled binary into the same directory:
+
+```bash
+cp ./packages/opencode/dist/opencode-<platform>/bin/opencode ~/.local/bin/opencode
+chmod +x ~/.local/bin/opencode
+```
+
 ### Agents
 
 OpenCode includes two built-in agents you can switch between with the `Tab` key.

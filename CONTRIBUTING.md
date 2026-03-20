@@ -69,6 +69,30 @@ Then run it with:
 
 Replace `<platform>` with your platform (e.g., `darwin-arm64`, `linux-x64`).
 
+If you want that local build on your normal shell `PATH`, copy it into `~/.local/bin`:
+
+```bash
+cp ./packages/opencode/dist/opencode-<platform>/bin/opencode ~/.local/bin/opencode
+chmod +x ~/.local/bin/opencode
+```
+
+> [!NOTE]
+> On macOS, the build script ad-hoc re-signs the compiled binary after `bun build --compile`.
+> This is required because recent macOS releases can reject Bun's linker-generated signature with
+> `Code Signature Invalid` when launching the standalone executable.
+>
+> If you are testing an older darwin binary that was built before this fix, re-sign it manually:
+>
+> ```bash
+> codesign --force --sign - ./packages/opencode/dist/opencode-<platform>/bin/opencode
+> ```
+>
+> You can verify the result with:
+>
+> ```bash
+> codesign --verify --deep --strict --verbose=4 ./packages/opencode/dist/opencode-<platform>/bin/opencode
+> ```
+
 - Core pieces:
   - `packages/opencode`: OpenCode core business logic & server.
   - `packages/opencode/src/cli/cmd/tui/`: The TUI code, written in SolidJS with [opentui](https://github.com/sst/opentui)
