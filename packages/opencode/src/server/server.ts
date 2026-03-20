@@ -540,7 +540,6 @@ export namespace Server {
     mdnsDomain?: string
     cors?: string[]
   }) {
-    url = new URL(`http://${opts.hostname}:${opts.port}`)
     const app = createApp(opts)
     const args = {
       hostname: opts.hostname,
@@ -557,6 +556,11 @@ export namespace Server {
     }
     const server = opts.port === 0 ? (tryServe(4096) ?? tryServe(0)) : tryServe(opts.port)
     if (!server) throw new Error(`Failed to start server on port ${opts.port}`)
+    // Set url after Bun.serve() resolves so server.port reflects the actual
+    // bound port. When opts.port === 0, Bun picks an available port and the
+    // pre-bind value would leave url.port === "0", breaking ctx.serverUrl for
+    // plugins.
+    url = new URL(`http://${opts.hostname}:${server.port}`)
 
     const shouldPublishMDNS =
       opts.mdns &&
