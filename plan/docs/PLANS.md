@@ -2,10 +2,12 @@
 
 ## How To Use This File
 
-- Pick the next `todo` item whose dependencies are satisfied.
+- Pick the next unowned `todo` item whose dependencies are satisfied.
+- Fetch the latest `xiaokang/cyzh/eco-agent`, then create one dedicated feature branch for that claimed plan.
 - Read the owning phase file under `plan/docs/exec-plans/`.
 - Update status before and after execution.
-- Do not mark `done` without the benchmark gate recorded.
+- Use `ready` when the feature branch passed its benchmark gate but is not merged into `cyzh/eco-agent` yet.
+- Do not mark `done` without the benchmark gate recorded and the change merged into `cyzh/eco-agent`.
 
 ## Phase Order
 
@@ -24,7 +26,7 @@
 | --- | --- | --- | --- | --- |
 | BMK-001 | blocked | Build repo-local benchmark catalog | none | catalog self-check |
 | BMK-002 | done | Define benchmark manifest schema | BMK-001 | catalog self-check |
-| BMK-003 | todo | Create timestamped benchmark workspace | BMK-002 | catalog self-check |
+| BMK-003 | in_progress | Create timestamped benchmark workspace | BMK-002 | catalog self-check |
 | BMK-004 | todo | Run `smic110-adder` dry-run smoke | BMK-003 | adder smoke |
 | BMK-005 | todo | Load fullflow suite from repo-local jobs | BMK-004 | fullflow smoke |
 | BMK-006 | todo | Load design and stage-specific suites | BMK-005 | design/function/physical/signoff smoke |
@@ -35,7 +37,7 @@
 
 ### Latest Runs
 
-- `BMK-001`: benchmark `pass` at `/workspaces/Github/opencode/benchmark/26-03-20/18-18-08`; commit: `458ac87ff15137e88ae13adff546ac4526bc629c`; push to `xiaokang` failed with SSH access error
+- `BMK-001`: benchmark `pass` at `/workspaces/Github/opencode/benchmark/26-03-20/18-18-08`; commit: `458ac87ff15137e88ae13adff546ac4526bc629c`; push to `xiaokang/cyzh/eco-agent` failed with SSH access error
 
 | ID | Status | Title | Depends On | Benchmark Gate |
 | --- | --- | --- | --- | --- |
@@ -117,6 +119,6 @@
 | OPS-001 | todo | Write subagent playbook for execution work | PLT-003 | catalog self-check |
 | OPS-002 | todo | Add benchmark trend history | BMK-007 | fullflow smoke |
 | OPS-003 | todo | Add failure triage summaries | PLT-006, BMK-007 | fullflow smoke |
-| OPS-004 | todo | Add commit and push workflow to `xiaokang` | PLT-007 | fullflow smoke |
+| OPS-004 | todo | Add feature-branch merge workflow to `cyzh/eco-agent` | PLT-007 | fullflow smoke |
 | OPS-005 | todo | Add CLI or TUI run status surfaces | PLT-008, BMK-007 | fullflow smoke |
 | OPS-006 | todo | Add docs and done-checklist automation | OPS-001, OPS-004 | fullflow smoke |
