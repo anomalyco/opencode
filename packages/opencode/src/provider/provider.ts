@@ -47,8 +47,6 @@ import { ProviderTransform } from "./transform"
 import { Installation } from "../installation"
 import { ModelID, ProviderID } from "./schema"
 
-const DEFAULT_CHUNK_TIMEOUT = 120_000
-
 export namespace Provider {
   const log = Log.create({ service: "provider" })
 
@@ -150,8 +148,7 @@ export namespace Provider {
         autoload: false,
         options: {
           headers: {
-            "anthropic-beta":
-              "claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
+            "anthropic-beta": "interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
           },
         },
       }
@@ -187,17 +184,16 @@ export namespace Provider {
         options: {},
       }
     },
-    "github-copilot": async () => {
+    xai: async () => {
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
-          if (useLanguageModel(sdk)) return sdk.languageModel(modelID)
-          return shouldUseCopilotResponsesApi(modelID) ? sdk.responses(modelID) : sdk.chat(modelID)
+          return sdk.responses(modelID)
         },
         options: {},
       }
     },
-    "github-copilot-enterprise": async () => {
+    "github-copilot": async () => {
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
@@ -849,7 +845,7 @@ export namespace Provider {
       return true
     }
 
-    const providers: { [providerID: string]: Info } = {}
+    const providers: Record<ProviderID, Info> = {} as Record<ProviderID, Info>
     const languages = new Map<string, LanguageModelV2>()
     const modelLoaders: {
       [providerID: string]: CustomModelLoader
@@ -862,20 +858,6 @@ export namespace Provider {
     log.info("init")
 
     const configProviders = Object.entries(config.provider ?? {})
-
-    // Add GitHub Copilot Enterprise provider that inherits from GitHub Copilot
-    if (database["github-copilot"]) {
-      const githubCopilot = database["github-copilot"]
-      database["github-copilot-enterprise"] = {
-        ...githubCopilot,
-        id: ProviderID.githubCopilotEnterprise,
-        name: "GitHub Copilot Enterprise",
-        models: mapValues(githubCopilot.models, (model) => ({
-          ...model,
-          providerID: ProviderID.githubCopilotEnterprise,
-        })),
-      }
-    }
 
     function mergeProvider(providerID: ProviderID, provider: Partial<Info>) {
       const existing = providers[providerID]
@@ -1003,45 +985,15 @@ export namespace Provider {
       const providerID = ProviderID.make(plugin.auth.provider)
       if (disabled.has(providerID)) continue
 
-      // For github-copilot plugin, check if auth exists for either github-copilot or github-copilot-enterprise
-      let hasAuth = false
       const auth = await Auth.get(providerID)
-      if (auth) hasAuth = true
-
-      // Special handling for github-copilot: also check for enterprise auth
-      if (providerID === ProviderID.githubCopilot && !hasAuth) {
-        const enterpriseAuth = await Auth.get("github-copilot-enterprise")
-        if (enterpriseAuth) hasAuth = true
-      }
-
-      if (!hasAuth) continue
+      if (!auth) continue
       if (!plugin.auth.loader) continue
 
-      // Load for the main provider if auth exists
       if (auth) {
         const options = await plugin.auth.loader(() => Auth.get(providerID) as any, database[plugin.auth.provider])
         const opts = options ?? {}
         const patch: Partial<Info> = providers[providerID] ? { options: opts } : { source: "custom", options: opts }
         mergeProvider(providerID, patch)
-      }
-
-      // If this is github-copilot plugin, also register for github-copilot-enterprise if auth exists
-      if (providerID === ProviderID.githubCopilot) {
-        const enterpriseProviderID = ProviderID.githubCopilotEnterprise
-        if (!disabled.has(enterpriseProviderID)) {
-          const enterpriseAuth = await Auth.get(enterpriseProviderID)
-          if (enterpriseAuth) {
-            const enterpriseOptions = await plugin.auth.loader(
-              () => Auth.get(enterpriseProviderID) as any,
-              database[enterpriseProviderID],
-            )
-            const opts = enterpriseOptions ?? {}
-            const patch: Partial<Info> = providers[enterpriseProviderID]
-              ? { options: opts }
-              : { source: "custom", options: opts }
-            mergeProvider(enterpriseProviderID, patch)
-          }
-        }
       }
     }
 
@@ -1185,7 +1137,7 @@ export namespace Provider {
       if (existing) return existing
 
       const customFetch = options["fetch"]
-      const chunkTimeout = options["chunkTimeout"] || DEFAULT_CHUNK_TIMEOUT
+      const chunkTimeout = options["chunkTimeout"]
       delete options["chunkTimeout"]
 
       options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {

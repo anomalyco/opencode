@@ -175,7 +175,8 @@ export const anthropicHelper: ProviderHelper = ({ reqModel, providerModel }) => 
       outputTokens: usage.output_tokens ?? 0,
       reasoningTokens: undefined,
       cacheReadTokens: usage.cache_read_input_tokens ?? undefined,
-      cacheWrite5mTokens: usage.cache_creation?.ephemeral_5m_input_tokens ?? undefined,
+      cacheWrite5mTokens:
+        usage.cache_creation?.ephemeral_5m_input_tokens ?? usage.cache_creation_input_tokens ?? undefined,
       cacheWrite1hTokens: usage.cache_creation?.ephemeral_1h_input_tokens ?? undefined,
     }),
   }
