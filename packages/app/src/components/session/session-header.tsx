@@ -230,6 +230,16 @@ export function SessionHeader() {
     if (opening() || !canOpen() || !platform.openPath) return
     const directory = projectDirectory()
     if (!directory) return
+    if (app === "wezterm" && platform.openInEditor) {
+      setOpenRequest("app", app)
+      platform
+        .openInEditor("WezTerm", directory)
+        .catch((err: unknown) => showRequestError(language, err))
+        .finally(() => {
+          setOpenRequest("app", undefined)
+        })
+      return
+    }
 
     const item = options().find((o) => o.id === app)
     const openWith = item && "openWith" in item ? item.openWith : undefined
