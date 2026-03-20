@@ -14,9 +14,14 @@ export const lineCommentStyles = `
   position: relative;
   right: auto;
   display: flex;
-  width: 100%;
+  width: calc(100% - 4rem);
   min-width: 0;
+  max-width: 600px;
   align-items: flex-start;
+}
+
+[data-component="session-review"] [data-component="line-comment"][data-inline] {
+  width: 100%;
 }
 
 [data-component="line-comment"][data-open] {
@@ -182,9 +187,14 @@ export const lineCommentStyles = `
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
+  row-gap: 4px;
   padding-left: 8px;
   min-width: 0;
+}
+
+[data-component="line-comment"] [data-slot="line-comment-action-buttons"] {
+  display: flex;
+  gap: 8px;
 }
 
 [data-component="line-comment"] [data-slot="line-comment-editor-label"] {

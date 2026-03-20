@@ -61,7 +61,6 @@ type LineCommentControllerProps<T extends LineCommentShape> = {
   onDelete?: (comment: T) => void
   renderCommentActions?: (comment: T, controls: { edit: VoidFunction; remove: VoidFunction }) => JSX.Element
   editSubmitLabel?: string
-  onDraftPopoverFocusOut?: JSX.EventHandlerUnion<HTMLDivElement, FocusEvent>
   getHoverSelectedRange?: Accessor<SelectedLineRange | null>
   cancelDraftOnCommentToggle?: boolean
   clearSelectionOnSelectionEndNull?: boolean
@@ -88,7 +87,6 @@ type DraftProps = {
   onInput: (value: string) => void
   onCancel: VoidFunction
   onSubmit: (value: string) => void
-  onPopoverFocusOut?: JSX.EventHandlerUnion<HTMLDivElement, FocusEvent>
   cancelLabel?: string
   submitLabel?: string
 }
@@ -145,7 +143,6 @@ export function createLineCommentAnnotationRenderer<T>(props: {
               onInput={view().editor!.onInput}
               onCancel={view().editor!.onCancel}
               onSubmit={view().editor!.onSubmit}
-              onPopoverFocusOut={view().editor!.onPopoverFocusOut}
               cancelLabel={view().editor!.cancelLabel}
               submitLabel={view().editor!.submitLabel}
             />
@@ -166,7 +163,6 @@ export function createLineCommentAnnotationRenderer<T>(props: {
           onInput={view().onInput}
           onCancel={view().onCancel}
           onSubmit={view().onSubmit}
-          onPopoverFocusOut={view().onPopoverFocusOut}
         />
       )
     }, host)
@@ -421,7 +417,6 @@ export function createLineCommentController<T extends LineCommentShape>(
         props.onSubmit({ comment, selection: cloneSelectedLineRange(range) })
         note.cancelDraft()
       },
-      onPopoverFocusOut: props.onDraftPopoverFocusOut,
     }),
   })
 

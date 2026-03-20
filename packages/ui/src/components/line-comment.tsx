@@ -38,7 +38,6 @@ export type LineCommentAnchorProps = {
   buttonLabel?: string
   onClick?: JSX.EventHandlerUnion<HTMLButtonElement, MouseEvent>
   onMouseEnter?: JSX.EventHandlerUnion<HTMLButtonElement, MouseEvent>
-  onPopoverFocusOut?: JSX.EventHandlerUnion<HTMLDivElement, FocusEvent>
   class?: string
   popoverClass?: string
   children?: JSX.Element
@@ -98,7 +97,6 @@ export const LineCommentAnchor = (props: LineCommentAnchorProps) => {
                   [props.popoverClass ?? ""]: !!props.popoverClass,
                 }}
                 on:mousedown={(e) => e.stopPropagation()}
-                on:focusout={props.onPopoverFocusOut as any}
               >
                 {props.children}
               </div>
@@ -115,7 +113,6 @@ export const LineCommentAnchor = (props: LineCommentAnchorProps) => {
           on:mousedown={(e) => e.stopPropagation()}
           on:click={props.onClick as any}
           on:mouseenter={props.onMouseEnter as any}
-          on:focusout={props.onPopoverFocusOut as any}
         >
           {props.children}
         </div>
@@ -233,7 +230,7 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
   })
 
   return (
-    <LineCommentAnchor {...rest} open={true} variant="editor" hideButton={props.inline} onClick={() => focus()}>
+    <LineCommentAnchor {...rest} open={true} variant="editor" hideButton={props.inline}>
       <div data-slot="line-comment-editor">
         <textarea
           ref={(el) => {
@@ -273,7 +270,7 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
           <Show
             when={!props.inline}
             fallback={
-              <>
+              <div data-slot="line-comment-action-buttons">
                 <button
                   type="button"
                   data-slot="line-comment-action"
@@ -293,15 +290,17 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
                 >
                   {split.submitLabel ?? i18n.t("ui.lineComment.submit")}
                 </button>
-              </>
+              </div>
             }
           >
-            <Button size="small" variant="ghost" onClick={split.onCancel}>
-              {split.cancelLabel ?? i18n.t("ui.common.cancel")}
-            </Button>
-            <Button size="small" variant="primary" disabled={text().trim().length === 0} onClick={submit}>
-              {split.submitLabel ?? i18n.t("ui.lineComment.submit")}
-            </Button>
+            <div data-slot="line-comment-action-buttons">
+              <Button size="small" variant="ghost" onClick={split.onCancel}>
+                {split.cancelLabel ?? i18n.t("ui.common.cancel")}
+              </Button>
+              <Button size="small" variant="primary" disabled={text().trim().length === 0} onClick={submit}>
+                {split.submitLabel ?? i18n.t("ui.lineComment.submit")}
+              </Button>
+            </div>
           </Show>
         </div>
       </div>
