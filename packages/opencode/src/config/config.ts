@@ -1264,6 +1264,12 @@ export namespace Config {
             .describe(
               "Conflict-aware scheduler mode: 'auto' creates waves automatically and warns on overlaps, 'strict' fails plan approval if file overlaps exist, 'off' disables wave scheduling (default: off)",
             ),
+          lint_mode: z
+            .enum(["off", "warn", "auto", "strict"])
+            .optional()
+            .describe(
+              "Parallel plan lint mode: 'off' disables linting, 'warn' shows diagnostics only, 'auto' rewrites overlapping plans, 'strict' fails approval on any overlap (default: off)",
+            ),
         })
         .optional()
         .describe("Parallel agent orchestration configuration"),

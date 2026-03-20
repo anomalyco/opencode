@@ -4,6 +4,8 @@ import { WorkerManager } from "./worker"
 import { Recovery } from "./recovery"
 import { Integration } from "./integration"
 import * as Scheduler from "./scheduler"
+import { lint } from "./lint"
+import { rewrite, validate } from "./rewrite"
 import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider"
 import { Instance } from "@/project/instance"
@@ -243,6 +245,50 @@ export namespace Orchestrator {
         parallelizable: validation.analysis.parallelizableCount,
         serial: validation.analysis.serialCount,
       })
+    }
+
+    // Validate and optionally rewrite based on lint_mode
+    const lintMode = cfg.parallel?.lint_mode ?? "off"
+    if (lintMode !== "off") {
+      const lintReport = lint(plan.subtasks)
+      const lintValidation = validate(plan.subtasks, lintMode)
+
+      if (lintMode === "strict" && !lintValidation.valid) {
+        throw issue({
+          code: "plan_lint_failed",
+          stage: "preflight",
+          message: lintValidation.error ?? "Plan failed lint validation",
+        })
+      }
+
+      if (lintMode === "warn" && lintReport.issues.length > 0) {
+        for (const issue of lintReport.issues) {
+          log.warn(`[${issue.code}] ${issue.message}`, {
+            severity: issue.severity,
+            subtasks: issue.subtasks.map(String),
+            files: issue.files,
+            recommendation: issue.recommendation,
+          })
+        }
+      }
+
+      if (lintMode === "auto" && !lintReport.valid) {
+        const rewritten = rewrite(plan.subtasks, lintReport)
+        if (rewritten.addedWiringSubtask) {
+          log.info("plan auto-rewritten to isolate shared files", {
+            originalSubtasks: plan.subtasks.length,
+            rewrittenSubtasks: rewritten.rewrittenSubtasks.length,
+            wiringSubtask: String(rewritten.wiringSubtaskId),
+          })
+
+          // Update plan with rewritten subtasks
+          await PlanStore.update({
+            id: plan.id,
+            subtasks: rewritten.rewrittenSubtasks,
+            status: plan.status,
+          })
+        }
+      }
     }
   }
 

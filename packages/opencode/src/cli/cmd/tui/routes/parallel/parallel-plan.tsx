@@ -6,6 +6,7 @@ import { useToast } from "@tui/ui/toast"
 import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useSync } from "@tui/context/sync"
+import { lint } from "@/parallel/lint"
 import { TextAttributes } from "@opentui/core"
 import { pipe, flatMap, entries, sortBy, map, filter } from "remeda"
 
@@ -266,6 +267,40 @@ export function ParallelPlan(props: { plan: Plan; onApproved: () => void; onCanc
           </text>
         </box>
       </Show>
+
+      {/* Lint warnings */}
+      {(() => {
+        const report = lint(props.plan.subtasks)
+        if (report.issues.length === 0) return null
+        return (
+          <box marginBottom={1} flexDirection="column" borderStyle="single" borderColor={theme.border} padding={1}>
+            <text fg={theme.textMuted} attributes={TextAttributes.UNDERLINE}>
+              Lint ({report.summary.error} errors, {report.summary.warn} warnings)
+            </text>
+            <For each={report.issues.filter((i) => i.severity !== "info").slice(0, 5)}>
+              {(issue) => (
+                <box flexDirection="row" gap={1}>
+                  <text
+                    fg={
+                      issue.severity === "error"
+                        ? theme.error
+                        : issue.severity === "warn"
+                          ? theme.warning
+                          : theme.textMuted
+                    }
+                  >
+                    [{issue.severity}]
+                  </text>
+                  <text fg={theme.text}>{issue.code}</text>
+                  <text fg={theme.textMuted} wrapMode="word">
+                    {issue.message.slice(0, 60)}
+                  </text>
+                </box>
+              )}
+            </For>
+          </box>
+        )
+      })()}
 
       <box flexDirection="column" gap={1} marginBottom={1}>
         <text attributes={TextAttributes.UNDERLINE} fg={theme.text}>

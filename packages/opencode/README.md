@@ -70,6 +70,75 @@ opencode config set parallel.scheduler_mode off
 }
 ```
 
+#### Parallel Plan Linter + Auto-Rewrite
+
+OpenCode includes a plan linter that analyzes subtask file scopes before execution and optionally auto-rewrites risky plans into safer layouts. This prevents merge-conflict cascades by isolating shared registry/wiring files into a dedicated final subtask.
+
+**Lint Modes:**
+
+| Mode     | Behavior                                                                |
+| -------- | ----------------------------------------------------------------------- |
+| `off`    | Disable linting (default)                                               |
+| `warn`   | Show diagnostics in plan review, no rewrite                             |
+| `auto`   | Automatically rewrite plans to isolate shared files into wiring subtask |
+| `strict` | Fail plan approval if any overlap, duplicate, or hotspot detected       |
+
+**What the Linter Detects:**
+
+- **File scope overlaps**: Subtasks claiming overlapping paths (parent/child directories)
+- **Duplicate file ownership**: Multiple subtasks claiming the same exact file
+- **Hotspot files**: Shared registry files (`src/cli/registry.ts`), orchestrator wiring (`src/parallel/orchestrator.ts`), CLI indices
+
+**Auto-Rewrite Behavior:**
+
+In `auto` mode, plans with lint errors are automatically rewritten:
+
+1. Shared/hotspot files are removed from original subtasks
+2. A new final "wiring" subtask is created with all shared files
+3. The wiring subtask depends on all subtasks that touched shared files
+4. The wiring subtask runs serially after all parallel work completes
+
+**Example - Before Rewrite:**
+
+```json
+{
+  "subtasks": [
+    { "id": "1", "title": "Add feature A", "fileScope": ["src/feature-a.ts", "src/cli/registry.ts"] },
+    { "id": "2", "title": "Add feature B", "fileScope": ["src/feature-b.ts", "src/cli/registry.ts"] }
+  ]
+}
+```
+
+**Example - After Auto-Rewrite:**
+
+```json
+{
+  "subtasks": [
+    { "id": "1", "title": "Add feature A", "fileScope": ["src/feature-a.ts"] },
+    { "id": "2", "title": "Add feature B", "fileScope": ["src/feature-b.ts"] },
+    {
+      "id": "wiring-123",
+      "title": "Final wiring (shared files)",
+      "fileScope": ["src/cli/registry.ts"],
+      "dependencies": ["1", "2"]
+    }
+  ]
+}
+```
+
+**Configuration:**
+
+```bash
+# Enable auto-rewrite mode
+opencode config set parallel.lint_mode auto
+
+# Use strict mode for guaranteed clean plans
+opencode config set parallel.lint_mode strict
+
+# Show warnings only
+opencode config set parallel.lint_mode warn
+```
+
 #### Configuration
 
 Configure publish mode in your `AGENTS.md` or via CLI:
