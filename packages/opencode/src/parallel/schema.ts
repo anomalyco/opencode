@@ -54,11 +54,15 @@ export const PlanStatus = z.enum([
   "running",
   "merging",
   "partial_success",
+  "integrated",
   "cancelled",
   "done",
   "failed",
 ])
 export type PlanStatus = z.infer<typeof PlanStatus>
+
+export const PublishMode = z.enum(["new-branch", "unstaged", "direct"])
+export type PublishMode = z.infer<typeof PublishMode>
 
 export const PlanError = z.object({
   code: z.string(),
@@ -113,6 +117,8 @@ export const Plan = z.object({
   workerModel: ModelRef,
   subtasks: z.array(Subtask),
   workers: z.array(WorkerState),
+  integrationBranch: z.string().optional(),
+  publishMode: PublishMode.optional(),
   version: z.number().default(0),
   time: z.object({
     created: z.number(),
