@@ -1,4 +1,4 @@
-import { stat } from "fs/promises"
+import { mkdir, stat } from "fs/promises"
 import path from "path"
 import { BenchmarkCatalog } from "./catalog"
 import { BenchmarkManifest } from "./manifest"
@@ -56,7 +56,14 @@ export namespace BenchmarkSmoke {
     name: string
     job: string
     start: string
-    stages: readonly string[]
+    stages: Array<{
+      stage: string
+      status: string
+      active: boolean
+      wait: string[]
+      missing: string[]
+      notes: string[]
+    }>
     missing: string[]
     notes: string[]
   }) {
@@ -68,9 +75,37 @@ export namespace BenchmarkSmoke {
       `case: ${run.name}`,
       `job: ${run.job}`,
       `start: ${run.start}`,
-      `stages: ${run.stages.join(",")}`,
+      `stages: ${run.stages.map((row) => row.stage).join(",")}`,
+      ...run.stages.map(
+        (row) =>
+          `stage.${row.stage}: ${row.status}; active=${row.active}; wait=${row.wait.length ? row.wait.join(",") : "none"}; missing=${row.missing.length}`,
+      ),
       run.missing.length ? `missing: ${run.missing.join(" | ")}` : "missing: none",
       run.notes.length ? `notes: ${run.notes.join(" | ")}` : "notes: none",
+    ]
+  }
+
+  function stage(step: string, i: number, list: string[], miss: string[]) {
+    const wait = list.slice(0, i)
+    return {
+      stage: step,
+      index: i,
+      status: "dry_run",
+      active: i === 0,
+      wait,
+      missing: miss,
+      notes: i === 0 ? ["dry-run stage recorded"] : [`dry-run stage not executed; waiting for ${wait[wait.length - 1]} handoff`],
+    }
+  }
+
+  function note(row: ReturnType<typeof stage>) {
+    return [
+      `stage: ${row.stage}`,
+      `status: ${row.status}`,
+      `active: ${row.active}`,
+      `wait: ${row.wait.length ? row.wait.join(",") : "none"}`,
+      row.missing.length ? `missing: ${row.missing.join(" | ")}` : "missing: none",
+      row.notes.length ? `notes: ${row.notes.join(" | ")}` : "notes: none",
     ]
   }
 
@@ -110,11 +145,12 @@ export namespace BenchmarkSmoke {
       : miss.length
         ? [`dry-run launch recorded with ${miss.length} missing input path(s)`]
         : ["dry-run launch recorded"]
-    const stages = flow(item?.start ?? "design")
+    const steps = flow(item?.start ?? "design")
     const end = new Date()
     const suite = item?.suite ?? "fullflow"
     const job = item?.job ?? name
     const scope = (await BenchmarkWorkspace.scope(out, suite, item?.name ?? path.basename(name, ".json"))).root
+    const stages = steps.map((step, i, list) => stage(step, i, list, miss))
     const run = {
       gate: GATE,
       root: out,
@@ -133,6 +169,10 @@ export namespace BenchmarkSmoke {
       eda_root: path.join(scope, "eda"),
     }
     const text = `${lines(run).join("\n")}\n`
+
+    await Promise.all(
+      stages.map((row) => mkdir(path.join(run.eda_root, row.stage, "artifacts"), { recursive: true })),
+    )
 
     await Promise.all([
       Bun.write(
@@ -166,6 +206,7 @@ export namespace BenchmarkSmoke {
             suite: run.suite,
             case: run.name,
             job: run.job,
+            stages: run.stages,
             notes: run.notes,
             missing: run.missing,
           },
@@ -177,6 +218,7 @@ export namespace BenchmarkSmoke {
       Bun.write(path.join(out, "logs", "smoke.log"), text),
       Bun.write(path.join(out, "artifacts", "launch.json"), JSON.stringify(run, null, 2)),
       Bun.write(path.join(out, "artifacts", "resolved.json"), JSON.stringify(list, null, 2)),
+      Bun.write(path.join(out, "artifacts", "stages.json"), JSON.stringify(stages, null, 2)),
       Bun.write(path.join(scope, "result.json"), JSON.stringify(run, null, 2)),
       Bun.write(path.join(scope, "stdout.log"), text),
       Bun.write(path.join(scope, "stderr.log"), load.ok ? "" : `${load.err}\n`),
@@ -193,6 +235,7 @@ export namespace BenchmarkSmoke {
       ),
       Bun.write(path.join(scope, "artifacts", "launch.json"), JSON.stringify(run, null, 2)),
       Bun.write(path.join(scope, "artifacts", "resolved.json"), JSON.stringify(list, null, 2)),
+      Bun.write(path.join(scope, "artifacts", "stages.json"), JSON.stringify(stages, null, 2)),
       Bun.write(
         path.join(run.eda_root, "dry-run.json"),
         JSON.stringify(
@@ -207,6 +250,17 @@ export namespace BenchmarkSmoke {
           2,
         ),
       ),
+      ...stages.flatMap((row) => {
+        const text = `${note(row).join("\n")}\n`
+        const root = path.join(run.eda_root, row.stage)
+        return [
+          Bun.write(path.join(root, "result.json"), JSON.stringify(row, null, 2)),
+          Bun.write(path.join(root, "stdout.log"), text),
+          Bun.write(path.join(root, "stderr.log"), row.missing.length ? `${row.missing.join("\n")}\n` : ""),
+          Bun.write(path.join(root, "artifacts", "summary.json"), JSON.stringify(row, null, 2)),
+          Bun.write(path.join(root, "artifacts", "resolved.json"), JSON.stringify(list, null, 2)),
+        ]
+      }),
     ])
 
     return run
