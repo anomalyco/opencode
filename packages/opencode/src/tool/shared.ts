@@ -6,6 +6,7 @@ import { Bus } from "../bus"
 import { File } from "../file"
 import { FileWatcher } from "../file/watcher"
 import { FileTime } from "../file/time"
+import type { SessionID } from "../session/schema"
 
 /** Resolve a tool parameter path to an absolute path against the project directory */
 export function resolveToolPath(p: string): string {
@@ -49,7 +50,7 @@ export async function writeFileAndNotify(opts: {
   filePath: string
   content: string
   existed: boolean
-  sessionID: string
+  sessionID: SessionID
 }): Promise<void> {
   await Filesystem.write(opts.filePath, opts.content)
   await Bus.publish(File.Event.Edited, { file: opts.filePath })
