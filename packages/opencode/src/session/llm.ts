@@ -184,6 +184,18 @@ export namespace LLM {
       })
     }
 
+    const all = Object.keys(tools).filter((x) => x !== "invalid")
+    const cap = input.model.limit.tools
+    let active = all
+    if (cap && all.length > cap) {
+      l.warn("capping tools", {
+        total: all.length,
+        limit: cap,
+        dropped: all.length - cap,
+      })
+      active = all.slice(0, cap)
+    }
+
     return streamText({
       onError(error) {
         l.error("stream error", {
@@ -215,7 +227,7 @@ export namespace LLM {
       topP: params.topP,
       topK: params.topK,
       providerOptions: ProviderTransform.providerOptions(input.model, params.options),
-      activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
+      activeTools: active,
       tools,
       toolChoice: input.toolChoice,
       maxOutputTokens,
