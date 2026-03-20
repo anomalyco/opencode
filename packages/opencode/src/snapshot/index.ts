@@ -1,10 +1,11 @@
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node"
-import { Cause, Duration, Effect, FileSystem, Layer, Schedule, ServiceMap, Stream } from "effect"
+import { Cause, Duration, Effect, Layer, Schedule, ServiceMap, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import path from "path"
 import z from "zod"
 import { InstanceContext } from "@/effect/instance-context"
 import { runPromiseInstance } from "@/effect/runtime"
+import { AppFileSystem } from "@/filesystem"
 import { Config } from "../config/config"
 import { Global } from "../global"
 import { Log } from "../util/log"
@@ -85,12 +86,12 @@ export namespace Snapshot {
   export const layer: Layer.Layer<
     Service,
     never,
-    InstanceContext | FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner
+    InstanceContext | AppFileSystem.Service | ChildProcessSpawner.ChildProcessSpawner
   > = Layer.effect(
     Service,
     Effect.gen(function* () {
       const ctx = yield* InstanceContext
-      const fs = yield* FileSystem.FileSystem
+      const fs = yield* AppFileSystem.Service
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
       const directory = ctx.directory
       const worktree = ctx.worktree
@@ -124,9 +125,8 @@ export namespace Snapshot {
         ),
       )
 
+      // Snapshot-specific error handling on top of AppFileSystem
       const exists = (file: string) => fs.exists(file).pipe(Effect.orDie)
-      const mkdir = (dir: string) => fs.makeDirectory(dir, { recursive: true }).pipe(Effect.orDie)
-      const write = (file: string, text: string) => fs.writeFileString(file, text).pipe(Effect.orDie)
       const read = (file: string) => fs.readFileString(file).pipe(Effect.catch(() => Effect.succeed("")))
       const remove = (file: string) => fs.remove(file).pipe(Effect.catch(() => Effect.void))
 
@@ -148,12 +148,12 @@ export namespace Snapshot {
       const sync = Effect.fnUntraced(function* () {
         const file = yield* excludes()
         const target = path.join(gitdir, "info", "exclude")
-        yield* mkdir(path.join(gitdir, "info"))
+        yield* fs.ensureDir(path.join(gitdir, "info")).pipe(Effect.orDie)
         if (!file) {
-          yield* write(target, "")
+          yield* fs.writeFileString(target, "").pipe(Effect.orDie)
           return
         }
-        yield* write(target, yield* read(file))
+        yield* fs.writeFileString(target, yield* read(file)).pipe(Effect.orDie)
       })
 
       const add = Effect.fnUntraced(function* () {
@@ -178,7 +178,7 @@ export namespace Snapshot {
       const track = Effect.fn("Snapshot.track")(function* () {
         if (!(yield* enabled())) return
         const existed = yield* exists(gitdir)
-        yield* mkdir(gitdir)
+        yield* fs.ensureDir(gitdir).pipe(Effect.orDie)
         if (!existed) {
           yield* git(["init"], {
             env: { GIT_DIR: gitdir, GIT_WORK_TREE: worktree },
@@ -342,7 +342,8 @@ export namespace Snapshot {
 
   export const defaultLayer = layer.pipe(
     Layer.provide(NodeChildProcessSpawner.layer),
-    Layer.provide(NodeFileSystem.layer),
+    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(NodeFileSystem.layer), // needed by NodeChildProcessSpawner
     Layer.provide(NodePath.layer),
   )
 }
