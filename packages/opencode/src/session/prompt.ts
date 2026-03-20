@@ -28,11 +28,11 @@ import { MCP } from "../mcp"
 import { LSP } from "../lsp"
 import { ReadTool } from "../tool/read"
 import { FileTime } from "../file/time"
+import { NotFoundError } from "@/storage/db"
 import { Flag } from "../flag/flag"
 import { ulid } from "ulid"
 import { spawn } from "child_process"
 import { Command } from "../command"
-import { $ } from "bun"
 import { pathToFileURL, fileURLToPath } from "url"
 import { ConfigMarkdown } from "../config/markdown"
 import { SessionSummary } from "./summary"
@@ -41,13 +41,14 @@ import { fn } from "@/util/fn"
 import { SessionProcessor } from "./processor"
 import { TaskTool } from "@/tool/task"
 import { Tool } from "@/tool/tool"
-import { PermissionNext } from "@/permission/next"
+import { PermissionNext } from "@/permission"
 import { SessionStatus } from "./status"
 import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
-import { Truncate } from "@/tool/truncation"
+import { Truncate } from "@/tool/truncate"
 import { decodeDataUrl } from "@/util/data-url"
+import { Process } from "@/util/process"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -666,6 +667,7 @@ export namespace SessionPrompt {
       const result = await processor.process({
         user: lastUser,
         agent,
+        permission: session.permission,
         abort,
         sessionID,
         system,
@@ -1244,7 +1246,7 @@ export namespace SessionPrompt {
                 ]
               }
 
-              FileTime.read(input.sessionID, filepath)
+              await FileTime.read(input.sessionID, filepath)
               return [
                 {
                   messageID: info.id,
@@ -1316,6 +1318,31 @@ export namespace SessionPrompt {
         parts,
       },
     )
+
+    const parsedInfo = MessageV2.Info.safeParse(info)
+    if (!parsedInfo.success) {
+      log.error("invalid user message before save", {
+        sessionID: input.sessionID,
+        messageID: info.id,
+        agent: info.agent,
+        model: info.model,
+        issues: parsedInfo.error.issues,
+      })
+    }
+
+    parts.forEach((part, index) => {
+      const parsedPart = MessageV2.Part.safeParse(part)
+      if (parsedPart.success) return
+      log.error("invalid user part before save", {
+        sessionID: input.sessionID,
+        messageID: info.id,
+        partID: part.id,
+        partType: part.type,
+        index,
+        issues: parsedPart.error.issues,
+        part,
+      })
+    })
 
     await Session.updateMessage(info)
     for (const part of parts) {
@@ -1786,15 +1813,13 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       template = template + "\n\n" + input.arguments
     }
 
-    const shell = ConfigMarkdown.shell(template)
-    if (shell.length > 0) {
+    const shellMatches = ConfigMarkdown.shell(template)
+    if (shellMatches.length > 0) {
+      const sh = Shell.preferred()
       const results = await Promise.all(
-        shell.map(async ([, cmd]) => {
-          try {
-            return await $`${{ raw: cmd }}`.quiet().nothrow().text()
-          } catch (error) {
-            return `Error executing command: ${error instanceof Error ? error.message : String(error)}`
-          }
+        shellMatches.map(async ([, cmd]) => {
+          const out = await Process.text([cmd], { shell: sh, nothrow: true })
+          return out.text
         }),
       )
       let index = 0
@@ -1964,7 +1989,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       if (!cleaned) return
 
       const title = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
-      return Session.setTitle({ sessionID: input.session.id, title })
+      return Session.setTitle({ sessionID: input.session.id, title }).catch((err) => {
+        if (NotFoundError.isInstance(err)) return
+        throw err
+      })
     }
   }
 }
