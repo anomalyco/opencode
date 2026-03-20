@@ -297,10 +297,10 @@ test("custom provider can reuse auth_provider loader", async () => {
     directory: tmp.path,
     fn: async () => {
       const providers = await Provider.list()
-      expect(providers["custom-github-copilot"]).toBeDefined()
-      expect(providers["custom-github-copilot"].options.apiKey).toBe("")
-      expect(providers["custom-github-copilot"].options.baseURL).toBe("https://api.githubcopilot.com")
-      expect(typeof providers["custom-github-copilot"].options.fetch).toBe("function")
+      expect(providers[ProviderID.make("custom-github-copilot")]).toBeDefined()
+      expect(providers[ProviderID.make("custom-github-copilot")].options.apiKey).toBe("")
+      expect(providers[ProviderID.make("custom-github-copilot")].options.baseURL).toBe("https://api.githubcopilot.com")
+      expect(typeof providers[ProviderID.make("custom-github-copilot")].options.fetch).toBe("function")
 
       const model = await Provider.getModel(ProviderID.make("custom-github-copilot"), ModelID.make("gpt-5"))
       const language = await Provider.getLanguage(model)
