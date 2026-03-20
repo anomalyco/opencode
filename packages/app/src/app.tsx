@@ -89,7 +89,12 @@ declare global {
 function MarkedProviderWithNativeParser(props: ParentProps) {
   // Note: Native parser removed as of commit 692249052 to fix math rendering issues
   // Now using JS parser with KaTeX for all platforms
-  return <MarkedProvider>{props.children}</MarkedProvider>
+  const platform = usePlatform()
+  return (
+    <MarkedProvider mathOutput={platform.platform === "desktop" ? "html" : "htmlAndMathml"}>
+      {props.children}
+    </MarkedProvider>
+  )
 }
 
 function AppShellProviders(props: ParentProps) {

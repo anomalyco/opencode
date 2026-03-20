@@ -6,6 +6,8 @@ import { bundledLanguages, type BundledLanguage } from "shiki"
 import { createSimpleContext } from "./helper"
 import { getSharedHighlighter, registerCustomTheme, ThemeRegistrationResolved } from "@pierre/diffs"
 
+type MathOutput = "html" | "htmlAndMathml"
+
 const autoLinkBoundaryChars = new Set([
   " ",
   "\t",
@@ -473,13 +475,14 @@ function normalizeDisplayMath(markdown: string): string {
     .join("")
 }
 
-function renderMathInText(text: string): string {
+function renderMathInText(text: string, output: MathOutput): string {
   const render = (math: string, displayMode: boolean, fallback: string) => {
     try {
       return katex.renderToString(
         displayMode ? stripEquationNumbers(unescapeHtmlEntities(math)) : unescapeHtmlEntities(math),
         {
           displayMode,
+          output,
           throwOnError: false,
         },
       )
@@ -516,7 +519,7 @@ function renderMathInText(text: string): string {
   return result
 }
 
-function renderMathExpressions(html: string): string {
+function renderMathExpressions(html: string, output: MathOutput): string {
   // Split on code/pre/kbd tags to avoid processing their contents
   const codeBlockPattern = /(<(?:pre|code|kbd)[^>]*>[\s\S]*?<\/(?:pre|code|kbd)>)/gi
   const parts = html.split(codeBlockPattern)
@@ -526,7 +529,7 @@ function renderMathExpressions(html: string): string {
       // Odd indices are the captured code blocks - leave them alone
       if (i % 2 === 1) return part
       // Process math only in non-code parts
-      return renderMathInText(part)
+      return renderMathInText(part, output)
     })
     .join("")
 }
@@ -566,7 +569,8 @@ export type NativeMarkdownParser = (markdown: string) => Promise<string>
 
 export const { use: useMarked, provider: MarkedProvider } = createSimpleContext({
   name: "Marked",
-  init: (props: { nativeParser?: NativeMarkdownParser }) => {
+  init: (props: { nativeParser?: NativeMarkdownParser; mathOutput?: MathOutput }) => {
+    const output = props.mathOutput ?? "htmlAndMathml"
     const jsParser = marked.use(
       {
         renderer: {
@@ -580,6 +584,7 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
         },
       },
       markedKatex({
+        output,
         throwOnError: false,
         nonStandard: true,
       }),
@@ -606,7 +611,7 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
       return {
         async parse(markdown: string): Promise<string> {
           const html = await nativeParser(markdown)
-          const withMath = renderMathExpressions(html)
+          const withMath = renderMathExpressions(html, output)
           return highlightCodeBlocks(withMath)
         },
       }
@@ -615,7 +620,7 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
     return {
       async parse(markdown: string): Promise<string> {
         const html = await jsParser.parse(normalizeDisplayMath(markdown))
-        return renderMathExpressions(html)
+        return renderMathExpressions(html, output)
       },
     }
   },

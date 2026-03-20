@@ -3,7 +3,16 @@ import { useI18n } from "../context/i18n"
 import DOMPurify from "dompurify"
 import morphdom from "morphdom"
 import { checksum } from "@opencode-ai/util/encode"
-import { ComponentProps, createEffect, createMemo, createResource, createSignal, onCleanup, splitProps } from "solid-js"
+import {
+  ComponentProps,
+  createEffect,
+  createMemo,
+  createResource,
+  createSignal,
+  onCleanup,
+  splitProps,
+  untrack,
+} from "solid-js"
 import { isServer } from "solid-js/web"
 
 type Entry = {
@@ -13,6 +22,8 @@ type Entry = {
 
 const max = 200
 const cache = new Map<string, Entry>()
+const debugKey = "opencode:debug:markdown"
+let seq = 0
 
 if (typeof window !== "undefined" && DOMPurify.isSupported) {
   DOMPurify.addHook("afterSanitizeAttributes", (node: Element) => {
@@ -55,6 +66,35 @@ function escape(text: string) {
 
 function fallback(markdown: string) {
   return escape(markdown).replace(/\r\n?/g, "\n").replace(/\n/g, "<br>")
+}
+
+function debug() {
+  if (typeof window === "undefined") return false
+  return localStorage.getItem(debugKey) === "1" || document.documentElement.dataset.debugMarkdown === "1"
+}
+
+function log(id: number, event: string, data?: unknown) {
+  if (!debug()) return
+  if (data === undefined) {
+    console.log(`[markdown:${id}] ${event}`)
+    return
+  }
+  console.log(`[markdown:${id}] ${event}`, data)
+}
+
+function count(root: ParentNode, sel: string) {
+  return root.querySelectorAll(sel).length
+}
+
+function info(node: Node) {
+  if (!(node instanceof Element)) return node.nodeName
+  return {
+    tag: node.tagName.toLowerCase(),
+    class: node.className,
+    slot: node.getAttribute("data-slot"),
+    part: node.getAttribute("data-part"),
+    role: node.getAttribute("role"),
+  }
 }
 
 type CopyLabels = {
@@ -404,6 +444,15 @@ function normalize(text: string) {
   return out
 }
 
+function math(el: Element) {
+  return (
+    el.classList.contains("katex") ||
+    el.classList.contains("katex-display") ||
+    el.classList.contains("katex-html") ||
+    el.classList.contains("katex-mathml")
+  )
+}
+
 export function Markdown(
   props: ComponentProps<"div"> & {
     text: string
@@ -412,6 +461,7 @@ export function Markdown(
     classList?: Record<string, boolean>
   },
 ) {
+  const id = ++seq
   const [local, others] = splitProps(props, ["text", "cacheKey", "class", "classList"])
   const marked = useMarked()
   const i18n = useI18n()
@@ -429,10 +479,12 @@ export function Markdown(
 
       const hash = checksum(normalized)
       const key = local.cacheKey ?? hash
+      const start = performance.now()
 
       if (key && hash) {
         const cached = cache.get(key)
         if (cached && cached.hash === hash) {
+          log(id, "render cache hit", { key, hash, text: markdown.length, html: cached.html.length })
           touch(key, cached)
           return cached.html
         }
@@ -440,11 +492,13 @@ export function Markdown(
 
       let safe = ""
       try {
+        log(id, "render parse", { key, hash, text: markdown.length })
         safe = sanitize(await marked.parse(normalized))
       } catch (err) {
         console.error("markdown render failed", err)
         safe = fallback(normalized)
       }
+      log(id, "render done", { key, hash, html: safe.length, ms: Math.round(performance.now() - start) })
       if (key && hash) touch(key, { hash, html: safe })
       return safe
     },
@@ -453,55 +507,144 @@ export function Markdown(
 
   let copySetupTimer: ReturnType<typeof setTimeout> | undefined
   let copyCleanup: (() => void) | undefined
+  let obs: MutationObserver | undefined
+
+  createEffect(() => {
+    const container = root()
+    if (!container) return
+    container.dataset.markdownId = String(id)
+
+    if (obs) {
+      obs.disconnect()
+      obs = undefined
+    }
+
+    obs = new MutationObserver((list) => {
+      if (!debug()) return
+      log(id, "dom mutate", {
+        count: list.length,
+        sample: list.slice(0, 3).map((item) => ({
+          type: item.type,
+          target: info(item.target),
+          attr: item.attributeName,
+          added: item.addedNodes.length,
+          removed: item.removedNodes.length,
+        })),
+      })
+    })
+
+    obs.observe(container, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      characterData: true,
+    })
+
+    log(id, "mount", {
+      key: local.cacheKey,
+      text: local.text.length,
+      katex: count(container, ".katex, .katex-display"),
+    })
+  })
 
   createEffect(() => {
     const container = root()
     const content = html()
-    const next = labels()
     if (!container) return
     if (isServer) return
 
     if (!content) {
+      log(id, "patch clear")
       container.innerHTML = ""
       delete container.dataset.html
       return
     }
 
-    if (container.dataset.html === content && labelsEqual(container, next)) return
-
     if (container.dataset.html === content) {
-      if (copySetupTimer) clearTimeout(copySetupTimer)
-      copySetupTimer = setTimeout(() => {
-        if (copyCleanup) copyCleanup()
-        copyCleanup = setupCodeCopy(container, next)
-        setLabels(container, next)
-      }, 150)
+      log(id, "patch skip same html", {
+        html: content.length,
+        katex: count(container, ".katex, .katex-display"),
+      })
       return
     }
+
+    const next = untrack(labels)
 
     const temp = document.createElement("div")
     temp.innerHTML = content
     wrapCodeBlocks(temp)
+    let same = 0
+    let keep = 0
+
+    log(id, "patch start", {
+      prev: container.dataset.html?.length ?? 0,
+      next: content.length,
+      katex: {
+        from: count(container, ".katex, .katex-display"),
+        to: count(temp, ".katex, .katex-display"),
+      },
+    })
 
     morphdom(container, temp, {
       childrenOnly: true,
       onBeforeElUpdated: (fromEl, toEl) => {
-        if (fromEl.isEqualNode(toEl)) return false
+        if (fromEl.isEqualNode(toEl)) {
+          same++
+          return false
+        }
+        if (math(fromEl) && math(toEl)) {
+          keep++
+          log(id, "patch keep math", {
+            from: info(fromEl),
+            to: info(toEl),
+          })
+          return false
+        }
         return true
       },
     })
 
     container.dataset.html = content
+    log(id, "patch done", {
+      same,
+      keep,
+      katex: count(container, ".katex, .katex-display"),
+    })
 
     if (copySetupTimer) clearTimeout(copySetupTimer)
     copySetupTimer = setTimeout(() => {
       if (copyCleanup) copyCleanup()
       copyCleanup = setupCodeCopy(container, next)
       setLabels(container, next)
+      log(id, "copy setup", {
+        buttons: count(container, '[data-slot="markdown-copy-button"]'),
+      })
+    }, 150)
+  })
+
+  createEffect(() => {
+    const container = root()
+    const next = labels()
+    if (!container) return
+    if (isServer) return
+    if (!container.dataset.html) return
+    if (labelsEqual(container, next)) {
+      log(id, "labels skip")
+      return
+    }
+
+    if (copySetupTimer) clearTimeout(copySetupTimer)
+    copySetupTimer = setTimeout(() => {
+      if (copyCleanup) copyCleanup()
+      copyCleanup = setupCodeCopy(container, next)
+      setLabels(container, next)
+      log(id, "labels update", next)
     }, 150)
   })
 
   onCleanup(() => {
+    log(id, "cleanup")
+    obs?.disconnect()
     if (copySetupTimer) clearTimeout(copySetupTimer)
     if (copyCleanup) copyCleanup()
   })
