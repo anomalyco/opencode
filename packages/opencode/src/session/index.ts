@@ -10,6 +10,7 @@ import { Flag } from "../flag/flag"
 import { Installation } from "../installation"
 
 import { Database, NotFoundError, eq, and, or, gte, isNull, desc, like, inArray, lt } from "../storage/db"
+import { Filesystem } from "../util/filesystem"
 import type { SQL } from "../storage/db"
 import { SessionTable, MessageTable, PartTable } from "./session.sql"
 import { ProjectTable } from "../project/project.sql"
@@ -45,13 +46,20 @@ export namespace Session {
    * This function ensures consistent path comparison for session listing.
    */
   function normalizeDirectory(dir: string): string {
-    // Normalize backslashes to forward slashes
-    let normalized = dir.replaceAll("\\", "/")
-    // Normalize drive letter to uppercase for case-insensitive comparison on Windows
-    if (process.platform === "win32") {
-      normalized = normalized.replace(/^([a-z]):/, (_, drive) => drive.toUpperCase() + ":")
+    try {
+      // Use Filesystem.resolve to normalize the path - it handles:
+      // - Converting backslashes to forward slashes
+      // - Normalizing drive letter case
+      // - Resolving Git Bash, Cygwin, MSYS2 paths
+      return Filesystem.resolve(dir)
+    } catch {
+      // Fallback: basic normalization without filesystem calls
+      // This handles cases where the directory might not exist anymore
+      if (process.platform === "win32") {
+        return dir.replace(/\\/g, "/").replace(/^([a-z]):/, (_, drive) => drive.toUpperCase() + ":")
+      }
+      return dir
     }
-    return normalized
   }
 
   function createDefaultTitle(isChild = false) {

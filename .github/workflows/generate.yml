@@ -1,51 +1,156 @@
 name: generate
 
+# 🔧 Fork同步专用配置
+# 仅在手动触发或有实际代码变更时运行，避免同步时触发
 on:
+  workflow_dispatch:  # 手动触发 - 用于测试
   push:
     branches:
       - dev
+    paths-ignore:     # 忽略纯同步操作
+      - '.github/**'
+      - 'docs/**'
+      - 'README*'
+      - 'LICENSE'
+      - '.gitignore'
+
+# 环境变量 - 控制是否启用生成功能
+env:
+  ENABLE_GENERATION: ${{ github.event_name == 'workflow_dispatch' || github.event.head_commit.message != 'Merge branch*' }}
 
 jobs:
+  # 检查是否需要运行生成任务
+  check-generation-needed:
+    runs-on: ubuntu-latest
+    outputs:
+      should-run: ${{ steps.decision.outputs.should-run }}
+      reason: ${{ steps.decision.outputs.reason }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: 检查是否需要运行生成
+        id: decision
+        run: |
+          # 手动触发 - 总是运行
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "should-run=true" >> $GITHUB_OUTPUT
+            echo "reason=手动触发生成" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # 检查是否是同步提交
+          commit_msg="${{ github.event.head_commit.message }}"
+          if [[ "$commit_msg" =~ ^Merge[[:space:]]+branch[[:space:]]+.*[[:space:]]+into[[:space:]]+.*$ ]]; then
+            echo "should-run=false" >> $GITHUB_OUTPUT
+            echo "reason=检测到同步提交，跳过生成" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # 检查是否有实际代码变更
+          if git diff --name-only HEAD~1 HEAD | grep -v -E '^(\.github|docs|README|LICENSE|\.gitignore)/' > /dev/null; then
+            echo "should-run=true" >> $GITHUB_OUTPUT
+            echo "reason=检测到代码变更，需要生成" >> $GITHUB_OUTPUT
+          else
+            echo "should-run=false" >> $GITHUB_OUTPUT
+            echo "reason=无重要代码变更，跳过生成" >> $GITHUB_OUTPUT
+          fi
+
+  # 生成任务 - 仅在需要时运行
   generate:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs: check-generation-needed
+    if: needs.check-generation-needed.outputs.should-run == 'true'
+    runs-on: ubuntu-latest  # 使用标准runner，避免fork权限问题
+    
     permissions:
       contents: write
       pull-requests: write
+      actions: read
+    
     steps:
+      - name: 显示运行原因
+        run: |
+          echo "🚀 生成任务原因: ${{ needs.check-generation-needed.outputs.reason }}"
+          echo "📝 提交信息: ${{ github.event.head_commit.message }}"
+
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          # 使用PAT token提高fork权限（如果配置了的话）
+          token: ${{ secrets.PAT || secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
 
-      - name: Setup git committer
+      # 条件性GitHub App设置 - 仅在secrets存在时使用
+      - name: Setup git committer (GitHub App - 如果可用)
         id: committer
+        if: vars.OPENCODE_APP_ID != '' && secrets.OPENCODE_APP_SECRET != ''
         uses: ./.github/actions/setup-git-committer
         with:
           opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
           opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
 
-      - name: Generate
-        run: ./script/generate.ts
+      # Fork环境的备用git配置
+      - name: Setup git user (Fork备用方案)
+        if: vars.OPENCODE_APP_ID == '' || secrets.OPENCODE_APP_SECRET == ''
+        run: |
+          echo "🔧 使用fork环境的git配置"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Commit and push
+      - name: 运行生成脚本
+        run: |
+          echo "⚡ 开始运行生成脚本..."
+          if [ -f "./script/generate.ts" ]; then
+            ./script/generate.ts
+            echo "✅ 生成脚本执行完成"
+          else
+            echo "❌ 生成脚本不存在"
+            exit 1
+          fi
+
+      # 智能提交策略
+      - name: 检查变更并提交
         run: |
           if [ -z "$(git status --porcelain)" ]; then
-            echo "No changes to commit"
+            echo "📝 没有检测到变更，无需提交"
             exit 0
           fi
+          
+          echo "📋 检测到以下变更："
+          git status --porcelain
+          
           git add -A
           git commit -m "chore: generate" --allow-empty
-          git push origin HEAD:${{ github.ref_name }} --no-verify
-          # if ! git push origin HEAD:${{ github.event.pull_request.head.ref || github.ref_name }} --no-verify; then
-          #   echo ""
-          #   echo "============================================"
-          #   echo "Failed to push generated code."
-          #   echo "Please run locally and push:"
-          #   echo ""
-          #   echo "  ./script/generate.ts"
-          #   echo "  git add -A && git commit -m \"chore: generate\" && git push"
-          #   echo ""
-          #   echo "============================================"
-          #   exit 1
-          # fi
+          
+          echo "🚀 尝试推送到fork..."
+          # 尝试推送到fork
+          if git push origin HEAD:${{ github.ref_name }} --no-verify; then
+            echo "✅ 成功推送到fork"
+          else
+            echo "⚠️ 推送到fork失败"
+            echo "💡 这在fork环境中是正常的，您可能需要："
+            echo "   1. 创建PAT token并添加为PAT secret"
+            echo "   2. 或者手动创建Pull Request"
+            echo "   3. 或者禁用此workflow（推荐）"
+            
+            # 不让workflow失败，只是警告
+            exit 0
+          fi
+
+  # 状态报告
+  report-status:
+    needs: [check-generation-needed, generate]
+    if: always() && needs.check-generation-needed.outputs.should-run == 'false'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 显示跳过原因
+        run: |
+          echo "⏭️ 生成任务已跳过"
+          echo "📋 原因: ${{ needs.check-generation-needed.outputs.reason }}"
+          echo "🔄 这是fork同步的正常行为"
