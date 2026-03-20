@@ -28,7 +28,7 @@
 | BMK-002 | done | Define benchmark manifest schema | BMK-001 | catalog self-check |
 | BMK-003 | done | Create timestamped benchmark workspace | BMK-002 | catalog self-check |
 | BMK-004 | done | Run `smic110-adder` dry-run smoke | BMK-003 | adder smoke |
-| BMK-005 | ready | Load fullflow suite from repo-local jobs | BMK-004 | fullflow smoke |
+| BMK-005 | done | Load fullflow suite from repo-local jobs | BMK-004 | fullflow smoke |
 | BMK-006 | todo | Load design and stage-specific suites | BMK-005 | design/function/physical/signoff smoke |
 | BMK-007 | todo | Normalize results and summaries | BMK-006 | fullflow smoke |
 | BMK-008 | todo | Wire benchmark into plan completion gate | BMK-007 | fullflow smoke |
