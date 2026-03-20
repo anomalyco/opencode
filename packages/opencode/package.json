@@ -26,6 +26,13 @@
   "exports": {
     "./*": "./src/*.ts"
   },
+  "imports": {
+    "#db": {
+      "bun": "./src/storage/db.bun.ts",
+      "node": "./src/storage/db.node.ts",
+      "default": "./src/storage/db.bun.ts"
+    }
+  },
   "devDependencies": {
     "@babel/core": "7.28.4",
     "@effect/language-service": "0.79.0",
@@ -50,8 +57,8 @@
     "@types/which": "3.0.4",
     "@types/yargs": "17.0.33",
     "@typescript/native-preview": "catalog:",
-    "drizzle-kit": "1.0.0-beta.16-ea816b6",
-    "drizzle-orm": "1.0.0-beta.16-ea816b6",
+    "drizzle-kit": "catalog:",
+    "drizzle-orm": "catalog:",
     "typescript": "catalog:",
     "vscode-languageserver-types": "3.17.5",
     "why-is-node-running": "3.2.2",
@@ -113,7 +120,7 @@
     "cross-spawn": "^7.0.6",
     "decimal.js": "10.5.0",
     "diff": "catalog:",
-    "drizzle-orm": "1.0.0-beta.16-ea816b6",
+    "drizzle-orm": "catalog:",
     "effect": "catalog:",
     "fuzzysort": "3.1.0",
     "glob": "13.0.5",
@@ -144,6 +151,6 @@
     "zod-to-json-schema": "3.24.5"
   },
   "overrides": {
-    "drizzle-orm": "1.0.0-beta.16-ea816b6"
+    "drizzle-orm": "catalog:"
   }
 }
