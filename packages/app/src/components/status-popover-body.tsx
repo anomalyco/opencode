@@ -1,8 +1,10 @@
 import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Icon } from "@opencode-ai/ui/icon"
+import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Switch } from "@opencode-ai/ui/switch"
 import { Tabs } from "@opencode-ai/ui/tabs"
+import { TextField } from "@opencode-ai/ui/text-field"
 import { useMutation } from "@tanstack/solid-query"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useNavigate } from "@solidjs/router"
@@ -245,6 +247,48 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
   const pluginCount = createMemo(() => plugins().length)
   const pluginEmpty = createMemo(() => pluginEmptyMessage(language.t("dialog.plugins.empty"), "opencode.json"))
 
+  const [pluginDraft, setPluginDraft] = createSignal("")
+  const [pluginLoading, setPluginLoading] = createSignal(false)
+
+  const refreshConfig = async () => {
+    const result = await sdk.client.config.get()
+    if (result.data) sync.set("config", result.data)
+  }
+
+  const savePlugins = async (plugin: string[]) => {
+    if (pluginLoading()) return
+    setPluginLoading(true)
+    return sdk.client.config
+      .update({
+        config: {
+          plugin,
+        },
+      })
+      .then(refreshConfig)
+      .catch((err) =>
+        showToast({
+          variant: "error",
+          title: language.t("common.requestFailed"),
+          description: err instanceof Error ? err.message : String(err),
+        }),
+      )
+      .finally(() => setPluginLoading(false))
+  }
+
+  const addPlugin = () => {
+    const value = pluginDraft().trim()
+    if (!value) return
+    const list = Array.from(new Set([...plugins(), value]))
+    if (list.length === plugins().length) {
+      setPluginDraft("")
+      return
+    }
+    setPluginDraft("")
+    return savePlugins(list)
+  }
+
+  const removePlugin = (value: string) => savePlugins(plugins().filter((item) => item !== value))
+
   return (
     <div class="flex items-center gap-1 w-[360px] rounded-xl shadow-[var(--shadow-lg-border-base)]">
       <Tabs
@@ -421,7 +465,28 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
         </Tabs.Content>
 
         <Tabs.Content value="plugins">
-          <div class="flex flex-col px-2 pb-2">
+          <div class="flex flex-col px-2 pb-2 gap-2">
+            <div class="flex gap-2 p-2">
+              <TextField
+                class="flex-1"
+                placeholder={language.t("status.popover.plugin.placeholder")}
+                disabled={pluginLoading()}
+                value={pluginDraft()}
+                onInput={(e) => setPluginDraft(e.currentTarget.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault()
+                    addPlugin()
+                  }
+                }}
+              />
+              <IconButton
+                icon="plus"
+                disabled={pluginLoading() || !pluginDraft().trim()}
+                onClick={addPlugin}
+                size="sm"
+              />
+            </div>
             <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
               <Show
                 when={plugins().length > 0}
@@ -429,9 +494,16 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
               >
                 <For each={plugins()}>
                   {(plugin) => (
-                    <div class="flex items-center gap-2 w-full px-2 py-1">
+                    <div class="flex items-center gap-2 w-full px-2 py-1 group">
                       <div class="size-1.5 rounded-full shrink-0 bg-icon-success-base" />
-                      <span class="text-14-regular text-text-base truncate">{plugin}</span>
+                      <span class="text-14-regular text-text-base truncate flex-1">{plugin}</span>
+                      <IconButton
+                        icon="close"
+                        disabled={pluginLoading()}
+                        onClick={() => removePlugin(plugin)}
+                        size="sm"
+                        class="opacity-0 group-hover:opacity-100 transition-opacity"
+                      />
                     </div>
                   )}
                 </For>
@@ -443,3 +515,4 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
     </div>
   )
 }
+
