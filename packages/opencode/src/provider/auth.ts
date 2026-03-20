@@ -4,7 +4,7 @@ import * as Auth from "@/auth/effect"
 import { runPromiseInstance } from "@/effect/runtime"
 import { fn } from "@/util/fn"
 import { ProviderID } from "./schema"
-import { Array as Arr, Effect, Layer, Record, Result, ServiceMap, Struct } from "effect"
+import { Array as Arr, Effect, Layer, Record, Result, ServiceMap } from "effect"
 import z from "zod"
 
 export namespace ProviderAuth {
@@ -118,7 +118,8 @@ export namespace ProviderAuth {
           ),
         )
       })
-      const pending = new Map<ProviderID, AuthOuathResult>()
+      const pending = new Map<string, AuthOuathResult>()
+      const key = (providerID: ProviderID, method: number) => `${providerID}:${method}`
 
       const methods = Effect.fn("ProviderAuth.methods")(function* () {
         return Record.map(hooks, (item) =>
@@ -167,7 +168,7 @@ export namespace ProviderAuth {
         }
 
         const result = yield* Effect.promise(() => method.authorize(input.inputs))
-        pending.set(input.providerID, result)
+        pending.set(key(input.providerID, input.method), result)
         return {
           url: result.url,
           method: result.method,
@@ -180,31 +181,35 @@ export namespace ProviderAuth {
         method: number
         code?: string
       }) {
-        const match = pending.get(input.providerID)
+        const id = key(input.providerID, input.method)
+        const match = pending.get(id)
         if (!match) return yield* Effect.fail(new OauthMissing({ providerID: input.providerID }))
         if (match.method === "code" && !input.code) {
           return yield* Effect.fail(new OauthCodeMissing({ providerID: input.providerID }))
         }
+        pending.delete(id)
 
         const result = yield* Effect.promise(() =>
           match.method === "code" ? match.callback(input.code!) : match.callback(),
         )
         if (!result || result.type !== "success") return yield* Effect.fail(new OauthCallbackFailed({}))
+        const save = result.provider ? ProviderID.make(result.provider) : input.providerID
 
         if ("key" in result) {
-          yield* auth.set(input.providerID, {
+          yield* auth.set(save, {
             type: "api",
             key: result.key,
           })
         }
 
         if ("refresh" in result) {
-          yield* auth.set(input.providerID, {
+          const { type: _, provider: __, refresh, access, expires, ...extra } = result
+          yield* auth.set(save, {
             type: "oauth",
-            access: result.access,
-            refresh: result.refresh,
-            expires: result.expires,
-            ...(result.accountId ? { accountId: result.accountId } : {}),
+            access,
+            refresh,
+            expires,
+            ...extra,
           })
         }
       })

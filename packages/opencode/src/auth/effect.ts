@@ -2,31 +2,11 @@ import path from "path"
 import { Effect, Layer, Record, Result, Schema, ServiceMap } from "effect"
 import { Global } from "../global"
 import { Filesystem } from "../util/filesystem"
+import * as AuthSchema from "./schema"
 
 export const OAUTH_DUMMY_KEY = "opencode-oauth-dummy-key"
 
-export class Oauth extends Schema.Class<Oauth>("OAuth")({
-  type: Schema.Literal("oauth"),
-  refresh: Schema.String,
-  access: Schema.String,
-  expires: Schema.Number,
-  accountId: Schema.optional(Schema.String),
-  enterpriseUrl: Schema.optional(Schema.String),
-}) {}
-
-export class Api extends Schema.Class<Api>("ApiAuth")({
-  type: Schema.Literal("api"),
-  key: Schema.String,
-}) {}
-
-export class WellKnown extends Schema.Class<WellKnown>("WellKnownAuth")({
-  type: Schema.Literal("wellknown"),
-  key: Schema.String,
-  token: Schema.String,
-}) {}
-
-export const Info = Schema.Union([Oauth, Api, WellKnown])
-export type Info = Schema.Schema.Type<typeof Info>
+export type Info = AuthSchema.Info
 
 export class AuthError extends Schema.TaggedErrorClass<AuthError>()("AuthError", {
   message: Schema.String,
@@ -50,13 +30,14 @@ export namespace AuthEffect {
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
-      const decode = Schema.decodeUnknownOption(Info)
-
       const all = Effect.fn("Auth.all")(() =>
         Effect.tryPromise({
           try: async () => {
             const data = await Filesystem.readJson<Record<string, unknown>>(file).catch(() => ({}))
-            return Record.filterMap(data, (value) => Result.fromOption(decode(value), () => undefined))
+            return Record.filterMap(data, (value) => {
+              const parsed = AuthSchema.Info.safeParse(value)
+              return parsed.success ? Result.succeed(parsed.data) : Result.failVoid
+            })
           },
           catch: fail("Failed to read auth data"),
         }),

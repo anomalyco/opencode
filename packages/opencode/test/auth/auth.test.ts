@@ -56,3 +56,23 @@ test("set and remove are no-ops on keys without trailing slashes", async () => {
   const after = await Auth.all()
   expect(after["anthropic"]).toBeUndefined()
 })
+
+test("oauth auth preserves plugin metadata", async () => {
+  await Auth.set("anthropic", {
+    type: "oauth",
+    refresh: "refresh",
+    access: "access",
+    expires: 123,
+    userAgent: "claude-code/2.1.76",
+    billingHeader: "x-anthropic-billing-header: cc_version=2.1.76.4dc; cc_entrypoint=cli; cch=00000;",
+  })
+
+  const auth = await Auth.get("anthropic")
+  expect(auth).toBeDefined()
+  expect(auth?.type).toBe("oauth")
+  if (auth?.type !== "oauth") return
+  expect(auth.userAgent).toBe("claude-code/2.1.76")
+  expect(auth.billingHeader).toBe(
+    "x-anthropic-billing-header: cc_version=2.1.76.4dc; cc_entrypoint=cli; cch=00000;",
+  )
+})

@@ -1,7 +1,7 @@
 import { Effect } from "effect"
-import z from "zod"
 import { runtime } from "@/effect/runtime"
 import * as S from "./effect"
+import * as Schema from "./schema"
 
 export { OAUTH_DUMMY_KEY } from "./effect"
 
@@ -10,34 +10,11 @@ function runPromise<A>(f: (service: S.AuthEffect.Interface) => Effect.Effect<A, 
 }
 
 export namespace Auth {
-  export const Oauth = z
-    .object({
-      type: z.literal("oauth"),
-      refresh: z.string(),
-      access: z.string(),
-      expires: z.number(),
-      accountId: z.string().optional(),
-      enterpriseUrl: z.string().optional(),
-    })
-    .meta({ ref: "OAuth" })
-
-  export const Api = z
-    .object({
-      type: z.literal("api"),
-      key: z.string(),
-    })
-    .meta({ ref: "ApiAuth" })
-
-  export const WellKnown = z
-    .object({
-      type: z.literal("wellknown"),
-      key: z.string(),
-      token: z.string(),
-    })
-    .meta({ ref: "WellKnownAuth" })
-
-  export const Info = z.discriminatedUnion("type", [Oauth, Api, WellKnown]).meta({ ref: "Auth" })
-  export type Info = z.infer<typeof Info>
+  export const Oauth = Schema.Oauth
+  export const Api = Schema.Api
+  export const WellKnown = Schema.WellKnown
+  export const Info = Schema.Info
+  export type Info = Schema.Info
 
   export async function get(providerID: string) {
     return runPromise((service) => service.get(providerID))
