@@ -384,7 +384,7 @@ export const NewSessionItem = (props: {
     >
       <div class="flex items-center gap-1 w-full">
         <div class="shrink-0 size-6 flex items-center justify-center">
-          <Icon name="plus-small" size="small" class="text-icon-weak" />
+          <Icon name="new-session" size="small" class="text-icon-weak" />
         </div>
         <span class="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate">
           {label}
