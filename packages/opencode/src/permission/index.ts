@@ -13,6 +13,7 @@ import { Wildcard } from "@/util/wildcard"
 import { Deferred, Effect, Layer, Schema, ServiceMap } from "effect"
 import os from "os"
 import z from "zod"
+import { evaluate as evalRule } from "./evaluate"
 import { PermissionID } from "./schema"
 
 export namespace PermissionNext {
@@ -125,12 +126,8 @@ export namespace PermissionNext {
   }
 
   export function evaluate(permission: string, pattern: string, ...rulesets: Ruleset[]): Rule {
-    const rules = rulesets.flat()
-    log.info("evaluate", { permission, pattern, ruleset: rules })
-    const match = rules.findLast(
-      (rule) => Wildcard.match(permission, rule.permission) && Wildcard.match(pattern, rule.pattern),
-    )
-    return match ?? { action: "ask", permission, pattern: "*" }
+    log.info("evaluate", { permission, pattern, ruleset: rulesets.flat() })
+    return evalRule(permission, pattern, ...rulesets)
   }
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/PermissionNext") {}
