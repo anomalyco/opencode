@@ -1,5 +1,5 @@
 import { useFilteredList } from "@opencode-ai/ui/hooks"
-import { createEffect, on, Component, Show, onCleanup, Switch, Match, createMemo, createSignal } from "solid-js"
+import { createEffect, on, Component, Show, onCleanup, Switch, Match, createMemo, createSignal, For } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createFocusSignal } from "@solid-primitives/active-element"
 import { useLocal } from "@/context/local"
@@ -61,6 +61,8 @@ import { GhostText } from "./prompt-input/ghost-text"
 import { shouldRender } from "./prompt-input/sync"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
 import { DialogPromptEditor } from "@/components/dialog-prompt-editor"
+import { Popover } from "@opencode-ai/ui/popover"
+import { getFilename } from "@opencode-ai/util/path"
 import { merge, value } from "./prompt-input/expand"
 
 interface PromptInputProps {
@@ -107,6 +109,171 @@ const EXAMPLES = [
 
 const NON_EMPTY_TEXT = /[^\s\u200B]/
 
+const GitContext = () => {
+  const sdk = useSDK()
+  const sync = useSync()
+  const language = useLanguage()
+  const [open, setOpen] = createSignal(false)
+  const [snap, setSnap] = createSignal(sync.data.vcs)
+
+  const branch = createMemo(() => sync.data.vcs?.branch?.trim())
+  const root = createMemo(() => sync.project?.worktree || sync.data.path.worktree || sdk.directory)
+  const dir = createMemo(() => sync.data.path.directory || sdk.directory)
+  const repo = createMemo(() => sync.project?.name || getFilename(root()))
+  const local = createMemo(() => dir() === root())
+  const kind = createMemo(() => (local() ? language.t("workspace.type.local") : language.t("workspace.type.sandbox")))
+  const branches = createMemo(() => {
+    const items = (snap()?.branches ?? sync.data.vcs?.branches ?? []).filter(Boolean)
+    if (items.length) return items
+    return branch() ? [branch()!] : []
+  })
+  const showBranches = createMemo(() => branches().length > 1)
+  const worktrees = createMemo(() => {
+    const items = snap()?.worktrees ?? sync.data.vcs?.worktrees ?? []
+    if (items.length) return items
+    const sandboxes = sync.project?.sandboxes ?? []
+    return [root(), ...sandboxes].filter(Boolean).map((path) => ({
+      path,
+      branch: path === dir() ? branch() : undefined,
+    }))
+  })
+  const extras = createMemo(() => worktrees().filter((item) => item.path !== root()))
+  const title = createMemo(() => (extras().length > 0 ? "Workspaces" : "Workspace"))
+
+  createEffect(() => {
+    setSnap(sync.data.vcs)
+  })
+
+  createEffect(() => {
+    if (!open()) return
+    sdk.client.vcs
+      .get()
+      .then((result) => result.data)
+      .then((data) => data && setSnap(data))
+      .catch(() => undefined)
+  })
+
+  return (
+    <Show when={sync.project?.vcs === "git" && branch()}>
+      <Popover
+        open={open()}
+        onOpenChange={setOpen}
+        placement="top-start"
+        gutter={6}
+        triggerAs={Button}
+        triggerProps={{
+          variant: "ghost",
+          size: "normal",
+          class: "min-w-0 max-w-[320px] text-13-regular group",
+        }}
+        class="w-[420px] max-w-[calc(100vw-40px)] rounded-xl border border-white/10 bg-transparent shadow-[var(--shadow-lg-border-base)]"
+        style={{
+          "background-color": "rgb(12 12 14 / 0.34)",
+          "backdrop-filter": "blur(40px) saturate(150%)",
+          "-webkit-backdrop-filter": "blur(40px) saturate(150%)",
+        }}
+        trigger={
+          <div class="min-w-0 flex items-center gap-1.5 px-1.5">
+            <Icon name="branch" size="small" class="shrink-0 text-icon-base" />
+            <span class="truncate text-text-strong">{branch()}</span>
+            <Icon name="chevron-down" size="small" class="shrink-0 text-icon-weak" />
+          </div>
+        }
+      >
+        <div class="flex flex-col gap-4 p-3">
+          <div class="flex flex-col gap-1">
+            <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">Git context</div>
+            <div class="flex items-center gap-2 min-w-0">
+              <Icon name="branch" size="small" class="shrink-0 text-icon-base" />
+              <div class="min-w-0 flex-1">
+                <div class="truncate text-14-medium text-text-strong">{branch()}</div>
+                <div class="truncate text-12-regular text-text-weak">
+                  {repo()} - {kind()}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex flex-col gap-2">
+            <Show
+              when={!local()}
+              fallback={
+                <div class="flex flex-col gap-1">
+                  <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">Workspace</div>
+                  <div class="break-all font-mono text-[12px] leading-5 text-text-base">{root()}</div>
+                </div>
+              }
+            >
+              <div class="flex flex-col gap-1">
+                <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">Current directory</div>
+                <div class="break-all font-mono text-[12px] leading-5 text-text-base">{dir()}</div>
+              </div>
+              <div class="flex flex-col gap-1">
+                <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">Workspace root</div>
+                <div class="break-all font-mono text-[12px] leading-5 text-text-base">{root()}</div>
+              </div>
+            </Show>
+          </div>
+
+          <Show when={showBranches() || extras().length > 0}>
+            <div class="grid gap-3" classList={{ "sm:grid-cols-2": showBranches() && extras().length > 0 }}>
+              <Show when={showBranches()}>
+                <div class="min-w-0">
+                  <div class="mb-2 text-11-medium uppercase tracking-[0.08em] text-text-weak">Branches</div>
+                  <div class="flex flex-col gap-1.5">
+                    <For each={branches().slice(0, 8)}>
+                      {(item) => (
+                        <div class="flex items-center gap-2 min-w-0 text-12-regular">
+                          <Icon name="branch" size="small" class="shrink-0 text-icon-weak" />
+                          <span class="truncate text-text-base">{item}</span>
+                          <Show when={item === branch()}>
+                            <span class="shrink-0 rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
+                              current
+                            </span>
+                          </Show>
+                        </div>
+                      )}
+                    </For>
+                  </div>
+                </div>
+              </Show>
+
+              <Show when={extras().length > 0}>
+                <div class="min-w-0">
+                  <div class="mb-2 text-11-medium uppercase tracking-[0.08em] text-text-weak">{title()}</div>
+                  <div class="flex flex-col gap-1.5">
+                    <For each={extras().slice(0, 8)}>
+                      {(item) => (
+                        <div class="flex items-start gap-2 min-w-0 text-12-regular">
+                          <Icon name="folder" size="small" class="mt-0.5 shrink-0 text-icon-weak" />
+                          <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-1.5 min-w-0">
+                              <span class="truncate text-text-base">{getFilename(item.path)}</span>
+                              <Show when={item.path === dir()}>
+                                <span class="shrink-0 rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
+                                  current
+                                </span>
+                              </Show>
+                            </div>
+                            <div class="break-all font-mono text-[12px] leading-5 text-text-weak">{item.path}</div>
+                            <Show when={item.branch}>
+                              <div class="truncate text-text-weak">{item.branch}</div>
+                            </Show>
+                          </div>
+                        </div>
+                      )}
+                    </For>
+                  </div>
+                </div>
+              </Show>
+            </div>
+          </Show>
+        </div>
+      </Popover>
+    </Show>
+  )
+}
+
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const sdk = useSDK()
   const sync = useSync()
@@ -121,8 +288,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const permission = usePermission()
   const language = useLanguage()
   type DictKey = keyof typeof enDict
-  const kw = (...keys: DictKey[]) =>
-    language.locale() === "en" ? undefined : keys.map((k) => enDict[k]).join(" ")
+  const kw = (...keys: DictKey[]) => (language.locale() === "en" ? undefined : keys.map((k) => enDict[k]).join(" "))
   const platform = usePlatform()
   const { params, tabs, view } = useSessionLayout()
   let editorRef!: HTMLDivElement
@@ -1647,6 +1813,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     variant="ghost"
                   />
                 </TooltipKeybind>
+                <GitContext />
               </div>
             </div>
           </div>
