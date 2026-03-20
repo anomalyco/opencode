@@ -13,6 +13,9 @@ export const sessionTodoToggleButtonSelector = '[data-action="session-todo-toggl
 export const sessionTodoListSelector = '[data-slot="session-todo-list"]'
 
 export const modelVariantCycleSelector = '[data-action="model-variant-cycle"]'
+export const promptAgentSelector = '[data-component="prompt-agent-control"]'
+export const promptModelSelector = '[data-component="prompt-model-control"]'
+export const promptVariantSelector = '[data-component="prompt-variant-control"]'
 export const settingsLanguageSelectSelector = '[data-action="settings-language"]'
 export const settingsColorSchemeSelector = '[data-action="settings-color-scheme"]'
 export const settingsThemeSelector = '[data-action="settings-theme"]'

@@ -152,12 +152,12 @@ const createPlatform = (): Platform => {
     storage,
 
     checkUpdate: async () => {
-      if (!UPDATER_ENABLED) return { updateAvailable: false }
+      if (!UPDATER_ENABLED()) return { updateAvailable: false }
       return window.api.checkUpdate()
     },
 
     update: async () => {
-      if (!UPDATER_ENABLED) return
+      if (!UPDATER_ENABLED()) return
       await window.api.installUpdate()
     },
 
