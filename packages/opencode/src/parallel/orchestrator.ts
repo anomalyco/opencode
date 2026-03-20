@@ -409,6 +409,30 @@ export namespace Orchestrator {
       await WorkerManager.waitAll(planID, abort)
     })
 
+    const afterWait = await PlanStore.get(planID)
+    const active = inflight(afterWait.workers)
+    if (active.length > 0) {
+      await PlanStore.update({
+        id: planID,
+        status: "failed",
+        error: {
+          code: "workers_incomplete",
+          stage: "running",
+          message: `Workers still active after wait: ${active.length}`,
+          at: Date.now(),
+        },
+      })
+      Metrics.recordPlanOutcome("failed")
+      log.error("workers still active after wait; skipping merge", {
+        planID,
+        active: active.map((worker) => ({
+          subtaskID: worker.subtaskID,
+          status: worker.status,
+        })),
+      })
+      return
+    }
+
     await PlanStore.transition({ id: planID, status: "merging" })
     await PlanStore.transition({ id: planID, status: "integrating" })
     const integrationResult = await stage("integrating", async () => Integration.integrate(planID))
@@ -439,29 +463,38 @@ export namespace Orchestrator {
 
     // Determine final status based on all outcomes
     const finalPlan = await PlanStore.get(planID)
-    const mergedWorkers = finalPlan.workers.filter((w) => w.status === "merged")
-    const failedWorkers = finalPlan.workers.filter((w) => w.status === "failed" || w.status === "conflict")
+    const result = resolveOutcome({
+      workers: finalPlan.workers,
+      integrationSuccess: integrationResult.success,
+      publishSuccess: publishResult.success,
+    })
+    const finalStatus = result.status
 
-    let finalStatus: "done" | "partial_success" | "failed"
-    if (integrationResult.success && publishResult.success && failedWorkers.length === 0) {
-      finalStatus = "done"
-    } else if (mergedWorkers.length > 0) {
-      finalStatus = "partial_success"
+    if (result.unresolved > 0) {
+      log.error("plan has unresolved workers at completion", {
+        planID,
+        unresolved: result.unresolved,
+        statuses: unresolved(finalPlan.workers).map((worker) => ({
+          subtaskID: worker.subtaskID,
+          status: worker.status,
+        })),
+      })
+    }
+
+    if (finalStatus === "partial_success") {
       log.info("plan partial success", {
         planID,
-        merged: mergedWorkers.length,
-        failed: failedWorkers.length,
+        merged: result.merged,
+        failed: result.failed,
         integrationBranch: integrationResult.branch,
         publishMode,
       })
-    } else {
-      finalStatus = "failed"
     }
 
     await PlanStore.transition({ id: planID, status: finalStatus })
     Metrics.recordPlanOutcome(finalStatus)
 
-    if (finalStatus === "failed") {
+    if (finalStatus === "failed" && result.unresolved === 0) {
       await Recovery.cleanupWorktrees(finalPlan)
     }
 
@@ -625,18 +658,15 @@ export namespace Orchestrator {
             const publishResult = await Integration.publish(planID, publishMode)
 
             const finalPlan = await PlanStore.get(planID)
-            const mergedWorkers = finalPlan.workers.filter((w) => w.status === "merged")
-            const failedWorkers = finalPlan.workers.filter((w) => w.status === "failed" || w.status === "conflict")
-
-            const finalStatus =
-              publishResult.success && failedWorkers.length === 0
-                ? "done"
-                : mergedWorkers.length > 0
-                  ? "partial_success"
-                  : "failed"
+            const outcome = resolveOutcome({
+              workers: finalPlan.workers,
+              integrationSuccess: integrationResult.success,
+              publishSuccess: publishResult.success,
+            })
+            const finalStatus = outcome.status
             await PlanStore.transition({ id: planID, status: finalStatus })
 
-            if (finalStatus === "failed") {
+            if (finalStatus === "failed" && outcome.unresolved === 0) {
               await Recovery.cleanupWorktrees(finalPlan)
             }
           }

@@ -4,6 +4,7 @@ import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { PlanStore } from "../../src/parallel/plan"
 import { Orchestrator } from "../../src/parallel/orchestrator"
 import { SubtaskID } from "../../src/parallel/schema"
+import type { WorkerState } from "../../src/parallel/schema"
 import { tmpdir } from "../fixture/fixture"
 
 describe("Parallel Infrastructure", () => {
@@ -333,6 +334,49 @@ describe("Parallel Infrastructure", () => {
           return models
         },
       })
+    })
+  })
+
+  describe("Orchestrator.resolveOutcome", () => {
+    function worker(status: WorkerState["status"]): WorkerState {
+      return {
+        subtaskID: SubtaskID.ascending(),
+        status,
+      }
+    }
+
+    test("fails when unresolved workers remain", () => {
+      const result = Orchestrator.resolveOutcome({
+        workers: [worker("merged"), worker("running"), worker("running")],
+        integrationSuccess: true,
+        publishSuccess: true,
+      })
+
+      expect(result.status).toBe("failed")
+      expect(result.unresolved).toBe(2)
+    })
+
+    test("marks done only when all workers are merged", () => {
+      const result = Orchestrator.resolveOutcome({
+        workers: [worker("merged"), worker("merged"), worker("merged")],
+        integrationSuccess: true,
+        publishSuccess: true,
+      })
+
+      expect(result.status).toBe("done")
+      expect(result.unresolved).toBe(0)
+      expect(result.merged).toBe(3)
+    })
+
+    test("marks partial success when terminal but some workers failed", () => {
+      const result = Orchestrator.resolveOutcome({
+        workers: [worker("merged"), worker("conflict"), worker("failed")],
+        integrationSuccess: true,
+        publishSuccess: true,
+      })
+
+      expect(result.status).toBe("partial_success")
+      expect(result.failed).toBe(2)
     })
   })
 })
