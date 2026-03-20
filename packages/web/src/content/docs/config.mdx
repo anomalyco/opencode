@@ -707,3 +707,72 @@ These are useful for:
 - Keeping sensitive data like API keys in separate files.
 - Including large instruction files without cluttering your config.
 - Sharing common configuration snippets across multiple config files.
+
+---
+
+### JSON files
+
+Use `{json:path/to/file.json#/pointer}` to extract a string field from a JSON file:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "openai": {
+      "options": {
+        "apiKey": "{json:~/.config/opencode/auth.json#/OPENAI_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+The `#/pointer` part uses [JSON Pointer (RFC 6901)](https://datatracker.ietf.org/doc/html/rfc6901) syntax.
+For example:
+
+- `#/OPENAI_API_KEY` selects a top-level key
+- `#/provider/openai/apiKey` selects a nested key
+- `#/providers/0/apiKey` selects an array item
+
+This also supports array indices, for example `#/providers/0/apiKey`.
+
+This is useful when:
+
+- Another tool already stores your API key in a JSON file.
+- You want to reuse one shared secret source without copying values into `opencode.json`.
+
+Currently, `{json:...}` references must resolve to a string value.
+
+---
+
+### TOML files
+
+Use `{toml:path/to/file.toml#/pointer}` to extract a string field from a TOML file:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "openai": {
+      "options": {
+        "baseURL": "{toml:.codex/config.toml#/model_providers/custom/base_url}"
+      }
+    }
+  }
+}
+```
+
+For a TOML file like:
+
+```toml title=".codex/config.toml"
+[model_providers.custom]
+base_url = "https://api.example.com/openai/v1"
+```
+
+`{toml:...}` also uses the same JSON Pointer-style path after `#`, applied to the parsed TOML object.
+For example, `#/model_providers/custom/base_url` maps to:
+
+- table: `[model_providers.custom]`
+- key: `base_url`
+
+The extracted value must currently resolve to a string.

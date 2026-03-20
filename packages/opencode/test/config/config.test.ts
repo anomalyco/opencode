@@ -329,6 +329,119 @@ test("handles file inclusion with replacement tokens", async () => {
   })
 })
 
+test("extracts API keys from auth.json", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Filesystem.write(
+        path.join(dir, "auth.json"),
+        JSON.stringify({
+          OPENAI_API_KEY: "sk-test-openai-example-key",
+        }),
+      )
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        provider: {
+          openai: {
+            options: {
+              apiKey: "{json:auth.json#/OPENAI_API_KEY}",
+            },
+          },
+        },
+      })
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.provider?.openai?.options?.apiKey).toBe("sk-test-openai-example-key")
+    },
+  })
+})
+
+test("extracts values from .codex/config.toml", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Filesystem.write(
+        path.join(dir, ".codex", "config.toml"),
+        `[model_providers.custom]
+base_url = "https://api.example.com/openai/v1"
+`,
+      )
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        provider: {
+          openai: {
+            options: {
+              baseURL: "{toml:.codex/config.toml#/model_providers/custom/base_url}",
+            },
+          },
+        },
+      })
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.provider?.openai?.options?.baseURL).toBe("https://api.example.com/openai/v1")
+    },
+  })
+})
+
+test("supports JSON array indices via pointer syntax", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Filesystem.write(
+        path.join(dir, "providers.json"),
+        JSON.stringify({
+          providers: [{ apiKey: "array-index-key" }],
+        }),
+      )
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        provider: {
+          openai: {
+            options: {
+              apiKey: "{json:providers.json#/providers/0/apiKey}",
+            },
+          },
+        },
+      })
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.provider?.openai?.options?.apiKey).toBe("array-index-key")
+    },
+  })
+})
+
+test("throws when TOML extraction resolves to a non-string value", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Filesystem.write(
+        path.join(dir, ".codex", "config.toml"),
+        `[model_providers.custom]
+base_url = "https://api.example.com/openai/v1"
+`,
+      )
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        username: "{toml:.codex/config.toml#/model_providers/custom}",
+      })
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await expect(Config.get()).rejects.toThrow()
+    },
+  })
+})
+
 test("validates config schema and throws on invalid fields", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
@@ -2065,6 +2178,81 @@ describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
         fn: async () => {
           const config = await Config.get()
           expect(config.username).toBe("secret_key_from_file")
+        },
+      })
+    } finally {
+      if (originalEnv !== undefined) {
+        process.env["OPENCODE_CONFIG_CONTENT"] = originalEnv
+      } else {
+        delete process.env["OPENCODE_CONFIG_CONTENT"]
+      }
+    }
+  })
+
+  test("substitutes {json:} tokens in OPENCODE_CONFIG_CONTENT", async () => {
+    const originalEnv = process.env["OPENCODE_CONFIG_CONTENT"]
+
+    try {
+      await using tmp = await tmpdir({
+        init: async (dir) => {
+          await Filesystem.write(path.join(dir, "auth.json"), JSON.stringify({ OPENAI_API_KEY: "sk-test-config-content-key" }))
+          process.env["OPENCODE_CONFIG_CONTENT"] = JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            provider: {
+              openai: {
+                options: {
+                  apiKey: "{json:./auth.json#/OPENAI_API_KEY}",
+                },
+              },
+            },
+          })
+        },
+      })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const config = await Config.get()
+          expect(config.provider?.openai?.options?.apiKey).toBe("sk-test-config-content-key")
+        },
+      })
+    } finally {
+      if (originalEnv !== undefined) {
+        process.env["OPENCODE_CONFIG_CONTENT"] = originalEnv
+      } else {
+        delete process.env["OPENCODE_CONFIG_CONTENT"]
+      }
+    }
+  })
+
+  test("substitutes {toml:} tokens in OPENCODE_CONFIG_CONTENT", async () => {
+    const originalEnv = process.env["OPENCODE_CONFIG_CONTENT"]
+
+    try {
+      await using tmp = await tmpdir({
+        init: async (dir) => {
+          await Filesystem.write(
+            path.join(dir, ".codex", "config.toml"),
+            `[model_providers.custom]
+base_url = "https://api.example.com/openai/v1"
+`,
+          )
+          process.env["OPENCODE_CONFIG_CONTENT"] = JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            provider: {
+              openai: {
+                options: {
+                  baseURL: "{toml:./.codex/config.toml#/model_providers/custom/base_url}",
+                },
+              },
+            },
+          })
+        },
+      })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const config = await Config.get()
+          expect(config.provider?.openai?.options?.baseURL).toBe("https://api.example.com/openai/v1")
         },
       })
     } finally {

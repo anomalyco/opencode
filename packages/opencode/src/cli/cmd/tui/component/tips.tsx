@@ -124,6 +124,7 @@ const TIPS = [
   "Reference ANSI colors 0-255 in custom themes",
   "Use {highlight}{env:VAR_NAME}{/highlight} syntax to reference environment variables in config",
   "Use {highlight}{file:path}{/highlight} to include file contents in config values",
+  "Use {highlight}{json:path#/a/b}{/highlight} or {highlight}{toml:path#/a/b}{/highlight} to load a string from a nested config key",
   "Use {highlight}instructions{/highlight} in config to load additional rules files",
   "Set agent {highlight}temperature{/highlight} from 0.0 (focused) to 1.0 (creative)",
   "Configure {highlight}steps{/highlight} to limit agentic iterations per request",

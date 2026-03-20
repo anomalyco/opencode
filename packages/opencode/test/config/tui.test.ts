@@ -455,6 +455,34 @@ test("applies file substitutions when first identical token is in a commented li
   })
 })
 
+test("applies TOML substitutions when first identical token is in a commented line", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, ".codex", "config.toml"),
+        `[model_providers.custom]
+base_url = "https://api.example.com/openai/v1"
+`,
+      )
+      await Bun.write(
+        path.join(dir, "tui.jsonc"),
+        `{
+  // "theme": "{toml:.codex/config.toml#/model_providers/custom/base_url}",
+  "theme": "{toml:.codex/config.toml#/model_providers/custom/base_url}"
+}`,
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await TuiConfig.get()
+      expect(config.theme).toBe("https://api.example.com/openai/v1")
+    },
+  })
+})
+
 test("loads managed tui config and gives it highest precedence", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
