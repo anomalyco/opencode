@@ -94,10 +94,14 @@
   min-width: 104px;
   max-width: 23rem;
   overflow: hidden;
-  border-radius: var(--radius-md);
-  background-color: var(--surface-raised-stronger-non-alpha);
+  border-radius: var(--radius-xl);
+  border: 1px solid rgb(255 255 255 / 0.1);
+  background-color: rgb(12 12 14 / 0.34);
+  background-clip: padding-box;
+  backdrop-filter: blur(40px) saturate(150%);
+  -webkit-backdrop-filter: blur(40px) saturate(150%);
   padding: 4px;
-  box-shadow: var(--shadow-xs-border);
+  box-shadow: var(--shadow-lg-border-base);
   z-index: 60;
 
   &[data-expanded] {
@@ -172,7 +176,7 @@
 
 [data-component="select-content"][data-trigger-style="settings"] {
   min-width: 160px;
-  border-radius: 8px;
+  border-radius: var(--radius-xl);
   padding: 0;
 
   [data-slot="select-select-content-list"] {

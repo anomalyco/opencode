@@ -64,7 +64,7 @@
     gap: 12px;
 
     border-radius: var(--radius-md);
-    background: var(--surface-base);
+    background: color-mix(in oklch, var(--surface-base) 62%, transparent);
 
     [data-slot="list-search-container"] {
       display: flex;
@@ -192,6 +192,8 @@
         align-items: center;
         align-self: stretch;
         background: var(--surface-raised-stronger-non-alpha);
+        backdrop-filter: blur(24px) saturate(130%);
+        -webkit-backdrop-filter: blur(24px) saturate(130%);
         position: sticky;
         top: 0;
 
@@ -327,6 +329,22 @@
           }
         }
       }
+    }
+  }
+}
+
+[data-component="dialog"] [data-component="list"],
+[data-component="popover-content"] [data-component="list"] {
+  [data-slot="list-search"] {
+    background: rgb(255 255 255 / 0.05);
+    border: 1px solid rgb(255 255 255 / 0.06);
+  }
+
+  [data-slot="list-header"] {
+    background: rgb(12 12 14 / 0.22);
+
+    &::after {
+      background: linear-gradient(to bottom, rgb(12 12 14 / 0.22), transparent);
     }
   }
 }
