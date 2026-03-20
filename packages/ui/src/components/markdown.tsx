@@ -10,6 +10,7 @@ import {
   createResource,
   createSignal,
   onCleanup,
+  onMount,
   splitProps,
   untrack,
 } from "solid-js"
@@ -457,22 +458,25 @@ export function Markdown(
   props: ComponentProps<"div"> & {
     text: string
     cacheKey?: string
+    eager?: boolean
     class?: string
     classList?: Record<string, boolean>
   },
 ) {
   const id = ++seq
-  const [local, others] = splitProps(props, ["text", "cacheKey", "class", "classList"])
+  const [local, others] = splitProps(props, ["text", "cacheKey", "eager", "class", "classList"])
   const marked = useMarked()
   const i18n = useI18n()
   const [root, setRoot] = createSignal<HTMLDivElement>()
+  const [ready, setReady] = createSignal(isServer || local.eager !== false)
   const labels = createMemo(() => ({
     copy: i18n.t("ui.message.copy"),
     copied: i18n.t("ui.message.copied"),
   }))
   const [html] = createResource(
-    () => local.text,
+    () => (ready() ? local.text : undefined),
     async (markdown) => {
+      if (!markdown) return ""
       if (isServer) return fallback(markdown)
 
       const normalized = normalize(markdown)
@@ -508,6 +512,33 @@ export function Markdown(
   let copySetupTimer: ReturnType<typeof setTimeout> | undefined
   let copyCleanup: (() => void) | undefined
   let obs: MutationObserver | undefined
+
+  onMount(() => {
+    if (isServer) return
+    if (local.eager !== false) {
+      setReady(true)
+      return
+    }
+
+    const container = root()
+    if (!container) return
+    if (typeof IntersectionObserver === "undefined") {
+      setReady(true)
+      return
+    }
+
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return
+        setReady(true)
+        io.disconnect()
+      },
+      { rootMargin: "300px 0px" },
+    )
+
+    io.observe(container)
+    onCleanup(() => io.disconnect())
+  })
 
   createEffect(() => {
     const container = root()
