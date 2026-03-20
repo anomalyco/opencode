@@ -224,6 +224,11 @@ function App() {
     return RGBA.fromValues(bg.r, bg.g, bg.b, 0)
   }
 
+  createEffect(() => {
+    // Keep the renderer backdrop in sync so transparent overlays blend against the terminal RGB.
+    renderer.setBackgroundColor(background())
+  })
+
   useKeyboard((evt) => {
     if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
     if (!renderer.getSelection()) return
