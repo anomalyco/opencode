@@ -10,6 +10,7 @@ import {
   type ToolSet,
   tool,
   jsonSchema,
+  Output,
 } from "ai"
 import { mergeDeep, pipe } from "remeda"
 import { GitLabWorkflowLanguageModel } from "gitlab-ai-provider"
@@ -41,6 +42,7 @@ export namespace LLM {
     tools: Record<string, Tool>
     retries?: number
     toolChoice?: "auto" | "required" | "none"
+    format?: MessageV2.OutputFormat
   }
 
   export type StreamOutput = StreamTextResult<ToolSet, unknown>
@@ -214,6 +216,10 @@ export namespace LLM {
     }
 
     return streamText({
+      experimental_output:
+        input.format?.type === "json_schema"
+          ? Output.object({ schema: jsonSchema(input.format.schema as any) })
+          : undefined,
       onError(error) {
         l.error("stream error", {
           error,

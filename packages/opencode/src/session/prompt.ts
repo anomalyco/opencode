@@ -53,16 +53,6 @@ import { Process } from "@/util/process"
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
 
-const STRUCTURED_OUTPUT_DESCRIPTION = `Use this tool to return your final response in the requested structured format.
-
-IMPORTANT:
-- You MUST call this tool exactly once at the end of your response
-- The input must be valid JSON matching the required schema
-- Complete all necessary research and tool calls BEFORE calling this tool
-- This tool provides your final answer - no further actions are taken after calling it`
-
-const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
-
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
 
@@ -287,11 +277,6 @@ export namespace SessionPrompt {
     }
 
     using _ = defer(() => cancel(sessionID))
-
-    // Structured output state
-    // Note: On session resumption, state is reset but outputFormat is preserved
-    // on the user message and will be retrieved from lastUser below
-    let structuredOutput: unknown | undefined
 
     let step = 0
     const session = await Session.get(sessionID)
@@ -614,16 +599,6 @@ export namespace SessionPrompt {
         messages: msgs,
       })
 
-      // Inject StructuredOutput tool if JSON schema mode enabled
-      if (lastUser.format?.type === "json_schema") {
-        tools["StructuredOutput"] = createStructuredOutputTool({
-          schema: lastUser.format.schema,
-          onSuccess(output) {
-            structuredOutput = output
-          },
-        })
-      }
-
       if (step === 1) {
         SessionSummary.summarize({
           sessionID: sessionID,
@@ -660,9 +635,6 @@ export namespace SessionPrompt {
         ...(await InstructionPrompt.system()),
       ]
       const format = lastUser.format ?? { type: "text" }
-      if (format.type === "json_schema") {
-        system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
-      }
 
       const result = await processor.process({
         user: lastUser,
@@ -684,13 +656,11 @@ export namespace SessionPrompt {
         ],
         tools,
         model,
-        toolChoice: format.type === "json_schema" ? "required" : undefined,
+        format,
       })
 
-      // If structured output was captured, save it and exit immediately
-      // This takes priority because the StructuredOutput tool was called successfully
-      if (structuredOutput !== undefined) {
-        processor.message.structured = structuredOutput
+      // If structured output was produced via native Output.object(), save and exit
+      if (format.type === "json_schema" && processor.message.structured !== undefined) {
         processor.message.finish = processor.message.finish ?? "stop"
         await Session.updateMessage(processor.message)
         break
@@ -700,10 +670,9 @@ export namespace SessionPrompt {
       const modelFinished = processor.message.finish && !["tool-calls", "unknown"].includes(processor.message.finish)
 
       if (modelFinished && !processor.message.error) {
-        if (format.type === "json_schema") {
-          // Model stopped without calling StructuredOutput tool
+        if (format.type === "json_schema" && processor.message.structured === undefined) {
           processor.message.error = new MessageV2.StructuredOutputError({
-            message: "Model did not produce structured output",
+            message: "Model did not produce valid structured output",
             retries: 0,
           }).toObject()
           await Session.updateMessage(processor.message)
@@ -931,36 +900,6 @@ export namespace SessionPrompt {
     }
 
     return tools
-  }
-
-  /** @internal Exported for testing */
-  export function createStructuredOutputTool(input: {
-    schema: Record<string, any>
-    onSuccess: (output: unknown) => void
-  }): AITool {
-    // Remove $schema property if present (not needed for tool input)
-    const { $schema, ...toolSchema } = input.schema
-
-    return tool({
-      id: "StructuredOutput" as any,
-      description: STRUCTURED_OUTPUT_DESCRIPTION,
-      inputSchema: jsonSchema(toolSchema as any),
-      async execute(args) {
-        // AI SDK validates args against inputSchema before calling execute()
-        input.onSuccess(args)
-        return {
-          output: "Structured output captured successfully.",
-          title: "Structured Output",
-          metadata: { valid: true },
-        }
-      },
-      toModelOutput(result) {
-        return {
-          type: "text",
-          value: result.output,
-        }
-      },
-    })
   }
 
   async function createUserMessage(input: PromptInput) {

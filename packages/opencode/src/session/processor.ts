@@ -35,6 +35,7 @@ export namespace SessionProcessor {
     let blocked = false
     let attempt = 0
     let needsCompaction = false
+    let lastText: string | undefined
 
     const result = {
       get message() {
@@ -330,6 +331,7 @@ export namespace SessionProcessor {
                       { text: currentText.text },
                     )
                     currentText.text = textOutput.text
+                    lastText = currentText.text
                     currentText.time = {
                       start: Date.now(),
                       end: Date.now(),
@@ -350,6 +352,14 @@ export namespace SessionProcessor {
                   continue
               }
               if (needsCompaction) break
+            }
+            // Extract structured output from text when using native json_schema
+            if (streamInput.format?.type === "json_schema" && lastText) {
+              try {
+                input.assistantMessage.structured = JSON.parse(lastText)
+              } catch {
+                // JSON parse failed - will be handled as StructuredOutputError in prompt.ts
+              }
             }
           } catch (e: any) {
             log.error("process", {
