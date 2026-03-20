@@ -4,7 +4,17 @@ import { Bus } from "@/bus"
 import { ParallelEvent } from "./events"
 import { validateTransition, validateWorkerTransition } from "./transitions"
 import { ConflictError } from "./errors"
-import type { Plan, PlanID, SubtaskID, WorkerState, PlanStatus, WorkerStatus, Subtask, ModelRef } from "./schema"
+import type {
+  Plan,
+  PlanID,
+  SubtaskID,
+  WorkerState,
+  PlanStatus,
+  WorkerStatus,
+  Subtask,
+  ModelRef,
+  PublishMode,
+} from "./schema"
 import { PlanID as PlanIDSchema, SubtaskID as SubtaskIDSchema, Plan as PlanSchema } from "./schema"
 import { SessionID } from "@/session/schema"
 import { ProjectID } from "@/project/schema"
@@ -52,6 +62,8 @@ function fromRow(row: PlanRow): Plan {
     workerModel: row.worker_model,
     subtasks: row.subtasks,
     workers: row.workers,
+    integrationBranch: row.integration_branch ?? undefined,
+    publishMode: row.publish_mode ?? undefined,
     version: row.version,
     time: {
       created: row.time_created,
@@ -73,6 +85,8 @@ function toRow(plan: Plan) {
     worker_model: plan.workerModel,
     subtasks: plan.subtasks,
     workers: plan.workers,
+    integration_branch: plan.integrationBranch ?? null,
+    publish_mode: plan.publishMode ?? null,
     version: plan.version,
     time_created: plan.time.created,
     time_approved: plan.time.approved ?? null,
