@@ -86,15 +86,17 @@ const useServerHealth = (servers: Accessor<ServerConnection.Any[]>) => {
 const useDefaultServerKey = (
   get: (() => string | Promise<string | null | undefined> | null | undefined) | undefined,
 ) => {
-  const [url, setUrl] = createSignal<string | undefined>()
-  const [tick, setTick] = createSignal(0)
+  const [state, setState] = createStore({
+    url: undefined as string | undefined,
+    tick: 0,
+  })
 
   createEffect(() => {
-    tick()
+    state.tick
     let dead = false
     const result = get?.()
     if (!result) {
-      setUrl(undefined)
+      setState("url", undefined)
       onCleanup(() => {
         dead = true
       })
@@ -104,7 +106,7 @@ const useDefaultServerKey = (
     if (result instanceof Promise) {
       void result.then((next) => {
         if (dead) return
-        setUrl(next ? normalizeServerUrl(next) : undefined)
+        setState("url", next ? normalizeServerUrl(next) : undefined)
       })
       onCleanup(() => {
         dead = true
@@ -112,7 +114,7 @@ const useDefaultServerKey = (
       return
     }
 
-    setUrl(normalizeServerUrl(result))
+    setState("url", normalizeServerUrl(result))
     onCleanup(() => {
       dead = true
     })
@@ -120,11 +122,11 @@ const useDefaultServerKey = (
 
   return {
     key: () => {
-      const u = url()
+      const u = state.url
       if (!u) return
       return ServerConnection.key({ type: "http", http: { url: u } })
     },
-    refresh: () => setTick((value) => value + 1),
+    refresh: () => setState("tick", (value) => value + 1),
   }
 }
 
@@ -169,6 +171,7 @@ export function StatusPopover() {
   const language = useLanguage()
   const navigate = useNavigate()
 
+  const [shown, setShown] = createSignal(false)
   const servers = createMemo(() => {
     const current = server.current
     const list = server.list
@@ -199,18 +202,23 @@ export function StatusPopover() {
 
   return (
     <Popover
+      open={shown()}
+      onOpenChange={setShown}
       triggerAs={Button}
       triggerProps={{
         variant: "ghost",
-        class: "titlebar-icon w-6 h-6 p-0 box-border",
+        class: "titlebar-icon w-8 h-6 p-0 box-border",
         "aria-label": language.t("status.popover.trigger"),
         style: { scale: 1 },
       }}
       trigger={
-        <div class="flex size-4 items-center justify-center">
+        <div class="relative size-4">
+          <div class="badge-mask-tight size-4 flex items-center justify-center">
+            <Icon name={shown() ? "status-active" : "status"} size="small" />
+          </div>
           <div
             classList={{
-              "size-1.5 rounded-full": true,
+              "absolute -top-px -right-px size-1.5 rounded-full": true,
               "bg-icon-success-base": overallHealthy(),
               "bg-icon-critical-base": !overallHealthy() && server.healthy() !== undefined,
               "bg-border-weak-base": server.healthy() === undefined,
@@ -269,8 +277,8 @@ export function StatusPopover() {
                         aria-disabled={isBlocked()}
                         onClick={() => {
                           if (isBlocked()) return
-                          server.setActive(key)
                           navigate("/")
+                          queueMicrotask(() => server.setActive(key))
                         }}
                       >
                         <ServerHealthIndicator health={health[key]} />

@@ -1,6 +1,7 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test"
 import path from "path"
 import { Session } from "../../src/session"
+import { ModelID, ProviderID } from "../../src/provider/schema"
 import { SessionRevert } from "../../src/session/revert"
 import { SessionCompaction } from "../../src/session/compaction"
 import { MessageV2 } from "../../src/session/message-v2"
@@ -29,8 +30,8 @@ describe("revert + compact workflow", () => {
           sessionID,
           agent: "default",
           model: {
-            providerID: "openai",
-            modelID: "gpt-4",
+            providerID: ProviderID.make("openai"),
+            modelID: ModelID.make("gpt-4"),
           },
           time: {
             created: Date.now(),
@@ -64,8 +65,8 @@ describe("revert + compact workflow", () => {
             reasoning: 0,
             cache: { read: 0, write: 0 },
           },
-          modelID: "gpt-4",
-          providerID: "openai",
+          modelID: ModelID.make("gpt-4"),
+          providerID: ProviderID.make("openai"),
           parentID: userMsg1.id,
           time: {
             created: Date.now(),
@@ -90,8 +91,8 @@ describe("revert + compact workflow", () => {
           sessionID,
           agent: "default",
           model: {
-            providerID: "openai",
-            modelID: "gpt-4",
+            providerID: ProviderID.make("openai"),
+            modelID: ModelID.make("gpt-4"),
           },
           time: {
             created: Date.now(),
@@ -124,8 +125,8 @@ describe("revert + compact workflow", () => {
             reasoning: 0,
             cache: { read: 0, write: 0 },
           },
-          modelID: "gpt-4",
-          providerID: "openai",
+          modelID: ModelID.make("gpt-4"),
+          providerID: ProviderID.make("openai"),
           parentID: userMsg2.id,
           time: {
             created: Date.now(),
@@ -205,8 +206,8 @@ describe("revert + compact workflow", () => {
           sessionID,
           agent: "default",
           model: {
-            providerID: "openai",
-            modelID: "gpt-4",
+            providerID: ProviderID.make("openai"),
+            modelID: ModelID.make("gpt-4"),
           },
           time: {
             created: Date.now(),
@@ -238,8 +239,8 @@ describe("revert + compact workflow", () => {
             reasoning: 0,
             cache: { read: 0, write: 0 },
           },
-          modelID: "gpt-4",
-          providerID: "openai",
+          modelID: ModelID.make("gpt-4"),
+          providerID: ProviderID.make("openai"),
           parentID: userMsg.id,
           time: {
             created: Date.now(),
