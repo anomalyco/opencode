@@ -5,7 +5,7 @@ import { Bus } from "../../src/bus"
 import { runtime } from "../../src/effect/runtime"
 import { Instances } from "../../src/effect/instances"
 import { PermissionNext } from "../../src/permission"
-import * as S from "../../src/permission/service"
+import { PermissionNext as S } from "../../src/permission"
 import { PermissionID } from "../../src/permission/schema"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
@@ -1005,7 +1005,7 @@ test("ask - abort should clear pending request", async () => {
     fn: async () => {
       const ctl = new AbortController()
       const ask = runtime.runPromise(
-        S.PermissionEffect.Service.use((svc) =>
+        S.Service.use((svc) =>
           svc.ask({
             sessionID: SessionID.make("session_test"),
             permission: "bash",
