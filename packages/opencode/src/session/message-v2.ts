@@ -782,13 +782,19 @@ export namespace MessageV2 {
 
     const tools = Object.fromEntries(Array.from(toolNames).map((toolName) => [toolName, { toModelOutput }]))
 
-    return convertToModelMessages(
-      result.filter((msg) => msg.parts.some((part) => part.type !== "step-start")),
-      {
-        //@ts-expect-error (convertToModelMessages expects a ToolSet but only actually needs tools[name]?.toModelOutput)
-        tools,
-      },
-    )
+    const filtered = result.filter((msg) => msg.parts.some((part) => part.type !== "step-start"))
+    if (filtered.length > 0 && filtered[filtered.length - 1].role === "assistant") {
+      filtered.push({
+        id: MessageID.ascending(),
+        role: "user",
+        parts: [{ type: "text", text: "Continue." }],
+      })
+    }
+
+    return convertToModelMessages(filtered, {
+      //@ts-expect-error (convertToModelMessages expects a ToolSet but only actually needs tools[name]?.toModelOutput)
+      tools,
+    })
   }
 
   export const page = fn(
