@@ -485,6 +485,7 @@ function bindMessage<T extends MessageType>(input: T) {
   const data = useData()
   const base = structuredClone(unwrap(input)) as T
   return createMemo(() => {
+    if (!base) return input
     const next = data.store.message?.[base.sessionID]?.find((item) => item.id === base.id)
     return (next as T | undefined) ?? base
   })
@@ -906,13 +907,17 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
   const timefmt = createMemo(() => new Intl.DateTimeFormat(i18n.locale(), { timeStyle: "short" }))
 
   const stamp = createMemo(() => {
-    const created = message().time?.created
+    const current = message()
+    if (!current) return ""
+    const created = current.time?.created
     if (typeof created !== "number") return ""
     return timefmt().format(created)
   })
 
   const metaHead = createMemo(() => {
-    const agent = message().agent
+    const current = message()
+    if (!current) return ""
+    const agent = current.agent
     const items = [agent ? agent[0]?.toUpperCase() + agent.slice(1) : "", model()]
     return items.filter((x) => !!x).join("\u00A0\u00B7\u00A0")
   })
@@ -933,13 +938,14 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
 
   const run = (kind: "fork" | "revert") => {
     const act = kind === "fork" ? props.actions?.fork : props.actions?.revert
-    if (!act || busy()) return
+    const current = message()
+    if (!act || busy() || !current) return
     setState("busy", kind)
     void Promise.resolve()
       .then(() =>
         act({
-          sessionID: message().sessionID,
-          messageID: message().id,
+          sessionID: current.sessionID,
+          messageID: current.id,
         }),
       )
       .finally(() => {
