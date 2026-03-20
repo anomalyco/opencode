@@ -40,10 +40,10 @@ export const latestRootSession = (stores: SessionStore[], now: number) =>
   stores.flatMap(roots).sort(sortSessions(now))[0]
 
 export function hasProjectPermissions<T>(
-  request: Record<string, T[] | undefined>,
+  request: Record<string, T[] | undefined> | undefined,
   include: (item: T) => boolean = () => true,
 ) {
-  return Object.values(request).some((list) => list?.some(include))
+  return Object.values(request ?? {}).some((list) => list?.some(include))
 }
 
 export const childMapByParent = (sessions: Session[] | undefined) => {

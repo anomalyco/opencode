@@ -131,6 +131,16 @@ export default function Layout(props: ParentProps) {
   const theme = useTheme()
   const language = useLanguage()
   const initialDirectory = decode64(params.dir)
+  const route = createMemo(() => {
+    const slug = params.dir
+    if (!slug) return { slug, dir: "" }
+    const dir = decode64(slug)
+    if (!dir) return { slug, dir: "" }
+    return {
+      slug,
+      dir: globalSync.peek(dir, { bootstrap: false })[0].path.directory || dir,
+    }
+  })
   const availableThemeEntries = createMemo(() => Object.entries(theme.themes()))
   const colorSchemeOrder: ColorScheme[] = ["system", "light", "dark"]
   const colorSchemeKey: Record<ColorScheme, "theme.scheme.system" | "theme.scheme.light" | "theme.scheme.dark"> = {
@@ -139,7 +149,7 @@ export default function Layout(props: ParentProps) {
     dark: "theme.scheme.dark",
   }
   const colorSchemeLabel = (scheme: ColorScheme) => language.t(colorSchemeKey[scheme])
-  const currentDir = createMemo(() => decode64(params.dir) ?? "")
+  const currentDir = createMemo(() => route().dir)
 
   const [state, setState] = createStore({
     autoselect: !initialDirectory,
@@ -486,8 +496,8 @@ export default function Layout(props: ParentProps) {
         }
 
         const currentSession = params.id
-        if (directory === currentDir() && props.sessionID === currentSession) return
-        if (directory === currentDir() && session?.parentID === currentSession) return
+        if (workspaceKey(directory) === workspaceKey(currentDir()) && props.sessionID === currentSession) return
+        if (workspaceKey(directory) === workspaceKey(currentDir()) && session?.parentID === currentSession) return
 
         dismissSessionAlert(sessionKey)
 
@@ -622,7 +632,7 @@ export default function Layout(props: ParentProps) {
     const activeDir = currentDir()
     return workspaceIds(project).filter((directory) => {
       const expanded = store.workspaceExpanded[directory] ?? directory === project.worktree
-      const active = directory === activeDir
+      const active = workspaceKey(directory) === workspaceKey(activeDir)
       return expanded || active
     })
   })
@@ -689,7 +699,7 @@ export default function Layout(props: ParentProps) {
       seen: lru,
       keep: sessionID,
       limit: PREFETCH_MAX_SESSIONS_PER_DIR,
-      preserve: directory === params.dir && params.id ? [params.id] : undefined,
+      preserve: params.id && workspaceKey(directory) === workspaceKey(currentDir()) ? [params.id] : undefined,
     })
   }
 
@@ -702,7 +712,7 @@ export default function Layout(props: ParentProps) {
   })
 
   createEffect(() => {
-    params.dir
+    route()
     globalSDK.url
 
     prefetchToken.value += 1
@@ -1696,13 +1706,10 @@ export default function Layout(props: ParentProps) {
   createEffect(
     on(
       () => {
-        const dir = params.dir
-        const directory = dir ? decode64(dir) : undefined
-        const resolved = directory ? globalSync.child(directory, { bootstrap: false })[0].path.directory : ""
-        return [pageReady(), dir, params.id, searchParams.grid, currentProject()?.worktree, directory, resolved] as const
+        return [pageReady(), route().slug, params.id, searchParams.grid, currentProject()?.worktree, currentDir()] as const
       },
-      ([ready, dir, id, grid, root, directory, resolved]) => {
-        if (!ready || !dir || !directory) {
+      ([ready, slug, id, grid, root, dir]) => {
+        if (!ready || !slug || !dir) {
           activeRoute.session = ""
           activeRoute.sessionProject = ""
           activeRoute.directory = ""
@@ -1716,29 +1723,28 @@ export default function Layout(props: ParentProps) {
           return
         }
 
-        const next = resolved || directory
-        const session = `${dir}/${id}?grid=${grid ?? ""}`
+        const session = `${slug}/${id}?grid=${grid ?? ""}`
 
         if (!root) {
           activeRoute.session = session
-          activeRoute.directory = next
+          activeRoute.directory = dir
           activeRoute.sessionProject = ""
           return
         }
 
         if (server.projects.last() !== root) server.projects.touch(root)
 
-        const changed = session !== activeRoute.session || next !== activeRoute.directory
+        const changed = session !== activeRoute.session || dir !== activeRoute.directory
         if (changed) {
           activeRoute.session = session
-          activeRoute.directory = next
-          activeRoute.sessionProject = syncSessionRoute(next, id, root)
+          activeRoute.directory = dir
+          activeRoute.sessionProject = syncSessionRoute(dir, id, root)
           return
         }
 
         if (root === activeRoute.sessionProject) return
-        activeRoute.directory = next
-        activeRoute.sessionProject = rememberSessionRoute(next, id, root)
+        activeRoute.directory = dir
+        activeRoute.sessionProject = rememberSessionRoute(dir, id, root)
       },
     ),
   )
@@ -1931,6 +1937,7 @@ export default function Layout(props: ParentProps) {
 
   const projectSidebarCtx: ProjectSidebarContext = {
     currentDir,
+    currentProject,
     sidebarOpened: () => layout.sidebar.opened(),
     sidebarHovering,
     hoverProject: () => state.hoverProject,
