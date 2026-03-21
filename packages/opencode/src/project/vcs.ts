@@ -98,10 +98,14 @@ export namespace Vcs {
       })
     }),
   )
-}
 
-export const runPromise = makeRunPromise(Vcs.Service, Vcs.layer)
+  const runPromise = makeRunPromise(Service, layer)
 
-export function init() {
-  return runPromise((svc) => svc.init())
+  export function init() {
+    return runPromise((svc) => svc.init())
+  }
+
+  export function branch() {
+    return runPromise((svc) => svc.branch())
+  }
 }

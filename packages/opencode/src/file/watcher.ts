@@ -158,10 +158,10 @@ export namespace FileWatcher {
       })
     }),
   )
-}
 
-export const runPromise = makeRunPromise(FileWatcher.Service, FileWatcher.layer)
+  const runPromise = makeRunPromise(Service, layer)
 
-export function init() {
-  return runPromise((svc) => svc.init())
+  export function init() {
+    return runPromise((svc) => svc.init())
+  }
 }

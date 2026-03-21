@@ -330,6 +330,8 @@ export namespace Installation {
     Layer.provide(NodePath.layer),
   )
 
+  const runPromise = makeRunPromise(Service, defaultLayer)
+
   export function info(): Promise<Info> {
     return runPromise((svc) => svc.info())
   }
@@ -346,5 +348,3 @@ export namespace Installation {
     return runPromise((svc) => svc.upgrade(m, target))
   }
 }
-
-export const runPromise = makeRunPromise(Installation.Service, Installation.defaultLayer)

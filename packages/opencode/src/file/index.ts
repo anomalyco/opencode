@@ -179,12 +179,6 @@ export namespace File {
     "efi",
     "rom",
     "com",
-    "cmd",
-    "ps1",
-    "sh",
-    "bash",
-    "zsh",
-    "fish",
   ])
 
   const image = new Set([
@@ -303,7 +297,7 @@ export namespace File {
 
   function shouldEncode(mimeType: string) {
     const type = mimeType.toLowerCase()
-    log.info("shouldEncode", { type })
+    log.debug("shouldEncode", { type })
     if (!type) return false
     if (type.startsWith("text/")) return false
     if (type.includes("charset=")) return false
@@ -359,10 +353,9 @@ export namespace File {
         ),
       )
 
-      const isGlobalHome = Instance.directory === Global.Path.home && Instance.project.id === "global"
-
       const scan = Effect.fn("File.scan")(function* () {
         if (Instance.directory === path.parse(Instance.directory).root) return
+        const isGlobalHome = Instance.directory === Global.Path.home && Instance.project.id === "global"
         const next: Entry = { files: [], dirs: [] }
 
         yield* Effect.promise(async () => {
