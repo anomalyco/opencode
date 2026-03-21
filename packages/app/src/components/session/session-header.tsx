@@ -44,6 +44,16 @@ const OPEN_APPS = [
 type OpenApp = (typeof OPEN_APPS)[number]
 type OS = "macos" | "windows" | "linux" | "unknown"
 
+export type OpenPlan =
+  | {
+      kind: "editor"
+      editor: string
+    }
+  | {
+      kind: "path"
+      app?: string
+    }
+
 const MAC_APPS = [
   {
     id: "vscode",
@@ -126,6 +136,24 @@ const showRequestError = (language: ReturnType<typeof useLanguage>, err: unknown
     title: language.t("common.requestFailed"),
     description: err instanceof Error ? err.message : String(err),
   })
+}
+
+export function getOpenPlan(
+  app: OpenApp,
+  list: ReadonlyArray<{ id: OpenApp; openWith?: string }>,
+  hasEditor: boolean,
+): OpenPlan {
+  if (app === "wezterm" && hasEditor) {
+    return {
+      kind: "editor",
+      editor: "WezTerm",
+    }
+  }
+
+  return {
+    kind: "path",
+    app: list.find((item) => item.id === app)?.openWith,
+  }
 }
 
 export function SessionHeader() {
@@ -230,22 +258,11 @@ export function SessionHeader() {
     if (opening() || !canOpen() || !platform.openPath) return
     const directory = projectDirectory()
     if (!directory) return
-    if (app === "wezterm" && platform.openInEditor) {
-      setOpenRequest("app", app)
-      platform
-        .openInEditor("WezTerm", directory)
-        .catch((err: unknown) => showRequestError(language, err))
-        .finally(() => {
-          setOpenRequest("app", undefined)
-        })
-      return
-    }
-
-    const item = options().find((o) => o.id === app)
-    const openWith = item && "openWith" in item ? item.openWith : undefined
+    const plan = getOpenPlan(app, options(), !!platform.openInEditor)
     setOpenRequest("app", app)
-    platform
-      .openPath(directory, openWith)
+    const task =
+      plan.kind === "editor" ? platform.openInEditor?.(plan.editor, directory) : platform.openPath(directory, plan.app)
+    Promise.resolve(task)
       .catch((err: unknown) => showRequestError(language, err))
       .finally(() => {
         setOpenRequest("app", undefined)
