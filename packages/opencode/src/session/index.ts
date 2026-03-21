@@ -181,6 +181,19 @@ export namespace Session {
   })
   export type GlobalInfo = z.output<typeof GlobalInfo>
 
+  export const BackgroundTask = z.object({
+    sessionID: SessionID.zod,
+    result: z.string(),
+    status: z.enum(["success", "error"]),
+    description: z.string(),
+    agent: z.string(),
+    model: z.object({
+      providerID: ProviderID.zod,
+      modelID: ModelID.zod,
+    }),
+  })
+  export type BackgroundTask = z.output<typeof BackgroundTask>
+
   export const Event = {
     Created: BusEvent.define(
       "session.created",
@@ -212,6 +225,13 @@ export namespace Session {
       z.object({
         sessionID: SessionID.zod.optional(),
         error: MessageV2.Assistant.shape.error,
+      }),
+    ),
+    BackgroundTaskCompleted: BusEvent.define(
+      "session.background_task_completed",
+      z.object({
+        sessionID: SessionID.zod,
+        task: BackgroundTask,
       }),
     ),
   }
@@ -668,6 +688,7 @@ export namespace Session {
       for (const child of await children(sessionID)) {
         await remove(child.id)
       }
+      SessionPrompt.cancel(sessionID)
       await unshare(sessionID).catch(() => {})
       // CASCADE delete handles messages and parts automatically
       Database.use((db) => {

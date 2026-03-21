@@ -60,6 +60,7 @@ export namespace SessionStatus {
   }
 
   export function set(sessionID: SessionID, status: Info) {
+    state()[sessionID] = status
     Bus.publish(Event.Status, {
       sessionID,
       status,
@@ -70,8 +71,6 @@ export namespace SessionStatus {
         sessionID,
       })
       delete state()[sessionID]
-      return
     }
-    state()[sessionID] = status
   }
 }
