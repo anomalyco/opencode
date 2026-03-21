@@ -144,6 +144,13 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         parts: promptParts,
       })
 
+      if (result.info.role === "assistant" && result.info.error) {
+        const err = result.info.error
+        throw new Error(
+          typeof err.data?.message === "string" && err.data.message ? err.data.message : err.name || "Task failed",
+        )
+      }
+
       const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
 
       const output = [
