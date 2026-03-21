@@ -24,6 +24,7 @@ import { BusEvent } from "../bus/bus-event"
 import { Bus } from "@/bus"
 import { TuiEvent } from "@/cli/cmd/tui/event"
 import open from "open"
+import { EventEmitter } from "node:events"
 
 export namespace MCP {
   const log = Log.create({ service: "mcp" })
@@ -185,6 +186,24 @@ export namespace MCP {
       const config = cfg.mcp ?? {}
       const clients: Record<string, MCPClient> = {}
       const status: Record<string, Status> = {}
+
+      // Increase MaxListeners to prevent EventEmitter warnings when many
+      // MCP servers are connected. Each StdioClientTransport spawns a child
+      // process and adds listeners to its stdin/stdout/stderr pipes; the MCP
+      // protocol layer may also send many concurrent requests (getPrompt,
+      // listTools, etc.) that each add a 'drain' listener on the child
+      // process's stdin. The default limit of ~10 is easily exceeded.
+      const localCount = Object.values(config).filter(
+        (mcp) => typeof mcp === "object" && mcp !== null && "type" in mcp && mcp.type === "local",
+      ).length
+      if (localCount > 0) {
+        const needed = Math.max(localCount * 6, 30) // generous headroom for concurrent requests
+        EventEmitter.defaultMaxListeners = Math.max(EventEmitter.defaultMaxListeners, needed)
+        for (const stream of [process.stdin, process.stdout, process.stderr]) {
+          const current = stream.getMaxListeners()
+          if (current < needed) stream.setMaxListeners(needed)
+        }
+      }
 
       await Promise.all(
         Object.entries(config).map(async ([key, mcp]) => {

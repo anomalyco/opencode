@@ -79,6 +79,7 @@ import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { formatTranscript } from "../../util/transcript"
+import { splitThinkBlocks } from "@/util/format"
 import { UI } from "@/cli/ui.ts"
 import { useTuiConfig } from "../../context/tui-config"
 
@@ -1454,33 +1455,58 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
 
 function TextPart(props: { last: boolean; part: TextPart; message: AssistantMessage }) {
   const ctx = use()
-  const { theme, syntax } = useTheme()
+  const { theme, syntax, subtleSyntax } = useTheme()
+  const parsed = createMemo(() => splitThinkBlocks(props.part.text))
+  const displayText = createMemo(() => parsed().text.trim())
+  const reasoning = createMemo(() => parsed().reasoning.trim())
   return (
-    <Show when={props.part.text.trim()}>
-      <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0}>
-        <Switch>
-          <Match when={Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
-            <markdown
-              syntaxStyle={syntax()}
-              streaming={true}
-              content={props.part.text.trim()}
-              conceal={ctx.conceal()}
-            />
-          </Match>
-          <Match when={!Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
-            <code
-              filetype="markdown"
-              drawUnstyledText={false}
-              streaming={true}
-              syntaxStyle={syntax()}
-              content={props.part.text.trim()}
-              conceal={ctx.conceal()}
-              fg={theme.text}
-            />
-          </Match>
-        </Switch>
-      </box>
-    </Show>
+    <>
+      <Show when={reasoning() && ctx.showThinking()}>
+        <box
+          paddingLeft={2}
+          marginTop={1}
+          flexDirection="column"
+          border={["left"]}
+          customBorderChars={SplitBorder.customBorderChars}
+          borderColor={theme.backgroundElement}
+        >
+          <code
+            filetype="markdown"
+            drawUnstyledText={false}
+            streaming={true}
+            syntaxStyle={subtleSyntax()}
+            content={"_Thinking:_ " + reasoning()}
+            conceal={ctx.conceal()}
+            fg={theme.textMuted}
+          />
+        </box>
+      </Show>
+      <Show when={displayText()}>
+        <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0}>
+          <Switch>
+            <Match when={Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
+              <markdown
+                syntaxStyle={syntax()}
+                streaming={true}
+                content={displayText()}
+                conceal={ctx.conceal()}
+              />
+            </Match>
+            <Match when={!Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
+              <code
+                filetype="markdown"
+                drawUnstyledText={false}
+                streaming={true}
+                syntaxStyle={syntax()}
+                content={displayText()}
+                conceal={ctx.conceal()}
+                fg={theme.text}
+              />
+            </Match>
+          </Switch>
+        </box>
+      </Show>
+    </>
   )
 }
 
