@@ -110,6 +110,10 @@ const allTargets: {
   },
   {
     os: "win32",
+    arch: "arm64",
+  },
+  {
+    os: "win32",
     arch: "x64",
   },
   {
@@ -174,7 +178,6 @@ for (const item of targets) {
     conditions: ["browser"],
     tsconfig: "./tsconfig.json",
     plugins: [solidPlugin],
-    sourcemap: "external",
     compile: {
       autoloadBunfig: false,
       autoloadDotenv: false,
@@ -195,6 +198,19 @@ for (const item of targets) {
       OPENCODE_LIBC: item.os === "linux" ? `'${item.abi ?? "glibc"}'` : "",
     },
   })
+
+  // Smoke test: only run if binary is for current platform
+  if (item.os === process.platform && item.arch === process.arch && !item.abi) {
+    const binaryPath = `dist/${name}/bin/opencode`
+    console.log(`Running smoke test: ${binaryPath} --version`)
+    try {
+      const versionOutput = await $`${binaryPath} --version`.text()
+      console.log(`Smoke test passed: ${versionOutput.trim()}`)
+    } catch (e) {
+      console.error(`Smoke test failed for ${name}:`, e)
+      process.exit(1)
+    }
+  }
 
   await $`rm -rf ./dist/${name}/bin/tui`
   await Bun.file(`dist/${name}/package.json`).write(

@@ -9,6 +9,7 @@ import { useToast } from "../ui/toast"
 import { useKeybind } from "../context/keybind"
 import { DialogSessionList } from "./workspace/dialog-session-list"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
+import { setTimeout as sleep } from "node:timers/promises"
 
 async function openWorkspace(input: {
   dialog: ReturnType<typeof useDialog>
@@ -47,7 +48,7 @@ async function openWorkspace(input: {
   }
   let created: Session | undefined
   while (!created) {
-    const result = await client.session.create({}).catch(() => undefined)
+    const result = await client.session.create({ workspaceID: input.workspaceID }).catch(() => undefined)
     if (!result) {
       input.toast.show({
         message: "Failed to open workspace",
@@ -56,7 +57,7 @@ async function openWorkspace(input: {
       return
     }
     if (result.response.status >= 500 && result.response.status < 600) {
-      await Bun.sleep(1000)
+      await sleep(1000)
       continue
     }
     if (!result.data) {

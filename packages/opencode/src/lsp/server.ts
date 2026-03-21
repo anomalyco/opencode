@@ -1,4 +1,4 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "child_process"
+import type { ChildProcessWithoutNullStreams } from "child_process"
 import path from "path"
 import os from "os"
 import { Global } from "../global"
@@ -13,6 +13,7 @@ import { Archive } from "../util/archive"
 import { Process } from "../util/process"
 import { which } from "../util/which"
 import { Module } from "@opencode-ai/util/module"
+import { spawn } from "./launch"
 
 export namespace LSPServer {
   const log = Log.create({ service: "lsp.server" })
@@ -268,7 +269,7 @@ export namespace LSPServer {
       }
 
       if (lintBin) {
-        const proc = Process.spawn([lintBin, "--help"], { stdout: "pipe" })
+        const proc = spawn(lintBin, ["--help"])
         await proc.exited
         if (proc.stdout) {
           const help = await text(proc.stdout)

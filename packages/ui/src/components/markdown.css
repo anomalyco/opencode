@@ -60,6 +60,7 @@
   ol {
     margin-top: 0.5rem;
     margin-bottom: 1rem;
+    margin-left: 0;
     padding-left: 1.5rem;
     list-style-position: outside;
   }
@@ -70,6 +71,7 @@
 
   ol {
     list-style-type: decimal;
+    padding-left: 2.25rem;
   }
 
   li {
@@ -96,6 +98,10 @@
     margin-top: 0.25rem;
     margin-bottom: 0.25rem;
     padding-left: 1rem; /* Minimal indent for nesting only */
+  }
+
+  li > ol {
+    padding-left: 1.75rem;
   }
 
   /* Blockquotes */
