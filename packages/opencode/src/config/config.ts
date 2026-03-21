@@ -675,7 +675,7 @@ export namespace Config {
           todowrite: PermissionAction.optional(),
           todoread: PermissionAction.optional(),
           question: PermissionAction.optional(),
-          webfetch: PermissionAction.optional(),
+          webfetch: PermissionRule.optional(),
           websearch: PermissionAction.optional(),
           codesearch: PermissionAction.optional(),
           lsp: PermissionRule.optional(),

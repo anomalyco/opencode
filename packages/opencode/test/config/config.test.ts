@@ -1124,6 +1124,35 @@ test("migrates legacy tools config to permissions - deny", async () => {
   })
 })
 
+test("permission config allows webfetch rules", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          permission: {
+            webfetch: {
+              "https://example.com/*": "allow",
+              "*.example.com/*": "ask",
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.permission?.webfetch).toEqual({
+        "https://example.com/*": "allow",
+        "*.example.com/*": "ask",
+      })
+    },
+  })
+})
+
 test("migrates legacy write tool to edit permission", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

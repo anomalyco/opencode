@@ -24,10 +24,11 @@ export const WebFetchTool = Tool.define("webfetch", {
       throw new Error("URL must start with http:// or https://")
     }
 
+    const host = new URL(params.url).host
     await ctx.ask({
       permission: "webfetch",
       patterns: [params.url],
-      always: ["*"],
+      always: [`*://${host}*`],
       metadata: {
         url: params.url,
         format: params.format,

@@ -664,13 +664,16 @@ export namespace SessionPrompt {
         system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
       }
 
+      const ruleset = PermissionNext.merge(agent.permission, session.permission ?? [])
+      const webfetch = formatWebfetchRules(ruleset)
+
       const result = await processor.process({
         user: lastUser,
         agent,
         permission: session.permission,
         abort,
         sessionID,
-        system,
+        system: [...system, ...(webfetch ? [webfetch] : [])],
         messages: [
           ...MessageV2.toModelMessages(msgs, model),
           ...(isLastStep
@@ -1994,5 +1997,13 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         throw err
       })
     }
+  }
+
+  export function formatWebfetchRules(ruleset: PermissionNext.Ruleset): string | undefined {
+    const rules = ruleset.filter((r) => r.permission === "webfetch")
+    if (!rules.length) return
+    if (rules.length === 1 && rules[0].pattern === "*" && rules[0].action === "allow") return
+    const lines = rules.map((r) => `  ${r.action}: ${r.pattern}`)
+    return ["<webfetch-url-permissions>", ...lines, "</webfetch-url-permissions>"].join("\n")
   }
 }
