@@ -1,4 +1,4 @@
-import { describe, test, expect } from "bun:test"
+import { afterEach, describe, test, expect } from "bun:test"
 import { $ } from "bun"
 import path from "path"
 import fs from "fs/promises"
@@ -6,6 +6,8 @@ import { File } from "../../src/file"
 import { Instance } from "../../src/project/instance"
 import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
+
+afterEach(() => Instance.disposeAll())
 
 describe("file/index Filesystem patterns", () => {
   describe("File.read() - text content", () => {

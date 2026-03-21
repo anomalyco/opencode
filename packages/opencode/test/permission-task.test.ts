@@ -1,8 +1,10 @@
-import { describe, test, expect } from "bun:test"
+import { afterEach, describe, test, expect } from "bun:test"
 import { Permission } from "../src/permission"
 import { Config } from "../src/config/config"
 import { Instance } from "../src/project/instance"
 import { tmpdir } from "./fixture/fixture"
+
+afterEach(() => Instance.disposeAll())
 
 describe("Permission.evaluate for permission.task", () => {
   const createRuleset = (rules: Record<string, "allow" | "deny" | "ask">): Permission.Ruleset =>

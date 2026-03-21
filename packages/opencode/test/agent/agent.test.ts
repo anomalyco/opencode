@@ -1,4 +1,4 @@
-import { test, expect } from "bun:test"
+import { afterEach, test, expect } from "bun:test"
 import path from "path"
 import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
@@ -10,6 +10,8 @@ function evalPerm(agent: Agent.Info | undefined, permission: string): Permission
   if (!agent) return undefined
   return Permission.evaluate(permission, "*", agent.permission).action
 }
+
+afterEach(() => Instance.disposeAll())
 
 test("returns default native agents when no config", async () => {
   await using tmp = await tmpdir()

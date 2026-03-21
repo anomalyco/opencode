@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
 import path from "path"
 import { ReadTool } from "../../src/tool/read"
 import { Instance } from "../../src/project/instance"
@@ -9,6 +9,8 @@ import { Agent } from "../../src/agent/agent"
 import { SessionID, MessageID } from "../../src/session/schema"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
+
+afterEach(() => Instance.disposeAll())
 
 const ctx = {
   sessionID: SessionID.make("ses_test"),

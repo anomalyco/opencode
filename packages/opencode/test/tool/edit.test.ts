@@ -1,4 +1,4 @@
-import { describe, test, expect } from "bun:test"
+import { afterEach, describe, test, expect } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
 import { EditTool } from "../../src/tool/edit"
@@ -17,6 +17,8 @@ const ctx = {
   metadata: () => {},
   ask: async () => {},
 }
+
+afterEach(() => Instance.disposeAll())
 
 async function touch(file: string, time: number) {
   const date = new Date(time)

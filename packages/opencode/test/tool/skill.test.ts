@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
 import path from "path"
 import { pathToFileURL } from "url"
 import type { Permission } from "../../src/permission"
@@ -17,6 +17,8 @@ const baseCtx: Omit<Tool.Context, "ask"> = {
   messages: [],
   metadata: () => {},
 }
+
+afterEach(() => Instance.disposeAll())
 
 describe("tool.skill", () => {
   test("description lists skill location URL", async () => {
