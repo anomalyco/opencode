@@ -43,6 +43,9 @@ import { PermissionRoutes } from "./routes/permission"
 import { GlobalRoutes } from "./routes/global"
 import { MDNS } from "./mdns"
 import { lazy } from "@/util/lazy"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
+import { stat } from "node:fs/promises"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -497,19 +500,45 @@ export namespace Server {
         },
       )
       .all("/*", async (c) => {
-        const path = c.req.path
+        const webCsp =
+          "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:"
 
-        const response = await proxy(`https://app.opencode.ai${path}`, {
+        const root = process.env.OPENCODE_APP_DIST
+          ? path.resolve(process.env.OPENCODE_APP_DIST)
+          : path.join(path.dirname(fileURLToPath(import.meta.url)), "../../../app/dist")
+        const indexPath = path.join(root, "index.html")
+        if (await Bun.file(indexPath).exists()) {
+          const urlPath = c.req.path
+          const rel = urlPath === "/" ? "index.html" : urlPath.slice(1)
+          if (rel.includes("..")) return c.text("Not found", 404)
+
+          const rootResolved = path.resolve(root)
+          const resolved = path.resolve(path.join(root, rel))
+          const relative = path.relative(rootResolved, resolved)
+          if (relative.startsWith("..") || path.isAbsolute(relative)) return c.text("Not found", 404)
+
+          try {
+            const st = await stat(resolved)
+            const body = st.isDirectory() ? Bun.file(indexPath) : Bun.file(resolved)
+            const res = new Response(body)
+            res.headers.set("Content-Security-Policy", webCsp)
+            return res
+          } catch {
+            const res = new Response(Bun.file(indexPath))
+            res.headers.set("Content-Security-Policy", webCsp)
+            return res
+          }
+        }
+
+        const reqPath = c.req.path
+        const response = await proxy(`https://app.opencode.ai${reqPath}`, {
           ...c.req,
           headers: {
             ...c.req.raw.headers,
             host: "app.opencode.ai",
           },
         })
-        response.headers.set(
-          "Content-Security-Policy",
-          "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:",
-        )
+        response.headers.set("Content-Security-Policy", webCsp)
         return response
       })
   }
