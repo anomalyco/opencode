@@ -89,11 +89,12 @@
 	},
 	"dependencies": {
 		"@aws-sdk/client-s3": "3.933.0",
-		"http-proxy": "^1.18.1",
 		"@opencode-ai/plugin": "workspace:*",
 		"@opencode-ai/script": "workspace:*",
 		"@opencode-ai/sdk": "workspace:*",
-		"typescript": "catalog:"
+		"http-proxy": "^1.18.1",
+		"typescript": "catalog:",
+		"xlsx": "0.18.5"
 	},
 	"repository": {
 		"type": "git",
