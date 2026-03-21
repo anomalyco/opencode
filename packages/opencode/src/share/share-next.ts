@@ -136,7 +136,10 @@ export namespace ShareNext {
         })
         .run(),
     )
-    fullSync(sessionID)
+    
+    // Await fullSync when creating a share so that process doesn't exit before initial upload completes
+    await fullSync(sessionID, true)
+    
     return result
   }
 
@@ -185,44 +188,81 @@ export namespace ShareNext {
     }
   }
 
-  const queue = new Map<string, { timeout: NodeJS.Timeout; data: Map<string, Data> }>()
-  async function sync(sessionID: string, data: Data[]) {
+  const queue = new Map<string, { timeout: NodeJS.Timeout; data: Map<string, Data>; promise?: Promise<void> }>()
+  
+  async function sync(sessionID: string, data: Data[], immediate = false) {
     if (disabled) return
     const existing = queue.get(sessionID)
-    if (existing) {
+    if (existing && !immediate) {
       for (const item of data) {
         existing.data.set(key(item), item)
       }
-      return
+      return existing.promise
     }
 
     const dataMap = new Map<string, Data>()
+    if (existing) {
+      clearTimeout(existing.timeout)
+      for (const [k, v] of existing.data) {
+        dataMap.set(k, v)
+      }
+    }
     for (const item of data) {
       dataMap.set(key(item), item)
     }
 
-    const timeout = setTimeout(async () => {
+    let resolvePromise: () => void
+    let rejectPromise: (err: any) => void
+    const syncPromise = new Promise<void>((resolve, reject) => {
+      resolvePromise = resolve
+      rejectPromise = reject
+    })
+
+    const executeSync = async () => {
       const queued = queue.get(sessionID)
-      if (!queued) return
+      if (!queued) {
+        resolvePromise()
+        return
+      }
       queue.delete(sessionID)
       const share = get(sessionID)
-      if (!share) return
-
-      const req = await request()
-      const response = await fetch(`${req.baseUrl}${req.api.sync(share.id)}`, {
-        method: "POST",
-        headers: { ...req.headers, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          secret: share.secret,
-          data: Array.from(queued.data.values()),
-        }),
-      })
-
-      if (!response.ok) {
-        log.warn("failed to sync share", { sessionID, shareID: share.id, status: response.status })
+      if (!share) {
+        resolvePromise()
+        return
       }
-    }, 1000)
-    queue.set(sessionID, { timeout, data: dataMap })
+
+      try {
+        const req = await request()
+        const response = await fetch(`${req.baseUrl}${req.api.sync(share.id)}`, {
+          method: "POST",
+          headers: { ...req.headers, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            secret: share.secret,
+            data: Array.from(queued.data.values()),
+          }),
+        })
+
+        if (!response.ok) {
+          const message = await response.text().catch(() => response.statusText)
+          log.warn("failed to sync share", { sessionID, shareID: share.id, status: response.status, message })
+          rejectPromise(new Error(`Sync failed: ${response.status} ${message}`))
+        } else {
+          resolvePromise()
+        }
+      } catch (error) {
+        log.error("Network error during share sync", { sessionID, shareID: share.id, error })
+        rejectPromise(error)
+      }
+    }
+
+    if (immediate) {
+      queue.set(sessionID, { timeout: setTimeout(() => {}, 0), data: dataMap, promise: syncPromise })
+      await executeSync()
+    } else {
+      const timeout = setTimeout(executeSync, 1000)
+      queue.set(sessionID, { timeout, data: dataMap, promise: syncPromise })
+      return syncPromise
+    }
   }
 
   export async function remove(sessionID: string) {
@@ -248,7 +288,7 @@ export namespace ShareNext {
     Database.use((db) => db.delete(SessionShareTable).where(eq(SessionShareTable.session_id, sessionID)).run())
   }
 
-  async function fullSync(sessionID: string) {
+  async function fullSync(sessionID: string, immediate = false) {
     log.info("full sync", { sessionID })
     const session = await Session.get(sessionID)
     const diffs = await Session.diff(sessionID)
@@ -281,6 +321,8 @@ export namespace ShareNext {
         type: "model",
         data: models,
       },
-    ])
+    ], immediate).catch(err => {
+      log.error("fullSync failed", { sessionID, error: err })
+    })
   }
 }

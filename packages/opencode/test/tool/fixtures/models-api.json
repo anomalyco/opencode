@@ -10810,7 +10810,7 @@
   "google-vertex-anthropic": {
     "id": "google-vertex-anthropic",
     "env": ["GOOGLE_VERTEX_PROJECT", "GOOGLE_VERTEX_LOCATION", "GOOGLE_APPLICATION_CREDENTIALS"],
-    "npm": "@ai-sdk/google-vertex/anthropic",
+    "npm": "REMOVED-BAN-SDK-vertex/anthropic",
     "name": "Vertex (Anthropic)",
     "doc": "https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/claude",
     "models": {
@@ -21171,7 +21171,7 @@
           "context_over_200k": { "input": 4, "output": 18, "cache_read": 0.4 }
         },
         "limit": { "context": 1048576, "output": 65536 },
-        "provider": { "npm": "@ai-sdk/google" }
+        "provider": { "npm": "REMOVED-BAN-SDK" }
       },
       "claude-sonnet-4-5": {
         "id": "claude-sonnet-4-5",
@@ -21384,7 +21384,7 @@
         "open_weights": false,
         "cost": { "input": 0.5, "output": 3, "cache_read": 0.05 },
         "limit": { "context": 1048576, "output": 65536 },
-        "provider": { "npm": "@ai-sdk/google" }
+        "provider": { "npm": "REMOVED-BAN-SDK" }
       },
       "gpt-5.1-codex-max": {
         "id": "gpt-5.1-codex-max",
@@ -21791,7 +21791,7 @@
   "google": {
     "id": "google",
     "env": ["GOOGLE_GENERATIVE_AI_API_KEY", "GEMINI_API_KEY"],
-    "npm": "@ai-sdk/google",
+    "npm": "REMOVED-BAN-SDK",
     "name": "Google",
     "doc": "https://ai.google.dev/gemini-api/docs/pricing",
     "models": {
@@ -22240,7 +22240,7 @@
   "google-vertex": {
     "id": "google-vertex",
     "env": ["GOOGLE_VERTEX_PROJECT", "GOOGLE_VERTEX_LOCATION", "GOOGLE_APPLICATION_CREDENTIALS"],
-    "npm": "@ai-sdk/google-vertex",
+    "npm": "REMOVED-BAN-SDK-vertex",
     "name": "Vertex",
     "doc": "https://cloud.google.com/vertex-ai/generative-ai/docs/models",
     "models": {
