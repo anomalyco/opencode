@@ -27,6 +27,7 @@ export namespace Format {
   export type Status = z.infer<typeof Status>
 
   export interface Interface {
+    readonly init: () => Effect.Effect<void>
     readonly status: () => Effect.Effect<Status[]>
   }
 
@@ -140,7 +141,9 @@ export namespace Format {
           }
         }),
       )
-      yield* InstanceState.get(instanceState)
+      const init = Effect.fn("Format.init")(function* () {
+        yield* InstanceState.get(instanceState)
+      })
 
       const status = Effect.fn("Format.status")(function* () {
         const { formatters, isEnabled } = yield* InstanceState.get(instanceState)
@@ -156,11 +159,15 @@ export namespace Format {
         return result
       })
 
-      return Service.of({ status })
+      return Service.of({ init, status })
     }),
   )
 
   const runPromise = makeRunPromise(Service, layer)
+
+  export async function init() {
+    return runPromise((s) => s.init())
+  }
 
   export async function status() {
     return runPromise((s) => s.status())
