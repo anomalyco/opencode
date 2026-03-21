@@ -95,7 +95,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     layout.fileTree.setTab("all")
   }
 
-  const clear = async () => {
+  const restart = async () => {
     const sessionID = params.id
     if (!sessionID) return
     const msg = userMessages()[0]
@@ -502,12 +502,12 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         },
       }),
       sessionCommand({
-        id: "session.clear",
-        title: language.t("command.session.clear"),
-        description: language.t("command.session.clear.description"),
-        slash: "clear",
+        id: "session.restart",
+        title: language.t("command.session.restart"),
+        description: language.t("command.session.restart.description"),
+        slash: "restart",
         disabled: !params.id || userMessages().length === 0,
-        onSelect: clear,
+        onSelect: restart,
       }),
       sessionCommand({
         id: "session.fork",
