@@ -135,9 +135,16 @@ export namespace Plugin {
     Bus.subscribeAll(async (input) => {
       const hooks = await state().then((x) => x.hooks)
       for (const hook of hooks) {
-        hook["event"]?.({
-          event: input,
-        })
+        try {
+          await hook["event"]?.({
+            event: input,
+          })
+        } catch (err) {
+          log.error("plugin event hook failed", {
+            type: input.type,
+            error: err instanceof Error ? err.message : String(err),
+          })
+        }
       }
     })
   }
