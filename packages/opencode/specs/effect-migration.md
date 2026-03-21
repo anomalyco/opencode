@@ -63,9 +63,17 @@ Rules:
 - Use `Effect.fn("Namespace.method")` for all Effect functions (for tracing)
 - No `Layer.fresh` — InstanceState handles per-directory isolation
 
-## Mixed-mode (Auth only)
+## Schema → Zod interop
 
-Auth is the only service still split across `auth/effect.ts` (Effect Schema internals) and `auth/index.ts` (Zod schemas + facade). This is because it uses Effect Schema classes internally but exposes Zod schemas for the HTTP API layer.
+When a service uses Effect Schema internally but needs Zod schemas for the HTTP layer, derive Zod from Schema using the `zod()` helper from `@/util/effect-zod`:
+
+```ts
+import { zod } from "@/util/effect-zod"
+
+export const ZodInfo = zod(Info) // derives z.ZodType from Schema.Union
+```
+
+See `Auth.ZodInfo` for the canonical example.
 
 ## Scheduled Tasks
 
@@ -101,7 +109,7 @@ That is fine for leaf files like `schema.ts`. Keep the service surface in the ow
 Fully migrated (single namespace, InstanceState where needed, flattened facade):
 
 - [x] `Account` — `account/index.ts`
-- [x] `Auth` — `auth/effect.ts` + `auth/index.ts` (mixed-mode, dual Schema/Zod)
+- [x] `Auth` — `auth/index.ts` (uses `zod()` helper for Schema→Zod interop)
 - [x] `File` — `file/index.ts`
 - [x] `FileTime` — `file/time.ts`
 - [x] `FileWatcher` — `file/watcher.ts`

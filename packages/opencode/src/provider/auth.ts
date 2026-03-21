@@ -1,6 +1,6 @@
 import type { AuthOuathResult, Hooks } from "@opencode-ai/plugin"
 import { NamedError } from "@opencode-ai/util/error"
-import * as Auth from "@/auth/effect"
+import * as Auth from "@/auth"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRunPromise } from "@/effect/run-service"
 import { Plugin } from "../plugin"
