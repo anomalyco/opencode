@@ -2,6 +2,7 @@ import { NodePath } from "@effect/platform-node"
 import { Cause, Duration, Effect, Layer, Schedule, ServiceMap } from "effect"
 import path from "path"
 import type { Agent } from "../agent/agent"
+import { makeRunPromise } from "@/effect/run-service"
 import { AppFileSystem } from "@/filesystem"
 import { evaluate } from "@/permission/evaluate"
 import { Identifier } from "../id/id"
@@ -135,3 +136,5 @@ export namespace Truncate {
 
   export const defaultLayer = layer.pipe(Layer.provide(AppFileSystem.defaultLayer), Layer.provide(NodePath.layer))
 }
+
+export const runPromise = makeRunPromise(Truncate.Service, Truncate.defaultLayer)

@@ -1,6 +1,6 @@
 import type { Agent } from "../agent/agent"
-import { runtime } from "@/effect/runtime"
 import { Truncate as S } from "./truncate-effect"
+import * as M from "./truncate-effect"
 
 export namespace Truncate {
   export const MAX_LINES = S.MAX_LINES
@@ -13,6 +13,6 @@ export namespace Truncate {
   export type Options = S.Options
 
   export async function output(text: string, options: Options = {}, agent?: Agent.Info): Promise<Result> {
-    return runtime.runPromise(S.Service.use((s) => s.output(text, options, agent)))
+    return M.runPromise((s) => s.output(text, options, agent))
   }
 }

@@ -1,6 +1,7 @@
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Effect, Layer, Schema, ServiceMap, Stream } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { makeRunPromise } from "@/effect/run-service"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import path from "path"
@@ -329,14 +330,6 @@ export namespace Installation {
     Layer.provide(NodePath.layer),
   )
 
-  // Legacy adapters — dynamic import avoids circular dependency since
-  // foundational modules (db.ts, provider/models.ts) import Installation
-  // at load time, and runtime transitively loads those same modules.
-  async function runPromise<A>(f: (service: Interface) => Effect.Effect<A, any>) {
-    const { runtime } = await import("@/effect/runtime")
-    return runtime.runPromise(Service.use(f))
-  }
-
   export function info(): Promise<Info> {
     return runPromise((svc) => svc.info())
   }
@@ -353,3 +346,5 @@ export namespace Installation {
     return runPromise((svc) => svc.upgrade(m, target))
   }
 }
+
+export const runPromise = makeRunPromise(Installation.Service, Installation.defaultLayer)

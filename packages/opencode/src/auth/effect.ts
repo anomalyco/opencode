@@ -1,5 +1,6 @@
 import path from "path"
 import { Effect, Layer, Record, Result, Schema, ServiceMap } from "effect"
+import { makeRunPromise } from "@/effect/run-service"
 import { Global } from "../global"
 import { Filesystem } from "../util/filesystem"
 
@@ -92,3 +93,5 @@ export namespace Auth {
     }),
   )
 }
+
+export const runPromise = makeRunPromise(Auth.Service, Auth.layer)

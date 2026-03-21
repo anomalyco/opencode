@@ -1,13 +1,7 @@
-import { Effect } from "effect"
 import z from "zod"
-import { runtime } from "@/effect/runtime"
 import * as S from "./effect"
 
 export { OAUTH_DUMMY_KEY } from "./effect"
-
-function runPromise<A>(f: (service: S.Auth.Interface) => Effect.Effect<A, S.AuthError>) {
-  return runtime.runPromise(S.Auth.Service.use(f))
-}
 
 export namespace Auth {
   export const Oauth = z
@@ -40,18 +34,18 @@ export namespace Auth {
   export type Info = z.infer<typeof Info>
 
   export async function get(providerID: string) {
-    return runPromise((service) => service.get(providerID))
+    return S.runPromise((service) => service.get(providerID))
   }
 
   export async function all(): Promise<Record<string, Info>> {
-    return runPromise((service) => service.all())
+    return S.runPromise((service) => service.all())
   }
 
   export async function set(key: string, info: Info) {
-    return runPromise((service) => service.set(key, info))
+    return S.runPromise((service) => service.set(key, info))
   }
 
   export async function remove(key: string) {
-    return runPromise((service) => service.remove(key))
+    return S.runPromise((service) => service.remove(key))
   }
 }
