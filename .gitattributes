@@ -1,0 +1,33 @@
+# Default: auto-detect text files and normalize line endings to LF in the repo
+* text=auto eol=lf
+
+# Explicitly force LF for all common source/config file types
+*.sh   text eol=lf
+*.bash text eol=lf
+*.js   text eol=lf
+*.ts   text eol=lf
+*.tsx  text eol=lf
+*.jsx  text eol=lf
+*.json text eol=lf
+*.md   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.css  text eol=lf
+*.html text eol=lf
+*.go   text eol=lf
+*.rs   text eol=lf
+*.py   text eol=lf
+Dockerfile* text eol=lf
+Makefile   text eol=lf
+
+# Binaries - never touch
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.pdf  binary
+*.zip  binary
+*.tar  binary
+*.gz   binary
