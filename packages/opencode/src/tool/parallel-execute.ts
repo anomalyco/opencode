@@ -53,7 +53,7 @@ export const ParallelExecuteTool = Tool.define("parallel_execute", {
 
     return {
       title: `Launched ${plan.subtasks.length} parallel workers`,
-      output: `Plan ${planID} approved and execution started.\n${plan.subtasks.length} workers are spawning in isolated git worktrees.\n\nThe user can monitor progress with the /workers command in the command palette.`,
+      output: `Plan ${planID} approved and execution started.\n${plan.subtasks.length} workers are spawning in isolated git worktrees.\n\nThe user can monitor progress with the /parallel-workers command in the command palette.`,
       metadata: {} as Record<string, never>,
     }
   },

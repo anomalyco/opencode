@@ -537,8 +537,7 @@ function App() {
       value: "parallel.status",
       category: "Agent",
       slash: {
-        name: "workers",
-        aliases: ["manager"],
+        name: "parallel-workers",
       },
       onSelect: async () => {
         dialog.clear()
