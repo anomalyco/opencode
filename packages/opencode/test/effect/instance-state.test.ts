@@ -157,19 +157,25 @@ test("InstanceState.get reads the current directory lazily", async () => {
 })
 
 test("InstanceState preserves directory across async boundaries", async () => {
-  await using one = await tmpdir()
-  await using two = await tmpdir()
-  await using three = await tmpdir()
+  await using one = await tmpdir({ git: true })
+  await using two = await tmpdir({ git: true })
+  await using three = await tmpdir({ git: true })
 
   interface Api {
-    readonly get: () => Effect.Effect<string>
+    readonly get: () => Effect.Effect<{ directory: string; worktree: string; project: string }>
   }
 
   class Test extends ServiceMap.Service<Test, Api>()("@test/InstanceStateAsync") {
     static readonly layer = Layer.effect(
       Test,
       Effect.gen(function* () {
-        const state = yield* InstanceState.make((ctx) => Effect.sync(() => ctx.directory))
+        const state = yield* InstanceState.make((ctx) =>
+          Effect.sync(() => ({
+            directory: ctx.directory,
+            worktree: ctx.worktree,
+            project: ctx.project.id,
+          })),
+        )
 
         return Test.of({
           get: Effect.fn("Test.get")(function* () {
@@ -208,12 +214,150 @@ test("InstanceState preserves directory across async boundaries", async () => {
       }),
     ])
 
-    expect(a).toBe(one.path)
-    expect(b).toBe(two.path)
-    expect(c).toBe(three.path)
+    expect(a).toEqual({ directory: one.path, worktree: one.path, project: a.project })
+    expect(b).toEqual({ directory: two.path, worktree: two.path, project: b.project })
+    expect(c).toEqual({ directory: three.path, worktree: three.path, project: c.project })
+    expect(a.project).not.toBe(b.project)
+    expect(a.project).not.toBe(c.project)
+    expect(b.project).not.toBe(c.project)
   } finally {
     await rt.dispose()
   }
+})
+
+test("InstanceState survives high-contention concurrent access", async () => {
+  const N = 20
+  const dirs = await Promise.all(Array.from({ length: N }, () => tmpdir()))
+
+  interface Api {
+    readonly get: () => Effect.Effect<string>
+  }
+
+  class Test extends ServiceMap.Service<Test, Api>()("@test/HighContention") {
+    static readonly layer = Layer.effect(
+      Test,
+      Effect.gen(function* () {
+        const state = yield* InstanceState.make((ctx) => Effect.sync(() => ctx.directory))
+
+        return Test.of({
+          get: Effect.fn("Test.get")(function* () {
+            // Interleave many async hops to maximize chance of ALS corruption
+            for (let i = 0; i < 10; i++) {
+              yield* Effect.promise(() => Bun.sleep(Math.random() * 3))
+              yield* Effect.yieldNow
+              yield* Effect.promise(() => Promise.resolve())
+            }
+            return yield* InstanceState.get(state)
+          }),
+        })
+      }),
+    )
+  }
+
+  const rt = ManagedRuntime.make(Test.layer)
+
+  try {
+    const results = await Promise.all(
+      dirs.map((d) =>
+        Instance.provide({
+          directory: d.path,
+          fn: () => rt.runPromise(Test.use((svc) => svc.get())),
+        }),
+      ),
+    )
+
+    for (let i = 0; i < N; i++) {
+      expect(results[i]).toBe(dirs[i].path)
+    }
+  } finally {
+    await rt.dispose()
+    for (const d of dirs) await d[Symbol.asyncDispose]()
+  }
+})
+
+test("InstanceState correct after interleaved init and dispose", async () => {
+  await using one = await tmpdir()
+  await using two = await tmpdir()
+
+  interface Api {
+    readonly get: () => Effect.Effect<string>
+  }
+
+  class Test extends ServiceMap.Service<Test, Api>()("@test/InterleavedDispose") {
+    static readonly layer = Layer.effect(
+      Test,
+      Effect.gen(function* () {
+        const state = yield* InstanceState.make((ctx) =>
+          Effect.promise(async () => {
+            await Bun.sleep(5) // slow init
+            return ctx.directory
+          }),
+        )
+
+        return Test.of({
+          get: Effect.fn("Test.get")(function* () {
+            return yield* InstanceState.get(state)
+          }),
+        })
+      }),
+    )
+  }
+
+  const rt = ManagedRuntime.make(Test.layer)
+
+  try {
+    // Init both directories
+    const a = await Instance.provide({
+      directory: one.path,
+      fn: () => rt.runPromise(Test.use((svc) => svc.get())),
+    })
+    expect(a).toBe(one.path)
+
+    // Dispose one directory, access the other concurrently
+    const [, b] = await Promise.all([
+      Instance.reload({ directory: one.path }),
+      Instance.provide({
+        directory: two.path,
+        fn: () => rt.runPromise(Test.use((svc) => svc.get())),
+      }),
+    ])
+    expect(b).toBe(two.path)
+
+    // Re-access disposed directory - should get fresh state
+    const c = await Instance.provide({
+      directory: one.path,
+      fn: () => rt.runPromise(Test.use((svc) => svc.get())),
+    })
+    expect(c).toBe(one.path)
+  } finally {
+    await rt.dispose()
+  }
+})
+
+test("InstanceState mutation in one directory does not leak to another", async () => {
+  await using one = await tmpdir()
+  await using two = await tmpdir()
+
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const state = yield* InstanceState.make(() => Effect.sync(() => ({ count: 0 })))
+
+        // Mutate state in directory one
+        const s1 = yield* Effect.promise(() => access(state, one.path))
+        s1.count = 42
+
+        // Access directory two — should be independent
+        const s2 = yield* Effect.promise(() => access(state, two.path))
+        expect(s2.count).toBe(0)
+
+        // Confirm directory one still has the mutation
+        const s1again = yield* Effect.promise(() => access(state, one.path))
+        expect(s1again.count).toBe(42)
+        expect(s1again).toBe(s1) // same reference
+      }),
+    ),
+  )
 })
 
 test("InstanceState dedupes concurrent lookups", async () => {
