@@ -32,6 +32,7 @@ export type MergePipelineResult = {
 
 export namespace MergePipeline {
   const log = Log.create({ service: "merge" })
+  const conflictError = "Merge conflict could not be resolved"
 
   /**
    * Validate that workers stayed within their declared fileScope.
@@ -131,27 +132,28 @@ export namespace MergePipeline {
     for (const { worker } of withDiffs) {
       log.info("merge start", { planID, branch: worker.branch! })
       const result = await mergeBranch(planID, worker.branch!, cwd)
-      log.info("merge complete", { planID, branch: worker.branch!, result })
+      log.info("merge complete", { planID, branch: worker.branch!, result: result.mode })
       Bus.publish(ParallelEvent.MergeProgress, {
         planID,
         branch: worker.branch!,
-        result,
+        result: result.mode,
       })
 
       workerResults.push({
         subtaskID: worker.subtaskID,
         branch: worker.branch!,
-        resolutionMode: result,
+        resolutionMode: result.mode,
       })
 
-      if (result === "failed") {
+      if (result.mode === "failed") {
         allSuccess = false
-        log.error("merge failed", { planID, branch: worker.branch!, error: "Merge conflict could not be resolved" })
+        const err = result.error ?? conflictError
+        log.error("merge failed", { planID, branch: worker.branch!, error: err })
         await PlanStore.updateWorker({
           id: planID,
           subtaskID: worker.subtaskID,
           status: "conflict",
-          error: "Merge conflict could not be resolved",
+          error: err,
           resolutionMode: "failed",
         })
       } else {
@@ -159,7 +161,7 @@ export namespace MergePipeline {
           id: planID,
           subtaskID: worker.subtaskID,
           status: "merged",
-          resolutionMode: result,
+          resolutionMode: result.mode,
         })
       }
     }
@@ -171,7 +173,11 @@ export namespace MergePipeline {
     return { success: allSuccess, workers: workerResults }
   }
 
-  async function mergeBranch(planID: PlanID, branch: string, cwd: string): Promise<WorkerResolutionMode> {
+  async function mergeBranch(
+    planID: PlanID,
+    branch: string,
+    cwd: string,
+  ): Promise<{ mode: WorkerResolutionMode; error?: string }> {
     // Get plan and worker info for better merge message
     const plan = await PlanStore.get(planID)
     const worker = plan.workers.find((w) => w.branch === branch)
@@ -194,37 +200,40 @@ export namespace MergePipeline {
       const merged = await git(["merge-base", "--is-ancestor", branch, "HEAD"], { cwd })
       if (merged.exitCode === 0) {
         log.info("merge clean", { planID, branch, subtaskTitle, exitCode: merge.exitCode })
-        return "clean"
+        return { mode: "clean" }
       }
       log.error("merge verification failed", { planID, branch, subtaskTitle })
-      return "failed"
+      return { mode: "failed", error: "Merge verification failed after successful merge" }
     }
 
     log.info("merge needs resolution", { planID, branch, subtaskTitle, exitCode: merge.exitCode })
-    const result = await resolveConflicts(planID, branch, cwd)
-    if (result) {
+    const result = await resolveConflicts(planID, branch, cwd, merge)
+    if (result.mode) {
       const merged = await git(["merge-base", "--is-ancestor", branch, "HEAD"], { cwd })
-      if (merged.exitCode === 0) return result
+      if (merged.exitCode === 0) return { mode: result.mode }
       log.error("merge verification failed after resolution", { planID, branch, subtaskTitle })
-      return "failed"
+      return { mode: "failed", error: "Merge verification failed after conflict resolution" }
     }
 
-    log.error("merge resolution failed", { planID, branch, subtaskTitle })
+    const err = result.error ?? mergeError(merge) ?? conflictError
+    log.error("merge resolution failed", { planID, branch, subtaskTitle, error: err })
     await git(["merge", "--abort"], { cwd })
-    return "failed"
+    return { mode: "failed", error: err }
   }
 
   async function resolveConflicts(
     planID: PlanID,
     branch: string,
     cwd: string,
-  ): Promise<false | Exclude<WorkerResolutionMode, "clean" | "failed">> {
+    merge: { stdout: Uint8Array; stderr: Uint8Array },
+  ): Promise<{ mode: false; error?: string } | { mode: Exclude<WorkerResolutionMode, "clean" | "failed"> }> {
     const status = await git(["diff", "--name-only", "--diff-filter=U"], { cwd })
     const conflictedFiles = outputText(status.stdout).split("\n").filter(Boolean)
 
     if (conflictedFiles.length === 0) {
-      log.info("no conflicts to resolve", { planID, branch })
-      return false
+      const err = mergeError(merge)
+      log.warn("merge failed without unresolved files", { planID, branch, error: err })
+      return { mode: false, error: err }
     }
 
     log.info("resolving conflicts", { planID, branch, fileCount: conflictedFiles.length, files: conflictedFiles })
@@ -274,7 +283,7 @@ export namespace MergePipeline {
       })
       if (hasConflictMarker(resolution)) {
         log.error("ai resolution still contains conflict markers", { planID, branch, file })
-        return false
+        return { mode: false }
       }
 
       await Bun.write(path.join(cwd, file), resolution)
@@ -285,10 +294,11 @@ export namespace MergePipeline {
     log.info("committing resolved conflicts", { planID, branch, fileCount: conflictedFiles.length })
     const commit = await git(["commit", "--no-edit"], { cwd })
     if (commit.exitCode !== 0) {
-      log.error("commit failed after resolution", { planID, branch, exitCode: commit.exitCode })
+      const err = mergeError(commit)
+      log.error("commit failed after resolution", { planID, branch, exitCode: commit.exitCode, error: err })
+      return { mode: false, error: err }
     }
-    if (commit.exitCode !== 0) return false
-    return mode
+    return { mode }
   }
 
   async function resolveWithAI(input: {
@@ -358,6 +368,19 @@ export namespace MergePipeline {
 function outputText(input: Uint8Array | undefined): string {
   if (!input?.length) return ""
   return new TextDecoder().decode(input).trim()
+}
+
+function mergeError(input: { stdout?: Uint8Array; stderr?: Uint8Array }): string | undefined {
+  const err = outputText(input.stderr)
+  const out = outputText(input.stdout)
+  const text = [err, out].filter(Boolean).join("\n")
+  if (!text) return
+  const line = text
+    .split("\n")
+    .map((x) => x.trim())
+    .find(Boolean)
+  if (!line) return
+  return line.replace(/^error:\s*/i, "")
 }
 
 const CONFLICT_RESOLUTION_PROMPT = `You are a merge conflict resolver for a parallel coding system.

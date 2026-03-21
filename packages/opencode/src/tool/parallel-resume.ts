@@ -88,7 +88,7 @@ export const ParallelResumeTool = Tool.define("parallel_resume", {
           resumed.status === "done"
             ? "All workers recovered and merged successfully!"
             : resumed.status === "failed"
-              ? "Plan could not be recovered — all workers failed."
+              ? "Plan could not be fully recovered. Review worker errors and run abandon to clean up if needed."
               : `${failed} worker(s) failed during recovery. You can create a new plan to handle the remaining work.`,
         ].join("\n"),
         metadata: {} as Record<string, never>,

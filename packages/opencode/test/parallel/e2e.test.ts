@@ -276,6 +276,44 @@ describe("Parallel E2E", () => {
     })
   })
 
+  test("recovery: resume does not mark done when merge fails", async () => {
+    await withProject(async (projectID) => {
+      const plan = await createPlan(projectID, [{ title: "Missing branch merge", files: ["src/a.ts"] }])
+
+      await PlanStore.transition({ id: plan.id, status: "approved" })
+      await PlanStore.transition({ id: plan.id, status: "spawning" })
+      await PlanStore.updateWorker({
+        id: plan.id,
+        subtaskID: plan.subtasks[0].id,
+        status: "spawning",
+      } as any)
+      await PlanStore.transition({ id: plan.id, status: "running" })
+      await PlanStore.updateWorker({
+        id: plan.id,
+        subtaskID: plan.subtasks[0].id,
+        status: "running",
+      } as any)
+
+      await PlanStore.updateWorker({
+        id: plan.id,
+        subtaskID: plan.subtasks[0].id,
+        status: "done",
+        branch: "opencode/branch-does-not-exist",
+      } as any)
+
+      await PlanStore.transition({ id: plan.id, status: "merging" })
+
+      const resumed = await Recovery.resume(plan.id)
+      expect(resumed.status).toBe("failed")
+
+      const worker = resumed.workers.find((w) => w.subtaskID === plan.subtasks[0].id)
+      expect(worker).toBeDefined()
+      expect(worker!.status).toBe("conflict")
+      expect(worker!.error).toBeDefined()
+      expect(worker!.error).not.toBe("Merge conflict could not be resolved")
+    })
+  })
+
   test("recovery: abandon cleans up worktrees", async () => {
     await withProject(async (projectID, worktree) => {
       const plan = await createPlan(projectID, [{ title: "Update a.ts", files: ["src/a.ts"] }])

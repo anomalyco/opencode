@@ -429,10 +429,10 @@ export namespace Recovery {
       })
 
       const { MergePipeline } = await import("./merge")
-      const success = await MergePipeline.run(planID)
-      await forceStatus(planID, success ? "done" : "failed")
+      const result = await MergePipeline.run(planID)
+      await forceStatus(planID, result.success ? "done" : "failed")
 
-      if (!success) {
+      if (!result.success) {
         log.info("merge failed during resume", {
           planID,
           details: "Merge pipeline encountered conflicts or errors",

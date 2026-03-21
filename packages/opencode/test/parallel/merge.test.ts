@@ -61,6 +61,8 @@ describe("MergePipeline", () => {
 
         const updated = await PlanStore.get(plan.id)
         expect(updated.workers[0].status).toBe("conflict")
+        expect(updated.workers[0].error).toBeDefined()
+        expect(updated.workers[0].error).not.toBe("Merge conflict could not be resolved")
 
         const kept = await fs
           .stat(dir)
