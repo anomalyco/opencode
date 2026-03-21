@@ -34,6 +34,11 @@ export namespace InstanceState {
   export const use = <A, E, R, B>(self: InstanceState<A, E, R>, select: (value: A) => B) =>
     Effect.map(get(self), select)
 
+  export const useEffect = <A, E, R, B, E2, R2>(
+    self: InstanceState<A, E, R>,
+    select: (value: A) => Effect.Effect<B, E2, R2>,
+  ) => Effect.flatMap(get(self), select)
+
   export const has = <A, E, R>(self: InstanceState<A, E, R>) =>
     Effect.suspend(() => ScopedCache.has(self.cache, Instance.directory))
 
