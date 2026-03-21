@@ -11,7 +11,6 @@ import { makeRunPromise } from "@/effect/run-service"
 import { Flag } from "@/flag/flag"
 import { Global } from "@/global"
 import { Permission } from "@/permission"
-import { Instance } from "@/project/instance"
 import { Filesystem } from "@/util/filesystem"
 import { Config } from "../config/config"
 import { ConfigMarkdown } from "../config/markdown"
@@ -118,7 +117,7 @@ export namespace Skill {
   }
 
   // TODO: Migrate to Effect
-  const create = (discovery: Discovery.Interface): Cache => {
+  const create = (discovery: Discovery.Interface, directory: string, worktree: string): Cache => {
     const state: State = {
       skills: {},
       dirs: new Set<string>(),
@@ -134,8 +133,8 @@ export namespace Skill {
 
         for await (const root of Filesystem.up({
           targets: EXTERNAL_DIRS,
-          start: Instance.directory,
-          stop: Instance.project.worktree,
+          start: directory,
+          stop: worktree,
         })) {
           await scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "project" })
         }
@@ -148,7 +147,7 @@ export namespace Skill {
       const cfg = await Config.get()
       for (const item of cfg.skills?.paths ?? []) {
         const expanded = item.startsWith("~/") ? path.join(os.homedir(), item.slice(2)) : item
-        const dir = path.isAbsolute(expanded) ? expanded : path.join(Instance.directory, expanded)
+        const dir = path.isAbsolute(expanded) ? expanded : path.join(directory, expanded)
         if (!(await Filesystem.isDir(dir))) {
           log.warn("skill path not found", { path: dir })
           continue
@@ -185,7 +184,7 @@ export namespace Skill {
     Service,
     Effect.gen(function* () {
       const discovery = yield* Discovery.Service
-      const state = yield* InstanceState.make(Effect.fn("Skill.state")((_ctx) => Effect.sync(() => create(discovery))))
+      const state = yield* InstanceState.make(Effect.fn("Skill.state")((ctx) => Effect.sync(() => create(discovery, ctx.directory, ctx.worktree))))
 
       const ensure = Effect.fn("Skill.ensure")(function* () {
         const cache = yield* InstanceState.get(state)

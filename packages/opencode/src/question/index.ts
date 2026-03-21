@@ -8,9 +8,9 @@ import { Log } from "@/util/log"
 import z from "zod"
 import { QuestionID } from "./schema"
 
-const log = Log.create({ service: "question" })
-
 export namespace Question {
+  const log = Log.create({ service: "question" })
+
   // Schemas
 
   export const Option = z

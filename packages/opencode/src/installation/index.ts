@@ -332,19 +332,19 @@ export namespace Installation {
 
   const runPromise = makeRunPromise(Service, defaultLayer)
 
-  export function info(): Promise<Info> {
+  export async function info(): Promise<Info> {
     return runPromise((svc) => svc.info())
   }
 
-  export function method(): Promise<Method> {
+  export async function method(): Promise<Method> {
     return runPromise((svc) => svc.method())
   }
 
-  export function latest(installMethod?: Method): Promise<string> {
+  export async function latest(installMethod?: Method): Promise<string> {
     return runPromise((svc) => svc.latest(installMethod))
   }
 
-  export function upgrade(m: Method, target: string): Promise<void> {
+  export async function upgrade(m: Method, target: string): Promise<void> {
     return runPromise((svc) => svc.upgrade(m, target))
   }
 }
