@@ -26,7 +26,7 @@ import { CodeSearchTool } from "./codesearch"
 import { Flag } from "@/flag/flag"
 import { Log } from "@/util/log"
 import { LspTool } from "./lsp"
-import { Truncate } from "./truncation"
+import { Truncate } from "./truncate"
 
 import { ApplyPatchTool } from "./apply_patch"
 import { Glob } from "../util/glob"
@@ -46,7 +46,7 @@ export namespace ToolRegistry {
     if (matches.length) await Config.waitForDependencies()
     for (const match of matches) {
       const namespace = path.basename(match, path.extname(match))
-      const mod = await import(pathToFileURL(match).href)
+      const mod = await import(process.platform === "win32" ? match : pathToFileURL(match).href)
       for (const [id, def] of Object.entries<ToolDefinition>(mod)) {
         custom.push(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def))
       }

@@ -7,48 +7,48 @@ import config from "../../../../config.mjs"
 export const console = config.console
 export const email = `mailto:${config.email}`
 
-OpenCode Go, popüler açık kodlama modellerine güvenilir erişim sağlayan **aylık 10$** tutarında düşük maliyetli bir aboneliktir.
+OpenCode Go, popüler açık kodlama modellerine güvenilir erişim sağlayan düşük maliyetli bir aboneliktir — **ilk ayınız için 5$**, sonrasında **aylık 10$**.
 
 :::note
-OpenCode Go şu anda beta aşamasındadır.
+OpenCode Go şu anda beta olarak mevcut.
 :::
 
-Go, OpenCode içindeki diğer sağlayıcılar gibi çalışır. OpenCode Go'ya abone olur ve API anahtarınızı alırsınız. Bu **tamamen isteğe bağlıdır** ve OpenCode'u kullanmak için buna ihtiyacınız yoktur.
+Go, OpenCode'daki diğer sağlayıcılar gibi çalışır. OpenCode Go'ya abone olur ve API anahtarınızı alırsınız. Bu **tamamen isteğe bağlıdır** ve OpenCode'u kullanmak için bunu kullanmanıza gerek yoktur.
 
-Kararlı küresel erişim için ABD, AB ve Singapur'da barındırılan modellerle, öncelikli olarak uluslararası kullanıcılar için tasarlanmıştır.
+Dünya çapında istikrarlı erişim için ABD, AB ve Singapur'da barındırılan modellerle temel olarak uluslararası kullanıcılar için tasarlanmıştır.
 
 ---
 
 ## Arka Plan
 
-Açık modeller gerçekten iyi hale geldi. Artık kodlama görevleri için tescilli modellere yakın performans sunuyorlar. Ve birçok sağlayıcı bunları rekabetçi bir şekilde sunabildiği için genellikle çok daha ucuzlar.
+Açık modeller gerçekten çok iyi hale geldi. Artık kodlama görevleri için özel mülk modellere yakın bir performansa ulaşıyorlar. Ve birçok sağlayıcı onlara rekabetçi bir şekilde hizmet verebildiği için genellikle çok daha ucuzdurlar.
 
-Ancak, bunlara güvenilir ve düşük gecikmeli erişim sağlamak zor olabilir. Sağlayıcılar kalite ve kullanılabilirlik açısından farklılık gösterir.
+Ancak, bu modellere güvenilir, düşük gecikmeli erişim sağlamak zor olabilir. Sağlayıcılar kalite ve erişilebilirlik açısından farklılık gösterir.
 
 :::tip
-OpenCode ile iyi çalışan seçkin bir model ve sağlayıcı grubunu test ettik.
+OpenCode ile iyi çalışan seçili bir model ve sağlayıcı grubunu test ettik.
 :::
 
-Bunu düzeltmek için birkaç şey yaptık:
+Bunu çözmek için birkaç şey yaptık:
 
-1. Seçkin bir açık model grubunu test ettik ve bunları en iyi nasıl çalıştıracakları konusunda ekipleriyle görüştük.
-2. Daha sonra bunların doğru şekilde sunulduğundan emin olmak için birkaç sağlayıcıyla çalıştık.
-3. Son olarak, model/sağlayıcı kombinasyonunu kıyasladık ve önermekten memnuniyet duyduğumuz bir liste oluşturduk.
+1. Seçili bir grup açık modeli test ettik ve bu modelleri en iyi nasıl çalıştırabileceğimizi öğrenmek için ekipleriyle görüştük.
+2. Ardından, bunların doğru şekilde sunulduğundan emin olmak için birkaç sağlayıcıyla birlikte çalıştık.
+3. Son olarak, model/sağlayıcı kombinasyonunu kıyasladık (benchmark) ve gönül rahatlığıyla önerebileceğimiz bir liste oluşturduk.
 
-OpenCode Go, bu modellere **aylık 10$** karşılığında erişmenizi sağlar.
+OpenCode Go, bu modellere **ilk ayınız için 5$**, ardından **aylık 10$** karşılığında erişmenizi sağlar.
 
 ---
 
-## Nasıl çalışır
+## Nasıl çalışır?
 
-OpenCode Go, OpenCode'daki diğer herhangi bir sağlayıcı gibi çalışır.
+OpenCode Go, OpenCode'daki diğer sağlayıcılar gibi çalışır.
 
-1. **<a href={console}>OpenCode Zen</a>**'de oturum açın, Go'ya abone olun ve API anahtarınızı kopyalayın.
+1. **<a href={console}>OpenCode Zen</a>**'e giriş yapın, Go'ya abone olun ve API anahtarınızı kopyalayın.
 2. TUI'de `/connect` komutunu çalıştırın, `OpenCode Go`yu seçin ve API anahtarınızı yapıştırın.
-3. Go üzerinden kullanılabilen modellerin listesini görmek için TUI'de `/models` komutunu çalıştırın.
+3. Go üzerinden kullanabileceğiniz modellerin listesini görmek için TUI'de `/models` komutunu çalıştırın.
 
 :::note
-Çalışma alanı başına yalnızca bir üye OpenCode Go'ya abone olabilir.
+Her çalışma alanından yalnızca bir üye OpenCode Go'ya abone olabilir.
 :::
 
 Mevcut model listesi şunları içerir:
@@ -56,34 +56,35 @@ Mevcut model listesi şunları içerir:
 - **GLM-5**
 - **Kimi K2.5**
 - **MiniMax M2.5**
+- **MiniMax M2.7**
 
-Test ettikçe ve yenilerini ekledikçe model listesi değişebilir.
+Test edip yenilerini ekledikçe model listesi değişebilir.
 
 ---
 
-## Kullanım sınırları
+## Kullanım limitleri
 
-OpenCode Go aşağıdaki sınırları içerir:
+OpenCode Go aşağıdaki limitleri içerir:
 
-- **5 saatlik sınır** — 12$ kullanım
-- **Haftalık sınır** — 30$ kullanım
-- **Aylık sınır** — 60$ kullanım
+- **5 saatlik limit** — 12$ kullanım
+- **Haftalık limit** — 30$ kullanım
+- **Aylık limit** — 60$ kullanım
 
-Sınırlar dolar değeri üzerinden tanımlanmıştır. Bu, gerçek istek sayınızın kullandığınız modele bağlı olduğu anlamına gelir. MiniMax M2.5 gibi daha ucuz modeller daha fazla isteğe izin verirken, GLM-5 gibi daha yüksek maliyetli modeller daha azına izin verir.
+Limitler dolar değeri üzerinden belirlenmiştir. Bu, gerçek istek sayınızın kullandığınız modele bağlı olduğu anlamına gelir. MiniMax M2.5 gibi daha ucuz modeller daha fazla isteğe izin verirken, GLM-5 gibi yüksek maliyetli modeller daha azına izin verir.
 
 Aşağıdaki tablo, tipik Go kullanım modellerine dayalı tahmini bir istek sayısı sunmaktadır:
 
-|                     | GLM-5 | Kimi K2.5 | MiniMax M2.5 |
-| ------------------- | ----- | --------- | ------------ |
-| 5 saat başına istek | 1.150 | 1.850     | 30.000       |
-| haftalık istek      | 2.880 | 4.630     | 75.000       |
-| aylık istek         | 5.750 | 9.250     | 150.000      |
+|                    | GLM-5 | Kimi K2.5 | MiniMax M2.7 | MiniMax M2.5 |
+| ------------------ | ----- | --------- | ------------ | ------------ |
+| 5 saatte bir istek | 1.150 | 1.850     | 14.000       | 20.000       |
+| haftalık istek     | 2.880 | 4.630     | 35.000       | 50.000       |
+| aylık istek        | 5.750 | 9.250     | 70.000       | 100.000      |
 
-Tahminler gözlemlenen ortalama istek modellerine dayanmaktadır:
+Tahminler, gözlemlenen ortalama istek modellerine dayanmaktadır:
 
 - GLM-5 — İstek başına 700 girdi, 52.000 önbelleğe alınmış, 150 çıktı token'ı
 - Kimi K2.5 — İstek başına 870 girdi, 55.000 önbelleğe alınmış, 200 çıktı token'ı
-- MiniMax M2.5 — İstek başına 300 girdi, 55.000 önbelleğe alınmış, 125 çıktı token'ı
+- MiniMax M2.7/M2.5 — İstek başına 300 girdi, 55.000 önbelleğe alınmış, 125 çıktı token'ı
 
 Mevcut kullanımınızı **<a href={console}>konsoldan</a>** takip edebilirsiniz.
 
@@ -91,45 +92,34 @@ Mevcut kullanımınızı **<a href={console}>konsoldan</a>** takip edebilirsiniz
 Kullanım sınırına ulaşırsanız, ücretsiz modelleri kullanmaya devam edebilirsiniz.
 :::
 
-Erken kullanım ve geri bildirimlerden öğrendiklerimize göre kullanım sınırları değişebilir.
+Erken kullanımlardan ve geri bildirimlerden edindiğimiz deneyimlere bağlı olarak kullanım limitleri değişebilir.
 
 ---
 
-### Fiyatlandırma
+### Limit dışı kullanım
 
-OpenCode Go, **aylık 10$** tutarında bir abonelik planıdır. Aşağıda **1M token başına** fiyatlar yer almaktadır.
-
-| Model        | Girdi | Çıktı | Önbelleğe Alınmış Okuma |
-| ------------ | ----- | ----- | ----------------------- |
-| GLM-5        | $1.00 | $3.20 | $0.20                   |
-| Kimi K2.5    | $0.60 | $3.00 | $0.10                   |
-| MiniMax M2.5 | $0.30 | $1.20 | $0.03                   |
-
----
-
-### Sınırların ötesinde kullanım
-
-Zen bakiyenizde krediniz de varsa, konsoldaki **Bakiyeyi kullan** (Use balance) seçeneğini etkinleştirebilirsiniz. Etkinleştirildiğinde, kullanım sınırlarınıza ulaştıktan sonra Go, istekleri engellemek yerine Zen bakiyenize geri dönecektir.
+Eğer Zen bakiyenizde kredileriniz varsa, konsoldan **Bakiye kullan (Use balance)** seçeneğini etkinleştirebilirsiniz. Bu özellik etkinleştirildiğinde, kullanım limitlerinize ulaştıktan sonra Go, istekleri engellemek yerine Zen bakiyenizi kullanmaya devam edecektir.
 
 ---
 
 ## Uç Noktalar
 
-Go modellerine aşağıdaki API uç noktaları üzerinden de erişebilirsiniz.
+Go modellerine aşağıdaki API uç noktaları aracılığıyla da erişebilirsiniz.
 
-| Model        | Model ID     | Endpoint                                         | AI SDK Paketi               |
+| Model        | Model ID     | Uç Nokta                                         | AI SDK Paketi               |
 | ------------ | ------------ | ------------------------------------------------ | --------------------------- |
 | GLM-5        | glm-5        | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K2.5    | kimi-k2.5    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiniMax M2.7 | minimax-m2.7 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.5 | minimax-m2.5 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 
-OpenCode yapılandırmanızdaki [model kimliği](/docs/config/#models), `opencode-go/<model-id>` biçimini kullanır. Örneğin, Kimi K2.5 için yapılandırmanızda `opencode-go/kimi-k2.5` kullanırsınız.
+OpenCode yapılandırmanızdaki [model id](/docs/config/#models) formatı `opencode-go/<model-id>` şeklindedir. Örneğin, Kimi K2.5 için yapılandırmanızda `opencode-go/kimi-k2.5` kullanmalısınız.
 
 ---
 
 ## Gizlilik
 
-Plan öncelikli olarak uluslararası kullanıcılar için tasarlanmıştır; modeller kararlı küresel erişim için ABD, AB ve Singapur'da barındırılmaktadır.
+Plan, dünya çapında istikrarlı erişim için ABD, AB ve Singapur'da barındırılan modellerle temel olarak uluslararası kullanıcılar için tasarlanmıştır.
 
 Herhangi bir sorunuz varsa <a href={email}>bizimle iletişime geçin</a>.
 
@@ -139,7 +129,7 @@ Herhangi bir sorunuz varsa <a href={email}>bizimle iletişime geçin</a>.
 
 OpenCode Go'yu şu amaçlarla oluşturduk:
 
-1. Düşük maliyetli bir abonelikle yapay zeka kodlamasını daha fazla insan için **erişilebilir** kılmak.
+1. Düşük maliyetli bir abonelik ile yapay zeka destekli kodlamayı daha fazla kişi için **erişilebilir** kılmak.
 2. En iyi açık kodlama modellerine **güvenilir** erişim sağlamak.
-3. Kodlama ajanı kullanımı için **test edilmiş ve kıyaslanmış** modelleri seçmek.
-4. OpenCode ile başka herhangi bir sağlayıcıyı kullanmanıza da izin vererek **kilitlenmeyi önlemek**.
+3. Kodlama aracısı (agent) kullanımı için **test edilmiş ve kıyaslanmış** modelleri bir araya getirmek.
+4. OpenCode ile diğer sağlayıcıları da kullanmanıza olanak tanıyarak **kilitlenme (vendor lock-in) olmamasını** sağlamak.

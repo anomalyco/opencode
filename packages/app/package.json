@@ -56,7 +56,7 @@
     "@solidjs/router": "catalog:",
     "@thisbeyond/solid-dnd": "0.7.5",
     "diff": "catalog:",
-    "effect": "4.0.0-beta.31",
+    "effect": "catalog:",
     "fuzzysort": "catalog:",
     "ghostty-web": "github:anomalyco/ghostty-web#main",
     "luxon": "catalog:",
