@@ -5,7 +5,9 @@ import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { ToolRegistry } from "../../src/tool/registry"
 
-afterEach(() => Instance.disposeAll())
+afterEach(async () => {
+  await Instance.disposeAll()
+})
 
 describe("tool.registry", () => {
   test("loads tools from .opencode/tool (singular)", async () => {

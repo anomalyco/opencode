@@ -18,7 +18,9 @@ const ctx = {
   ask: async () => {},
 }
 
-afterEach(() => Instance.disposeAll())
+afterEach(async () => {
+  await Instance.disposeAll()
+})
 
 async function touch(file: string, time: number) {
   const date = new Date(time)

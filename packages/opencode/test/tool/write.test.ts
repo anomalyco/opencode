@@ -17,7 +17,9 @@ const ctx = {
   ask: async () => {},
 }
 
-afterEach(() => Instance.disposeAll())
+afterEach(async () => {
+  await Instance.disposeAll()
+})
 
 describe("tool.write", () => {
   describe("new file creation", () => {

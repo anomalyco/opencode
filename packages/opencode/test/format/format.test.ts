@@ -9,7 +9,9 @@ import * as Formatter from "../../src/format/formatter"
 import { Instance } from "../../src/project/instance"
 
 describe("Format", () => {
-  afterEach(() => Instance.disposeAll())
+  afterEach(async () => {
+    await Instance.disposeAll()
+  })
 
   test("status() returns built-in formatters when no config overrides", async () => {
     await using tmp = await tmpdir()

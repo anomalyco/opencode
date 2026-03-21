@@ -4,7 +4,9 @@ import { Instance } from "../../src/project/instance"
 import { TaskTool } from "../../src/tool/task"
 import { tmpdir } from "../fixture/fixture"
 
-afterEach(() => Instance.disposeAll())
+afterEach(async () => {
+  await Instance.disposeAll()
+})
 
 describe("tool.task", () => {
   test("description sorts subagents by name and is stable across calls", async () => {

@@ -11,7 +11,9 @@ function evalPerm(agent: Agent.Info | undefined, permission: string): Permission
   return Permission.evaluate(permission, "*", agent.permission).action
 }
 
-afterEach(() => Instance.disposeAll())
+afterEach(async () => {
+  await Instance.disposeAll()
+})
 
 test("returns default native agents when no config", async () => {
   await using tmp = await tmpdir()

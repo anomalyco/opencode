@@ -12,7 +12,9 @@ import { tmpdir } from "../fixture/fixture"
 // This helper does the same for expected values so assertions match cross-platform.
 const fwd = (...parts: string[]) => path.join(...parts).replaceAll("\\", "/")
 
-afterEach(() => Instance.disposeAll())
+afterEach(async () => {
+  await Instance.disposeAll()
+})
 
 async function bootstrap() {
   return tmpdir({

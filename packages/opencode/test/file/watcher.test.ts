@@ -136,7 +136,9 @@ function ready(directory: string) {
 // ---------------------------------------------------------------------------
 
 describeWatcher("FileWatcher", () => {
-  afterEach(() => Instance.disposeAll())
+  afterEach(async () => {
+    await Instance.disposeAll()
+  })
 
   test("publishes root create, update, and delete events", async () => {
     await using tmp = await tmpdir({ git: true })

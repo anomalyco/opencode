@@ -67,7 +67,9 @@ function nextBranchUpdate(directory: string, timeout = 10_000) {
 // ---------------------------------------------------------------------------
 
 describeVcs("Vcs", () => {
-  afterEach(() => Instance.disposeAll())
+  afterEach(async () => {
+    await Instance.disposeAll()
+  })
 
   test("branch() returns current branch name", async () => {
     await using tmp = await tmpdir({ git: true })

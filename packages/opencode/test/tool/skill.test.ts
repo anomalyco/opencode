@@ -18,7 +18,9 @@ const baseCtx: Omit<Tool.Context, "ask"> = {
   metadata: () => {},
 }
 
-afterEach(() => Instance.disposeAll())
+afterEach(async () => {
+  await Instance.disposeAll()
+})
 
 describe("tool.skill", () => {
   test("description lists skill location URL", async () => {

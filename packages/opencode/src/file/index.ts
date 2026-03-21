@@ -408,15 +408,23 @@ export namespace File {
 
       const scope = yield* Scope.Scope
 
-      const init = Effect.fn("File.init")(function* () {
+      const ensure = Effect.fn("File.ensure")(function* () {
         const s = yield* InstanceState.get(state)
-        if (!s.fiber) {
+        if (!s.fiber)
           s.fiber = yield* scan().pipe(
             Effect.catchCause(() => Effect.void),
+            Effect.ensuring(
+              Effect.sync(() => {
+                s.fiber = undefined
+              }),
+            ),
             Effect.forkIn(scope),
           )
-        }
         yield* Fiber.join(s.fiber)
+      })
+
+      const init = Effect.fn("File.init")(function* () {
+        yield* ensure()
       })
 
       const status = Effect.fn("File.status")(function* () {
@@ -646,6 +654,7 @@ export namespace File {
         dirs?: boolean
         type?: "file" | "directory"
       }) {
+        yield* ensure()
         const { cache } = yield* InstanceState.get(state)
 
         return yield* Effect.promise(async () => {
