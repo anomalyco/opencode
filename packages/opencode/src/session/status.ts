@@ -1,9 +1,9 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRunPromise, memoMap } from "@/effect/run-service"
+import { makeRunPromise } from "@/effect/run-service"
 import { SessionID } from "./schema"
-import { Effect, Layer, ManagedRuntime, ServiceMap } from "effect"
+import { Effect, Layer, ServiceMap } from "effect"
 import z from "zod"
 
 export namespace SessionStatus {
@@ -35,6 +35,7 @@ export namespace SessionStatus {
         status: Info,
       }),
     ),
+    // deprecated
     Idle: BusEvent.define(
       "session.idle",
       z.object({
@@ -45,7 +46,7 @@ export namespace SessionStatus {
 
   export interface Interface {
     readonly get: (sessionID: SessionID) => Effect.Effect<Info>
-    readonly list: () => Effect.Effect<Record<string, Info>>
+    readonly list: () => Effect.Effect<Map<SessionID, Info>>
     readonly set: (sessionID: SessionID, status: Info) => Effect.Effect<void>
   }
 
@@ -64,7 +65,7 @@ export namespace SessionStatus {
       })
 
       const list = Effect.fn("SessionStatus.list")(function* () {
-        return Object.fromEntries(yield* InstanceState.get(state))
+        return new Map(yield* InstanceState.get(state))
       })
 
       const set = Effect.fn("SessionStatus.set")(function* (sessionID: SessionID, status: Info) {
@@ -83,26 +84,16 @@ export namespace SessionStatus {
   )
 
   const runPromise = makeRunPromise(Service, layer)
-  let rt: ManagedRuntime.ManagedRuntime<Service, never> | undefined
 
-  function runSync<A, E>(effect: Effect.Effect<A, E, Service>) {
-    rt ??= ManagedRuntime.make(layer, { memoMap })
-    return rt.runSync(effect)
-  }
-
-  export function get(sessionID: SessionID): Info {
-    return runSync(Service.use((svc) => svc.get(sessionID)))
-  }
-
-  export function list(): Record<string, Info> {
-    return runSync(Service.use((svc) => svc.list()))
-  }
-
-  export function set(sessionID: SessionID, status: Info) {
-    runSync(Service.use((svc) => svc.set(sessionID, status)))
-  }
-
-  export async function getAsync(sessionID: SessionID) {
+  export async function get(sessionID: SessionID) {
     return runPromise((svc) => svc.get(sessionID))
+  }
+
+  export async function list() {
+    return runPromise((svc) => svc.list())
+  }
+
+  export async function set(sessionID: SessionID, status: Info) {
+    return runPromise((svc) => svc.set(sessionID, status))
   }
 }
