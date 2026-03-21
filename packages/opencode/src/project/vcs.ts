@@ -31,6 +31,7 @@ export namespace Vcs {
   export type Info = z.infer<typeof Info>
 
   export interface Interface {
+    readonly init: () => Effect.Effect<void>
     readonly branch: () => Effect.Effect<string | undefined>
   }
 
@@ -86,11 +87,13 @@ export namespace Vcs {
           }),
         ),
       )
-      yield* InstanceState.get(state)
 
       return Service.of({
+        init: Effect.fn("Vcs.init")(function* () {
+          yield* InstanceState.get(state)
+        }),
         branch: Effect.fn("Vcs.branch")(function* () {
-          return (yield* InstanceState.get(state)).current
+          return yield* InstanceState.use(state, (x) => x.current)
         }),
       })
     }),
@@ -98,3 +101,7 @@ export namespace Vcs {
 }
 
 export const runPromise = makeRunPromise(Vcs.Service, Vcs.layer)
+
+export function init() {
+  return runPromise((svc) => svc.init())
+}

@@ -2,6 +2,7 @@ import { Plugin } from "../plugin"
 import { LSP } from "../lsp"
 import { File } from "../file"
 import { Project } from "./project"
+import * as Vcs from "./vcs"
 import { Bus } from "../bus"
 import { Command } from "../command"
 import { Instance } from "./instance"
@@ -14,6 +15,7 @@ export async function InstanceBootstrap() {
   ShareNext.init()
   await LSP.init()
   File.init()
+  void Vcs.init()
 
   Bus.subscribe(Command.Event.Executed, async (payload) => {
     if (payload.properties.name === Command.Default.INIT) {
