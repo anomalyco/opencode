@@ -116,9 +116,20 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
   }
 
   const isOverFileTreePanel = (event: DragEvent): boolean => {
-    // Check if drag is over file tree panel using elementFromPoint for accuracy
-    const element = document.elementFromPoint(event.clientX, event.clientY)
-    return element?.closest("#file-tree-panel") !== null
+    const panel = document.getElementById("file-tree-panel")
+    if (!(panel instanceof HTMLElement)) return false
+    if (panel.hasAttribute("inert")) return false
+
+    const rect = panel.getBoundingClientRect()
+    if (rect.width < 1 || rect.height < 1) return false
+
+    const { clientX, clientY } = event
+    return (
+      clientX >= rect.left &&
+      clientX < rect.right &&
+      clientY >= rect.top &&
+      clientY < rect.bottom
+    )
   }
 
   const handleGlobalDragOver = (event: DragEvent) => {

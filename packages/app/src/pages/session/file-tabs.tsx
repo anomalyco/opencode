@@ -484,30 +484,39 @@ export function FileTabContent(props: { tab: string }) {
   )
 
   return (
-    <Tabs.Content value={props.tab} class="mt-3 relative h-full">
-      <ScrollView
-        class="h-full"
-        viewportRef={(el: HTMLDivElement) => {
-          scroll = el
-          restoreScroll()
-        }}
-        onScroll={handleScroll as any}
-      >
-        <Switch>
-          <Match when={spreadsheet() && state()?.loaded && path()}>
-            {(p) => (
-              <div class="px-6 py-4">
-                <SpreadsheetViewer filePath={p()} />
-              </div>
-            )}
-          </Match>
-          <Match when={state()?.loaded}>{renderFile(contents())}</Match>
-          <Match when={state()?.loading}>
-            <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>
-          </Match>
-          <Match when={state()?.error}>{(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}</Match>
-        </Switch>
-      </ScrollView>
+    <Tabs.Content
+      value={props.tab}
+      class="relative mt-3 flex min-h-0 flex-1 flex-col overflow-hidden"
+    >
+      <Switch>
+        <Match when={spreadsheet() && state()?.loaded && path()}>
+          {(p) => (
+            <div class="flex min-h-0 flex-1 flex-col px-6 py-4">
+              <SpreadsheetViewer filePath={p()} />
+            </div>
+          )}
+        </Match>
+        <Match when={true}>
+          <ScrollView
+            class="min-h-0 flex-1"
+            viewportRef={(el: HTMLDivElement) => {
+              scroll = el
+              restoreScroll()
+            }}
+            onScroll={handleScroll as any}
+          >
+            <Switch>
+              <Match when={state()?.loaded}>{renderFile(contents())}</Match>
+              <Match when={state()?.loading}>
+                <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>
+              </Match>
+              <Match when={state()?.error}>
+                {(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}
+              </Match>
+            </Switch>
+          </ScrollView>
+        </Match>
+      </Switch>
     </Tabs.Content>
   )
 }

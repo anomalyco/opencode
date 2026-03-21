@@ -3,6 +3,7 @@ import { createStore, produce, reconcile } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useParams } from "@solidjs/router"
+import { base64FromBytes } from "@opencode-ai/util/encode"
 import { getFilename } from "@opencode-ai/util/path"
 import { useSDK } from "./sdk"
 import { useSync } from "./sync"
@@ -202,7 +203,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
 
     const upload = async (filepath: string, content: Uint8Array) => {
       const normalized = path.normalize(filepath)
-      const base64 = btoa(String.fromCharCode(...content))
+      const base64 = base64FromBytes(content)
       const result = await sdk.client.file.upload({ path: normalized, content: base64 })
       if (result.error) throw new Error("Upload failed")
       void tree.listDir(path.dirname(normalized), { force: true })

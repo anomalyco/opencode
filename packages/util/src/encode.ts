@@ -1,3 +1,16 @@
+/** RFC 4648 base64 for raw bytes. Chunked so large files do not blow the call stack. */
+export function base64FromBytes(bytes: Uint8Array): string {
+  const chunk = 0x8000
+  let binary = ""
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode.apply(
+      null,
+      bytes.subarray(i, i + chunk) as unknown as number[],
+    )
+  }
+  return btoa(binary)
+}
+
 export function base64Encode(value: string) {
   const bytes = new TextEncoder().encode(value)
   const binary = Array.from(bytes, (b) => String.fromCharCode(b)).join("")
