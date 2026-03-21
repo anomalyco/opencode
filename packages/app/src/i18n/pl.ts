@@ -205,6 +205,7 @@ export const dict = {
   "common.cancel": "Anuluj",
   "common.connect": "Połącz",
   "common.disconnect": "Rozłącz",
+  "common.continue": "Prześlij",
   "common.submit": "Prześlij",
   "common.save": "Zapisz",
   "common.saving": "Zapisywanie...",

@@ -209,6 +209,7 @@ export const dict = {
   "common.cancel": "Abbrechen",
   "common.connect": "Verbinden",
   "common.disconnect": "Trennen",
+  "common.continue": "Absenden",
   "common.submit": "Absenden",
   "common.save": "Speichern",
   "common.saving": "Speichert...",

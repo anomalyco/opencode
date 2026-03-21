@@ -9,6 +9,7 @@ import { Splash } from "@opencode-ai/ui/logo"
 import { ThemeProvider } from "@opencode-ai/ui/theme"
 import { MetaProvider } from "@solidjs/meta"
 import { type BaseRouterProps, Navigate, Route, Router } from "@solidjs/router"
+import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import { type Duration, Effect } from "effect"
 import {
   type Component,
@@ -46,21 +47,13 @@ import Layout from "@/pages/layout"
 import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
 
-const Home = lazy(() => import("@/pages/home"))
+const HomeRoute = lazy(() => import("@/pages/home"))
 const Session = lazy(() => import("@/pages/session"))
 const Loading = () => <div class="size-full" />
 
-const HomeRoute = () => (
-  <Suspense fallback={<Loading />}>
-    <Home />
-  </Suspense>
-)
-
 const SessionRoute = () => (
   <SessionProviders>
-    <Suspense fallback={<Loading />}>
-      <Session />
-    </Suspense>
+    <Session />
   </SessionProviders>
 )
 
@@ -87,6 +80,11 @@ declare global {
 function MarkedProviderWithNativeParser(props: ParentProps) {
   const platform = usePlatform()
   return <MarkedProvider nativeParser={platform.parseMarkdown}>{props.children}</MarkedProvider>
+}
+
+function QueryProvider(props: ParentProps) {
+  const client = new QueryClient()
+  return <QueryClientProvider client={client}>{props.children}</QueryClientProvider>
 }
 
 function AppShellProviders(props: ParentProps) {
@@ -124,8 +122,10 @@ function SessionProviders(props: ParentProps) {
 function RouterRoot(props: ParentProps<{ appChildren?: JSX.Element }>) {
   return (
     <AppShellProviders>
-      {props.appChildren}
-      {props.children}
+      <Suspense fallback={<Loading />}>
+        {props.appChildren}
+        {props.children}
+      </Suspense>
     </AppShellProviders>
   )
 }
@@ -142,11 +142,13 @@ export function AppBaseProviders(props: ParentProps) {
         <LanguageProvider>
           <UiI18nBridge>
             <ErrorBoundary fallback={(error) => <ErrorPage error={error} />}>
-              <DialogProvider>
-                <MarkedProviderWithNativeParser>
-                  <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
-                </MarkedProviderWithNativeParser>
-              </DialogProvider>
+              <QueryProvider>
+                <DialogProvider>
+                  <MarkedProviderWithNativeParser>
+                    <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
+                  </MarkedProviderWithNativeParser>
+                </DialogProvider>
+              </QueryProvider>
             </ErrorBoundary>
           </UiI18nBridge>
         </LanguageProvider>
@@ -265,6 +267,15 @@ function ConnectionError(props: { onRetry?: () => void; onServerSelected?: (key:
   )
 }
 
+function ServerKey(props: ParentProps) {
+  const server = useServer()
+  return (
+    <Show when={server.key} keyed>
+      {props.children}
+    </Show>
+  )
+}
+
 export function AppInterface(props: {
   children?: JSX.Element
   defaultServer: ServerConnection.Key
@@ -275,20 +286,22 @@ export function AppInterface(props: {
   return (
     <ServerProvider defaultServer={props.defaultServer} servers={props.servers}>
       <ConnectionGate disableHealthCheck={props.disableHealthCheck}>
-        <GlobalSDKProvider>
-          <GlobalSyncProvider>
-            <Dynamic
-              component={props.router ?? Router}
-              root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
-            >
-              <Route path="/" component={HomeRoute} />
-              <Route path="/:dir" component={DirectoryLayout}>
-                <Route path="/" component={SessionIndexRoute} />
-                <Route path="/session/:id?" component={SessionRoute} />
-              </Route>
-            </Dynamic>
-          </GlobalSyncProvider>
-        </GlobalSDKProvider>
+        <ServerKey>
+          <GlobalSDKProvider>
+            <GlobalSyncProvider>
+              <Dynamic
+                component={props.router ?? Router}
+                root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
+              >
+                <Route path="/" component={HomeRoute} />
+                <Route path="/:dir" component={DirectoryLayout}>
+                  <Route path="/" component={SessionIndexRoute} />
+                  <Route path="/session/:id?" component={SessionRoute} />
+                </Route>
+              </Dynamic>
+            </GlobalSyncProvider>
+          </GlobalSDKProvider>
+        </ServerKey>
       </ConnectionGate>
     </ServerProvider>
   )

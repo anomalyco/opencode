@@ -8,7 +8,6 @@ import { upgrade } from "@/cli/upgrade"
 import { Config } from "@/config/config"
 import { GlobalBus } from "@/bus/global"
 import { createOpencodeClient, type Event } from "@opencode-ai/sdk/v2"
-import type { BunWebSocketData } from "hono/bun"
 import { Flag } from "@/flag/flag"
 import { setTimeout as sleep } from "node:timers/promises"
 
@@ -38,7 +37,7 @@ GlobalBus.on("event", (event) => {
   Rpc.emit("global.event", event)
 })
 
-let server: Bun.Server<BunWebSocketData> | undefined
+let server: Awaited<ReturnType<typeof Server.listen>> | undefined
 
 const eventStream = {
   abort: undefined as AbortController | undefined,
@@ -120,7 +119,7 @@ export const rpc = {
   },
   async server(input: { port: number; hostname: string; mdns?: boolean; cors?: string[] }) {
     if (server) await server.stop(true)
-    server = Server.listen(input)
+    server = await Server.listen(input)
     return { url: server.url.toString() }
   },
   async checkUpgrade(input: { directory: string }) {
@@ -143,7 +142,7 @@ export const rpc = {
     Log.Default.info("worker shutting down")
     if (eventStream.abort) eventStream.abort.abort()
     await Instance.disposeAll()
-    if (server) server.stop(true)
+    if (server) await server.stop(true)
   },
 }
 

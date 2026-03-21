@@ -220,6 +220,7 @@ export const dict = {
   "common.cancel": "ยกเลิก",
   "common.connect": "เชื่อมต่อ",
   "common.disconnect": "ยกเลิกการเชื่อมต่อ",
+  "common.continue": "ส่ง",
   "common.submit": "ส่ง",
   "common.save": "บันทึก",
   "common.saving": "กำลังบันทึก...",

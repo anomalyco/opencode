@@ -203,6 +203,7 @@ export const dict = {
   "common.cancel": "キャンセル",
   "common.connect": "接続",
   "common.disconnect": "切断",
+  "common.continue": "送信",
   "common.submit": "送信",
   "common.save": "保存",
   "common.saving": "保存中...",
