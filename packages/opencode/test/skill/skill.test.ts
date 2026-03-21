@@ -1,9 +1,13 @@
-import { test, expect } from "bun:test"
+import { afterEach, test, expect } from "bun:test"
 import { Skill } from "../../src/skill"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import path from "path"
 import fs from "fs/promises"
+
+afterEach(async () => {
+  await Instance.disposeAll()
+})
 
 async function createGlobalSkill(homeDir: string) {
   const skillDir = path.join(homeDir, ".claude", "skills", "global-test-skill")
