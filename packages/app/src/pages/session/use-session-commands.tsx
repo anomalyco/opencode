@@ -15,10 +15,10 @@ import { DialogSelectFile } from "@/components/dialog-select-file"
 import { DialogSelectModel } from "@/components/dialog-select-model"
 import { DialogSelectMcp } from "@/components/dialog-select-mcp"
 import { DialogFork } from "@/components/dialog-fork"
+import { promptLength } from "@/components/prompt-input/history"
 import { showToast } from "@opencode-ai/ui/toast"
 import { findLast } from "@opencode-ai/util/array"
 import { createSessionTabs } from "@/pages/session/helpers"
-import { forkSession } from "@/pages/session/fork"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { UserMessage } from "@opencode-ai/sdk/v2"
 import { useSessionLayout } from "@/pages/session/session-layout"
@@ -96,22 +96,17 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const restart = async () => {
-    const sessionID = params.id
-    if (!sessionID) return
+    const dir = params.dir
+    if (!dir) return
     const msg = userMessages()[0]
     if (!msg) return
-
-    await forkSession({
-      fork: sdk.client.session.fork,
-      sessionID,
-      messageID: msg.id,
-      parts: sync.data.part[msg.id] ?? [],
+    const value = extractPromptFromParts(sync.data.part[msg.id] ?? [], {
       directory: sdk.directory,
       attachmentName: language.t("common.attachment"),
-      fail: (message) => showToast({ title: language.t("common.requestFailed"), description: message }),
-      navigate,
-      set: (value, next) => prompt.set(value, undefined, next),
     })
+
+    prompt.set(value, promptLength(value), { dir })
+    navigate(`/${dir}/session`)
   }
 
   const selectionPreview = (path: string, selection: FileSelection) => {

@@ -10,6 +10,7 @@ import { showToast } from "@opencode-ai/ui/toast"
 import type { TextPart as SDKTextPart } from "@opencode-ai/sdk/v2/client"
 import { useLanguage } from "@/context/language"
 import { forkSession } from "@/pages/session/fork"
+import { extractPromptFromParts } from "@/utils/prompt"
 
 interface ForkableMessage {
   id: string
@@ -59,14 +60,17 @@ export const DialogFork: Component = () => {
 
     const sessionID = params.id
     if (!sessionID) return
+    const value = extractPromptFromParts(sync.data.part[item.id] ?? [], {
+      directory: sdk.directory,
+      attachmentName: language.t("common.attachment"),
+    })
 
     void forkSession({
       fork: sdk.client.session.fork,
       sessionID,
       messageID: item.id,
-      parts: sync.data.part[item.id] ?? [],
+      prompt: value,
       directory: sdk.directory,
-      attachmentName: language.t("common.attachment"),
       fail: (message) => showToast({ title: language.t("common.requestFailed"), description: message }),
       navigate,
       set: (value, next) => prompt.set(value, undefined, next),

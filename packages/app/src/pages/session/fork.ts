@@ -1,7 +1,5 @@
-import type { Part } from "@opencode-ai/sdk/v2"
 import { base64Encode } from "@opencode-ai/util/encode"
 import type { Prompt } from "@/context/prompt"
-import { extractPromptFromParts } from "@/utils/prompt"
 
 type ForkData = { id: string }
 type ForkInput = { sessionID: string; messageID: string }
@@ -11,18 +9,13 @@ export async function forkSession(opts: {
   fork: (input: ForkInput) => Promise<ForkResult>
   sessionID: string
   messageID: string
-  parts: Part[]
+  prompt: Prompt
   directory: string
-  attachmentName: string
   fail: (message?: string) => void
   navigate: (href: string) => void
   set: (prompt: Prompt, next: { dir: string; id: string }) => void
   done?: () => void
 }) {
-  const restored = extractPromptFromParts(opts.parts, {
-    directory: opts.directory,
-    attachmentName: opts.attachmentName,
-  })
   const dir = base64Encode(opts.directory)
 
   await opts
@@ -34,7 +27,7 @@ export async function forkSession(opts: {
         return
       }
       opts.done?.()
-      opts.set(restored, { dir, id })
+      opts.set(opts.prompt, { dir, id })
       opts.navigate(`/${dir}/session/${id}`)
     })
     .catch((err: unknown) => {
