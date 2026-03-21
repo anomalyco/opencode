@@ -1,6 +1,5 @@
 import { Effect, Layer, LayerMap, ServiceMap } from "effect"
 import { File } from "@/file/service"
-import { FileTime } from "@/file/time-service"
 import { FileWatcher } from "@/file/watcher"
 import { Instance } from "@/project/instance"
 import { Vcs } from "@/project/vcs"
@@ -16,7 +15,6 @@ export type InstanceServices =
   | ProviderAuth.Service
   | FileWatcher.Service
   | Vcs.Service
-  | FileTime.Service
   | File.Service
   | Skill.Service
   | Snapshot.Service
@@ -33,7 +31,6 @@ function lookup(_key: string) {
     ProviderAuth.defaultLayer,
     FileWatcher.layer,
     Vcs.layer,
-    FileTime.layer,
     File.layer,
     Skill.defaultLayer,
     Snapshot.defaultLayer,

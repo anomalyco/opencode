@@ -84,6 +84,28 @@ describe("file/time", () => {
         },
       })
     })
+
+    test("isolates reads by directory", async () => {
+      await using one = await tmpdir()
+      await using two = await tmpdir()
+      await using shared = await tmpdir()
+      const filepath = path.join(shared.path, "file.txt")
+      await fs.writeFile(filepath, "content", "utf-8")
+
+      await Instance.provide({
+        directory: one.path,
+        fn: async () => {
+          await FileTime.read(sessionID, filepath)
+        },
+      })
+
+      await Instance.provide({
+        directory: two.path,
+        fn: async () => {
+          expect(await FileTime.get(sessionID, filepath)).toBeUndefined()
+        },
+      })
+    })
   })
 
   describe("assert()", () => {
