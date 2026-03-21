@@ -4,11 +4,11 @@ import { client } from "./client.gen.js"
 import { buildClientParams, type Client, type Options as Options2, type TDataShape } from "./client/index.js"
 import type {
   AgentPartInput,
-  ApiAuth,
   AppAgentsResponses,
   AppLogErrors,
   AppLogResponses,
   AppSkillsResponses,
+  Auth as Auth3,
   AuthRemoveErrors,
   AuthRemoveResponses,
   AuthSetErrors,
@@ -63,7 +63,6 @@ import type {
   McpLocalConfig,
   McpRemoteConfig,
   McpStatusResponses,
-  OAuth,
   OutputFormat,
   Part as Part2,
   PartDeleteErrors,
@@ -174,7 +173,6 @@ import type {
   TuiShowToastResponses,
   TuiSubmitPromptResponses,
   VcsGetResponses,
-  WellKnownAuth,
   WorktreeCreateErrors,
   WorktreeCreateInput,
   WorktreeCreateResponses,
@@ -339,7 +337,7 @@ export class Auth extends HeyApiClient {
   public set<ThrowOnError extends boolean = false>(
     parameters: {
       providerID: string
-      body?: OAuth | ApiAuth | WellKnownAuth
+      auth?: Auth3
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -349,7 +347,7 @@ export class Auth extends HeyApiClient {
         {
           args: [
             { in: "path", key: "providerID" },
-            { key: "body", map: "body" },
+            { key: "auth", map: "body" },
           ],
         },
       ],
