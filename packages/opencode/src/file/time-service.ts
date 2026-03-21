@@ -106,7 +106,7 @@ export namespace FileTime {
 
       return Service.of({ read, get, assert, withLock })
     }),
-  ).pipe(Layer.orDie, Layer.fresh)
+  ).pipe(Layer.orDie)
 }
 
 export const runPromise = makeRunPromise(FileTime.Service, FileTime.layer)

@@ -1,6 +1,6 @@
 import z from "zod"
 import { Tool } from "./tool"
-import { Question } from "../question/service"
+import { Question } from "../question"
 import { Question as QuestionApi } from "../question"
 import DESCRIPTION from "./question.txt"
 

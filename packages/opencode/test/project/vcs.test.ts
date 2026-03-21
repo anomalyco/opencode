@@ -25,7 +25,7 @@ function withVcs(
     directory,
     Layer.merge(FileWatcher.layer, Vcs.layer),
     async (rt) => {
-      await rt.runPromise(FileWatcher.Service.use(() => Effect.void))
+      await rt.runPromise(FileWatcher.Service.use((s) => s.init()))
       await rt.runPromise(Vcs.Service.use((s) => s.init()))
       await Bun.sleep(500)
       await body(rt)

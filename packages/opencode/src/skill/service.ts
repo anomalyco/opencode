@@ -185,7 +185,7 @@ export namespace Skill {
     Service,
     Effect.gen(function* () {
       const discovery = yield* Discovery.Service
-      const state = yield* InstanceState.make(Effect.fn("Skill.state")(() => Effect.sync(() => create(discovery))))
+      const state = yield* InstanceState.make(Effect.fn("Skill.state")((_ctx) => Effect.sync(() => create(discovery))))
 
       const ensure = Effect.fn("Skill.ensure")(function* () {
         const cache = yield* InstanceState.get(state)
@@ -217,7 +217,7 @@ export namespace Skill {
 
       return Service.of({ get, all, dirs, available })
     }),
-  ).pipe(Layer.fresh)
+  )
 
   export const defaultLayer: Layer.Layer<Service> = layer.pipe(Layer.provide(Discovery.defaultLayer))
 

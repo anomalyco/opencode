@@ -93,9 +93,9 @@ test("InstanceState invalidates on disposeAll", async () => {
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const state = yield* InstanceState.make((dir) =>
+        const state = yield* InstanceState.make((ctx) =>
           Effect.acquireRelease(
-            Effect.sync(() => ({ dir })),
+            Effect.sync(() => ({ dir: ctx.directory })),
             (value) =>
               Effect.sync(() => {
                 seen.push(value.dir)
@@ -125,7 +125,7 @@ test("InstanceState.get reads the current directory lazily", async () => {
     static readonly layer = Layer.effect(
       Test,
       Effect.gen(function* () {
-        const state = yield* InstanceState.make((dir) => Effect.sync(() => dir))
+        const state = yield* InstanceState.make((ctx) => Effect.sync(() => ctx.directory))
         const get = InstanceState.get(state)
 
         return Test.of({
@@ -169,7 +169,7 @@ test("InstanceState preserves directory across async boundaries", async () => {
     static readonly layer = Layer.effect(
       Test,
       Effect.gen(function* () {
-        const state = yield* InstanceState.make((dir) => Effect.sync(() => dir))
+        const state = yield* InstanceState.make((ctx) => Effect.sync(() => ctx.directory))
 
         return Test.of({
           get: Effect.fn("Test.get")(function* () {

@@ -6,7 +6,7 @@ import { mergeDeep } from "remeda"
 import z from "zod"
 import { Bus } from "../bus"
 import { Config } from "../config/config"
-import { File } from "../file/service"
+import { File } from "../file"
 import { Instance } from "../project/instance"
 import { Process } from "../util/process"
 import { Log } from "../util/log"
@@ -36,7 +36,7 @@ export namespace Format {
     Service,
     Effect.gen(function* () {
       const instanceState = yield* InstanceState.make(
-        Effect.fn(function* () {
+        Effect.fn("Format.state")(function* (_ctx) {
           const enabled: Record<string, boolean> = {}
           const formatters: Record<string, Formatter.Info> = {}
 
@@ -158,7 +158,7 @@ export namespace Format {
 
       return Service.of({ status })
     }),
-  ).pipe(Layer.fresh)
+  )
 }
 
 export const runPromise = makeRunPromise(Format.Service, Format.layer)

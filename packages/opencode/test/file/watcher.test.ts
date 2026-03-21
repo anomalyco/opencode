@@ -25,7 +25,7 @@ function withWatcher<E>(directory: string, body: Effect.Effect<void, E>) {
     directory,
     FileWatcher.layer,
     async (rt) => {
-      await rt.runPromise(FileWatcher.Service.use(() => Effect.void))
+      await rt.runPromise(FileWatcher.Service.use((s) => s.init()))
       await Effect.runPromise(ready(directory))
       await Effect.runPromise(body)
     },

@@ -254,7 +254,7 @@ export namespace Permission {
 
       return Service.of({ ask, reply, list })
     }),
-  ).pipe(Layer.fresh)
+  )
 
   function expand(pattern: string): string {
     if (pattern.startsWith("~/")) return os.homedir() + pattern.slice(1)
