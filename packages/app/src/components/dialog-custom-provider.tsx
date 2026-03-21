@@ -124,14 +124,17 @@ export function DialogCustomProvider(props: Props) {
       if (result.key) {
         await globalSDK.client.auth.set({
           providerID: result.providerID,
-          body: {
+          auth: {
             type: "api",
             key: result.key,
           },
         })
       }
 
-      await globalSync.updateConfig({ provider: { [result.providerID]: result.config }, disabled_providers: nextDisabled })
+      await globalSync.updateConfig({
+        provider: { [result.providerID]: result.config },
+        disabled_providers: nextDisabled,
+      })
       return result
     },
     onSuccess: (result) => {
@@ -310,7 +313,13 @@ export function DialogCustomProvider(props: Props) {
             </Button>
           </div>
 
-          <Button class="w-auto self-start" type="submit" size="large" variant="primary" disabled={saveMutation.isPending}>
+          <Button
+            class="w-auto self-start"
+            type="submit"
+            size="large"
+            variant="primary"
+            disabled={saveMutation.isPending}
+          >
             {saveMutation.isPending ? language.t("common.saving") : language.t("common.submit")}
           </Button>
         </form>
