@@ -366,7 +366,8 @@ TUI davranışını `tui.json` (veya `tui.jsonc`) aracılığıyla özelleştire
   "scroll_acceleration": {
     "enabled": true
   },
-  "diff_style": "auto"
+  "diff_style": "auto",
+  "sidebar_position": "left"
 }
 ```
 
@@ -379,6 +380,7 @@ Bu, sunucu/çalışma zamanı davranışını yapılandıran `opencode.json` dos
 - `scroll_acceleration.enabled` - Pürüzsüz, doğal kaydırma için macOS tarzı kaydırma ivmesini etkinleştirin. Etkinleştirildiğinde, kaydırma hızı hızlı kaydırma hareketleriyle artar ve daha yavaş hareketler için hassas kalır. **Bu ayar `scroll_speed` ayarından önceliklidir ve etkinleştirildiğinde onu geçersiz kılar.**
 - `scroll_speed` - Kaydırma komutlarını kullanırken TUI'nin ne kadar hızlı kaydırılacağını kontrol eder (minimum: `0.001`, ondalık değerleri destekler). Varsayılan değer `3`'tür. **Not: `scroll_acceleration.enabled` `true` olarak ayarlanmışsa bu yok sayılır.**
 - `diff_style` - Fark (diff) oluşturmayı kontrol eder. `"auto"` terminal genişliğine uyum sağlar, `"stacked"` her zaman tek sütunlu bir düzen gösterir.
+- `sidebar_position` - Kenar çubuğu konumunu kontrol eder. `"right"` (varsayılan) kenar çubuğunu sağda tutar, `"left"` sola taşır.
 
 Özel bir TUI yapılandırma yolu yüklemek için `OPENCODE_TUI_CONFIG` kullanın.
 

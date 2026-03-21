@@ -364,7 +364,8 @@ VS Code와 같은 일부 편집기는 `--wait` 플래그와 함께 시작해야 
   "scroll_acceleration": {
     "enabled": true
   },
-  "diff_style": "auto"
+  "diff_style": "auto",
+  "sidebar_position": "left"
 }
 ```
 
@@ -377,6 +378,7 @@ VS Code와 같은 일부 편집기는 `--wait` 플래그와 함께 시작해야 
 - `scroll_acceleration.enabled` - 부드럽고 자연스러운 스크롤을 위해 macOS 스타일의 스크롤 가속을 활성화합니다. 활성화하면 빠른 스크롤 제스처로 스크롤 속도가 증가하고 느린 움직임에서는 정밀하게 유지됩니다. **이 설정은 `scroll_speed`보다 우선하며 활성화 시 이를 덮어씁니다.**
 - `scroll_speed` - 스크롤 명령을 사용할 때 TUI 스크롤 속도를 제어합니다 (최소: `0.001`, 소수점 값 지원). 기본값은 `3`입니다. **참고: `scroll_acceleration.enabled`가 `true`로 설정되면 무시됩니다.**
 - `diff_style` - diff 렌더링 방식을 제어합니다. `"auto"`는 터미널 너비에 적응하고, `"stacked"`는 항상 단일 열 레이아웃을 표시합니다.
+- `sidebar_position` - 사이드바 위치를 제어합니다. `"right"` (기본값)는 사이드바를 오른쪽에, `"left"`는 왼쪽으로 이동합니다.
 
 `OPENCODE_TUI_CONFIG`를 사용하여 사용자 정의 TUI 설정 경로를 로드할 수 있습니다.
 

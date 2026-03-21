@@ -368,7 +368,8 @@ Du kan tilpasse TUI-oppførselen gjennom `tui.json` (eller `tui.jsonc`).
   "scroll_acceleration": {
     "enabled": true
   },
-  "diff_style": "auto"
+  "diff_style": "auto",
+  "sidebar_position": "left"
 }
 ```
 
@@ -381,6 +382,7 @@ Dette er atskilt fra `opencode.json`, som konfigurerer server-/kjøretidsoppfør
 - `scroll_acceleration.enabled` - Aktiver rulleakselerasjon i macOS-stil for jevn, naturlig rulling. Når aktivert, øker rullehastigheten med raske rullebevegelser og forblir presis for langsommere bevegelser. **Denne innstillingen har forrang over `scroll_speed` og overstyrer den når den er aktivert.**
 - `scroll_speed` - Styrer hvor raskt TUI ruller når du bruker rullekommandoer (minimum: `0.001`, støtter desimalverdier). Standard er `3`. **Merk: Dette ignoreres hvis `scroll_acceleration.enabled` er satt til `true`.**
 - `diff_style` - Kontrollerer diff-gjengivelse. `"auto"` tilpasser seg terminalbredden, `"stacked"` viser alltid en enkeltkolonneoppsett.
+- `sidebar_position` - Kontrollerer sidefeltet-plassering. `"right"` (standard) holder sidefeltet til høyre, `"left"` flytter det til venstre.
 
 Bruk `OPENCODE_TUI_CONFIG` for å laste en egendefinert TUI-konfigurasjonsbane.
 

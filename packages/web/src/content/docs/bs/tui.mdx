@@ -371,7 +371,8 @@ Možete prilagoditi TUI ponašanje putem `tui.json` (ili `tui.jsonc`).
   "scroll_acceleration": {
     "enabled": true
   },
-  "diff_style": "auto"
+  "diff_style": "auto",
+  "sidebar_position": "left"
 }
 ```
 
@@ -384,6 +385,7 @@ Ovo je odvojeno od `opencode.json`, koji konfiguriše ponašanje servera/izvrša
 - `scroll_acceleration.enabled` - ​​Omogućite ubrzanje pomicanja u macOS stilu za glatko, prirodno pomicanje. Kada je omogućeno, brzina pomicanja se povećava brzim pokretima pomicanja i ostaje precizna za sporije pokrete. **Ova postavka ima prednost nad `scroll_speed` i nadjačava je kada je omogućena.**
 - `scroll_speed` - ​​Kontrolira koliko brzo TUI skroluje kada se koriste komande za pomeranje (minimum: `0.001`, podržava decimalne vrijednosti). Podrazumevano je `3`. **Napomena: Ovo se zanemaruje ako je `scroll_acceleration.enabled` postavljeno na `true`.**
 - `diff_style` - Kontrolira prikazivanje razlike. `"auto"` se prilagođava širini terminala, `"stacked"` uvijek prikazuje raspored u jednoj koloni.
+- `sidebar_position` - Kontrolira poziciju bočne trake. `"right"` (zadano) drži bočnu traku desno, `"left"` je premješta lijevo.
 
 Koristite `OPENCODE_TUI_CONFIG` da učitate prilagođenu putanju TUI konfiguracije.
 
