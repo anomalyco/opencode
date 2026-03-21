@@ -250,7 +250,7 @@ export const dict = {
 
   "go.title": "OpenCode Go | すべての人のための低価格なコーディングモデル",
   "go.meta.description":
-    "Goは最初の月$5、その後$10/月で、GLM-5、Kimi K2.5、MiniMax M2.5に対して5時間のゆとりあるリクエスト上限があります。",
+    "Goは最初の月$5、その後$10/月で、GLM-5、Kimi K2.5、MiniMax M2.5、MiniMax M2.7に対して5時間のゆとりあるリクエスト上限があります。",
   "go.hero.title": "すべての人のための低価格なコーディングモデル",
   "go.hero.body":
     "Goは、世界中のプログラマーにエージェント型コーディングをもたらします。最も高性能なオープンソースモデルへの十分な制限と安定したアクセスを提供し、コストや可用性を気にすることなく強力なエージェントで構築できます。",
@@ -299,7 +299,7 @@ export const dict = {
   "go.problem.item1": "低価格なサブスクリプション料金",
   "go.problem.item2": "十分な制限と安定したアクセス",
   "go.problem.item3": "できるだけ多くのプログラマーのために構築",
-  "go.problem.item4": "GLM-5、Kimi K2.5、MiniMax M2.5を含む",
+  "go.problem.item4": "GLM-5、Kimi K2.5、MiniMax M2.5、MiniMax M2.7を含む",
   "go.how.title": "Goの仕組み",
   "go.how.body": "Goは最初の月$5、その後$10/月で始まります。OpenCodeまたは任意のエージェントで使えます。",
   "go.how.step1.title": "アカウントを作成",
@@ -321,10 +321,11 @@ export const dict = {
   "go.faq.a1":
     "Goは、エージェント型コーディングのための有能なオープンソースモデルへの安定したアクセスを提供する低価格なサブスクリプションです。",
   "go.faq.q2": "Goにはどのモデルが含まれますか？",
-  "go.faq.a2": "Goには、GLM-5、Kimi K2.5、MiniMax M2.5が含まれており、十分な制限と安定したアクセスが提供されます。",
+  "go.faq.a2":
+    "Goには、GLM-5、Kimi K2.5、MiniMax M2.5、MiniMax M2.7が含まれており、十分な制限と安定したアクセスが提供されます。",
   "go.faq.q3": "GoはZenと同じですか？",
   "go.faq.a3":
-    "いいえ。Zenは従量課金制ですが、Goは最初の月$5、その後$10/月で始まり、GLM-5、Kimi K2.5、MiniMax M2.5のオープンソースモデルに対して、ゆとりある上限と信頼できるアクセスを提供します。",
+    "いいえ。Zenは従量課金制ですが、Goは最初の月$5、その後$10/月で始まり、GLM-5、Kimi K2.5、MiniMax M2.5、MiniMax M2.7のオープンソースモデルに対して、ゆとりある上限と信頼できるアクセスを提供します。",
   "go.faq.q4": "Goの料金は？",
   "go.faq.a4.p1.beforePricing": "Goは",
   "go.faq.a4.p1.pricingLink": "最初の月$5",
@@ -349,7 +350,7 @@ export const dict = {
 
   "go.faq.q9": "無料モデルとGoの違いは何ですか？",
   "go.faq.a9":
-    "無料モデルにはBig Pickleと、その時点で利用可能なプロモーションモデルが含まれ、1日200リクエストの制限があります。GoにはGLM-5、Kimi K2.5、MiniMax M2.5が含まれ、ローリングウィンドウ（5時間、週間、月間）全体でより高いリクエスト制限が適用されます。これは概算で5時間あたり$12、週間$30、月間$60相当です（実際のリクエスト数はモデルと使用状況により異なります）。",
+    "無料モデルにはBig Pickleと、その時点で利用可能なプロモーションモデルが含まれ、1日200リクエストの制限があります。GoにはGLM-5、Kimi K2.5、MiniMax M2.5、MiniMax M2.7が含まれ、ローリングウィンドウ（5時間、週間、月間）全体でより高いリクエスト制限が適用されます。これは概算で5時間あたり$12、週間$30、月間$60相当です（実際のリクエスト数はモデルと使用状況により異なります）。",
 
   "zen.api.error.rateLimitExceeded": "レート制限を超えました。後でもう一度お試しください。",
   "zen.api.error.modelNotSupported": "モデル {{model}} はサポートされていません",
@@ -652,6 +653,8 @@ export const dict = {
     "このプランは主にグローバルユーザー向けに設計されており、米国、EU、シンガポールでホストされたモデルにより安定したグローバルアクセスを提供します。料金と利用制限は、初期の利用状況やフィードバックに基づいて変更される可能性があります。",
   "workspace.lite.promo.subscribe": "Goを購読する",
   "workspace.lite.promo.subscribing": "リダイレクト中...",
+  "workspace.lite.promo.otherMethods": "その他の支払い方法",
+  "workspace.lite.promo.selectMethod": "支払い方法を選択",
 
   "download.title": "OpenCode | ダウンロード",
   "download.meta.description": "OpenCode を macOS、Windows、Linux 向けにダウンロード",
