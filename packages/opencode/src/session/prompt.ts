@@ -696,8 +696,14 @@ export namespace SessionPrompt {
         break
       }
 
-      // Check if model finished (finish reason is not "tool-calls" or "unknown")
-      const modelFinished = processor.message.finish && !["tool-calls", "unknown"].includes(processor.message.finish)
+      const parts = await MessageV2.parts(processor.message.id)
+      const hasToolActivity = parts.some((part) => part.type === "tool")
+      const modelFinished =
+        !!processor.message.finish &&
+        (![
+          "tool-calls",
+          "unknown",
+        ].includes(processor.message.finish) || (processor.message.finish === "unknown" && !hasToolActivity))
 
       if (modelFinished && !processor.message.error) {
         if (format.type === "json_schema") {
@@ -709,6 +715,8 @@ export namespace SessionPrompt {
           await Session.updateMessage(processor.message)
           break
         }
+
+        break
       }
 
       if (result === "stop") break
