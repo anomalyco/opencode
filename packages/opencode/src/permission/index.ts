@@ -1,7 +1,6 @@
-import { runPromiseInstance } from "@/effect/runtime"
 import { fn } from "@/util/fn"
 import z from "zod"
-import { Permission as S } from "./service"
+import { runPromise, Permission as S } from "./service"
 
 export namespace PermissionNext {
   export const Action = S.Action
@@ -42,11 +41,11 @@ export namespace PermissionNext {
   export const merge = S.merge
   export const disabled = S.disabled
 
-  export const ask = fn(S.AskInput, async (input) => runPromiseInstance(S.Service.use((s) => s.ask(input))))
+  export const ask = fn(S.AskInput, async (input) => runPromise((s) => s.ask(input)))
 
-  export const reply = fn(S.ReplyInput, async (input) => runPromiseInstance(S.Service.use((s) => s.reply(input))))
+  export const reply = fn(S.ReplyInput, async (input) => runPromise((s) => s.reply(input)))
 
   export async function list() {
-    return runPromiseInstance(S.Service.use((s) => s.list()))
+    return runPromise((s) => s.list())
   }
 }

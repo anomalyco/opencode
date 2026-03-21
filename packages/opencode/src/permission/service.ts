@@ -1,8 +1,10 @@
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { Config } from "@/config/config"
-import { InstanceContext } from "@/effect/instance-context"
+import { InstanceState } from "@/effect/instance-state"
+import { makeRunPromise } from "@/effect/run-service"
 import { ProjectID } from "@/project/schema"
+import { Instance } from "@/project/instance"
 import { MessageID, SessionID } from "@/session/schema"
 import { PermissionTable } from "@/session/session.sql"
 import { Database, eq } from "@/storage/db"
@@ -123,6 +125,11 @@ export namespace Permission {
     deferred: Deferred.Deferred<void, RejectedError | CorrectedError>
   }
 
+  interface State {
+    pending: Map<PermissionID, PendingEntry>
+    approved: Ruleset
+  }
+
   export function evaluate(permission: string, pattern: string, ...rulesets: Ruleset[]): Rule {
     log.info("evaluate", { permission, pattern, ruleset: rulesets.flat() })
     return evalRule(permission, pattern, ...rulesets)
@@ -133,14 +140,20 @@ export namespace Permission {
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
-      const { project } = yield* InstanceContext
-      const row = Database.use((db) =>
-        db.select().from(PermissionTable).where(eq(PermissionTable.project_id, project.id)).get(),
+      const state = yield* InstanceState.make<State>(
+        Effect.fn("Permission.state")(() => {
+          const row = Database.use((db) =>
+            db.select().from(PermissionTable).where(eq(PermissionTable.project_id, Instance.project.id)).get(),
+          )
+          return Effect.succeed({
+            pending: new Map<PermissionID, PendingEntry>(),
+            approved: row?.data ?? [],
+          })
+        }),
       )
-      const pending = new Map<PermissionID, PendingEntry>()
-      const approved: Ruleset = row?.data ?? []
 
       const ask = Effect.fn("Permission.ask")(function* (input: z.infer<typeof AskInput>) {
+        const { approved, pending } = yield* InstanceState.get(state)
         const { ruleset, ...request } = input
         let needsAsk = false
 
@@ -177,6 +190,7 @@ export namespace Permission {
       })
 
       const reply = Effect.fn("Permission.reply")(function* (input: z.infer<typeof ReplyInput>) {
+        const { approved, pending } = yield* InstanceState.get(state)
         const existing = pending.get(input.requestID)
         if (!existing) return
 
@@ -234,6 +248,7 @@ export namespace Permission {
       })
 
       const list = Effect.fn("Permission.list")(function* () {
+        const pending = (yield* InstanceState.get(state)).pending
         return Array.from(pending.values(), (item) => item.info)
       })
 
@@ -280,3 +295,5 @@ export namespace Permission {
     return result
   }
 }
+
+export const runPromise = makeRunPromise(Permission.Service, Permission.layer)

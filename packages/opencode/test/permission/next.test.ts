@@ -1,11 +1,8 @@
 import { afterEach, test, expect } from "bun:test"
 import os from "os"
-import { Effect } from "effect"
 import { Bus } from "../../src/bus"
-import { runtime } from "../../src/effect/runtime"
-import { Instances } from "../../src/effect/instances"
 import { PermissionNext } from "../../src/permission"
-import { PermissionNext as S } from "../../src/permission"
+import { runPromise } from "../../src/permission/service"
 import { PermissionID } from "../../src/permission/schema"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
@@ -918,6 +915,65 @@ test("reply - publishes replied event", async () => {
   })
 })
 
+test("permission requests stay isolated by directory", async () => {
+  await using one = await tmpdir({ git: true })
+  await using two = await tmpdir({ git: true })
+
+  const a = Instance.provide({
+    directory: one.path,
+    fn: () =>
+      PermissionNext.ask({
+        id: PermissionID.make("per_dir_a"),
+        sessionID: SessionID.make("session_dir_a"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: [],
+        ruleset: [],
+      }),
+  })
+
+  const b = Instance.provide({
+    directory: two.path,
+    fn: () =>
+      PermissionNext.ask({
+        id: PermissionID.make("per_dir_b"),
+        sessionID: SessionID.make("session_dir_b"),
+        permission: "bash",
+        patterns: ["pwd"],
+        metadata: {},
+        always: [],
+        ruleset: [],
+      }),
+  })
+
+  const onePending = await Instance.provide({
+    directory: one.path,
+    fn: () => waitForPending(1),
+  })
+  const twoPending = await Instance.provide({
+    directory: two.path,
+    fn: () => waitForPending(1),
+  })
+
+  expect(onePending).toHaveLength(1)
+  expect(twoPending).toHaveLength(1)
+  expect(onePending[0].id).toBe(PermissionID.make("per_dir_a"))
+  expect(twoPending[0].id).toBe(PermissionID.make("per_dir_b"))
+
+  await Instance.provide({
+    directory: one.path,
+    fn: () => PermissionNext.reply({ requestID: onePending[0].id, reply: "reject" }),
+  })
+  await Instance.provide({
+    directory: two.path,
+    fn: () => PermissionNext.reply({ requestID: twoPending[0].id, reply: "reject" }),
+  })
+
+  await a.catch(() => {})
+  await b.catch(() => {})
+})
+
 test("reply - does nothing for unknown requestID", async () => {
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({
@@ -1004,8 +1060,8 @@ test("ask - abort should clear pending request", async () => {
     directory: tmp.path,
     fn: async () => {
       const ctl = new AbortController()
-      const ask = runtime.runPromise(
-        S.Service.use((svc) =>
+      const ask = runPromise(
+        (svc) =>
           svc.ask({
             sessionID: SessionID.make("session_test"),
             permission: "bash",
@@ -1014,7 +1070,6 @@ test("ask - abort should clear pending request", async () => {
             always: [],
             ruleset: [{ permission: "bash", pattern: "*", action: "ask" }],
           }),
-        ).pipe(Effect.provide(Instances.get(Instance.directory))),
         { signal: ctl.signal },
       )
 
