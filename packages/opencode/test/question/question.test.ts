@@ -381,3 +381,73 @@ test("questions stay isolated by directory", async () => {
   await p1.catch(() => {})
   await p2.catch(() => {})
 })
+
+test("pending question rejects on instance dispose", async () => {
+  await using tmp = await tmpdir({ git: true })
+
+  const ask = Instance.provide({
+    directory: tmp.path,
+    fn: () => {
+      return Question.ask({
+        sessionID: SessionID.make("ses_dispose"),
+        questions: [
+          {
+            question: "Dispose me?",
+            header: "Dispose",
+            options: [{ label: "Yes", description: "Yes" }],
+          },
+        ],
+      })
+    },
+  })
+  const result = ask.then(
+    () => "resolved" as const,
+    (err) => err,
+  )
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const pending = await Question.list()
+      expect(pending).toHaveLength(1)
+      await Instance.dispose()
+    },
+  })
+
+  expect(await result).toBeInstanceOf(Question.RejectedError)
+})
+
+test("pending question rejects on instance reload", async () => {
+  await using tmp = await tmpdir({ git: true })
+
+  const ask = Instance.provide({
+    directory: tmp.path,
+    fn: () => {
+      return Question.ask({
+        sessionID: SessionID.make("ses_reload"),
+        questions: [
+          {
+            question: "Reload me?",
+            header: "Reload",
+            options: [{ label: "Yes", description: "Yes" }],
+          },
+        ],
+      })
+    },
+  })
+  const result = ask.then(
+    () => "resolved" as const,
+    (err) => err,
+  )
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const pending = await Question.list()
+      expect(pending).toHaveLength(1)
+      await Instance.reload({ directory: tmp.path })
+    },
+  })
+
+  expect(await result).toBeInstanceOf(Question.RejectedError)
+})

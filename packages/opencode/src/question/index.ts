@@ -110,11 +110,22 @@ export namespace Question {
     Service,
     Effect.gen(function* () {
       const state = yield* InstanceState.make<State>(
-        Effect.fn("Question.state")(() =>
-          Effect.succeed({
+        Effect.fn("Question.state")(function* () {
+          const state = {
             pending: new Map<QuestionID, PendingEntry>(),
-          }),
-        ),
+          }
+
+          yield* Effect.addFinalizer(() =>
+            Effect.gen(function* () {
+              for (const item of state.pending.values()) {
+                yield* Deferred.fail(item.deferred, new RejectedError())
+              }
+              state.pending.clear()
+            }),
+          )
+
+          return state
+        }),
       )
 
       const ask = Effect.fn("Question.ask")(function* (input: {
