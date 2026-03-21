@@ -6,7 +6,6 @@ import { Instances } from "../../src/effect/instances"
 import { Instance } from "../../src/project/instance"
 import { ProviderAuth } from "../../src/provider/auth"
 import { Vcs } from "../../src/project/vcs"
-import { Question } from "../../src/question"
 import { tmpdir } from "../fixture/fixture"
 
 /**
@@ -88,7 +87,6 @@ describe("effect/runtime", () => {
       directory: tmp.path,
       fn: async () => {
         expect(await grabInstance(Vcs.Service)).toBe(await grabInstance(Vcs.Service))
-        expect(await grabInstance(Question.Service)).toBe(await grabInstance(Question.Service))
       },
     })
   })
@@ -116,11 +114,11 @@ describe("effect/runtime", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const before = await grabInstance(Question.Service)
+        const before = await grabInstance(Vcs.Service)
 
         await runtime.runPromise(Instances.use((map) => map.invalidate(Instance.directory)))
 
-        const after = await grabInstance(Question.Service)
+        const after = await grabInstance(Vcs.Service)
         expect(after).not.toBe(before)
       },
     })

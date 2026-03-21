@@ -1,6 +1,8 @@
 import { Deferred, Effect, Layer, Schema, ServiceMap } from "effect"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
+import { InstanceState } from "@/effect/instance-state"
+import { makeRunPromise } from "@/effect/run-service"
 import { SessionID, MessageID } from "@/session/schema"
 import { Log } from "@/util/log"
 import z from "zod"
@@ -85,6 +87,10 @@ export namespace Question {
     deferred: Deferred.Deferred<Answer[], RejectedError>
   }
 
+  interface State {
+    pending: Map<QuestionID, PendingEntry>
+  }
+
   // Service
 
   export interface Interface {
@@ -103,13 +109,20 @@ export namespace Question {
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
-      const pending = new Map<QuestionID, PendingEntry>()
+      const state = yield* InstanceState.make<State>(
+        Effect.fn("Question.state")(() =>
+          Effect.succeed({
+            pending: new Map<QuestionID, PendingEntry>(),
+          }),
+        ),
+      )
 
       const ask = Effect.fn("Question.ask")(function* (input: {
         sessionID: SessionID
         questions: Info[]
         tool?: { messageID: MessageID; callID: string }
       }) {
+        const pending = (yield* InstanceState.get(state)).pending
         const id = QuestionID.ascending()
         log.info("asking", { id, questions: input.questions.length })
 
@@ -132,6 +145,7 @@ export namespace Question {
       })
 
       const reply = Effect.fn("Question.reply")(function* (input: { requestID: QuestionID; answers: Answer[] }) {
+        const pending = (yield* InstanceState.get(state)).pending
         const existing = pending.get(input.requestID)
         if (!existing) {
           log.warn("reply for unknown request", { requestID: input.requestID })
@@ -148,6 +162,7 @@ export namespace Question {
       })
 
       const reject = Effect.fn("Question.reject")(function* (requestID: QuestionID) {
+        const pending = (yield* InstanceState.get(state)).pending
         const existing = pending.get(requestID)
         if (!existing) {
           log.warn("reject for unknown request", { requestID })
@@ -163,6 +178,7 @@ export namespace Question {
       })
 
       const list = Effect.fn("Question.list")(function* () {
+        const pending = (yield* InstanceState.get(state)).pending
         return Array.from(pending.values(), (x) => x.info)
       })
 
@@ -170,3 +186,5 @@ export namespace Question {
     }),
   ).pipe(Layer.fresh)
 }
+
+export const runPromise = makeRunPromise(Question.Service, Question.layer)

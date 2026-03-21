@@ -320,3 +320,64 @@ test("list - returns empty when no pending", async () => {
     },
   })
 })
+
+test("questions stay isolated by directory", async () => {
+  await using one = await tmpdir({ git: true })
+  await using two = await tmpdir({ git: true })
+
+  const p1 = Instance.provide({
+    directory: one.path,
+    fn: () =>
+      Question.ask({
+        sessionID: SessionID.make("ses_one"),
+        questions: [
+          {
+            question: "Question 1?",
+            header: "Q1",
+            options: [{ label: "A", description: "A" }],
+          },
+        ],
+      }),
+  })
+
+  const p2 = Instance.provide({
+    directory: two.path,
+    fn: () =>
+      Question.ask({
+        sessionID: SessionID.make("ses_two"),
+        questions: [
+          {
+            question: "Question 2?",
+            header: "Q2",
+            options: [{ label: "B", description: "B" }],
+          },
+        ],
+      }),
+  })
+
+  const onePending = await Instance.provide({
+    directory: one.path,
+    fn: () => Question.list(),
+  })
+  const twoPending = await Instance.provide({
+    directory: two.path,
+    fn: () => Question.list(),
+  })
+
+  expect(onePending.length).toBe(1)
+  expect(twoPending.length).toBe(1)
+  expect(onePending[0].sessionID).toBe(SessionID.make("ses_one"))
+  expect(twoPending[0].sessionID).toBe(SessionID.make("ses_two"))
+
+  await Instance.provide({
+    directory: one.path,
+    fn: () => Question.reject(onePending[0].id),
+  })
+  await Instance.provide({
+    directory: two.path,
+    fn: () => Question.reject(twoPending[0].id),
+  })
+
+  await p1.catch(() => {})
+  await p2.catch(() => {})
+})

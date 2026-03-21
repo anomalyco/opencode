@@ -1,5 +1,6 @@
 import { Effect, Layer, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
+import { makeRunPromise } from "@/effect/run-service"
 import path from "path"
 import { mergeDeep } from "remeda"
 import z from "zod"
@@ -158,3 +159,5 @@ export namespace Format {
     }),
   ).pipe(Layer.fresh)
 }
+
+export const runPromise = makeRunPromise(Format.Service, Format.layer)

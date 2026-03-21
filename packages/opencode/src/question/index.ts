@@ -1,7 +1,6 @@
-import { runPromiseInstance } from "@/effect/runtime"
 import type { MessageID, SessionID } from "@/session/schema"
 import type { QuestionID } from "./schema"
-import { Question as S } from "./service"
+import { runPromise, Question as S } from "./service"
 
 export namespace Question {
   export const Option = S.Option
@@ -32,18 +31,18 @@ export namespace Question {
     questions: Info[]
     tool?: { messageID: MessageID; callID: string }
   }): Promise<Answer[]> {
-    return runPromiseInstance(S.Service.use((s) => s.ask(input)))
+    return runPromise((s) => s.ask(input))
   }
 
   export async function reply(input: { requestID: QuestionID; answers: Answer[] }) {
-    return runPromiseInstance(S.Service.use((s) => s.reply(input)))
+    return runPromise((s) => s.reply(input))
   }
 
   export async function reject(requestID: QuestionID) {
-    return runPromiseInstance(S.Service.use((s) => s.reject(requestID)))
+    return runPromise((s) => s.reject(requestID))
   }
 
   export async function list() {
-    return runPromiseInstance(S.Service.use((s) => s.list()))
+    return runPromise((s) => s.list())
   }
 }

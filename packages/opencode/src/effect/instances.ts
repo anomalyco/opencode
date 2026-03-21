@@ -2,12 +2,10 @@ import { Effect, Layer, LayerMap, ServiceMap } from "effect"
 import { File } from "@/file/service"
 import { FileTime } from "@/file/time-service"
 import { FileWatcher } from "@/file/watcher"
-import { Format } from "@/format/service"
 import { Permission } from "@/permission/service"
 import { Instance } from "@/project/instance"
 import { Vcs } from "@/project/vcs"
 import { ProviderAuth } from "@/provider/auth-service"
-import { Question } from "@/question/service"
 import { Skill } from "@/skill/service"
 import { Snapshot } from "@/snapshot/service"
 import { InstanceContext } from "./instance-context"
@@ -16,13 +14,11 @@ import { registerDisposer } from "./instance-registry"
 export { InstanceContext } from "./instance-context"
 
 export type InstanceServices =
-  | Question.Service
   | Permission.Service
   | ProviderAuth.Service
   | FileWatcher.Service
   | Vcs.Service
   | FileTime.Service
-  | Format.Service
   | File.Service
   | Skill.Service
   | Snapshot.Service
@@ -36,13 +32,11 @@ export type InstanceServices =
 function lookup(_key: string) {
   const ctx = Layer.sync(InstanceContext, () => InstanceContext.of(Instance.current))
   return Layer.mergeAll(
-    Question.layer,
     Permission.layer,
     ProviderAuth.defaultLayer,
     FileWatcher.layer,
     Vcs.layer,
     FileTime.layer,
-    Format.layer,
     File.layer,
     Skill.defaultLayer,
     Snapshot.defaultLayer,
