@@ -80,15 +80,21 @@ export namespace Format {
           }
 
           async function getFormatter(ext: string) {
-            const result = []
-            for (const item of Object.values(formatters)) {
-              log.info("checking", { name: item.name, ext })
-              if (!item.extensions.includes(ext)) continue
-              if (!(await isEnabled(item))) continue
-              log.info("enabled", { name: item.name, ext })
-              result.push(item)
-            }
-            return result
+            const matching = Object.values(formatters).filter((item) => item.extensions.includes(ext))
+            const checks = await Promise.all(
+              matching.map(async (item) => {
+                log.info("checking", { name: item.name, ext })
+                const on = await isEnabled(item)
+                if (on) {
+                  log.info("enabled", { name: item.name, ext })
+                }
+                return {
+                  item,
+                  enabled: on,
+                }
+              }),
+            )
+            return checks.filter((x) => x.enabled).map((x) => x.item)
           }
 
           yield* Effect.acquireRelease(
