@@ -1,17 +1,22 @@
 import path from "path"
 import { Effect, Layer, Record, Result, Schema, Context } from "effect"
 import { makeRuntime } from "@/effect/run-service"
+import { Flag } from "@/flag/flag"
 import { zod } from "@/util/effect-zod"
 import { Global } from "../global"
 import { AppFileSystem } from "../filesystem"
 
 export const OAUTH_DUMMY_KEY = "opencode-oauth-dummy-key"
 
-const file = path.join(Global.Path.data, "auth.json")
-
 const fail = (message: string) => (cause: unknown) => new Auth.AuthError({ message, cause })
 
 export namespace Auth {
+  export function file() {
+    if (!Flag.OPENCODE_AUTH_PATH) return path.join(Global.Path.data, "auth.json")
+    if (path.isAbsolute(Flag.OPENCODE_AUTH_PATH)) return Flag.OPENCODE_AUTH_PATH
+    return path.join(Global.Path.data, Flag.OPENCODE_AUTH_PATH)
+  }
+
   export class Oauth extends Schema.Class<Oauth>("OAuth")({
     type: Schema.Literal("oauth"),
     refresh: Schema.String,
@@ -58,7 +63,8 @@ export namespace Auth {
       const decode = Schema.decodeUnknownOption(Info)
 
       const all = Effect.fn("Auth.all")(function* () {
-        const data = (yield* fsys.readJson(file).pipe(Effect.orElseSucceed(() => ({})))) as Record<string, unknown>
+      const all = Effect.fn("Auth.all")(function* () {
+        const data = (yield* fsys.readJson(file()).pipe(Effect.orElseSucceed(() => ({})))) as Record<string, unknown>
         return Record.filterMap(data, (value) => Result.fromOption(decode(value), () => undefined))
       })
 
@@ -72,7 +78,7 @@ export namespace Auth {
         if (norm !== key) delete data[key]
         delete data[norm + "/"]
         yield* fsys
-          .writeJson(file, { ...data, [norm]: info }, 0o600)
+          .writeJson(file(), { ...data, [norm]: info }, 0o600)
           .pipe(Effect.mapError(fail("Failed to write auth data")))
       })
 
@@ -81,7 +87,7 @@ export namespace Auth {
         const data = yield* all()
         delete data[key]
         delete data[norm]
-        yield* fsys.writeJson(file, data, 0o600).pipe(Effect.mapError(fail("Failed to write auth data")))
+        yield* fsys.writeJson(file(), data, 0o600).pipe(Effect.mapError(fail("Failed to write auth data")))
       })
 
       return Service.of({ get, all, set, remove })

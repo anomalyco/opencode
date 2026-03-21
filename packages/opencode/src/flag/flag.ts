@@ -79,6 +79,7 @@ export namespace Flag {
   export const OPENCODE_MODELS_URL = process.env["OPENCODE_MODELS_URL"]
   export const OPENCODE_MODELS_PATH = process.env["OPENCODE_MODELS_PATH"]
   export const OPENCODE_DISABLE_EMBEDDED_WEB_UI = truthy("OPENCODE_DISABLE_EMBEDDED_WEB_UI")
+  export declare const OPENCODE_AUTH_PATH: string | undefined
   export const OPENCODE_DB = process.env["OPENCODE_DB"]
   export const OPENCODE_DISABLE_CHANNEL_DB = truthy("OPENCODE_DISABLE_CHANNEL_DB")
   export const OPENCODE_SKIP_MIGRATIONS = truthy("OPENCODE_SKIP_MIGRATIONS")
@@ -142,6 +143,17 @@ Object.defineProperty(Flag, "OPENCODE_PURE", {
 Object.defineProperty(Flag, "OPENCODE_PLUGIN_META_FILE", {
   get() {
     return process.env["OPENCODE_PLUGIN_META_FILE"]
+  },
+  enumerable: true,
+  configurable: false,
+})
+
+// Dynamic getter for OPENCODE_AUTH_PATH
+// This must be evaluated at access time, not module load time,
+// because tests and external tooling may set this env var at runtime
+Object.defineProperty(Flag, "OPENCODE_AUTH_PATH", {
+  get() {
+    return process.env["OPENCODE_AUTH_PATH"]
   },
   enumerable: true,
   configurable: false,

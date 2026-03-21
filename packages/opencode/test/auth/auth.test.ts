@@ -1,5 +1,7 @@
 import { test, expect } from "bun:test"
+import path from "path"
 import { Auth } from "../../src/auth"
+import { Global } from "../../src/global"
 
 test("set normalizes trailing slashes in keys", async () => {
   await Auth.set("https://example.com/", {
@@ -55,4 +57,33 @@ test("set and remove are no-ops on keys without trailing slashes", async () => {
   await Auth.remove("anthropic")
   const after = await Auth.all()
   expect(after["anthropic"]).toBeUndefined()
+})
+
+test("file resolves OPENCODE_AUTH_PATH relative to data dir", () => {
+  const prev = process.env.OPENCODE_AUTH_PATH
+  process.env.OPENCODE_AUTH_PATH = "custom-auth.json"
+  try {
+    expect(Auth.file()).toBe(path.join(Global.Path.data, "custom-auth.json"))
+  } finally {
+    if (prev === undefined) {
+      delete process.env.OPENCODE_AUTH_PATH
+      return
+    }
+    process.env.OPENCODE_AUTH_PATH = prev
+  }
+})
+
+test("file keeps OPENCODE_AUTH_PATH absolute", () => {
+  const prev = process.env.OPENCODE_AUTH_PATH
+  const auth = path.join(Global.Path.data, "auth-alt.json")
+  process.env.OPENCODE_AUTH_PATH = auth
+  try {
+    expect(Auth.file()).toBe(auth)
+  } finally {
+    if (prev === undefined) {
+      delete process.env.OPENCODE_AUTH_PATH
+      return
+    }
+    process.env.OPENCODE_AUTH_PATH = prev
+  }
 })

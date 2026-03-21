@@ -4,10 +4,8 @@ import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
 import { ModelsDev } from "../../provider/models"
 import { map, pipe, sortBy, values } from "remeda"
-import path from "path"
 import os from "os"
 import { Config } from "../../config/config"
-import { Global } from "../../global"
 import { Plugin } from "../../plugin"
 import { Instance } from "../../project/instance"
 import type { Hooks } from "@opencode-ai/plugin"
@@ -211,7 +209,7 @@ export const ProvidersListCommand = cmd({
   describe: "list providers and credentials",
   async handler(_args) {
     UI.empty()
-    const authPath = path.join(Global.Path.data, "auth.json")
+    const authPath = Auth.file()
     const homedir = os.homedir()
     const displayPath = authPath.startsWith(homedir) ? authPath.replace(homedir, "~") : authPath
     prompts.intro(`Credentials ${UI.Style.TEXT_DIM}${displayPath}`)
