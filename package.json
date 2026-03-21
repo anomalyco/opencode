@@ -11,7 +11,7 @@
     "dev:desktop": "bun --cwd packages/desktop tauri dev",
     "dev:web": "bun --cwd packages/app dev",
     "numeral:serve": "bun run numes/app build && bun run --cwd packages/opencode src/index.ts serve --port 4096",
-    "numeral:web": "bun run numeral:build-web && bun run --cwd packages/opencode src/index.ts web --port 3000",
+    "numeral:web": "bun run --cwd packages/app build && bun run --cwd packages/opencode src/index.ts web --port 3000",
     "typecheck": "bun turbo typecheck",
     "prepare": "husky",
     "random": "echo 'Random script'",
