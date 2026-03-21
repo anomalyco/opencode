@@ -268,7 +268,7 @@ function ApiMethod(props: ApiMethodProps) {
         if (!value) return
         await sdk.client.auth.set({
           providerID: props.providerID,
-          auth: {
+          body: {
             type: "api",
             key: value,
           },
