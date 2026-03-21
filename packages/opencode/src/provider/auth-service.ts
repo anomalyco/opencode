@@ -1,6 +1,8 @@
-import type { AuthOuathResult } from "@opencode-ai/plugin"
+import type { AuthOuathResult, Hooks } from "@opencode-ai/plugin"
 import { NamedError } from "@opencode-ai/util/error"
 import * as Auth from "@/auth/effect"
+import { InstanceState } from "@/effect/instance-state"
+import { makeRunPromise } from "@/effect/run-service"
 import { ProviderID } from "./schema"
 import { Array as Arr, Effect, Layer, Record, Result, ServiceMap, Struct } from "effect"
 import z from "zod"
@@ -89,6 +91,8 @@ export namespace ProviderAuth {
     | InstanceType<typeof OauthCallbackFailed>
     | InstanceType<typeof ValidationFailed>
 
+  type Hook = NonNullable<Hooks["auth"]>
+
   export interface Interface {
     readonly methods: () => Effect.Effect<Record<ProviderID, Method[]>>
     readonly authorize: (input: {
@@ -99,26 +103,38 @@ export namespace ProviderAuth {
     readonly callback: (input: { providerID: ProviderID; method: number; code?: string }) => Effect.Effect<void, Error>
   }
 
+  interface State {
+    hooks: Record<ProviderID, Hook>
+    pending: Map<ProviderID, AuthOuathResult>
+  }
+
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/ProviderAuth") {}
 
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
       const auth = yield* Auth.Auth.Service
-      const hooks = yield* Effect.promise(async () => {
-        const mod = await import("../plugin")
-        const plugins = await mod.Plugin.list()
-        return Record.fromEntries(
-          Arr.filterMap(plugins, (x) =>
-            x.auth?.provider !== undefined
-              ? Result.succeed([ProviderID.make(x.auth.provider), x.auth] as const)
-              : Result.failVoid,
-          ),
-        )
-      })
-      const pending = new Map<ProviderID, AuthOuathResult>()
+      const state = yield* InstanceState.make<State>(
+        Effect.fn("ProviderAuth.state")(() =>
+          Effect.promise(async () => {
+            const mod = await import("../plugin")
+            const plugins = await mod.Plugin.list()
+            return {
+              hooks: Record.fromEntries(
+                Arr.filterMap(plugins, (x) =>
+                  x.auth?.provider !== undefined
+                    ? Result.succeed([ProviderID.make(x.auth.provider), x.auth] as const)
+                    : Result.failVoid,
+                ),
+              ),
+              pending: new Map<ProviderID, AuthOuathResult>(),
+            }
+          }),
+        ),
+      )
 
       const methods = Effect.fn("ProviderAuth.methods")(function* () {
+        const hooks = (yield* InstanceState.get(state)).hooks
         return Record.map(hooks, (item) =>
           item.methods.map(
             (method): Method => ({
@@ -152,6 +168,7 @@ export namespace ProviderAuth {
         method: number
         inputs?: Record<string, string>
       }) {
+        const { hooks, pending } = yield* InstanceState.get(state)
         const method = hooks[input.providerID].methods[input.method]
         if (method.type !== "oauth") return
 
@@ -178,6 +195,7 @@ export namespace ProviderAuth {
         method: number
         code?: string
       }) {
+        const pending = (yield* InstanceState.get(state)).pending
         const match = pending.get(input.providerID)
         if (!match) return yield* Effect.fail(new OauthMissing({ providerID: input.providerID }))
         if (match.method === "code" && !input.code) {
@@ -213,3 +231,5 @@ export namespace ProviderAuth {
 
   export const defaultLayer = layer.pipe(Layer.provide(Auth.Auth.layer))
 }
+
+export const runPromise = makeRunPromise(ProviderAuth.Service, ProviderAuth.defaultLayer)

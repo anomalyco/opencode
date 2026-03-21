@@ -4,7 +4,6 @@ import { runtime, runPromiseInstance } from "../../src/effect/runtime"
 import { Auth } from "../../src/auth/effect"
 import { Instances } from "../../src/effect/instances"
 import { Instance } from "../../src/project/instance"
-import { ProviderAuth } from "../../src/provider/auth"
 import { Vcs } from "../../src/project/vcs"
 import { tmpdir } from "../fixture/fixture"
 
@@ -48,27 +47,10 @@ describe("effect/runtime", () => {
     expect(authOne).toBe(authTwo)
   })
 
-  test("instance services with global deps share the global (ProviderAuth → Auth)", async () => {
+  test("global services are shared with the same auth dependency", async () => {
     await using one = await tmpdir({ git: true })
     await using two = await tmpdir({ git: true })
 
-    // ProviderAuth depends on Auth via defaultLayer.
-    // The instance service itself should be different per directory,
-    // but the underlying Auth should be shared.
-    const paOne = await Instance.provide({
-      directory: one.path,
-      fn: () => grabInstance(ProviderAuth.Service),
-    })
-
-    const paTwo = await Instance.provide({
-      directory: two.path,
-      fn: () => grabInstance(ProviderAuth.Service),
-    })
-
-    // Different directories → different ProviderAuth instances.
-    expect(paOne).not.toBe(paTwo)
-
-    // But the global Auth is the same object in both.
     const authOne = await Instance.provide({
       directory: one.path,
       fn: () => grabGlobal(Auth.Service),

@@ -1,8 +1,7 @@
-import { runPromiseInstance } from "@/effect/runtime"
 import { fn } from "@/util/fn"
 import { ProviderID } from "./schema"
 import z from "zod"
-import { ProviderAuth as S } from "./auth-service"
+import { runPromise, ProviderAuth as S } from "./auth-service"
 
 export namespace ProviderAuth {
   export const Method = S.Method
@@ -24,7 +23,7 @@ export namespace ProviderAuth {
   export const defaultLayer = S.defaultLayer
 
   export async function methods() {
-    return runPromiseInstance(S.Service.use((svc) => svc.methods()))
+    return runPromise((svc) => svc.methods())
   }
 
   export const authorize = fn(
@@ -33,8 +32,7 @@ export namespace ProviderAuth {
       method: z.number(),
       inputs: z.record(z.string(), z.string()).optional(),
     }),
-    async (input): Promise<Authorization | undefined> =>
-      runPromiseInstance(S.Service.use((svc) => svc.authorize(input))),
+    async (input): Promise<Authorization | undefined> => runPromise((svc) => svc.authorize(input)),
   )
 
   export const callback = fn(
@@ -43,6 +41,6 @@ export namespace ProviderAuth {
       method: z.number(),
       code: z.string().optional(),
     }),
-    async (input) => runPromiseInstance(S.Service.use((svc) => svc.callback(input))),
+    async (input) => runPromise((svc) => svc.callback(input)),
   )
 }

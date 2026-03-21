@@ -3,7 +3,6 @@ import { File } from "@/file/service"
 import { FileWatcher } from "@/file/watcher"
 import { Instance } from "@/project/instance"
 import { Vcs } from "@/project/vcs"
-import { ProviderAuth } from "@/provider/auth-service"
 import { Skill } from "@/skill/service"
 import { Snapshot } from "@/snapshot/service"
 import { InstanceContext } from "./instance-context"
@@ -11,13 +10,7 @@ import { registerDisposer } from "./instance-registry"
 
 export { InstanceContext } from "./instance-context"
 
-export type InstanceServices =
-  | ProviderAuth.Service
-  | FileWatcher.Service
-  | Vcs.Service
-  | File.Service
-  | Skill.Service
-  | Snapshot.Service
+export type InstanceServices = FileWatcher.Service | Vcs.Service | File.Service | Skill.Service | Snapshot.Service
 
 // NOTE: LayerMap only passes the key (directory string) to lookup, but we need
 // the full instance context (directory, worktree, project). We read from the
@@ -27,14 +20,9 @@ export type InstanceServices =
 // the full context directly.
 function lookup(_key: string) {
   const ctx = Layer.sync(InstanceContext, () => InstanceContext.of(Instance.current))
-  return Layer.mergeAll(
-    ProviderAuth.defaultLayer,
-    FileWatcher.layer,
-    Vcs.layer,
-    File.layer,
-    Skill.defaultLayer,
-    Snapshot.defaultLayer,
-  ).pipe(Layer.provide(ctx))
+  return Layer.mergeAll(FileWatcher.layer, Vcs.layer, File.layer, Skill.defaultLayer, Snapshot.defaultLayer).pipe(
+    Layer.provide(ctx),
+  )
 }
 
 export class Instances extends ServiceMap.Service<Instances, LayerMap.LayerMap<string, InstanceServices>>()(
