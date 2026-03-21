@@ -148,11 +148,11 @@ describe("Format", () => {
       config: {
         formatter: {
           first: {
-            command: ["sh", "-c", "sleep 0.05; v=$(cat \"$1\"); printf '%sA' \"$v\" > \"$1\"", "sh", "$FILE"],
+            command: ["sh", "-c", 'sleep 0.05; v=$(cat "$1"); printf \'%sA\' "$v" > "$1"', "sh", "$FILE"],
             extensions: [".seq"],
           },
           second: {
-            command: ["sh", "-c", "v=$(cat \"$1\"); printf '%sB' \"$v\" > \"$1\"", "sh", "$FILE"],
+            command: ["sh", "-c", 'v=$(cat "$1"); printf \'%sB\' "$v" > "$1"', "sh", "$FILE"],
             extensions: [".seq"],
           },
         },

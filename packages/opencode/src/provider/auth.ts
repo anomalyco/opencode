@@ -118,18 +118,19 @@ export namespace ProviderAuth {
       const state = yield* InstanceState.make<State>(
         Effect.fn("ProviderAuth.state")(() =>
           Effect.promise(async () => {
-          const plugins = await Plugin.list()
-          return {
-            hooks: Record.fromEntries(
-              Arr.filterMap(plugins, (x) =>
-                x.auth?.provider !== undefined
-                  ? Result.succeed([ProviderID.make(x.auth.provider), x.auth] as const)
-                  : Result.failVoid,
+            const plugins = await Plugin.list()
+            return {
+              hooks: Record.fromEntries(
+                Arr.filterMap(plugins, (x) =>
+                  x.auth?.provider !== undefined
+                    ? Result.succeed([ProviderID.make(x.auth.provider), x.auth] as const)
+                    : Result.failVoid,
+                ),
               ),
-            ),
-            pending: new Map<ProviderID, AuthOuathResult>(),
-          }
-        })),
+              pending: new Map<ProviderID, AuthOuathResult>(),
+            }
+          }),
+        ),
       )
 
       const methods = Effect.fn("ProviderAuth.methods")(function* () {

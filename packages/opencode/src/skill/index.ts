@@ -184,7 +184,9 @@ export namespace Skill {
     Service,
     Effect.gen(function* () {
       const discovery = yield* Discovery.Service
-      const state = yield* InstanceState.make(Effect.fn("Skill.state")((ctx) => Effect.sync(() => create(discovery, ctx.directory, ctx.worktree))))
+      const state = yield* InstanceState.make(
+        Effect.fn("Skill.state")((ctx) => Effect.sync(() => create(discovery, ctx.directory, ctx.worktree))),
+      )
 
       const ensure = Effect.fn("Skill.ensure")(function* () {
         const cache = yield* InstanceState.get(state)
