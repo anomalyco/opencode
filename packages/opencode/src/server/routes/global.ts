@@ -113,7 +113,12 @@ export const GlobalRoutes = lazy(() =>
           try {
             for await (const data of q) {
               if (data === null) return
-              await stream.writeSSE({ data })
+              try {
+                await stream.writeSSE({ data })
+              } catch {
+                log.info("global event disconnected (write failed)")
+                return
+              }
             }
           } finally {
             stop()
