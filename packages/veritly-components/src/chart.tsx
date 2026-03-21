@@ -58,24 +58,6 @@ function parseArea(raw: AreaPoint[] | string): AreaPoint[] | null {
 	}
 }
 
-function sample(days = 120): AreaPoint[] {
-	const out: AreaPoint[] = [];
-	const end = new Date();
-	end.setHours(0, 0, 0, 0);
-	for (let i = days - 1; i >= 0; i--) {
-		const d = new Date(end);
-		d.setDate(end.getDate() - i);
-		const desktop = Math.round(170 + Math.sin(i / 4.2) * 110 + (i % 9) * 14 + (i % 5) * 9);
-		const mobile = Math.round(130 + Math.cos(i / 5.6) * 90 + (i % 7) * 11 + (i % 4) * 7);
-		out.push({
-			date: d.toISOString().slice(0, 10),
-			desktop: Math.max(20, desktop),
-			mobile: Math.max(20, mobile),
-		});
-	}
-	return out;
-}
-
 export function Chart(props: { data?: ChartData | string; type?: ChartType }): JSX.Element {
 	const data = createMemo(() => {
 		if (!props.data) return null;
@@ -215,9 +197,9 @@ export function ChartAreaInteractive(props: {
 	defaultRange?: AreaRange;
 }) {
 	const data = createMemo(() => {
-		if (!props.data) return sample();
+		if (!props.data) return [];
 		const parsed = parseArea(props.data);
-		return parsed && parsed.length > 0 ? parsed : sample();
+		return parsed && parsed.length > 0 ? parsed : [];
 	});
 
 	const [range, setRange] = createSignal<AreaRange>(props.defaultRange || "90d");
@@ -353,7 +335,13 @@ export function ChartAreaInteractive(props: {
 				</div>
 			</div>
 			<div class="px-2 pt-3 pb-2 sm:px-4">
-				<div ref={node} class="w-full h-[280px]" />
+				{filtered().length > 0 ? (
+					<div ref={node} class="w-full h-[280px]" />
+				) : (
+					<div class="h-[280px] flex items-center justify-center text-sm text-slate-400 italic">
+						Pass <code class="mx-1 text-slate-300">data</code> to render this chart.
+					</div>
+				)}
 			</div>
 		</div>
 	);

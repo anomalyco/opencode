@@ -3,6 +3,8 @@
 These examples are valid with `MarkdownMdx` and the built-in components:
 `Chart`, `LineChart`, `BarChart`, `RadarChart`, and `ChartAreaInteractive`.
 
+const TRAFFIC_140D = '[{"date":"2025-09-01","desktop":1190,"mobile":865},{"date":"2025-09-02","desktop":1198,"mobile":875},{"date":"2025-09-03","desktop":1213,"mobile":889},{"date":"2026-01-18","desktop":2856,"mobile":2470}]';
+
 ## 1) Generic line chart
 
 <Chart type="line" data='{"labels":["Jan","Feb","Mar","Apr","May"],"datasets":[{"label":"Revenue","data":[12000,15600,14100,18900,21000],"color":"#06b6d4"},{"label":"Cost","data":[9000,10400,9900,12100,14200],"color":"#f43f5e"}]}' />
@@ -23,17 +25,21 @@ These examples are valid with `MarkdownMdx` and the built-in components:
 
 <Chart type="radar" data='{"labels":["API","UI","CLI","Infra","QA"],"datasets":[{"label":"Coverage","data":[68,74,59,81,65],"color":"#ec4899"}]}' />
 
-## 6) Invalid data example (fallback)
+## 6) Interactive area chart (explicit config)
 
-```mdx
-<RadarChart data="not-json" />
-```
+<ChartAreaInteractive
+	title="Traffic Trends"
+	description="Desktop vs mobile over time (real 140-day dataset)"
+	defaultRange="90d"
+	data={TRAFFIC_140D}
+/>
 
-## 7) Professional interactive area chart (shadcn-like)
+## 7) Interactive area chart (thicker 90-day trend feel)
 
-<ChartAreaInteractive />
-
-## 8) Interactive area chart with custom title
-
-<ChartAreaInteractive title="Traffic Trends" description="Desktop vs mobile over time" defaultRange="30d" />
+<ChartAreaInteractive
+	title="90 Day Trend"
+	description="Focused on a full 90-day window from real traffic data"
+	defaultRange="90d"
+	data={TRAFFIC_140D}
+/>
 
