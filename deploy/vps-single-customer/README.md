@@ -9,6 +9,8 @@ It uses:
 - one bind mount for the customer workspace
 - one persistent Docker volume for Numeral state
 
+The Numeral container must include `git`, because session versioning and worktrees depend on real Git operations inside the running app container.
+
 ## 1. Point DNS to the VPS
 
 Create an `A` record for your test domain, for example:
