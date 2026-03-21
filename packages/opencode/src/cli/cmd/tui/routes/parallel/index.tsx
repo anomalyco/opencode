@@ -28,6 +28,7 @@ export function Parallel() {
       s === "running" ||
       s === "merging" ||
       s === "integrating" ||
+      s === "recovering" ||
       s === "publishing"
     )
   }
@@ -175,7 +176,14 @@ export function Parallel() {
           <Show when={plan.status === "approved" || plan.status === "spawning" || plan.status === "running"}>
             <ParallelStatus plan={plan} onCancelled={back} onBack={back} />
           </Show>
-          <Show when={plan.status === "merging" || plan.status === "integrating" || plan.status === "publishing"}>
+          <Show
+            when={
+              plan.status === "merging" ||
+              plan.status === "integrating" ||
+              plan.status === "recovering" ||
+              plan.status === "publishing"
+            }
+          >
             <ParallelMerge plan={plan} />
           </Show>
           <Show when={plan.status === "integrated"}>

@@ -41,12 +41,140 @@ export namespace Orchestrator {
     unresolved: number
   }
 
+  type Recover = {
+    ok: boolean
+    integration?: Integration.IntegrationResult
+    publish?: Integration.PublishResult
+    publishOk?: boolean
+  }
+
   function unresolved(workers: Plan["workers"]) {
     return workers.filter((worker) => !["merged", "failed", "conflict"].includes(worker.status))
   }
 
   function inflight(workers: Plan["workers"]) {
     return workers.filter((worker) => ["pending", "spawning", "running", "stopping"].includes(worker.status))
+  }
+
+  function workerNotes(plan: Plan): string {
+    const seen = new Set<string>()
+    const out: string[] = []
+    for (const w of plan.workers) {
+      if (!w.error) continue
+      const msg = w.error.trim()
+      if (!msg || seen.has(msg)) continue
+      seen.add(msg)
+      out.push(msg)
+      if (out.length >= 3) break
+    }
+    if (out.length === 0) return "No worker-level diagnostics were recorded."
+    return out.join(" | ")
+  }
+
+  async function enterRecover(planID: PlanID): Promise<void> {
+    const plan = await PlanStore.get(planID)
+    if (plan.status === "recovering") return
+    await PlanStore.transition({ id: planID, status: "recovering" })
+  }
+
+  async function requireInput(planID: PlanID, stage: string, message: string): Promise<void> {
+    await PlanStore.update({
+      id: planID,
+      status: "failed",
+      error: {
+        code: "recovery_required",
+        stage,
+        message,
+        at: Date.now(),
+      },
+    })
+  }
+
+  async function recoverIntegrate(
+    planID: PlanID,
+    input: { result?: Integration.IntegrationResult; error?: unknown },
+  ): Promise<Recover> {
+    await enterRecover(planID)
+
+    if (input.result && input.result.merged.length > 0) {
+      await PlanStore.update({
+        id: planID,
+        error: {
+          code: "recovering_partial_merge",
+          stage: "recovering",
+          message: `Recovered with partial merge (${input.result.merged.length} merged, ${input.result.failed.length} failed). Continuing execution.`,
+          at: Date.now(),
+        },
+      })
+      return { ok: true, integration: input.result }
+    }
+
+    const retry = await Integration.integrate(planID).catch((error) => {
+      log.error("integration retry failed", { planID, error })
+      return undefined
+    })
+    if (retry && retry.merged.length > 0) {
+      await PlanStore.update({
+        id: planID,
+        error: {
+          code: "recovering_retry_succeeded",
+          stage: "recovering",
+          message: `Automatic recovery succeeded after retry (${retry.merged.length} merged, ${retry.failed.length} failed).`,
+          at: Date.now(),
+        },
+      })
+      return { ok: true, integration: retry }
+    }
+
+    const plan = await PlanStore.get(planID)
+    const msg = [
+      "Automatic recovery failed during integration.",
+      input.error ? `Failure: ${text(input.error)}` : "Failure: integration produced no merged workers.",
+      `Worker diagnostics: ${workerNotes(plan)}`,
+      "User input required: review /parallel-workers, then retry with a tighter plan or run parallel_resume action=\"abandon\".",
+    ].join(" ")
+    await requireInput(planID, "recovering", msg)
+    return { ok: false }
+  }
+
+  async function recoverPublish(
+    planID: PlanID,
+    input: { mode: "new-branch" | "unstaged" | "direct"; error: unknown },
+  ): Promise<Recover> {
+    await enterRecover(planID)
+
+    if (input.mode !== "new-branch") {
+      const fallback = await Integration.publish(planID, "new-branch").catch((error) => {
+        log.error("publish fallback failed", { planID, error })
+        return undefined
+      })
+      if (fallback?.success) {
+        await PlanStore.update({
+          id: planID,
+          error: {
+            code: "publish_fallback_new_branch",
+            stage: "recovering",
+            message:
+              `Publish failed in ${input.mode}. Recovered by publishing as new-branch.` +
+              " Changes are preserved on integration branch; manual apply is required.",
+            at: Date.now(),
+          },
+        })
+        return {
+          ok: true,
+          publish: fallback,
+          publishOk: false,
+        }
+      }
+    }
+
+    const msg = [
+      "Automatic recovery failed during publishing.",
+      `Failure: ${text(input.error)}`,
+      "User input required: retry publish manually (new-branch/unstaged/direct) or abandon the plan.",
+    ].join(" ")
+    await requireInput(planID, "recovering", msg)
+    return { ok: false }
   }
 
   export function resolveOutcome(input: {
@@ -398,9 +526,10 @@ export namespace Orchestrator {
     const spawning = await PlanStore.listByProjectAndStatus(projectID, "spawning")
     const merging = await PlanStore.listByProjectAndStatus(projectID, "merging")
     const integrating = await PlanStore.listByProjectAndStatus(projectID, "integrating")
+    const recovering = await PlanStore.listByProjectAndStatus(projectID, "recovering")
     const integrated = await PlanStore.listByProjectAndStatus(projectID, "integrated")
     const publishing = await PlanStore.listByProjectAndStatus(projectID, "publishing")
-    const running = [...active, ...spawning, ...merging, ...integrating, ...integrated, ...publishing]
+    const running = [...active, ...spawning, ...merging, ...integrating, ...recovering, ...integrated, ...publishing]
 
     if (running.length > 0) {
       const existingPlan = running[0]
@@ -537,9 +666,25 @@ export namespace Orchestrator {
 
     await PlanStore.transition({ id: planID, status: "merging" })
     await PlanStore.transition({ id: planID, status: "integrating" })
-    const integrationResult = await stage("integrating", async () => Integration.integrate(planID))
+    let integrationErr: unknown = undefined
+    let integrationResult = await Integration.integrate(planID).catch((error) => {
+      integrationErr = error
+      return undefined
+    })
 
-    if (integrationResult.merged.length === 0) {
+    if (!integrationResult || !integrationResult.success) {
+      const recover = await recoverIntegrate(planID, {
+        result: integrationResult,
+        error: integrationErr,
+      })
+      if (!recover.ok) {
+        Metrics.recordPlanOutcome("failed")
+        return
+      }
+      integrationResult = recover.integration
+    }
+
+    if (!integrationResult || integrationResult.merged.length === 0) {
       await PlanStore.transition({ id: planID, status: "failed" })
       const finalPlan = await PlanStore.get(planID)
       await Recovery.cleanupWorktrees(finalPlan)
@@ -561,14 +706,31 @@ export namespace Orchestrator {
     const publishMode = plan.publishMode ?? cfg.parallel?.publish_mode ?? "new-branch"
 
     await PlanStore.transition({ id: planID, status: "publishing" })
-    const publishResult = await stage("publishing", async () => Integration.publish(planID, publishMode))
+    let publishErr: unknown = undefined
+    let publishResult = await Integration.publish(planID, publishMode).catch((error) => {
+      publishErr = error
+      return undefined
+    })
+    let publishOk = publishResult?.success ?? false
+    if (!publishResult || !publishResult.success) {
+      const recover = await recoverPublish(planID, {
+        mode: publishMode,
+        error: publishErr ?? new Error(publishResult?.error ?? "Publish failed"),
+      })
+      if (!recover.ok) {
+        Metrics.recordPlanOutcome("failed")
+        return
+      }
+      publishResult = recover.publish
+      publishOk = recover.publishOk ?? (publishResult?.success ?? false)
+    }
 
     // Determine final status based on all outcomes
     const finalPlan = await PlanStore.get(planID)
     const result = resolveOutcome({
       workers: finalPlan.workers,
       integrationSuccess: integrationResult.success,
-      publishSuccess: publishResult.success,
+      publishSuccess: publishOk,
     })
     const finalStatus = result.status
 
@@ -596,7 +758,7 @@ export namespace Orchestrator {
     await PlanStore.transition({ id: planID, status: finalStatus })
     Metrics.recordPlanOutcome(finalStatus)
 
-    if (finalStatus === "failed" && result.unresolved === 0) {
+    if (finalStatus === "failed" && result.unresolved === 0 && finalPlan.error?.code !== "recovery_required") {
       await Recovery.cleanupWorktrees(finalPlan)
     }
 

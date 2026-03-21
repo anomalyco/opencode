@@ -221,7 +221,7 @@ export namespace PlanStore {
         .where(
           and(
             eq(PlanTable.project_id, sql.placeholder("project_id")),
-            sql`${PlanTable.status} IN ('draft', 'proposed', 'approved', 'spawning', 'running', 'merging', 'integrating', 'integrated', 'publishing')`,
+            sql`${PlanTable.status} IN ('draft', 'proposed', 'approved', 'spawning', 'running', 'merging', 'integrating', 'recovering', 'integrated', 'publishing')`,
           ),
         )
         .prepare(),

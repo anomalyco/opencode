@@ -14,7 +14,15 @@ export namespace Recovery {
   const log = Log.create({ service: "parallel-recovery" })
 
   /** Statuses that indicate an interrupted plan */
-  const INTERRUPTED_STATUSES: PlanStatus[] = ["approved", "spawning", "running", "merging"]
+  const INTERRUPTED_STATUSES: PlanStatus[] = [
+    "approved",
+    "spawning",
+    "running",
+    "merging",
+    "integrating",
+    "recovering",
+    "publishing",
+  ]
 
   /** Statuses that indicate an in-flight worker */
   const INTERRUPTED_WORKER_STATUSES = ["pending", "spawning", "running"]
@@ -195,7 +203,12 @@ export namespace Recovery {
         }
       }
 
-      const canResume = incompleteWorkers.length > 0 || plan.status === "merging"
+      const canResume =
+        incompleteWorkers.length > 0 ||
+        plan.status === "merging" ||
+        plan.status === "integrating" ||
+        plan.status === "recovering" ||
+        plan.status === "publishing"
       const timeSinceInterruption = plan.time.approved ? Date.now() - plan.time.approved : undefined
 
       // Build actionable summary with specific commands and recovery suggestions

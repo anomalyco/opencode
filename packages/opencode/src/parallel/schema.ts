@@ -54,6 +54,7 @@ export const PlanStatus = z.enum([
   "running",
   "merging",
   "integrating",
+  "recovering",
   "publishing",
   "partial_success",
   "integrated",

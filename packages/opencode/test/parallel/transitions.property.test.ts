@@ -20,6 +20,10 @@ const PLAN_STATUSES: PlanStatus[] = [
   "spawning",
   "running",
   "merging",
+  "integrating",
+  "recovering",
+  "integrated",
+  "publishing",
   "partial_success",
   "cancelled",
   "done",
@@ -82,7 +86,18 @@ describe("Plan Transitions - Property Tests", () => {
   })
 
   test("non-terminal states have at least one valid outgoing transition", () => {
-    const nonTerminalStatuses: PlanStatus[] = ["draft", "proposed", "approved", "spawning", "running", "merging"]
+    const nonTerminalStatuses: PlanStatus[] = [
+      "draft",
+      "proposed",
+      "approved",
+      "spawning",
+      "running",
+      "merging",
+      "integrating",
+      "recovering",
+      "integrated",
+      "publishing",
+    ]
 
     for (const status of nonTerminalStatuses) {
       const transitions = VALID_PLAN_TRANSITIONS[status]
