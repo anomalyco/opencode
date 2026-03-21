@@ -2170,7 +2170,7 @@ function TodoWrite(props: ToolProps<typeof TodoWriteTool>) {
         <BlockTool title="# Todos" part={props.part}>
           <box>
             <For each={props.input.todos ?? []}>
-              {(todo) => <TodoItem status={todo.status} content={todo.content} />}
+              {(todo) => <TodoItem id={todo.id || 'temp-id'} status={todo.status} content={todo.content} />}
             </For>
           </box>
         </BlockTool>

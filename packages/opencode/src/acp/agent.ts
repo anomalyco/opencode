@@ -369,6 +369,12 @@ export namespace ACP {
                 if (part.tool === "todowrite") {
                   const parsedTodos = z.array(Todo.Info).safeParse(JSON.parse(part.state.output))
                   if (parsedTodos.success) {
+                    log.info("Processing todowrite tool call with enhanced structure", { 
+                      sessionId, 
+                      todoCount: parsedTodos.data.length,
+                      hasParentId: parsedTodos.data.some(t => t.parentId),
+                      hasDependsOn: parsedTodos.data.some(t => t.dependsOn?.length)
+                    });
                     await this.connection
                       .sessionUpdate({
                         sessionId,
@@ -378,6 +384,9 @@ export namespace ACP {
                             const status: PlanEntry["status"] =
                               todo.status === "cancelled" ? "completed" : (todo.status as PlanEntry["status"])
                             return {
+                              id: todo.id,
+                              parentId: todo.parentId,
+                              dependsOn: todo.dependsOn,
                               priority: "medium",
                               status,
                               content: todo.content,
@@ -893,6 +902,9 @@ export namespace ACP {
                           const status: PlanEntry["status"] =
                             todo.status === "cancelled" ? "completed" : (todo.status as PlanEntry["status"])
                           return {
+                            id: todo.id,
+                            parentId: todo.parentId,
+                            dependsOn: todo.dependsOn,
                             priority: "medium",
                             status,
                             content: todo.content,

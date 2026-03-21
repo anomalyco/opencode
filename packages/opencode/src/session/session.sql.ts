@@ -78,6 +78,7 @@ export const PartTable = sqliteTable(
 export const TodoTable = sqliteTable(
   "todo",
   {
+    id: text().primaryKey(),
     session_id: text()
       .$type<SessionID>()
       .notNull()
@@ -85,12 +86,14 @@ export const TodoTable = sqliteTable(
     content: text().notNull(),
     status: text().notNull(),
     priority: text().notNull(),
+    parent_id: text().$type<string>(),
+    depends_on: text({ mode: "json" }).$type<string[]>(),
     position: integer().notNull(),
     ...Timestamps,
   },
   (table) => [
-    primaryKey({ columns: [table.session_id, table.position] }),
     index("todo_session_idx").on(table.session_id),
+    index("todo_parent_idx").on(table.parent_id),
   ],
 )
 
