@@ -42,6 +42,7 @@ import { QuestionRoutes } from "./routes/question"
 import { PermissionRoutes } from "./routes/permission"
 import { GlobalRoutes } from "./routes/global"
 import { MDNS } from "./mdns"
+import { validateWorkspace } from "../project/workspace"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -224,13 +225,27 @@ export namespace Server {
         .use(async (c, next) => {
           if (c.req.path === "/log") return next()
           const raw = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
-          const directory = (() => {
+          const requested = (() => {
             try {
               return decodeURIComponent(raw)
             } catch {
               return raw
             }
           })()
+          const checked = await validateWorkspace(requested)
+          let directory = checked.valid ? checked.directory : requested
+
+          if (!checked.valid && requested !== process.cwd()) {
+            const fallback = await validateWorkspace(process.cwd())
+            if (fallback.valid) {
+              log.warn("invalid workspace, falling back to process cwd", {
+                requested,
+                reason: checked.reason,
+                fallback: fallback.directory,
+              })
+              directory = fallback.directory
+            }
+          }
           return Instance.provide({
             directory,
             init: InstanceBootstrap,

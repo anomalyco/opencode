@@ -12,6 +12,7 @@ import { fn } from "../util/fn"
 import { Log } from "../util/log"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
+import { validateWorkspace } from "../project/workspace"
 
 export namespace Worktree {
   const log = Log.create({ service: "worktree" })
@@ -353,6 +354,26 @@ export namespace Worktree {
             return false
           })
         if (!booted) return
+
+        const checked = await validateWorkspace(info.directory)
+        if (!checked.valid || checked.common !== Instance.worktree) {
+          const message =
+            checked.valid && checked.common !== Instance.worktree
+              ? "Workspace is not attached to the active project"
+              : checked.reason
+          log.error("worktree validation failed", { directory: info.directory, message })
+          await Project.removeSandbox(projectID, info.directory).catch(() => undefined)
+          GlobalBus.emit("event", {
+            directory: info.directory,
+            payload: {
+              type: Event.Failed.type,
+              properties: {
+                message,
+              },
+            },
+          })
+          return
+        }
 
         GlobalBus.emit("event", {
           directory: info.directory,

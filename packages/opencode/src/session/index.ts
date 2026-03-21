@@ -22,6 +22,7 @@ import { Snapshot } from "@/snapshot"
 import type { Provider } from "@/provider/provider"
 import { PermissionNext } from "@/permission/next"
 import { Global } from "@/global"
+import { validateWorkspace } from "@/project/workspace"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -281,9 +282,68 @@ export namespace Session {
     return path.join(base, [input.time.created, input.slug].join("-") + ".md")
   }
 
+  async function lookup(id: string) {
+    const current = await Storage.read<Info>(["session", Instance.project.id, id]).catch(() => undefined)
+    if (current) return { projectID: Instance.project.id, session: current }
+    if (Instance.project.id !== "global") {
+      const global = await Storage.read<Info>(["session", "global", id]).catch(() => undefined)
+      if (global) return { projectID: "global", session: global }
+    }
+
+    const found = await Storage.list(["session"]).then((keys) => keys.find((item) => item.at(-1) === id))
+    if (!found) return
+
+    const projectID = found[1]
+    if (!projectID) return
+    const session = await Storage.read<Info>(found).catch(() => undefined)
+    if (!session) return
+    return { projectID, session }
+  }
+
+  async function recover(projectID: string, session: Info) {
+    const checked = await validateWorkspace(session.directory)
+    const currentDirectory = Instance.directory
+    const currentProjectID = Instance.project.id
+    const sameProject = session.projectID === currentProjectID && projectID === currentProjectID
+    const sameDirectory = session.directory === currentDirectory
+    const sameWorktree =
+      Instance.project.vcs !== "git" ||
+      (checked.valid && checked.common === Instance.worktree && checked.directory === currentDirectory)
+
+    if (sameProject && sameDirectory && sameWorktree) return session
+
+    const next: Info = {
+      ...session,
+      projectID: currentProjectID,
+      directory: currentDirectory,
+    }
+
+    log.warn("recovering session workspace", {
+      sessionID: session.id,
+      fromProjectID: projectID,
+      toProjectID: currentProjectID,
+      fromDirectory: session.directory,
+      toDirectory: currentDirectory,
+      reason: checked.valid ? "workspace does not match active project" : checked.reason,
+    })
+
+    await Storage.write(["session", currentProjectID, session.id], next)
+    if (projectID !== currentProjectID) {
+      await Storage.remove(["session", projectID, session.id]).catch(() => undefined)
+    }
+    Bus.publish(Event.Updated, {
+      info: next,
+    })
+    return next
+  }
+
   export const get = fn(Identifier.schema("session"), async (id) => {
-    const read = await Storage.read<Info>(["session", Instance.project.id, id])
-    return read as Info
+    const found = await lookup(id)
+    if (!found) {
+      await Storage.read<Info>(["session", Instance.project.id, id])
+    }
+    if (!found) throw new Error("session not found")
+    return recover(found.projectID, found.session)
   })
 
   export const getShare = fn(Identifier.schema("session"), async (id) => {

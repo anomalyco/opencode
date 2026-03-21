@@ -489,6 +489,13 @@ export default function Page() {
         .catch(() => undefined)
       if (nextBranch) sync.set("vcs", nextBranch)
 
+      const nextDir = selected.directory ? base64Encode(selected.directory) : (params.dir ?? "")
+      if (nextDir !== (params.dir ?? "")) {
+        layout.handoff.setTabs(nextDir, sessionID)
+        navigate(`/${nextDir}/session/${sessionID}`)
+        return
+      }
+
       await refreshVersionView()
       if (params.id === sessionID) {
         await sync.session.sync(sessionID).catch(() => undefined)
@@ -522,6 +529,12 @@ export default function Page() {
       .then((x) => x.data)
       .catch(() => undefined)
     if (nextBranch) sync.set("vcs", nextBranch)
+    const nextDir = next.directory ? base64Encode(next.directory) : (params.dir ?? "")
+    if (nextDir !== (params.dir ?? "")) {
+      layout.handoff.setTabs(nextDir, next.id)
+      navigate(`/${nextDir}/session/${next.id}`)
+      return
+    }
     await refreshVersionView()
     layout.handoff.setTabs(params.dir ?? "", next.id)
     navigate(`/${params.dir}/session/${next.id}`)

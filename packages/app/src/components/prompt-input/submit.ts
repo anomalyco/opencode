@@ -141,6 +141,20 @@ export function createPromptSubmit(input: PromptSubmitInput) {
 
     let sessionDirectory = projectDirectory
     let client = sdk.client
+    const switchDirectory = (next: string) => {
+      sessionDirectory = next
+      if (sessionDirectory === projectDirectory) {
+        client = sdk.client
+        return
+      }
+      client = createOpencodeClient({
+        baseUrl: sdk.url,
+        fetch: platform.fetch,
+        directory: sessionDirectory,
+        throwOnError: true,
+      })
+      globalSync.child(sessionDirectory)
+    }
 
     if (isNewSession) {
       if (worktreeSelection === "create") {
@@ -163,21 +177,11 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           return
         }
         WorktreeState.pending(createdWorktree.directory)
-        sessionDirectory = createdWorktree.directory
+        switchDirectory(createdWorktree.directory)
       }
 
       if (worktreeSelection !== "main" && worktreeSelection !== "create") {
-        sessionDirectory = worktreeSelection
-      }
-
-      if (sessionDirectory !== projectDirectory) {
-        client = createOpencodeClient({
-          baseUrl: sdk.url,
-          fetch: platform.fetch,
-          directory: sessionDirectory,
-          throwOnError: true,
-        })
-        globalSync.child(sessionDirectory)
+        switchDirectory(worktreeSelection)
       }
 
       input.onNewSessionWorktreeReset?.()
@@ -206,6 +210,9 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           return undefined
         })
       if (session) {
+        if (session.directory && session.directory !== sessionDirectory) {
+          switchDirectory(session.directory)
+        }
         layout.handoff.setTabs(base64Encode(sessionDirectory), session.id)
         navigate(`/${base64Encode(sessionDirectory)}/session/${session.id}`)
       }
@@ -216,6 +223,9 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         description: language.t("prompt.toast.promptSendFailed.description"),
       })
       return
+    }
+    if (session.directory && session.directory !== sessionDirectory) {
+      switchDirectory(session.directory)
     }
 
     const hasHistory = (sync.data.message[session.id]?.length ?? 0) > 0
@@ -232,6 +242,9 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         })
       if (!next) return
       session = next
+      if (next.directory && next.directory !== sessionDirectory) {
+        switchDirectory(next.directory)
+      }
       layout.handoff.setTabs(base64Encode(sessionDirectory), next.id)
       navigate(`/${base64Encode(sessionDirectory)}/session/${next.id}`)
     }
