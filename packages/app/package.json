@@ -12,7 +12,6 @@
     "typecheck": "tsgo -b",
     "start": "vite",
     "dev": "vite",
-    "dev:license": "bun script/license-mock.ts",
     "build": "vite build",
     "serve": "vite preview",
     "test": "bun run test:unit",

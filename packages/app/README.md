@@ -21,29 +21,16 @@ Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
 
 The page will reload if you make edits.<br>
 
-### License testing
+### License setup
 
-The pricing gate can be tested locally with a tiny mock licensing service.
+Point `VITE_OPENCODE_LICENSE_URL` at your live license service before starting the app in local development.
 
 ```bash
 cp .env.example .env.local
-bun run dev:license
 bun run dev -- --port 4444
 ```
 
-Open `http://localhost:4444`, go to `Settings > License`, and paste one of these keys:
-
-- `TEST-ACTIVE-KEY` - unlocks the app
-- `TEST-EXPIRED-KEY` - returns an expired license
-- `TEST-INVALID-KEY` - returns an invalid license error
-- `TEST-GRACE-KEY` - unlocks the app in grace-period mode
-
-The mock service listens on `http://127.0.0.1:8787` by default and exposes:
-
-- `GET /health`
-- `GET /keys`
-- `POST /v1/licenses/activate`
-- `POST /v1/licenses/refresh`
+Open `http://localhost:4444` and use `Settings > License` to verify activation against the configured live service.
 
 ### `npm run build`
 
