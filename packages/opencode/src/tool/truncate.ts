@@ -1,6 +1,5 @@
 import type { Agent } from "../agent/agent"
-import { Truncate as S } from "./truncate-effect"
-import * as M from "./truncate-effect"
+import { runPromise, Truncate as S } from "./truncate-effect"
 
 export namespace Truncate {
   export const MAX_LINES = S.MAX_LINES
@@ -13,6 +12,6 @@ export namespace Truncate {
   export type Options = S.Options
 
   export async function output(text: string, options: Options = {}, agent?: Agent.Info): Promise<Result> {
-    return M.runPromise((s) => s.output(text, options, agent))
+    return runPromise((s) => s.output(text, options, agent))
   }
 }

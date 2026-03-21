@@ -1,7 +1,14 @@
 import { Option, type Effect } from "effect"
 
-import { Account as S, type AccountError, type AccessToken, AccountID, Info as Model, OrgID } from "./effect"
-import * as M from "./effect"
+import {
+  runPromise,
+  Account as S,
+  type AccountError,
+  type AccessToken,
+  AccountID,
+  Info as Model,
+  OrgID,
+} from "./effect"
 
 export { AccessToken, AccountID, OrgID } from "./effect"
 
@@ -22,8 +29,4 @@ export namespace Account {
     const token = await runPromise((service) => service.token(accountID))
     return Option.getOrUndefined(token)
   }
-}
-
-function runPromise<A>(f: (service: S.Interface) => Effect.Effect<A, AccountError>) {
-  return M.runPromise(f)
 }

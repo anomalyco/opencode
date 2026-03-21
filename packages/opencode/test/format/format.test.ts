@@ -62,4 +62,23 @@ describe("Format", () => {
       await rt.runPromise(Format.Service.use(() => Effect.void))
     })
   })
+
+  test("status() initializes formatter state per directory", async () => {
+    await using off = await tmpdir({
+      config: { formatter: false },
+    })
+    await using on = await tmpdir()
+
+    const a = await Instance.provide({
+      directory: off.path,
+      fn: () => Format.status(),
+    })
+    const b = await Instance.provide({
+      directory: on.path,
+      fn: () => Format.status(),
+    })
+
+    expect(a).toEqual([])
+    expect(b.length).toBeGreaterThan(0)
+  })
 })
