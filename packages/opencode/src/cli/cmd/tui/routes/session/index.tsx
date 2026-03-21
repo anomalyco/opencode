@@ -7,6 +7,7 @@ import {
   For,
   Match,
   on,
+  onCleanup,
   onMount,
   Show,
   Switch,
@@ -46,6 +47,7 @@ import type { WebFetchTool } from "@/tool/webfetch"
 import type { TaskTool } from "@/tool/task"
 import type { QuestionTool } from "@/tool/question"
 import type { SkillTool } from "@/tool/skill"
+import type { ParallelExecuteTool } from "@/tool/parallel-execute"
 import { useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { useSDK } from "@tui/context/sdk"
 import { useCommandDialog } from "@tui/component/dialog-command"
@@ -81,6 +83,7 @@ import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { formatTranscript } from "../../util/transcript"
 import { UI } from "@/cli/ui.ts"
 import { useTuiConfig } from "../../context/tui-config"
+import type { Plan } from "@/parallel/schema"
 
 addDefaultParsers(parsers.parsers)
 
@@ -1556,6 +1559,9 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
         <Match when={props.part.tool === "task"}>
           <Task {...toolprops} />
         </Match>
+        <Match when={props.part.tool === "parallel_execute"}>
+          <ParallelExecute {...toolprops} />
+        </Match>
         <Match when={props.part.tool === "apply_patch"}>
           <ApplyPatch {...toolprops} />
         </Match>
@@ -2032,6 +2038,107 @@ function Task(props: ToolProps<typeof TaskTool>) {
       }}
     >
       {content()}
+    </InlineTool>
+  )
+}
+
+function ParallelExecute(props: ToolProps<typeof ParallelExecuteTool>) {
+  const sdk = useSDK()
+  const [plan, setPlan] = createSignal<Plan | undefined>()
+
+  const id = createMemo(() => {
+    const meta = props.metadata.planID
+    if (typeof meta === "string" && meta) return meta
+    const input = props.input.plan_id
+    if (typeof input === "string" && input) return input
+    const out = props.output?.match(/Plan\s+([a-z0-9_]+)/i)?.[1]
+    return out
+  })
+
+  const live = createMemo(() => props.metadata.live !== false)
+
+  const active = createMemo(() => {
+    const status = plan()?.status ?? props.metadata.status
+    return (
+      status === "approved" ||
+      status === "spawning" ||
+      status === "running" ||
+      status === "merging" ||
+      status === "integrating" ||
+      status === "recovering" ||
+      status === "publishing"
+    )
+  })
+
+  const stats = createMemo(() => {
+    const p = plan()
+    if (p) {
+      const total = p.workers.length
+      const done = p.workers.filter((x) => x.status === "done" || x.status === "merged").length
+      const running = p.workers.filter((x) => x.status === "running" || x.status === "spawning").length
+      const failed = p.workers.filter((x) => x.status === "failed" || x.status === "conflict").length
+      return { total, done, running, failed, status: p.status }
+    }
+    return {
+      total: Number(props.metadata.total ?? 0),
+      done: Number(props.metadata.done ?? 0),
+      running: Number(props.metadata.running ?? 0),
+      failed: Number(props.metadata.failed ?? 0),
+      status: String(props.metadata.status ?? "approved"),
+    }
+  })
+
+  const current = createMemo(() => {
+    const p = plan()
+    if (!p) return ""
+    const rows = p.workers
+      .filter((x) => x.status === "spawning" || x.status === "running")
+      .slice(0, 3)
+      .map((x) => p.subtasks.find((st) => st.id === x.subtaskID)?.title ?? String(x.subtaskID).slice(0, 12))
+    if (rows.length === 0) return ""
+    return rows.join(", ")
+  })
+
+  createEffect(() => {
+    const planID = id()
+    if (!planID) return
+    let closed = false
+    let timer: ReturnType<typeof setInterval> | undefined
+
+    const load = async () => {
+      const res = await sdk.fetch(`${sdk.url}/parallel/${planID}`).catch(() => undefined)
+      if (!res?.ok) return
+      const data = (await res.json()) as Plan
+      if (closed) return
+      setPlan(data)
+    }
+
+    void load()
+
+    if (live()) {
+      timer = setInterval(() => {
+        if (!active()) return
+        void load()
+      }, 1000)
+    }
+
+    onCleanup(() => {
+      closed = true
+      if (!timer) return
+      clearInterval(timer)
+    })
+  })
+
+  const text = createMemo(() => {
+    const s = stats()
+    const head = `Parallel ${s.done}/${s.total} complete · ${s.running} running · ${s.failed} failed · ${s.status}`
+    if (!current()) return head
+    return `${head}\n↳ ${current()}`
+  })
+
+  return (
+    <InlineTool icon="▣" pending="Launching parallel workers..." complete={id()} spinner={active()} part={props.part}>
+      {text()}
     </InlineTool>
   )
 }
