@@ -6,10 +6,12 @@ import { Effect, Layer, ServiceMap } from "effect"
 import { NamedError } from "@opencode-ai/util/error"
 import type { Agent } from "@/agent/agent"
 import { Bus } from "@/bus"
-import { InstanceContext } from "@/effect/instance-context"
+import { InstanceState } from "@/effect/instance-state"
+import { makeRunPromise } from "@/effect/run-service"
 import { Flag } from "@/flag/flag"
 import { Global } from "@/global"
 import { Permission } from "@/permission/service"
+import { Instance } from "@/project/instance"
 import { Filesystem } from "@/util/filesystem"
 import { Config } from "../config/config"
 import { ConfigMarkdown } from "../config/markdown"
@@ -116,7 +118,7 @@ export namespace Skill {
   }
 
   // TODO: Migrate to Effect
-  const create = (instance: InstanceContext.Shape, discovery: Discovery.Interface): Cache => {
+  const create = (discovery: Discovery.Interface): Cache => {
     const state: State = {
       skills: {},
       dirs: new Set<string>(),
@@ -132,8 +134,8 @@ export namespace Skill {
 
         for await (const root of Filesystem.up({
           targets: EXTERNAL_DIRS,
-          start: instance.directory,
-          stop: instance.project.worktree,
+          start: Instance.directory,
+          stop: Instance.project.worktree,
         })) {
           await scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "project" })
         }
@@ -146,7 +148,7 @@ export namespace Skill {
       const cfg = await Config.get()
       for (const item of cfg.skills?.paths ?? []) {
         const expanded = item.startsWith("~/") ? path.join(os.homedir(), item.slice(2)) : item
-        const dir = path.isAbsolute(expanded) ? expanded : path.join(instance.directory, expanded)
+        const dir = path.isAbsolute(expanded) ? expanded : path.join(Instance.directory, expanded)
         if (!(await Filesystem.isDir(dir))) {
           log.warn("skill path not found", { path: dir })
           continue
@@ -179,31 +181,36 @@ export namespace Skill {
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Skill") {}
 
-  export const layer: Layer.Layer<Service, never, InstanceContext | Discovery.Service> = Layer.effect(
+  export const layer: Layer.Layer<Service, never, Discovery.Service> = Layer.effect(
     Service,
     Effect.gen(function* () {
-      const instance = yield* InstanceContext
       const discovery = yield* Discovery.Service
-      const state = create(instance, discovery)
+      const state = yield* InstanceState.make(Effect.fn("Skill.state")(() => Effect.sync(() => create(discovery))))
+
+      const ensure = Effect.fn("Skill.ensure")(function* () {
+        const cache = yield* InstanceState.get(state)
+        yield* Effect.promise(() => cache.ensure())
+        return cache
+      })
 
       const get = Effect.fn("Skill.get")(function* (name: string) {
-        yield* Effect.promise(() => state.ensure())
-        return state.skills[name]
+        const cache = yield* ensure()
+        return cache.skills[name]
       })
 
       const all = Effect.fn("Skill.all")(function* () {
-        yield* Effect.promise(() => state.ensure())
-        return Object.values(state.skills)
+        const cache = yield* ensure()
+        return Object.values(cache.skills)
       })
 
       const dirs = Effect.fn("Skill.dirs")(function* () {
-        yield* Effect.promise(() => state.ensure())
-        return Array.from(state.dirs)
+        const cache = yield* ensure()
+        return Array.from(cache.dirs)
       })
 
       const available = Effect.fn("Skill.available")(function* (agent?: Agent.Info) {
-        yield* Effect.promise(() => state.ensure())
-        const list = Object.values(state.skills).toSorted((a, b) => a.name.localeCompare(b.name))
+        const cache = yield* ensure()
+        const list = Object.values(cache.skills).toSorted((a, b) => a.name.localeCompare(b.name))
         if (!agent) return list
         return list.filter((skill) => Permission.evaluate("skill", skill.name, agent.permission).action !== "deny")
       })
@@ -212,9 +219,7 @@ export namespace Skill {
     }),
   ).pipe(Layer.fresh)
 
-  export const defaultLayer: Layer.Layer<Service, never, InstanceContext> = layer.pipe(
-    Layer.provide(Discovery.defaultLayer),
-  )
+  export const defaultLayer: Layer.Layer<Service> = layer.pipe(Layer.provide(Discovery.defaultLayer))
 
   export function fmt(list: Info[], opts: { verbose: boolean }) {
     if (list.length === 0) return "No skills are currently available."
@@ -236,3 +241,5 @@ export namespace Skill {
     return ["## Available Skills", ...list.map((skill) => `- **${skill.name}**: ${skill.description}`)].join("\n")
   }
 }
+
+export const runPromise = makeRunPromise(Skill.Service, Skill.defaultLayer)

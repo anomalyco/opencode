@@ -1,6 +1,5 @@
-import { runPromiseInstance } from "@/effect/runtime"
 import type { Agent } from "@/agent/agent"
-import { Skill as S } from "./service"
+import { runPromise, Skill as S } from "./service"
 
 export namespace Skill {
   export const Info = S.Info
@@ -18,18 +17,18 @@ export namespace Skill {
   export const fmt = S.fmt
 
   export async function get(name: string) {
-    return runPromiseInstance(S.Service.use((skill) => skill.get(name)))
+    return runPromise((skill) => skill.get(name))
   }
 
   export async function all() {
-    return runPromiseInstance(S.Service.use((skill) => skill.all()))
+    return runPromise((skill) => skill.all())
   }
 
   export async function dirs() {
-    return runPromiseInstance(S.Service.use((skill) => skill.dirs()))
+    return runPromise((skill) => skill.dirs())
   }
 
   export async function available(agent?: Agent.Info) {
-    return runPromiseInstance(S.Service.use((skill) => skill.available(agent)))
+    return runPromise((skill) => skill.available(agent))
   }
 }
