@@ -3,6 +3,7 @@ import { NamedError } from "@opencode-ai/util/error"
 import * as Auth from "@/auth/effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRunPromise } from "@/effect/run-service"
+import { Plugin } from "../plugin"
 import { ProviderID } from "./schema"
 import { Array as Arr, Effect, Layer, Record, Result, ServiceMap, Struct } from "effect"
 import z from "zod"
@@ -117,8 +118,7 @@ export namespace ProviderAuth {
       const state = yield* InstanceState.make<State>(
         Effect.fn("ProviderAuth.state")(() =>
           Effect.promise(async () => {
-            const mod = await import("../plugin")
-            const plugins = await mod.Plugin.list()
+            const plugins = await Plugin.list()
             return {
               hooks: Record.fromEntries(
                 Arr.filterMap(plugins, (x) =>

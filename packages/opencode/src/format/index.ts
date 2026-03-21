@@ -141,6 +141,7 @@ export namespace Format {
           }
         }),
       )
+
       const init = Effect.fn("Format.init")(function* () {
         yield* InstanceState.get(instanceState)
       })
