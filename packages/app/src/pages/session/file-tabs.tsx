@@ -1,6 +1,7 @@
 import { createEffect, createMemo, Match, on, onCleanup, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
+import { createMediaQuery } from "@solid-primitives/media"
 import type { FileSearchHandle } from "@opencode-ai/ui/file"
 import { useFileComponent } from "@opencode-ai/ui/context/file"
 import { cloneSelectedLineRange, previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
@@ -56,6 +57,7 @@ export function FileTabContent(props: { tab: string }) {
   const file = useFile()
   const comments = useComments()
   const language = useLanguage()
+  const touch = createMediaQuery("(hover: none), (pointer: coarse)")
   const prompt = usePrompt()
   const fileComponent = useFileComponent()
   const { sessionKey, tabs, view } = useSessionLayout()
@@ -398,7 +400,7 @@ export function FileTabContent(props: { tab: string }) {
           cacheKey: cacheKey(),
         }}
         enableLineSelection
-        enableHoverUtility
+        enableHoverUtility={!touch()}
         selectedLines={activeSelection()}
         commentedLines={commentedLines()}
         onRendered={() => {
@@ -406,12 +408,16 @@ export function FileTabContent(props: { tab: string }) {
         }}
         annotations={commentsUi.annotations()}
         renderAnnotation={commentsUi.renderAnnotation}
-        renderHoverUtility={commentsUi.renderHoverUtility}
+        renderHoverUtility={touch() ? undefined : commentsUi.renderHoverUtility}
         onLineSelected={(range: SelectedLineRange | null) => {
           commentsUi.onLineSelected(range)
         }}
         onLineNumberSelectionEnd={commentsUi.onLineNumberSelectionEnd}
         onLineSelectionEnd={(range: SelectedLineRange | null) => {
+          if (touch() && range) {
+            commentsUi.onLineNumberSelectionEnd(range)
+            return
+          }
           commentsUi.onLineSelectionEnd(range)
         }}
         search={search}
