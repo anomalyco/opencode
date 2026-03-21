@@ -1,5 +1,5 @@
 import { Popover as Kobalte } from "@kobalte/core/popover"
-import { Component, ComponentProps, createMemo, JSX, Show, ValidComponent } from "solid-js"
+import { Component, ComponentProps, createMemo, JSX, onMount, Show, ValidComponent } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocal } from "@/context/local"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -14,6 +14,8 @@ import { DialogSelectProvider } from "./dialog-select-provider"
 import { DialogManageModels } from "./dialog-manage-models"
 import { ModelTooltip } from "./model-tooltip"
 import { useLanguage } from "@/context/language"
+import { useGlobalSDK } from "@/context/global-sdk"
+import { useGlobalSync } from "@/context/global-sync"
 
 const isFree = (provider: string, cost: { input: number } | undefined) =>
   provider === "opencode" && (!cost || cost.input === 0)
@@ -104,6 +106,14 @@ export function ModelSelectorPopover(props: {
     dismiss: null,
   })
   const dialog = useDialog()
+  const globalSDK = useGlobalSDK()
+  const globalSync = useGlobalSync()
+
+  const refresh = () =>
+    globalSDK.client.global
+      .dispose()
+      .catch(() => undefined)
+      .then(globalSync.bootstrap)
 
   const handleManage = () => {
     setStore("open", false)
@@ -120,6 +130,7 @@ export function ModelSelectorPopover(props: {
     <Kobalte
       open={store.open}
       onOpenChange={(next) => {
+        if (next) void refresh()
         if (next) setStore("dismiss", null)
         setStore("open", next)
       }}
@@ -192,6 +203,15 @@ export function ModelSelectorPopover(props: {
 export const DialogSelectModel: Component<{ provider?: string; model?: ModelState }> = (props) => {
   const dialog = useDialog()
   const language = useLanguage()
+  const globalSDK = useGlobalSDK()
+  const globalSync = useGlobalSync()
+
+  onMount(() => {
+    void globalSDK.client.global
+      .dispose()
+      .catch(() => undefined)
+      .then(globalSync.bootstrap)
+  })
 
   return (
     <Dialog

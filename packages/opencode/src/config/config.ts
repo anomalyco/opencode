@@ -75,6 +75,17 @@ export namespace Config {
     return merged
   }
 
+  function mergePatch(target: Info, source: Info): Info {
+    const merged = mergeDeep(target, source)
+    if (source.provider && merged.provider) {
+      for (const [id, value] of Object.entries(source.provider)) {
+        if (!value) continue
+        merged.provider[id] = value
+      }
+    }
+    return merged
+  }
+
   export const state = Instance.state(async () => {
     const auth = await Auth.all()
 
@@ -1349,7 +1360,7 @@ export namespace Config {
   export async function update(config: Info) {
     const filepath = path.join(Instance.directory, "config.json")
     const existing = await loadFile(filepath)
-    await Filesystem.writeJson(filepath, mergeDeep(existing, config))
+    await Filesystem.writeJson(filepath, mergePatch(existing, config))
     await Instance.dispose()
   }
 
@@ -1381,6 +1392,20 @@ export namespace Config {
     return Object.entries(patch).reduce((result, [key, value]) => {
       if (value === undefined) return result
       return patchJsonc(result, value, [...path, key])
+    }, input)
+  }
+
+  function replaceProviderPatchJsonc(input: string, patch: Info): string {
+    if (!patch.provider) return input
+    return Object.entries(patch.provider).reduce((result, [id, value]) => {
+      if (!value) return result
+      const edits = modify(result, ["provider", id], value, {
+        formattingOptions: {
+          insertSpaces: true,
+          tabSize: 2,
+        },
+      })
+      return applyEdits(result, edits)
     }, input)
   }
 
@@ -1428,30 +1453,28 @@ export namespace Config {
     const next = await (async () => {
       if (!filepath.endsWith(".jsonc")) {
         const existing = parseConfig(before, filepath)
-        const merged = mergeDeep(existing, config)
+        const merged = mergePatch(existing, config)
         await Filesystem.writeJson(filepath, merged)
         return merged
       }
 
       const updated = patchJsonc(before, config)
-      const merged = parseConfig(updated, filepath)
-      await Filesystem.write(filepath, updated)
+      const replaced = replaceProviderPatchJsonc(updated, config)
+      const merged = parseConfig(replaced, filepath)
+      await Filesystem.write(filepath, replaced)
       return merged
     })()
 
     global.reset()
 
-    void Instance.disposeAll()
-      .catch(() => undefined)
-      .finally(() => {
-        GlobalBus.emit("event", {
-          directory: "global",
-          payload: {
-            type: Event.Disposed.type,
-            properties: {},
-          },
-        })
-      })
+    await Instance.disposeAll().catch(() => undefined)
+    GlobalBus.emit("event", {
+      directory: "global",
+      payload: {
+        type: Event.Disposed.type,
+        properties: {},
+      },
+    })
 
     return next
   }

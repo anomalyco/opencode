@@ -4,7 +4,9 @@ import { Switch } from "@opencode-ai/ui/switch"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { TextField } from "@opencode-ai/ui/text-field"
-import { type Component, For, Show } from "solid-js"
+import { type Component, For, onMount, Show } from "solid-js"
+import { useGlobalSDK } from "@/context/global-sdk"
+import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { useModels } from "@/context/models"
 import { popularProviders } from "@/hooks/use-providers"
@@ -34,6 +36,15 @@ const ListEmptyState: Component<{ message: string; filter: string }> = (props) =
 export const SettingsModels: Component = () => {
   const language = useLanguage()
   const models = useModels()
+  const globalSDK = useGlobalSDK()
+  const globalSync = useGlobalSync()
+
+  onMount(() => {
+    void globalSDK.client.global
+      .dispose()
+      .catch(() => undefined)
+      .then(globalSync.bootstrap)
+  })
 
   const list = useFilteredList<ModelItem>({
     items: (_filter) => models.list(),

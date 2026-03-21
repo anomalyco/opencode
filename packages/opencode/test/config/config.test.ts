@@ -67,6 +67,110 @@ test("loads config with defaults when no files exist", async () => {
   })
 })
 
+test("updateGlobal replaces models for patched provider", async () => {
+  await using cfg = await tmpdir()
+  const prev = Global.Path.config
+  ;(Global.Path as { config: string }).config = cfg.path
+  Config.global.reset()
+
+  try {
+    await writeConfig(
+      cfg.path,
+      {
+        $schema: "https://opencode.ai/config.json",
+        provider: {
+          custom: {
+            name: "Custom",
+            npm: "@ai-sdk/openai-compatible",
+            options: {
+              baseURL: "https://example.com/v1",
+            },
+            models: {
+              old: { name: "Old" },
+              keep: { name: "Keep" },
+            },
+          },
+        },
+      },
+      "opencode.json",
+    )
+
+    await Config.updateGlobal({
+      provider: {
+        custom: {
+          name: "Custom",
+          npm: "@ai-sdk/openai-compatible",
+          options: {
+            baseURL: "https://example.com/v1",
+          },
+          models: {
+            keep: { name: "Keep" },
+          },
+        },
+      },
+    })
+
+    const next = JSON.parse((await Filesystem.readText(path.join(cfg.path, "opencode.json"))) ?? "{}")
+    expect(next.provider.custom.models.old).toBeUndefined()
+    expect(next.provider.custom.models.keep).toEqual({ name: "Keep" })
+  } finally {
+    await Instance.disposeAll()
+    ;(Global.Path as { config: string }).config = prev
+    Config.global.reset()
+  }
+})
+
+test("updateGlobal replaces models for patched provider in jsonc", async () => {
+  await using cfg = await tmpdir()
+  const prev = Global.Path.config
+  ;(Global.Path as { config: string }).config = cfg.path
+  Config.global.reset()
+
+  try {
+    await Filesystem.write(
+      path.join(cfg.path, "opencode.jsonc"),
+      `{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "custom": {
+      "name": "Custom",
+      "npm": "@ai-sdk/openai-compatible",
+      "options": { "baseURL": "https://example.com/v1" },
+      "models": {
+        "old": { "name": "Old" },
+        "keep": { "name": "Keep" }
+      }
+    }
+  }
+}`,
+    )
+
+    await Config.updateGlobal({
+      provider: {
+        custom: {
+          name: "Custom",
+          npm: "@ai-sdk/openai-compatible",
+          options: {
+            baseURL: "https://example.com/v1",
+          },
+          models: {
+            keep: { name: "Keep" },
+          },
+        },
+      },
+    })
+
+    const text = (await Filesystem.readText(path.join(cfg.path, "opencode.jsonc"))) ?? "{}"
+    const next = JSON.parse(text.replace(/^\s*\/\/.*$/gm, ""))
+    expect(next.provider.custom.models.old).toBeUndefined()
+    expect(next.provider.custom.models.keep).toEqual({ name: "Keep" })
+  } finally {
+    await Instance.disposeAll()
+    ;(Global.Path as { config: string }).config = prev
+    Config.global.reset()
+  }
+})
+
 test("loads JSON config file", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

@@ -17,6 +17,7 @@ import { DialogSelectProvider } from "./dialog-select-provider"
 
 type Props = {
   back?: "providers" | "close"
+  providerID?: string
 }
 
 export function DialogCustomProvider(props: Props) {
@@ -25,13 +26,25 @@ export function DialogCustomProvider(props: Props) {
   const globalSDK = useGlobalSDK()
   const language = useLanguage()
 
+  const current = () => (props.providerID ? globalSync.data.config.provider?.[props.providerID] : undefined)
+
   const [form, setForm] = createStore<FormState>({
-    providerID: "",
-    name: "",
-    baseURL: "",
-    apiKey: "",
-    models: [modelRow()],
-    headers: [headerRow()],
+    providerID: props.providerID ?? "",
+    name: current()?.name ?? "",
+    baseURL: String(current()?.options?.baseURL ?? ""),
+    apiKey: current()?.env?.[0] ? `{env:${current()?.env?.[0]}}` : "",
+    models: (() => {
+      const models = current()?.models
+      const items = models ? Object.entries(models) : []
+      if (!items.length) return [modelRow()]
+      return items.map(([id, m]) => ({ ...modelRow(), id, name: String(m?.name ?? id) }))
+    })(),
+    headers: (() => {
+      const headers = current()?.options?.headers
+      const items = headers && typeof headers === "object" ? Object.entries(headers as Record<string, unknown>) : []
+      if (!items.length) return [headerRow()]
+      return items.map(([key, value]) => ({ ...headerRow(), key, value: String(value ?? "") }))
+    })(),
     err: {},
   })
 
@@ -102,11 +115,12 @@ export function DialogCustomProvider(props: Props) {
   }
 
   const validate = () => {
+    const ignore = props.providerID ? new Set([props.providerID]) : new Set<string>()
     const output = validateCustomProvider({
       form,
       t: language.t,
       disabledProviders: globalSync.data.config.disabled_providers ?? [],
-      existingProviderIDs: new Set(globalSync.data.provider.all.map((p) => p.id)),
+      existingProviderIDs: new Set(globalSync.data.provider.all.map((p) => p.id).filter((id) => !ignore.has(id))),
     })
     batch(() => {
       setForm("err", output.err)
@@ -197,6 +211,7 @@ export function DialogCustomProvider(props: Props) {
               description={language.t("provider.custom.field.providerID.description")}
               value={form.providerID}
               onChange={(v) => setField("providerID", v)}
+              disabled={!!props.providerID}
               validationState={form.err.providerID ? "invalid" : undefined}
               error={form.err.providerID}
             />
