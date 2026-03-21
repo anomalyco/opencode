@@ -22,6 +22,10 @@ export const TuiOptions = z.object({
     .enum(["auto", "stacked"])
     .optional()
     .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
+  sidebar_position: z
+    .enum(["right", "left"])
+    .optional()
+    .describe("Control sidebar position: 'right' (default) or 'left'"),
 })
 
 export const TuiInfo = z

@@ -161,6 +161,7 @@ export function Session() {
   const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
 
   const wide = createMemo(() => dimensions().width > 120)
+  const sidebarLeft = createMemo(() => tuiConfig?.sidebar_position === "left")
   const sidebarVisible = createMemo(() => {
     if (session()?.parentID) return false
     if (sidebarOpen()) return true
@@ -1045,7 +1046,7 @@ export function Session() {
         tui: tuiConfig,
       }}
     >
-      <box flexDirection="row">
+      <box flexDirection={sidebarLeft() ? "row-reverse" : "row"}>
         <box flexGrow={1} paddingBottom={1} paddingTop={1} paddingLeft={2} paddingRight={2} gap={1}>
           <Show when={session()}>
             <Show when={showHeader() && (!sidebarVisible() || !wide())}>
@@ -1204,7 +1205,7 @@ export function Session() {
                 left={0}
                 right={0}
                 bottom={0}
-                alignItems="flex-end"
+                alignItems={sidebarLeft() ? "flex-start" : "flex-end"}
                 backgroundColor={RGBA.fromInts(0, 0, 0, 70)}
               >
                 <Sidebar sessionID={route.sessionID} />
