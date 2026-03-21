@@ -12,10 +12,9 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { createMemo, Match, onCleanup, onMount, Switch } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { Link } from "@/components/link"
-import { useLanguage } from "@/context/language"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
-import { DialogSelectModel } from "./dialog-select-model"
+import { useLanguage } from "@/context/language"
 import { DialogSelectProvider } from "./dialog-select-provider"
 
 export function DialogConnectProvider(props: { provider: string }) {
