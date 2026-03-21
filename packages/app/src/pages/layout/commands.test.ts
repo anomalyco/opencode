@@ -33,6 +33,7 @@ function input() {
   let cb = () => [] as Array<{ id: string; onSelect?: () => void; disabled?: boolean }>
   const calls = {
     chosen: 0,
+    edited: [] as LocalProject[],
     moved: [] as number[],
     unseen: [] as number[],
     archived: [] as Session[],
@@ -94,6 +95,9 @@ function input() {
     colorSchemeLabel: (scheme: "system" | "light" | "dark") => `scheme:${scheme}`,
     chooseProject: () => {
       calls.chosen += 1
+    },
+    showEditProjectDialog: (item: LocalProject) => {
+      calls.edited.push(item)
     },
     navigateSessionByOffset: (offset: number) => {
       calls.moved.push(offset)
@@ -160,6 +164,7 @@ describe("layout commands", () => {
     const ids = ctx.options().map((item) => item.id)
     expect(ids).toContain("sidebar.toggle")
     expect(ids).toContain("workspace.toggle")
+    expect(ids).toContain("project.edit")
     expect(ids).toContain("theme.set.ocean")
     expect(ids).toContain("theme.scheme.dark")
     expect(ids).toContain("language.set.de")
@@ -193,10 +198,15 @@ describe("layout commands", () => {
       ?.onSelect?.()
     ctx
       .options()
+      .find((item) => item.id === "project.edit")
+      ?.onSelect?.()
+    ctx
+      .options()
       .find((item) => item.id === "settings.open")
       ?.onSelect?.()
 
     expect(ctx.calls.archived.map((item) => item.id)).toEqual(["s1"])
+    expect(ctx.calls.edited.map((item) => item.id)).toEqual(["p1"])
     expect(ctx.calls.dialog).toBe(2)
   })
 })

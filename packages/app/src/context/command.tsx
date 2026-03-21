@@ -6,6 +6,7 @@ import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
 import { dict as en } from "@/i18n/en"
 import { Persist, persisted } from "@/utils/persist"
+import { DialogCommandPalette } from "@/components/dialog-command-palette"
 
 const IS_MAC = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
 
@@ -350,9 +351,17 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       option?.onSelect?.(source)
     }
 
-    const showPalette = () => {
-      run("file.open", "palette")
-    }
+    const showPalette = () =>
+      dialog.show(() => (
+        <DialogCommandPalette
+          options={options}
+          commands={language.t("palette.group.commands")}
+          placeholder={language.t("palette.command.placeholder")}
+          empty={language.t("palette.empty")}
+          loading={language.t("common.loading")}
+          t={language.t}
+        />
+      ))
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (suspended() || dialog.active) return

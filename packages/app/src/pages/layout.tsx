@@ -73,7 +73,8 @@ import {
   sortedRootSessions,
   workspaceKey,
 } from "./layout/helpers"
-import { registerLayoutCommands, showProviderDialog, showSettingsDialog } from "./layout/commands"
+import { showProviderDialog, showSettingsDialog } from "@/components/dialog-actions"
+import { registerLayoutCommands } from "./layout/commands"
 import {
   collectNewSessionDeepLinks,
   collectOpenProjectDeepLinks,
@@ -997,6 +998,7 @@ export default function Layout(props: ParentProps) {
     colorSchemeOrder,
     colorSchemeLabel,
     chooseProject,
+    showEditProjectDialog,
     navigateSessionByOffset,
     navigateSessionByUnseen,
     archiveSession,
@@ -1232,7 +1234,9 @@ export default function Layout(props: ParentProps) {
     layout.sidebar.toggleWorkspaces(project.worktree)
   }
 
-  const showEditProjectDialog = (project: LocalProject) => dialog.show(() => <DialogEditProject project={project} />)
+  function showEditProjectDialog(project: LocalProject) {
+    dialog.show(() => <DialogEditProject project={project} />)
+  }
 
   async function chooseProject() {
     function resolve(result: string | string[] | null) {

@@ -99,36 +99,6 @@ const createSessionEntry = (
   updated: input.updated,
 })
 
-function createCommandEntries(props: {
-  filesOnly: () => boolean
-  command: ReturnType<typeof useCommand>
-  language: ReturnType<typeof useLanguage>
-}) {
-  const allowed = createMemo(() => {
-    if (props.filesOnly()) return []
-    return props.command.options.filter(
-      (option) => !option.disabled && !option.id.startsWith("suggested.") && option.id !== "file.open",
-    )
-  })
-
-  const list = createMemo(() => {
-    const category = props.language.t("palette.group.commands")
-    return allowed().map((option) => createCommandEntry(option, category))
-  })
-
-  const picks = createMemo(() => {
-    const all = allowed()
-    const order = new Map<string, number>(COMMON_COMMAND_IDS.map((id, index) => [id, index]))
-    const picked = all.filter((option) => order.has(option.id))
-    const base = picked.length ? picked : all.slice(0, ENTRY_LIMIT)
-    const sorted = picked.length ? [...base].sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0)) : base
-    const category = props.language.t("palette.group.commands")
-    return sorted.map((option) => createCommandEntry(option, category))
-  })
-
-  return { allowed, list, picks }
-}
-
 function createFileEntries(props: {
   file: ReturnType<typeof useFile>
   tabs: () => ReturnType<ReturnType<typeof useLayout>["tabs"]>
@@ -169,6 +139,36 @@ function createFileEntries(props: {
   })
 
   return { recent, root }
+}
+
+function createCommandEntries(props: {
+  filesOnly: () => boolean
+  command: ReturnType<typeof useCommand>
+  language: ReturnType<typeof useLanguage>
+}) {
+  const allowed = createMemo(() => {
+    if (props.filesOnly()) return []
+    return props.command.options.filter(
+      (item) => !item.disabled && !item.id.startsWith("suggested.") && item.id !== "file.open",
+    )
+  })
+
+  const list = createMemo(() => {
+    const category = props.language.t("palette.group.commands")
+    return allowed().map((item) => createCommandEntry(item, category))
+  })
+
+  const picks = createMemo(() => {
+    const all = allowed()
+    const order = new Map<string, number>(COMMON_COMMAND_IDS.map((id, i) => [id, i]))
+    const picked = all.filter((item) => order.has(item.id))
+    const base = picked.length ? picked : all.slice(0, ENTRY_LIMIT)
+    const list = picked.length ? [...base].sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0)) : base
+    const category = props.language.t("palette.group.commands")
+    return list.map((item) => createCommandEntry(item, category))
+  })
+
+  return { list, picks }
 }
 
 function createSessionEntries(props: {

@@ -1,8 +1,6 @@
 import type { Accessor, JSX } from "solid-js"
 import { showToast } from "@opencode-ai/ui/toast"
-import { DialogSelectProvider } from "@/components/dialog-select-provider"
-import { DialogSelectServer } from "@/components/dialog-select-server"
-import { DialogSettings } from "@/components/dialog-settings"
+import { showProviderDialog, showServerDialog, showSettingsDialog } from "@/components/dialog-actions"
 import { type CommandOption } from "@/context/command"
 import type { LocalProject } from "@/context/layout"
 import type { Locale } from "@/context/language"
@@ -43,6 +41,7 @@ type Input = {
   colorSchemeOrder: readonly ColorScheme[]
   colorSchemeLabel: (scheme: ColorScheme) => string
   chooseProject: () => void | Promise<void>
+  showEditProjectDialog: (project: LocalProject) => void
   navigateSessionByOffset: (offset: number) => void
   navigateSessionByUnseen: (offset: number) => void
   archiveSession: (session: Session) => void | Promise<void>
@@ -59,41 +58,39 @@ type Input = {
   }
 }
 
-export const showProviderDialog = (dialog: Input["dialog"]) => dialog.show(() => <DialogSelectProvider />)
-
-export const showServerDialog = (dialog: Input["dialog"]) => dialog.show(() => <DialogSelectServer />)
-
-export const showSettingsDialog = (dialog: Input["dialog"]) => dialog.show(() => <DialogSettings />)
-
-const archiveCurrentSession = (input: Input) => {
-  const session = input.currentSessions().find((item) => item.id === input.params.id)
-  if (session) input.archiveSession(session)
-}
-
-const createCurrentWorkspace = (input: Input) => {
-  const project = input.currentProject()
-  if (!project) return
-  return input.createWorkspace(project)
-}
-
-const toggleWorkspace = (input: Input) => {
-  const project = input.currentProject()
-  if (!project) return
-  if (project.vcs !== "git") return
-  const wasEnabled = input.layout.sidebar.workspaces(project.worktree)()
-  input.layout.sidebar.toggleWorkspaces(project.worktree)
-  showToast({
-    title: wasEnabled
-      ? input.language.t("toast.workspace.disabled.title")
-      : input.language.t("toast.workspace.enabled.title"),
-    description: wasEnabled
-      ? input.language.t("toast.workspace.disabled.description")
-      : input.language.t("toast.workspace.enabled.description"),
-  })
-}
-
 export function registerLayoutCommands(input: Input) {
   input.command.register("layout", () => {
+    const session = () => input.currentSessions().find((item) => item.id === input.params.id)
+    const project = () => input.currentProject()
+    const preview = (id: string) => {
+      input.theme.previewTheme(id)
+      return () => input.theme.cancelPreview()
+    }
+    const previewScheme = (id: ColorScheme) => {
+      input.theme.previewColorScheme(id)
+      return () => input.theme.cancelPreview()
+    }
+    const workspace = () => {
+      const item = project()
+      if (!item) return
+      return input.createWorkspace(item)
+    }
+    const toggle = () => {
+      const item = project()
+      if (!item) return
+      if (item.vcs !== "git") return
+      const on = input.layout.sidebar.workspaces(item.worktree)()
+      input.layout.sidebar.toggleWorkspaces(item.worktree)
+      showToast({
+        title: on
+          ? input.language.t("toast.workspace.disabled.title")
+          : input.language.t("toast.workspace.enabled.title"),
+        description: on
+          ? input.language.t("toast.workspace.disabled.description")
+          : input.language.t("toast.workspace.enabled.description"),
+      })
+    }
+
     const list: CommandOption[] = [
       {
         id: "sidebar.toggle",
@@ -108,6 +105,17 @@ export function registerLayoutCommands(input: Input) {
         category: input.language.t("command.category.project"),
         keybind: "mod+o",
         onSelect: () => input.chooseProject(),
+      },
+      {
+        id: "project.edit",
+        title: input.language.t("dialog.project.edit.title"),
+        description: project()?.worktree,
+        category: input.language.t("command.category.project"),
+        disabled: !project(),
+        onSelect: () => {
+          const item = project()
+          if (item) input.showEditProjectDialog(item)
+        },
       },
       {
         id: "provider.connect",
@@ -162,7 +170,10 @@ export function registerLayoutCommands(input: Input) {
         category: input.language.t("command.category.session"),
         keybind: "mod+shift+backspace",
         disabled: !input.params.dir || !input.params.id,
-        onSelect: () => archiveCurrentSession(input),
+        onSelect: () => {
+          const item = session()
+          if (item) input.archiveSession(item)
+        },
       },
       {
         id: "workspace.new",
@@ -170,7 +181,7 @@ export function registerLayoutCommands(input: Input) {
         category: input.language.t("command.category.workspace"),
         keybind: "mod+shift+w",
         disabled: !input.workspaceSetting(),
-        onSelect: () => createCurrentWorkspace(input),
+        onSelect: workspace,
       },
       {
         id: "workspace.toggle",
@@ -178,8 +189,8 @@ export function registerLayoutCommands(input: Input) {
         description: input.language.t("command.workspace.toggle.description"),
         category: input.language.t("command.category.workspace"),
         slash: "workspace",
-        disabled: !input.currentProject() || input.currentProject()?.vcs !== "git",
-        onSelect: () => toggleWorkspace(input),
+        disabled: !project() || project()?.vcs !== "git",
+        onSelect: toggle,
       },
       {
         id: "theme.cycle",
@@ -196,10 +207,7 @@ export function registerLayoutCommands(input: Input) {
         title: input.language.t("command.theme.set", { theme: item.name ?? id }),
         category: input.language.t("command.category.theme"),
         onSelect: () => input.theme.commitPreview(),
-        onHighlight: () => {
-          input.theme.previewTheme(id)
-          return () => input.theme.cancelPreview()
-        },
+        onHighlight: () => preview(id),
       })
     }
 
@@ -217,10 +225,7 @@ export function registerLayoutCommands(input: Input) {
         title: input.language.t("command.theme.scheme.set", { scheme: input.colorSchemeLabel(scheme) }),
         category: input.language.t("command.category.theme"),
         onSelect: () => input.theme.commitPreview(),
-        onHighlight: () => {
-          input.theme.previewColorScheme(scheme)
-          return () => input.theme.cancelPreview()
-        },
+        onHighlight: () => previewScheme(scheme),
       })
     }
 
