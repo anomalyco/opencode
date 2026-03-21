@@ -121,6 +121,10 @@ bun run --cwd packages/app dev
 
 This starts a local dev server at http://localhost:5173 (or similar port shown in output). Most UI changes can be tested here, but the server must be running for full functionality.
 
+### Air-gapped or offline `opencode web`
+
+If the machine cannot reach `app.opencode.ai`, build the web app and point the server at the `dist` output. See [docs/OFFLINE_WEB.md](./docs/OFFLINE_WEB.md) for `OPENCODE_APP_DIST`, optional model list mirroring, and troubleshooting.
+
 ### Running the Desktop App
 
 The desktop app is a native Tauri application that wraps the web UI.

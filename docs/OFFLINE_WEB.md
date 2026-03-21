@@ -1,43 +1,47 @@
-# 内网 / 断网部署 OpenCode Web
+# Air-gapped or offline `opencode web`
 
-在本地构建前端后，通过 **`OPENCODE_APP_DIST`** 指定 `vite build` 产物目录，服务端会优先提供静态文件，**不再依赖** `https://app.opencode.ai` 代理。若未设置或目录下无 `index.html`，仍会回退到该代理（需外网）。
+Serve the web UI from a local **`vite build`** output so the server does not proxy to `https://app.opencode.ai`. If no build is present (no `index.html` under the resolved path), behavior is unchanged: the server falls back to that proxy (requires outbound access).
+
+**Before opening a PR for related code changes:** the project expects an [issue first](https://github.com/anomalyco/opencode/blob/dev/CONTRIBUTING.md#issue-first-policy) (`Fixes #…` / `Closes #…` in the PR description).
 
 ---
 
-## 1. 联网时：构建前端
+## 1. Build the web app (while online)
+
+From the repository root:
 
 ```bash
-cd /path/to/opencode
-export PATH="$HOME/.bun/bin:$PATH"
 bun install
 cd packages/app
 bun run build
 ```
 
-确认存在 **`packages/app/dist/index.html`**。
+Confirm **`packages/app/dist/index.html`** exists.
 
 ---
 
-## 2. 环境变量（内网）
+## 2. Environment variables
 
-| 变量 | 说明 |
-|------|------|
-| `OPENCODE_APP_DIST` | 前端 `dist` 目录的**绝对路径**（须含 `index.html`）。不设则尝试使用仓库内 `packages/app/dist` 相对路径。 |
-| `OPENCODE_DISABLE_MODELS_FETCH` | 设为 `1` 关闭对 `https://models.dev` 的定时拉取。 |
-| `OPENCODE_MODELS_PATH` | 指向本地 `models-api.json`（仓库内 **`offline/models-api.json`** 或联网时自行下载）。 |
-| `OPENCODE_DISABLE_AUTOUPDATE` | 设为 `1` 关闭自动更新检查。 |
-| `OPENCODE_SERVER_PASSWORD` | 建议设置，为 Web 服务提供 Basic 认证。 |
+| Variable | Purpose |
+|----------|---------|
+| `OPENCODE_APP_DIST` | Absolute path to the `dist` directory (must contain `index.html`). If unset, the server looks for `packages/app/dist` relative to the running server package. |
+| `OPENCODE_DISABLE_MODELS_FETCH` | Set to `1` to disable periodic fetches to `https://models.dev`. |
+| `OPENCODE_MODELS_PATH` | Optional path to a local `api.json`–compatible file (e.g. downloaded from `https://models.dev/api.json`) when the network cannot reach models.dev. |
+| `OPENCODE_DISABLE_AUTOUPDATE` | Set to `1` to disable autoupdate checks. |
+| `OPENCODE_SERVER_PASSWORD` | Recommended: protect the web server with HTTP Basic auth. |
 
-下载模型列表（若未使用仓库内 `offline/models-api.json`）：
+Download a models list for `OPENCODE_MODELS_PATH` (optional):
 
 ```bash
 mkdir -p offline
 curl -fsSL "https://models.dev/api.json" -o offline/models-api.json
 ```
 
+The `offline/` directory is gitignored for local mirrors; use any path for `OPENCODE_MODELS_PATH`.
+
 ---
 
-## 3. 启动
+## 3. Start
 
 ```bash
 export PATH="$HOME/.bun/bin:$PATH"
@@ -52,30 +56,27 @@ cd "$REPO/packages/opencode"
 bun run --conditions=browser ./src/index.ts web
 ```
 
-浏览器打开终端里打印的地址（一般为 `http://127.0.0.1:4096/`）。
+Open the URL printed in the terminal (often `http://127.0.0.1:4096/`).
+
+On success, logs include **`serving web UI from local dist`** once, with the resolved `root` path.
 
 ---
 
-## 4. 与本仓库相关的离线资源
+## 4. Bundled static assets in this repo
 
-- **`packages/app/public/changelog.json`**：发布说明请求同源路径 `/changelog.json`，构建后会进入 `dist`。
-- **`offline/models-api.json`**：供 `OPENCODE_MODELS_PATH` 使用（可选，但断网建议配置）。
-
----
-
-## 5. 排错
-
-| 现象 | 处理 |
-|------|------|
-| 白屏或无法加载 UI | 检查 `OPENCODE_APP_DIST` 与 `dist/index.html` 是否存在。 |
-| 仍访问外网拉前端 | 未正确设置 `OPENCODE_APP_DIST` 或路径无效，会回退代理 `app.opencode.ai`。 |
+- **`packages/app/public/changelog.json`** — copied into `dist/` on build; the app requests **`/changelog.json`** on the same origin instead of `https://opencode.ai/changelog.json`.
 
 ---
 
-## 6. 本机路径示例
+## 5. Troubleshooting
 
-若仓库在：
+| Symptom | What to check |
+|---------|----------------|
+| Blank page or failed UI load | `OPENCODE_APP_DIST` (if set), and that `dist/index.html` exists at that path. |
+| Traffic still goes to `app.opencode.ai` | Invalid or missing local `index.html` causes fallback to the remote proxy. |
 
-`/Users/chenlong/Desktop/ai-projects/opencode`
+---
 
-将上文 `REPO` 与 `path/to/opencode` 替换为该路径即可。
+## 6. Regenerating SDK after server changes
+
+If you change `packages/opencode/src/server/server.ts`, follow [CONTRIBUTING.md](https://github.com/anomalyco/opencode/blob/dev/CONTRIBUTING.md) and run `./script/generate.ts` when API or SDK artifacts need updating.

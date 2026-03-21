@@ -52,6 +52,7 @@ globalThis.AI_SDK_LOG_WARNINGS = false
 
 export namespace Server {
   const log = Log.create({ service: "server" })
+  let webUiLocalLogged = false
 
   export const Default = lazy(() => createApp({}))
 
@@ -503,11 +504,15 @@ export namespace Server {
         const webCsp =
           "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:"
 
-        const root = process.env.OPENCODE_APP_DIST
-          ? path.resolve(process.env.OPENCODE_APP_DIST)
+        const root = Flag.OPENCODE_APP_DIST
+          ? path.resolve(Flag.OPENCODE_APP_DIST)
           : path.join(path.dirname(fileURLToPath(import.meta.url)), "../../../app/dist")
         const indexPath = path.join(root, "index.html")
         if (await Bun.file(indexPath).exists()) {
+          if (!webUiLocalLogged) {
+            webUiLocalLogged = true
+            log.info("serving web UI from local dist", { root })
+          }
           const urlPath = c.req.path
           const rel = urlPath === "/" ? "index.html" : urlPath.slice(1)
           if (rel.includes("..")) return c.text("Not found", 404)
