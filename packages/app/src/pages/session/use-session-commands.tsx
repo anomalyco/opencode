@@ -18,6 +18,7 @@ import { DialogFork } from "@/components/dialog-fork"
 import { showToast } from "@opencode-ai/ui/toast"
 import { findLast } from "@opencode-ai/util/array"
 import { createSessionTabs } from "@/pages/session/helpers"
+import { forkSession } from "@/pages/session/fork"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { UserMessage } from "@opencode-ai/sdk/v2"
 import { useSessionLayout } from "@/pages/session/session-layout"
@@ -92,6 +93,25 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const showAllFiles = () => {
     if (layout.fileTree.tab() !== "changes") return
     layout.fileTree.setTab("all")
+  }
+
+  const clear = async () => {
+    const sessionID = params.id
+    if (!sessionID) return
+    const msg = userMessages()[0]
+    if (!msg) return
+
+    await forkSession({
+      fork: sdk.client.session.fork,
+      sessionID,
+      messageID: msg.id,
+      parts: sync.data.part[msg.id] ?? [],
+      directory: sdk.directory,
+      attachmentName: language.t("common.attachment"),
+      fail: (message) => showToast({ title: language.t("common.requestFailed"), description: message }),
+      navigate,
+      set: (value, next) => prompt.set(value, undefined, next),
+    })
   }
 
   const selectionPreview = (path: string, selection: FileSelection) => {
@@ -480,6 +500,14 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
             providerID: model.provider.id,
           })
         },
+      }),
+      sessionCommand({
+        id: "session.clear",
+        title: language.t("command.session.clear"),
+        description: language.t("command.session.clear.description"),
+        slash: "clear",
+        disabled: !params.id || userMessages().length === 0,
+        onSelect: clear,
       }),
       sessionCommand({
         id: "session.fork",

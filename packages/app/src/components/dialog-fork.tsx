@@ -7,10 +7,9 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { showToast } from "@opencode-ai/ui/toast"
-import { extractPromptFromParts } from "@/utils/prompt"
 import type { TextPart as SDKTextPart } from "@opencode-ai/sdk/v2/client"
-import { base64Encode } from "@opencode-ai/util/encode"
 import { useLanguage } from "@/context/language"
+import { forkSession } from "@/pages/session/fork"
 
 interface ForkableMessage {
   id: string
@@ -61,28 +60,18 @@ export const DialogFork: Component = () => {
     const sessionID = params.id
     if (!sessionID) return
 
-    const parts = sync.data.part[item.id] ?? []
-    const restored = extractPromptFromParts(parts, {
+    void forkSession({
+      fork: sdk.client.session.fork,
+      sessionID,
+      messageID: item.id,
+      parts: sync.data.part[item.id] ?? [],
       directory: sdk.directory,
       attachmentName: language.t("common.attachment"),
+      fail: (message) => showToast({ title: language.t("common.requestFailed"), description: message }),
+      navigate,
+      set: (value, next) => prompt.set(value, undefined, next),
+      done: dialog.close,
     })
-    const dir = base64Encode(sdk.directory)
-
-    sdk.client.session
-      .fork({ sessionID, messageID: item.id })
-      .then((forked) => {
-        if (!forked.data) {
-          showToast({ title: language.t("common.requestFailed") })
-          return
-        }
-        dialog.close()
-        prompt.set(restored, undefined, { dir, id: forked.data.id })
-        navigate(`/${dir}/session/${forked.data.id}`)
-      })
-      .catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : String(err)
-        showToast({ title: language.t("common.requestFailed"), description: message })
-      })
   }
 
   return (
