@@ -64,7 +64,7 @@ export namespace Snapshot {
       Effect.gen(function* () {
         const fs = yield* AppFileSystem.Service
         const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
-        const instanceState = yield* InstanceState.make<State>(
+        const state = yield* InstanceState.make<State>(
           Effect.fn("Snapshot.state")(function* (ctx) {
             const state = {
               directory: ctx.directory,
@@ -326,28 +326,28 @@ export namespace Snapshot {
 
         return Service.of({
           init: Effect.fn("Snapshot.init")(function* () {
-            yield* InstanceState.get(instanceState)
+            yield* InstanceState.get(state)
           }),
           cleanup: Effect.fn("Snapshot.cleanup")(function* () {
-            return yield* InstanceState.useEffect(instanceState, (s) => s.cleanup())
+            return yield* InstanceState.useEffect(state, (s) => s.cleanup())
           }),
           track: Effect.fn("Snapshot.track")(function* () {
-            return yield* InstanceState.useEffect(instanceState, (s) => s.track())
+            return yield* InstanceState.useEffect(state, (s) => s.track())
           }),
           patch: Effect.fn("Snapshot.patch")(function* (hash: string) {
-            return yield* InstanceState.useEffect(instanceState, (s) => s.patch(hash))
+            return yield* InstanceState.useEffect(state, (s) => s.patch(hash))
           }),
           restore: Effect.fn("Snapshot.restore")(function* (snapshot: string) {
-            return yield* InstanceState.useEffect(instanceState, (s) => s.restore(snapshot))
+            return yield* InstanceState.useEffect(state, (s) => s.restore(snapshot))
           }),
           revert: Effect.fn("Snapshot.revert")(function* (patches: Snapshot.Patch[]) {
-            return yield* InstanceState.useEffect(instanceState, (s) => s.revert(patches))
+            return yield* InstanceState.useEffect(state, (s) => s.revert(patches))
           }),
           diff: Effect.fn("Snapshot.diff")(function* (hash: string) {
-            return yield* InstanceState.useEffect(instanceState, (s) => s.diff(hash))
+            return yield* InstanceState.useEffect(state, (s) => s.diff(hash))
           }),
           diffFull: Effect.fn("Snapshot.diffFull")(function* (from: string, to: string) {
-            return yield* InstanceState.useEffect(instanceState, (s) => s.diffFull(from, to))
+            return yield* InstanceState.useEffect(state, (s) => s.diffFull(from, to))
           }),
         })
       }),

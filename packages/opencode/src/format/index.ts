@@ -36,7 +36,7 @@ export namespace Format {
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
-      const instanceState = yield* InstanceState.make(
+      const state = yield* InstanceState.make(
         Effect.fn("Format.state")(function* (_ctx) {
           const enabled: Record<string, boolean> = {}
           const formatters: Record<string, Formatter.Info> = {}
@@ -143,11 +143,11 @@ export namespace Format {
       )
 
       const init = Effect.fn("Format.init")(function* () {
-        yield* InstanceState.get(instanceState)
+        yield* InstanceState.get(state)
       })
 
       const status = Effect.fn("Format.status")(function* () {
-        const { formatters, isEnabled } = yield* InstanceState.get(instanceState)
+        const { formatters, isEnabled } = yield* InstanceState.get(state)
         const result: Status[] = []
         for (const formatter of Object.values(formatters)) {
           const isOn = yield* Effect.promise(() => isEnabled(formatter))
