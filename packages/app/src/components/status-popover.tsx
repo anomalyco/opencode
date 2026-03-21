@@ -332,8 +332,11 @@ export function StatusPopover() {
                         <button
                           type="button"
                           class="flex items-center gap-2 w-full h-8 pl-3 pr-2 py-1 rounded-md hover:bg-surface-raised-base-hover transition-colors text-left"
-                           onClick={() => mcp.toggle.mutate(name)}
-                           disabled={mcp.toggle.isPending && mcp.toggle.variables === name}
+                          onClick={() => {
+                            if (mcp.toggle.isPending) return
+                            mcp.toggle.mutate(name)
+                          }}
+                          disabled={mcp.toggle.isPending && mcp.toggle.variables === name}
                         >
                           <div
                             classList={{
@@ -347,11 +350,14 @@ export function StatusPopover() {
                           />
                           <span class="text-14-regular text-text-base truncate flex-1">{name}</span>
                           <div onClick={(event) => event.stopPropagation()}>
-                             <Switch
-                               checked={enabled()}
-                               disabled={mcp.toggle.isPending && mcp.toggle.variables === name}
-                               onChange={() => mcp.toggle.mutate(name)}
-                             />
+                            <Switch
+                              checked={enabled()}
+                              disabled={mcp.toggle.isPending && mcp.toggle.variables === name}
+                              onChange={() => {
+                                if (mcp.toggle.isPending) return
+                                mcp.toggle.mutate(name)
+                              }}
+                            />
                           </div>
                         </button>
                       )
