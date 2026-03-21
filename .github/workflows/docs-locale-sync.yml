@@ -82,7 +82,7 @@ jobs:
             5. Use only the minimum tools needed for this task (read/glob, file edits, and translator Task). Do not use shell, web, search, or GitHub tools for translation work.
             6. Preserve frontmatter keys, internal links, code blocks, and existing locale-specific metadata unless the English change requires an update.
             7. Keep locale docs structure aligned with their corresponding English pages.
-            8. Do not modify English source docs in packages/web/src/content/docs/*.mdx.
+            8. Do not modify English source docs in docs/**/*.mdx.
             9. If no locale updates are needed, make no changes.
           EOF
 
