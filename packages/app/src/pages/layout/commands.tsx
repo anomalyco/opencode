@@ -42,6 +42,7 @@ type Input = {
   colorSchemeLabel: (scheme: ColorScheme) => string
   chooseProject: () => void | Promise<void>
   showEditProjectDialog: (project: LocalProject) => void
+  navigateProjectByOffset: (offset: number) => void
   navigateSessionByOffset: (offset: number) => void
   navigateSessionByUnseen: (offset: number) => void
   archiveSession: (session: Session) => void | Promise<void>
@@ -105,6 +106,20 @@ export function registerLayoutCommands(input: Input) {
         category: input.language.t("command.category.project"),
         keybind: "mod+o",
         onSelect: () => input.chooseProject(),
+      },
+      {
+        id: "project.previous",
+        title: input.language.t("command.project.previous"),
+        category: input.language.t("command.category.project"),
+        keybind: "mod+alt+arrowup",
+        onSelect: () => input.navigateProjectByOffset(-1),
+      },
+      {
+        id: "project.next",
+        title: input.language.t("command.project.next"),
+        category: input.language.t("command.category.project"),
+        keybind: "mod+alt+arrowdown",
+        onSelect: () => input.navigateProjectByOffset(1),
       },
       {
         id: "project.edit",

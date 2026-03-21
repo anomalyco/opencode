@@ -34,6 +34,7 @@ function input() {
   const calls = {
     chosen: 0,
     edited: [] as LocalProject[],
+    project: [] as number[],
     moved: [] as number[],
     unseen: [] as number[],
     archived: [] as Session[],
@@ -98,6 +99,9 @@ function input() {
     },
     showEditProjectDialog: (item: LocalProject) => {
       calls.edited.push(item)
+    },
+    navigateProjectByOffset: (offset: number) => {
+      calls.project.push(offset)
     },
     navigateSessionByOffset: (offset: number) => {
       calls.moved.push(offset)
@@ -165,9 +169,27 @@ describe("layout commands", () => {
     expect(ids).toContain("sidebar.toggle")
     expect(ids).toContain("workspace.toggle")
     expect(ids).toContain("project.edit")
+    expect(ids).toContain("project.previous")
+    expect(ids).toContain("project.next")
     expect(ids).toContain("theme.set.ocean")
     expect(ids).toContain("theme.scheme.dark")
     expect(ids).toContain("language.set.de")
+  })
+
+  test("runs project navigation commands", () => {
+    const ctx = input()
+    registerLayoutCommands(ctx.cfg)
+
+    ctx
+      .options()
+      .find((item) => item.id === "project.previous")
+      ?.onSelect?.()
+    ctx
+      .options()
+      .find((item) => item.id === "project.next")
+      ?.onSelect?.()
+
+    expect(ctx.calls.project).toEqual([-1, 1])
   })
 
   test("runs workspace toggle from shared helper", () => {
