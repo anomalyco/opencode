@@ -9,6 +9,7 @@ export type LicensePhase = "checking" | "missing" | "active" | "grace" | "invali
 type PersistedState = {
   installID: string
   state: "missing" | "active" | "invalid" | "expired"
+  licenseKey?: string
   maskedKey?: string
   plan?: string
   entitlementToken?: string
@@ -86,6 +87,7 @@ function phaseOf(value: PersistedState): LicensePhase {
   if (value.state === "invalid") return "invalid"
   if (value.state === "expired") return "expired"
   const hasLicense = !!(
+    value.licenseKey ||
     value.maskedKey ||
     value.plan ||
     value.entitlementToken ||
@@ -163,13 +165,14 @@ export const { use: useLicense, provider: LicenseProvider } = createSimpleContex
 
     const cached = createMemo(() => phaseOf(saved))
     const licensed = createMemo(() => state.phase === "active" || state.phase === "grace")
-    const canRefresh = createMemo(() => !!saved.refreshToken || !!saved.entitlementToken)
+    const canRefresh = createMemo(() => !!saved.licenseKey || !!saved.refreshToken || !!saved.entitlementToken)
 
     const reset = (value: PersistedState["state"] = "missing", next?: Partial<PersistedState>) => {
       setSaved(
         reconcile({
           ...defaults(saved.installID),
           state: value,
+          licenseKey: next?.licenseKey,
           maskedKey: next?.maskedKey,
           plan: next?.plan,
           lastValidatedAt: next?.lastValidatedAt,
@@ -297,10 +300,17 @@ export const { use: useLicense, provider: LicenseProvider } = createSimpleContex
       setState("busy", true)
       setState("message", undefined)
 
-      return request("/v1/licenses/refresh", {
-        entitlement_token: saved.entitlementToken,
-        refresh_token: saved.refreshToken,
-      }).then((response) => {
+      const path = saved.refreshToken ? "/v1/licenses/refresh" : "/v1/licenses/activate"
+      const body = saved.refreshToken
+        ? {
+            entitlement_token: saved.entitlementToken,
+            refresh_token: saved.refreshToken,
+          }
+        : {
+            license_key: saved.licenseKey,
+          }
+
+      return request(path, body).then((response) => {
         if (response.ok) return finish(apply(normalize(response.data)))
 
         if (licensed()) {
@@ -325,7 +335,11 @@ export const { use: useLicense, provider: LicenseProvider } = createSimpleContex
       setState("message", undefined)
 
       return request("/v1/licenses/activate", { license_key: value }).then((response) => {
-        if (response.ok) return finish(apply(normalize(response.data)))
+        if (response.ok) {
+          const result = apply(normalize(response.data))
+          setSaved("licenseKey", value)
+          return finish(result)
+        }
 
         const phase = response.status >= 400 && response.status < 500 ? "invalid" : "error"
         setState("phase", phase)
