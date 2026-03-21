@@ -1,40 +1,43 @@
 import { runPromiseInstance } from "@/effect/runtime"
-import { File as S } from "./service"
+import * as Mod from "./service"
+
+const init = () => {
+  return runPromiseInstance(Mod.File.Service.use((svc) => svc.init()))
+}
+
+const status = async () => {
+  return runPromiseInstance(Mod.File.Service.use((svc) => svc.status()))
+}
+
+const read = async (file: string): Promise<File.Content> => {
+  return runPromiseInstance(Mod.File.Service.use((svc) => svc.read(file)))
+}
+
+const list = async (dir?: string) => {
+  return runPromiseInstance(Mod.File.Service.use((svc) => svc.list(dir)))
+}
+
+const search = async (input: { query: string; limit?: number; dirs?: boolean; type?: "file" | "directory" }) => {
+  return runPromiseInstance(Mod.File.Service.use((svc) => svc.search(input)))
+}
+
+export const File = {
+  Info: Mod.File.Info,
+  Node: Mod.File.Node,
+  Content: Mod.File.Content,
+  Event: Mod.File.Event,
+  Service: Mod.File.Service,
+  layer: Mod.File.layer,
+  init,
+  status,
+  read,
+  list,
+  search,
+}
 
 export namespace File {
-  export const Info = S.Info
-  export type Info = S.Info
-
-  export const Node = S.Node
-  export type Node = S.Node
-
-  export const Content = S.Content
-  export type Content = S.Content
-
-  export const Event = S.Event
-
-  export type Interface = S.Interface
-
-  export const Service = S.Service
-  export const layer = S.layer
-
-  export function init() {
-    return runPromiseInstance(S.Service.use((svc) => svc.init()))
-  }
-
-  export async function status() {
-    return runPromiseInstance(S.Service.use((svc) => svc.status()))
-  }
-
-  export async function read(file: string): Promise<Content> {
-    return runPromiseInstance(S.Service.use((svc) => svc.read(file)))
-  }
-
-  export async function list(dir?: string) {
-    return runPromiseInstance(S.Service.use((svc) => svc.list(dir)))
-  }
-
-  export async function search(input: { query: string; limit?: number; dirs?: boolean; type?: "file" | "directory" }) {
-    return runPromiseInstance(S.Service.use((svc) => svc.search(input)))
-  }
+  export type Info = Mod.File.Info
+  export type Node = Mod.File.Node
+  export type Content = Mod.File.Content
+  export type Interface = Mod.File.Interface
 }

@@ -1,18 +1,20 @@
 import type { Agent } from "../agent/agent"
 import { runtime } from "@/effect/runtime"
-import { Truncate as S } from "./truncate-effect"
+import * as Mod from "./truncate-effect"
+
+const output = async (text: string, options: Truncate.Options = {}, agent?: Agent.Info): Promise<Truncate.Result> => {
+  return runtime.runPromise(Mod.Truncate.Service.use((s) => s.output(text, options, agent)))
+}
+
+export const Truncate = {
+  MAX_LINES: Mod.Truncate.MAX_LINES,
+  MAX_BYTES: Mod.Truncate.MAX_BYTES,
+  DIR: Mod.Truncate.DIR,
+  GLOB: Mod.Truncate.GLOB,
+  output,
+}
 
 export namespace Truncate {
-  export const MAX_LINES = S.MAX_LINES
-  export const MAX_BYTES = S.MAX_BYTES
-  export const DIR = S.DIR
-  export const GLOB = S.GLOB
-
-  export type Result = S.Result
-
-  export type Options = S.Options
-
-  export async function output(text: string, options: Options = {}, agent?: Agent.Info): Promise<Result> {
-    return runtime.runPromise(S.Service.use((s) => s.output(text, options, agent)))
-  }
+  export type Result = Mod.Truncate.Result
+  export type Options = Mod.Truncate.Options
 }

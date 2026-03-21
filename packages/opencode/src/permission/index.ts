@@ -1,52 +1,51 @@
 import { runPromiseInstance } from "@/effect/runtime"
 import { fn } from "@/util/fn"
 import z from "zod"
-import { Permission as S } from "./service"
+import * as Mod from "./service"
+
+const list = async (): Promise<Mod.Permission.Request[]> => {
+  return runPromiseInstance(Mod.Permission.Service.use((s) => s.list()))
+}
+
+export const PermissionNext = {
+  Action: Mod.Permission.Action,
+  Rule: Mod.Permission.Rule,
+  Ruleset: Mod.Permission.Ruleset,
+  Request: Mod.Permission.Request,
+  Reply: Mod.Permission.Reply,
+  Approval: Mod.Permission.Approval,
+  Event: Mod.Permission.Event,
+  RejectedError: Mod.Permission.RejectedError,
+  CorrectedError: Mod.Permission.CorrectedError,
+  DeniedError: Mod.Permission.DeniedError,
+  AskInput: Mod.Permission.AskInput,
+  ReplyInput: Mod.Permission.ReplyInput,
+  Service: Mod.Permission.Service,
+  layer: Mod.Permission.layer,
+  evaluate: Mod.Permission.evaluate,
+  fromConfig: Mod.Permission.fromConfig,
+  merge: Mod.Permission.merge,
+  disabled: Mod.Permission.disabled,
+  ask: fn(
+    Mod.Permission.AskInput,
+    async (input: z.infer<typeof Mod.Permission.AskInput>): Promise<void> =>
+      runPromiseInstance(Mod.Permission.Service.use((s) => s.ask(input))),
+  ),
+  reply: fn(
+    Mod.Permission.ReplyInput,
+    async (input: z.infer<typeof Mod.Permission.ReplyInput>): Promise<void> =>
+      runPromiseInstance(Mod.Permission.Service.use((s) => s.reply(input))),
+  ),
+  list,
+}
 
 export namespace PermissionNext {
-  export const Action = S.Action
-  export type Action = S.Action
-
-  export const Rule = S.Rule
-  export type Rule = S.Rule
-
-  export const Ruleset = S.Ruleset
-  export type Ruleset = S.Ruleset
-
-  export const Request = S.Request
-  export type Request = S.Request
-
-  export const Reply = S.Reply
-  export type Reply = S.Reply
-
-  export const Approval = S.Approval
-  export type Approval = z.infer<typeof S.Approval>
-
-  export const Event = S.Event
-
-  export const RejectedError = S.RejectedError
-  export const CorrectedError = S.CorrectedError
-  export const DeniedError = S.DeniedError
-  export type Error = S.Error
-
-  export const AskInput = S.AskInput
-  export const ReplyInput = S.ReplyInput
-
-  export type Interface = S.Interface
-
-  export const Service = S.Service
-  export const layer = S.layer
-
-  export const evaluate = S.evaluate
-  export const fromConfig = S.fromConfig
-  export const merge = S.merge
-  export const disabled = S.disabled
-
-  export const ask = fn(S.AskInput, async (input) => runPromiseInstance(S.Service.use((s) => s.ask(input))))
-
-  export const reply = fn(S.ReplyInput, async (input) => runPromiseInstance(S.Service.use((s) => s.reply(input))))
-
-  export async function list() {
-    return runPromiseInstance(S.Service.use((s) => s.list()))
-  }
+  export type Action = Mod.Permission.Action
+  export type Rule = Mod.Permission.Rule
+  export type Ruleset = Mod.Permission.Ruleset
+  export type Request = Mod.Permission.Request
+  export type Reply = Mod.Permission.Reply
+  export type Approval = z.infer<typeof Mod.Permission.Approval>
+  export type Error = Mod.Permission.Error
+  export type Interface = Mod.Permission.Interface
 }

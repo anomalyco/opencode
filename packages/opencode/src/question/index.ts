@@ -1,49 +1,49 @@
 import { runPromiseInstance } from "@/effect/runtime"
 import type { MessageID, SessionID } from "@/session/schema"
 import type { QuestionID } from "./schema"
-import { Question as S } from "./service"
+import * as Q from "./service"
+
+const ask = async (input: {
+  sessionID: SessionID
+  questions: Question.Info[]
+  tool?: { messageID: MessageID; callID: string }
+}): Promise<Question.Answer[]> => {
+  return runPromiseInstance(Q.Question.Service.use((s) => s.ask(input)))
+}
+
+const reply = async (input: { requestID: QuestionID; answers: Question.Answer[] }) => {
+  return runPromiseInstance(Q.Question.Service.use((s) => s.reply(input)))
+}
+
+const reject = async (requestID: QuestionID) => {
+  return runPromiseInstance(Q.Question.Service.use((s) => s.reject(requestID)))
+}
+
+const list = async () => {
+  return runPromiseInstance(Q.Question.Service.use((s) => s.list()))
+}
+
+export const Question = {
+  Option: Q.Question.Option,
+  Info: Q.Question.Info,
+  Request: Q.Question.Request,
+  Answer: Q.Question.Answer,
+  Reply: Q.Question.Reply,
+  Event: Q.Question.Event,
+  RejectedError: Q.Question.RejectedError,
+  Service: Q.Question.Service,
+  layer: Q.Question.layer,
+  ask,
+  reply,
+  reject,
+  list,
+}
 
 export namespace Question {
-  export const Option = S.Option
-  export type Option = S.Option
-
-  export const Info = S.Info
-  export type Info = S.Info
-
-  export const Request = S.Request
-  export type Request = S.Request
-
-  export const Answer = S.Answer
-  export type Answer = S.Answer
-
-  export const Reply = S.Reply
-  export type Reply = S.Reply
-
-  export const Event = S.Event
-  export const RejectedError = S.RejectedError
-
-  export type Interface = S.Interface
-
-  export const Service = S.Service
-  export const layer = S.layer
-
-  export async function ask(input: {
-    sessionID: SessionID
-    questions: Info[]
-    tool?: { messageID: MessageID; callID: string }
-  }): Promise<Answer[]> {
-    return runPromiseInstance(S.Service.use((s) => s.ask(input)))
-  }
-
-  export async function reply(input: { requestID: QuestionID; answers: Answer[] }) {
-    return runPromiseInstance(S.Service.use((s) => s.reply(input)))
-  }
-
-  export async function reject(requestID: QuestionID) {
-    return runPromiseInstance(S.Service.use((s) => s.reject(requestID)))
-  }
-
-  export async function list() {
-    return runPromiseInstance(S.Service.use((s) => s.list()))
-  }
+  export type Option = Q.Question.Option
+  export type Info = Q.Question.Info
+  export type Request = Q.Question.Request
+  export type Answer = Q.Question.Answer
+  export type Reply = Q.Question.Reply
+  export type Interface = Q.Question.Interface
 }
