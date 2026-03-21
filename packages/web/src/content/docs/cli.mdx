@@ -276,6 +276,30 @@ opencode mcp debug <name>
 
 ---
 
+### plugin
+
+Manage configured npm plugins.
+
+```bash
+opencode plugin [command]
+```
+
+---
+
+#### update
+
+Refresh npm plugins declared in your config.
+
+```bash
+opencode plugin update
+```
+
+This only updates npm plugins listed in config. It does not load or update local plugins from `plugin/` or `plugins/` directories, and it does not upgrade opencode itself.
+
+Plugins pinned to an explicit version are skipped. Unsupported specifiers are also skipped.
+
+---
+
 ### models
 
 List all available models from configured providers.

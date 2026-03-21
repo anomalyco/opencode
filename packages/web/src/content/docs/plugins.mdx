@@ -51,6 +51,18 @@ Browse available plugins in the [ecosystem](/docs/ecosystem#plugins).
 
 ---
 
+### Refresh the cache
+
+To manually refresh the npm plugin cache, run:
+
+```bash
+opencode plugin update
+```
+
+This only refreshes npm plugins declared in config. It does not touch local `plugin/` or `plugins/` directories, and plugins pinned to an explicit version or using an unsupported specifier are skipped.
+
+---
+
 ### Load order
 
 Plugins are loaded from all sources and all hooks run in sequence. The load order is:
