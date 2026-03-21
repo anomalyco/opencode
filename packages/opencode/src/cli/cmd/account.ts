@@ -2,7 +2,7 @@ import { cmd } from "./cmd"
 import { Duration, Effect, Match, Option } from "effect"
 import { UI } from "../ui"
 import { runtime } from "@/effect/runtime"
-import { AccountID, AccountEffect, OrgID, PollExpired, type PollResult } from "@/account/effect"
+import { AccountID, Account, OrgID, PollExpired, type PollResult } from "@/account/effect"
 import { type AccountError } from "@/account/schema"
 import * as Prompt from "../effect/prompt"
 import open from "open"
@@ -17,7 +17,7 @@ const isActiveOrgChoice = (
 ) => Option.isSome(active) && active.value.id === choice.accountID && active.value.active_org_id === choice.orgID
 
 const loginEffect = Effect.fn("login")(function* (url: string) {
-  const service = yield* AccountEffect.Service
+  const service = yield* Account.Service
 
   yield* Prompt.intro("Log in")
   const login = yield* service.login(url)
@@ -58,7 +58,7 @@ const loginEffect = Effect.fn("login")(function* (url: string) {
 })
 
 const logoutEffect = Effect.fn("logout")(function* (email?: string) {
-  const service = yield* AccountEffect.Service
+  const service = yield* Account.Service
   const accounts = yield* service.list()
   if (accounts.length === 0) return yield* println("Not logged in")
 
@@ -98,7 +98,7 @@ interface OrgChoice {
 }
 
 const switchEffect = Effect.fn("switch")(function* () {
-  const service = yield* AccountEffect.Service
+  const service = yield* Account.Service
 
   const groups = yield* service.orgsByAccount()
   if (groups.length === 0) return yield* println("Not logged in")
@@ -129,7 +129,7 @@ const switchEffect = Effect.fn("switch")(function* () {
 })
 
 const orgsEffect = Effect.fn("orgs")(function* () {
-  const service = yield* AccountEffect.Service
+  const service = yield* Account.Service
 
   const groups = yield* service.orgsByAccount()
   if (groups.length === 0) return yield* println("No accounts found")

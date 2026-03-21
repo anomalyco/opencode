@@ -1,6 +1,7 @@
 import z from "zod"
 import { Tool } from "./tool"
-import { Question } from "../question"
+import { Question } from "../question/service"
+import { Question as QuestionApi } from "../question"
 import DESCRIPTION from "./question.txt"
 
 export const QuestionTool = Tool.define("question", {
@@ -9,7 +10,7 @@ export const QuestionTool = Tool.define("question", {
     questions: z.array(Question.Info.omit({ custom: true })).describe("Questions to ask"),
   }),
   async execute(params, ctx) {
-    const answers = await Question.ask({
+    const answers = await QuestionApi.ask({
       sessionID: ctx.sessionID,
       questions: params.questions,
       tool: ctx.callID ? { messageID: ctx.messageID, callID: ctx.callID } : undefined,
