@@ -179,7 +179,7 @@ export namespace PR {
       const result = streamObject({
         ...params,
         providerOptions: ProviderTransform.providerOptions(model, {
-          instructions: SystemPrompt.instructions(),
+          instructions: system.join("\n"),
           store: false,
         }),
         onError: () => {},

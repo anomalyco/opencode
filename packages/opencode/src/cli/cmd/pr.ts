@@ -32,7 +32,7 @@ export const PrCommand = cmd({
         // Use gh pr checkout with custom branch name
         const result = await withTimeout($`gh pr checkout ${prNumber} --branch ${localBranchName} --force`.nothrow(), 30_000)
 
-        if (result.code !== 0) {
+        if (result.exitCode !== 0) {
           UI.error(`Failed to checkout PR #${prNumber}. Make sure you have gh CLI installed and authenticated.`)
           process.exit(1)
         }
@@ -45,8 +45,8 @@ export const PrCommand = cmd({
 
         let sessionId: string | undefined
 
-        if (prInfoResult.code === 0) {
-          const prInfoText = prInfoResult.text
+        if (prInfoResult.exitCode === 0) {
+          const prInfoText = prInfoResult.stdout.toString()
           if (prInfoText.trim()) {
             const prInfo = JSON.parse(prInfoText)
 
