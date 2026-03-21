@@ -9,7 +9,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const BASE_URL = config.baseUrl
 const PUBLIC_DIR = join(__dirname, "../public")
 const ROUTES_DIR = join(__dirname, "../src/routes")
-const DOCS_DIR = join(__dirname, "../../../web/src/content/docs")
+const DOCS_DIR = join(__dirname, "../../../docs")
 
 interface SitemapEntry {
   url: string

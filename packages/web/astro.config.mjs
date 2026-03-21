@@ -172,7 +172,7 @@ export default defineConfig({
         replacesTitle: true,
       },
       sidebar: [
-        "",
+        "index",
         "config",
         "providers",
         "network",

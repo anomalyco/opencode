@@ -37,8 +37,8 @@ Locale guidance does not override code/command preservation rules or the global 
 
 # Do-Not-Translate Terms (OpenCode Docs)
 
-Generated from: `packages/web/src/content/docs/*.mdx` (default English docs)
-Generated on: 2026-02-10
+Generated from: `docs/*.mdx` (default English docs)
+Generated on: 2026-03-20
 
 Use this as a translation QA checklist / glossary. Preserve listed terms exactly (spelling, casing, punctuation).
 
