@@ -1686,6 +1686,38 @@ describe("ProviderTransform.message - cache control on gateway", () => {
     expect(result[0].content[0]?.providerOptions).toBeUndefined()
     expect(result[0].providerOptions).toBeUndefined()
   })
+
+  test("anthropic oauth prepends Claude Code billing system text", () => {
+    const model = createModel({
+      providerID: "anthropic",
+      api: {
+        id: "claude-sonnet-4",
+        url: "https://api.anthropic.com",
+        npm: "@ai-sdk/anthropic",
+      },
+    })
+    const msgs = [
+      {
+        role: "system",
+        content: "You are a helpful assistant",
+      },
+      {
+        role: "user",
+        content: "hey",
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, { authType: "oauth" }) as any[]
+
+    expect(result[0]).toEqual({
+      role: "system",
+      content: "x-anthropic-billing-header: cc_version=2.1.76.4dc; cc_entrypoint=cli; cch=00000;",
+    })
+    expect(result[1]).toEqual({
+      role: "system",
+      content: "You are a helpful assistant",
+    })
+  })
 })
 
 describe("ProviderTransform.variants", () => {

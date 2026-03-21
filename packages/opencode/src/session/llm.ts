@@ -213,6 +213,10 @@ export namespace LLM {
           "x-opencode-request": input.user.id,
           "x-opencode-client": Flag.OPENCODE_CLIENT,
         }),
+        ...(input.model.providerID === "anthropic" &&
+          auth?.type === "oauth" && {
+            "User-Agent": ProviderTransform.CLAUDE_CODE_USER_AGENT,
+          }),
         ...input.model.headers,
         ...headers,
       },

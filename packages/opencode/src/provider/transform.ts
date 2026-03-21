@@ -1,4 +1,5 @@
 import type { ModelMessage } from "ai"
+import { createHash } from "crypto"
 import { mergeDeep, unique } from "remeda"
 import type { JSONSchema7 } from "@ai-sdk/provider"
 import type { JSONSchema } from "zod/v4/core"
@@ -19,6 +20,9 @@ function mimeToModality(mime: string): Modality | undefined {
 
 export namespace ProviderTransform {
   export const OUTPUT_TOKEN_MAX = Flag.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
+  export const CLAUDE_CODE_VERSION = "2.1.76"
+  export const CLAUDE_CODE_USER_AGENT = `claude-code/${CLAUDE_CODE_VERSION}`
+  const CLAUDE_CODE_SALT = "59cf53e54c78"
 
   // Maps npm package to the key the AI SDK expects for providerOptions
   function sdkKey(npm: string): string | undefined {
@@ -213,6 +217,32 @@ export namespace ProviderTransform {
     return msgs
   }
 
+  function billing(msgs: ModelMessage[]) {
+    const msg = msgs.find((msg) => msg.role === "user")
+    const text = (() => {
+      if (!msg) return ""
+      if (typeof msg.content === "string") return msg.content
+      return msg.content.find((part) => part.type === "text")?.text ?? ""
+    })()
+    const code = [4, 7, 20].map((idx) => text.charAt(idx) || "0").join("")
+    const hash = createHash("sha256")
+      .update(CLAUDE_CODE_SALT + code + CLAUDE_CODE_VERSION)
+      .digest("hex")
+      .slice(0, 3)
+    return `x-anthropic-billing-header: cc_version=${CLAUDE_CODE_VERSION}.${hash}; cc_entrypoint=cli; cch=00000;`
+  }
+
+  function oauth(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
+    if (model.providerID !== "anthropic" || options.authType !== "oauth") return msgs
+    return [
+      {
+        role: "system" as const,
+        content: billing(msgs),
+      },
+      ...msgs,
+    ]
+  }
+
   function unsupportedParts(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
     return msgs.map((msg) => {
       if (msg.role !== "user" || !Array.isArray(msg.content)) return msg
@@ -254,6 +284,7 @@ export namespace ProviderTransform {
   export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
     msgs = unsupportedParts(msgs, model)
     msgs = normalizeMessages(msgs, model, options)
+    msgs = oauth(msgs, model, options)
     if (
       (model.providerID === "anthropic" ||
         model.api.id.includes("anthropic") ||

@@ -768,8 +768,13 @@ describe("session.llm.stream", () => {
         }
 
         const capture = await request
+        const headers = capture.headers
         expect(capture.url.pathname.endsWith("/messages")).toBe(true)
+        expect(headers.get("User-Agent")).toContain("claude-code/2.1.76")
         expect(JSON.stringify(capture.body)).not.toContain("\"cache_control\"")
+        expect(JSON.stringify(capture.body)).toContain(
+          "x-anthropic-billing-header: cc_version=2.1.76.02c; cc_entrypoint=cli; cch=00000;",
+        )
       },
     })
   })
