@@ -140,6 +140,7 @@ export namespace Format {
           }
         }),
       )
+      yield* InstanceState.get(instanceState)
 
       const status = Effect.fn("Format.status")(function* () {
         const { formatters, isEnabled } = yield* InstanceState.get(instanceState)

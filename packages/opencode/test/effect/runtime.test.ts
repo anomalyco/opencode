@@ -3,8 +3,8 @@ import { Effect } from "effect"
 import { runtime, runPromiseInstance } from "../../src/effect/runtime"
 import { Auth } from "../../src/auth/effect"
 import { Instances } from "../../src/effect/instances"
+import { File } from "../../src/file/service"
 import { Instance } from "../../src/project/instance"
-import { Vcs } from "../../src/project/vcs"
 import { tmpdir } from "../fixture/fixture"
 
 /**
@@ -68,7 +68,7 @@ describe("effect/runtime", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        expect(await grabInstance(Vcs.Service)).toBe(await grabInstance(Vcs.Service))
+        expect(await grabInstance(File.Service)).toBe(await grabInstance(File.Service))
       },
     })
   })
@@ -79,12 +79,12 @@ describe("effect/runtime", () => {
 
     const vcsOne = await Instance.provide({
       directory: one.path,
-      fn: () => grabInstance(Vcs.Service),
+      fn: () => grabInstance(File.Service),
     })
 
     const vcsTwo = await Instance.provide({
       directory: two.path,
-      fn: () => grabInstance(Vcs.Service),
+      fn: () => grabInstance(File.Service),
     })
 
     expect(vcsOne).not.toBe(vcsTwo)
@@ -96,11 +96,11 @@ describe("effect/runtime", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const before = await grabInstance(Vcs.Service)
+        const before = await grabInstance(File.Service)
 
         await runtime.runPromise(Instances.use((map) => map.invalidate(Instance.directory)))
 
-        const after = await grabInstance(Vcs.Service)
+        const after = await grabInstance(File.Service)
         expect(after).not.toBe(before)
       },
     })

@@ -11,7 +11,7 @@ import { LSP } from "../lsp"
 import { Format } from "../format"
 import { TuiRoutes } from "./routes/tui"
 import { Instance } from "../project/instance"
-import { Vcs } from "../project/vcs"
+import { runPromise as runPromiseVcs, Vcs } from "../project/vcs"
 import { runPromiseInstance } from "@/effect/runtime"
 import { Agent } from "../agent/agent"
 import { Skill } from "../skill/skill"
@@ -331,7 +331,7 @@ export namespace Server {
           },
         }),
         async (c) => {
-          const branch = await runPromiseInstance(Vcs.Service.use((s) => s.branch()))
+          const branch = await runPromiseVcs((s) => s.branch())
           return c.json({
             branch,
           })
