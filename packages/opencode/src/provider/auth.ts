@@ -1,6 +1,6 @@
 import type { AuthOuathResult, Hooks } from "@opencode-ai/plugin"
 import { NamedError } from "@opencode-ai/util/error"
-import * as Auth from "@/auth"
+import { Auth } from "@/auth"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRunPromise } from "@/effect/run-service"
 import { Plugin } from "../plugin"
@@ -114,7 +114,7 @@ export namespace ProviderAuth {
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
-      const auth = yield* Auth.Auth.Service
+      const auth = yield* Auth.Service
       const state = yield* InstanceState.make<State>(
         Effect.fn("ProviderAuth.state")(() =>
           Effect.promise(async () => {
@@ -229,7 +229,7 @@ export namespace ProviderAuth {
     }),
   )
 
-  export const defaultLayer = layer.pipe(Layer.provide(Auth.Auth.layer))
+  export const defaultLayer = layer.pipe(Layer.provide(Auth.layer))
 
   const runPromise = makeRunPromise(Service, defaultLayer)
 

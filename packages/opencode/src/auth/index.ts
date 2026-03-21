@@ -7,39 +7,40 @@ import { Filesystem } from "../util/filesystem"
 
 export const OAUTH_DUMMY_KEY = "opencode-oauth-dummy-key"
 
-export class Oauth extends Schema.Class<Oauth>("OAuth")({
-  type: Schema.Literal("oauth"),
-  refresh: Schema.String,
-  access: Schema.String,
-  expires: Schema.Number,
-  accountId: Schema.optional(Schema.String),
-  enterpriseUrl: Schema.optional(Schema.String),
-}) {}
-
-export class Api extends Schema.Class<Api>("ApiAuth")({
-  type: Schema.Literal("api"),
-  key: Schema.String,
-}) {}
-
-export class WellKnown extends Schema.Class<WellKnown>("WellKnownAuth")({
-  type: Schema.Literal("wellknown"),
-  key: Schema.String,
-  token: Schema.String,
-}) {}
-
-export const Info = Schema.Union([Oauth, Api, WellKnown])
-export type Info = Schema.Schema.Type<typeof Info>
-
-export class AuthError extends Schema.TaggedErrorClass<AuthError>()("AuthError", {
-  message: Schema.String,
-  cause: Schema.optional(Schema.Defect),
-}) {}
-
 const file = path.join(Global.Path.data, "auth.json")
 
-const fail = (message: string) => (cause: unknown) => new AuthError({ message, cause })
+const fail = (message: string) => (cause: unknown) => new Auth.AuthError({ message, cause })
 
 export namespace Auth {
+  export class Oauth extends Schema.Class<Oauth>("OAuth")({
+    type: Schema.Literal("oauth"),
+    refresh: Schema.String,
+    access: Schema.String,
+    expires: Schema.Number,
+    accountId: Schema.optional(Schema.String),
+    enterpriseUrl: Schema.optional(Schema.String),
+  }) {}
+
+  export class Api extends Schema.Class<Api>("ApiAuth")({
+    type: Schema.Literal("api"),
+    key: Schema.String,
+  }) {}
+
+  export class WellKnown extends Schema.Class<WellKnown>("WellKnownAuth")({
+    type: Schema.Literal("wellknown"),
+    key: Schema.String,
+    token: Schema.String,
+  }) {}
+
+  const _Info = Schema.Union([Oauth, Api, WellKnown])
+  export const Info = Object.assign(_Info, { zod: zod(_Info) })
+  export type Info = Schema.Schema.Type<typeof _Info>
+
+  export class AuthError extends Schema.TaggedErrorClass<AuthError>()("AuthError", {
+    message: Schema.String,
+    cause: Schema.optional(Schema.Defect),
+  }) {}
+
   export interface Interface {
     readonly get: (providerID: string) => Effect.Effect<Info | undefined, AuthError>
     readonly all: () => Effect.Effect<Record<string, Info>, AuthError>
@@ -94,20 +95,17 @@ export namespace Auth {
     }),
   )
 
-  export const ZodInfo = zod(Info)
-  export type ZodInfo = Schema.Schema.Type<typeof Info>
-
   const runPromise = makeRunPromise(Service, layer)
 
   export async function get(providerID: string) {
     return runPromise((service) => service.get(providerID))
   }
 
-  export async function all(): Promise<Record<string, ZodInfo>> {
+  export async function all(): Promise<Record<string, Info>> {
     return runPromise((service) => service.all())
   }
 
-  export async function set(key: string, info: ZodInfo) {
+  export async function set(key: string, info: Info) {
     return runPromise((service) => service.set(key, info))
   }
 
