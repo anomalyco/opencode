@@ -27,6 +27,7 @@ import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
+import { itemStyle, virtualize } from "@/pages/session/message-timeline-utils"
 import { parseCommentNote, readCommentMetadata } from "@/utils/comment-note"
 import { Virtualizer, type VirtualizerHandle } from "virtua/solid"
 
@@ -242,8 +243,6 @@ export function MessageTimeline(props: {
   const platform = usePlatform()
 
   const rendered = createMemo(() => props.renderedUserMessages.map((message) => message.id))
-  const shouldVirtualize = createMemo(() => platform.platform === "desktop" && rendered().length > 6)
-  createEffect(() => props.onVirtualizedChange?.(shouldVirtualize()))
   const itemSize = createMemo(() => {
     const list = props.renderedUserMessages
     if (list.length === 0) return 520
@@ -276,6 +275,14 @@ export function MessageTimeline(props: {
     return sync.data.session_status[id] ?? idle
   })
   const working = createMemo(() => !!pending() || sessionStatus().type !== "idle")
+  const shouldVirtualize = createMemo(() =>
+    virtualize({
+      desktop: platform.platform === "desktop",
+      count: rendered().length,
+      working: working(),
+    }),
+  )
+  createEffect(() => props.onVirtualizedChange?.(shouldVirtualize()))
 
   const [slot, setSlot] = createStore({
     open: false,
@@ -689,11 +696,7 @@ export function MessageTimeline(props: {
                   "pb-4": true,
                   "pl-2 pr-3 md:pl-4 md:pr-3": true,
                 }}
-                style={{
-                  "max-width": props.centered ? "var(--session-content-width, 60rem)" : undefined,
-                  "margin-left": props.centered ? "auto" : undefined,
-                  "margin-right": props.centered ? "auto" : undefined,
-                }}
+                style={itemStyle(props.centered)}
               >
                 <div class="h-12 w-full flex items-center justify-between gap-2">
                   <div class="flex items-center gap-1 min-w-0 flex-1 pr-3">
@@ -957,11 +960,7 @@ export function MessageTimeline(props: {
                 "mt-0.5": props.centered,
                 "mt-0": !props.centered,
               }}
-              style={{
-                "max-width": props.centered ? "var(--session-content-width, 60rem)" : undefined,
-                "margin-left": props.centered ? "auto" : undefined,
-                "margin-right": props.centered ? "auto" : undefined,
-              }}
+              style={itemStyle(props.centered)}
             >
               <Show when={props.turnStart > 0 || props.historyMore}>
                 <div class="w-full flex justify-center">
@@ -1020,13 +1019,7 @@ export function MessageTimeline(props: {
           "min-w-0 w-full max-w-full": true,
           "pb-12": shouldVirtualize(),
         }}
-        style={{
-          "content-visibility": shouldVirtualize() ? undefined : "auto",
-          "contain-intrinsic-size": shouldVirtualize() ? undefined : "auto 500px",
-          "max-width": props.centered ? "var(--session-content-width, 60rem)" : undefined,
-          "margin-left": props.centered ? "auto" : undefined,
-          "margin-right": props.centered ? "auto" : undefined,
-        }}
+        style={itemStyle(props.centered)}
       >
         <Show when={commentCount() > 0}>
           <div class="w-full px-4 md:px-5 pb-2">
