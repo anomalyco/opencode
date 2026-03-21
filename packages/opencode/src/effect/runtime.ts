@@ -6,6 +6,7 @@ import type { InstanceServices } from "@/effect/instances"
 import { Installation } from "@/installation"
 import { Truncate } from "@/tool/truncate-effect"
 import { Instance } from "@/project/instance"
+import { memoMap } from "./run-service"
 
 export const runtime = ManagedRuntime.make(
   Layer.mergeAll(
@@ -14,6 +15,7 @@ export const runtime = ManagedRuntime.make(
     Truncate.defaultLayer,
     Instances.layer,
   ).pipe(Layer.provideMerge(Auth.layer)),
+  { memoMap },
 )
 
 export function runPromiseInstance<A, E>(effect: Effect.Effect<A, E, InstanceServices>) {
