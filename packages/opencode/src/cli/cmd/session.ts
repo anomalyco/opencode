@@ -41,7 +41,7 @@ function pagerCmd(): string[] {
 export const SessionCommand = cmd({
   command: "session",
   describe: "manage sessions",
-  builder: (yargs: Argv) => yargs.command(SessionListCommand).command(SessionDeleteCommand).demandCommand(),
+  builder: (yargs: Argv) => yargs.command(SessionListCommand).command(SessionDeleteCommand).command(SessionShareCommand).demandCommand(),
   async handler() {},
 })
 
@@ -155,3 +155,37 @@ function formatSessionJSON(sessions: Session.Info[]): string {
   }))
   return JSON.stringify(jsonData, null, 2)
 }
+
+export const SessionShareCommand = cmd({
+  command: "share [sessionID]",
+  describe: "share a session publicly and print the URL",
+  builder: (yargs: import("yargs").Argv) => {
+    return yargs.positional("sessionID", {
+      describe: "session ID to share (defaults to most recent)",
+      type: "string",
+    })
+  },
+  handler: async (args) => {
+    await bootstrap(process.cwd(), async () => {
+      let id = args.sessionID
+      if (!id) {
+        const sessions = [...Session.list({ roots: true, limit: 1 })]
+        if (sessions.length === 0) {
+          UI.error("No sessions found")
+          process.exit(1)
+        }
+        id = sessions[0].id
+      }
+      try {
+        await Session.get(id)
+      } catch {
+        UI.error(`Session not found: ${id}`)
+        process.exit(1)
+      }
+      UI.println(UI.Style.TEXT_DIM + `Preparing share for session ${id}...` + UI.Style.TEXT_NORMAL)
+      const { ShareNext } = await import("../../share/share-next")
+      const share = await ShareNext.create(id)
+      UI.println(UI.Style.TEXT_SUCCESS_BOLD + share.url + UI.Style.TEXT_NORMAL)
+    })
+  },
+})
