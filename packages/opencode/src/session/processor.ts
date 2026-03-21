@@ -12,8 +12,8 @@ import type { Provider } from "@/provider/provider"
 import { LLM } from "./llm"
 import { Config } from "@/config/config"
 import { SessionCompaction } from "./compaction"
-import { PermissionNext } from "@/permission"
-import { Question } from "@/question/service"
+import { Permission } from "@/permission"
+import { Question } from "@/question"
 import { PartID } from "./schema"
 import type { SessionID, MessageID } from "./schema"
 
@@ -163,7 +163,7 @@ export namespace SessionProcessor {
                       )
                     ) {
                       const agent = await Agent.get(input.assistantMessage.agent)
-                      await PermissionNext.ask({
+                      await Permission.ask({
                         permission: "doom_loop",
                         patterns: [value.toolName],
                         sessionID: input.assistantMessage.sessionID,
@@ -219,7 +219,7 @@ export namespace SessionProcessor {
                     })
 
                     if (
-                      value.error instanceof PermissionNext.RejectedError ||
+                      value.error instanceof Permission.RejectedError ||
                       value.error instanceof Question.RejectedError
                     ) {
                       blocked = shouldBreak
