@@ -45,15 +45,15 @@ export namespace Vcs {
     Service,
     Effect.gen(function* () {
       const state = yield* InstanceState.make<State>(
-        Effect.fn("Vcs.state")(() =>
+        Effect.fn("Vcs.state")((ctx) =>
           Effect.gen(function* () {
-            if (Instance.project.vcs !== "git") {
+            if (ctx.project.vcs !== "git") {
               return { current: undefined }
             }
 
             const getCurrentBranch = async () => {
               const result = await git(["rev-parse", "--abbrev-ref", "HEAD"], {
-                cwd: Instance.worktree,
+                cwd: ctx.worktree,
               })
               if (result.exitCode !== 0) return undefined
               const text = result.text().trim()

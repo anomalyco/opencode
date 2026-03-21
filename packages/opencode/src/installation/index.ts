@@ -294,7 +294,7 @@ export namespace Installation {
               result = yield* run(["scoop", "install", `opencode@${target}`])
               break
             default:
-              throw new Error(`Unknown method: ${m}`)
+              return yield* new UpgradeFailedError({ stderr: `Unknown method: ${m}` })
           }
           if (!result || result.code !== 0) {
             const stderr = m === "choco" ? "not running from an elevated command shell" : result?.stderr || ""

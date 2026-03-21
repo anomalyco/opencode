@@ -5,7 +5,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { makeRunPromise } from "@/effect/run-service"
 import { Plugin } from "../plugin"
 import { ProviderID } from "./schema"
-import { Array as Arr, Effect, Layer, Record, Result, ServiceMap, Struct } from "effect"
+import { Array as Arr, Effect, Layer, Record, Result, ServiceMap } from "effect"
 import z from "zod"
 
 export namespace ProviderAuth {
@@ -115,8 +115,9 @@ export namespace ProviderAuth {
     Service,
     Effect.gen(function* () {
       const auth = yield* Auth.Service
-      const state = yield* InstanceState.make<State>(() =>
-        Effect.promise(async () => {
+      const state = yield* InstanceState.make<State>(
+        Effect.fn("ProviderAuth.state")(() =>
+          Effect.promise(async () => {
           const plugins = await Plugin.list()
           return {
             hooks: Record.fromEntries(
@@ -128,7 +129,7 @@ export namespace ProviderAuth {
             ),
             pending: new Map<ProviderID, AuthOuathResult>(),
           }
-        }),
+        })),
       )
 
       const methods = Effect.fn("ProviderAuth.methods")(function* () {
