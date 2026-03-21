@@ -1,0 +1,108 @@
+name: deploy-vps-production
+
+on:
+  push:
+    branches:
+      - pro
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref to deploy. Defaults to pro.
+        required: false
+        type: string
+
+concurrency: pro-vps-deploy
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - prod-vps
+    outputs:
+      ref: ${{ steps.resolve.outputs.ref }}
+    steps:
+      - id: resolve
+        shell: bash
+        run: |
+          ref="${{ github.sha }}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            ref="${{ inputs.ref }}"
+            if [ -z "$ref" ]; then
+              ref="pro"
+            fi
+          fi
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+
+  validate:
+    needs: resolve
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - prod-vps
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.resolve.outputs.ref }}
+
+      - name: Verify workflow SHA
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          actual=$(git rev-parse HEAD)
+          test "$actual" = "${{ github.sha }}"
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Run typecheck
+        run: bun typecheck
+
+      - name: Run tests
+        run: bun turbo test
+
+  deploy:
+    needs:
+      - resolve
+      - validate
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - prod-vps
+    environment: production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.resolve.outputs.ref }}
+
+      - name: Verify workflow SHA
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          actual=$(git rev-parse HEAD)
+          test "$actual" = "${{ github.sha }}"
+
+      - name: Resolve deploy SHA
+        id: sha
+        shell: bash
+        run: echo "value=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy production stack
+        env:
+          DEPLOY_BRANCH: pro
+          DEPLOY_ROOT: /srv/numeral/app
+          DEPLOY_REPO_URL: https://github.com/${{ github.repository }}.git
+          DEPLOY_COMPOSE_FILE: deploy/vps-single-customer/docker-compose.yml
+          DEPLOY_ENV_FILE: deploy/vps-single-customer/.env
+          DEPLOY_SHA: ${{ steps.sha.outputs.value }}
+        run: ./deploy/vps-single-customer/deploy.sh
