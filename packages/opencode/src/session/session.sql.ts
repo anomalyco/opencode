@@ -1,7 +1,7 @@
 import { sqliteTable, text, integer, index, primaryKey } from "drizzle-orm/sqlite-core"
 import { ProjectTable } from "../project/project.sql"
 import type { MessageV2 } from "./message-v2"
-import type { Snapshot } from "../snapshot/service"
+import type { Snapshot } from "../snapshot"
 import type { Permission as PermissionNext } from "../permission/service"
 import type { ProjectID } from "../project/schema"
 import type { SessionID, MessageID, PartID } from "./schema"

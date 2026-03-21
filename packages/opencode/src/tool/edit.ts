@@ -15,7 +15,7 @@ import { Bus } from "../bus"
 import { FileTime } from "../file/time"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
-import { Snapshot } from "@/snapshot/service"
+import { Snapshot } from "@/snapshot"
 import { assertExternalDirectory } from "./external-directory"
 
 const MAX_DIAGNOSTICS_PER_FILE = 20
