@@ -592,7 +592,7 @@ export namespace Orchestrator {
       const codebaseContext = await Decomposition.gatherCodebaseContext(Instance.directory)
       const formattedContext = Decomposition.formatCodebaseContext(codebaseContext)
 
-      const subtasks = await Decomposition.decompose({
+      const { subtasks, sharedContracts, conventions } = await Decomposition.decompose({
         task: input.task,
         model: models.orchestratorModel,
         codebaseContext: formattedContext,
@@ -603,6 +603,8 @@ export namespace Orchestrator {
       const updated = await PlanStore.update({
         id: plan.id,
         subtasks,
+        sharedContracts,
+        conventions,
         workers: subtasks.map((st) => ({
           subtaskID: st.id,
           status: "pending" as const,
@@ -834,7 +836,7 @@ export namespace Orchestrator {
     const codebaseContext = await Decomposition.gatherCodebaseContext(Instance.directory)
     const formattedContext = Decomposition.formatCodebaseContext(codebaseContext)
 
-    const subtasks = await Decomposition.decompose({
+    const { subtasks, sharedContracts, conventions } = await Decomposition.decompose({
       task: plan.task,
       model: plan.orchestratorModel,
       codebaseContext: formattedContext,
@@ -849,6 +851,8 @@ export namespace Orchestrator {
     return PlanStore.update({
       id: planID,
       subtasks: restoredSubtasks,
+      sharedContracts: sharedContracts ?? null,
+      conventions: conventions ?? null,
       workers: restoredSubtasks.map((st) => ({
         subtaskID: st.id,
         status: "pending" as const,

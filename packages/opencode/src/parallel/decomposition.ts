@@ -4,7 +4,7 @@ import { Provider } from "@/provider/provider"
 import { Log } from "@/util/log"
 import { Glob } from "@/util/glob"
 import { SubtaskID } from "./schema"
-import type { Subtask, ModelRef } from "./schema"
+import type { Subtask, ModelRef, SharedContract, ProjectConventions } from "./schema"
 import path from "path"
 
 export namespace Decomposition {
@@ -24,8 +24,11 @@ Rules:
 7. Use the dependencies field to specify when one subtask must complete before another can start. Reference dependencies by the 0-based index of the subtask they depend on (e.g., 0, 1, 2).
 8. Avoid circular dependencies - the dependency graph must be acyclic.
 9. If subtasks are truly independent, leave dependencies empty.
+10. When subtasks share an interface boundary (API producer + consumer, shared types, config contracts), define SHARED CONTRACTS with exact type definitions that both sides must conform to. This prevents mismatches when workers implement independently.
+11. Identify NEGATIVE CONSTRAINTS — things each subtask must NOT do (forbidden libraries, services, patterns). Attach relevant constraints to each subtask.
+12. Identify PROJECT CONVENTIONS all workers must follow: serialization format, auth mechanism, timestamp format, naming conventions. Omit if the task is simple enough not to need cross-cutting conventions.
 
-Output format: a JSON object with a "subtasks" array.`
+Output format: a JSON object with "subtasks" array, optional "sharedContracts" array, and optional "conventions" object.`
 
   const SubtaskOutput = z.object({
     title: z.string().describe("Short label for the subtask, e.g., 'Add login form'"),
@@ -36,10 +39,36 @@ Output format: a JSON object with a "subtasks" array.`
       .describe(
         "0-based indices of subtasks that must complete before this one (leave empty for independent subtasks)",
       ),
+    constraints: z
+      .array(z.string())
+      .optional()
+      .describe("Things this subtask must NOT do — forbidden libs, patterns, services"),
   })
 
   const OutputSchema = z.object({
     subtasks: z.array(SubtaskOutput),
+    sharedContracts: z
+      .array(
+        z.object({
+          name: z.string().describe("Contract name, e.g., 'OrganizeEndpoint API Contract'"),
+          description: z.string().describe("What this contract covers"),
+          types: z.string().describe("Exact type definitions both sides must use"),
+          producerIndices: z.array(z.number().int().nonnegative()).describe("0-based subtask indices that implement this"),
+          consumerIndices: z.array(z.number().int().nonnegative()).describe("0-based subtask indices that consume this"),
+        }),
+      )
+      .optional()
+      .describe("Shared type contracts for producer/consumer subtask pairs"),
+    conventions: z
+      .object({
+        serialization: z.string().optional(),
+        auth: z.string().optional(),
+        timestamps: z.string().optional(),
+        naming: z.string().optional(),
+        other: z.array(z.string()).optional(),
+      })
+      .optional()
+      .describe("Cross-cutting conventions all workers must follow"),
   })
 
   export interface CodebaseContext {
@@ -321,7 +350,7 @@ Output format: a JSON object with a "subtasks" array.`
   }
 
   export function assignSubtaskIDs<
-    T extends { title: string; description: string; fileScope: string[]; dependencies: number[] },
+    T extends { title: string; description: string; fileScope: string[]; dependencies: number[]; constraints?: string[] },
   >(subtasks: T[]): Subtask[] {
     const n = subtasks.length
     const ids = Array.from({ length: n }, () => SubtaskID.ascending())
@@ -332,6 +361,7 @@ Output format: a JSON object with a "subtasks" array.`
       description: st.description,
       fileScope: st.fileScope,
       dependencies: st.dependencies.map((depIdx) => ids[depIdx]),
+      constraints: st.constraints,
     }))
   }
 
@@ -383,11 +413,17 @@ Output format: a JSON object with a "subtasks" array.`
     return conflicts
   }
 
+  export interface DecomposeResult {
+    subtasks: Subtask[]
+    sharedContracts?: SharedContract[]
+    conventions?: ProjectConventions
+  }
+
   export async function decompose(input: {
     task: string
     model: ModelRef
     codebaseContext?: string
-  }): Promise<Subtask[]> {
+  }): Promise<DecomposeResult> {
     log.info("decomposing task", { task: input.task.slice(0, 100) })
 
     const fullModel = await Provider.getModel(input.model.providerID, input.model.modelID)
@@ -416,6 +452,26 @@ Output format: a JSON object with a "subtasks" array.`
     }
 
     const subtasks = assignSubtaskIDs(result.object.subtasks)
+    const ids = subtasks.map((s) => s.id)
+
+    const refs = (idxs: number[], name: string, role: "producer" | "consumer"): Subtask["dependencies"] =>
+      idxs.map((idx) => {
+        if (idx >= ids.length) {
+          throw new Error(`Invalid shared contract ${role} index ${idx} for "${name}" (valid: 0-${ids.length - 1})`)
+        }
+        return ids[idx]
+      })
+
+    // Convert index-based contract references to SubtaskID-based
+    const sharedContracts: SharedContract[] | undefined = result.object.sharedContracts?.map((sc) => ({
+      name: sc.name,
+      description: sc.description,
+      types: sc.types,
+      producers: refs(sc.producerIndices, sc.name, "producer"),
+      consumers: refs(sc.consumerIndices, sc.name, "consumer"),
+    }))
+
+    const conventions = result.object.conventions
 
     // Predict potential conflicts from overlapping file scopes
     const conflicts = predictConflicts(subtasks)
@@ -430,7 +486,12 @@ Output format: a JSON object with a "subtasks" array.`
       })
     }
 
-    log.info("decomposition complete", { count: subtasks.length, conflicts: conflicts.length })
-    return subtasks
+    log.info("decomposition complete", {
+      count: subtasks.length,
+      conflicts: conflicts.length,
+      contracts: sharedContracts?.length ?? 0,
+      hasConventions: !!conventions,
+    })
+    return { subtasks, sharedContracts, conventions }
   }
 }

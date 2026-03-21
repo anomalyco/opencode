@@ -63,6 +63,8 @@ function fromRow(row: PlanRow): Plan {
     workerModel: row.worker_model,
     subtasks: row.subtasks,
     workers: row.workers,
+    sharedContracts: row.shared_contracts ?? undefined,
+    conventions: row.conventions ?? undefined,
     integrationBranch: row.integration_branch ?? undefined,
     publishMode: row.publish_mode ?? undefined,
     version: row.version,
@@ -86,6 +88,8 @@ function toRow(plan: Plan) {
     worker_model: plan.workerModel,
     subtasks: plan.subtasks,
     workers: plan.workers,
+    shared_contracts: plan.sharedContracts ?? null,
+    conventions: plan.conventions ?? null,
     integration_branch: plan.integrationBranch ?? null,
     publish_mode: plan.publishMode ?? null,
     version: plan.version,
@@ -162,6 +166,8 @@ export namespace PlanStore {
       error: PlanSchema.shape.error.nullable().optional(),
       subtasks: PlanSchema.shape.subtasks.optional(),
       workers: PlanSchema.shape.workers.optional(),
+      sharedContracts: PlanSchema.shape.sharedContracts.nullable().optional(),
+      conventions: PlanSchema.shape.conventions.nullable().optional(),
       integrationBranch: z.string().optional(),
       publishMode: PublishModeSchema.optional(),
     }),
@@ -196,6 +202,12 @@ export namespace PlanStore {
       }
       if (input.publishMode !== undefined) {
         updates.publish_mode = input.publishMode as any
+      }
+      if (input.sharedContracts !== undefined) {
+        updates.shared_contracts = input.sharedContracts ?? null
+      }
+      if (input.conventions !== undefined) {
+        updates.conventions = input.conventions ?? null
       }
 
       return Database.use((db) => {

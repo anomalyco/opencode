@@ -43,8 +43,27 @@ export const Subtask = z.object({
   fileScope: z.array(z.string()),
   dependencies: z.array(SubtaskID.zod).default([]),
   model: ModelRef.optional(),
+  constraints: z.array(z.string()).optional(),
 })
 export type Subtask = z.infer<typeof Subtask>
+
+export const SharedContract = z.object({
+  name: z.string(),
+  description: z.string(),
+  types: z.string(),
+  producers: z.array(SubtaskID.zod),
+  consumers: z.array(SubtaskID.zod),
+})
+export type SharedContract = z.infer<typeof SharedContract>
+
+export const ProjectConventions = z.object({
+  serialization: z.string().optional(),
+  auth: z.string().optional(),
+  timestamps: z.string().optional(),
+  naming: z.string().optional(),
+  other: z.array(z.string()).optional(),
+})
+export type ProjectConventions = z.infer<typeof ProjectConventions>
 
 export const PlanStatus = z.enum([
   "draft",
@@ -120,6 +139,8 @@ export const Plan = z.object({
   workerModel: ModelRef,
   subtasks: z.array(Subtask),
   workers: z.array(WorkerState),
+  sharedContracts: z.array(SharedContract).optional(),
+  conventions: ProjectConventions.optional(),
   integrationBranch: z.string().optional(),
   publishMode: PublishMode.optional(),
   version: z.number().default(0),

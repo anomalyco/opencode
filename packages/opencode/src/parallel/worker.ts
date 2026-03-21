@@ -11,7 +11,7 @@ import { Bus } from "@/bus"
 import { SessionStatus } from "../session/status"
 import { git } from "../util/git"
 import { SessionID } from "@/session/schema"
-import type { Plan, PlanID, SubtaskID, Subtask, WorkerState } from "./schema"
+import type { Plan, PlanID, SubtaskID, Subtask, WorkerState, SharedContract, ProjectConventions } from "./schema"
 import { ParallelEvent } from "./events"
 import { Metrics } from "./metrics"
 
@@ -147,7 +147,10 @@ export namespace WorkerManager {
         directory: info.directory,
         init: ParallelBootstrap, // Use lightweight bootstrap
         fn: async () => {
-          const promptText = buildWorkerPrompt(plan.task, subtask, plan.subtasks)
+          const promptText = buildWorkerPrompt(plan.task, subtask, plan.subtasks, {
+            sharedContracts: plan.sharedContracts,
+            conventions: plan.conventions,
+          })
           const model = subtask.model ?? plan.workerModel
           const { SessionPrompt } = await import("../session/prompt")
           await SessionPrompt.prompt({
@@ -664,7 +667,25 @@ export namespace WorkerManager {
     throw new Error(stderr || stdout || "Failed to commit worker snapshot")
   }
 
-  function buildWorkerPrompt(globalTask: string, subtask: Subtask, allSubtasks: Subtask[]): string {
+  function formatConventions(conv: ProjectConventions): string {
+    const parts: string[] = []
+    if (conv.serialization) parts.push(`- **Serialization**: ${conv.serialization}`)
+    if (conv.auth) parts.push(`- **Auth**: ${conv.auth}`)
+    if (conv.timestamps) parts.push(`- **Timestamps**: ${conv.timestamps}`)
+    if (conv.naming) parts.push(`- **Naming**: ${conv.naming}`)
+    if (conv.other?.length) parts.push(...conv.other.map((o) => `- ${o}`))
+    return parts.join("\n")
+  }
+
+  function buildWorkerPrompt(
+    globalTask: string,
+    subtask: Subtask,
+    allSubtasks: Subtask[],
+    options?: {
+      sharedContracts?: SharedContract[]
+      conventions?: ProjectConventions
+    },
+  ): string {
     const depInfo =
       subtask.dependencies.length > 0
         ? `\n## Dependencies\nThis subtask depends on the following subtasks (they have already completed):\n${subtask.dependencies
@@ -675,15 +696,44 @@ export namespace WorkerManager {
             .join("\n")}`
         : ""
 
+    const constraintInfo =
+      subtask.constraints?.length
+        ? `\n## CONSTRAINTS (you MUST follow these)\n${subtask.constraints.map((c) => `- **${c}**`).join("\n")}`
+        : ""
+
+    const conventionInfo = (() => {
+      const conv = options?.conventions
+      if (!conv) return ""
+      const formatted = formatConventions(conv)
+      return formatted ? `\n## Project Conventions (ALL workers must follow)\n${formatted}` : ""
+    })()
+
+    const contractInfo = (() => {
+      const contracts = (options?.sharedContracts ?? []).filter(
+        (sc) => sc.producers.includes(subtask.id) || sc.consumers.includes(subtask.id),
+      )
+      if (contracts.length === 0) return ""
+      return `\n## Shared Contracts (you MUST conform to these exact types)\n${contracts
+        .map((sc) => {
+          const prod = sc.producers.includes(subtask.id)
+          const cons = sc.consumers.includes(subtask.id)
+          const role = prod && cons ? "PRODUCER + CONSUMER — implement and depend on this" : ""
+          if (role) return `### ${sc.name} [${role}]\n${sc.description}\n\`\`\`\n${sc.types}\n\`\`\``
+          if (prod) return `### ${sc.name} [PRODUCER — implement this]\n${sc.description}\n\`\`\`\n${sc.types}\n\`\`\``
+          return `### ${sc.name} [CONSUMER — depend on this]\n${sc.description}\n\`\`\`\n${sc.types}\n\`\`\``
+        })
+        .join("\n\n")}`
+    })()
+
     return `# Parallel Task Execution
 
 ## Global Context
 ${globalTask}
-
+${conventionInfo}
 ## Your Specific Subtask
 **${subtask.title}**
 
-${subtask.description}${depInfo}
+${subtask.description}${constraintInfo}${contractInfo}${depInfo}
 
 ## File Scope
 You should primarily modify these files:
@@ -693,6 +743,7 @@ ${subtask.fileScope.map((f) => `- ${f}`).join("\n")}
 - You are one of several agents working in parallel on different parts of this task.
 - Your changes will be merged with other agents' work automatically.
 - Stay within your file scope to minimize merge conflicts.
+- If shared contracts are defined above, your types MUST match them exactly.
 - Commit your changes when you're done.
 - Do NOT modify files outside your scope unless absolutely necessary.`
   }
