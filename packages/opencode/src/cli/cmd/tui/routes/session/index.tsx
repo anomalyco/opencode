@@ -219,6 +219,7 @@ export function Session() {
     const part = evt.properties.part
     if (part.type !== "tool") return
     if (part.sessionID !== route.sessionID) return
+    if (session()?.parentID) return
     if (part.state.status !== "completed") return
     if (part.id === lastSwitch) return
 
