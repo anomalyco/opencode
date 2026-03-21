@@ -2,14 +2,14 @@ import { Component, createMemo } from "solid-js"
 import { useNavigate, useParams } from "@solidjs/router"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
-import { usePrompt } from "@/context/prompt"
+import { usePrompt, type Prompt } from "@/context/prompt"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { showToast } from "@opencode-ai/ui/toast"
 import type { TextPart as SDKTextPart } from "@opencode-ai/sdk/v2/client"
+import { base64Encode } from "@opencode-ai/util/encode"
 import { useLanguage } from "@/context/language"
-import { forkSession } from "@/pages/session/fork"
 import { extractPromptFromParts } from "@/utils/prompt"
 
 interface ForkableMessage {
@@ -20,6 +20,37 @@ interface ForkableMessage {
 
 function formatTime(date: Date): string {
   return date.toLocaleTimeString(undefined, { timeStyle: "short" })
+}
+
+async function fork(opts: {
+  fork: (input: { sessionID: string; messageID: string }) => Promise<{ data?: { id: string } }>
+  sessionID: string
+  messageID: string
+  prompt: Prompt
+  directory: string
+  fail: (message?: string) => void
+  navigate: (href: string) => void
+  set: (prompt: Prompt, next: { dir: string; id: string }) => void
+  done?: () => void
+}) {
+  const dir = base64Encode(opts.directory)
+
+  await opts
+    .fork({ sessionID: opts.sessionID, messageID: opts.messageID })
+    .then((res) => {
+      const id = res.data?.id
+      if (!id) {
+        opts.fail()
+        return
+      }
+      opts.done?.()
+      opts.set(opts.prompt, { dir, id })
+      opts.navigate(`/${dir}/session/${id}`)
+    })
+    .catch((err: unknown) => {
+      const message = err instanceof Error ? err.message : String(err)
+      opts.fail(message)
+    })
 }
 
 export const DialogFork: Component = () => {
@@ -65,7 +96,7 @@ export const DialogFork: Component = () => {
       attachmentName: language.t("common.attachment"),
     })
 
-    void forkSession({
+    void fork({
       fork: sdk.client.session.fork,
       sessionID,
       messageID: item.id,
