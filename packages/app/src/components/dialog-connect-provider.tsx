@@ -387,7 +387,7 @@ export function DialogConnectProvider(props: { provider: string }) {
           type: "api",
           key: apiKey,
         },
-      })
+      } as any)
       await complete()
     }
 

@@ -135,7 +135,7 @@ export function DialogCustomProvider(props: Props) {
             type: "api",
             key: result.key,
           },
-        })
+        } as any)
       : Promise.resolve()
 
     auth
