@@ -671,7 +671,7 @@ export namespace ACP {
         const cursor = params.cursor ? Number(params.cursor) : undefined
         const limit = 100
 
-        const sessions = await this.sdk.session
+        const sessions = await this.sdk.experimental.session
           .list(
             {
               directory: params.cwd ?? undefined,
