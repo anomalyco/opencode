@@ -2,6 +2,7 @@ import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { TextField } from "@opencode-ai/ui/text-field"
+import { useMutation } from "@tanstack/solid-query"
 import { Icon } from "@opencode-ai/ui/icon"
 import { createMemo, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -28,7 +29,6 @@ export function DialogEditProject(props: { project: LocalProject }) {
     color: props.project.icon?.color || "pink",
     iconUrl: props.project.icon?.override || "",
     startup: props.project.commands?.start ?? "",
-    saving: false,
     dragOver: false,
     iconHover: false,
   })
@@ -71,38 +71,37 @@ export function DialogEditProject(props: { project: LocalProject }) {
     setStore("iconUrl", "")
   }
 
-  async function handleSubmit(e: SubmitEvent) {
-    e.preventDefault()
+  const saveMutation = useMutation(() => ({
+    mutationFn: async () => {
+      const name = store.name.trim() === folderName() ? "" : store.name.trim()
+      const start = store.startup.trim()
 
-    await Promise.resolve()
-      .then(async () => {
-        setStore("saving", true)
-        const name = store.name.trim() === folderName() ? "" : store.name.trim()
-        const start = store.startup.trim()
-
-        if (props.project.id && props.project.id !== "global") {
-          await globalSDK.client.project.update({
-            projectID: props.project.id,
-            directory: props.project.worktree,
-            name,
-            icon: { color: store.color, override: store.iconUrl },
-            commands: { start },
-          })
-          globalSync.project.icon(props.project.worktree, store.iconUrl || undefined)
-          dialog.close()
-          return
-        }
-
-        globalSync.project.meta(props.project.worktree, {
+      if (props.project.id && props.project.id !== "global") {
+        await globalSDK.client.project.update({
+          projectID: props.project.id,
+          directory: props.project.worktree,
           name,
-          icon: { color: store.color, override: store.iconUrl || undefined },
-          commands: { start: start || undefined },
+          icon: { color: store.color, override: store.iconUrl },
+          commands: { start },
         })
+        globalSync.project.icon(props.project.worktree, store.iconUrl || undefined)
         dialog.close()
+        return
+      }
+
+      globalSync.project.meta(props.project.worktree, {
+        name,
+        icon: { color: store.color, override: store.iconUrl || undefined },
+        commands: { start: start || undefined },
       })
-      .finally(() => {
-        setStore("saving", false)
-      })
+      dialog.close()
+    },
+  }))
+
+  function handleSubmit(e: SubmitEvent) {
+    e.preventDefault()
+    if (saveMutation.isPending) return
+    saveMutation.mutate()
   }
 
   return (
@@ -246,8 +245,8 @@ export function DialogEditProject(props: { project: LocalProject }) {
           <Button type="button" variant="ghost" size="large" onClick={() => dialog.close()}>
             {language.t("common.cancel")}
           </Button>
-          <Button type="submit" variant="primary" size="large" disabled={store.saving}>
-            {store.saving ? language.t("common.saving") : language.t("common.save")}
+          <Button type="submit" variant="primary" size="large" disabled={saveMutation.isPending}>
+            {saveMutation.isPending ? language.t("common.saving") : language.t("common.save")}
           </Button>
         </div>
       </form>
