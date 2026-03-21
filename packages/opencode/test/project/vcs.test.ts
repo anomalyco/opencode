@@ -25,8 +25,8 @@ function withVcs(
     directory,
     Layer.merge(FileWatcher.layer, Vcs.layer),
     async (rt) => {
-      await rt.runPromise(FileWatcher.Service.use(() => Effect.void))
-      await rt.runPromise(Vcs.Service.use(() => Effect.void))
+      await rt.runPromise(FileWatcher.Service.use((s) => s.init()))
+      await rt.runPromise(Vcs.Service.use((s) => s.init()))
       await Bun.sleep(500)
       await body(rt)
     },
@@ -67,7 +67,9 @@ function nextBranchUpdate(directory: string, timeout = 10_000) {
 // ---------------------------------------------------------------------------
 
 describeVcs("Vcs", () => {
-  afterEach(() => Instance.disposeAll())
+  afterEach(async () => {
+    await Instance.disposeAll()
+  })
 
   test("branch() returns current branch name", async () => {
     await using tmp = await tmpdir({ git: true })
