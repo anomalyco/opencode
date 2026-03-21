@@ -220,9 +220,7 @@ test("evaluate - last matching rule wins (wildcard after specific)", () => {
 })
 
 test("evaluate - glob pattern match", () => {
-  const result = Permission.evaluate("edit", "src/foo.ts", [
-    { permission: "edit", pattern: "src/*", action: "allow" },
-  ])
+  const result = Permission.evaluate("edit", "src/foo.ts", [{ permission: "edit", pattern: "src/*", action: "allow" }])
   expect(result.action).toBe("allow")
 })
 
@@ -256,9 +254,7 @@ test("evaluate - empty ruleset returns ask", () => {
 })
 
 test("evaluate - no matching pattern returns ask", () => {
-  const result = Permission.evaluate("edit", "etc/passwd", [
-    { permission: "edit", pattern: "src/*", action: "allow" },
-  ])
+  const result = Permission.evaluate("edit", "etc/passwd", [{ permission: "edit", pattern: "src/*", action: "allow" }])
   expect(result.action).toBe("ask")
 })
 
@@ -971,6 +967,72 @@ test("permission requests stay isolated by directory", async () => {
 
   await a.catch(() => {})
   await b.catch(() => {})
+})
+
+test("pending permission rejects on instance dispose", async () => {
+  await using tmp = await tmpdir({ git: true })
+
+  const ask = Instance.provide({
+    directory: tmp.path,
+    fn: () =>
+      Permission.ask({
+        id: PermissionID.make("per_dispose"),
+        sessionID: SessionID.make("session_dispose"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: [],
+        ruleset: [],
+      }),
+  })
+  const result = ask.then(
+    () => "resolved" as const,
+    (err) => err,
+  )
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const pending = await waitForPending(1)
+      expect(pending).toHaveLength(1)
+      await Instance.dispose()
+    },
+  })
+
+  expect(await result).toBeInstanceOf(Permission.RejectedError)
+})
+
+test("pending permission rejects on instance reload", async () => {
+  await using tmp = await tmpdir({ git: true })
+
+  const ask = Instance.provide({
+    directory: tmp.path,
+    fn: () =>
+      Permission.ask({
+        id: PermissionID.make("per_reload"),
+        sessionID: SessionID.make("session_reload"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: [],
+        ruleset: [],
+      }),
+  })
+  const result = ask.then(
+    () => "resolved" as const,
+    (err) => err,
+  )
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const pending = await waitForPending(1)
+      expect(pending).toHaveLength(1)
+      await Instance.reload({ directory: tmp.path })
+    },
+  })
+
+  expect(await result).toBeInstanceOf(Permission.RejectedError)
 })
 
 test("reply - does nothing for unknown requestID", async () => {

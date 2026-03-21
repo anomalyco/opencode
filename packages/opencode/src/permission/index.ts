@@ -141,14 +141,25 @@ export namespace Permission {
     Service,
     Effect.gen(function* () {
       const state = yield* InstanceState.make<State>(
-        Effect.fn("Permission.state")(() => {
+        Effect.fn("Permission.state")(function* (ctx) {
           const row = Database.use((db) =>
-            db.select().from(PermissionTable).where(eq(PermissionTable.project_id, Instance.project.id)).get(),
+            db.select().from(PermissionTable).where(eq(PermissionTable.project_id, ctx.project.id)).get(),
           )
-          return Effect.succeed({
+          const state = {
             pending: new Map<PermissionID, PendingEntry>(),
             approved: row?.data ?? [],
-          })
+          }
+
+          yield* Effect.addFinalizer(() =>
+            Effect.gen(function* () {
+              for (const item of state.pending.values()) {
+                yield* Deferred.fail(item.deferred, new RejectedError())
+              }
+              state.pending.clear()
+            }),
+          )
+
+          return state
         }),
       )
 
