@@ -17,8 +17,12 @@ export const ServeCommand = cmd({
     const opts = await resolveNetworkOptions(args)
     const server = Server.listen(opts)
     console.log(`opencode server listening on http://${server.hostname}:${server.port}`)
-
-    await new Promise(() => {})
-    await server.stop()
+    await new Promise<void>((resolve) => {
+      process.once("SIGTERM", () => resolve())
+      process.once("SIGINT", () => resolve())
+    })
+    // Force-close active connections (e.g. open SSE streams) so the process
+    // exits promptly instead of waiting for clients to disconnect.
+    await server.stop(true)
   },
 })
