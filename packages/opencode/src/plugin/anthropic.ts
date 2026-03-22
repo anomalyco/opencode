@@ -203,7 +203,7 @@ export async function AnthropicAuthPlugin({ client }: PluginInput): Promise<Hook
               // Refresh token if expired
               if (!currentAuth.access || currentAuth.expires < Date.now()) {
                 const refreshResult = await refreshToken(currentAuth.refresh)
-                if (refreshResult.type === "failed") {
+                if (refreshResult.type === "failed" || !refreshResult.refresh || !refreshResult.access || !refreshResult.expires) {
                   throw new Error("Token refresh failed")
                 }
 
@@ -213,12 +213,12 @@ export async function AnthropicAuthPlugin({ client }: PluginInput): Promise<Hook
                   },
                   body: {
                     type: "oauth",
-                    refresh: refreshResult.refresh!,
-                    access: refreshResult.access!,
-                    expires: refreshResult.expires!,
+                    refresh: refreshResult.refresh,
+                    access: refreshResult.access,
+                    expires: refreshResult.expires,
                   },
                 })
-                currentAuth.access = refreshResult.access!
+                currentAuth.access = refreshResult.access
               }
 
               const requestInit = init ?? {}
