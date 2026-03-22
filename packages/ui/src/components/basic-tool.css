@@ -8,7 +8,9 @@
   justify-content: flex-start;
 
   [data-slot="basic-tool-tool-trigger-content"] {
-    width: auto;
+    flex: 1 1 auto;
+    width: 100%;
+    min-width: 0;
     display: flex;
     align-items: center;
     align-self: stretch;
@@ -49,17 +51,19 @@
   }
 
   [data-slot="basic-tool-tool-info"] {
-    flex: 0 1 auto;
+    flex: 1 1 auto;
     min-width: 0;
     font-size: 14px;
   }
 
   [data-slot="basic-tool-tool-info-structured"] {
-    width: auto;
+    flex: 1 1 auto;
+    width: 100%;
+    min-width: 0;
     display: flex;
     align-items: center;
     gap: 8px;
-    justify-content: flex-start;
+    justify-content: space-between;
   }
 
   [data-slot="basic-tool-tool-info-main"] {
