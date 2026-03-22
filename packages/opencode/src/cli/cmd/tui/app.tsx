@@ -104,6 +104,7 @@ async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
 }
 
 import type { EventSource } from "./context/sdk"
+import { Installation } from "@/installation"
 
 export function tui(input: {
   url: string
