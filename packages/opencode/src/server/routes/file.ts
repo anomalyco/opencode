@@ -3,7 +3,6 @@ import { describeRoute, validator, resolver } from "hono-openapi"
 import z from "zod"
 import { File } from "../../file"
 import { Ripgrep } from "../../file/ripgrep"
-import { LSP } from "../../lsp"
 import { Instance } from "../../project/instance"
 import { lazy } from "../../util/lazy"
 
@@ -80,38 +79,6 @@ export const FileRoutes = lazy(() =>
           type,
         })
         return c.json(results)
-      },
-    )
-    .get(
-      "/find/symbol",
-      describeRoute({
-        summary: "Find symbols",
-        description: "Search for workspace symbols like functions, classes, and variables using LSP.",
-        operationId: "find.symbols",
-        responses: {
-          200: {
-            description: "Symbols",
-            content: {
-              "application/json": {
-                schema: resolver(LSP.Symbol.array()),
-              },
-            },
-          },
-        },
-      }),
-      validator(
-        "query",
-        z.object({
-          query: z.string(),
-        }),
-      ),
-      async (c) => {
-        /*
-      const query = c.req.valid("query").query
-      const result = await LSP.workspaceSymbol(query)
-      return c.json(result)
-      */
-        return c.json([])
       },
     )
     .get(

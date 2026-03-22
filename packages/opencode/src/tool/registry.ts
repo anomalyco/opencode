@@ -21,10 +21,8 @@ import z from "zod"
 import { Plugin } from "../plugin"
 import { ProviderID, type ModelID } from "../provider/schema"
 import { WebSearchTool } from "./websearch"
-import { CodeSearchTool } from "./codesearch"
 import { Flag } from "@/flag/flag"
 import { Log } from "@/util/log"
-import { LspTool } from "./lsp"
 import { Truncate } from "./truncate"
 import { ApplyPatchTool } from "./apply_patch"
 import { Glob } from "../util/glob"
@@ -126,10 +124,8 @@ export namespace ToolRegistry {
           WebFetchTool,
           TodoWriteTool,
           WebSearchTool,
-          CodeSearchTool,
           SkillTool,
           ApplyPatchTool,
-          ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
           ...(cfg.experimental?.batch_tool === true ? [BatchTool] : []),
           ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [PlanExitTool] : []),
           ...custom,
@@ -162,8 +158,8 @@ export namespace ToolRegistry {
           Promise.all(
             allTools
               .filter((tool) => {
-                // Enable websearch/codesearch for zen users OR via enable flag
-                if (tool.id === "codesearch" || tool.id === "websearch") {
+                // Enable websearch for zen users OR via enable flag
+                if (tool.id === "websearch") {
                   return model.providerID === ProviderID.opencode || Flag.OPENCODE_ENABLE_EXA
                 }
 

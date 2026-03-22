@@ -3,7 +3,6 @@ import { SessionID, MessageID, PartID } from "./schema"
 import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
 import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
-import { LSP } from "../lsp"
 import { Snapshot } from "@/snapshot"
 import { fn } from "@/util/fn"
 import { Database, NotFoundError, and, desc, eq, inArray, lt, or } from "@/storage/db"
@@ -153,7 +152,16 @@ export namespace MessageV2 {
   export const SymbolSource = FilePartSourceBase.extend({
     type: z.literal("symbol"),
     path: z.string(),
-    range: LSP.Range,
+    range: z.object({
+      start: z.object({
+        line: z.number(),
+        character: z.number(),
+      }),
+      end: z.object({
+        line: z.number(),
+        character: z.number(),
+      }),
+    }),
     name: z.string(),
     kind: z.number().int(),
   }).meta({

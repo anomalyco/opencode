@@ -21,7 +21,6 @@ import {
   printParseErrorCode,
 } from "jsonc-parser"
 import { Instance } from "../project/instance"
-import { LSPServer } from "../lsp/server"
 import { BunProc } from "@/bun"
 import { Installation } from "@/installation"
 import { ConfigMarkdown } from "./markdown"
@@ -677,8 +676,6 @@ export namespace Config {
           question: PermissionAction.optional(),
           webfetch: PermissionAction.optional(),
           websearch: PermissionAction.optional(),
-          codesearch: PermissionAction.optional(),
-          lsp: PermissionRule.optional(),
           doom_loop: PermissionAction.optional(),
           skill: PermissionRule.optional(),
         })
@@ -1135,56 +1132,6 @@ export namespace Config {
         )
         .optional()
         .describe("MCP (Model Context Protocol) server configurations"),
-      formatter: z
-        .union([
-          z.literal(false),
-          z.record(
-            z.string(),
-            z.object({
-              disabled: z.boolean().optional(),
-              command: z.array(z.string()).optional(),
-              environment: z.record(z.string(), z.string()).optional(),
-              extensions: z.array(z.string()).optional(),
-            }),
-          ),
-        ])
-        .optional(),
-      lsp: z
-        .union([
-          z.literal(false),
-          z.record(
-            z.string(),
-            z.union([
-              z.object({
-                disabled: z.literal(true),
-              }),
-              z.object({
-                command: z.array(z.string()),
-                extensions: z.array(z.string()).optional(),
-                disabled: z.boolean().optional(),
-                env: z.record(z.string(), z.string()).optional(),
-                initialization: z.record(z.string(), z.any()).optional(),
-              }),
-            ]),
-          ),
-        ])
-        .optional()
-        .refine(
-          (data) => {
-            if (!data) return true
-            if (typeof data === "boolean") return true
-            const serverIds = new Set(Object.values(LSPServer).map((s) => s.id))
-
-            return Object.entries(data).every(([id, config]) => {
-              if (config.disabled) return true
-              if (serverIds.has(id)) return true
-              return Boolean(config.extensions)
-            })
-          },
-          {
-            error: "For custom LSP servers, 'extensions' array is required.",
-          },
-        ),
       instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),
       layout: Layout.optional().describe("@deprecated Always uses stretch layout."),
       permission: Permission.optional(),

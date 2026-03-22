@@ -4,7 +4,6 @@ import * as fs from "fs/promises"
 import * as path from "path"
 import { createInterface } from "readline"
 import { Tool } from "./tool"
-import { LSP } from "../lsp"
 import { FileTime } from "../file/time"
 import DESCRIPTION from "./read.txt"
 import { Instance } from "../project/instance"
@@ -212,8 +211,6 @@ export const ReadTool = Tool.define("read", {
     }
     output += "\n</content>"
 
-    // just warms the lsp client
-    LSP.touchFile(filepath, false)
     await FileTime.read(ctx.sessionID, filepath)
 
     if (instructions.length > 0) {
