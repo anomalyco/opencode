@@ -86,7 +86,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       .abort({
         sessionID,
       })
-      .catch(() => {})
+      .catch(() => { })
   }
 
   const restoreCommentItems = (items: CommentItem[]) => {
@@ -247,6 +247,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       }
       layout.handoff.setTabs(base64Encode(sessionDirectory), next.id)
       navigate(`/${base64Encode(sessionDirectory)}/session/${next.id}`)
+      await sync.session.sync(next.id).catch(() => undefined)
     }
 
     const active = session!

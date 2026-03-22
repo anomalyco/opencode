@@ -3,6 +3,9 @@
 }
 
 {$NUMERAL_DOMAIN} {
-  encode zstd gzip
-  reverse_proxy numeral:4096
+  # No site-wide encode: zstd/gzip can buffer small streaming chunks and break SSE
+  # (/global/event). Re-add selective encoding only if you exclude streaming routes.
+  reverse_proxy numeral:4096 {
+    flush_interval -1
+  }
 }
