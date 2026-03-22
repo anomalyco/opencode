@@ -10,7 +10,7 @@ import type { ProjectID } from "../project/schema"
 import { Log } from "../util/log"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
-import { Effect, Fiber, FileSystem, Layer, Path, Scope, ServiceMap, Stream } from "effect"
+import { Effect, FileSystem, Layer, Path, Scope, ServiceMap, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node"
 import { makeRunPromise } from "@/effect/run-service"
@@ -304,7 +304,6 @@ export namespace Worktree {
         const projectID = Instance.project.id
         const extra = startCommand?.trim()
 
-        // Populate the worktree, boot the instance, run start scripts
         const populated = yield* git(["reset", "--hard"], { cwd: info.directory })
         if (populated.code !== 0) {
           const message = populated.stderr || populated.text || "Failed to populate worktree"
@@ -553,7 +552,6 @@ export namespace Worktree {
 
         const worktreePath = entry.path
 
-        // Determine target branch
         const remoteList = yield* git(["remote"], { cwd: Instance.worktree })
         if (remoteList.code !== 0) {
           throw new ResetFailedError({ message: remoteList.stderr || remoteList.text || "Failed to list git remotes" })
@@ -580,10 +578,13 @@ export namespace Worktree {
         const remoteBranch =
           remote && remoteTarget.startsWith(`${remote}/`) ? remoteTarget.slice(`${remote}/`.length) : ""
 
-        const mainCheck = yield* git(["show-ref", "--verify", "--quiet", "refs/heads/main"], { cwd: Instance.worktree })
-        const masterCheck = yield* git(["show-ref", "--verify", "--quiet", "refs/heads/master"], {
-          cwd: Instance.worktree,
-        })
+        const [mainCheck, masterCheck] = yield* Effect.all(
+          [
+            git(["show-ref", "--verify", "--quiet", "refs/heads/main"], { cwd: Instance.worktree }),
+            git(["show-ref", "--verify", "--quiet", "refs/heads/master"], { cwd: Instance.worktree }),
+          ],
+          { concurrency: 2 },
+        )
         const localBranch = mainCheck.code === 0 ? "main" : masterCheck.code === 0 ? "master" : ""
 
         const target = remoteBranch ? `${remote}/${remoteBranch}` : localBranch
