@@ -2,7 +2,7 @@ import { $ } from "bun"
 import * as fs from "fs/promises"
 import os from "os"
 import path from "path"
-import { Effect, FileSystem } from "effect"
+import { Effect, FileSystem, ServiceMap } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import type { Config } from "../../src/config/config"
 import { Instance } from "../../src/project/instance"
@@ -75,7 +75,7 @@ export async function tmpdir<T>(options?: TmpDirOptions<T>) {
   return result
 }
 
-/** Effectful scoped tmpdir — cleaned up when the scope closes */
+/** Effectful scoped tmpdir. Cleaned up when the scope closes. Make sure these stay in sync */
 export function tmpdirScoped(options?: { git?: boolean; config?: Partial<Config.Info> }) {
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
@@ -83,9 +83,7 @@ export function tmpdirScoped(options?: { git?: boolean; config?: Partial<Config.
     const dir = yield* fs.makeTempDirectoryScoped({ prefix: "opencode-test-" })
 
     const git = (...args: string[]) =>
-      spawner
-        .spawn(ChildProcess.make("git", args, { cwd: dir }))
-        .pipe(Effect.flatMap((handle) => handle.exitCode))
+      spawner.spawn(ChildProcess.make("git", args, { cwd: dir })).pipe(Effect.flatMap((handle) => handle.exitCode))
 
     if (options?.git) {
       yield* git("init")
@@ -109,18 +107,35 @@ export function tmpdirScoped(options?: { git?: boolean; config?: Partial<Config.
 export const provideInstance =
   (directory: string) =>
   <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
-    Effect.withFiber((fiber) =>
+    Effect.servicesWith((services: ServiceMap.ServiceMap<R>) =>
       Effect.promise<A>(async () =>
         Instance.provide({
           directory,
-          fn: () => Effect.runPromiseWith(fiber.services as any)(self),
+          fn: () => Effect.runPromiseWith(services)(self),
         }),
       ),
     )
 
-export function tmpdirInstanceScoped(options?: { git?: boolean; config?: Partial<Config.Info> }) {
-  return Effect.map(tmpdirScoped(options), (path) => ({
-    path,
-    provide: provideInstance(path),
-  }))
+export function provideTmpdirInstance<A, E, R>(
+  self: (path: string) => Effect.Effect<A, E, R>,
+  options?: { git?: boolean; config?: Partial<Config.Info> },
+) {
+  return Effect.gen(function* () {
+    const path = yield* tmpdirScoped(options)
+    let provided = false
+
+    yield* Effect.addFinalizer(() =>
+      provided
+        ? Effect.promise(() =>
+            Instance.provide({
+              directory: path,
+              fn: () => Instance.dispose(),
+            }),
+          ).pipe(Effect.ignore)
+        : Effect.void,
+    )
+
+    provided = true
+    return yield* self(path).pipe(provideInstance(path))
+  })
 }

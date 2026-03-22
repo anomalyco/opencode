@@ -1,156 +1,130 @@
-import { afterEach, describe, expect, test } from "bun:test"
-import { Deferred, Effect, ManagedRuntime, Stream } from "effect"
+import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node"
+import { describe, expect } from "bun:test"
+import { Deferred, Effect, Layer, Stream } from "effect"
 import z from "zod"
 import { Bus } from "../../src/bus"
 import { BusEvent } from "../../src/bus/bus-event"
-import { Instance } from "../../src/project/instance"
-import { provideInstance, tmpdir } from "../fixture/fixture"
+import { provideTmpdirInstance } from "../fixture/fixture"
+import { testEffect } from "../lib/effect"
 
 const TestEvent = {
   Ping: BusEvent.define("test.effect.ping", z.object({ value: z.number() })),
   Pong: BusEvent.define("test.effect.pong", z.object({ message: z.string() })),
 }
 
-async function runBus<A>(directory: string, self: Effect.Effect<A, never, Bus.Service>) {
-  const rt = ManagedRuntime.make(Bus.layer)
-  try {
-    return await rt.runPromise(self.pipe(provideInstance(directory)))
-  } finally {
-    await rt.dispose()
-  }
-}
+const node = NodeChildProcessSpawner.layer.pipe(
+  Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
+)
+
+const live = Layer.mergeAll(Bus.layer, node)
+
+const it = testEffect(live)
 
 describe("Bus (Effect-native)", () => {
-  afterEach(() => Instance.disposeAll())
+  it.effect("publish + subscribe stream delivers events", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const bus = yield* Bus.Service
+        const received: number[] = []
+        const done = yield* Deferred.make<void>()
 
-  test("publish + subscribe stream delivers events", async () => {
-    await using tmp = await tmpdir()
-
-    await runBus(
-      tmp.path,
-      Effect.scoped(
-        Bus.Service.use((bus) =>
-          Effect.gen(function* () {
-            const received: number[] = []
-            const done = yield* Deferred.make<void>()
-
-            yield* Stream.runForEach(bus.subscribe(TestEvent.Ping), (evt) =>
-              Effect.sync(() => {
-                received.push(evt.properties.value)
-                if (received.length === 2) Deferred.doneUnsafe(done, Effect.void)
-              }),
-            ).pipe(Effect.forkScoped)
-
-            yield* Effect.sleep("10 millis")
-            yield* bus.publish(TestEvent.Ping, { value: 1 })
-            yield* bus.publish(TestEvent.Ping, { value: 2 })
-            yield* Deferred.await(done)
-
-            expect(received).toEqual([1, 2])
+        yield* Stream.runForEach(bus.subscribe(TestEvent.Ping), (evt) =>
+          Effect.sync(() => {
+            received.push(evt.properties.value)
+            if (received.length === 2) Deferred.doneUnsafe(done, Effect.void)
           }),
-        ),
-      ),
-    )
-  })
+        ).pipe(Effect.forkScoped)
 
-  test("subscribe filters by event type", async () => {
-    await using tmp = await tmpdir()
+        yield* Effect.sleep("10 millis")
+        yield* bus.publish(TestEvent.Ping, { value: 1 })
+        yield* bus.publish(TestEvent.Ping, { value: 2 })
+        yield* Deferred.await(done)
 
-    await runBus(
-      tmp.path,
-      Effect.scoped(
-        Bus.Service.use((bus) =>
-          Effect.gen(function* () {
-            const pings: number[] = []
-            const done = yield* Deferred.make<void>()
+        expect(received).toEqual([1, 2])
+      }),
+    ),
+  )
 
-            yield* Stream.runForEach(bus.subscribe(TestEvent.Ping), (evt) =>
-              Effect.sync(() => {
-                pings.push(evt.properties.value)
-                Deferred.doneUnsafe(done, Effect.void)
-              }),
-            ).pipe(Effect.forkScoped)
+  it.effect("subscribe filters by event type", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const bus = yield* Bus.Service
+        const pings: number[] = []
+        const done = yield* Deferred.make<void>()
 
-            yield* Effect.sleep("10 millis")
-            yield* bus.publish(TestEvent.Pong, { message: "ignored" })
-            yield* bus.publish(TestEvent.Ping, { value: 42 })
-            yield* Deferred.await(done)
-
-            expect(pings).toEqual([42])
+        yield* Stream.runForEach(bus.subscribe(TestEvent.Ping), (evt) =>
+          Effect.sync(() => {
+            pings.push(evt.properties.value)
+            Deferred.doneUnsafe(done, Effect.void)
           }),
-        ),
-      ),
-    )
-  })
+        ).pipe(Effect.forkScoped)
 
-  test("subscribeAll receives all types", async () => {
-    await using tmp = await tmpdir()
+        yield* Effect.sleep("10 millis")
+        yield* bus.publish(TestEvent.Pong, { message: "ignored" })
+        yield* bus.publish(TestEvent.Ping, { value: 42 })
+        yield* Deferred.await(done)
 
-    await runBus(
-      tmp.path,
-      Effect.scoped(
-        Bus.Service.use((bus) =>
-          Effect.gen(function* () {
-            const types: string[] = []
-            const done = yield* Deferred.make<void>()
+        expect(pings).toEqual([42])
+      }),
+    ),
+  )
 
-            yield* Stream.runForEach(bus.subscribeAll(), (evt) =>
-              Effect.sync(() => {
-                types.push(evt.type)
-                if (types.length === 2) Deferred.doneUnsafe(done, Effect.void)
-              }),
-            ).pipe(Effect.forkScoped)
+  it.effect("subscribeAll receives all types", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const bus = yield* Bus.Service
+        const types: string[] = []
+        const done = yield* Deferred.make<void>()
 
-            yield* Effect.sleep("10 millis")
-            yield* bus.publish(TestEvent.Ping, { value: 1 })
-            yield* bus.publish(TestEvent.Pong, { message: "hi" })
-            yield* Deferred.await(done)
-
-            expect(types).toContain("test.effect.ping")
-            expect(types).toContain("test.effect.pong")
+        yield* Stream.runForEach(bus.subscribeAll(), (evt) =>
+          Effect.sync(() => {
+            types.push(evt.type)
+            if (types.length === 2) Deferred.doneUnsafe(done, Effect.void)
           }),
-        ),
-      ),
-    )
-  })
+        ).pipe(Effect.forkScoped)
 
-  test("multiple subscribers each receive the event", async () => {
-    await using tmp = await tmpdir()
+        yield* Effect.sleep("10 millis")
+        yield* bus.publish(TestEvent.Ping, { value: 1 })
+        yield* bus.publish(TestEvent.Pong, { message: "hi" })
+        yield* Deferred.await(done)
 
-    await runBus(
-      tmp.path,
-      Effect.scoped(
-        Bus.Service.use((bus) =>
-          Effect.gen(function* () {
-            const a: number[] = []
-            const b: number[] = []
-            const doneA = yield* Deferred.make<void>()
-            const doneB = yield* Deferred.make<void>()
+        expect(types).toContain("test.effect.ping")
+        expect(types).toContain("test.effect.pong")
+      }),
+    ),
+  )
 
-            yield* Stream.runForEach(bus.subscribe(TestEvent.Ping), (evt) =>
-              Effect.sync(() => {
-                a.push(evt.properties.value)
-                Deferred.doneUnsafe(doneA, Effect.void)
-              }),
-            ).pipe(Effect.forkScoped)
+  it.effect("multiple subscribers each receive the event", () =>
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const bus = yield* Bus.Service
+        const a: number[] = []
+        const b: number[] = []
+        const doneA = yield* Deferred.make<void>()
+        const doneB = yield* Deferred.make<void>()
 
-            yield* Stream.runForEach(bus.subscribe(TestEvent.Ping), (evt) =>
-              Effect.sync(() => {
-                b.push(evt.properties.value)
-                Deferred.doneUnsafe(doneB, Effect.void)
-              }),
-            ).pipe(Effect.forkScoped)
-
-            yield* Effect.sleep("10 millis")
-            yield* bus.publish(TestEvent.Ping, { value: 99 })
-            yield* Deferred.await(doneA)
-            yield* Deferred.await(doneB)
-
-            expect(a).toEqual([99])
-            expect(b).toEqual([99])
+        yield* Stream.runForEach(bus.subscribe(TestEvent.Ping), (evt) =>
+          Effect.sync(() => {
+            a.push(evt.properties.value)
+            Deferred.doneUnsafe(doneA, Effect.void)
           }),
-        ),
-      ),
-    )
-  })
+        ).pipe(Effect.forkScoped)
+
+        yield* Stream.runForEach(bus.subscribe(TestEvent.Ping), (evt) =>
+          Effect.sync(() => {
+            b.push(evt.properties.value)
+            Deferred.doneUnsafe(doneB, Effect.void)
+          }),
+        ).pipe(Effect.forkScoped)
+
+        yield* Effect.sleep("10 millis")
+        yield* bus.publish(TestEvent.Ping, { value: 99 })
+        yield* Deferred.await(doneA)
+        yield* Deferred.await(doneB)
+
+        expect(a).toEqual([99])
+        expect(b).toEqual([99])
+      }),
+    ),
+  )
 })
