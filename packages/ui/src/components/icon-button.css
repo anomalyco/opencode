@@ -7,6 +7,7 @@
   user-select: none;
   aspect-ratio: 1;
   flex-shrink: 0;
+  cursor: pointer;
 
   &[data-variant="primary"] {
     background-color: var(--icon-strong-base);

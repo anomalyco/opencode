@@ -1603,9 +1603,8 @@
     position: sticky;
     top: var(--sticky-accordion-top, 0px);
     z-index: 20;
-    height: calc(32px + var(--tool-content-gap));
-    padding-bottom: var(--tool-content-gap);
-    background-color: var(--background-stronger);
+    height: 40px;
+    padding-bottom: 8px;
   }
 }
 

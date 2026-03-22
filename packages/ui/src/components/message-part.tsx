@@ -1321,12 +1321,7 @@ function ToolFileAccordion(props: { path: string; actions?: JSX.Element; childre
   const value = createMemo(() => props.path || "tool-file")
 
   return (
-    <Accordion
-      multiple
-      data-scope="apply-patch"
-      style={{ "--sticky-accordion-offset": "calc(32px + var(--tool-content-gap))" }}
-      defaultValue={[value()]}
-    >
+    <Accordion multiple data-scope="apply-patch" style={{ "--sticky-accordion-offset": "40px" }} defaultValue={[]}>
       <Accordion.Item value={value()}>
         <StickyAccordionHeader>
           <Accordion.Trigger>
@@ -2146,15 +2141,6 @@ ToolRegistry.register({
       return list[0]
     })
     const [expanded, setExpanded] = createSignal<string[]>([])
-    let seeded = false
-
-    createEffect(() => {
-      const list = files()
-      if (list.length === 0) return
-      if (seeded) return
-      seeded = true
-      setExpanded(list.filter((f) => f.type !== "delete").map((f) => f.filePath))
-    })
 
     const subtitle = createMemo(() => {
       const count = files().length

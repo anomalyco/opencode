@@ -63,6 +63,7 @@
     border-bottom: 1px solid var(--border-weak-base);
     border-right: 1px solid var(--border-weak-base);
     background-color: var(--background-base);
+    cursor: pointer;
 
     [data-slot="tabs-trigger"] {
       display: flex;
@@ -93,6 +94,7 @@
     &:disabled {
       pointer-events: none;
       color: var(--text-weaker);
+      cursor: not-allowed;
     }
     &:focus-visible {
       outline: none;
