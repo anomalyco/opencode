@@ -22,9 +22,16 @@ export namespace Plugin {
     hooks: Hooks[]
   }
 
+  // Hook names that follow the (input, output) => Promise<void> trigger pattern
+  type TriggerName = {
+    [K in keyof Hooks]-?: NonNullable<Hooks[K]> extends (input: any, output: any) => Promise<void>
+      ? K
+      : never
+  }[keyof Hooks]
+
   export interface Interface {
     readonly trigger: <
-      Name extends Exclude<keyof Required<Hooks>, "auth" | "event" | "tool">,
+      Name extends TriggerName,
       Input = Parameters<Required<Hooks>[Name]>[0],
       Output = Parameters<Required<Hooks>[Name]>[1],
     >(
@@ -152,7 +159,7 @@ export namespace Plugin {
       )
 
       const trigger = Effect.fn("Plugin.trigger")(function* <
-        Name extends Exclude<keyof Required<Hooks>, "auth" | "event" | "tool">,
+        Name extends TriggerName,
         Input = Parameters<Required<Hooks>[Name]>[0],
         Output = Parameters<Required<Hooks>[Name]>[1],
       >(name: Name, input: Input, output: Output) {
@@ -184,7 +191,7 @@ export namespace Plugin {
   const runPromise = makeRunPromise(Service, layer)
 
   export async function trigger<
-    Name extends Exclude<keyof Required<Hooks>, "auth" | "event" | "tool">,
+    Name extends TriggerName,
     Input = Parameters<Required<Hooks>[Name]>[0],
     Output = Parameters<Required<Hooks>[Name]>[1],
   >(name: Name, input: Input, output: Output): Promise<Output> {
