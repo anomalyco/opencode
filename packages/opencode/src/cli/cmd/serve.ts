@@ -1,6 +1,6 @@
 import { Server } from "../../server/server"
 import { cmd } from "./cmd"
-import { withNetworkOptions, resolveNetworkOptions } from "../network"
+import { withNetworkOptions, withOfflineOption, resolveNetworkOptions } from "../network"
 import { Flag } from "../../flag/flag"
 import { Workspace } from "../../control-plane/workspace"
 import { Project } from "../../project/project"
@@ -8,9 +8,10 @@ import { Installation } from "../../installation"
 
 export const ServeCommand = cmd({
   command: "serve",
-  builder: (yargs) => withNetworkOptions(yargs),
+  builder: (yargs) => withOfflineOption(withNetworkOptions(yargs)),
   describe: "starts a headless opencode server",
   handler: async (args) => {
+    if (args.offline) process.env["OPENCODE_OFFLINE"] = "true"
     if (!Flag.OPENCODE_SERVER_PASSWORD) {
       console.log("Warning: OPENCODE_SERVER_PASSWORD is not set; server is unsecured.")
     }

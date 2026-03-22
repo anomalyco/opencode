@@ -457,6 +457,41 @@ Notice that this only works if it was not installed using a package manager such
 
 ---
 
+### Offline mode
+
+You can disable all non-essential outbound connections with the `offline` option. This is useful in air-gapped or privacy-sensitive environments.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "offline": true
+}
+```
+
+You can also set it via environment variable or CLI flag:
+
+```bash
+# Environment variable
+OPENCODE_OFFLINE=true opencode
+
+# CLI flag
+opencode --offline
+opencode run --offline "fix the tests"
+opencode serve --offline
+```
+
+When offline mode is enabled:
+
+- Auto-update checks (`opencode.ai/install`) are skipped
+- Session sharing (`opncd.ai`) is disabled and the `/share` command is hidden
+- The web UI proxy (`app.opencode.ai`) returns an error
+
+Essential connections are not affected — your configured LLM provider and the `models.dev` model catalog continue to work normally. Exa web/code search is also unaffected since it is user-initiated and already gated by a permission prompt.
+
+For finer-grained control, you can use the individual environment variables: `OPENCODE_DISABLE_AUTOUPDATE`, `OPENCODE_DISABLE_SHARE`, and `OPENCODE_DISABLE_APP_PROXY`.
+
+---
+
 ### Formatters
 
 You can configure code formatters through the `formatter` option.

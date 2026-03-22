@@ -7,7 +7,7 @@ import { fileURLToPath } from "url"
 import { UI } from "@/cli/ui"
 import { Log } from "@/util/log"
 import { withTimeout } from "@/util/timeout"
-import { withNetworkOptions, resolveNetworkOptions } from "@/cli/network"
+import { withNetworkOptions, withOfflineOption, resolveNetworkOptions } from "@/cli/network"
 import { Filesystem } from "@/util/filesystem"
 import type { Event } from "@opencode-ai/sdk/v2"
 import type { EventSource } from "./context/sdk"
@@ -66,39 +66,42 @@ export const TuiThreadCommand = cmd({
   command: "$0 [project]",
   describe: "start opencode tui",
   builder: (yargs) =>
-    withNetworkOptions(yargs)
-      .positional("project", {
-        type: "string",
-        describe: "path to start opencode in",
-      })
-      .option("model", {
-        type: "string",
-        alias: ["m"],
-        describe: "model to use in the format of provider/model",
-      })
-      .option("continue", {
-        alias: ["c"],
-        describe: "continue the last session",
-        type: "boolean",
-      })
-      .option("session", {
-        alias: ["s"],
-        type: "string",
-        describe: "session id to continue",
-      })
-      .option("fork", {
-        type: "boolean",
-        describe: "fork the session when continuing (use with --continue or --session)",
-      })
-      .option("prompt", {
-        type: "string",
-        describe: "prompt to use",
-      })
-      .option("agent", {
-        type: "string",
-        describe: "agent to use",
-      }),
+    withOfflineOption(
+      withNetworkOptions(yargs)
+        .positional("project", {
+          type: "string",
+          describe: "path to start opencode in",
+        })
+        .option("model", {
+          type: "string",
+          alias: ["m"],
+          describe: "model to use in the format of provider/model",
+        })
+        .option("continue", {
+          alias: ["c"],
+          describe: "continue the last session",
+          type: "boolean",
+        })
+        .option("session", {
+          alias: ["s"],
+          type: "string",
+          describe: "session id to continue",
+        })
+        .option("fork", {
+          type: "boolean",
+          describe: "fork the session when continuing (use with --continue or --session)",
+        })
+        .option("prompt", {
+          type: "string",
+          describe: "prompt to use",
+        })
+        .option("agent", {
+          type: "string",
+          describe: "agent to use",
+        }),
+    ),
   handler: async (args) => {
+    if (args.offline) process.env["OPENCODE_OFFLINE"] = "true"
     // Keep ENABLE_PROCESSED_INPUT cleared even if other code flips it.
     // (Important when running under `bun run` wrappers on Windows.)
     const unguard = win32InstallCtrlCGuard()

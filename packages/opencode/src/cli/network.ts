@@ -36,6 +36,15 @@ export function withNetworkOptions<T>(yargs: Argv<T>) {
   return yargs.options(options)
 }
 
+export function withOfflineOption<T>(yargs: Argv<T>) {
+  return yargs.option("offline", {
+    type: "boolean" as const,
+    describe:
+      "disable non-essential outbound connections (auto-update, session sharing, app proxy). Equivalent to OPENCODE_OFFLINE=true",
+    default: false,
+  })
+}
+
 export async function resolveNetworkOptions(args: NetworkOptions) {
   const config = await Config.global()
   const portExplicitlySet = process.argv.includes("--port")
