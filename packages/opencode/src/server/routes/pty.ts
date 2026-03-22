@@ -176,6 +176,9 @@ export const PtyRoutes = lazy(() =>
           return typeof (value as { readyState?: unknown }).readyState === "number"
         }
 
+        const pending: string[] = []
+        let ready = false
+
         return {
           async onOpen(_event, ws) {
             const socket = ws.raw
@@ -184,9 +187,16 @@ export const PtyRoutes = lazy(() =>
               return
             }
             handler = await Pty.connect(id, socket, cursor)
+            ready = true
+            for (const msg of pending) handler?.onMessage(msg)
+            pending.length = 0
           },
           onMessage(event) {
             if (typeof event.data !== "string") return
+            if (!ready) {
+              pending.push(event.data)
+              return
+            }
             handler?.onMessage(event.data)
           },
           onClose() {

@@ -118,6 +118,18 @@ export namespace Pty {
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
+      function teardown(session: Active) {
+        try {
+          session.process.kill()
+        } catch {}
+        for (const [key, ws] of session.subscribers.entries()) {
+          try {
+            if (ws.data === key) ws.close()
+          } catch {}
+        }
+        session.subscribers.clear()
+      }
+
       const cache = yield* InstanceState.make<State>(
         Effect.fn("Pty.state")(function* (ctx) {
           const state = {
@@ -128,14 +140,7 @@ export namespace Pty {
           yield* Effect.addFinalizer(() =>
             Effect.sync(() => {
               for (const session of state.sessions.values()) {
-                try {
-                  session.process.kill()
-                } catch {}
-                for (const [key, ws] of session.subscribers.entries()) {
-                  try {
-                    if (ws.data === key) ws.close()
-                  } catch {}
-                }
+                teardown(session)
               }
               state.sessions.clear()
             }),
@@ -145,21 +150,13 @@ export namespace Pty {
         }),
       )
 
-      const drop = Effect.fn("Pty.drop")(function* (id: PtyID) {
+      const remove = Effect.fn("Pty.remove")(function* (id: PtyID) {
         const state = yield* InstanceState.get(cache)
         const session = state.sessions.get(id)
         if (!session) return
         state.sessions.delete(id)
         log.info("removing session", { id })
-        try {
-          session.process.kill()
-        } catch {}
-        for (const [key, ws] of session.subscribers.entries()) {
-          try {
-            if (ws.data === key) ws.close()
-          } catch {}
-        }
-        session.subscribers.clear()
+        teardown(session)
         void Bus.publish(Event.Deleted, { id: session.info.id })
       })
 
@@ -258,7 +255,7 @@ export namespace Pty {
               log.info("session exited", { id, exitCode })
               session.info.status = "exited"
               void Bus.publish(Event.Exited, { id, exitCode })
-              void runPromise((svc) => svc.remove(id))
+              Effect.runFork(remove(id))
             }),
           )
           await Bus.publish(Event.Created, { info })
@@ -278,10 +275,6 @@ export namespace Pty {
         }
         yield* Effect.promise(() => Bus.publish(Event.Updated, { info: session.info }))
         return session.info
-      })
-
-      const remove = Effect.fn("Pty.remove")(function* (id: PtyID) {
-        yield* drop(id)
       })
 
       const resize = Effect.fn("Pty.resize")(function* (id: PtyID, cols: number, rows: number) {
