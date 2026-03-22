@@ -105,6 +105,9 @@ export namespace Skill {
   const scan = async (state: State, root: string, pattern: string, opts?: { dot?: boolean; scope?: string }) => {
     if (!(await Filesystem.isDir(root))) return
 
+    // Skill roots may be symlinked into other tool-managed trees. Track the
+    // physical directory so we can follow valid symlinked roots without
+    // recursing forever when those trees contain symlink cycles.
     const seen = new Set<string>()
 
     const walk = async (dir: string, rel: string) => {
@@ -131,6 +134,8 @@ export namespace Skill {
 
         if (!item.isSymbolicLink()) continue
 
+        // Preserve symlinked skill roots and files, but decide based on the
+        // target type so symlink cycles are still stopped by the realpath set.
         const info = await stat(abs).catch(() => undefined)
         if (!info) continue
 
