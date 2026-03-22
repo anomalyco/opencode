@@ -35,6 +35,11 @@ import { makeRunPromise } from "@/effect/run-service"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
+  const plain = (x: unknown): x is Record<string, any> =>
+    !!x &&
+    typeof x === "object" &&
+    !Array.isArray(x) &&
+    [Object.prototype, null].includes(Object.getPrototypeOf(x))
 
   type State = {
     custom: Tool.Info[]
@@ -65,17 +70,33 @@ export namespace ToolRegistry {
                 parameters: z.object(def.args),
                 description: def.description,
                 execute: async (args, toolCtx) => {
+                  let title: string | undefined
+                  let meta: Record<string, any> | undefined
                   const pluginCtx = {
                     ...toolCtx,
                     directory: ctx.directory,
                     worktree: ctx.worktree,
+                    metadata(input: { title?: string; metadata?: Record<string, any> }) {
+                      if (input.title !== undefined) title = input.title
+                      if (input.metadata !== undefined) meta = plain(input.metadata) ? input.metadata : {}
+                      toolCtx.metadata(input)
+                    },
                   } as unknown as PluginToolContext
-                  const result = await def.execute(args as any, pluginCtx)
-                  const out = await Truncate.output(result, {}, initCtx?.agent)
+                  const result = (await def.execute(args as any, pluginCtx)) as unknown
+                  const item = plain(result) ? result : undefined
+                  const text = item && typeof item.output === "string" ? item.output : typeof result === "string" ? result : undefined
+                  if (text === undefined) throw new Error(`Plugin tool ${id} must return a string or an object with string output`)
+                  const out = await Truncate.output(text, {}, initCtx?.agent)
+                  const info = item && typeof item.title === "string" ? item.title : title ?? ""
+                  const data = item && plain(item.metadata) ? item.metadata : meta ?? {}
                   return {
-                    title: "",
-                    output: out.truncated ? out.content : result,
-                    metadata: { truncated: out.truncated, outputPath: out.truncated ? out.outputPath : undefined },
+                    title: info,
+                    output: out.content,
+                    metadata: {
+                      ...data,
+                      truncated: out.truncated,
+                      ...(out.truncated && { outputPath: out.outputPath }),
+                    },
                   }
                 },
               }),

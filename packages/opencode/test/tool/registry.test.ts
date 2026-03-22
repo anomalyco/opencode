@@ -4,6 +4,19 @@ import fs from "fs/promises"
 import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { ToolRegistry } from "../../src/tool/registry"
+import { ProviderID, ModelID } from "../../src/provider/schema"
+import { MessageID, SessionID } from "../../src/session/schema"
+
+const ctx = {
+  sessionID: SessionID.make("ses_test"),
+  messageID: MessageID.make("msg_test"),
+  callID: "call_test",
+  agent: "test",
+  abort: AbortSignal.any([]),
+  messages: [],
+  metadata: () => {},
+  ask: async () => {},
+}
 
 afterEach(async () => {
   await Instance.disposeAll()
@@ -120,6 +133,137 @@ describe("tool.registry", () => {
       fn: async () => {
         const ids = await ToolRegistry.ids()
         expect(ids).toContain("cowsay")
+      },
+    })
+  })
+
+  test("preserves metadata set via context.metadata()", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const opencodeDir = path.join(dir, ".opencode")
+        await fs.mkdir(opencodeDir, { recursive: true })
+
+        const toolsDir = path.join(opencodeDir, "tools")
+        await fs.mkdir(toolsDir, { recursive: true })
+
+        await Bun.write(
+          path.join(toolsDir, "hello.ts"),
+          [
+            "export default {",
+            "  description: 'hello tool',",
+            "  args: {},",
+            "  execute: async (_args: {}, ctx: any) => {",
+            "    ctx.metadata({ title: 'ctx title', metadata: { foo: 'bar' } })",
+            "    return 'x'.repeat(60 * 1024)",
+            "  },",
+            "}",
+            "",
+          ].join("\n"),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const tool = (
+          await ToolRegistry.tools({ providerID: ProviderID.make("test"), modelID: ModelID.make("test") })
+        ).find((x) => x.id === "hello")
+        expect(tool).toBeDefined()
+        if (!tool) return
+
+        const result = await tool.execute({}, ctx)
+        expect(result.title).toBe("ctx title")
+        expect(result.metadata.foo).toBe("bar")
+        expect(result.metadata.truncated).toBe(true)
+        expect(result.metadata.outputPath).toBeDefined()
+      },
+    })
+  })
+
+  test("preserves string plugin results", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const opencodeDir = path.join(dir, ".opencode")
+        await fs.mkdir(opencodeDir, { recursive: true })
+
+        const toolsDir = path.join(opencodeDir, "tools")
+        await fs.mkdir(toolsDir, { recursive: true })
+
+        await Bun.write(
+          path.join(toolsDir, "hello.ts"),
+          [
+            "export default {",
+            "  description: 'hello tool',",
+            "  args: {},",
+            "  execute: async () => 'hello world',",
+            "}",
+            "",
+          ].join("\n"),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const tool = (
+          await ToolRegistry.tools({ providerID: ProviderID.make("test"), modelID: ModelID.make("test") })
+        ).find((x) => x.id === "hello")
+        expect(tool).toBeDefined()
+        if (!tool) return
+
+        const result = await tool.execute({}, ctx)
+        expect(result.title).toBe("")
+        expect(result.output).toBe("hello world")
+        expect(result.metadata.truncated).toBe(false)
+        expect("outputPath" in result.metadata).toBe(false)
+      },
+    })
+  })
+
+  test("preserves structured plugin results", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const opencodeDir = path.join(dir, ".opencode")
+        await fs.mkdir(opencodeDir, { recursive: true })
+
+        const toolsDir = path.join(opencodeDir, "tools")
+        await fs.mkdir(toolsDir, { recursive: true })
+
+        await Bun.write(
+          path.join(toolsDir, "hello.ts"),
+          [
+            "export default {",
+            "  description: 'hello tool',",
+            "  args: {},",
+            "  execute: async () => ({",
+            "    title: 'result title',",
+            "    metadata: { foo: 'bar' },",
+            "    output: 'hello world',",
+            "  }) as any,",
+            "}",
+            "",
+          ].join("\n"),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const tool = (
+          await ToolRegistry.tools({ providerID: ProviderID.make("test"), modelID: ModelID.make("test") })
+        ).find((x) => x.id === "hello")
+        expect(tool).toBeDefined()
+        if (!tool) return
+
+        const result = await tool.execute({}, ctx)
+        expect(result.title).toBe("result title")
+        expect(result.output).toBe("hello world")
+        expect(result.metadata.foo).toBe("bar")
+        expect(result.metadata.truncated).toBe(false)
+        expect("outputPath" in result.metadata).toBe(false)
       },
     })
   })
