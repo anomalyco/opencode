@@ -103,8 +103,6 @@ export namespace Skill {
   }
 
   const scan = async (state: State, root: string, pattern: string, opts?: { dot?: boolean; scope?: string }) => {
-    // Preserve the old glob scope so we do not walk unrelated siblings such as
-    // .opencode/node_modules just to find SKILL.md files under skill roots.
     const roots =
       pattern === EXTERNAL_SKILL_PATTERN
         ? [path.join(root, "skills")]
@@ -112,47 +110,53 @@ export namespace Skill {
           ? [path.join(root, "skill"), path.join(root, "skills")]
           : [root]
 
-    // Skill roots may be symlinked into other tool-managed trees. Track the
-    // physical directory so we can follow valid symlinked roots without
-    // recursing forever when those trees contain symlink cycles.
-    const seen = new Set<string>()
 
-    const walk = async (dir: string, rel: string) => {
-      const key = await realpath(dir).catch(() => dir)
-      if (seen.has(key)) return
-      seen.add(key)
+    // Prevent symlink loops by tracking visited real directories.
+    const seenDirs = new Set<string>()
 
-      const list = await readdir(dir, { withFileTypes: true })
-      for (const item of list) {
-        if (!opts?.dot && item.name.startsWith(".")) continue
+    const walk = async (dir: string, relativePath: string) => {
+      const resolvedDir = await realpath(dir).catch(() => dir)
+      if (seenDirs.has(resolvedDir)) return
+      seenDirs.add(resolvedDir)
 
-        const abs = path.join(dir, item.name)
-        const next = rel ? path.join(rel, item.name) : item.name
+      const dirEntries = await readdir(dir, { withFileTypes: true })
+      for (const entry of dirEntries) {
+        // Skip hidden paths
+        if (!opts?.dot && entry.name.startsWith(".")) continue
 
-        if (item.isFile()) {
-          if (Glob.match(SKILL_PATTERN, next.replaceAll(path.sep, "/"))) await add(state, abs)
+        const absoluteEntryPath = path.join(dir, entry.name)
+        const relativeEntryPath = relativePath ? path.join(relativePath, entry.name) : entry.name
+
+        // Match regular files directly against the skill glob
+        if (entry.isFile()) {
+          if (Glob.match(SKILL_PATTERN, relativeEntryPath.replaceAll(path.sep, "/"))) await add(state, absoluteEntryPath)
           continue
         }
 
-        if (item.isDirectory()) {
-          await walk(abs, next)
+        // Recurse into subdirs
+        if (entry.isDirectory()) {
+          await walk(absoluteEntryPath, relativeEntryPath)
           continue
         }
 
-        if (!item.isSymbolicLink()) continue
+        // Symlinks need a second check so we can follow skill roots without
+        // blindly recursing into link cycles.
+        if (!entry.isSymbolicLink()) continue
 
         // Preserve symlinked skill roots and files, but decide based on the
         // target type so symlink cycles are still stopped by the realpath set.
-        const info = await stat(abs).catch(() => undefined)
-        if (!info) continue
+        const targetStat = await stat(absoluteEntryPath).catch(() => undefined)
+        if (!targetStat) continue
 
-        if (info.isFile()) {
-          if (Glob.match(SKILL_PATTERN, next.replaceAll(path.sep, "/"))) await add(state, abs)
+        // Add symlinked skill files
+        if (targetStat.isFile()) {
+          if (Glob.match(SKILL_PATTERN, relativeEntryPath.replaceAll(path.sep, "/"))) await add(state, absoluteEntryPath)
           continue
         }
 
-        if (info.isDirectory()) {
-          await walk(abs, next)
+        // Recurse into unseen symlinked subdirs
+        if (targetStat.isDirectory()) {
+          await walk(absoluteEntryPath, relativeEntryPath)
         }
       }
     }
