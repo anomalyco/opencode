@@ -1,6 +1,7 @@
 import type { Argv } from "yargs"
 import { Instance } from "../../project/instance"
 import { Provider } from "../../provider/provider"
+import { ProviderID } from "../../provider/schema"
 import { ModelsDev } from "../../provider/models"
 import { cmd } from "./cmd"
 import { UI } from "../ui"
@@ -36,7 +37,7 @@ export const ModelsCommand = cmd({
       async fn() {
         const providers = await Provider.list()
 
-        function printModels(providerID: string, verbose?: boolean) {
+        function printModels(providerID: ProviderID, verbose?: boolean) {
           const provider = providers[providerID]
           const sortedModels = Object.entries(provider.models).sort(([a], [b]) => a.localeCompare(b))
           for (const [modelID, model] of sortedModels) {
@@ -50,13 +51,13 @@ export const ModelsCommand = cmd({
         }
 
         if (args.provider) {
-          const provider = providers[args.provider]
+          const provider = providers[ProviderID.make(args.provider)]
           if (!provider) {
             UI.error(`Provider not found: ${args.provider}`)
             return
           }
 
-          printModels(args.provider, args.verbose)
+          printModels(ProviderID.make(args.provider), args.verbose)
           return
         }
 
@@ -69,7 +70,7 @@ export const ModelsCommand = cmd({
         })
 
         for (const providerID of providerIDs) {
-          printModels(providerID, args.verbose)
+          printModels(ProviderID.make(providerID), args.verbose)
         }
       },
     })

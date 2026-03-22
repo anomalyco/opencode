@@ -1,6 +1,7 @@
 import type { Argv } from "yargs"
 import type { Session as SDKSession, Message, Part } from "@opencode-ai/sdk/v2"
 import { Session } from "../../session"
+import { MessageV2 } from "../../session/message-v2"
 import { cmd } from "./cmd"
 import { bootstrap } from "../bootstrap"
 import { Database } from "../../storage/db"
@@ -86,7 +87,7 @@ export const ImportCommand = cmd({
     await bootstrap(process.cwd(), async () => {
       let exportData:
         | {
-            info: Session.Info
+            info: SDKSession
             messages: Array<{
               info: Message
               parts: Part[]
@@ -152,7 +153,11 @@ export const ImportCommand = cmd({
         return
       }
 
-      const row = { ...Session.toRow(exportData.info), project_id: Instance.project.id }
+      const info = Session.Info.parse({
+        ...exportData.info,
+        projectID: Instance.project.id,
+      })
+      const row = Session.toRow(info)
       Database.use((db) =>
         db
           .insert(SessionTable)
@@ -162,28 +167,32 @@ export const ImportCommand = cmd({
       )
 
       for (const msg of exportData.messages) {
+        const msgInfo = MessageV2.Info.parse(msg.info)
+        const { id, sessionID: _, ...msgData } = msgInfo
         Database.use((db) =>
           db
             .insert(MessageTable)
             .values({
-              id: msg.info.id,
-              session_id: exportData.info.id,
-              time_created: msg.info.time?.created ?? Date.now(),
-              data: msg.info,
+              id,
+              session_id: row.id,
+              time_created: msgInfo.time?.created ?? Date.now(),
+              data: msgData,
             })
             .onConflictDoNothing()
             .run(),
         )
 
         for (const part of msg.parts) {
+          const partInfo = MessageV2.Part.parse(part)
+          const { id: partId, sessionID: _s, messageID, ...partData } = partInfo
           Database.use((db) =>
             db
               .insert(PartTable)
               .values({
-                id: part.id,
-                message_id: msg.info.id,
-                session_id: exportData.info.id,
-                data: part,
+                id: partId,
+                message_id: messageID,
+                session_id: row.id,
+                data: partData,
               })
               .onConflictDoNothing()
               .run(),

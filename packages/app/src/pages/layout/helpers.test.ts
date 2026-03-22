@@ -6,9 +6,15 @@ import {
   parseDeepLink,
   parseNewSessionDeepLink,
 } from "./deep-links"
-import { displayName, errorMessage, getDraggableId, syncWorkspaceOrder, workspaceKey } from "./helpers"
 import { type Session } from "@opencode-ai/sdk/v2/client"
-import { hasProjectPermissions, latestRootSession } from "./helpers"
+import {
+  displayName,
+  effectiveWorkspaceOrder,
+  errorMessage,
+  hasProjectPermissions,
+  latestRootSession,
+  workspaceKey,
+} from "./helpers"
 
 const session = (input: Partial<Session> & Pick<Session, "id" | "directory">) =>
   ({
@@ -98,19 +104,19 @@ describe("layout deep links", () => {
 describe("layout workspace helpers", () => {
   test("normalizes trailing slash in workspace key", () => {
     expect(workspaceKey("/tmp/demo///")).toBe("/tmp/demo")
-    expect(workspaceKey("C:\\tmp\\demo\\\\")).toBe("C:\\tmp\\demo")
+    expect(workspaceKey("C:\\tmp\\demo\\\\")).toBe("C:/tmp/demo")
   })
 
   test("preserves posix and drive roots in workspace key", () => {
     expect(workspaceKey("/")).toBe("/")
     expect(workspaceKey("///")).toBe("/")
-    expect(workspaceKey("C:\\")).toBe("C:\\")
-    expect(workspaceKey("C:\\\\\\")).toBe("C:\\")
+    expect(workspaceKey("C:\\")).toBe("C:/")
+    expect(workspaceKey("C://")).toBe("C:/")
     expect(workspaceKey("C:///")).toBe("C:/")
   })
 
   test("keeps local first while preserving known order", () => {
-    const result = syncWorkspaceOrder("/root", ["/root", "/b", "/c"], ["/root", "/c", "/a", "/b"])
+    const result = effectiveWorkspaceOrder("/root", ["/root", "/b", "/c"], ["/root", "/c", "/a", "/b"])
     expect(result).toEqual(["/root", "/c", "/b"])
   })
 
@@ -190,12 +196,6 @@ describe("layout workspace helpers", () => {
     )
 
     expect(result?.id).toBe("root")
-  })
-
-  test("extracts draggable id safely", () => {
-    expect(getDraggableId({ draggable: { id: "x" } })).toBe("x")
-    expect(getDraggableId({ draggable: { id: 42 } })).toBeUndefined()
-    expect(getDraggableId(null)).toBeUndefined()
   })
 
   test("formats fallback project display name", () => {

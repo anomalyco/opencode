@@ -1,11 +1,12 @@
 import { TextField } from "@opencode-ai/ui/text-field"
 import { Logo } from "@opencode-ai/ui/logo"
 import { Button } from "@opencode-ai/ui/button"
-import { Component, Show } from "solid-js"
+import { Component, Show, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { usePlatform } from "@/context/platform"
 import { useLanguage } from "@/context/language"
 import { Icon } from "@opencode-ai/ui/icon"
+import type { E2EWindow } from "@/testing/terminal"
 
 export type InitError = {
   name: string
@@ -35,14 +36,14 @@ function isInitError(error: unknown): error is InitError {
   )
 }
 
-function safeJson(value: unknown): string {
+function safeJson(value: unknown, circular: string): string {
   const seen = new WeakSet<object>()
   const json = JSON.stringify(
     value,
     (_key, val) => {
       if (typeof val === "bigint") return val.toString()
       if (typeof val === "object" && val) {
-        if (seen.has(val)) return "[Circular]"
+        if (seen.has(val)) return circular
         seen.add(val)
       }
       return val
@@ -54,14 +55,15 @@ function safeJson(value: unknown): string {
 
 function formatInitError(error: InitError, t: Translator): string {
   const data = error.data
+  const json = (value: unknown) => safeJson(value, t("error.page.circular"))
   switch (error.name) {
     case "MCPFailed": {
       const name = typeof data.name === "string" ? data.name : ""
       return t("error.chain.mcpFailed", { name })
     }
     case "ProviderAuthError": {
-      const providerID = typeof data.providerID === "string" ? data.providerID : "unknown"
-      const message = typeof data.message === "string" ? data.message : safeJson(data.message)
+      const providerID = typeof data.providerID === "string" ? data.providerID : t("common.unknown")
+      const message = typeof data.message === "string" ? data.message : json(data.message)
       return t("error.chain.providerAuthFailed", { provider: providerID, message })
     }
     case "APIError": {
@@ -101,24 +103,24 @@ function formatInitError(error: InitError, t: Translator): string {
       ].join("\n")
     }
     case "ProviderInitError": {
-      const providerID = typeof data.providerID === "string" ? data.providerID : "unknown"
+      const providerID = typeof data.providerID === "string" ? data.providerID : t("common.unknown")
       return t("error.chain.providerInitFailed", { provider: providerID })
     }
     case "ConfigJsonError": {
-      const path = typeof data.path === "string" ? data.path : safeJson(data.path)
+      const path = typeof data.path === "string" ? data.path : json(data.path)
       const message = typeof data.message === "string" ? data.message : ""
       if (message) return t("error.chain.configJsonInvalidWithMessage", { path, message })
       return t("error.chain.configJsonInvalid", { path })
     }
     case "ConfigDirectoryTypoError": {
-      const path = typeof data.path === "string" ? data.path : safeJson(data.path)
-      const dir = typeof data.dir === "string" ? data.dir : safeJson(data.dir)
-      const suggestion = typeof data.suggestion === "string" ? data.suggestion : safeJson(data.suggestion)
+      const path = typeof data.path === "string" ? data.path : json(data.path)
+      const dir = typeof data.dir === "string" ? data.dir : json(data.dir)
+      const suggestion = typeof data.suggestion === "string" ? data.suggestion : json(data.suggestion)
       return t("error.chain.configDirectoryTypo", { dir, path, suggestion })
     }
     case "ConfigFrontmatterError": {
-      const path = typeof data.path === "string" ? data.path : safeJson(data.path)
-      const message = typeof data.message === "string" ? data.message : safeJson(data.message)
+      const path = typeof data.path === "string" ? data.path : json(data.path)
+      const message = typeof data.message === "string" ? data.message : json(data.message)
       return t("error.chain.configFrontmatterError", { path, message })
     }
     case "ConfigInvalidError": {
@@ -126,7 +128,7 @@ function formatInitError(error: InitError, t: Translator): string {
         ? data.issues.filter(isIssue).map((issue) => "↳ " + issue.message + " " + issue.path.join("."))
         : []
       const message = typeof data.message === "string" ? data.message : ""
-      const path = typeof data.path === "string" ? data.path : safeJson(data.path)
+      const path = typeof data.path === "string" ? data.path : json(data.path)
 
       const line = message
         ? t("error.chain.configInvalidWithMessage", { path, message })
@@ -135,14 +137,15 @@ function formatInitError(error: InitError, t: Translator): string {
       return [line, ...issues].join("\n")
     }
     case "UnknownError":
-      return typeof data.message === "string" ? data.message : safeJson(data)
+      return typeof data.message === "string" ? data.message : json(data)
     default:
       if (typeof data.message === "string") return data.message
-      return safeJson(data)
+      return json(data)
   }
 }
 
 function formatErrorChain(error: unknown, t: Translator, depth = 0, parentMessage?: string): string {
+  const json = (value: unknown) => safeJson(value, t("error.page.circular"))
   if (!error) return t("error.chain.unknown")
 
   if (isInitError(error)) {
@@ -204,7 +207,7 @@ function formatErrorChain(error: unknown, t: Translator, depth = 0, parentMessag
   }
 
   const indent = depth > 0 ? `\n${CHAIN_SEPARATOR}${t("error.chain.causedBy")}\n` : ""
-  return indent + safeJson(error)
+  return indent + json(error)
 }
 
 function formatError(error: unknown, t: Translator): string {
@@ -222,6 +225,13 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
     checking: false,
     version: undefined as string | undefined,
     actionError: undefined as string | undefined,
+  })
+
+  onMount(() => {
+    const win = window as E2EWindow
+    if (!win.__opencode_e2e) return
+    const detail = formatError(props.error, language.t)
+    console.error(`[e2e:error-boundary] ${window.location.pathname}\n${detail}`)
   })
 
   async function checkForUpdates() {

@@ -29,9 +29,9 @@ OpenCode has a list of keybinds that you can customize through `tui.json`.
     "session_interrupt": "escape",
     "session_compact": "<leader>c",
     "session_child_first": "<leader>down",
-    "session_child_cycle": "<leader>right",
-    "session_child_cycle_reverse": "<leader>left",
-    "session_parent": "<leader>up",
+    "session_child_cycle": "right",
+    "session_child_cycle_reverse": "left",
+    "session_parent": "up",
     "messages_page_up": "pageup,ctrl+alt+b",
     "messages_page_down": "pagedown,ctrl+alt+f",
     "messages_line_up": "ctrl+alt+y",
@@ -113,6 +113,8 @@ OpenCode uses a `leader` key for most keybinds. This avoids conflicts in your te
 By default, `ctrl+x` is the leader key and most actions require you to first press the leader key and then the shortcut. For example, to start a new session you first press `ctrl+x` and then press `n`.
 
 You don't need to use a leader key for your keybinds but we recommend doing so.
+
+Some navigation keybinds intentionally do not use the leader key by default. For subagent sessions, the defaults are `session_child_first` = `\<leader>down`, `session_child_cycle` = `right`, `session_child_cycle_reverse` = `left`, and `session_parent` = `up`.
 
 ---
 
