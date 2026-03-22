@@ -32,6 +32,7 @@ import { Prompt, type PromptRef } from "@tui/component/prompt"
 import type { AssistantMessage, Part, ToolPart, UserMessage, TextPart, ReasoningPart } from "@opencode-ai/sdk/v2"
 import { useLocal } from "@tui/context/local"
 import { Locale } from "@/util/locale"
+import type { Ide } from "@/ide"
 import type { Tool } from "@/tool/tool"
 import type { ReadTool } from "@/tool/read"
 import type { WriteTool } from "@/tool/write"
@@ -213,6 +214,33 @@ export function Session() {
       prompt.set(route.initialPrompt)
     }
   })
+
+  // Map from message ID to the editor context at submission time.
+  // Snapshot of IDE context at the time each user message was sent, used to
+  // display a badge in message history. Stored in a separate map rather than
+  // on the persisted Message schema to avoid bloating every message on disk
+  // with display-only data. Ephemeral — lost on TUI restart, which is fine.
+  const messageContextMap = new Map<string, Ide.EditorContext>()
+
+  // Track only the message array length so this effect doesn't rerun on
+  // every streaming token or part update — only when a new message is added.
+  createEffect(
+    on(
+      () => (sync.data.message[route.sessionID] ?? []).length,
+      () => {
+        const msgs = sync.data.message[route.sessionID] ?? []
+        for (const msg of msgs) {
+          if (msg.role === "user" && !messageContextMap.has(msg.id)) {
+            // Snapshot the current IDE context at the time this message first appears
+            const ctx = { ...sync.data.ide_context }
+            if (ctx.selection) {
+              messageContextMap.set(msg.id, ctx)
+            }
+          }
+        }
+      },
+    ),
+  )
 
   let lastSwitch: string | undefined = undefined
   sdk.event.on("message.part.updated", (evt) => {
@@ -1152,6 +1180,7 @@ export function Session() {
                         message={message as UserMessage}
                         parts={sync.data.part[message.id] ?? []}
                         pending={pending()}
+                        editorContext={messageContextMap.get(message.id)}
                       />
                     </Match>
                     <Match when={message.role === "assistant"}>
@@ -1233,6 +1262,8 @@ function UserMessage(props: {
   onMouseUp: () => void
   index: number
   pending?: string
+  /** Snapshot of IDE editor context at the time this message was submitted */
+  editorContext?: Ide.EditorContext
 }) {
   const ctx = use()
   const local = useLocal()
@@ -1291,6 +1322,15 @@ function UserMessage(props: {
                   }}
                 </For>
               </box>
+            </Show>
+            <Show when={props.editorContext?.selection}>
+              {(sel) => (
+                <text fg={theme.textMuted}>
+                  {"\u2702"} Selected {sel().end.line - sel().start.line + 1}{" "}
+                  {sel().end.line === sel().start.line ? "line" : "lines"} from{" "}
+                  {props.editorContext?.uri ? path.basename(props.editorContext.uri) : "unknown"}
+                </text>
+              )}
             </Show>
             <Show
               when={queued()}
@@ -1465,8 +1505,6 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
               streaming={true}
               content={props.part.text.trim()}
               conceal={ctx.conceal()}
-              fg={theme.markdownText}
-              bg={theme.background}
             />
           </Match>
           <Match when={!Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>

@@ -8782,6 +8782,76 @@
         },
         "required": ["type", "properties"]
       },
+      "Event.ide.installed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "ide.installed"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "ide": {
+                "type": "string"
+              }
+            },
+            "required": ["ide"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.ide.context.updated": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "ide.context.updated"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "uri": {
+                "type": "string"
+              },
+              "selection": {
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "type": "object",
+                    "properties": {
+                      "line": {
+                        "type": "number"
+                      },
+                      "column": {
+                        "type": "number"
+                      }
+                    },
+                    "required": ["line", "column"]
+                  },
+                  "end": {
+                    "type": "object",
+                    "properties": {
+                      "line": {
+                        "type": "number"
+                      },
+                      "column": {
+                        "type": "number"
+                      }
+                    },
+                    "required": ["line", "column"]
+                  },
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": ["start", "end", "text"]
+              }
+            }
+          }
+        },
+        "required": ["type", "properties"]
+      },
       "QuestionOption": {
         "type": "object",
         "properties": {
@@ -9738,6 +9808,12 @@
           },
           {
             "$ref": "#/components/schemas/Event.session.idle"
+          },
+          {
+            "$ref": "#/components/schemas/Event.ide.installed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.ide.context.updated"
           },
           {
             "$ref": "#/components/schemas/Event.question.asked"

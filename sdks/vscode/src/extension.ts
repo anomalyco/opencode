@@ -2,15 +2,20 @@
 export function deactivate() {}
 
 import * as vscode from "vscode"
+import * as fs from "fs"
+import * as path from "path"
+import * as crypto from "crypto"
+import { createMcpServer } from "./mcp-server"
+import { vscodeEditorState } from "./vscode-editor-state"
 
 const TERMINAL_NAME = "opencode"
 
-export function activate(context: vscode.ExtensionContext) {
-  let openNewTerminalDisposable = vscode.commands.registerCommand("opencode.openNewTerminal", async () => {
+export async function activate(context: vscode.ExtensionContext) {
+  const openNewTerminalDisposable = vscode.commands.registerCommand("opencode.openNewTerminal", async () => {
     await openTerminal()
   })
 
-  let openTerminalDisposable = vscode.commands.registerCommand("opencode.openTerminal", async () => {
+  const openTerminalDisposable = vscode.commands.registerCommand("opencode.openTerminal", async () => {
     // An opencode terminal already exists => focus it
     const existingTerminal = vscode.window.terminals.find((t) => t.name === TERMINAL_NAME)
     if (existingTerminal) {
@@ -21,7 +26,7 @@ export function activate(context: vscode.ExtensionContext) {
     await openTerminal()
   })
 
-  let addFilepathDisposable = vscode.commands.registerCommand("opencode.addFilepathToTerminal", async () => {
+  const addFilepathDisposable = vscode.commands.registerCommand("opencode.addFilepathToTerminal", async () => {
     const fileRef = getActiveFile()
     if (!fileRef) {
       return
@@ -40,7 +45,106 @@ export function activate(context: vscode.ExtensionContext) {
     }
   })
 
-  context.subscriptions.push(openTerminalDisposable, addFilepathDisposable)
+  context.subscriptions.push(openNewTerminalDisposable, openTerminalDisposable, addFilepathDisposable)
+
+  // --- MCP Server for IDE Context Awareness ---
+  // Wrapped in try/catch so that a failure to start the MCP server (e.g. socket
+  // bind error, missing xdg-basedir) does not take down the terminal commands
+  // registered above — those should keep working regardless.
+  try {
+    // The editor state function reads live state from
+    // vscode.window.activeTextEditor each time it is called, so the
+    // editor://context resource always returns up-to-date context.
+    const editorState = vscodeEditorState
+
+    // Generate a per-session secret so that only the opencode process that reads
+    // the lock file can authenticate with the MCP server.
+    const authToken = crypto.randomUUID()
+
+    const version = context.extension.packageJSON.version ?? "0.0.0"
+
+    // Use xdg-basedir (the same package the opencode CLI uses) so lock file paths
+    // are always in the same location regardless of which process writes them.
+    // Dynamic import is required because xdg-basedir is an ESM-only package;
+    // TypeScript in Node16 module mode rejects static imports of ESM from CJS.
+    const { xdgData } = await import("xdg-basedir")
+    if (!xdgData) {
+      console.error("opencode: xdg-basedir returned no data directory; MCP server not started")
+      return
+    }
+    const ideDir = path.join(xdgData, "opencode", "ide")
+    fs.mkdirSync(ideDir, { recursive: true })
+
+    // Start the MCP HTTP server. It binds to 127.0.0.1 on an OS-assigned
+    // ephemeral port so there is no risk of port conflicts.
+    const mcpHandle = await createMcpServer(editorState, version, authToken)
+    const lockFilePath = path.join(ideDir, `${mcpHandle.port}.lock`)
+
+    // environmentVariableCollection persists across VS Code restarts, so terminals
+    // opened before this activation would otherwise inherit a stale port from the
+    // previous session. clear() ensures they get only the current port.
+    const envCollection = context.environmentVariableCollection
+    envCollection.clear()
+    envCollection.replace("OPENCODE_MCP_PORT", mcpHandle.port.toString())
+
+    // Write the lock file atomically: write to a .tmp file first, then rename
+    // into place. This guarantees readers never observe a partially-written file.
+    const lockContent = JSON.stringify({
+      pid: process.pid,
+      workspaceFolders: (vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath),
+      authToken,
+    })
+    const tmpPath = lockFilePath + ".tmp"
+    // mode 0o600: owner-only read/write. The lock file contains the auth token,
+    // so on shared machines we don't want other users to be able to read it.
+    fs.writeFileSync(tmpPath, lockContent, { mode: 0o600 })
+    fs.renameSync(tmpPath, lockFilePath)
+
+    // --- Editor change notifications ---
+    // Fire resource-updated notifications when the user switches files or
+    // changes their selection. This lets the CLI update its UI in real time
+    // without polling. Both listeners are debounced to avoid flooding the
+    // MCP transport during rapid cursor movement or repeated file switches.
+
+    // How long to wait after the last editor event before sending a notification.
+    // Low enough to feel responsive, high enough to batch rapid cursor movement
+    // (key repeat fires events every ~30ms).
+    const EDITOR_NOTIFY_DEBOUNCE_MS = 150
+
+    let debounceTimer: ReturnType<typeof setTimeout> | undefined
+    function notifyDebounced() {
+      if (debounceTimer) clearTimeout(debounceTimer)
+      debounceTimer = setTimeout(() => {
+        mcpHandle.notifyContextChanged().catch(() => {})
+      }, EDITOR_NOTIFY_DEBOUNCE_MS)
+    }
+
+    context.subscriptions.push(
+      vscode.window.onDidChangeActiveTextEditor(() => notifyDebounced()),
+      vscode.window.onDidChangeTextEditorSelection(() => notifyDebounced()),
+      {
+        dispose() {
+          if (debounceTimer) clearTimeout(debounceTimer)
+        },
+      },
+    )
+
+    // Clean up the MCP server and its lock file when the extension deactivates
+    // (e.g. VS Code is closed, the workspace changes, or the extension is
+    // disabled). Without this the lock file would linger and mislead the CLI.
+    context.subscriptions.push({
+      dispose() {
+        // close() is async but VS Code's dispose is sync. Attach .catch() to
+        // prevent an unhandled rejection if shutdown fails.
+        mcpHandle.close().catch(() => {})
+        try {
+          fs.unlinkSync(lockFilePath)
+        } catch {}
+      },
+    })
+  } catch (err) {
+    console.error("opencode: MCP server failed to start", err)
+  }
 
   async function openTerminal() {
     // Create a new terminal in split screen

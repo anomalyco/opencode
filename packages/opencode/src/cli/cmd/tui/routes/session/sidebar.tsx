@@ -210,6 +210,24 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 </For>
               </Show>
             </box>
+            {/* Editor context — shown when the IDE MCP server is connected */}
+            <Show when={sync.data.ide_context.uri}>
+              {(uri) => (
+                <box flexDirection="column" gap={0}>
+                  <text fg={theme.text}>
+                    <b>Editor</b>
+                  </text>
+                  <text fg={theme.textMuted}>{path.basename(uri())}</text>
+                  <Show when={sync.data.ide_context.selection}>
+                    {(sel) => (
+                      <text fg={theme.textMuted}>
+                        Lines {sel().start.line + 1}-{sel().end.line + 1} selected
+                      </text>
+                    )}
+                  </Show>
+                </box>
+              )}
+            </Show>
             <Show when={todo().length > 0 && todo().some((t) => t.status !== "completed")}>
               <box>
                 <box

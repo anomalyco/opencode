@@ -607,6 +607,31 @@ export type EventSessionIdle = {
   }
 }
 
+export type EventIdeInstalled = {
+  type: "ide.installed"
+  properties: {
+    ide: string
+  }
+}
+
+export type EventIdeContextUpdated = {
+  type: "ide.context.updated"
+  properties: {
+    uri?: string
+    selection?: {
+      start: {
+        line: number
+        column: number
+      }
+      end: {
+        line: number
+        column: number
+      }
+      text: string
+    }
+  }
+}
+
 export type QuestionOption = {
   /**
    * Display text (1-5 words, concise)
@@ -976,6 +1001,8 @@ export type Event =
   | EventPermissionReplied
   | EventSessionStatus
   | EventSessionIdle
+  | EventIdeInstalled
+  | EventIdeContextUpdated
   | EventQuestionAsked
   | EventQuestionReplied
   | EventQuestionRejected

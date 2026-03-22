@@ -29,6 +29,7 @@ import { batch, onMount } from "solid-js"
 import { Log } from "@/util/log"
 import type { Path } from "@opencode-ai/sdk"
 import type { Workspace } from "@opencode-ai/sdk/v2"
+import type { Ide } from "@/ide"
 
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
@@ -72,6 +73,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         [key: string]: McpResource
       }
       formatter: FormatterStatus[]
+      /** Current editor context from the IDE MCP server (active file, selection, etc.) */
+      ide_context: Ide.EditorContext
       vcs: VcsInfo | undefined
       path: Path
       workspaceList: Workspace[]
@@ -100,6 +103,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       mcp: {},
       mcp_resource: {},
       formatter: [],
+      ide_context: {},
       vcs: undefined,
       path: { state: "", config: "", worktree: "", directory: "" },
       workspaceList: [],
@@ -342,6 +346,11 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
         case "lsp.updated": {
           sdk.client.lsp.status().then((x) => setStore("lsp", x.data!))
+          break
+        }
+
+        case "ide.context.updated": {
+          setStore("ide_context", reconcile(event.properties))
           break
         }
 
