@@ -101,6 +101,15 @@ const cache = yield* InstanceState.make<State>(
 
 The key insight: don't split init into a separate method with a `started` flag. Put everything in the `InstanceState.make` closure and let `ScopedCache` handle the run-once semantics.
 
+## Migration pitfalls
+
+Things to avoid when converting from `Instance.state` to Effect services:
+
+- **Don't add unnecessary indirection**: `ScopedCache` already runs the init once per directory and caches the result. Don't layer fibers, `ensure()` callbacks, or promise memoization on top — just do the work directly in the `InstanceState.make` closure.
+- **Don't convert static imports to dynamic `import()`**: The Effect migration changes how state is managed, not module loading. Keep the same `import` statements the original code had. Dynamic imports add complexity and hide dependencies from the module graph.
+- **Don't introduce mutable shared state**: Prefer returning the computed result from the init closure rather than mutating a shared object that callers read after joining a fiber. The init closure returns the state; `InstanceState.get` returns it to callers.
+- **Keep unrelated changes out of migration PRs**: Type tightening, dependency version changes, and API improvements are fine work but belong in separate PRs. Migration PRs should be a clean before/after of the service pattern.
+
 ## Scheduled Tasks
 
 For loops or periodic work, use `Effect.repeat` or `Effect.schedule` with `Effect.forkScoped` in the layer definition.
