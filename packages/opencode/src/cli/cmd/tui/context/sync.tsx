@@ -18,6 +18,27 @@ import type {
   ProviderAuthMethod,
   VcsInfo,
 } from "@opencode-ai/sdk/v2"
+
+export interface TeamMember {
+  teamID: string
+  sessionID: string
+  agent: string
+  role: "lead" | "member"
+  status: "active" | "completed" | "failed" | "cancelled"
+}
+
+export interface TeamInfo {
+  id: string
+  sessionID: string
+  name: string
+  status: "active" | "disbanded"
+  time: { created: number; updated: number }
+}
+
+export interface TeamWithMembers {
+  team: TeamInfo
+  members: TeamMember[]
+}
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
 import { Binary } from "@opencode-ai/util/binary"
@@ -72,6 +93,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         [key: string]: McpResource
       }
       formatter: FormatterStatus[]
+      teams: TeamWithMembers[]
       vcs: VcsInfo | undefined
       path: Path
       workspaceList: Workspace[]
@@ -100,6 +122,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       mcp: {},
       mcp_resource: {},
       formatter: [],
+      teams: [],
       vcs: undefined,
       path: { state: "", config: "", worktree: "", directory: "" },
       workspaceList: [],
@@ -113,8 +136,64 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       setStore("workspaceList", reconcile(result.data))
     }
 
+    async function syncTeams() {
+      const result = (await sdk
+        .fetch(`${sdk.url}/team/active`)
+        .then((r) => r.json())
+        .catch(() => undefined)) as TeamWithMembers[] | undefined
+      if (!result) return
+      setStore("teams", reconcile(result))
+    }
+
     sdk.event.listen((e) => {
       const event = e.details
+      // Handle team events (not yet in SDK types)
+      const type = event.type as string
+      if (type === "team.created") {
+        const team = (event as any).properties.team as TeamInfo
+        setStore(
+          "teams",
+          produce((draft) => {
+            draft.push({ team, members: [] })
+          }),
+        )
+        return
+      }
+      if (type === "team.disbanded") {
+        const teamID = (event as any).properties.teamID as string
+        setStore(
+          "teams",
+          produce((draft) => {
+            const idx = draft.findIndex((t) => t.team.id === teamID)
+            if (idx !== -1) draft.splice(idx, 1)
+          }),
+        )
+        return
+      }
+      if (type === "team.member.added") {
+        const member = (event as any).properties.member as TeamMember
+        setStore(
+          "teams",
+          produce((draft) => {
+            const entry = draft.find((t) => t.team.id === member.teamID)
+            if (entry) entry.members.push(member)
+          }),
+        )
+        return
+      }
+      if (type === "team.member.updated") {
+        const member = (event as any).properties.member as TeamMember
+        setStore(
+          "teams",
+          produce((draft) => {
+            const entry = draft.find((t) => t.team.id === member.teamID)
+            if (!entry) return
+            const idx = entry.members.findIndex((m) => m.sessionID === member.sessionID)
+            if (idx !== -1) entry.members[idx] = member
+          }),
+        )
+        return
+      }
       switch (event.type) {
         case "server.instance.disposed":
           bootstrap()
@@ -423,6 +502,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             sdk.client.vcs.get().then((x) => setStore("vcs", reconcile(x.data))),
             sdk.client.path.get().then((x) => setStore("path", reconcile(x.data!))),
             syncWorkspaces(),
+            syncTeams(),
           ]).then(() => {
             setStore("status", "complete")
           })

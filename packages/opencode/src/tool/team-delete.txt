@@ -1,0 +1,5 @@
+Disband a team and mark all active members as completed.
+
+Call this after all team work is done. Agents persist any learnings via their memory — they do not need to stay alive for context retention.
+
+This does NOT terminate running background agents immediately — it marks the team as disbanded and updates member statuses. Background agents will complete their current work naturally.

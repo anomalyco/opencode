@@ -12,6 +12,11 @@ import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
+import { TeamCreateTool } from "./team-create"
+import { TeamDeleteTool } from "./team-delete"
+import { TeamTaskTool } from "./team-task"
+import { SendMessageTool } from "./send-message"
+import { AgentMemoryTool } from "./agent-memory"
 import type { Agent } from "../agent/agent"
 import { Tool } from "./tool"
 import { Instance } from "../project/instance"
@@ -118,6 +123,11 @@ export namespace ToolRegistry {
       CodeSearchTool,
       SkillTool,
       ApplyPatchTool,
+      TeamCreateTool,
+      TeamDeleteTool,
+      TeamTaskTool,
+      SendMessageTool,
+      AgentMemoryTool,
       ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
       ...(config.experimental?.batch_tool === true ? [BatchTool] : []),
       ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [PlanExitTool] : []),

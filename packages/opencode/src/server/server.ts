@@ -41,6 +41,7 @@ import { Filesystem } from "@/util/filesystem"
 import { QuestionRoutes } from "./routes/question"
 import { PermissionRoutes } from "./routes/permission"
 import { GlobalRoutes } from "./routes/global"
+import { TeamRoutes } from "./routes/team"
 import { MDNS } from "./mdns"
 import { lazy } from "@/util/lazy"
 
@@ -250,6 +251,7 @@ export namespace Server {
       .route("/", FileRoutes())
       .route("/", EventRoutes())
       .route("/mcp", McpRoutes())
+      .route("/team", TeamRoutes())
       .route("/tui", TuiRoutes())
       .post(
         "/instance/dispose",
@@ -556,6 +558,9 @@ export namespace Server {
     }
     const server = opts.port === 0 ? (tryServe(4096) ?? tryServe(0)) : tryServe(opts.port)
     if (!server) throw new Error(`Failed to start server on port ${opts.port}`)
+
+    // Reconcile stale teams from previous sessions
+    import("../team").then(({ Team }) => Team.reconcile()).catch(() => {})
 
     const shouldPublishMDNS =
       opts.mdns &&

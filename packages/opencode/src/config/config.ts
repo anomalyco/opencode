@@ -743,6 +743,10 @@ export namespace Config {
         .describe("Maximum number of agentic iterations before forcing text-only response"),
       maxSteps: z.number().int().positive().optional().describe("@deprecated Use 'steps' field instead."),
       permission: Permission.optional(),
+      memory: z
+        .enum(["none", "local"])
+        .optional()
+        .describe("Persistent memory mode. 'local' enables per-project persistent memory for this agent."),
     })
     .catchall(z.any())
     .transform((agent, ctx) => {
@@ -763,6 +767,7 @@ export namespace Config {
         "permission",
         "disable",
         "tools",
+        "memory",
       ])
 
       // Extract unknown properties into options
@@ -1204,6 +1209,24 @@ export namespace Config {
             .min(0)
             .optional()
             .describe("Token buffer for compaction. Leaves enough window to avoid overflow during compaction."),
+        })
+        .optional(),
+      team: z
+        .object({
+          max_agents: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .default(10)
+            .describe("Maximum number of concurrent background agents (default: 10)"),
+          member_timeout: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .default(300_000)
+            .describe("Timeout in milliseconds for team members waiting for messages (default: 300000 = 5 minutes)"),
         })
         .optional(),
       experimental: z

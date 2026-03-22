@@ -34,6 +34,7 @@ import { ulid } from "ulid"
 import { spawn } from "child_process"
 import { Command } from "../command"
 import { pathToFileURL, fileURLToPath } from "url"
+import { Config } from "../config/config"
 import { ConfigMarkdown } from "../config/markdown"
 import { SessionSummary } from "./summary"
 import { NamedError } from "@opencode-ai/util/error"
@@ -268,7 +269,80 @@ export namespace SessionPrompt {
     match.abort.abort()
     delete s[sessionID]
     SessionStatus.set(sessionID, { type: "idle" })
+    // Auto-disband any teams owned by this session
+    import("../team")
+      .then(({ Team }) => {
+        Team.disbandBySession(sessionID)
+      })
+      .catch(() => {})
     return
+  }
+
+  /**
+   * Check if a session is a background team member that should stay alive
+   * waiting for injected messages (cross-review, challenges, etc.)
+   */
+  async function shouldWaitForMessages(sessionID: SessionID, abort: AbortSignal): Promise<boolean> {
+    if (abort.aborted) return false
+    const session = await Session.get(sessionID)
+    if (!session.parentID) return false
+
+    // Check if this session is registered as a team member
+    const { TeamMemberTable } = await import("../team/team.sql")
+    const { Database, eq } = await import("../storage/db")
+    const member = Database.use((db) =>
+      db.select().from(TeamMemberTable).where(eq(TeamMemberTable.session_id, sessionID)).get(),
+    )
+    return !!member && member.status === "active"
+  }
+
+  /**
+   * Wait for an injected message to arrive in this session.
+   * Returns true if a message was injected, false if aborted or timed out.
+   */
+  function waitForInjection(sessionID: SessionID, abort: AbortSignal): Promise<boolean> {
+    return new Promise<boolean>(async (resolve) => {
+      const config = await Config.get()
+      const duration = config.team?.member_timeout ?? 300_000
+
+      const timeout = setTimeout(() => {
+        cleanup()
+        resolve(false)
+      }, duration)
+
+      const { SessionInject } = await import("./inject")
+      let resolved = false
+      const unsub = Bus.subscribe(SessionInject.Event.MessageInjected, (event) => {
+        if (event.properties.sessionID === sessionID && !resolved) {
+          resolved = true
+          cleanup()
+          resolve(true)
+        }
+      })
+
+      // Check for messages injected before subscription was established (race fix)
+      const msgs = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
+      const last = msgs.findLast((m) => m.info.role === "assistant")
+      const pending = msgs.find((m) => m.info.role === "user" && last && m.info.id > last.info.id)
+      if (pending && !resolved) {
+        resolved = true
+        cleanup()
+        resolve(true)
+        return
+      }
+
+      function onAbort() {
+        cleanup()
+        resolve(false)
+      }
+      abort.addEventListener("abort", onAbort)
+
+      function cleanup() {
+        clearTimeout(timeout)
+        unsub()
+        abort.removeEventListener("abort", onAbort)
+      }
+    })
   }
 
   export const LoopInput = z.object({
@@ -324,6 +398,15 @@ export namespace SessionPrompt {
         !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
         lastUser.id < lastAssistant.id
       ) {
+        // Check if this session is a background team member that should stay alive
+        const shouldWait = await shouldWaitForMessages(sessionID, abort)
+        if (shouldWait) {
+          log.info("team member waiting for messages", { sessionID })
+          const injected = await waitForInjection(sessionID, abort)
+          if (injected) continue
+          // Mark member as completed on normal exit (timeout or no more messages)
+          import("../team").then(({ Team }) => Team.completeMember(sessionID)).catch(() => {})
+        }
         log.info("exiting loop", { sessionID })
         break
       }
@@ -654,9 +737,11 @@ export namespace SessionPrompt {
 
       // Build system prompt, adding structured output instruction if needed
       const skills = await SystemPrompt.skills(agent)
+      const mem = SystemPrompt.memory(agent)
       const system = [
         ...(await SystemPrompt.environment(model)),
         ...(skills ? [skills] : []),
+        ...(mem ? [mem] : []),
         ...(await InstructionPrompt.system()),
       ]
       const format = lastUser.format ?? { type: "text" }

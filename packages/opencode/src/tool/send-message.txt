@@ -1,0 +1,13 @@
+Send a message to another agent in your team.
+
+This enables inter-agent communication within a team:
+- **Member → Lead**: Send findings, status updates, or responses to the team lead
+- **Lead → Member**: Route challenges, requests for elaboration, or cross-review findings to specific agents
+
+Usage:
+- You must be part of a team to use this tool
+- Specify the team_id and either a specific agent name or "lead" as the recipient
+- The message content should be clear and actionable
+- Messages are delivered asynchronously — the recipient processes them on their next turn
+
+When receiving messages, respond substantively. For cross-review challenges, provide evidence from the spec or codebase.

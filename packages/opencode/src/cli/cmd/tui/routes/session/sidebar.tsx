@@ -1,4 +1,4 @@
-import { useSync } from "@tui/context/sync"
+import { useSync, type TeamWithMembers } from "@tui/context/sync"
 import { createMemo, For, Show, Switch, Match } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
@@ -25,6 +25,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
     diff: true,
     todo: true,
     lsp: true,
+    teams: true,
   })
 
   // Sort MCP servers alphabetically for consistent display order
@@ -58,6 +59,17 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
       tokens: total.toLocaleString(),
       percentage: model?.limit.context ? Math.round((total / model.limit.context) * 100) : null,
     }
+  })
+
+  const teams = createMemo(() => sync.data.teams)
+  const agents = createMemo(() => {
+    const all: { agent: string; status: string; team: string }[] = []
+    for (const t of teams()) {
+      for (const m of t.members) {
+        if (m.role === "member") all.push({ agent: m.agent, status: m.status, team: t.team.name })
+      }
+    }
+    return all
   })
 
   const directory = useDirectory()
@@ -106,6 +118,71 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
               <text fg={theme.textMuted}>{context()?.percentage ?? 0}% used</text>
               <text fg={theme.textMuted}>{cost()} spent</text>
             </box>
+            <Show when={teams().length > 0}>
+              <box>
+                <box flexDirection="row" gap={1} onMouseDown={() => setExpanded("teams", !expanded.teams)}>
+                  <text fg={theme.text}>{expanded.teams ? "▼" : "▶"}</text>
+                  <text fg={theme.text}>
+                    <b>Teams</b>
+                    <Show when={!expanded.teams}>
+                      <span style={{ fg: theme.textMuted }}>
+                        {" "}
+                        ({teams().length} active, {agents().filter((a) => a.status === "active").length} agents)
+                      </span>
+                    </Show>
+                  </text>
+                </box>
+                <Show when={expanded.teams}>
+                  <For each={teams()}>
+                    {(entry) => (
+                      <box>
+                        <text fg={theme.text}>
+                          <span style={{ fg: theme.primary }}>&#9670;</span> {entry.team.name}
+                        </text>
+                        <For each={entry.members.filter((m) => m.role === "member")}>
+                          {(member) => (
+                            <box flexDirection="row" gap={1} paddingLeft={2}>
+                              <text
+                                flexShrink={0}
+                                style={{
+                                  fg: (
+                                    {
+                                      active: theme.warning,
+                                      completed: theme.success,
+                                      failed: theme.error,
+                                      cancelled: theme.textMuted,
+                                    } as Record<string, typeof theme.success>
+                                  )[member.status],
+                                }}
+                              >
+                                {member.status === "active"
+                                  ? "◌"
+                                  : member.status === "completed"
+                                    ? "●"
+                                    : member.status === "failed"
+                                      ? "✕"
+                                      : "○"}
+                              </text>
+                              <text fg={theme.textMuted} wrapMode="word">
+                                @{member.agent}{" "}
+                                <span style={{ fg: theme.textMuted }}>
+                                  <Switch fallback={member.status}>
+                                    <Match when={member.status === "active"}>working</Match>
+                                    <Match when={member.status === "completed"}>done</Match>
+                                    <Match when={member.status === "failed"}>failed</Match>
+                                    <Match when={member.status === "cancelled"}>cancelled</Match>
+                                  </Switch>
+                                </span>
+                              </text>
+                            </box>
+                          )}
+                        </For>
+                      </box>
+                    )}
+                  </For>
+                </Show>
+              </box>
+            </Show>
             <Show when={mcpEntries().length > 0}>
               <box>
                 <box
