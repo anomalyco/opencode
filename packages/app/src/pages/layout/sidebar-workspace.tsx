@@ -304,10 +304,10 @@ const WorkspaceSessionList = (props: {
         }}
       </For>
       <Show when={props.hasMore()}>
-        <div class="relative w-full py-1">
+        <div class="relative w-full px-2 pt-2 pb-1">
           <Button
             variant="ghost"
-            class="flex w-full text-left justify-start text-14-regular text-text-weak pl-9 pr-10"
+            class="flex h-8 w-full items-center justify-center rounded-lg border border-dashed border-border bg-surface-raised-base/35 px-3 text-12-medium text-text-weak transition-colors hover:border-border-strong hover:bg-surface-raised-base-hover hover:text-text"
             size="large"
             onClick={(e: MouseEvent) => {
               props.loadMore()
