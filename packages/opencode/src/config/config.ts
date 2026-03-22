@@ -1347,10 +1347,18 @@ export namespace Config {
   }
 
   export async function update(config: Info) {
-    const filepath = path.join(Instance.directory, "config.json")
+    const filepath = projectConfigFile()
     const existing = await loadFile(filepath)
     await Filesystem.writeJson(filepath, mergeDeep(existing, config))
     await Instance.dispose()
+  }
+
+  function projectConfigFile() {
+    const candidates = ["opencode.jsonc", "opencode.json"].map((file) => path.join(Instance.directory, file))
+    for (const file of candidates) {
+      if (existsSync(file)) return file
+    }
+    return candidates[1]
   }
 
   function globalConfigFile() {
