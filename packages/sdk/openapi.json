@@ -199,17 +199,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/OAuth"
-                  },
-                  {
-                    "$ref": "#/components/schemas/ApiAuth"
-                  },
-                  {
-                    "$ref": "#/components/schemas/WellKnownAuth"
-                  }
-                ]
+                "$ref": "#/components/schemas/Auth"
               }
             }
           }
@@ -10833,6 +10823,19 @@
           }
         },
         "required": ["type", "key", "token"]
+      },
+      "Auth": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/OAuth"
+          },
+          {
+            "$ref": "#/components/schemas/ApiAuth"
+          },
+          {
+            "$ref": "#/components/schemas/WellKnownAuth"
+          }
+        ]
       },
       "NotFoundError": {
         "type": "object",
