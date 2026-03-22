@@ -69,6 +69,9 @@ export namespace Bus {
           let ps = state.typed.get(type)
           if (!ps) {
             ps = yield* PubSub.unbounded<Payload>()
+            // Re-check after yield in case another fiber created one concurrently
+            const existing = state.typed.get(type)
+            if (existing) return existing
             state.typed.set(type, ps)
           }
           return ps
