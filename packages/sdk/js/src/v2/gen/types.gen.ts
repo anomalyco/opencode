@@ -83,6 +83,156 @@ export type EventLspUpdated = {
   }
 }
 
+<<<<<<< HEAD
+=======
+export type EventMessagePartDelta = {
+  type: "message.part.delta"
+  properties: {
+    sessionID: string
+    messageID: string
+    partID: string
+    field: string
+    delta: string
+  }
+}
+
+export type PermissionRequest = {
+  id: string
+  sessionID: string
+  permission: string
+  patterns: Array<string>
+  metadata: {
+    [key: string]: unknown
+  }
+  always: Array<string>
+  tool?: {
+    messageID: string
+    callID: string
+  }
+}
+
+export type EventPermissionAsked = {
+  type: "permission.asked"
+  properties: PermissionRequest
+}
+
+export type EventPermissionReplied = {
+  type: "permission.replied"
+  properties: {
+    sessionID: string
+    requestID: string
+    reply: "once" | "always" | "reject"
+  }
+}
+
+export type SessionStatus =
+  | {
+      type: "idle"
+    }
+  | {
+      type: "retry"
+      attempt: number
+      message: string
+      next: number
+    }
+  | {
+      type: "busy"
+    }
+
+export type EventSessionStatus = {
+  type: "session.status"
+  properties: {
+    sessionID: string
+    status: SessionStatus
+  }
+}
+
+export type EventSessionIdle = {
+  type: "session.idle"
+  properties: {
+    sessionID: string
+  }
+}
+
+export type QuestionOption = {
+  /**
+   * Display text (1-5 words, concise)
+   */
+  label: string
+  /**
+   * Explanation of choice
+   */
+  description: string
+}
+
+export type QuestionInfo = {
+  /**
+   * Complete question
+   */
+  question: string
+  /**
+   * Very short label (max 30 chars)
+   */
+  header: string
+  /**
+   * Available choices
+   */
+  options: Array<QuestionOption>
+  /**
+   * Allow selecting multiple choices
+   */
+  multiple?: boolean
+  /**
+   * Allow typing a custom answer (default: true)
+   */
+  custom?: boolean
+}
+
+export type QuestionRequest = {
+  id: string
+  sessionID: string
+  /**
+   * Questions to ask
+   */
+  questions: Array<QuestionInfo>
+  tool?: {
+    messageID: string
+    callID: string
+  }
+}
+
+export type EventQuestionAsked = {
+  type: "question.asked"
+  properties: QuestionRequest
+}
+
+export type QuestionAnswer = Array<string>
+
+export type EventQuestionReplied = {
+  type: "question.replied"
+  properties: {
+    sessionID: string
+    requestID: string
+    answers: Array<QuestionAnswer>
+  }
+}
+
+export type EventQuestionRejected = {
+  type: "question.rejected"
+  properties: {
+    sessionID: string
+    requestID: string
+  }
+}
+
+export type EventSessionCompacted = {
+  type: "session.compacted"
+  properties: {
+    sessionID: string
+  }
+}
+
+>>>>>>> d93fe741a (Fix SDK conflicts)
 export type EventFileEdited = {
   type: "file.edited"
   properties: {
@@ -90,6 +240,7 @@ export type EventFileEdited = {
   }
 }
 
+<<<<<<< HEAD
 export type OutputFormatText = {
   type: "text"
 }
@@ -105,6 +256,117 @@ export type OutputFormatJsonSchema = {
 }
 
 export type OutputFormat = OutputFormatText | OutputFormatJsonSchema
+=======
+export type EventFileWatcherUpdated = {
+  type: "file.watcher.updated"
+  properties: {
+    file: string
+    event: "add" | "change" | "unlink"
+  }
+}
+
+export type Todo = {
+  /**
+   * Brief description of the task
+   */
+  content: string
+  /**
+   * Current status of the task: pending, in_progress, completed, cancelled
+   */
+  status: string
+  /**
+   * Priority level of the task: high, medium, low
+   */
+  priority: string
+}
+
+export type EventTodoUpdated = {
+  type: "todo.updated"
+  properties: {
+    sessionID: string
+    todos: Array<Todo>
+  }
+}
+
+export type EventTuiPromptAppend = {
+  type: "tui.prompt.append"
+  properties: {
+    text: string
+  }
+}
+
+export type EventTuiCommandExecute = {
+  type: "tui.command.execute"
+  properties: {
+    command:
+      | "session.list"
+      | "session.new"
+      | "session.share"
+      | "session.interrupt"
+      | "session.compact"
+      | "session.page.up"
+      | "session.page.down"
+      | "session.line.up"
+      | "session.line.down"
+      | "session.half.page.up"
+      | "session.half.page.down"
+      | "session.first"
+      | "session.last"
+      | "prompt.clear"
+      | "prompt.submit"
+      | "agent.cycle"
+      | string
+  }
+}
+
+export type EventTuiToastShow = {
+  type: "tui.toast.show"
+  properties: {
+    title?: string
+    message: string
+    variant: "info" | "success" | "warning" | "error"
+    /**
+     * Duration in milliseconds
+     */
+    duration?: number
+  }
+}
+
+export type EventTuiSessionSelect = {
+  type: "tui.session.select"
+  properties: {
+    /**
+     * Session ID to navigate to
+     */
+    sessionID: string
+  }
+}
+
+export type EventMcpToolsChanged = {
+  type: "mcp.tools.changed"
+  properties: {
+    server: string
+  }
+}
+
+export type EventMcpBrowserOpenFailed = {
+  type: "mcp.browser.open.failed"
+  properties: {
+    mcpName: string
+    url: string
+  }
+}
+
+export type EventCommandExecuted = {
+  type: "command.executed"
+  properties: {
+    name: string
+    sessionID: string
+    arguments: string
+    messageID: string
+  }
+}
+>>>>>>> d93fe741a (Fix SDK conflicts)
 
 export type FileDiff = {
   file: string
@@ -115,6 +377,7 @@ export type FileDiff = {
   status?: "added" | "deleted" | "modified"
 }
 
+<<<<<<< HEAD
 export type UserMessage = {
   id: string
   sessionID: string
@@ -138,6 +401,14 @@ export type UserMessage = {
     [key: string]: boolean
   }
   variant?: string
+=======
+export type EventSessionDiff = {
+  type: "session.diff"
+  properties: {
+    sessionID: string
+    diff: Array<FileDiff>
+  }
+>>>>>>> d93fe741a (Fix SDK conflicts)
 }
 
 export type ProviderAuthError = {
@@ -201,6 +472,140 @@ export type ApiError = {
   }
 }
 
+<<<<<<< HEAD
+=======
+export type EventSessionError = {
+  type: "session.error"
+  properties: {
+    sessionID?: string
+    error?:
+      | ProviderAuthError
+      | UnknownError
+      | MessageOutputLengthError
+      | MessageAbortedError
+      | StructuredOutputError
+      | ContextOverflowError
+      | ApiError
+  }
+}
+
+export type EventVcsBranchUpdated = {
+  type: "vcs.branch.updated"
+  properties: {
+    branch?: string
+  }
+}
+
+export type EventWorkspaceReady = {
+  type: "workspace.ready"
+  properties: {
+    name: string
+  }
+}
+
+export type EventWorkspaceFailed = {
+  type: "workspace.failed"
+  properties: {
+    message: string
+  }
+}
+
+export type Pty = {
+  id: string
+  title: string
+  command: string
+  args: Array<string>
+  cwd: string
+  status: "running" | "exited"
+  pid: number
+}
+
+export type EventPtyCreated = {
+  type: "pty.created"
+  properties: {
+    info: Pty
+  }
+}
+
+export type EventPtyUpdated = {
+  type: "pty.updated"
+  properties: {
+    info: Pty
+  }
+}
+
+export type EventPtyExited = {
+  type: "pty.exited"
+  properties: {
+    id: string
+    exitCode: number
+  }
+}
+
+export type EventPtyDeleted = {
+  type: "pty.deleted"
+  properties: {
+    id: string
+  }
+}
+
+export type EventWorktreeReady = {
+  type: "worktree.ready"
+  properties: {
+    name: string
+    branch: string
+  }
+}
+
+export type EventWorktreeFailed = {
+  type: "worktree.failed"
+  properties: {
+    message: string
+  }
+}
+
+export type OutputFormatText = {
+  type: "text"
+}
+
+export type JsonSchema = {
+  [key: string]: unknown
+}
+
+export type OutputFormatJsonSchema = {
+  type: "json_schema"
+  schema: JsonSchema
+  retryCount?: number
+}
+
+export type OutputFormat = OutputFormatText | OutputFormatJsonSchema
+
+export type UserMessage = {
+  id: string
+  sessionID: string
+  role: "user"
+  time: {
+    created: number
+  }
+  format?: OutputFormat
+  summary?: {
+    title?: string
+    body?: string
+    diffs: Array<FileDiff>
+  }
+  agent: string
+  model: {
+    providerID: string
+    modelID: string
+  }
+  system?: string
+  tools?: {
+    [key: string]: boolean
+  }
+  variant?: string
+}
+
+>>>>>>> d93fe741a (Fix SDK conflicts)
 export type AssistantMessage = {
   id: string
   sessionID: string
@@ -248,6 +653,10 @@ export type Message = UserMessage | AssistantMessage
 export type EventMessageUpdated = {
   type: "message.updated"
   properties: {
+<<<<<<< HEAD
+=======
+    sessionID: string
+>>>>>>> d93fe741a (Fix SDK conflicts)
     info: Message
   }
 }
@@ -525,6 +934,7 @@ export type Part =
 export type EventMessagePartUpdated = {
   type: "message.part.updated"
   properties: {
+<<<<<<< HEAD
     part: Part
   }
 }
@@ -537,6 +947,11 @@ export type EventMessagePartDelta = {
     partID: string
     field: string
     delta: string
+=======
+    sessionID: string
+    part: Part
+    time: number
+>>>>>>> d93fe741a (Fix SDK conflicts)
   }
 }
 
@@ -549,6 +964,7 @@ export type EventMessagePartRemoved = {
   }
 }
 
+<<<<<<< HEAD
 export type PermissionRequest = {
   id: string
   sessionID: string
@@ -795,6 +1211,8 @@ export type EventCommandExecuted = {
   }
 }
 
+=======
+>>>>>>> d93fe741a (Fix SDK conflicts)
 export type PermissionAction = "allow" | "deny" | "ask"
 
 export type PermissionRule = {
@@ -841,6 +1259,10 @@ export type Session = {
 export type EventSessionCreated = {
   type: "session.created"
   properties: {
+<<<<<<< HEAD
+=======
+    sessionID: string
+>>>>>>> d93fe741a (Fix SDK conflicts)
     info: Session
   }
 }
@@ -848,6 +1270,10 @@ export type EventSessionCreated = {
 export type EventSessionUpdated = {
   type: "session.updated"
   properties: {
+<<<<<<< HEAD
+=======
+    sessionID: string
+>>>>>>> d93fe741a (Fix SDK conflicts)
     info: Session
   }
 }
@@ -855,6 +1281,7 @@ export type EventSessionUpdated = {
 export type EventSessionDeleted = {
   type: "session.deleted"
   properties: {
+<<<<<<< HEAD
     info: Session
   }
 }
@@ -954,6 +1381,10 @@ export type EventWorktreeFailed = {
   type: "worktree.failed"
   properties: {
     message: string
+=======
+    sessionID: string
+    info: Session
+>>>>>>> d93fe741a (Fix SDK conflicts)
   }
 }
 
@@ -966,12 +1397,16 @@ export type Event =
   | EventGlobalDisposed
   | EventLspClientDiagnostics
   | EventLspUpdated
+<<<<<<< HEAD
   | EventFileEdited
   | EventMessageUpdated
   | EventMessageRemoved
   | EventMessagePartUpdated
   | EventMessagePartDelta
   | EventMessagePartRemoved
+=======
+  | EventMessagePartDelta
+>>>>>>> d93fe741a (Fix SDK conflicts)
   | EventPermissionAsked
   | EventPermissionReplied
   | EventSessionStatus
@@ -980,6 +1415,10 @@ export type Event =
   | EventQuestionReplied
   | EventQuestionRejected
   | EventSessionCompacted
+<<<<<<< HEAD
+=======
+  | EventFileEdited
+>>>>>>> d93fe741a (Fix SDK conflicts)
   | EventFileWatcherUpdated
   | EventTodoUpdated
   | EventTuiPromptAppend
@@ -989,9 +1428,12 @@ export type Event =
   | EventMcpToolsChanged
   | EventMcpBrowserOpenFailed
   | EventCommandExecuted
+<<<<<<< HEAD
   | EventSessionCreated
   | EventSessionUpdated
   | EventSessionDeleted
+=======
+>>>>>>> d93fe741a (Fix SDK conflicts)
   | EventSessionDiff
   | EventSessionError
   | EventVcsBranchUpdated
@@ -1003,12 +1445,125 @@ export type Event =
   | EventPtyDeleted
   | EventWorktreeReady
   | EventWorktreeFailed
+<<<<<<< HEAD
+=======
+  | EventMessageUpdated
+  | EventMessageRemoved
+  | EventMessagePartUpdated
+  | EventMessagePartRemoved
+  | EventSessionCreated
+  | EventSessionUpdated
+  | EventSessionDeleted
+>>>>>>> d93fe741a (Fix SDK conflicts)
 
 export type GlobalEvent = {
   directory: string
   payload: Event
 }
 
+<<<<<<< HEAD
+=======
+export type SyncEventMessageUpdated = {
+  type: "message.updated.1"
+  aggregate: "sessionID"
+  data: {
+    sessionID: string
+    info: Message
+  }
+}
+
+export type SyncEventMessageRemoved = {
+  type: "message.removed.1"
+  aggregate: "sessionID"
+  data: {
+    sessionID: string
+    messageID: string
+  }
+}
+
+export type SyncEventMessagePartUpdated = {
+  type: "message.part.updated.1"
+  aggregate: "sessionID"
+  data: {
+    sessionID: string
+    part: Part
+    time: number
+  }
+}
+
+export type SyncEventMessagePartRemoved = {
+  type: "message.part.removed.1"
+  aggregate: "sessionID"
+  data: {
+    sessionID: string
+    messageID: string
+    partID: string
+  }
+}
+
+export type SyncEventSessionCreated = {
+  type: "session.created.1"
+  aggregate: "sessionID"
+  data: {
+    sessionID: string
+    info: Session
+  }
+}
+
+export type SyncEventSessionUpdated = {
+  type: "session.updated.1"
+  aggregate: "sessionID"
+  data: {
+    sessionID: string
+    info: {
+      id?: string
+      slug?: string
+      projectID?: string
+      workspaceID?: string
+      directory?: string
+      parentID?: string
+      summary?: {
+        additions: number
+        deletions: number
+        files: number
+        diffs?: Array<FileDiff>
+      }
+      share?: {
+        url?: string
+      }
+      title?: string
+      version?: string
+      time?: {
+        created?: number
+        updated?: number
+        compacting?: number
+        archived?: number
+      }
+      permission?: PermissionRuleset
+      revert?: {
+        messageID: string
+        partID?: string
+        snapshot?: string
+        diff?: string
+      }
+    }
+  }
+}
+
+export type SyncEventSessionDeleted = {
+  type: "session.deleted.1"
+  aggregate: "sessionID"
+  data: {
+    sessionID: string
+    info: Session
+  }
+}
+
+export type SyncEvent = {
+  payload: SyncEvent
+}
+
+>>>>>>> d93fe741a (Fix SDK conflicts)
 /**
  * Log level
  */
@@ -1973,6 +2528,26 @@ export type GlobalEventResponses = {
 
 export type GlobalEventResponse = GlobalEventResponses[keyof GlobalEventResponses]
 
+<<<<<<< HEAD
+=======
+export type GlobalSyncEventSubscribeData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/global/sync-event"
+}
+
+export type GlobalSyncEventSubscribeResponses = {
+  /**
+   * Event stream
+   */
+  200: SyncEvent
+}
+
+export type GlobalSyncEventSubscribeResponse =
+  GlobalSyncEventSubscribeResponses[keyof GlobalSyncEventSubscribeResponses]
+
+>>>>>>> d93fe741a (Fix SDK conflicts)
 export type GlobalConfigGetData = {
   body?: never
   path?: never
@@ -2030,6 +2605,7 @@ export type GlobalDisposeResponses = {
 
 export type GlobalDisposeResponse = GlobalDisposeResponses[keyof GlobalDisposeResponses]
 
+<<<<<<< HEAD
 export type GlobalUpgradeData = {
   body?: {
     target?: string
@@ -2065,6 +2641,8 @@ export type GlobalUpgradeResponses = {
 
 export type GlobalUpgradeResponse = GlobalUpgradeResponses[keyof GlobalUpgradeResponses]
 
+=======
+>>>>>>> d93fe741a (Fix SDK conflicts)
 export type AuthRemoveData = {
   body?: never
   path: {

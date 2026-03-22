@@ -46,8 +46,12 @@ import type {
   GlobalDisposeResponses,
   GlobalEventResponses,
   GlobalHealthResponses,
+<<<<<<< HEAD
   GlobalUpgradeErrors,
   GlobalUpgradeResponses,
+=======
+  GlobalSyncEventSubscribeResponses,
+>>>>>>> d93fe741a (Fix SDK conflicts)
   InstanceDisposeResponses,
   LspStatusResponses,
   McpAddErrors,
@@ -230,6 +234,23 @@ class HeyApiRegistry<T> {
   }
 }
 
+<<<<<<< HEAD
+=======
+export class SyncEvent extends HeyApiClient {
+  /**
+   * Subscribe to global sync events
+   *
+   * Get global sync events
+   */
+  public subscribe<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).sse.get<GlobalSyncEventSubscribeResponses, unknown, ThrowOnError>({
+      url: "/global/sync-event",
+      ...options,
+    })
+  }
+}
+
+>>>>>>> d93fe741a (Fix SDK conflicts)
 export class Config extends HeyApiClient {
   /**
    * Get global configuration
@@ -305,6 +326,7 @@ export class Global extends HeyApiClient {
     })
   }
 
+<<<<<<< HEAD
   /**
    * Upgrade opencode
    *
@@ -327,6 +349,11 @@ export class Global extends HeyApiClient {
         ...params.headers,
       },
     })
+=======
+  private _syncEvent?: SyncEvent
+  get syncEvent(): SyncEvent {
+    return (this._syncEvent ??= new SyncEvent({ client: this.client }))
+>>>>>>> d93fe741a (Fix SDK conflicts)
   }
 
   private _config?: Config
