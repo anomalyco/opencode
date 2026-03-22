@@ -10,8 +10,6 @@ import { Database, eq } from "../storage/db"
 import { ProjectTable } from "../project/project.sql"
 import type { ProjectID } from "../project/schema"
 import { Log } from "../util/log"
-import { Process } from "../util/process"
-import { git } from "../util/git"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { Effect, Fiber, FileSystem, Layer, Path, Scope, ServiceMap, Stream } from "effect"
@@ -209,13 +207,6 @@ export namespace Worktree {
     return `${pick(ADJECTIVES)}-${pick(NOUNS)}`
   }
 
-  async function exists(target: string) {
-    return fs
-      .stat(target)
-      .then(() => true)
-      .catch(() => false)
-  }
-
   function outputText(input: Uint8Array | undefined) {
     if (!input?.length) return ""
     return new TextDecoder().decode(input).trim()
@@ -241,10 +232,16 @@ export namespace Worktree {
   }
 
   async function prune(root: string, entries: string[]) {
-    const base = await canonical(root)
+    const resolve = async (input: string) => {
+      const abs = path.resolve(input)
+      const real = await fs.realpath(abs).catch(() => abs)
+      const normalized = path.normalize(real)
+      return process.platform === "win32" ? normalized.toLowerCase() : normalized
+    }
+    const base = await resolve(root)
     await Promise.all(
       entries.map(async (entry) => {
-        const target = await canonical(path.resolve(root, entry))
+        const target = await resolve(path.resolve(root, entry))
         if (target === base) return
         if (!target.startsWith(`${base}${path.sep}`)) return
         await fs.rm(target, { recursive: true, force: true }).catch(() => undefined)
@@ -252,91 +249,6 @@ export namespace Worktree {
     )
   }
 
-  async function sweep(root: string) {
-    const first = await git(["clean", "-ffdx"], { cwd: root })
-    if (first.exitCode === 0) return first
-
-    const entries = failed(first)
-    if (!entries.length) return first
-
-    await prune(root, entries)
-    return git(["clean", "-ffdx"], { cwd: root })
-  }
-
-  async function canonical(input: string) {
-    const abs = path.resolve(input)
-    const real = await fs.realpath(abs).catch(() => abs)
-    const normalized = path.normalize(real)
-    return process.platform === "win32" ? normalized.toLowerCase() : normalized
-  }
-
-  async function candidate(root: string, base?: string) {
-    for (const attempt of Array.from({ length: 26 }, (_, i) => i)) {
-      const name = base ? (attempt === 0 ? base : `${base}-${randomName()}`) : randomName()
-      const branch = `opencode/${name}`
-      const directory = path.join(root, name)
-
-      if (await exists(directory)) continue
-
-      const ref = `refs/heads/${branch}`
-      const branchCheck = await git(["show-ref", "--verify", "--quiet", ref], {
-        cwd: Instance.worktree,
-      })
-      if (branchCheck.exitCode === 0) continue
-
-      return Info.parse({ name, branch, directory })
-    }
-
-    throw new NameGenerationFailedError({ message: "Failed to generate a unique worktree name" })
-  }
-
-  async function runStartCommand(directory: string, cmd: string) {
-    if (process.platform === "win32") {
-      return Process.run(["cmd", "/c", cmd], { cwd: directory, nothrow: true })
-    }
-    return Process.run(["bash", "-lc", cmd], { cwd: directory, nothrow: true })
-  }
-
-  type StartKind = "project" | "worktree"
-
-  async function runStartScript(directory: string, cmd: string, kind: StartKind) {
-    const text = cmd.trim()
-    if (!text) return true
-
-    const ran = await runStartCommand(directory, text)
-    if (ran.code === 0) return true
-
-    log.error("worktree start command failed", {
-      kind,
-      directory,
-      message: errorText(ran),
-    })
-    return false
-  }
-
-  async function runStartScripts(directory: string, input: { projectID: ProjectID; extra?: string }) {
-    const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, input.projectID)).get())
-    const project = row ? Project.fromRow(row) : undefined
-    const startup = project?.commands?.start?.trim() ?? ""
-    const ok = await runStartScript(directory, startup, "project")
-    if (!ok) return false
-
-    const extra = input.extra ?? ""
-    await runStartScript(directory, extra, "worktree")
-    return true
-  }
-
-  function queueStartScripts(directory: string, input: { projectID: ProjectID; extra?: string }) {
-    setTimeout(() => {
-      const start = async () => {
-        await runStartScripts(directory, input)
-      }
-
-      void start().catch((error) => {
-        log.error("worktree start task failed", { directory, error })
-      })
-    }, 0)
-  }
 
   // ---------------------------------------------------------------------------
   // Effect service
@@ -380,7 +292,7 @@ export namespace Worktree {
         Effect.catch(() => Effect.succeed({ code: 1, text: "", stderr: "" } satisfies GitResult)),
       )
 
-      const candidateEffect = Effect.fn("Worktree.candidate")(function* (root: string, base?: string) {
+      const candidate = Effect.fn("Worktree.candidate")(function* (root: string, base?: string) {
         for (const attempt of Array.from({ length: 26 }, (_, i) => i)) {
           const name = base ? (attempt === 0 ? base : `${base}-${randomName()}`) : randomName()
           const branch = `opencode/${name}`
@@ -406,7 +318,7 @@ export namespace Worktree {
         yield* fsys.makeDirectory(root, { recursive: true }).pipe(Effect.orDie)
 
         const base = name ? slug(name) : ""
-        return yield* candidateEffect(root, base || undefined)
+        return yield* candidate(root, base || undefined)
       })
 
       const createFromInfo = Effect.fn("Worktree.createFromInfo")(function* (
@@ -438,8 +350,8 @@ export namespace Worktree {
           return
         }
 
-        yield* Effect.promise(async () => {
-          const booted = await Instance.provide({
+        const booted = yield* Effect.promise(() =>
+          Instance.provide({
             directory: info.directory,
             init: InstanceBootstrap,
             fn: () => undefined,
@@ -453,19 +365,19 @@ export namespace Worktree {
                 payload: { type: Event.Failed.type, properties: { message } },
               })
               return false
-            })
-          if (!booted) return
+            }),
+        )
+        if (!booted) return
 
-          GlobalBus.emit("event", {
-            directory: info.directory,
-            payload: {
-              type: Event.Ready.type,
-              properties: { name: info.name, branch: info.branch },
-            },
-          })
-
-          await runStartScripts(info.directory, { projectID, extra })
+        GlobalBus.emit("event", {
+          directory: info.directory,
+          payload: {
+            type: Event.Ready.type,
+            properties: { name: info.name, branch: info.branch },
+          },
         })
+
+        yield* runStartScripts(info.directory, { projectID, extra })
       })
 
       const create = Effect.fn("Worktree.create")(function* (input?: CreateInput) {
@@ -477,7 +389,7 @@ export namespace Worktree {
         return info
       })
 
-      const canonicalEffect = Effect.fnUntraced(function* (input: string) {
+      const canonical = Effect.fnUntraced(function* (input: string) {
         const abs = pathSvc.resolve(input)
         const real = yield* fsys.realPath(abs).pipe(Effect.catch(() => Effect.succeed(abs)))
         const normalized = pathSvc.normalize(real)
@@ -509,7 +421,7 @@ export namespace Worktree {
       ) {
         for (const item of entries) {
           if (!item.path) continue
-          const key = yield* canonicalEffect(item.path)
+          const key = yield* canonical(item.path)
           if (key === directory) return item
         }
         return undefined
@@ -531,7 +443,7 @@ export namespace Worktree {
           throw new NotGitError({ message: "Worktrees are only supported for git projects" })
         }
 
-        const directory = yield* canonicalEffect(input.directory)
+        const directory = yield* canonical(input.directory)
 
         const list = yield* gitRun(["worktree", "list", "--porcelain"], { cwd: Instance.worktree })
         if (list.code !== 0) {
@@ -587,7 +499,35 @@ export namespace Worktree {
         })
       }
 
-      const sweepEffect = Effect.fnUntraced(function* (root: string) {
+      const runStartCommand = Effect.fnUntraced(function* (directory: string, cmd: string) {
+        const [shell, args] = process.platform === "win32" ? ["cmd", ["/c", cmd]] : ["bash", ["-lc", cmd]]
+        const handle = yield* spawner.spawn(ChildProcess.make(shell, args, { cwd: directory, extendEnv: true }))
+        const code = yield* handle.exitCode
+        return code
+      }, Effect.scoped, Effect.catch(() => Effect.succeed(1)))
+
+      const runStartScript = Effect.fnUntraced(function* (directory: string, cmd: string, kind: string) {
+        const text = cmd.trim()
+        if (!text) return true
+        const code = yield* runStartCommand(directory, text)
+        if (code === 0) return true
+        log.error("worktree start command failed", { kind, directory })
+        return false
+      })
+
+      const runStartScripts = Effect.fnUntraced(function* (directory: string, input: { projectID: ProjectID; extra?: string }) {
+        const row = yield* Effect.sync(() =>
+          Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, input.projectID)).get()),
+        )
+        const project = row ? Project.fromRow(row) : undefined
+        const startup = project?.commands?.start?.trim() ?? ""
+        const ok = yield* runStartScript(directory, startup, "project")
+        if (!ok) return false
+        yield* runStartScript(directory, input.extra ?? "", "worktree")
+        return true
+      })
+
+      const sweep = Effect.fnUntraced(function* (root: string) {
         const first = yield* gitRun(["clean", "-ffdx"], { cwd: root })
         if (first.code === 0) return first
 
@@ -603,8 +543,8 @@ export namespace Worktree {
           throw new NotGitError({ message: "Worktrees are only supported for git projects" })
         }
 
-        const directory = yield* canonicalEffect(input.directory)
-        const primary = yield* canonicalEffect(Instance.worktree)
+        const directory = yield* canonical(input.directory)
+        const primary = yield* canonical(Instance.worktree)
         if (directory === primary) {
           throw new ResetFailedError({ message: "Cannot reset the primary workspace" })
         }
@@ -663,7 +603,7 @@ export namespace Worktree {
           new ResetFailedError({ message: (r.stderr || r.text) || "Failed to reset worktree to target" }),
         )
 
-        const cleanResult = yield* sweepEffect(worktreePath)
+        const cleanResult = yield* sweep(worktreePath)
         if (cleanResult.code !== 0) {
           throw new ResetFailedError({ message: (cleanResult.stderr || cleanResult.text) || "Failed to clean worktree" })
         }
@@ -689,7 +629,10 @@ export namespace Worktree {
           throw new ResetFailedError({ message: `Worktree reset left local changes:\n${status.text.trim()}` })
         }
 
-        queueStartScripts(worktreePath, { projectID: Instance.project.id })
+        yield* runStartScripts(worktreePath, { projectID: Instance.project.id }).pipe(
+          Effect.catchCause((cause) => Effect.sync(() => log.error("worktree start task failed", { cause }))),
+          Effect.forkIn(scope),
+        )
 
         return true
       })
