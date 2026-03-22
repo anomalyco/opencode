@@ -166,6 +166,8 @@ export namespace Bus {
 
   const { runPromise, runSync } = makeRuntime(Service, layer)
 
+  // runSync is safe here because the subscribe chain (InstanceState.get, PubSub.subscribe,
+  // Scope.make, Effect.forkScoped) is entirely synchronous. If any step becomes async, this will throw.
   export async function publish<D extends BusEvent.Definition>(def: D, properties: z.output<D["properties"]>) {
     return runPromise((svc) => svc.publish(def, properties))
   }

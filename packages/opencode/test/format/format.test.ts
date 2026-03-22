@@ -1,12 +1,27 @@
-import { Effect } from "effect"
+import { Effect, Layer, ManagedRuntime } from "effect"
 import { afterEach, describe, expect, test } from "bun:test"
 import { tmpdir } from "../fixture/fixture"
-import { withServices } from "../fixture/instance"
-import { Bus } from "../../src/bus"
-import { File } from "../../src/file"
 import { Format } from "../../src/format"
 import * as Formatter from "../../src/format/formatter"
 import { Instance } from "../../src/project/instance"
+
+function withRuntime<S, E>(
+  directory: string,
+  layer: Layer.Layer<S, E, never>,
+  body: (rt: ManagedRuntime.ManagedRuntime<S, E>) => Promise<void>,
+) {
+  return Instance.provide({
+    directory,
+    fn: async () => {
+      const rt = ManagedRuntime.make(layer)
+      try {
+        await body(rt)
+      } finally {
+        await rt.dispose()
+      }
+    },
+  })
+}
 
 describe("Format", () => {
   afterEach(async () => {
@@ -16,7 +31,7 @@ describe("Format", () => {
   test("status() returns built-in formatters when no config overrides", async () => {
     await using tmp = await tmpdir()
 
-    await withServices(tmp.path, Format.layer, async (rt) => {
+    await withRuntime(tmp.path, Format.layer, async (rt) => {
       const statuses = await rt.runPromise(Format.Service.use((s) => s.status()))
       expect(Array.isArray(statuses)).toBe(true)
       expect(statuses.length).toBeGreaterThan(0)
@@ -38,7 +53,7 @@ describe("Format", () => {
       config: { formatter: false },
     })
 
-    await withServices(tmp.path, Format.layer, async (rt) => {
+    await withRuntime(tmp.path, Format.layer, async (rt) => {
       const statuses = await rt.runPromise(Format.Service.use((s) => s.status()))
       expect(statuses).toEqual([])
     })
@@ -53,7 +68,7 @@ describe("Format", () => {
       },
     })
 
-    await withServices(tmp.path, Format.layer, async (rt) => {
+    await withRuntime(tmp.path, Format.layer, async (rt) => {
       const statuses = await rt.runPromise(Format.Service.use((s) => s.status()))
       const gofmt = statuses.find((s) => s.name === "gofmt")
       expect(gofmt).toBeUndefined()
@@ -63,7 +78,7 @@ describe("Format", () => {
   test("service initializes without error", async () => {
     await using tmp = await tmpdir()
 
-    await withServices(tmp.path, Format.layer, async (rt) => {
+    await withRuntime(tmp.path, Format.layer, async (rt) => {
       await rt.runPromise(Format.Service.use(() => Effect.void))
     })
   })
@@ -127,7 +142,7 @@ describe("Format", () => {
     }
 
     try {
-      await withServices(tmp.path, Format.layer, async (rt) => {
+      await withRuntime(tmp.path, Format.layer, async (rt) => {
         await rt.runPromise(Format.Service.use((s) => s.init()))
         await rt.runPromise(Format.Service.use((s) => s.file(file)))
       })
@@ -162,7 +177,7 @@ describe("Format", () => {
     const file = `${tmp.path}/test.seq`
     await Bun.write(file, "x")
 
-    await withServices(tmp.path, Format.layer, async (rt) => {
+    await withRuntime(tmp.path, Format.layer, async (rt) => {
       await rt.runPromise(Format.Service.use((s) => s.init()))
       await rt.runPromise(Format.Service.use((s) => s.file(file)))
     })

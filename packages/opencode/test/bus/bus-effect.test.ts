@@ -4,8 +4,7 @@ import z from "zod"
 import { Bus } from "../../src/bus"
 import { BusEvent } from "../../src/bus/bus-event"
 import { Instance } from "../../src/project/instance"
-import { tmpdir } from "../fixture/fixture"
-import { provideInstance } from "../fixture/instance"
+import { provideInstance, tmpdir } from "../fixture/fixture"
 
 const TestEvent = {
   Ping: BusEvent.define("test.effect.ping", z.object({ value: z.number() })),

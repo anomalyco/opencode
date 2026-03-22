@@ -5,6 +5,7 @@ import path from "path"
 import { Effect, FileSystem } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import type { Config } from "../../src/config/config"
+import { Instance } from "../../src/project/instance"
 
 // Strip null bytes from paths (defensive fix for CI environment issues)
 function sanitizePath(p: string): string {
@@ -81,11 +82,10 @@ export function tmpdirScoped(options?: { git?: boolean; config?: Partial<Config.
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const dir = yield* fs.makeTempDirectoryScoped({ prefix: "opencode-test-" })
 
-    function git(...args: string[]) {
-      return spawner.spawn(ChildProcess.make("git", args, { cwd: dir })).pipe(
-        Effect.flatMap((handle) => handle.exitCode),
-      )
-    }
+    const git = (...args: string[]) =>
+      spawner
+        .spawn(ChildProcess.make("git", args, { cwd: dir }))
+        .pipe(Effect.flatMap((handle) => handle.exitCode))
 
     if (options?.git) {
       yield* git("init")
@@ -104,4 +104,23 @@ export function tmpdirScoped(options?: { git?: boolean; config?: Partial<Config.
 
     return dir
   })
+}
+
+export const provideInstance =
+  (directory: string) =>
+  <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+    Effect.withFiber((fiber) =>
+      Effect.promise<A>(async () =>
+        Instance.provide({
+          directory,
+          fn: () => Effect.runPromiseWith(fiber.services as any)(self),
+        }),
+      ),
+    )
+
+export function tmpdirInstanceScoped(options?: { git?: boolean; config?: Partial<Config.Info> }) {
+  return Effect.map(tmpdirScoped(options), (path) => ({
+    path,
+    provide: provideInstance(path),
+  }))
 }

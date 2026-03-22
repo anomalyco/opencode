@@ -43,12 +43,12 @@ export function withServices<S>(
 
 export const provideInstance =
   (directory: string) =>
-  <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
-    Effect.withFiber((fiber) =>
+  <A, E = never, R = never>(self: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+    Effect.services<A, E, R>((fiber) =>
       Effect.promise<A>(async () =>
         Instance.provide({
           directory,
-          fn: () => Effect.runPromiseWith(fiber.services as any)(self),
+          fn: () => Effect.runPromiseWith(fiber.services)(self),
         }),
       ),
     )
