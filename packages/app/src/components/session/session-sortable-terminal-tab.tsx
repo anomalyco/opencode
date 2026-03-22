@@ -6,8 +6,10 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Icon } from "@opencode-ai/ui/icon"
+import { isDefaultTitle as isDefaultTerminalTitle } from "@/context/terminal-title"
 import { useTerminal, type LocalPTY } from "@/context/terminal"
 import { useLanguage } from "@/context/language"
+import { focusTerminalById } from "@/pages/session/helpers"
 
 export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () => void }): JSX.Element {
   const terminal = useTerminal()
@@ -22,15 +24,12 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () =>
   })
   let input: HTMLInputElement | undefined
   let blurFrame: number | undefined
+  let editRequested = false
 
   const isDefaultTitle = () => {
     const number = props.terminal.titleNumber
     if (!Number.isFinite(number) || number <= 0) return false
-    const match = props.terminal.title.match(/^Terminal (\d+)$/)
-    if (!match) return false
-    const parsed = Number(match[1])
-    if (!Number.isFinite(parsed) || parsed <= 0) return false
-    return parsed === number
+    return isDefaultTerminalTitle(props.terminal.title, number)
   }
 
   const label = () => {
@@ -53,21 +52,8 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () =>
 
   const focus = () => {
     if (store.editing) return
-
-    if (document.activeElement instanceof HTMLElement) {
-      document.activeElement.blur()
-    }
-    const wrapper = document.getElementById(`terminal-wrapper-${props.terminal.id}`)
-    const element = wrapper?.querySelector('[data-component="terminal"]') as HTMLElement
-    if (!element) return
-
-    const textarea = element.querySelector("textarea") as HTMLTextAreaElement
-    if (textarea) {
-      textarea.focus()
-      return
-    }
-    element.focus()
-    element.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true }))
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
+    focusTerminalById(props.terminal.id)
   }
 
   const edit = (e?: Event) => {
@@ -183,8 +169,14 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () =>
                 left: `${store.menuPosition.x}px`,
                 top: `${store.menuPosition.y}px`,
               }}
+              onCloseAutoFocus={(e) => {
+                if (!editRequested) return
+                e.preventDefault()
+                editRequested = false
+                requestAnimationFrame(() => edit())
+              }}
             >
-              <DropdownMenu.Item onSelect={edit}>
+              <DropdownMenu.Item onSelect={() => (editRequested = true)}>
                 <Icon name="edit" class="w-4 h-4 mr-2" />
                 {language.t("common.rename")}
               </DropdownMenu.Item>

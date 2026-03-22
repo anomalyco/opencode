@@ -4,10 +4,12 @@ import { Session } from "."
 
 import { MessageV2 } from "./message-v2"
 import { Identifier } from "@/id/id"
+import { SessionID, MessageID } from "./schema"
 import { Snapshot } from "@/snapshot"
 
 import { Storage } from "@/storage/storage"
 import { Bus } from "@/bus"
+import { NotFoundError } from "@/storage/db"
 
 export namespace SessionSummary {
   function unquoteGitPath(input: string) {
@@ -68,19 +70,25 @@ export namespace SessionSummary {
 
   export const summarize = fn(
     z.object({
-      sessionID: z.string(),
-      messageID: z.string(),
+      sessionID: SessionID.zod,
+      messageID: MessageID.zod,
     }),
     async (input) => {
-      const all = await Session.messages({ sessionID: input.sessionID })
-      await Promise.all([
-        summarizeSession({ sessionID: input.sessionID, messages: all }),
-        summarizeMessage({ messageID: input.messageID, messages: all }),
-      ])
+      await Session.messages({ sessionID: input.sessionID })
+        .then((all) =>
+          Promise.all([
+            summarizeSession({ sessionID: input.sessionID, messages: all }),
+            summarizeMessage({ messageID: input.messageID, messages: all }),
+          ]),
+        )
+        .catch((err) => {
+          if (NotFoundError.isInstance(err)) return
+          throw err
+        })
     },
   )
 
-  async function summarizeSession(input: { sessionID: string; messages: MessageV2.WithParts[] }) {
+  async function summarizeSession(input: { sessionID: SessionID; messages: MessageV2.WithParts[] }) {
     const diffs = await computeDiff({ messages: input.messages })
     await Session.setSummary({
       sessionID: input.sessionID,
@@ -101,7 +109,8 @@ export namespace SessionSummary {
     const messages = input.messages.filter(
       (m) => m.info.id === input.messageID || (m.info.role === "assistant" && m.info.parentID === input.messageID),
     )
-    const msgWithParts = messages.find((m) => m.info.id === input.messageID)!
+    const msgWithParts = messages.find((m) => m.info.id === input.messageID)
+    if (!msgWithParts) return
     const userMsg = msgWithParts.info as MessageV2.User
     const diffs = await computeDiff({ messages })
     userMsg.summary = {
@@ -113,8 +122,8 @@ export namespace SessionSummary {
 
   export const diff = fn(
     z.object({
-      sessionID: Identifier.schema("session"),
-      messageID: Identifier.schema("message").optional(),
+      sessionID: SessionID.zod,
+      messageID: MessageID.zod.optional(),
     }),
     async (input) => {
       const diffs = await Storage.read<Snapshot.FileDiff[]>(["session_diff", input.sessionID]).catch(() => [])
