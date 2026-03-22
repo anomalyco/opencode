@@ -611,11 +611,11 @@ export namespace File {
           if (Instance.project.vcs === "git") {
             const ig = ignore()
             const gitignore = path.join(Instance.project.worktree, ".gitignore")
-            if (await Filesystem.exists(gitignore)) {
+            if (await Filesystem.exists(gitignore) && !(await Filesystem.isDir(gitignore))) {
               ig.add(await Filesystem.readText(gitignore))
             }
             const ignoreFile = path.join(Instance.project.worktree, ".ignore")
-            if (await Filesystem.exists(ignoreFile)) {
+            if (await Filesystem.exists(ignoreFile) && !(await Filesystem.isDir(ignoreFile))) {
               ig.add(await Filesystem.readText(ignoreFile))
             }
             ignored = ig.ignores.bind(ig)
