@@ -132,7 +132,7 @@ Still open and likely worth migrating:
 - [ ] `Pty`
 - [ ] `Worktree`
 - [ ] `Bus`
-- [ ] `Command`
+- [x] `Command`
 - [ ] `Config`
 - [ ] `Session`
 - [ ] `SessionProcessor`
