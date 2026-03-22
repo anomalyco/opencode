@@ -477,104 +477,106 @@ export namespace Worktree {
         return info
       })
 
+      const canonicalEffect = Effect.fnUntraced(function* (input: string) {
+        const abs = pathSvc.resolve(input)
+        const real = yield* fsys.realPath(abs).pipe(Effect.catch(() => Effect.succeed(abs)))
+        const normalized = pathSvc.normalize(real)
+        return process.platform === "win32" ? normalized.toLowerCase() : normalized
+      })
+
+      function parseWorktreeList(text: string) {
+        return text
+          .split("\n")
+          .map((line) => line.trim())
+          .reduce<{ path?: string; branch?: string }[]>((acc, line) => {
+            if (!line) return acc
+            if (line.startsWith("worktree ")) {
+              acc.push({ path: line.slice("worktree ".length).trim() })
+              return acc
+            }
+            const current = acc[acc.length - 1]
+            if (!current) return acc
+            if (line.startsWith("branch ")) {
+              current.branch = line.slice("branch ".length).trim()
+            }
+            return acc
+          }, [])
+      }
+
+      const locateWorktree = Effect.fnUntraced(function* (
+        entries: { path?: string; branch?: string }[],
+        directory: string,
+      ) {
+        for (const item of entries) {
+          if (!item.path) continue
+          const key = yield* canonicalEffect(item.path)
+          if (key === directory) return item
+        }
+        return undefined
+      })
+
+      function stopFsmonitor(target: string) {
+        return fsys.exists(target).pipe(
+          Effect.orDie,
+          Effect.flatMap((exists) => (exists ? gitRun(["fsmonitor--daemon", "stop"], { cwd: target }) : Effect.void)),
+        )
+      }
+
+      function cleanDirectory(target: string) {
+        return fsys.remove(target, { recursive: true }).pipe(Effect.ignore)
+      }
+
       const remove = Effect.fn("Worktree.remove")(function* (input: RemoveInput) {
         if (Instance.project.vcs !== "git") {
           throw new NotGitError({ message: "Worktrees are only supported for git projects" })
         }
 
-        return yield* Effect.promise(async () => {
-          const directory = await canonical(input.directory)
-          const locate = async (stdout: Uint8Array | undefined) => {
-            const lines = outputText(stdout)
-              .split("\n")
-              .map((line) => line.trim())
-            const entries = lines.reduce<{ path?: string; branch?: string }[]>((acc, line) => {
-              if (!line) return acc
-              if (line.startsWith("worktree ")) {
-                acc.push({ path: line.slice("worktree ".length).trim() })
-                return acc
-              }
-              const current = acc[acc.length - 1]
-              if (!current) return acc
-              if (line.startsWith("branch ")) {
-                current.branch = line.slice("branch ".length).trim()
-              }
-              return acc
-            }, [])
+        const directory = yield* canonicalEffect(input.directory)
 
-            return (async () => {
-              for (const item of entries) {
-                if (!item.path) continue
-                const key = await canonical(item.path)
-                if (key === directory) return item
-              }
-            })()
+        const list = yield* gitRun(["worktree", "list", "--porcelain"], { cwd: Instance.worktree })
+        if (list.code !== 0) {
+          throw new RemoveFailedError({ message: (list.stderr || list.text) || "Failed to read git worktrees" })
+        }
+
+        const entries = parseWorktreeList(list.text)
+        const entry = yield* locateWorktree(entries, directory)
+
+        if (!entry?.path) {
+          const directoryExists = yield* fsys.exists(directory).pipe(Effect.orDie)
+          if (directoryExists) {
+            yield* stopFsmonitor(directory)
+            yield* cleanDirectory(directory)
           }
-
-          const clean = (target: string) =>
-            fs
-              .rm(target, {
-                recursive: true,
-                force: true,
-                maxRetries: 5,
-                retryDelay: 100,
-              })
-              .catch((error) => {
-                const message = error instanceof Error ? error.message : String(error)
-                throw new RemoveFailedError({ message: message || "Failed to remove git worktree directory" })
-              })
-
-          const stop = async (target: string) => {
-            if (!(await exists(target))) return
-            await git(["fsmonitor--daemon", "stop"], { cwd: target })
-          }
-
-          const list = await git(["worktree", "list", "--porcelain"], { cwd: Instance.worktree })
-          if (list.exitCode !== 0) {
-            throw new RemoveFailedError({ message: errorText(list) || "Failed to read git worktrees" })
-          }
-
-          const entry = await locate(list.stdout)
-
-          if (!entry?.path) {
-            const directoryExists = await exists(directory)
-            if (directoryExists) {
-              await stop(directory)
-              await clean(directory)
-            }
-            return true
-          }
-
-          await stop(entry.path)
-          const removed = await git(["worktree", "remove", "--force", entry.path], {
-            cwd: Instance.worktree,
-          })
-          if (removed.exitCode !== 0) {
-            const next = await git(["worktree", "list", "--porcelain"], { cwd: Instance.worktree })
-            if (next.exitCode !== 0) {
-              throw new RemoveFailedError({
-                message: errorText(removed) || errorText(next) || "Failed to remove git worktree",
-              })
-            }
-
-            const stale = await locate(next.stdout)
-            if (stale?.path) {
-              throw new RemoveFailedError({ message: errorText(removed) || "Failed to remove git worktree" })
-            }
-          }
-
-          await clean(entry.path)
-
-          const branch = entry.branch?.replace(/^refs\/heads\//, "")
-          if (branch) {
-            const deleted = await git(["branch", "-D", branch], { cwd: Instance.worktree })
-            if (deleted.exitCode !== 0) {
-              throw new RemoveFailedError({ message: errorText(deleted) || "Failed to delete worktree branch" })
-            }
-          }
-
           return true
-        })
+        }
+
+        yield* stopFsmonitor(entry.path)
+        const removed = yield* gitRun(["worktree", "remove", "--force", entry.path], { cwd: Instance.worktree })
+        if (removed.code !== 0) {
+          const next = yield* gitRun(["worktree", "list", "--porcelain"], { cwd: Instance.worktree })
+          if (next.code !== 0) {
+            throw new RemoveFailedError({
+              message: (removed.stderr || removed.text) || (next.stderr || next.text) || "Failed to remove git worktree",
+            })
+          }
+
+          const stale = yield* locateWorktree(parseWorktreeList(next.text), directory)
+          if (stale?.path) {
+            throw new RemoveFailedError({ message: (removed.stderr || removed.text) || "Failed to remove git worktree" })
+          }
+        }
+
+        yield* cleanDirectory(entry.path)
+
+        const branch = entry.branch?.replace(/^refs\/heads\//, "")
+        if (branch) {
+          const deleted = yield* gitRun(["branch", "-D", branch], { cwd: Instance.worktree })
+          if (deleted.code !== 0) {
+            throw new RemoveFailedError({ message: (deleted.stderr || deleted.text) || "Failed to delete worktree branch" })
+          }
+        }
+
+        return true
       })
 
       const reset = Effect.fn("Worktree.reset")(function* (input: ResetInput) {
