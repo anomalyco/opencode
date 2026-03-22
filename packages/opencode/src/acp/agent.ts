@@ -671,29 +671,24 @@ export namespace ACP {
         const cursor = params.cursor ? Number(params.cursor) : undefined
         const limit = 100
 
-        const sessions = await this.sdk.session
-          .list(
-            {
-              directory: params.cwd ?? undefined,
-              roots: true,
-            },
-            { throwOnError: true },
-          )
-          .then((x) => x.data ?? [])
+        const listed = await this.sdk.experimental.session.list(
+          {
+            roots: true,
+            cursor,
+            limit,
+          },
+          { throwOnError: true },
+        )
+        const sessions = listed.data ?? []
 
-        const sorted = sessions.toSorted((a, b) => b.time.updated - a.time.updated)
-        const filtered = cursor ? sorted.filter((s) => s.time.updated < cursor) : sorted
-        const page = filtered.slice(0, limit)
-
-        const entries: SessionInfo[] = page.map((session) => ({
+        const entries: SessionInfo[] = sessions.map((session) => ({
           sessionId: session.id,
           cwd: session.directory,
           title: session.title,
           updatedAt: new Date(session.time.updated).toISOString(),
         }))
 
-        const last = page[page.length - 1]
-        const next = filtered.length > limit && last ? String(last.time.updated) : undefined
+        const next = listed.response.headers.get("x-next-cursor") ?? undefined
 
         const response: ListSessionsResponse = {
           sessions: entries,
