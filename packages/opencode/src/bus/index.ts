@@ -1,5 +1,5 @@
 import z from "zod"
-import { Effect, Fiber, Layer, PubSub, ServiceMap, Stream } from "effect"
+import { Effect, Layer, PubSub, ServiceMap, Stream } from "effect"
 import { Log } from "../util/log"
 import { Instance } from "../project/instance"
 import { BusEvent } from "./bus-event"
@@ -117,15 +117,12 @@ export namespace Bus {
     }),
   )
 
-  const { runPromise, runFork } = makeRuntime(Service, layer)
+  const { runPromise, runCallback } = makeRuntime(Service, layer)
 
   function forkStream<T>(streamFn: (svc: Interface) => Stream.Stream<T>, callback: (msg: T) => void) {
-    const fiber = runFork((svc) =>
+    return runCallback((svc) =>
       streamFn(svc).pipe(Stream.runForEach((msg) => Effect.sync(() => callback(msg)))),
     )
-    return () => {
-      Effect.runFork(Fiber.interrupt(fiber))
-    }
   }
 
   export async function publish<D extends BusEvent.Definition>(
