@@ -5,7 +5,6 @@ import { MouseButton, TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
 import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
 import { win32DisableProcessedInput, win32FlushInputBuffer, win32InstallCtrlCGuard } from "./win32"
-import { Installation } from "@/installation"
 import { Flag } from "@/flag/flag"
 import semver from "semver"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
@@ -731,9 +730,8 @@ function App() {
     })
   })
 
-  sdk.event.on(Installation.Event.UpdateAvailable.type, async (evt) => {
+  sdk.event.on("installation.update-available", async (evt) => {
     const version = evt.properties.version
-    const kind = Installation.getReleaseType(Installation.VERSION, version)
 
     const skipped = kv.get("skipped_version")
     if (skipped && !semver.gt(version, skipped)) return
@@ -741,7 +739,7 @@ function App() {
     const confirmed = await DialogConfirm.show(
       dialog,
       `Update Available`,
-      `A new ${kind} release v${version} is available. Would you like to update now?`,
+      `A new release v${version} is available. Would you like to update now?`,
       "skip",
     )
 
