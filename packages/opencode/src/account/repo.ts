@@ -136,6 +136,8 @@ export class AccountRepo extends ServiceMap.Service<AccountRepo, AccountRepo.Ser
             .onConflictDoUpdate({
               target: AccountTable.id,
               set: {
+                email: input.email,
+                url: input.url,
                 access_token: input.accessToken,
                 refresh_token: input.refreshToken,
                 token_expiry: input.expiry,
