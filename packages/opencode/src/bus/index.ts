@@ -131,7 +131,6 @@ export namespace Bus {
                   try: () => Promise.resolve().then(() => callback(msg)),
                   catch: (cause) => {
                     log.error("subscriber failed", { type, cause })
-                    return cause
                   },
                 }).pipe(Effect.ignore),
               ),
