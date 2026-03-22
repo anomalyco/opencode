@@ -2368,14 +2368,12 @@ export default function Layout(props: ParentProps) {
                     size={layout.sidebar.width()}
                     min={244}
                     max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.3 + 64}
-                    collapseThreshold={244}
                     onResize={(w) => {
                       setState("sizing", true)
                       if (sizet !== undefined) clearTimeout(sizet)
                       sizet = window.setTimeout(() => setState("sizing", false), 120)
                       layout.sidebar.resize(w)
                     }}
-                    onCollapse={layout.sidebar.close}
                   />
                 </div>
               </Show>
