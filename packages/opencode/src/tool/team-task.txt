@@ -1,0 +1,11 @@
+Manage tasks on a team's shared task board. Team tasks are visible to all team members and provide coordination state.
+
+Operations:
+- **create**: Create a new task on the team board. Use this to assign work items to specialist agents.
+- **update**: Update a task's status, owner, or description. Agents should update their tasks to "in_progress" when starting and "completed" when done.
+- **get**: Read a specific task by ID.
+- **list**: List all tasks for a team.
+
+Task statuses: pending, in_progress, completed, failed.
+
+Tasks are distinct from the Todo tool — Todos track an individual agent's work plan, while Team Tasks coordinate across multiple agents in a team.

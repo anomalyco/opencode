@@ -13,6 +13,7 @@ import type { Provider } from "@/provider/provider"
 import type { Agent } from "@/agent/agent"
 import { Permission } from "@/permission"
 import { Skill } from "@/skill"
+import { AgentMemory } from "@/agent/memory"
 
 export namespace SystemPrompt {
   export function provider(model: Provider.Model) {
@@ -63,6 +64,18 @@ export namespace SystemPrompt {
       // the agents seem to ingest the information about skills a bit better if we present a more verbose
       // version of them here and a less verbose version in tool description, rather than vice versa.
       Skill.fmt(list, { verbose: true }),
+    ].join("\n")
+  }
+
+  export function memory(agent: Agent.Info): string | undefined {
+    if (agent.memory !== "local") return undefined
+    const mem = AgentMemory.read(agent.name)
+    if (!mem) return undefined
+    return [
+      `<agent_memory>`,
+      `The following is your persistent memory for this project. Use the agent_memory tool to update it.`,
+      mem.content,
+      `</agent_memory>`,
     ].join("\n")
   }
 }

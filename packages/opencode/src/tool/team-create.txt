@@ -1,0 +1,11 @@
+Create a named agent team for coordinating multiple specialist sub-agents.
+
+Teams enable multi-agent workflows where a lead orchestrator spawns specialist agents that work in parallel and communicate findings back through the lead.
+
+Usage:
+- Create a team before spawning background agents that need to coordinate
+- The team name should be descriptive (e.g., "spec-review-auth-service")
+- After creating a team, use the Task tool with `background: true` and `team_id` to spawn team members
+- Use TeamDelete to disband the team when all work is complete
+
+Returns the team ID which must be passed to subsequent team operations (TaskCreate, SendMessage, TeamDelete).

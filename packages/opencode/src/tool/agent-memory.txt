@@ -1,0 +1,11 @@
+Read or write persistent per-agent memory for this project.
+
+Agent memory persists across sessions — use it to store learned patterns, conventions, recurring issues, and domain knowledge specific to this project.
+
+Operations:
+- **read**: Read your stored memory for this project. Call this at the start of a task to recall past learnings.
+- **write**: Replace your entire memory content. Use this to store a curated set of learnings.
+- **append**: Add new content to existing memory without replacing it. Use this to accumulate learnings incrementally.
+
+Memory is scoped to (agent, project) — each agent has independent memory per project.
+Keep memory concise and actionable. Focus on patterns and conventions, not raw data.
