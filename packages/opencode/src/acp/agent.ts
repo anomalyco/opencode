@@ -1,4 +1,5 @@
 import {
+  type ContentBlock,
   RequestError,
   type Agent as ACPAgent,
   type AgentSideConnection,
@@ -41,6 +42,7 @@ import { Installation } from "@/installation"
 import { MessageV2 } from "@/session/message-v2"
 import { Config } from "@/config/config"
 import { Todo } from "@/session/todo"
+import { MessageID } from "@/session/schema"
 import { z } from "zod"
 import { LoadAPIKeyError } from "ai"
 import type { AssistantMessage, Event, OpencodeClient, SessionMessageResponse, ToolPart } from "@opencode-ai/sdk/v2"
@@ -484,6 +486,7 @@ export namespace ACP {
                 sessionId,
                 update: {
                   sessionUpdate: "agent_message_chunk",
+                  messageId: props.messageID,
                   content: {
                     type: "text",
                     text: props.delta,
@@ -502,6 +505,7 @@ export namespace ACP {
                 sessionId,
                 update: {
                   sessionUpdate: "agent_thought_chunk",
+                  messageId: props.messageID,
                   content: {
                     type: "text",
                     text: props.delta,
@@ -666,7 +670,7 @@ export namespace ACP {
       }
     }
 
-    async unstable_listSessions(params: ListSessionsRequest): Promise<ListSessionsResponse> {
+    async listSessions(params: ListSessionsRequest): Promise<ListSessionsResponse> {
       try {
         const cursor = params.cursor ? Number(params.cursor) : undefined
         const limit = 100
@@ -970,6 +974,7 @@ export namespace ACP {
                 sessionId,
                 update: {
                   sessionUpdate: message.info.role === "user" ? "user_message_chunk" : "agent_message_chunk",
+                  messageId: message.info.id,
                   content: {
                     type: "text",
                     text: part.text,
@@ -1001,6 +1006,7 @@ export namespace ACP {
                 sessionId,
                 update: {
                   sessionUpdate: messageChunk,
+                  messageId: message.info.id,
                   content: { type: "resource_link", uri: url, name: filename, mimeType: mime },
                 },
               })
@@ -1022,6 +1028,7 @@ export namespace ACP {
                   sessionId,
                   update: {
                     sessionUpdate: messageChunk,
+                    messageId: message.info.id,
                     content: {
                       type: "image",
                       mimeType: effectiveMime,
@@ -1050,6 +1057,7 @@ export namespace ACP {
                   sessionId,
                   update: {
                     sessionUpdate: messageChunk,
+                    messageId: message.info.id,
                     content: { type: "resource", resource },
                   },
                 })
@@ -1066,6 +1074,7 @@ export namespace ACP {
                 sessionId,
                 update: {
                   sessionUpdate: "agent_thought_chunk",
+                  messageId: message.info.id,
                   content: {
                     type: "text",
                     text: part.text,
@@ -1285,6 +1294,19 @@ export namespace ACP {
       this.sessionManager.setMode(params.sessionId, params.modeId)
     }
 
+    private async emitUserMessageChunks(sessionId: string, messageId: string, prompt: ContentBlock[]) {
+      for (const content of prompt) {
+        await this.connection.sessionUpdate({
+          sessionId,
+          update: {
+            sessionUpdate: "user_message_chunk",
+            messageId,
+            content,
+          },
+        })
+      }
+    }
+
     async prompt(params: PromptRequest) {
       const sessionID = params.sessionId
       const session = this.sessionManager.get(sessionID)
@@ -1401,8 +1423,11 @@ export namespace ACP {
       })
 
       if (!cmd) {
+        const messageID = MessageID.ascending()
+        await this.emitUserMessageChunks(sessionID, messageID, params.prompt)
         const response = await this.sdk.session.prompt({
           sessionID,
+          messageID,
           model: {
             providerID: model.providerID,
             modelID: model.modelID,
@@ -1427,8 +1452,11 @@ export namespace ACP {
         .list({ directory }, { throwOnError: true })
         .then((x) => x.data!.find((c) => c.name === cmd.name))
       if (command) {
+        const messageID = MessageID.ascending()
+        await this.emitUserMessageChunks(sessionID, messageID, params.prompt)
         const response = await this.sdk.session.command({
           sessionID,
+          messageID,
           command: command.name,
           arguments: cmd.args,
           model: model.providerID + "/" + model.modelID,
