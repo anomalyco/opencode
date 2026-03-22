@@ -3,6 +3,7 @@ import path from "path"
 import { pathToFileURL } from "url"
 import z from "zod"
 import { Effect, Layer, ServiceMap } from "effect"
+import { readdir, realpath, stat } from "fs/promises"
 import { NamedError } from "@opencode-ai/util/error"
 import type { Agent } from "@/agent/agent"
 import { Bus } from "@/bus"
@@ -101,19 +102,57 @@ export namespace Skill {
     }
   }
 
+  function norm(file: string) {
+    return file.replaceAll(path.sep, "/")
+  }
+
   const scan = async (state: State, root: string, pattern: string, opts?: { dot?: boolean; scope?: string }) => {
-    return Glob.scan(pattern, {
-      cwd: root,
-      absolute: true,
-      include: "file",
-      symlink: true,
-      dot: opts?.dot,
+    if (!(await Filesystem.isDir(root))) return
+
+    const seen = new Set<string>()
+
+    const walk = async (dir: string, rel: string) => {
+      const key = await realpath(dir).catch(() => dir)
+      if (seen.has(key)) return
+      seen.add(key)
+
+      const list = await readdir(dir, { withFileTypes: true })
+      for (const item of list) {
+        if (!opts?.dot && item.name.startsWith(".")) continue
+
+        const abs = path.join(dir, item.name)
+        const next = rel ? path.join(rel, item.name) : item.name
+
+        if (item.isFile()) {
+          if (Glob.match(pattern, norm(next))) await add(state, abs)
+          continue
+        }
+
+        if (item.isDirectory()) {
+          await walk(abs, next)
+          continue
+        }
+
+        if (!item.isSymbolicLink()) continue
+
+        const info = await stat(abs).catch(() => undefined)
+        if (!info) continue
+
+        if (info.isFile()) {
+          if (Glob.match(pattern, norm(next))) await add(state, abs)
+          continue
+        }
+
+        if (info.isDirectory()) {
+          await walk(abs, next)
+        }
+      }
+    }
+
+    return walk(root, "").catch((error) => {
+      if (!opts?.scope) throw error
+      log.error(`failed to scan ${opts.scope} skills`, { dir: root, error })
     })
-      .then((matches) => Promise.all(matches.map((match) => add(state, match))))
-      .catch((error) => {
-        if (!opts?.scope) throw error
-        log.error(`failed to scan ${opts.scope} skills`, { dir: root, error })
-      })
   }
 
   // TODO: Migrate to Effect

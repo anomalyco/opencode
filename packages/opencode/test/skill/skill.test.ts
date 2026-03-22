@@ -291,6 +291,49 @@ This skill is loaded from the global home directory.
   }
 })
 
+test("follows symlinked .agents skills without recursing through symlink loops", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      const root = path.join(dir, ".codex", "skills")
+      const skill = path.join(root, "linked-skill")
+      const loop = path.join(root, ".mise", "state", "trusted-configs")
+
+      await fs.mkdir(skill, { recursive: true })
+      await fs.mkdir(path.join(dir, ".agents"), { recursive: true })
+      await fs.mkdir(loop, { recursive: true })
+
+      await Bun.write(
+        path.join(skill, "SKILL.md"),
+        `---
+name: linked-skill
+description: A skill discovered through a symlinked .agents root.
+---
+
+# Linked Skill
+`,
+      )
+
+      await fs.symlink(path.join(dir, ".codex", "skills"), path.join(dir, ".agents", "skills"))
+      await fs.symlink(dir, path.join(loop, "home"))
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const skills = (await Promise.race([
+        Skill.all(),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("skill scan timed out")), 1500)),
+      ])) as Awaited<ReturnType<typeof Skill.all>>
+
+      expect(skills.length).toBe(1)
+      expect(skills[0].name).toBe("linked-skill")
+      expect(skills[0].location).toContain(path.join(".agents", "skills", "linked-skill", "SKILL.md"))
+    },
+  })
+})
+
 test("discovers skills from both .claude/skills/ and .agents/skills/", async () => {
   await using tmp = await tmpdir({
     git: true,
