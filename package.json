@@ -13,7 +13,7 @@
     "dev:storybook": "bun --cwd packages/storybook storybook",
     "typecheck": "bun turbo typecheck",
     "prepare": "husky",
-    "test": "echo 'do not run tests from root' && exit 1"
+    "test": "echo 'do not run tests from root directory ' && exit 1"
   },
   "workspaces": {
     "packages": [
