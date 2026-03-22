@@ -1,7 +1,7 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRunPromise, memoMap } from "@/effect/run-service"
+import { makeRunPromise } from "@/effect/run-service"
 import { Instance } from "@/project/instance"
 import { type IPty } from "bun-pty"
 import z from "zod"
@@ -10,7 +10,7 @@ import { lazy } from "@opencode-ai/util/lazy"
 import { Shell } from "@/shell/shell"
 import { Plugin } from "@/plugin"
 import { PtyID } from "./schema"
-import { Effect, Layer, ManagedRuntime, ServiceMap } from "effect"
+import { Effect, Layer, ServiceMap } from "effect"
 
 export namespace Pty {
   const log = Log.create({ service: "pty" })
@@ -40,6 +40,7 @@ export namespace Pty {
     sessions: Map<PtyID, Active>
   }
 
+  // WebSocket control frame: 0x00 + UTF-8 JSON.
   const meta = (cursor: number) => {
     const json = JSON.stringify({ cursor })
     const bytes = encoder.encode(json)
@@ -308,7 +309,10 @@ export namespace Pty {
         }
         log.info("client connected to session", { id })
 
+        // Use ws.data as the unique key for this connection lifecycle.
+        // If ws.data is undefined, fallback to ws object.
         const key = ws.data && typeof ws.data === "object" ? ws.data : ws
+        // Optionally cleanup if the key somehow exists
         session.subscribers.delete(key)
         session.subscribers.set(key, ws)
 
@@ -365,31 +369,25 @@ export namespace Pty {
   )
 
   const runPromise = makeRunPromise(Service, layer)
-  let rt: ManagedRuntime.ManagedRuntime<Service, never> | undefined
 
-  function runSync<A, E>(effect: Effect.Effect<A, E, Service>) {
-    rt ??= ManagedRuntime.make(layer, { memoMap })
-    return rt.runSync(effect)
+  export async function list() {
+    return runPromise((svc) => svc.list())
   }
 
-  export function list() {
-    return runSync(Service.use((svc) => svc.list()))
+  export async function get(id: PtyID) {
+    return runPromise((svc) => svc.get(id))
   }
 
-  export function get(id: PtyID) {
-    return runSync(Service.use((svc) => svc.get(id)))
+  export async function resize(id: PtyID, cols: number, rows: number) {
+    return runPromise((svc) => svc.resize(id, cols, rows))
   }
 
-  export function resize(id: PtyID, cols: number, rows: number) {
-    runSync(Service.use((svc) => svc.resize(id, cols, rows)))
+  export async function write(id: PtyID, data: string) {
+    return runPromise((svc) => svc.write(id, data))
   }
 
-  export function write(id: PtyID, data: string) {
-    runSync(Service.use((svc) => svc.write(id, data)))
-  }
-
-  export function connect(id: PtyID, ws: Socket, cursor?: number) {
-    return runSync(Service.use((svc) => svc.connect(id, ws, cursor)))
+  export async function connect(id: PtyID, ws: Socket, cursor?: number) {
+    return runPromise((svc) => svc.connect(id, ws, cursor))
   }
 
   export async function create(input: CreateInput) {
