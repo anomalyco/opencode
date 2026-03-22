@@ -33,7 +33,7 @@ import { pathToFileURL } from "url"
 import { Filesystem } from "../util/filesystem"
 import { Hash } from "../util/hash"
 import { ACPSessionManager } from "./session"
-import type { ACPConfig } from "./types"
+import type { ACPConfig, ACPSessionState } from "./types"
 import { Provider } from "../provider/provider"
 import { ModelID, ProviderID } from "../provider/schema"
 import { Agent as AgentModule } from "../agent/agent"
@@ -46,7 +46,13 @@ import { LoadAPIKeyError } from "ai"
 import type { AssistantMessage, Event, OpencodeClient, SessionMessageResponse, ToolPart } from "@opencode-ai/sdk/v2"
 import { applyPatch } from "diff"
 
-type ModeOption = { id: string; name: string; description?: string }
+type ModeOption = {
+  id: string
+  name: string
+  description?: string
+  model?: ACPSessionState["model"]
+  variant?: string
+}
 type ModelOption = { modelId: string; name: string }
 
 const DEFAULT_VARIANT_VALUE = "default"
@@ -1125,7 +1131,21 @@ export namespace ACP {
           id: agent.name,
           name: agent.name,
           description: agent.description,
+          model: agent.model
+            ? {
+                providerID: ProviderID.make(agent.model.providerID),
+                modelID: ModelID.make(agent.model.modelID),
+              }
+            : undefined,
+          variant: agent.model ? agent.variant : undefined,
         }))
+    }
+
+    private selectMode(sessionId: string, mode: ModeOption) {
+      this.sessionManager.setMode(sessionId, mode.id)
+      if (!mode.model) return
+      this.sessionManager.setModel(sessionId, mode.model)
+      this.sessionManager.setVariant(sessionId, mode.variant)
     }
 
     private async resolveModeState(
@@ -1138,10 +1158,10 @@ export namespace ACP {
         (await (async () => {
           if (!availableModes.length) return undefined
           const defaultAgentName = await AgentModule.defaultAgent()
-          const resolvedModeId =
-            availableModes.find((mode) => mode.name === defaultAgentName)?.id ?? availableModes[0].id
-          this.sessionManager.setMode(sessionId, resolvedModeId)
-          return resolvedModeId
+          const mode = availableModes.find((mode) => mode.name === defaultAgentName) ?? availableModes[0]
+          if (!mode) return undefined
+          this.selectMode(sessionId, mode)
+          return mode.id
         })())
 
       return { availableModes, currentModeId }
@@ -1149,18 +1169,19 @@ export namespace ACP {
 
     private async loadSessionMode(params: LoadSessionRequest) {
       const directory = params.cwd
-      const model = await defaultModel(this.config, directory)
       const sessionId = params.sessionId
 
       const providers = await this.sdk.config.providers({ directory }).then((x) => x.data!.providers)
       const entries = sortProvidersByName(providers)
+      const availableModels = buildAvailableModels(entries, { includeVariants: true })
+      const modeState = await this.resolveModeState(directory, sessionId)
+      const model = this.sessionManager.getModel(sessionId) ?? (await defaultModel(this.config, directory))
       const availableVariants = modelVariantsFromProviders(entries, model)
       const currentVariant = this.sessionManager.getVariant(sessionId)
       if (currentVariant && !availableVariants.includes(currentVariant)) {
         this.sessionManager.setVariant(sessionId, undefined)
       }
-      const availableModels = buildAvailableModels(entries, { includeVariants: true })
-      const modeState = await this.resolveModeState(directory, sessionId)
+      const variant = this.sessionManager.getVariant(sessionId)
       const currentModeId = modeState.currentModeId
       const modes = currentModeId
         ? {
@@ -1242,13 +1263,13 @@ export namespace ACP {
       return {
         sessionId,
         models: {
-          currentModelId: formatModelIdWithVariant(model, currentVariant, availableVariants, true),
+          currentModelId: formatModelIdWithVariant(model, variant, availableVariants, true),
           availableModels,
         },
         modes,
         _meta: buildVariantMeta({
           model,
-          variant: this.sessionManager.getVariant(sessionId),
+          variant,
           availableVariants,
         }),
       }
@@ -1279,10 +1300,11 @@ export namespace ACP {
     async setSessionMode(params: SetSessionModeRequest): Promise<SetSessionModeResponse | void> {
       const session = this.sessionManager.get(params.sessionId)
       const availableModes = await this.loadAvailableModes(session.cwd)
-      if (!availableModes.some((mode) => mode.id === params.modeId)) {
+      const mode = availableModes.find((mode) => mode.id === params.modeId)
+      if (!mode) {
         throw new Error(`Agent not found: ${params.modeId}`)
       }
-      this.sessionManager.setMode(params.sessionId, params.modeId)
+      this.selectMode(session.id, mode)
     }
 
     async prompt(params: PromptRequest) {
