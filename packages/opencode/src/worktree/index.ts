@@ -205,17 +205,8 @@ export namespace Worktree {
     return `${pick(ADJECTIVES)}-${pick(NOUNS)}`
   }
 
-  function outputText(input: Uint8Array | undefined) {
-    if (!input?.length) return ""
-    return new TextDecoder().decode(input).trim()
-  }
-
-  function errorText(result: { stdout?: Uint8Array; stderr?: Uint8Array }) {
-    return [outputText(result.stderr), outputText(result.stdout)].filter(Boolean).join("\n")
-  }
-
-  function failed(result: { stdout?: Uint8Array; stderr?: Uint8Array }) {
-    return [outputText(result.stderr), outputText(result.stdout)].filter(Boolean).flatMap((chunk) =>
+  function failedRemoves(...chunks: string[]) {
+    return chunks.filter(Boolean).flatMap((chunk) =>
       chunk
         .split("\n")
         .map((line) => line.trim())
@@ -468,13 +459,15 @@ export namespace Worktree {
         return true
       })
 
-      function gitExpect(args: string[], opts: { cwd: string }, error: (r: GitResult) => Error) {
-        return Effect.gen(function* () {
-          const result = yield* git(args, opts)
-          if (result.code !== 0) throw error(result)
-          return result
-        })
-      }
+      const gitExpect = Effect.fnUntraced(function* (
+        args: string[],
+        opts: { cwd: string },
+        error: (r: GitResult) => Error,
+      ) {
+        const result = yield* git(args, opts)
+        if (result.code !== 0) throw error(result)
+        return result
+      })
 
       const runStartCommand = Effect.fnUntraced(
         function* (directory: string, cmd: string) {
@@ -530,10 +523,7 @@ export namespace Worktree {
         const first = yield* git(["clean", "-ffdx"], { cwd: root })
         if (first.code === 0) return first
 
-        const entries = failed({
-          stderr: new TextEncoder().encode(first.stderr),
-          stdout: new TextEncoder().encode(first.text),
-        })
+        const entries = failedRemoves(first.stderr, first.text)
         if (!entries.length) return first
 
         yield* prune(root, entries)
