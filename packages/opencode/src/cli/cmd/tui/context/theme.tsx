@@ -41,6 +41,7 @@ import { useRenderer } from "@opentui/solid"
 import { createStore, produce } from "solid-js/store"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
+import { Log } from "@/util/log"
 import { useTuiConfig } from "./tui-config"
 
 type ThemeColors = {
@@ -174,7 +175,18 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   carbonfox,
 }
 
-function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
+const log = Log.create({ service: "tui.theme" })
+
+function isTheme(value: unknown): value is ThemeJson {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false
+  const theme = (value as { theme?: unknown }).theme
+  if (!theme || typeof theme !== "object" || Array.isArray(theme)) return false
+  return true
+}
+
+function resolveTheme(input: ThemeJson | undefined, mode: "dark" | "light") {
+  const theme = isTheme(input) ? input : DEFAULT_THEMES.opencode
+  const colors = theme.theme
   const defs = theme.defs ?? {}
   function resolveColor(c: ColorValue): RGBA {
     if (c instanceof RGBA) return c
@@ -185,8 +197,8 @@ function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
 
       if (defs[c] != null) {
         return resolveColor(defs[c])
-      } else if (theme.theme[c as keyof ThemeColors] !== undefined) {
-        return resolveColor(theme.theme[c as keyof ThemeColors]!)
+      } else if (colors[c as keyof ThemeColors] !== undefined) {
+        return resolveColor(colors[c as keyof ThemeColors]!)
       } else {
         throw new Error(`Color reference "${c}" not found in defs or theme`)
       }
@@ -198,7 +210,7 @@ function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
   }
 
   const resolved = Object.fromEntries(
-    Object.entries(theme.theme)
+    Object.entries(colors)
       .filter(([key]) => key !== "selectedListItemText" && key !== "backgroundMenu" && key !== "thinkingOpacity")
       .map(([key, value]) => {
         return [key, resolveColor(value as ColorValue)]
@@ -206,9 +218,9 @@ function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
   ) as Partial<ThemeColors>
 
   // Handle selectedListItemText separately since it's optional
-  const hasSelectedListItemText = theme.theme.selectedListItemText !== undefined
+  const hasSelectedListItemText = colors.selectedListItemText !== undefined
   if (hasSelectedListItemText) {
-    resolved.selectedListItemText = resolveColor(theme.theme.selectedListItemText!)
+    resolved.selectedListItemText = resolveColor(colors.selectedListItemText!)
   } else {
     // Backward compatibility: if selectedListItemText is not defined, use background color
     // This preserves the current behavior for all existing themes
@@ -216,14 +228,14 @@ function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
   }
 
   // Handle backgroundMenu - optional with fallback to backgroundElement
-  if (theme.theme.backgroundMenu !== undefined) {
-    resolved.backgroundMenu = resolveColor(theme.theme.backgroundMenu)
+  if (colors.backgroundMenu !== undefined) {
+    resolved.backgroundMenu = resolveColor(colors.backgroundMenu)
   } else {
     resolved.backgroundMenu = resolved.backgroundElement
   }
 
   // Handle thinkingOpacity - optional with default of 0.6
-  const thinkingOpacity = theme.theme.thinkingOpacity ?? 0.6
+  const thinkingOpacity = colors.thinkingOpacity ?? 0.6
 
   return {
     ...resolved,
@@ -412,7 +424,16 @@ async function getCustomThemes() {
       symlink: true,
     })) {
       const name = path.basename(item, ".json")
-      result[name] = await Filesystem.readJson(item)
+      const data = await Filesystem.readJson(item).catch((error) => {
+        log.warn("failed to read custom theme", { path: item, error })
+        return undefined
+      })
+      if (data === undefined) continue
+      if (!isTheme(data)) {
+        log.warn("invalid custom theme", { path: item })
+        continue
+      }
+      result[name] = data
     }
   }
   return result
