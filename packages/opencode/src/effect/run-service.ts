@@ -14,7 +14,3 @@ export function makeRuntime<I, S, E>(service: ServiceMap.Service<I, S>, layer: L
   }
 }
 
-/** @deprecated Use `makeRuntime` instead */
-export function makeRunPromise<I, S, E>(service: ServiceMap.Service<I, S>, layer: Layer.Layer<I, E>) {
-  return makeRuntime(service, layer).runPromise
-}
