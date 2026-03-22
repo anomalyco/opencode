@@ -755,11 +755,13 @@ export namespace ProviderTransform {
     }
 
     if (input.model.api.npm === "@ai-sdk/google" || input.model.api.npm === "@ai-sdk/google-vertex") {
-      result["thinkingConfig"] = {
-        includeThoughts: true,
-      }
-      if (input.model.api.id.includes("gemini-3")) {
-        result["thinkingConfig"]["thinkingLevel"] = "high"
+      if (input.model.capabilities.reasoning) {
+        result["thinkingConfig"] = {
+          includeThoughts: true,
+        }
+        if (input.model.api.id.includes("gemini-3")) {
+          result["thinkingConfig"]["thinkingLevel"] = "high"
+        }
       }
     }
 
