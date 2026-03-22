@@ -103,12 +103,15 @@ const live: Layer.Layer<
 
       const prompt = input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)
       const split = input.systemSplit ?? input.system.length
-      const system = [
-        // block 1: provider/agent prompt + global instructions (stable across repos)
-        [...prompt, ...input.system.slice(0, split)].filter(Boolean).join("\n"),
-        // block 2: env + project instructions + any custom prompt from last user message (dynamic)
-        [...input.system.slice(split), ...(input.user.system ? [input.user.system] : [])].filter(Boolean).join("\n"),
-      ].filter(Boolean)
+      const shouldSplit = item.options?.["splitSystemPrompt"] !== false
+      const system = shouldSplit
+        ? [
+            // block 1: provider/agent prompt + global instructions (stable across repos)
+            [...prompt, ...input.system.slice(0, split)].filter(Boolean).join("\n"),
+            // block 2: env + project instructions + any custom prompt from last user message (dynamic)
+            [...input.system.slice(split), ...(input.user.system ? [input.user.system] : [])].filter(Boolean).join("\n"),
+          ].filter(Boolean)
+        : [[...prompt, ...input.system, ...(input.user.system ? [input.user.system] : [])].filter(Boolean).join("\n")].filter(Boolean)
 
       const header = system[0]
       yield* plugin.trigger(
@@ -117,7 +120,7 @@ const live: Layer.Layer<
         { system },
       )
       // rejoin to maintain 2-part structure for caching if header unchanged
-      if (system.length > 2 && system[0] === header) {
+      if (shouldSplit && system.length > 2 && system[0] === header) {
         const rest = system.slice(1)
         system.length = 0
         system.push(header, rest.join("\n"))
