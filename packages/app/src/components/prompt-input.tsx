@@ -1499,12 +1499,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           style={control()}
                           onClick={() => dialog.show(() => <DialogSelectModelUnpaid model={local.model} />)}
                         >
-                          <Show when={local.model.current()?.provider?.id}>
-                            <ProviderIcon
-                              id={local.model.current()!.provider.id}
-                              class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-150"
-                              style={{ "will-change": "opacity", transform: "translateZ(0)" }}
-                            />
+                          <Show when={local.model.current()?.provider?.id} keyed>
+                            {(id) => (
+                              <ProviderIcon
+                                id={id}
+                                class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-150"
+                                style={{ "will-change": "opacity", transform: "translateZ(0)" }}
+                              />
+                            )}
                           </Show>
                           <span class="truncate">
                             {local.model.current()?.name ?? language.t("dialog.model.select.title")}
@@ -1531,12 +1533,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           "data-action": "prompt-model",
                         }}
                       >
-                        <Show when={local.model.current()?.provider?.id}>
-                          <ProviderIcon
-                            id={local.model.current()!.provider.id}
-                            class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-150"
-                            style={{ "will-change": "opacity", transform: "translateZ(0)" }}
-                          />
+                        <Show when={local.model.current()?.provider?.id} keyed>
+                          {(id) => (
+                            <ProviderIcon
+                              id={id}
+                              class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-150"
+                              style={{ "will-change": "opacity", transform: "translateZ(0)" }}
+                            />
+                          )}
                         </Show>
                         <span class="truncate">
                           {local.model.current()?.name ?? language.t("dialog.model.select.title")}
