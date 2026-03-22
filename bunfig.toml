@@ -2,5 +2,5 @@
 exact = true
 
 [test]
-root = "./do-not-run-tests-from-root"
+root = "./do-not-run-tests-from-root-dir-run-them-from-a-packages-dir"
 
