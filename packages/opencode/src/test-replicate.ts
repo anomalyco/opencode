@@ -24,8 +24,9 @@ Log.init({ print: true, dev: true, level: "DEBUG" })
 const { Database } = await import("@/storage/db")
 const { SyncEvent } = await import("@/sync")
 const { parseSSE } = await import("@/control-plane/sse")
+const { initProjectors } = await import("@/server/projectors")
 
-const url = process.argv[2] || "http://127.0.0.1:4096/global/event"
+const url = process.argv[2] || "http://127.0.0.1:4096/global/sync-event"
 const ac = new AbortController()
 
 process.on("SIGINT", () => ac.abort())
@@ -36,6 +37,8 @@ async function run() {
     headers: { accept: "text/event-stream" },
     signal: ac.signal,
   })
+
+  console.log(res.statusText)
 
   if (!res.ok) {
     console.error("failed to connect:", res.status, await res.text())
@@ -48,22 +51,23 @@ async function run() {
   }
 
   console.log("connected, listening for events...\n")
-  const { default: sessionProjectors } = await import("@/session/projectors")
-  SyncEvent.init(sessionProjectors)
+  initProjectors()
 
   Database.Client()
 
   await parseSSE(res.body, ac.signal, (event: any) => {
     // console.log("[sse]", JSON.stringify(event, null, 2))
     const payload = event.payload
-    if (payload.type && payload.properties && payload.properties.data) {
+    if (!payload.type.startsWith("server.")) {
+      console.log(payload)
       try {
+        console.log("replaying")
         SyncEvent.replay({
-          id: payload.properties.id,
           type: payload.type,
-          seq: payload.properties.seq,
-          aggregateID: payload.properties.aggregateId,
-          data: payload.properties.data,
+          id: payload.id,
+          seq: payload.seq,
+          aggregateID: payload.aggregateID,
+          data: payload.data,
         })
 
         // console.log("[apply] ok:", event.type)

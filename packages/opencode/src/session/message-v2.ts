@@ -449,7 +449,7 @@ export namespace MessageV2 {
   export const Event = {
     Updated: SyncEvent.define({
       type: "message.updated",
-      version: "v1",
+      version: 1,
       aggregate: "sessionID",
       schema: z.object({
         sessionID: SessionID.zod,
@@ -458,7 +458,7 @@ export namespace MessageV2 {
     }),
     Removed: SyncEvent.define({
       type: "message.removed",
-      version: "v1",
+      version: 1,
       aggregate: "sessionID",
       schema: z.object({
         sessionID: SessionID.zod,
@@ -467,7 +467,7 @@ export namespace MessageV2 {
     }),
     PartUpdated: SyncEvent.define({
       type: "message.part.updated",
-      version: "v1",
+      version: 1,
       aggregate: "sessionID",
       schema: z.object({
         sessionID: SessionID.zod,
@@ -487,7 +487,7 @@ export namespace MessageV2 {
     ),
     PartRemoved: SyncEvent.define({
       type: "message.part.removed",
-      version: "v1",
+      version: 1,
       aggregate: "sessionID",
       schema: z.object({
         sessionID: SessionID.zod,

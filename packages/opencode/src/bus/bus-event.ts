@@ -17,8 +17,7 @@ export namespace BusEvent {
 
   export function payloads() {
     return z
-      .discriminatedUnion(
-        "type",
+      .union(
         registry
           .entries()
           .map(([type, def]) => {

@@ -185,36 +185,28 @@ export namespace Session {
   export const Event = {
     Created: SyncEvent.define({
       type: "session.created",
-      version: "v1",
+      version: 1,
       aggregate: "sessionID",
       schema: z.object({
         sessionID: SessionID.zod,
         info: Info,
       }),
     }),
-    Shared: SyncEvent.define({
-      type: "session.shared",
-      version: "v1",
-      aggregate: "sessionID",
-      schema: z.object({
-        sessionID: SessionID.zod,
-        url: z.string().optional(),
-      }),
-    }),
     Updated: SyncEvent.define({
       type: "session.updated",
-      version: "v1",
+      version: 1,
       aggregate: "sessionID",
       schema: z.object({
         sessionID: SessionID.zod,
         info: Info.partial().extend({
+          share: Info.shape.share.unwrap().partial().optional(),
           time: Info.shape.time.partial().optional(),
         }),
       }),
     }),
     Deleted: SyncEvent.define({
       type: "session.deleted",
-      version: "v1",
+      version: 1,
       aggregate: "sessionID",
       schema: z.object({
         sessionID: SessionID.zod,
@@ -333,14 +325,11 @@ export namespace Session {
     SyncEvent.run(Event.Created, { sessionID: result.id, info: result })
 
     const cfg = await Config.get()
-    if (!result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.share === "auto"))
+    if (!result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.share === "auto")) {
       share(result.id).catch(() => {
         // Silently ignore sharing errors during session creation
       })
-    // Bus.publish(Event.Updated, {
-    //   id: result.id,
-    //   info: result,
-    // })
+    }
     return result
   }
 
@@ -365,7 +354,7 @@ export namespace Session {
     const { ShareNext } = await import("@/share/share-next")
     const share = await ShareNext.create(id)
 
-    SyncEvent.run(Event.Shared, { sessionID: id, url: share.url })
+    SyncEvent.run(Event.Updated, { sessionID: id, info: { share: { url: share.url } } })
 
     return share
   })
@@ -375,7 +364,7 @@ export namespace Session {
     const { ShareNext } = await import("@/share/share-next")
     await ShareNext.remove(id)
 
-    SyncEvent.run(Event.Shared, { sessionID: id, url: undefined })
+    SyncEvent.run(Event.Updated, { sessionID: id, info: { share: { url: undefined } } })
   })
 
   export const setTitle = fn(

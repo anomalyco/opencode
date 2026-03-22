@@ -28,18 +28,20 @@ function withInstance(fn: () => void | Promise<void>) {
 describe("SyncEvent", () => {
   const Created = SyncEvent.define({
     type: "item.created",
-    version: "v1",
+    version: 1,
     aggregate: "id",
     schema: z.object({ id: z.string(), name: z.string() }),
   })
   const Sent = SyncEvent.define({
     type: "item.sent",
-    version: "v1",
+    version: 1,
     aggregate: "item_id",
     schema: z.object({ item_id: z.string(), to: z.string() }),
   })
 
-  SyncEvent.init([SyncEvent.project(Created, () => {}), SyncEvent.project(Sent, () => {})])
+  SyncEvent.init({
+    projectors: [SyncEvent.project(Created, () => {}), SyncEvent.project(Sent, () => {})],
+  })
 
   describe("run", () => {
     test(
@@ -48,7 +50,7 @@ describe("SyncEvent", () => {
         SyncEvent.run(Created, { id: "msg_1", name: "first" })
         const rows = Database.use((db) => db.select().from(EventTable).all())
         expect(rows).toHaveLength(1)
-        expect(rows[0].name).toBe("item.created.v1")
+        expect(rows[0].name).toBe("item.created.1")
         expect(rows[0].aggregate_id).toBe("msg_1")
       }),
     )
@@ -87,7 +89,7 @@ describe("SyncEvent", () => {
 
         expect(events).toHaveLength(1)
         expect(events[0]).toEqual({
-          type: "item.created.v1",
+          type: "item.created.1",
           properties: {
             seq: 0,
             aggregateID: "msg_1",
@@ -110,7 +112,7 @@ describe("SyncEvent", () => {
         const id = Identifier.descending("message")
         SyncEvent.replay({
           id: "evt_1",
-          type: "item.created.v1",
+          type: "item.created.1",
           seq: 0,
           aggregateID: id,
           data: { id, name: "replayed" },
@@ -127,7 +129,7 @@ describe("SyncEvent", () => {
         const id = Identifier.descending("message")
         SyncEvent.replay({
           id: "evt_1",
-          type: "item.created.v1",
+          type: "item.created.1",
           seq: 0,
           aggregateID: id,
           data: { id, name: "first" },
@@ -135,7 +137,7 @@ describe("SyncEvent", () => {
         expect(() =>
           SyncEvent.replay({
             id: "evt_1",
-            type: "item.created.v1",
+            type: "item.created.1",
             seq: 5,
             aggregateID: id,
             data: { id, name: "bad" },

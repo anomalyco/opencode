@@ -5,9 +5,7 @@ import { MessageV2 } from "./message-v2"
 import { SessionTable, MessageTable, PartTable } from "./session.sql"
 import { ProjectTable } from "../project/project.sql"
 
-export type DeepPartial<T> = {
-  [K in keyof T]?: T[K] extends object ? DeepPartial<T[K]> : T[K]
-}
+export type DeepPartial<T> = T extends object ? { [K in keyof T]?: DeepPartial<T[K]> } : T
 
 function grab<T extends object, K1 extends keyof T, X>(
   obj: T,
@@ -73,14 +71,9 @@ export default [
 
   SyncEvent.project(Session.Event.Updated, (db, data) => {
     const info = data.info
-    const row = db.update(SessionTable).set(toPartialRow(info)).where(eq(SessionTable.id, data.sessionID)).returning().get()
-    if (!row) throw new NotFoundError({ message: `Session not found: ${data.sessionID}` })
-  }),
-
-  SyncEvent.project(Session.Event.Shared, (db, data) => {
     const row = db
       .update(SessionTable)
-      .set({ share_url: data.url })
+      .set(toPartialRow(info))
       .where(eq(SessionTable.id, data.sessionID))
       .returning()
       .get()

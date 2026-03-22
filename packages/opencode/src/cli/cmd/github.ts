@@ -26,6 +26,7 @@ import type { SessionID } from "../../session/schema"
 import { MessageID, PartID } from "../../session/schema"
 import { Provider } from "../../provider/provider"
 import { Bus } from "../../bus"
+import { SyncEvent } from "../../sync"
 import { MessageV2 } from "../../session/message-v2"
 import { SessionPrompt } from "@/session/prompt"
 import { setTimeout as sleep } from "node:timers/promises"
@@ -891,9 +892,9 @@ export const GithubRunCommand = cmd({
 
         let text = ""
         Bus.subscribe(MessageV2.Event.PartUpdated, (evt) => {
-          if (evt.properties.data.part.sessionID !== session.id) return
+          if (evt.properties.part.sessionID !== session.id) return
           //if (evt.properties.part.messageID === messageID) return
-          const part = evt.properties.data.part
+          const part = evt.properties.part
 
           if (part.type === "tool" && part.state.status === "completed") {
             const [tool, color] = TOOL[part.tool] ?? [part.tool, UI.Style.TEXT_INFO_BOLD]

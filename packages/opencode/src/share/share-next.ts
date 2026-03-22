@@ -66,7 +66,7 @@ export namespace ShareNext {
   export async function init() {
     if (disabled) return
     Bus.subscribe(Session.Event.Updated, async (evt) => {
-      const session = await Session.get(evt.properties.data.sessionID)
+      const session = await Session.get(evt.properties.sessionID)
 
       await sync(session.id, [
         {
@@ -76,11 +76,11 @@ export namespace ShareNext {
       ])
     })
     Bus.subscribe(MessageV2.Event.Updated, async (evt) => {
-      const info = evt.properties.data.info
+      const info = evt.properties.info
       await sync(info.sessionID, [
         {
           type: "message",
-          data: evt.properties.data.info,
+          data: evt.properties.info,
         },
       ])
       if (info.role === "user") {
@@ -93,10 +93,10 @@ export namespace ShareNext {
       }
     })
     Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
-      await sync(evt.properties.data.part.sessionID, [
+      await sync(evt.properties.part.sessionID, [
         {
           type: "part",
-          data: evt.properties.data.part,
+          data: evt.properties.part,
         },
       ])
     })

@@ -11,7 +11,7 @@ const projectRoot = path.join(__dirname, "../..")
 Log.init({ print: false })
 
 describe("session.started event", () => {
-  test("should emit session.started event when session is created", async () => {
+  test("should emit session.created event when session is created", async () => {
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
@@ -20,7 +20,7 @@ describe("session.started event", () => {
 
         const unsub = Bus.subscribe(Session.Event.Created, (event) => {
           eventReceived = true
-          receivedInfo = event.properties.data.info as Session.Info
+          receivedInfo = event.properties.info as Session.Info
         })
 
         const session = await Session.create({})
@@ -95,7 +95,7 @@ describe("step-finish token propagation via Bus event", () => {
 
           let received: MessageV2.Part | undefined
           const unsub = Bus.subscribe(MessageV2.Event.PartUpdated, (event) => {
-            received = event.properties.data.part
+            received = event.properties.part
           })
 
           const tokens = {

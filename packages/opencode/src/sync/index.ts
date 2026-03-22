@@ -1,61 +1,88 @@
 import z from "zod"
 import type { ZodObject } from "zod"
-import { Identifier } from "@/id/id"
-import { BusEvent } from "@/bus/bus-event"
+import { EventEmitter } from "events"
 import { Database, eq } from "@/storage/db"
-import { Bus } from "@/bus"
+import { Bus as ProjectBus } from "@/bus"
+import { BusEvent } from "@/bus/bus-event"
 import { EventSequenceTable, EventTable } from "./event.sql"
+import { EventID } from "./schema"
 
 export namespace SyncEvent {
   export type Definition = {
     type: string
-    properties: ZodObject<{ id: z.ZodString; seq: z.ZodNumber; aggregateID: z.ZodString; data: z.ZodObject }>
-    version: string
+    version: number
     aggregate: string
+    data: z.ZodObject
   }
 
   export type Event<Def extends Definition = Definition> = {
     id: string
     seq: number
     aggregateID: string
-    data: z.infer<Def["properties"]>["data"]
+    data: z.infer<Def["data"]>
   }
 
   export type SerializedEvent<Def extends Definition = Definition> = Event<Def> & { type: string }
 
   type ProjectorFunc = (db: Database.TxOrDb, data: unknown) => void
 
-  const registry = new Map<string, Definition>()
+  export const registry = new Map<string, Definition>()
   let projectors: Map<Definition, ProjectorFunc> | undefined
+  const versions = new Map<string, number>()
+  let frozen = false
+  let convertEvent: ((type: string, event: Event["data"]) => Record<string, unknown>) | undefined
 
-  export function init(pjs: Array<[Definition, ProjectorFunc]>) {
-    projectors = new Map(pjs)
+  const Bus = new EventEmitter<{ event: [{ def: Definition; event: Event }] }>()
+
+  export function init(input: {
+    projectors: Array<[Definition, ProjectorFunc]>
+    convertDefinition?: (type: string, data: ZodObject) => ZodObject
+    convertEvent?: Exclude<typeof convertEvent, undefined>
+  }) {
+    projectors = new Map(input.projectors)
+
+    // Install all the latest event defs to the bus. We only ever emit
+    // latest versions from code, and keep around old versions for
+    // replaying. Replaying does not go through the bus, and it
+    // simplifies the bus to only use unversioned latest events
+    for (let [type, version] of versions.entries()) {
+      let def = registry.get(versionedType(type, version))!
+      let data = def.data
+
+      BusEvent.define(def.type, input.convertDefinition ? input.convertDefinition(type, data) : data)
+    }
+
+    // Freeze the system so it clearly errors if events are defined
+    // after `init` which would cause bugs
+    frozen = true
+    convertEvent = input.convertEvent
   }
 
-  export function versionedName(type: string, version?: string) {
+  export function versionedType<A extends string>(type: A): A
+  export function versionedType<A extends string, B extends number>(type: A, version: B): `${A}/${B}`
+  export function versionedType(type: string, version?: number) {
     return version ? `${type}.${version}` : type
   }
 
   export function define<
     Type extends string,
-    Version extends string,
     Agg extends string,
     Schema extends ZodObject<Record<Agg, z.ZodType<string>>>,
-  >(input: { type: Type; version: Version; aggregate: Agg; schema: Schema }) {
+  >(input: { type: Type; version: number; aggregate: Agg; schema: Schema }) {
+    if (frozen) {
+      throw new Error("Error defining sync event: sync system has been frozen")
+    }
+
     const def = {
       type: input.type,
-      properties: z.object({
-        id: Identifier.schema("event"),
-        seq: z.number(),
-        aggregateID: z.string(),
-        data: input.schema,
-      }),
       version: input.version,
+      data: input.schema,
       aggregate: input.aggregate,
     }
 
-    registry.set(versionedName(def.type, def.version), def)
-    BusEvent.define(versionedName(def.type, def.version), def.properties)
+    versions.set(def.type, Math.max(def.version, versions.get(def.type) || 0))
+
+    registry.set(versionedType(def.type, def.version), def)
 
     return def
   }
@@ -96,7 +123,7 @@ export namespace SyncEvent {
           id: input.id,
           seq: input.seq,
           aggregate_id: input.aggregateID,
-          name: versionedName(def.type, def.version),
+          name: def.type,
           data: input.data as Record<string, unknown>,
         })
         .run()
@@ -128,6 +155,7 @@ export namespace SyncEvent {
       throw new Error(`Sequence mismatch for aggregate "${event.aggregateID}": expected ${expected}, got ${event.seq}`)
     }
 
+    console.log("seq", event.seq)
     process(def, event)
   }
 
@@ -136,15 +164,19 @@ export namespace SyncEvent {
     // This should never happen: we've enforced it via typescript in
     // the definition
     if (agg == null) {
-      throw new Error(`SyncEvent: "${def.aggregate}" required but not found: ${JSON.stringify(data)}`)
+      throw new Error(`SyncEvent.run: "${def.aggregate}" required but not found: ${JSON.stringify(data)}`)
     }
+
+    // if (!latest || def.version !== latest.version) {
+    //   throw new Error(`SyncEvent.run: running old versions of events is not allowed: ${def.type}`)
+    // }
 
     // Note that this is an "immediate" transaction which is critical.
     // We need to make sure we can safely read and write with nothing
     // else changing the data from under us
     Database.transaction(
       (tx) => {
-        const id = Identifier.ascending("workspace")
+        const id = EventID.ascending()
         const row = tx
           .select({ seq: EventSequenceTable.seq })
           .from(EventSequenceTable)
@@ -152,16 +184,55 @@ export namespace SyncEvent {
           .get()
         const seq = row?.seq != null ? row.seq + 1 : 0
 
-        process(def, { id, seq, aggregateID: agg, data })
+        const event = { id, seq, aggregateID: agg, data }
+        process(def, event)
 
         Database.effect(() => {
-          const versionedDef = { ...def, type: versionedName(def.type, def.version) }
-          Bus.publish(versionedDef, { id, seq, aggregateID: agg, data } as z.output<Def["properties"]>)
+          Bus.emit("event", {
+            def,
+            event,
+          })
+
+          ProjectBus.publish(
+            {
+              type: def.type,
+              properties: def.data,
+            },
+            convertEvent ? convertEvent(def.type, event.data) : event.data,
+          )
         })
       },
       {
         behavior: "immediate",
       },
     )
+  }
+
+  export function subscribeAll(handler: (event: { def: Definition; event: Event }) => void) {
+    Bus.on("event", handler)
+    return () => Bus.off("event", handler)
+  }
+
+  export function payloads() {
+    return z
+      .union(
+        registry
+          .entries()
+          .map(([type, def]) => {
+            return z
+              .object({
+                type: z.literal(type),
+                aggregate: z.literal(def.aggregate),
+                data: def.data,
+              })
+              .meta({
+                ref: "SyncEvent" + "." + def.type,
+              })
+          })
+          .toArray() as any,
+      )
+      .meta({
+        ref: "SyncEvent",
+      })
   }
 }
