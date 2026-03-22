@@ -137,6 +137,8 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         agent: agent.name,
         tools: {
           ...(hasTodoWritePermission ? {} : { todowrite: false }),
+          plan_exit: false,
+          plan_enter: false,
           ...(hasTaskPermission ? {} : { task: false }),
           ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
         },
