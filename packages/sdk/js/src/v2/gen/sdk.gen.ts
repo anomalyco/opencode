@@ -46,6 +46,8 @@ import type {
   GlobalDisposeResponses,
   GlobalEventResponses,
   GlobalHealthResponses,
+  GlobalUpgradeErrors,
+  GlobalUpgradeResponses,
   InstanceDisposeResponses,
   LspStatusResponses,
   McpAddErrors,
@@ -228,6 +230,62 @@ class HeyApiRegistry<T> {
   }
 }
 
+export class Auth extends HeyApiClient {
+  /**
+   * Remove auth credentials
+   *
+   * Remove authentication credentials
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "providerID" }] }])
+    return (options?.client ?? this.client).delete<AuthRemoveResponses, AuthRemoveErrors, ThrowOnError>({
+      url: "/auth/{providerID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Set auth credentials
+   *
+   * Set authentication credentials
+   */
+  public set<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+      auth?: Auth3
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "providerID" },
+            { key: "auth", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<AuthSetResponses, AuthSetErrors, ThrowOnError>({
+      url: "/auth/{providerID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Config extends HeyApiClient {
   /**
    * Get global configuration
@@ -303,57 +361,20 @@ export class Global extends HeyApiClient {
     })
   }
 
-  private _config?: Config
-  get config(): Config {
-    return (this._config ??= new Config({ client: this.client }))
-  }
-}
-
-export class Auth extends HeyApiClient {
   /**
-   * Remove auth credentials
+   * Upgrade opencode
    *
-   * Remove authentication credentials
+   * Upgrade opencode to the specified version or latest if not specified.
    */
-  public remove<ThrowOnError extends boolean = false>(
-    parameters: {
-      providerID: string
+  public upgrade<ThrowOnError extends boolean = false>(
+    parameters?: {
+      target?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "providerID" }] }])
-    return (options?.client ?? this.client).delete<AuthRemoveResponses, AuthRemoveErrors, ThrowOnError>({
-      url: "/auth/{providerID}",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Set auth credentials
-   *
-   * Set authentication credentials
-   */
-  public set<ThrowOnError extends boolean = false>(
-    parameters: {
-      providerID: string
-      auth?: Auth3
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "providerID" },
-            { key: "auth", map: "body" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).put<AuthSetResponses, AuthSetErrors, ThrowOnError>({
-      url: "/auth/{providerID}",
+    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "target" }] }])
+    return (options?.client ?? this.client).post<GlobalUpgradeResponses, GlobalUpgradeErrors, ThrowOnError>({
+      url: "/global/upgrade",
       ...options,
       ...params,
       headers: {
@@ -362,6 +383,11 @@ export class Auth extends HeyApiClient {
         ...params.headers,
       },
     })
+  }
+
+  private _config?: Config
+  get config(): Config {
+    return (this._config ??= new Config({ client: this.client }))
   }
 }
 
@@ -3906,14 +3932,14 @@ export class OpencodeClient extends HeyApiClient {
     OpencodeClient.__registry.set(this, args?.key)
   }
 
-  private _global?: Global
-  get global(): Global {
-    return (this._global ??= new Global({ client: this.client }))
-  }
-
   private _auth?: Auth
   get auth(): Auth {
     return (this._auth ??= new Auth({ client: this.client }))
+  }
+
+  private _global?: Global
+  get global(): Global {
+    return (this._global ??= new Global({ client: this.client }))
   }
 
   private _project?: Project

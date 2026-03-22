@@ -8,12 +8,18 @@ export async function upgrade() {
   const method = await Installation.method()
   const latest = await Installation.latest(method).catch(() => {})
   if (!latest) return
-  if (Installation.VERSION === latest) return
 
-  if (config.autoupdate === false || Flag.OPENCODE_DISABLE_AUTOUPDATE) {
+  if (Flag.OPENCODE_ALWAYS_NOTIFY_UPDATE) {
+    await Bus.publish(Installation.Event.UpdateAvailable, { version: latest })
     return
   }
-  if (config.autoupdate === "notify") {
+
+  if (Installation.VERSION === latest) return
+  if (config.autoupdate === false || Flag.OPENCODE_DISABLE_AUTOUPDATE) return
+
+  const kind = Installation.getReleaseType(Installation.VERSION, latest)
+
+  if (config.autoupdate === "notify" || kind !== "patch") {
     await Bus.publish(Installation.Event.UpdateAvailable, { version: latest })
     return
   }

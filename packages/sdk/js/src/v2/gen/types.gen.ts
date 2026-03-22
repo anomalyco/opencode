@@ -4,6 +4,36 @@ export type ClientOptions = {
   baseUrl: `${string}://${string}` | (string & {})
 }
 
+export type BadRequestError = {
+  data: unknown
+  errors: Array<{
+    [key: string]: unknown
+  }>
+  success: false
+}
+
+export type OAuth = {
+  type: "oauth"
+  refresh: string
+  access: string
+  expires: number
+  accountId?: string
+  enterpriseUrl?: string
+}
+
+export type ApiAuth = {
+  type: "api"
+  key: string
+}
+
+export type WellKnownAuth = {
+  type: "wellknown"
+  key: string
+  token: string
+}
+
+export type Auth = OAuth | ApiAuth | WellKnownAuth
+
 export type EventInstallationUpdated = {
   type: "installation.updated"
   properties: {
@@ -1506,36 +1536,6 @@ export type Config = {
   }
 }
 
-export type BadRequestError = {
-  data: unknown
-  errors: Array<{
-    [key: string]: unknown
-  }>
-  success: false
-}
-
-export type OAuth = {
-  type: "oauth"
-  refresh: string
-  access: string
-  expires: number
-  accountId?: string
-  enterpriseUrl?: string
-}
-
-export type ApiAuth = {
-  type: "api"
-  key: string
-}
-
-export type WellKnownAuth = {
-  type: "wellknown"
-  key: string
-  token: string
-}
-
-export type Auth = OAuth | ApiAuth | WellKnownAuth
-
 export type NotFoundError = {
   name: "NotFoundError"
   data: {
@@ -1938,6 +1938,60 @@ export type FormatterStatus = {
   enabled: boolean
 }
 
+export type AuthRemoveData = {
+  body?: never
+  path: {
+    providerID: string
+  }
+  query?: never
+  url: "/auth/{providerID}"
+}
+
+export type AuthRemoveErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type AuthRemoveError = AuthRemoveErrors[keyof AuthRemoveErrors]
+
+export type AuthRemoveResponses = {
+  /**
+   * Successfully removed authentication credentials
+   */
+  200: boolean
+}
+
+export type AuthRemoveResponse = AuthRemoveResponses[keyof AuthRemoveResponses]
+
+export type AuthSetData = {
+  body?: Auth
+  path: {
+    providerID: string
+  }
+  query?: never
+  url: "/auth/{providerID}"
+}
+
+export type AuthSetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type AuthSetError = AuthSetErrors[keyof AuthSetErrors]
+
+export type AuthSetResponses = {
+  /**
+   * Successfully set authentication credentials
+   */
+  200: boolean
+}
+
+export type AuthSetResponse = AuthSetResponses[keyof AuthSetResponses]
+
 export type GlobalHealthData = {
   body?: never
   path?: never
@@ -2030,59 +2084,40 @@ export type GlobalDisposeResponses = {
 
 export type GlobalDisposeResponse = GlobalDisposeResponses[keyof GlobalDisposeResponses]
 
-export type AuthRemoveData = {
-  body?: never
-  path: {
-    providerID: string
+export type GlobalUpgradeData = {
+  body?: {
+    target?: string
   }
+  path?: never
   query?: never
-  url: "/auth/{providerID}"
+  url: "/global/upgrade"
 }
 
-export type AuthRemoveErrors = {
+export type GlobalUpgradeErrors = {
   /**
    * Bad request
    */
   400: BadRequestError
 }
 
-export type AuthRemoveError = AuthRemoveErrors[keyof AuthRemoveErrors]
+export type GlobalUpgradeError = GlobalUpgradeErrors[keyof GlobalUpgradeErrors]
 
-export type AuthRemoveResponses = {
+export type GlobalUpgradeResponses = {
   /**
-   * Successfully removed authentication credentials
+   * Upgrade result
    */
-  200: boolean
+  200:
+    | {
+        success: true
+        version: string
+      }
+    | {
+        success: false
+        error: string
+      }
 }
 
-export type AuthRemoveResponse = AuthRemoveResponses[keyof AuthRemoveResponses]
-
-export type AuthSetData = {
-  body?: Auth
-  path: {
-    providerID: string
-  }
-  query?: never
-  url: "/auth/{providerID}"
-}
-
-export type AuthSetErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type AuthSetError = AuthSetErrors[keyof AuthSetErrors]
-
-export type AuthSetResponses = {
-  /**
-   * Successfully set authentication credentials
-   */
-  200: boolean
-}
-
-export type AuthSetResponse = AuthSetResponses[keyof AuthSetResponses]
+export type GlobalUpgradeResponse = GlobalUpgradeResponses[keyof GlobalUpgradeResponses]
 
 export type ProjectListData = {
   body?: never
