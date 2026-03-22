@@ -82,10 +82,9 @@ export function tmpdirScoped(options?: { git?: boolean; config?: Partial<Config.
     const dir = yield* fs.makeTempDirectoryScoped({ prefix: "opencode-test-" })
 
     function git(...args: string[]) {
-      return Effect.gen(function* () {
-        const handle = yield* spawner.spawn(ChildProcess.make("git", args, { cwd: dir }))
-        yield* handle.exitCode
-      })
+      return spawner.spawn(ChildProcess.make("git", args, { cwd: dir })).pipe(
+        Effect.flatMap((handle) => handle.exitCode),
+      )
     }
 
     if (options?.git) {
