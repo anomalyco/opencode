@@ -12,6 +12,7 @@ import { trimDiff } from "./edit"
 import { LSP } from "../lsp"
 import { Filesystem } from "../util/filesystem"
 import DESCRIPTION from "./apply_patch.txt"
+import { File } from "../file"
 import { Format } from "../format"
 
 const PatchParams = z.object({
@@ -221,6 +222,7 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
 
       if (edited) {
         await Format.file(edited)
+        Bus.publish(File.Event.Edited, { file: edited })
       }
     }
 

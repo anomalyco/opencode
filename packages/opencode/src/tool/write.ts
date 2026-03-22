@@ -5,6 +5,7 @@ import { LSP } from "../lsp"
 import { createTwoFilesPatch } from "diff"
 import DESCRIPTION from "./write.txt"
 import { Bus } from "../bus"
+import { File } from "../file"
 import { FileWatcher } from "../file/watcher"
 import { Format } from "../format"
 import { FileTime } from "../file/time"
@@ -43,6 +44,7 @@ export const WriteTool = Tool.define("write", {
 
     await Filesystem.write(filepath, params.content)
     await Format.file(filepath)
+    Bus.publish(File.Event.Edited, { file: filepath })
     await Bus.publish(FileWatcher.Event.Updated, {
       file: filepath,
       event: exists ? "change" : "add",

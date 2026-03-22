@@ -9,6 +9,7 @@ import { Tool } from "./tool"
 import { LSP } from "../lsp"
 import { createTwoFilesPatch, diffLines } from "diff"
 import DESCRIPTION from "./edit.txt"
+import { File } from "../file"
 import { FileWatcher } from "../file/watcher"
 import { Bus } from "../bus"
 import { Format } from "../format"
@@ -72,6 +73,7 @@ export const EditTool = Tool.define("edit", {
         })
         await Filesystem.write(filePath, params.newString)
         await Format.file(filePath)
+        Bus.publish(File.Event.Edited, { file: filePath })
         await Bus.publish(FileWatcher.Event.Updated, {
           file: filePath,
           event: existed ? "change" : "add",
@@ -107,6 +109,7 @@ export const EditTool = Tool.define("edit", {
 
       await Filesystem.write(filePath, contentNew)
       await Format.file(filePath)
+      Bus.publish(File.Event.Edited, { file: filePath })
       await Bus.publish(FileWatcher.Event.Updated, {
         file: filePath,
         event: "change",
