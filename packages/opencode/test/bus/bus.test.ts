@@ -105,6 +105,57 @@ describe("Bus", () => {
     })
   })
 
+  describe("multiple subscribers", () => {
+    test("all subscribers for same event type are called", async () => {
+      await using tmp = await tmpdir()
+      const a: number[] = []
+      const b: number[] = []
+
+      await withInstance(tmp.path, async () => {
+        Bus.subscribe(TestEvent.Ping, (evt) => a.push(evt.properties.value))
+        Bus.subscribe(TestEvent.Ping, (evt) => b.push(evt.properties.value))
+        await Bun.sleep(10)
+        await Bus.publish(TestEvent.Ping, { value: 7 })
+        await Bun.sleep(10)
+      })
+
+      expect(a).toEqual([7])
+      expect(b).toEqual([7])
+    })
+  })
+
+  describe("instance isolation", () => {
+    test("events in one directory do not reach subscribers in another", async () => {
+      await using tmpA = await tmpdir()
+      await using tmpB = await tmpdir()
+      const receivedA: number[] = []
+      const receivedB: number[] = []
+
+      await withInstance(tmpA.path, async () => {
+        Bus.subscribe(TestEvent.Ping, (evt) => receivedA.push(evt.properties.value))
+        await Bun.sleep(10)
+      })
+
+      await withInstance(tmpB.path, async () => {
+        Bus.subscribe(TestEvent.Ping, (evt) => receivedB.push(evt.properties.value))
+        await Bun.sleep(10)
+      })
+
+      await withInstance(tmpA.path, async () => {
+        await Bus.publish(TestEvent.Ping, { value: 1 })
+        await Bun.sleep(10)
+      })
+
+      await withInstance(tmpB.path, async () => {
+        await Bus.publish(TestEvent.Ping, { value: 2 })
+        await Bun.sleep(10)
+      })
+
+      expect(receivedA).toEqual([1])
+      expect(receivedB).toEqual([2])
+    })
+  })
+
   describe("instance disposal", () => {
     test("InstanceDisposed is delivered to wildcard subscribers before stream ends", async () => {
       await using tmp = await tmpdir()
