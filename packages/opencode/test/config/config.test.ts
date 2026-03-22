@@ -685,7 +685,7 @@ test("updates config and writes to file", async () => {
       const newConfig = { model: "updated/model" }
       await Config.update(newConfig as any)
 
-      const writtenConfig = await Filesystem.readJson(path.join(tmp.path, "config.json"))
+      const writtenConfig = await Filesystem.readJson(path.join(tmp.path, "opencode.json"))
       expect(writtenConfig.model).toBe("updated/model")
     },
   })
