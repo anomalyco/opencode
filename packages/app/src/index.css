@@ -10,6 +10,42 @@
     border-top-right-radius: 18px;
   }
 
+  [data-component="button"].prompt-pick,
+  [data-component="select"].prompt-pick [data-slot="select-select-trigger"] {
+    height: 28px;
+    padding: 0 6px 0 8px;
+    gap: 6px;
+
+    font-family: var(--font-family-sans);
+    font-size: 13px;
+    font-style: normal;
+    font-weight: var(--font-weight-regular);
+    line-height: 20px;
+    letter-spacing: var(--letter-spacing-normal);
+  }
+
+  [data-component="select"].prompt-pick [data-slot="select-select-trigger-value"] {
+    line-height: 20px;
+  }
+
+  [data-component="select-content"].prompt-pick {
+    padding: 6px;
+  }
+
+  [data-component="select-content"].prompt-variant [data-slot="select-select-content-list"] {
+    max-height: 18rem;
+  }
+
+  [data-component="select-content"].prompt-pick [data-slot="select-select-item"] {
+    padding: 6px 8px;
+    font-family: var(--font-family-sans);
+    font-size: 14px;
+    font-style: normal;
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-large);
+    letter-spacing: var(--letter-spacing-normal);
+  }
+
   [data-component="getting-started"] {
     container-type: inline-size;
     container-name: getting-started;

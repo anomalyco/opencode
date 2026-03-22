@@ -164,7 +164,7 @@ const GitContext = () => {
         triggerProps={{
           variant: "ghost",
           size: "normal",
-          class: "min-w-0 max-w-[320px] text-13-regular group",
+          class: "prompt-pick min-w-0 max-w-[320px] group",
         }}
         class="w-[420px] max-w-[calc(100vw-40px)] rounded-xl border border-white/10 bg-transparent shadow-[var(--shadow-lg-border-base)]"
         style={{
@@ -1729,8 +1729,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     options={agentNames()}
                     current={local.agent.current()?.name ?? ""}
                     onSelect={local.agent.set}
-                    class="capitalize max-w-[160px]"
-                    valueClass="truncate text-13-regular"
+                    class="prompt-pick capitalize max-w-[160px]"
+                    valueClass="truncate"
                     triggerStyle={control()}
                     variant="ghost"
                   />
@@ -1748,7 +1748,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         as="div"
                         variant="ghost"
                         size="normal"
-                        class="min-w-0 max-w-[320px] text-13-regular group"
+                        class="prompt-pick min-w-0 max-w-[320px] group"
                         style={control()}
                         onClick={() => dialog.show(() => <DialogSelectModelUnpaid />)}
                       >
@@ -1779,7 +1779,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         variant: "ghost",
                         size: "normal",
                         style: control(),
-                        class: "min-w-0 max-w-[320px] text-13-regular group",
+                        class: "prompt-pick min-w-0 max-w-[320px] group",
                       }}
                     >
                       <Show when={local.model.current()?.provider?.id}>
@@ -1808,8 +1808,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     current={local.model.variant.current() ?? "default"}
                     label={(x) => (x === "default" ? language.t("common.default") : x)}
                     onSelect={(x) => local.model.variant.set(x === "default" ? undefined : x)}
-                    class="capitalize max-w-[160px]"
-                    valueClass="truncate text-13-regular"
+                    class="prompt-pick prompt-variant capitalize max-w-[160px]"
+                    valueClass="truncate"
                     triggerStyle={control()}
                     variant="ghost"
                   />

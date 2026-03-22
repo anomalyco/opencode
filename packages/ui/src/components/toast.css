@@ -30,6 +30,15 @@
 }
 
 [data-component="toast"] {
+  --toast-bg: rgb(12 12 14 / 0.34);
+  --toast-border: rgb(255 255 255 / 0.1);
+  --toast-title: var(--text-invert-strong);
+  --toast-text: var(--text-invert-base);
+  --toast-icon: var(--text-invert-stronger);
+  --toast-action: var(--text-invert-weak);
+  --toast-action-strong: var(--text-invert-strong);
+  --toast-progress: rgb(255 255 255 / 0.2);
+
   position: relative;
   display: flex;
   align-items: flex-start;
@@ -41,10 +50,46 @@
   transition: all 150ms ease-out;
 
   border-radius: var(--radius-lg);
-  border: 1px solid var(--border-weak-base);
-  background: var(--surface-float-base);
+  border: 1px solid var(--toast-border);
+  background-color: var(--toast-bg);
+  background-clip: padding-box;
+  backdrop-filter: blur(40px) saturate(150%);
+  -webkit-backdrop-filter: blur(40px) saturate(150%);
   color: var(--text-invert-base);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-lg-border-base);
+
+  &[data-variant="default"],
+  &[data-variant="loading"] {
+    --toast-bg: rgb(12 12 14 / 0.34);
+    --toast-border: rgb(255 255 255 / 0.1);
+    --toast-progress: rgb(255 255 255 / 0.22);
+  }
+
+  &[data-variant="success"] {
+    --toast-bg: light-dark(
+      color-mix(in oklch, rgb(12 12 14 / 0.34) 76%, var(--surface-success-weak)),
+      color-mix(in oklch, rgb(12 12 14 / 0.42) 82%, var(--surface-success-strong))
+    );
+    --toast-border: light-dark(
+      color-mix(in oklch, rgb(255 255 255 / 0.1) 58%, var(--border-success-base)),
+      color-mix(in oklch, rgb(255 255 255 / 0.14) 64%, var(--border-success-base))
+    );
+    --toast-icon: var(--icon-success-base);
+    --toast-progress: var(--icon-success-base);
+  }
+
+  &[data-variant="error"] {
+    --toast-bg: light-dark(
+      color-mix(in oklch, rgb(12 12 14 / 0.32) 72%, var(--surface-warning-weak)),
+      color-mix(in oklch, rgb(12 12 14 / 0.4) 80%, var(--surface-warning-strong))
+    );
+    --toast-border: light-dark(
+      color-mix(in oklch, rgb(255 255 255 / 0.1) 52%, var(--border-warning-base)),
+      color-mix(in oklch, rgb(255 255 255 / 0.14) 58%, var(--border-warning-base))
+    );
+    --toast-icon: light-dark(var(--icon-on-warning-base), var(--icon-warning-base));
+    --toast-progress: light-dark(var(--icon-on-warning-base), var(--icon-warning-base));
+  }
 
   [data-slot="toast-inner"] {
     display: flex;
@@ -92,8 +137,7 @@
     justify-content: center;
 
     [data-component="icon"] {
-      color: var(--text-invert-stronger);
-      /* color: var(--icon-invert-base); */
+      color: var(--toast-icon);
     }
   }
 
@@ -114,7 +158,7 @@
   }
 
   [data-slot="toast-title"] {
-    color: var(--text-invert-strong);
+    color: var(--toast-title);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -131,7 +175,7 @@
   }
 
   [data-slot="toast-description"] {
-    color: var(--text-invert-base);
+    color: var(--toast-text);
     text-wrap-style: pretty;
     overflow-wrap: anywhere;
     word-break: break-word;
@@ -165,7 +209,7 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 
-    color: var(--text-invert-weak);
+    color: var(--toast-action);
     font-family: var(--font-family-sans);
     font-size: var(--font-size-base);
     font-weight: var(--font-weight-medium);
@@ -177,12 +221,36 @@
     }
 
     &:first-child {
-      color: var(--text-invert-strong);
+      color: var(--toast-action-strong);
     }
   }
 
   [data-slot="toast-close-button"] {
     flex-shrink: 0;
+
+    &[data-component="button"] {
+      color: var(--toast-title);
+
+      [data-slot="icon-svg"] {
+        color: var(--toast-title);
+        opacity: 0.72;
+      }
+
+      &:hover:not(:disabled),
+      &:focus-visible:not(:disabled) {
+        background-color: rgb(255 255 255 / 0.08);
+      }
+
+      &:active:not(:disabled) {
+        background-color: rgb(255 255 255 / 0.12);
+      }
+
+      &:hover:not(:disabled) [data-slot="icon-svg"],
+      &:focus-visible:not(:disabled) [data-slot="icon-svg"],
+      &:active:not(:disabled) [data-slot="icon-svg"] {
+        opacity: 1;
+      }
+    }
   }
 
   [data-slot="toast-progress-track"] {
@@ -191,7 +259,7 @@
     left: 0;
     right: 0;
     height: 3px;
-    background-color: var(--surface-base);
+    background-color: rgb(255 255 255 / 0.08);
     border-radius: 0 0 var(--radius-lg) var(--radius-lg);
     overflow: hidden;
   }
@@ -199,7 +267,7 @@
   [data-slot="toast-progress-fill"] {
     height: 100%;
     width: var(--kb-toast-progress-fill-width);
-    background-color: var(--color-primary);
+    background-color: var(--toast-progress);
     transition: width 250ms linear;
   }
 }
