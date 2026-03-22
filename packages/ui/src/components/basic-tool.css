@@ -8,8 +8,9 @@
   justify-content: flex-start;
 
   [data-slot="basic-tool-tool-trigger-content"] {
-    flex: 1 1 auto;
-    width: 100%;
+    flex: 0 1 auto;
+    width: auto;
+    max-width: calc(100% - 24px);
     min-width: 0;
     display: flex;
     align-items: center;
@@ -51,19 +52,21 @@
   }
 
   [data-slot="basic-tool-tool-info"] {
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     min-width: 0;
+    max-width: 100%;
     font-size: 14px;
   }
 
   [data-slot="basic-tool-tool-info-structured"] {
-    flex: 1 1 auto;
-    width: 100%;
+    flex: 0 1 auto;
+    width: auto;
+    max-width: 100%;
     min-width: 0;
-    display: flex;
+    display: inline-flex;
     align-items: center;
     gap: 8px;
-    justify-content: space-between;
+    justify-content: flex-start;
   }
 
   [data-slot="basic-tool-tool-info-main"] {
@@ -154,5 +157,11 @@
     line-height: var(--line-height-large);
     letter-spacing: var(--letter-spacing-normal);
     color: var(--text-base);
+  }
+
+  [data-slot="basic-tool-tool-action"] {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
   }
 }
