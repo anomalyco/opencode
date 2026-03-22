@@ -83,6 +83,20 @@ describe("session.llm.hasToolCalls", () => {
     expect(LLM.hasToolCalls(messages)).toBe(false)
   })
 
+  test("accepts user messages with content parts", () => {
+    const messages: ModelMessage[] = [
+      {
+        role: "user",
+        content: [{ type: "text", text: "Hello world" }],
+      },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "Hi there" }],
+      },
+    ]
+    expect(LLM.hasToolCalls(messages)).toBe(false)
+  })
+
   test("returns true when tool-call is mixed with text content", () => {
     const messages = [
       {
@@ -294,7 +308,7 @@ describe("session.llm.stream", () => {
           agent,
           system: ["You are a helpful assistant."],
           abort: new AbortController().signal,
-          messages: [{ role: "user", content: "Hello" }],
+          messages: [{ role: "user", content: [{ type: "text", text: "Hello" }] }],
           tools: {},
         })
 
