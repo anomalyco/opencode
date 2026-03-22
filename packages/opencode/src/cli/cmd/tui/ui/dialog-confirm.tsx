@@ -14,6 +14,8 @@ export type DialogConfirmProps = {
   label?: string
 }
 
+export type DialogConfirmResult = boolean | undefined
+
 export function DialogConfirm(props: DialogConfirmProps) {
   const dialog = useDialog()
   const { theme } = useTheme()
@@ -70,7 +72,7 @@ export function DialogConfirm(props: DialogConfirmProps) {
 }
 
 DialogConfirm.show = (dialog: DialogContext, title: string, message: string, label?: string) => {
-  return new Promise<boolean>((resolve) => {
+  return new Promise<DialogConfirmResult>((resolve) => {
     dialog.replace(
       () => (
         <DialogConfirm
@@ -81,7 +83,7 @@ DialogConfirm.show = (dialog: DialogContext, title: string, message: string, lab
           label={label}
         />
       ),
-      () => resolve(false),
+      () => resolve(undefined),
     )
   })
 }

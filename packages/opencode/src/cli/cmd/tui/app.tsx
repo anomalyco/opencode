@@ -737,17 +737,19 @@ function App() {
     const skipped = kv.get("skipped_version")
     if (skipped && !semver.gt(version, skipped)) return
 
-    const confirmed = await DialogConfirm.show(
+    const choice = await DialogConfirm.show(
       dialog,
       `Update Available`,
       `A new release v${version} is available. Would you like to update now?`,
       "skip",
     )
 
-    if (!confirmed) {
+    if (choice === false) {
       kv.set("skipped_version", version)
       return
     }
+
+    if (choice !== true) return
 
     toast.show({
       variant: "info",
