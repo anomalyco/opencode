@@ -230,62 +230,6 @@ class HeyApiRegistry<T> {
   }
 }
 
-export class Auth extends HeyApiClient {
-  /**
-   * Remove auth credentials
-   *
-   * Remove authentication credentials
-   */
-  public remove<ThrowOnError extends boolean = false>(
-    parameters: {
-      providerID: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "providerID" }] }])
-    return (options?.client ?? this.client).delete<AuthRemoveResponses, AuthRemoveErrors, ThrowOnError>({
-      url: "/auth/{providerID}",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Set auth credentials
-   *
-   * Set authentication credentials
-   */
-  public set<ThrowOnError extends boolean = false>(
-    parameters: {
-      providerID: string
-      auth?: Auth3
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "providerID" },
-            { key: "auth", map: "body" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).put<AuthSetResponses, AuthSetErrors, ThrowOnError>({
-      url: "/auth/{providerID}",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-}
-
 export class Config extends HeyApiClient {
   /**
    * Get global configuration
@@ -388,6 +332,62 @@ export class Global extends HeyApiClient {
   private _config?: Config
   get config(): Config {
     return (this._config ??= new Config({ client: this.client }))
+  }
+}
+
+export class Auth extends HeyApiClient {
+  /**
+   * Remove auth credentials
+   *
+   * Remove authentication credentials
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "providerID" }] }])
+    return (options?.client ?? this.client).delete<AuthRemoveResponses, AuthRemoveErrors, ThrowOnError>({
+      url: "/auth/{providerID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Set auth credentials
+   *
+   * Set authentication credentials
+   */
+  public set<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+      auth?: Auth3
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "providerID" },
+            { key: "auth", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<AuthSetResponses, AuthSetErrors, ThrowOnError>({
+      url: "/auth/{providerID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
   }
 }
 
@@ -3932,14 +3932,14 @@ export class OpencodeClient extends HeyApiClient {
     OpencodeClient.__registry.set(this, args?.key)
   }
 
-  private _auth?: Auth
-  get auth(): Auth {
-    return (this._auth ??= new Auth({ client: this.client }))
-  }
-
   private _global?: Global
   get global(): Global {
     return (this._global ??= new Global({ client: this.client }))
+  }
+
+  private _auth?: Auth
+  get auth(): Auth {
+    return (this._auth ??= new Auth({ client: this.client }))
   }
 
   private _project?: Project
