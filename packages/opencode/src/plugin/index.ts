@@ -20,7 +20,6 @@ export namespace Plugin {
 
   type State = {
     hooks: Hooks[]
-    started: boolean
   }
 
   export interface Interface {
@@ -129,9 +128,26 @@ export namespace Plugin {
                   })
                 })
             }
+
+            // Notify plugins of current config
+            for (const hook of hooks) {
+              await (hook as any).config?.(cfg)
+            }
           })
 
-          return { hooks, started: false }
+          // Subscribe to bus events, clean up when scope is closed
+          yield* Effect.acquireRelease(
+            Effect.sync(() =>
+              Bus.subscribeAll(async (input) => {
+                for (const hook of hooks) {
+                  hook["event"]?.({ event: input })
+                }
+              }),
+            ),
+            (unsub) => Effect.sync(unsub),
+          )
+
+          return { hooks }
         }),
       )
 
@@ -146,9 +162,8 @@ export namespace Plugin {
           for (const hook of state.hooks) {
             const fn = hook[name]
             if (!fn) continue
-            // @ts-expect-error if you feel adventurous, please fix the typing, make sure to bump the try-counter if you
-            // give up.
-            // try-counter: 2
+            // @ts-expect-error correlated union — TS can't prove Input/Output match hook[Name]
+            // see https://github.com/microsoft/TypeScript/issues/30581
             await fn(input, output)
           }
         })
@@ -161,20 +176,7 @@ export namespace Plugin {
       })
 
       const init = Effect.fn("Plugin.init")(function* () {
-        const state = yield* InstanceState.get(cache)
-        if (state.started) return
-        state.started = true
-        yield* Effect.promise(async () => {
-          const cfg = await Config.get()
-          for (const hook of state.hooks) {
-            await (hook as any).config?.(cfg)
-          }
-          Bus.subscribeAll(async (input) => {
-            for (const hook of state.hooks) {
-              hook["event"]?.({ event: input })
-            }
-          })
-        })
+        yield* InstanceState.get(cache)
       })
 
       return Service.of({ trigger, list, init })
