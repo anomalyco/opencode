@@ -671,8 +671,6 @@ export namespace ACP {
         const cursor = params.cursor ? Number(params.cursor) : undefined
         const limit = 100
 
-        // Use global session list so sessions from all projects are returned,
-        // not just the current project scoped by Instance.project.id
         const sessions = await this.sdk.experimental.session
           .list(
             {
