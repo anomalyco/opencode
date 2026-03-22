@@ -435,6 +435,10 @@ if [[ "$no_modify_path" != "true" ]]; then
                 print_message info "  export PATH=$INSTALL_DIR:\$PATH"
             ;;
         esac
+        if [[ -n "$config_file" && "$current_shell" != "fish" ]]; then
+            print_message info "${MUTED}To use opencode in this session, reload your shell config:${NC}"
+            print_message info "  source $config_file"
+        fi
     fi
 fi
 
