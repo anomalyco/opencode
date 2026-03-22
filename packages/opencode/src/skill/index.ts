@@ -102,10 +102,6 @@ export namespace Skill {
     }
   }
 
-  function norm(file: string) {
-    return file.replaceAll(path.sep, "/")
-  }
-
   const scan = async (state: State, root: string, pattern: string, opts?: { dot?: boolean; scope?: string }) => {
     if (!(await Filesystem.isDir(root))) return
 
@@ -124,7 +120,7 @@ export namespace Skill {
         const next = rel ? path.join(rel, item.name) : item.name
 
         if (item.isFile()) {
-          if (Glob.match(pattern, norm(next))) await add(state, abs)
+          if (Glob.match(pattern, next.replaceAll(path.sep, "/"))) await add(state, abs)
           continue
         }
 
@@ -139,7 +135,7 @@ export namespace Skill {
         if (!info) continue
 
         if (info.isFile()) {
-          if (Glob.match(pattern, norm(next))) await add(state, abs)
+          if (Glob.match(pattern, next.replaceAll(path.sep, "/"))) await add(state, abs)
           continue
         }
 
