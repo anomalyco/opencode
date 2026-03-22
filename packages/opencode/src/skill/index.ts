@@ -103,12 +103,15 @@ export namespace Skill {
   }
 
   const scan = async (state: State, root: string, pattern: string, opts?: { dot?: boolean; scope?: string }) => {
-    const roots =
-      pattern === EXTERNAL_SKILL_PATTERN
-        ? [path.join(root, "skills")]
-        : pattern === OPENCODE_SKILL_PATTERN
-          ? [path.join(root, "skill"), path.join(root, "skills")]
-          : [root]
+    let roots = [root]
+
+    if (pattern === EXTERNAL_SKILL_PATTERN) {
+      roots = [path.join(root, "skills")]
+    }
+
+    if (pattern === OPENCODE_SKILL_PATTERN) {
+      roots = [path.join(root, "skill"), path.join(root, "skills")]
+    }
 
 
     // Prevent symlink loops by tracking visited real directories.
