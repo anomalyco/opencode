@@ -36,6 +36,7 @@
   border: none;
   background: none;
   padding: 0;
+  cursor: pointer;
 
   &[data-active] [data-slot="message-nav-tick-line"] {
     background-color: var(--icon-strong-base);
@@ -63,7 +64,7 @@
   align-self: stretch;
   width: 100%;
   column-gap: 12px;
-  cursor: default;
+  cursor: pointer;
   border: none;
   background: none;
   padding: 4px 12px;

@@ -32,7 +32,7 @@
         justify-content: space-between;
         align-items: center;
         align-self: stretch;
-        cursor: default;
+        cursor: pointer;
         user-select: none;
 
         background-color: var(--background-stronger);

@@ -39,7 +39,7 @@
     gap: 8px;
     padding: 6px 10px;
     border-radius: calc(var(--radius-md) - 2px);
-    cursor: default;
+    cursor: pointer;
     user-select: none;
     outline: none;
 

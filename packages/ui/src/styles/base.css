@@ -79,7 +79,25 @@ a {
   color: inherit;
   -webkit-text-decoration: inherit;
   text-decoration: inherit;
-  cursor: default;
+  cursor: pointer;
+}
+
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+[role="tab"]:not([aria-disabled="true"]),
+[role="menuitem"]:not([aria-disabled="true"]),
+[role="menuitemcheckbox"]:not([aria-disabled="true"]),
+[role="menuitemradio"]:not([aria-disabled="true"]) {
+  cursor: pointer;
+}
+
+button:disabled,
+[role="button"][aria-disabled="true"],
+[role="tab"][aria-disabled="true"],
+[role="menuitem"][aria-disabled="true"],
+[role="menuitemcheckbox"][aria-disabled="true"],
+[role="menuitemradio"][aria-disabled="true"] {
+  cursor: not-allowed;
 }
 
 *[data-tauri-drag-region] {
