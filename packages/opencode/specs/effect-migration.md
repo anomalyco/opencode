@@ -100,6 +100,15 @@ const cache = yield* InstanceState.make<State>(
 )
 ```
 
+- **Resource cleanup**: Use `Effect.acquireRelease` or `Effect.addFinalizer` for resources that need teardown (native watchers, process handles, etc.):
+
+```ts
+yield* Effect.acquireRelease(
+  Effect.sync(() => nativeAddon.watch(dir)),
+  (watcher) => Effect.sync(() => watcher.close()),
+)
+```
+
 - **Background fibers**: Use `Effect.forkScoped` — the fiber is interrupted on disposal.
 - **Side effects at init**: Config notification, event wiring, etc. all belong in the init closure. Callers just do `InstanceState.get(cache)` to trigger everything, and `ScopedCache` deduplicates automatically.
 
