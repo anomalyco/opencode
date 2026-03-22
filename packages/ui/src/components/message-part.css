@@ -838,6 +838,10 @@
     padding: 8px 8px 0;
   }
 
+  &[data-minimized="true"] [data-slot="question-body"] {
+    padding-bottom: 8px;
+  }
+
   [data-slot="question-header"] {
     display: flex;
     align-items: center;
