@@ -1,6 +1,8 @@
 import path from "path"
 import { describe, expect, test } from "bun:test"
 import { fileURLToPath } from "url"
+import { Agent } from "../../src/agent/agent"
+import { Command } from "../../src/command"
 import { Instance } from "../../src/project/instance"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Session } from "../../src/session"
@@ -101,6 +103,55 @@ describe("session.prompt missing file", () => {
         expect(text[0]?.startsWith("Called the Read tool with the following input:")).toBe(true)
         expect(text[1]?.includes("Read tool failed to read")).toBe(true)
         expect(text[2]).toBe("after-file")
+
+        await Session.remove(session.id)
+      },
+    })
+  })
+})
+
+describe("session.prompt unknown names", () => {
+  test("throws AgentNotFoundError for an unknown prompt agent", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const error = await SessionPrompt.prompt({
+          sessionID: session.id,
+          agent: "does-not-exist",
+          noReply: true,
+          parts: [{ type: "text", text: "hello" }],
+        }).catch((error) => error)
+
+        expect(Agent.NotFoundError.isInstance(error)).toBe(true)
+        if (!Agent.NotFoundError.isInstance(error)) throw error
+        expect(error.data.agent).toBe("does-not-exist")
+        expect(error.data.message).toContain('Agent not found: "does-not-exist"')
+
+        await Session.remove(session.id)
+      },
+    })
+  })
+
+  test("throws CommandNotFoundError for an unknown command", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const error = await SessionPrompt.command({
+          sessionID: session.id,
+          command: "does-not-exist",
+          arguments: "",
+        }).catch((error) => error)
+
+        expect(Command.NotFoundError.isInstance(error)).toBe(true)
+        if (!Command.NotFoundError.isInstance(error)) throw error
+        expect(error.data.command).toBe("does-not-exist")
+        expect(error.data.message).toContain('Command not found: "does-not-exist"')
 
         await Session.remove(session.id)
       },

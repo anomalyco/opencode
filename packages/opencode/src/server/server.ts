@@ -63,6 +63,8 @@ export namespace Server {
           let status: ContentfulStatusCode
           if (err instanceof NotFoundError) status = 404
           else if (err instanceof Provider.ModelNotFoundError) status = 400
+          else if (Agent.NotFoundError.isInstance(err)) status = 400
+          else if (Command.NotFoundError.isInstance(err)) status = 400
           else if (err.name === "ProviderAuthValidationFailed") status = 400
           else if (err.name.startsWith("Worktree")) status = 400
           else status = 500

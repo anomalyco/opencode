@@ -2,6 +2,8 @@ import { ConfigMarkdown } from "@/config/markdown"
 import { Config } from "../config/config"
 import { MCP } from "../mcp"
 import { Provider } from "../provider/provider"
+import { Agent } from "../agent/agent"
+import { Command } from "../command"
 import { UI } from "./ui"
 
 export function FormatError(input: unknown) {
@@ -18,6 +20,12 @@ export function FormatError(input: unknown) {
   }
   if (Provider.InitError.isInstance(input)) {
     return `Failed to initialize provider "${input.data.providerID}". Check credentials and configuration.`
+  }
+  if (Agent.NotFoundError.isInstance(input)) {
+    return input.data.message
+  }
+  if (Command.NotFoundError.isInstance(input)) {
+    return input.data.message
   }
   if (Config.JsonError.isInstance(input)) {
     return (

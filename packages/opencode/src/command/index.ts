@@ -8,6 +8,7 @@ import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
 import { MCP } from "../mcp"
 import { Skill } from "../skill"
+import { NamedError } from "@opencode-ai/util/error"
 
 export namespace Command {
   export const Event = {
@@ -41,6 +42,15 @@ export namespace Command {
 
   // for some reason zod is inferring `string` for z.promise(z.string()).or(z.string()) so we have to manually override it
   export type Info = Omit<z.infer<typeof Info>, "template"> & { template: Promise<string> | string }
+
+  export const NotFoundError = NamedError.create(
+    "CommandNotFoundError",
+    z.object({
+      command: z.string(),
+      available: z.array(z.string()),
+      message: z.string(),
+    }),
+  )
 
   export function hints(template: string): string[] {
     const result: string[] = []
@@ -143,6 +153,18 @@ export namespace Command {
 
   export async function get(name: string) {
     return state().then((x) => x[name])
+  }
+
+  export async function must(name: string) {
+    const item = await get(name)
+    if (item) return item
+    const names = await list().then((x) => x.map((c) => c.name))
+    const error = new NotFoundError({
+      command: name,
+      available: names,
+      message: `Command not found: "${name}".${names.length ? ` Available commands: ${names.join(", ")}` : ""}`,
+    })
+    throw error
   }
 
   export async function list() {

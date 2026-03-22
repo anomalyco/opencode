@@ -8,6 +8,7 @@ import { Instance } from "../project/instance"
 import { Truncate } from "../tool/truncate"
 import { Auth } from "../auth"
 import { ProviderTransform } from "../provider/transform"
+import { NamedError } from "@opencode-ai/util/error"
 
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
@@ -48,6 +49,15 @@ export namespace Agent {
       ref: "Agent",
     })
   export type Info = z.infer<typeof Info>
+
+  export const NotFoundError = NamedError.create(
+    "AgentNotFoundError",
+    z.object({
+      agent: z.string(),
+      available: z.array(z.string()),
+      message: z.string(),
+    }),
+  )
 
   const state = Instance.state(async () => {
     const cfg = await Config.get()
@@ -253,6 +263,18 @@ export namespace Agent {
 
   export async function get(agent: string) {
     return state().then((x) => x[agent])
+  }
+
+  export async function must(agent: string) {
+    const item = await get(agent)
+    if (item) return item
+    const names = await list().then((x) => x.filter((a) => !a.hidden).map((a) => a.name))
+    const error = new NotFoundError({
+      agent,
+      available: names,
+      message: `Agent not found: "${agent}".${names.length ? ` Available agents: ${names.join(", ")}` : ""}`,
+    })
+    throw error
   }
 
   export async function list() {
