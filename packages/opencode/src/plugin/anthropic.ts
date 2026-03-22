@@ -171,7 +171,7 @@ async function refreshToken(refreshToken: string): Promise<TokenExchangeResult> 
  */
 export async function AnthropicAuthPlugin({ client }: PluginInput): Promise<Hooks> {
   return {
-    "experimental.chat.system.transform": (input, output) => {
+    "experimental.chat.system.transform": async (input, output) => {
       const prefix = "You are Claude Code, Anthropic's official CLI for Claude."
       if (input.model?.providerID === "anthropic") {
         output.system.unshift(prefix)
@@ -180,6 +180,33 @@ export async function AnthropicAuthPlugin({ client }: PluginInput): Promise<Hook
     },
     auth: {
       provider: "anthropic",
+      methods: [
+        {
+          label: "Claude Pro/Max (browser)",
+          type: "oauth" as const,
+          authorize: async () => {
+            const mode = "max" as const
+            const result = await authorize(mode)
+            return {
+              url: result.url,
+              instructions: "Complete authorization in your browser and paste the code.",
+              method: "manual" as const,
+              callback: async (code: string) => {
+                const tokens = await exchange(code, result.verifier, result.state)
+                if (tokens.type === "failed" || !tokens.refresh || !tokens.access || !tokens.expires) {
+                  throw new Error("Authentication failed")
+                }
+                return {
+                  type: "oauth" as const,
+                  refresh: tokens.refresh,
+                  access: tokens.access,
+                  expires: tokens.expires,
+                }
+              },
+            }
+          },
+        },
+      ],
       async loader(getAuth, provider) {
         const auth = await getAuth()
         if (auth.type === "oauth") {
