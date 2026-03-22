@@ -172,7 +172,11 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
     }))
 
     // Check permissions if needed
-    const relativePaths = fileChanges.map((c) => path.relative(Instance.worktree, c.filePath).replaceAll("\\", "/"))
+    const relativePaths = fileChanges.map((c) =>
+      Instance.containsPath(c.filePath)
+        ? path.relative(Instance.worktree, c.filePath).replaceAll("\\", "/")
+        : c.filePath.replaceAll("\\", "/"),
+    )
     await ctx.ask({
       permission: "edit",
       patterns: relativePaths,
