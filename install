@@ -362,6 +362,7 @@ fi
 add_to_path() {
     local config_file=$1
     local command=$2
+    local reload_command=$3
 
     if grep -Fxq "$command" "$config_file"; then
         print_message info "Command already exists in $config_file, skipping write."
@@ -369,6 +370,8 @@ add_to_path() {
         echo -e "\n# opencode" >> "$config_file"
         echo "$command" >> "$config_file"
         print_message info "${MUTED}Successfully added ${NC}opencode ${MUTED}to \$PATH in ${NC}$config_file"
+        # inform users to source
+        print_message info "${MUTED}Run '${NC}$reload_command' ${MUTED}or restart your terminal to apply changes"
     else
         print_message warning "Manually add the directory to $config_file (or similar):"
         print_message info "  $command"
@@ -415,19 +418,19 @@ if [[ "$no_modify_path" != "true" ]]; then
     elif [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
         case $current_shell in
             fish)
-                add_to_path "$config_file" "fish_add_path $INSTALL_DIR"
+                add_to_path "$config_file" "fish_add_path $INSTALL_DIR" "exec fish"
             ;;
             zsh)
-                add_to_path "$config_file" "export PATH=$INSTALL_DIR:\$PATH"
+                add_to_path "$config_file" "export PATH=$INSTALL_DIR:\$PATH" "source $config_file"
             ;;
             bash)
-                add_to_path "$config_file" "export PATH=$INSTALL_DIR:\$PATH"
+                add_to_path "$config_file" "export PATH=$INSTALL_DIR:\$PATH" "source $config_file"
             ;;
             ash)
-                add_to_path "$config_file" "export PATH=$INSTALL_DIR:\$PATH"
+                add_to_path "$config_file" "export PATH=$INSTALL_DIR:\$PATH" ". $config_file"
             ;;
             sh)
-                add_to_path "$config_file" "export PATH=$INSTALL_DIR:\$PATH"
+                add_to_path "$config_file" "export PATH=$INSTALL_DIR:\$PATH" ". $config_file"
             ;;
             *)
                 export PATH=$INSTALL_DIR:$PATH
