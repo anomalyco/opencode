@@ -4,6 +4,8 @@ import { useMutation } from "@tanstack/solid-query"
 import { Button } from "@opencode-ai/ui/button"
 import { DockPrompt } from "@opencode-ai/ui/dock-prompt"
 import { Icon } from "@opencode-ai/ui/icon"
+import { IconButton } from "@opencode-ai/ui/icon-button"
+import { Markdown } from "@opencode-ai/ui/markdown"
 import { showToast } from "@opencode-ai/ui/toast"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useLanguage } from "@/context/language"
@@ -73,6 +75,8 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     customOn: cached?.customOn ?? ([] as boolean[]),
     editing: false,
     focus: 0,
+    sending: false,
+    minimized: false,
   })
 
   let root: HTMLDivElement | undefined
@@ -423,11 +427,26 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   return (
     <DockPrompt
       kind="question"
+      minimized={store.minimized}
       ref={(el) => (root = el)}
       onKeyDown={nav}
       header={
         <>
-          <div data-slot="question-header-title">{summary()}</div>
+          <div
+            data-slot="question-header-title"
+            role="button"
+            tabIndex={0}
+            onClick={() => setStore("minimized", !store.minimized)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault()
+                setStore("minimized", !store.minimized)
+              }
+            }}
+            style={{ cursor: "pointer" }}
+          >
+            {summary()}
+          </div>
           <div data-slot="question-progress">
             <For each={questions()}>
               {(_, i) => (
@@ -442,6 +461,14 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
                 />
               )}
             </For>
+            <IconButton
+              icon="chevron-down"
+              size="small"
+              variant="ghost"
+              style={{ transform: store.minimized ? "rotate(180deg)" : undefined }}
+              onClick={() => setStore("minimized", !store.minimized)}
+              aria-label={store.minimized ? language.t("session.todo.expand") : language.t("session.todo.collapse")}
+            />
           </div>
         </>
       }
@@ -469,7 +496,9 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
         </>
       }
     >
-      <div data-slot="question-text">{question()?.question}</div>
+      <div data-slot="question-text">
+        <Markdown text={question()?.question ?? ""} />
+      </div>
       <Show when={multi()} fallback={<div data-slot="question-hint">{language.t("ui.question.singleHint")}</div>}>
         <div data-slot="question-hint">{language.t("ui.question.multiHint")}</div>
       </Show>
