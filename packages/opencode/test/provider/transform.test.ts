@@ -1799,14 +1799,65 @@ describe("ProviderTransform.variants", () => {
     expect(result).toEqual({})
   })
 
-  test("glm returns empty object", () => {
+  test("glm on zai returns thinking toggle variants", () => {
     const model = createMockModel({
-      id: "glm/glm-4",
-      providerID: "glm",
+      id: "zai/glm-5",
+      providerID: "zai",
       api: {
-        id: "glm-4",
-        url: "https://api.glm.com",
+        id: "glm-5",
+        url: "https://open.z.ai/api",
         npm: "@ai-sdk/openai-compatible",
+      },
+    })
+    const result = ProviderTransform.variants(model)
+    expect(result).toEqual({
+      none: { thinking: { type: "disabled" } },
+      high: { thinking: { type: "enabled", clear_thinking: false } },
+    })
+  })
+
+  test("glm on openai-compatible (non-zai) returns reasoning toggle variants", () => {
+    const model = createMockModel({
+      id: "openrouter/z-ai/glm-5",
+      providerID: "openrouter",
+      api: {
+        id: "z-ai/glm-5",
+        url: "https://openrouter.ai/api/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    })
+    const result = ProviderTransform.variants(model)
+    expect(result).toEqual({
+      none: { reasoning: { enabled: false } },
+      high: { reasoning: { enabled: true } },
+    })
+  })
+
+  test("glm on openrouter provider returns reasoning toggle variants", () => {
+    const model = createMockModel({
+      id: "openrouter/z-ai/glm-5",
+      providerID: "openrouter",
+      api: {
+        id: "z-ai/glm-5",
+        url: "https://openrouter.ai/api/v1",
+        npm: "@openrouter/ai-sdk-provider",
+      },
+    })
+    const result = ProviderTransform.variants(model)
+    expect(result).toEqual({
+      none: { reasoning: { enabled: false } },
+      high: { reasoning: { enabled: true } },
+    })
+  })
+
+  test("glm without matching npm returns empty object", () => {
+    const model = createMockModel({
+      id: "custom/glm-5",
+      providerID: "custom",
+      api: {
+        id: "glm-5",
+        url: "https://custom.api.com",
+        npm: "@ai-sdk/anthropic",
       },
     })
     const result = ProviderTransform.variants(model)

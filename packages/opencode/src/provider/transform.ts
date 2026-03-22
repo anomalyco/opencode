@@ -340,13 +340,35 @@ export namespace ProviderTransform {
     if (
       id.includes("deepseek") ||
       id.includes("minimax") ||
-      id.includes("glm") ||
       id.includes("mistral") ||
       id.includes("kimi") ||
       // TODO: Remove this after models.dev data is fixed to use "kimi-k2.5" instead of "k2p5"
       id.includes("k2p5")
     )
       return {}
+
+    // GLM models: allow toggling thinking on/off
+    if (id.includes("glm")) {
+      if (model.api.npm === "@ai-sdk/openai-compatible") {
+        if (["zai", "zhipuai"].includes(model.providerID)) {
+          return {
+            none: { thinking: { type: "disabled" } },
+            high: { thinking: { type: "enabled", clear_thinking: false } },
+          }
+        }
+        return {
+          none: { reasoning: { enabled: false } },
+          high: { reasoning: { enabled: true } },
+        }
+      }
+      if (model.api.npm === "@openrouter/ai-sdk-provider") {
+        return {
+          none: { reasoning: { enabled: false } },
+          high: { reasoning: { enabled: true } },
+        }
+      }
+      return {}
+    }
 
     // see: https://docs.x.ai/docs/guides/reasoning#control-how-hard-the-model-thinks
     if (id.includes("grok") && id.includes("grok-3-mini")) {
