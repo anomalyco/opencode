@@ -46,7 +46,13 @@ import { LoadAPIKeyError } from "ai"
 import type { AssistantMessage, Event, OpencodeClient, SessionMessageResponse, ToolPart } from "@opencode-ai/sdk/v2"
 import { applyPatch } from "diff"
 
-type ModeOption = { id: string; name: string; description?: string }
+type ModeOption = {
+  id: string
+  name: string
+  description?: string
+  model?: { providerID: string; modelID: string }
+  variant?: string
+}
 type ModelOption = { modelId: string; name: string }
 
 const DEFAULT_VARIANT_VALUE = "default"
@@ -1125,6 +1131,8 @@ export namespace ACP {
           id: agent.name,
           name: agent.name,
           description: agent.description,
+          model: agent.model,
+          variant: agent.variant,
         }))
     }
 
@@ -1279,10 +1287,19 @@ export namespace ACP {
     async setSessionMode(params: SetSessionModeRequest): Promise<SetSessionModeResponse | void> {
       const session = this.sessionManager.get(params.sessionId)
       const availableModes = await this.loadAvailableModes(session.cwd)
-      if (!availableModes.some((mode) => mode.id === params.modeId)) {
+      const selectedMode = availableModes.find((mode) => mode.id === params.modeId)
+      if (!selectedMode) {
         throw new Error(`Agent not found: ${params.modeId}`)
       }
       this.sessionManager.setMode(params.sessionId, params.modeId)
+
+      if (selectedMode.model) {
+        this.sessionManager.setModel(session.id, {
+          providerID: ProviderID.make(selectedMode.model.providerID),
+          modelID: ModelID.make(selectedMode.model.modelID),
+        })
+        this.sessionManager.setVariant(session.id, selectedMode.variant)
+      }
     }
 
     async prompt(params: PromptRequest) {
