@@ -42,6 +42,9 @@ export namespace Plugin {
   // Built-in plugins that are directly imported (not installed from npm)
   const INTERNAL_PLUGINS: PluginInstance[] = [CodexAuthPlugin, CopilotAuthPlugin, GitlabAuthPlugin]
 
+  // Old npm package names for plugins that are now built-in — skip if users still have them in config
+  const DEPRECATED_PLUGIN_PACKAGES = ["opencode-openai-codex-auth", "opencode-copilot-auth"]
+
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -84,7 +87,7 @@ export namespace Plugin {
             if (plugins.length) await Config.waitForDependencies()
 
             for (let plugin of plugins) {
-              if (plugin.includes("opencode-openai-codex-auth") || plugin.includes("opencode-copilot-auth")) continue
+              if (DEPRECATED_PLUGIN_PACKAGES.some((pkg) => plugin.includes(pkg))) continue
               log.info("loading plugin", { path: plugin })
               if (!plugin.startsWith("file://")) {
                 const idx = plugin.lastIndexOf("@")
