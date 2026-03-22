@@ -175,6 +175,15 @@ export namespace LSP {
     })
   }
 
+  export const matchesExtension = (file: string, extensions: string[]): boolean => {
+    if (extensions.length === 0) return true
+
+    const { ext, base } = path.parse(file)
+    const target = (ext || base).toLowerCase()
+
+    return extensions.some((e) => e.toLowerCase() === target)
+  }
+
   async function getClients(file: string) {
     const s = await state()
 
@@ -228,7 +237,7 @@ export namespace LSP {
     }
 
     for (const server of Object.values(s.servers)) {
-      if (server.extensions.length && !server.extensions.includes(extension)) continue
+      if (!matchesExtension(file, server.extensions)) continue
 
       const root = await server.root(file)
       if (!root) continue
@@ -269,9 +278,8 @@ export namespace LSP {
 
   export async function hasClients(file: string) {
     const s = await state()
-    const extension = path.parse(file).ext || file
     for (const server of Object.values(s.servers)) {
-      if (server.extensions.length && !server.extensions.includes(extension)) continue
+      if (!matchesExtension(file, server.extensions)) continue
       const root = await server.root(file)
       if (!root) continue
       if (s.broken.has(root + server.id)) continue
