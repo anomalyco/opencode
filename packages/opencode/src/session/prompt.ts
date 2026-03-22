@@ -2739,10 +2739,15 @@ export const layer = Layer.effect(
         messages: [
           {
             role: "user",
-            content: "Generate a title for this conversation:\n",
+            content: [{ type: "text", text: "Generate a title for this conversation:\n" }],
           },
           ...(hasOnlySubtaskParts
-            ? [{ role: "user" as const, content: subtaskParts.map((p) => p.prompt).join("\n") }]
+            ? [
+                {
+                  role: "user" as const,
+                  content: [{ type: "text" as const, text: subtaskParts.map((p) => p.prompt).join("\n") }],
+                },
+              ]
             : MessageV2.toModelMessages(contextMessages, model)),
         ],
       }).catch((error) => {
@@ -2868,7 +2873,7 @@ export const layer = Layer.effect(
           abort: new AbortController().signal,
           sessionID: input.sessionID,
           retries: 1,
-          messages: [{ role: "user", content: msg }],
+          messages: [{ role: "user", content: [{ type: "text", text: msg }] }],
         })
 
         const text = await result.text
