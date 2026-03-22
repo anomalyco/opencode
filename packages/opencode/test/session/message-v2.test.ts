@@ -699,9 +699,10 @@ describe("session.message-v2.toModelMessage", () => {
     expect(MessageV2.toModelMessages(input, model)).toStrictEqual([])
   })
 
-  test("converts pending/running tool calls to error results to prevent dangling tool_use", () => {
+  test("converts interrupted pending/running tool calls to error results to prevent dangling tool_use", () => {
     const userID = "m-user"
     const assistantID = "m-assistant"
+    const aborted = new MessageV2.AbortedError({ message: "aborted" }).toObject() as MessageV2.Assistant["error"]
 
     const input: MessageV2.WithParts[] = [
       {
@@ -715,7 +716,7 @@ describe("session.message-v2.toModelMessage", () => {
         ] as MessageV2.Part[],
       },
       {
-        info: assistantInfo(assistantID, userID),
+        info: assistantInfo(assistantID, userID, aborted),
         parts: [
           {
             ...basePart(assistantID, "a1"),

@@ -326,9 +326,10 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
       id: string
       type: "function"
       function: {
-        name: string
+        name?: string
         arguments: string
       }
+      started: boolean
       hasFinished: boolean
     }> = []
 
@@ -363,6 +364,54 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
     let isActiveReasoning = false
     let isActiveText = false
     let reasoningOpaque: string | undefined
+    const sync = (
+      call: (typeof toolCalls)[number],
+      ctl: TransformStreamDefaultController<LanguageModelV2StreamPart>,
+      done = false,
+    ) => {
+      if (call.function.name == null) {
+        return
+      }
+
+      if (!call.started) {
+        ctl.enqueue({
+          type: "tool-input-start",
+          id: call.id,
+          toolName: call.function.name,
+        })
+        call.started = true
+
+        if (call.function.arguments.length > 0) {
+          ctl.enqueue({
+            type: "tool-input-delta",
+            id: call.id,
+            delta: call.function.arguments,
+          })
+        }
+      }
+
+      if (call.hasFinished) {
+        return
+      }
+
+      if (!done && !isParsableJson(call.function.arguments)) {
+        return
+      }
+
+      ctl.enqueue({
+        type: "tool-input-end",
+        id: call.id,
+      })
+
+      ctl.enqueue({
+        type: "tool-call",
+        toolCallId: call.id ?? generateId(),
+        toolName: call.function.name,
+        input: call.function.arguments,
+        providerMetadata: reasoningOpaque ? { copilot: { reasoningOpaque } } : undefined,
+      })
+      call.hasFinished = true
+    }
 
     return {
       stream: response.pipeThrough(
@@ -524,59 +573,17 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
                     })
                   }
 
-                  if (toolCallDelta.function?.name == null) {
-                    throw new InvalidResponseDataError({
-                      data: toolCallDelta,
-                      message: `Expected 'function.name' to be a string.`,
-                    })
-                  }
-
-                  controller.enqueue({
-                    type: "tool-input-start",
-                    id: toolCallDelta.id,
-                    toolName: toolCallDelta.function.name,
-                  })
-
                   toolCalls[index] = {
                     id: toolCallDelta.id,
                     type: "function",
                     function: {
-                      name: toolCallDelta.function.name,
+                      name: toolCallDelta.function?.name || undefined,
                       arguments: toolCallDelta.function.arguments ?? "",
                     },
+                    started: false,
                     hasFinished: false,
                   }
-
-                  const toolCall = toolCalls[index]
-
-                  if (toolCall.function?.name != null && toolCall.function?.arguments != null) {
-                    // send delta if the argument text has already started:
-                    if (toolCall.function.arguments.length > 0) {
-                      controller.enqueue({
-                        type: "tool-input-delta",
-                        id: toolCall.id,
-                        delta: toolCall.function.arguments,
-                      })
-                    }
-
-                    // check if tool call is complete
-                    // (some providers send the full tool call in one chunk):
-                    if (isParsableJson(toolCall.function.arguments)) {
-                      controller.enqueue({
-                        type: "tool-input-end",
-                        id: toolCall.id,
-                      })
-
-                      controller.enqueue({
-                        type: "tool-call",
-                        toolCallId: toolCall.id ?? generateId(),
-                        toolName: toolCall.function.name,
-                        input: toolCall.function.arguments,
-                        providerMetadata: reasoningOpaque ? { copilot: { reasoningOpaque } } : undefined,
-                      })
-                      toolCall.hasFinished = true
-                    }
-                  }
+                  sync(toolCalls[index], controller)
 
                   continue
                 }
@@ -588,37 +595,22 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
                   continue
                 }
 
+                if (toolCall.function.name == null && toolCallDelta.function?.name) {
+                  toolCall.function.name = toolCallDelta.function.name
+                }
+
                 if (toolCallDelta.function?.arguments != null) {
                   toolCall.function!.arguments += toolCallDelta.function?.arguments ?? ""
+                  if (toolCall.started) {
+                    controller.enqueue({
+                      type: "tool-input-delta",
+                      id: toolCall.id,
+                      delta: toolCallDelta.function.arguments ?? "",
+                    })
+                  }
                 }
 
-                // send delta
-                controller.enqueue({
-                  type: "tool-input-delta",
-                  id: toolCall.id,
-                  delta: toolCallDelta.function.arguments ?? "",
-                })
-
-                // check if tool call is complete
-                if (
-                  toolCall.function?.name != null &&
-                  toolCall.function?.arguments != null &&
-                  isParsableJson(toolCall.function.arguments)
-                ) {
-                  controller.enqueue({
-                    type: "tool-input-end",
-                    id: toolCall.id,
-                  })
-
-                  controller.enqueue({
-                    type: "tool-call",
-                    toolCallId: toolCall.id ?? generateId(),
-                    toolName: toolCall.function.name,
-                    input: toolCall.function.arguments,
-                    providerMetadata: reasoningOpaque ? { copilot: { reasoningOpaque } } : undefined,
-                  })
-                  toolCall.hasFinished = true
-                }
+                sync(toolCall, controller)
               }
             }
           },
@@ -639,17 +631,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
 
             // go through all tool calls and send the ones that are not finished
             for (const toolCall of toolCalls.filter((toolCall) => !toolCall.hasFinished)) {
-              controller.enqueue({
-                type: "tool-input-end",
-                id: toolCall.id,
-              })
-
-              controller.enqueue({
-                type: "tool-call",
-                toolCallId: toolCall.id ?? generateId(),
-                toolName: toolCall.function.name,
-                input: toolCall.function.arguments,
-              })
+              sync(toolCall, controller, true)
             }
 
             const providerMetadata: SharedV2ProviderMetadata = {

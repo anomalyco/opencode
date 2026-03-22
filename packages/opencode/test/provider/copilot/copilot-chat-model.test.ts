@@ -71,6 +71,12 @@ const FIXTURES = {
     `data: {"choices":[{"finish_reason":"tool_calls","index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"function":{"arguments":"{}","name":"read_file"},"id":"call_reasoning_only_2","index":1,"type":"function"}]}}],"created":1769917420,"id":"opaque-only","usage":{"completion_tokens":12,"prompt_tokens":123,"prompt_tokens_details":{"cached_tokens":0},"total_tokens":135,"reasoning_tokens":0},"model":"gemini-3-flash-preview"}`,
     `data: [DONE]`,
   ],
+
+  delayedToolName: [
+    `data: {"choices":[{"index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"function":{"arguments":"{\\"path\\":\\""},"id":"call_delayed","index":0,"type":"function"}]}}],"created":1769917421,"id":"delayed-name","usage":{"completion_tokens":0,"prompt_tokens":0,"prompt_tokens_details":{"cached_tokens":0},"total_tokens":0,"reasoning_tokens":0},"model":"qwen3-coder"}`,
+    `data: {"choices":[{"finish_reason":"tool_calls","index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"function":{"arguments":"/README.md\\"}","name":"read_file"},"index":0,"type":"function"}]}}],"created":1769917421,"id":"delayed-name","usage":{"completion_tokens":12,"prompt_tokens":123,"prompt_tokens_details":{"cached_tokens":0},"total_tokens":135,"reasoning_tokens":0},"model":"qwen3-coder"}`,
+    `data: [DONE]`,
+  ],
 }
 
 function createMockFetch(chunks: string[]) {
@@ -479,6 +485,57 @@ describe("doStream", () => {
           reasoningOpaque: "opaque-xyz",
         },
       },
+    })
+  })
+
+  test("should buffer tool deltas until function name arrives", async () => {
+    const mockFetch = createMockFetch(FIXTURES.delayedToolName)
+    const model = createModel(mockFetch)
+
+    const { stream } = await model.doStream({
+      prompt: TEST_PROMPT,
+      includeRawChunks: false,
+    })
+
+    const parts = await convertReadableStreamToArray(stream)
+    const errors = parts.filter((part) => part.type === "error")
+    const tool = parts.filter(
+      (part) =>
+        part.type === "tool-input-start" ||
+        part.type === "tool-input-delta" ||
+        part.type === "tool-input-end" ||
+        part.type === "tool-call",
+    )
+
+    expect(errors).toHaveLength(0)
+    expect(tool).toStrictEqual([
+      {
+        type: "tool-input-start",
+        id: "call_delayed",
+        toolName: "read_file",
+      },
+      {
+        type: "tool-input-delta",
+        id: "call_delayed",
+        delta: '{"path":"/README.md"}',
+      },
+      {
+        type: "tool-input-end",
+        id: "call_delayed",
+      },
+      {
+        type: "tool-call",
+        toolCallId: "call_delayed",
+        toolName: "read_file",
+        input: '{"path":"/README.md"}',
+        providerMetadata: undefined,
+      },
+    ])
+
+    const finish = parts.find((part) => part.type === "finish")
+    expect(finish).toMatchObject({
+      type: "finish",
+      finishReason: "tool-calls",
     })
   })
 
