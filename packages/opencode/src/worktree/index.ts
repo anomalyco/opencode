@@ -396,7 +396,7 @@ export namespace Worktree {
         throw new NameGenerationFailedError({ message: "Failed to generate a unique worktree name" })
       })
 
-      const makeWorktreeInfoFn = Effect.fn("Worktree.makeWorktreeInfo")(function* (name?: string) {
+      const makeWorktreeInfo = Effect.fn("Worktree.makeWorktreeInfo")(function* (name?: string) {
         if (Instance.project.vcs !== "git") {
           throw new NotGitError({ message: "Worktrees are only supported for git projects" })
         }
@@ -408,7 +408,7 @@ export namespace Worktree {
         return yield* candidateEffect(root, base || undefined)
       })
 
-      const createFromInfoFn = Effect.fn("Worktree.createFromInfo")(function* (
+      const createFromInfo = Effect.fn("Worktree.createFromInfo")(function* (
         info: Info,
         startCommand?: string,
       ) {
@@ -482,9 +482,9 @@ export namespace Worktree {
         })
       })
 
-      const createFn = Effect.fn("Worktree.create")(function* (input?: CreateInput) {
-        const info = yield* makeWorktreeInfoFn(input?.name)
-        const bootstrap = yield* createFromInfoFn(info, input?.startCommand)
+      const create = Effect.fn("Worktree.create")(function* (input?: CreateInput) {
+        const info = yield* makeWorktreeInfo(input?.name)
+        const bootstrap = yield* createFromInfo(info, input?.startCommand)
         // This is needed due to how worktrees currently work in the desktop app
         setTimeout(() => {
           bootstrap()
@@ -492,7 +492,7 @@ export namespace Worktree {
         return info
       })
 
-      const removeFn = Effect.fn("Worktree.remove")(function* (input: RemoveInput) {
+      const remove = Effect.fn("Worktree.remove")(function* (input: RemoveInput) {
         if (Instance.project.vcs !== "git") {
           throw new NotGitError({ message: "Worktrees are only supported for git projects" })
         }
@@ -592,7 +592,7 @@ export namespace Worktree {
         })
       })
 
-      const resetFn = Effect.fn("Worktree.reset")(function* (input: ResetInput) {
+      const reset = Effect.fn("Worktree.reset")(function* (input: ResetInput) {
         if (Instance.project.vcs !== "git") {
           throw new NotGitError({ message: "Worktrees are only supported for git projects" })
         }
@@ -742,13 +742,7 @@ export namespace Worktree {
         })
       })
 
-      return Service.of({
-        makeWorktreeInfo: makeWorktreeInfoFn,
-        createFromInfo: createFromInfoFn,
-        create: createFn,
-        remove: removeFn,
-        reset: resetFn,
-      })
+      return Service.of({ makeWorktreeInfo, createFromInfo, create, remove, reset })
     }),
   )
 
