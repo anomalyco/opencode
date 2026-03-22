@@ -76,6 +76,42 @@ describe("Worktree", () => {
       expect(ref.exitCode).not.toBe(0)
     })
 
+    test("create returns info immediately and fires Event.Ready after bootstrap", async () => {
+      await using tmp = await tmpdir({ git: true })
+      const { GlobalBus } = await import("../../src/bus/global")
+
+      const ready = new Promise<{ name: string; branch: string }>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          GlobalBus.off("event", on)
+          reject(new Error("timed out waiting for worktree.ready"))
+        }, 10_000)
+
+        function on(evt: { directory?: string; payload: { type: string; properties: any } }) {
+          if (evt.payload.type !== Worktree.Event.Ready.type) return
+          clearTimeout(timer)
+          GlobalBus.off("event", on)
+          resolve(evt.payload.properties)
+        }
+
+        GlobalBus.on("event", on)
+      })
+
+      const info = await withInstance(tmp.path, () => Worktree.create())
+
+      // create returns immediately — info is available before bootstrap completes
+      expect(info.name).toBeDefined()
+      expect(info.branch).toStartWith("opencode/")
+
+      // Event.Ready fires after bootstrap finishes in the background
+      const props = await ready
+      expect(props.name).toBe(info.name)
+      expect(props.branch).toBe(info.branch)
+
+      // Cleanup
+      await Bun.sleep(100)
+      await withInstance(tmp.path, () => Worktree.remove({ directory: info.directory }))
+    })
+
     test("create with custom name", async () => {
       await using tmp = await tmpdir({ git: true })
 
