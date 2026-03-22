@@ -1534,6 +1534,8 @@ export type WellKnownAuth = {
   token: string
 }
 
+export type Auth = OAuth | ApiAuth | WellKnownAuth
+
 export type NotFoundError = {
   name: "NotFoundError"
   data: {
@@ -2056,7 +2058,7 @@ export type AuthRemoveResponses = {
 export type AuthRemoveResponse = AuthRemoveResponses[keyof AuthRemoveResponses]
 
 export type AuthSetData = {
-  body?: OAuth | ApiAuth | WellKnownAuth
+  body?: Auth
   path: {
     providerID: string
   }
