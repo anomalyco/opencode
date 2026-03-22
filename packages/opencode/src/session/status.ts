@@ -6,7 +6,6 @@ import { SessionID } from "./schema"
 import { Effect, Layer, ServiceMap } from "effect"
 import z from "zod"
 
-
 export namespace SessionStatus {
   export const Info = z
     .union([

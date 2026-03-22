@@ -1,6 +1,5 @@
 import { ConfigProvider, Layer, ManagedRuntime } from "effect"
 import { InstanceContext } from "../../src/effect/instance-context"
-import { memoMap } from "../../src/effect/run-service"
 import { Instance } from "../../src/project/instance"
 
 /** ConfigProvider that enables the experimental file watcher. */
