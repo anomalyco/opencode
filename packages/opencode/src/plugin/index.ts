@@ -24,9 +24,7 @@ export namespace Plugin {
 
   // Hook names that follow the (input, output) => Promise<void> trigger pattern
   type TriggerName = {
-    [K in keyof Hooks]-?: NonNullable<Hooks[K]> extends (input: any, output: any) => Promise<void>
-      ? K
-      : never
+    [K in keyof Hooks]-?: NonNullable<Hooks[K]> extends (input: any, output: any) => Promise<void> ? K : never
   }[keyof Hooks]
 
   export interface Interface {

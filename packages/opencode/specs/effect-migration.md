@@ -82,24 +82,33 @@ The `InstanceState.make` init callback receives a `Scope`, so you can use `Effec
 - **Subscriptions**: Use `Effect.acquireRelease` to subscribe and auto-unsubscribe:
 
 ```ts
-const cache = yield* InstanceState.make<State>(
-  Effect.fn("Foo.state")(function* (ctx) {
-    // ... load state ...
+const cache =
+  yield *
+  InstanceState.make<State>(
+    Effect.fn("Foo.state")(function* (ctx) {
+      // ... load state ...
 
-    yield* Effect.acquireRelease(
-      Effect.sync(() => Bus.subscribeAll((event) => { /* handle */ })),
-      (unsub) => Effect.sync(unsub),
-    )
+      yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          Bus.subscribeAll((event) => {
+            /* handle */
+          }),
+        ),
+        (unsub) => Effect.sync(unsub),
+      )
 
-    return { /* state */ }
-  }),
-)
+      return {
+        /* state */
+      }
+    }),
+  )
 ```
 
 - **Background fibers**: Use `Effect.forkScoped` — the fiber is interrupted on disposal.
 - **Side effects at init**: Config notification, event wiring, etc. all belong in the init closure. Callers just do `InstanceState.get(cache)` to trigger everything, and `ScopedCache` deduplicates automatically.
 
 The key insight: don't split init into a separate method with a `started` flag. Put everything in the `InstanceState.make` closure and let `ScopedCache` handle the run-once semantics.
+
 ## Scheduled Tasks
 
 For loops or periodic work, use `Effect.repeat` or `Effect.schedule` with `Effect.forkScoped` in the layer definition.
