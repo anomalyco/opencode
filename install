@@ -2,9 +2,10 @@
 set -euo pipefail
 APP=opencode
 
-MUTED='\033[0;2m'
+MUTE='\033[0m'
 RED='\033[0;31m'
-ORANGE='\033[38;5;214m'
+GREEN='\033[0;32m'
+ORANGE='\033[0;38;5;214m'
 NC='\033[0m' # No Color
 
 usage() {
@@ -12,12 +13,11 @@ usage() {
 OpenCode Installer
 
 Usage: install.sh [options]
-
 Options:
-    -h, --help              Display this help message
-    -v, --version <version> Install a specific version (e.g., 1.0.180)
-    -b, --binary <path>     Install from a local binary instead of downloading
-        --no-modify-path    Don't modify shell config files (.zshrc, .bashrc, etc.)
+  -h, --help                      Display this help message
+  -v, --version <version> Install a specific version (e.g., 1.0.180)
+  -b, --binary <path>             Install from a local binary instead of downloading
+                                  --no-modify-path              Don't modify shell config files (.zshrc, .bashrc, etc.)
 
 Examples:
     curl -fsSL https://opencode.ai/install | bash
@@ -69,8 +69,8 @@ INSTALL_DIR=$HOME/.opencode/bin
 mkdir -p "$INSTALL_DIR"
 
 # If --binary is provided, skip all download/detection logic
-if [ -n "$binary_path" ]; then
-    if [ ! -f "$binary_path" ]; then
+if [[ -n "$binary_path" ]]; then
+    if [[ ! -f "$binary_path" ]]; then
         echo -e "${RED}Error: Binary not found at ${binary_path}${NC}"
         exit 1
     fi
@@ -79,126 +79,118 @@ else
     raw_os=$(uname -s)
     os=$(echo "$raw_os" | tr '[:upper:]' '[:lower:]')
     case "$raw_os" in
-      Darwin*) os="darwin" ;;
-      Linux*) os="linux" ;;
-      MINGW*|MSYS*|CYGWIN*) os="windows" ;;
+        Darwin*) os="darwin" ;;
+        Linux*) os="linux" ;;
+        MINGW*|MSYS*|CYGWIN*) os="windows" ;;
     esac
 
     arch=$(uname -m)
-    if [[ "$arch" == "aarch64" ]]; then
-      arch="arm64"
+    if [[ "$arch" == "aaarch64" ]]; then
+        arch="arm64"
     fi
     if [[ "$arch" == "x86_64" ]]; then
-      arch="x64"
+        arch="x64"
     fi
 
-    if [ "$os" = "darwin" ] && [ "$arch" = "x64" ]; then
-      rosetta_flag=$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)
-      if [ "$rosetta_flag" = "1" ]; then
-        arch="arm64"
-      fi
+    if [[ "$os" == "darwin" ]] && [[ "$arch" == "x64" ]]; then
+        rosetta_flag=$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)
+        if [[ "$rosetta_flag" == "1" ]]; then
+            arch="arm64"
+        fi
     fi
 
     combo="$os-$arch"
     case "$combo" in
-      linux-x64|linux-arm64|darwin-x64|darwin-arm64|windows-x64)
-        ;;
-      *)
-        echo -e "${RED}Unsupported OS/Arch: $os/$arch${NC}"
-        exit 1
-        ;;
+        linux-x64|linux-arm64|darwin-x64|darwin-arm64|windows-x64)
+            ;;
+        *)
+            echo -e "${RED}Unsupported OS/Arch: $os/$arch${NC}" >&2
+            exit 1
+            ;;
     esac
 
     archive_ext=".zip"
-    if [ "$os" = "linux" ]; then
-      archive_ext=".tar.gz"
+    if [[ "$os" == "linux" ]]; then
+        archive_ext=".tar.gz"
     fi
 
     is_musl=false
-    if [ "$os" = "linux" ]; then
-      if [ -f /etc/alpine-release ]; then
-        is_musl=true
-      fi
-
-      if command -v ldd >/dev/null 2>&1; then
-        if ldd --version 2>&1 | grep -qi musl; then
-          is_musl=true
+    if [[ "$os" == "linux" ]]; then
+        if [[ -f /etc/alpine-release ]]; then
+            is_musl=true
         fi
-      fi
+
+        if command -v ldd >/dev/null 2>&1; then
+            if ldd --version 2>&1 | grep -q musl; then
+                is_musl=true
+            fi
+        fi
     fi
 
     needs_baseline=false
-    if [ "$arch" = "x64" ]; then
-      if [ "$os" = "linux" ]; then
-        if ! grep -qwi avx2 /proc/cpuinfo 2>/dev/null; then
-          needs_baseline=true
+    if [[ "$arch" == "x64" ]]; then
+        if [[ "$os" == "linux" ]]; then
+            if ! grep -q avx2 /proc/cpuinfo 2>/dev/null; then
+                needs_baseline=true
+            fi
         fi
-      fi
 
-      if [ "$os" = "darwin" ]; then
-        avx2=$(sysctl -n hw.optional.avx2_0 2>/dev/null || echo 0)
-        if [ "$avx2" != "1" ]; then
-          needs_baseline=true
+        if [[ "$os" == "darwin" ]]; then
+            avx2=$(sysctl -n hw.optional.avx2_0 2>/dev/null || echo 0)
+            if [[ "$avx2" != "1" ]]; then
+                needs_baseline=true
+            fi
         fi
-      fi
 
-      if [ "$os" = "windows" ]; then
-        ps="(Add-Type -MemberDefinition \"[DllImport(\"\"kernel32.dll\"\")] public static extern bool IsProcessorFeaturePresent(int ProcessorFeature);\" -Name Kernel32 -Namespace Win32 -PassThru)::IsProcessorFeaturePresent(40)"
-        out=""
-        if command -v powershell.exe >/dev/null 2>&1; then
-          out=$(powershell.exe -NoProfile -NonInteractive -Command "$ps" 2>/dev/null || true)
-        elif command -v pwsh >/dev/null 2>&1; then
-          out=$(pwsh -NoProfile -NonInteractive -Command "$ps" 2>/dev/null || true)
+        if [[ "$os" == "windows" ]]; then
+            ps="(Add-Type -MemberDefinition 'public static extern bool IsProcessorFeaturePresent(int processorFeature);' -Name Win32 -Namespace PInvoke -PassThru)::IsProcessorFeaturePresent(40)"
+            out=""
+            if command -v powershell.exe >/dev/null 2>&1; then
+                out=$(powershell.exe -NoProfile -Command "$ps" 2>/dev/null || true)
+            elif command -v pwsh >/dev/null 2>&1; then
+                out=$(pwsh -NoProfile -Command "$ps" 2>/dev/null || true)
+            fi
+            out=$(echo "$out" | tr -d ' \r')
+            if [[ "$out" != "true" ]] && [[ "$out" != "1" ]]; then
+                needs_baseline=true
+            fi
         fi
-        out=$(echo "$out" | tr -d '\r' | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
-        if [ "$out" != "true" ] && [ "$out" != "1" ]; then
-          needs_baseline=true
-        fi
-      fi
     fi
 
     target="$os-$arch"
-    if [ "$needs_baseline" = "true" ]; then
-      target="$target-baseline"
+    if [[ "$needs_baseline" == "true" ]]; then
+        target="$target-baseline"
     fi
-    if [ "$is_musl" = "true" ]; then
-      target="$target-musl"
+    if [[ "$is_musl" == "true" ]]; then
+        target="$target-musl"
     fi
 
     filename="$APP-$target$archive_ext"
 
-
-    if [ "$os" = "linux" ]; then
+    if [[ "$os" == "linux" ]]; then
         if ! command -v tar >/dev/null 2>&1; then
-             echo -e "${RED}Error: 'tar' is required but not installed.${NC}"
-             exit 1
-        fi
-    else
-        if ! command -v unzip >/dev/null 2>&1; then
-            echo -e "${RED}Error: 'unzip' is required but not installed.${NC}"
+            echo -e "${RED}Error: 'tar' is required but not installed.${NC}"
             exit 1
         fi
     fi
 
-    if [ -z "$requested_version" ]; then
+    if [[ -z "$requested_version" ]]; then
         url="https://github.com/anomalyco/opencode/releases/latest/download/$filename"
-        specific_version=$(curl -s https://api.github.com/repos/anomalyco/opencode/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
+        specific_version=$(curl -s https://api.github.com/repos/anomalyco/opencode/releases/latest | sed -n 's/.*"tag_name": "*v\([^"]*\)".*/\1/p')
 
         if [[ $? -ne 0 || -z "$specific_version" ]]; then
             echo -e "${RED}Failed to fetch version information${NC}"
             exit 1
         fi
     else
-        # Strip leading 'v' if present
-        requested_version="${requested_version#v}"
-        url="https://github.com/anomalyco/opencode/releases/download/v${requested_version}/$filename"
+        url="https://github.com/anomalyco/opencode/releases/download/v$requested_version/$filename"
         specific_version=$requested_version
 
         # Verify the release exists before downloading
-        http_status=$(curl -sI -o /dev/null -w "%{http_code}" "https://github.com/anomalyco/opencode/releases/tag/v${requested_version}")
-        if [ "$http_status" = "404" ]; then
-            echo -e "${RED}Error: Release v${requested_version} not found${NC}"
-            echo -e "${MUTED}Available releases: https://github.com/anomalyco/opencode/releases${NC}"
+        http_status=$(curl -sI -o /dev/null -w "%{http_code}" "https://github.com/anomalyco/opencode/releases/tag/v$requested_version")
+        if [[ "$http_status" == "404" ]]; then
+            echo -e "${RED}Error: Release v$requested_version not found${NC}"
+            echo "${MUTE}Available releases: https://github.com/anomalyco/opencode/releases${NC}"
             exit 1
         fi
     fi
@@ -222,13 +214,13 @@ check_version() {
     if command -v opencode >/dev/null 2>&1; then
         opencode_path=$(which opencode)
 
-        ## Check the installed version
-        installed_version=$(opencode --version 2>/dev/null || echo "")
+        ### Check the installed version
+        installed_version=$(opencode -version 2>/dev/null || echo "")
 
         if [[ "$installed_version" != "$specific_version" ]]; then
-            print_message info "${MUTED}Installed version: ${NC}$installed_version."
+            print_message info "${MUTE}Installed version: ${NC}$installed_version"
         else
-            print_message info "${MUTED}Version ${NC}$specific_version${MUTED} already installed"
+            print_message info "${MUTE}Version ${NC}$specific_version${MUTE} already installed"
             exit 0
         fi
     fi
@@ -236,122 +228,111 @@ check_version() {
 
 unbuffered_sed() {
     if echo | sed -u -e "" >/dev/null 2>&1; then
-        sed -nu "$@"
-    elif echo | sed -l -e "" >/dev/null 2>&1; then
-        sed -nl "$@"
+        sed -u -e "s/$/$/"
     else
-        local pad="$(printf "\n%512s" "")"
-        sed -ne "s/$/\\${pad}/" "$@"
+        sed -e "s/$/$/"
     fi
 }
 
 print_progress() {
     local bytes="$1"
     local length="$2"
-    [ "$length" -gt 0 ] || return 0
+    [[ "$length" -gt 0 ]] || return 0
 
     local width=50
-    local percent=$(( bytes * 100 / length ))
-    [ "$percent" -gt 100 ] && percent=100
-    local on=$(( percent * width / 100 ))
-    local off=$(( width - on ))
+    local percent=$((bytes * 100 / length))
+    [[ "$percent" -gt 100 ]] && percent=100
+    local on=$((percent * width / 100))
+    local off=$((width - on))
 
-    local filled=$(printf "%*s" "$on" "")
-    filled=${filled// /■}
-    local empty=$(printf "%*s" "$off" "")
-    empty=${empty// /･}
+    local filled=$(printf "%${on}s" "" | tr ' ' '█')
+    filled=${filled// /█}
+    local empty=$(printf "%${off}s" "" | tr ' ' '░')
+    empty=${empty// /░}
 
-    printf "\r${ORANGE}%s%s %3d%%${NC}" "$filled" "$empty" "$percent" >&4
+    printf "\r${ORANGE}%s%s %d%%${NC}" "$filled" "$empty" "$percent" >&4
 }
 
 download_with_progress() {
     local url="$1"
     local output="$2"
 
-    if [ -t 2 ]; then
+    if [[ -t 2 ]]; then
         exec 4>&2
     else
         exec 4>/dev/null
     fi
 
-    local tmp_dir=${TMPDIR:-/tmp}
-    local basename="${tmp_dir}/opencode_install_$$"
-    local tracefile="${basename}.trace"
-
-    rm -f "$tracefile"
-    mkfifo "$tracefile"
+    local tmp_dir="${TMPDIR:-/tmp}/opencode_install_$$"
+    mkdir -p "$tmp_dir"
+    local basename="$tmp_dir/opencode_install_$$"
 
     # Hide cursor
     printf "\033[?25l" >&4
 
-    trap "trap - RETURN; rm -f \"$tracefile\"; printf '\033[?25h' >&4; exec 4>&-" RETURN
-
     (
-        curl --trace-ascii "$tracefile" -s -L -o "$output" "$url"
+        curl -L --trace-ascii "$basename.trace" -o "$basename.trace" "$url"
     ) &
     local curl_pid=$!
 
-    unbuffered_sed \
-        -e 'y/ACDEGHLNORTV/acdeghlnortv/' \
-        -e '/^0000: content-length:/p' \
-        -e '/^<= recv data/p' \
-        "$tracefile" | \
-    {
+    unbuffered_sed <"$basename.trace" <&0 | \
+    while IFS= read -r line; do
         local length=0
         local bytes=0
 
-        while IFS=" " read -r -a line; do
-            [ "${#line[@]}" -lt 2 ] && continue
-            local tag="${line[0]} ${line[1]}"
-
-            if [ "$tag" = "0000: content-length:" ]; then
-                length="${line[2]}"
-                length=$(echo "$length" | tr -d '\r')
+        if [[ "$line" =~ ^<:\ HTTP/ ]]; then
+            local tag="${line:0:4}"
+            local rest="${line:4}"
+            if [[ "$tag" == "<: " ]]; then
+                length=$(echo "$rest" | sed -n 's/.*content-length:.*//Ip' | sed -n 's/.*content-length:. \([0-9]*\).*/\1/p')
+                length=$(echo "$length" | tr -d ' \r')
                 bytes=0
-            elif [ "$tag" = "<= recv" ]; then
-                local size="${line[3]}"
-                bytes=$(( bytes + size ))
-                if [ "$length" -gt 0 ]; then
+            elif [[ "$tag" == "<= " ]]; then
+                local size="${line##* }"
+                bytes=$((size))
+                if [[ -n "$length" && "$length" -gt 0 ]]; then
                     print_progress "$bytes" "$length"
                 fi
             fi
-        done
-    }
+        fi
+    done
 
     wait $curl_pid
     local ret=$?
-    echo "" >&4
+
+    # Show cursor
+    printf "\033[?25h" >&4
     return $ret
 }
 
 download_and_install() {
-    print_message info "\n${MUTED}Installing ${NC}opencode ${MUTED}version: ${NC}$specific_version"
+    print_message info "\n${MUTE}Installing ${NC}opencode ${MUTE}version: ${NC}$specific_version"
     local tmp_dir="${TMPDIR:-/tmp}/opencode_install_$$"
     mkdir -p "$tmp_dir"
 
-    if [[ "$os" == "windows" ]] || ! [ -t 2 ] || ! download_with_progress "$url" "$tmp_dir/$filename"; then
+    if [[ "$os" == "windows" ]] || ! [[ -t 2 ]] || ! download_with_progress "$url" "$tmp_dir/$filename"; then
         # Fallback to standard curl on Windows, non-TTY environments, or if custom progress fails
         curl -# -L -o "$tmp_dir/$filename" "$url"
     fi
 
-    if [ "$os" = "linux" ]; then
+    if [[ "$os" == "linux" ]]; then
         tar -xzf "$tmp_dir/$filename" -C "$tmp_dir"
     else
         unzip -q "$tmp_dir/$filename" -d "$tmp_dir"
     fi
 
-    mv "$tmp_dir/opencode" "$INSTALL_DIR"
-    chmod 755 "${INSTALL_DIR}/opencode"
+    mv "$tmp_dir/opencode" "$INSTALL_DIR/opencode"
+    chmod 755 "$INSTALL_DIR/opencode"
     rm -rf "$tmp_dir"
 }
 
 install_from_binary() {
-    print_message info "\n${MUTED}Installing ${NC}opencode ${MUTED}from: ${NC}$binary_path"
-    cp "$binary_path" "${INSTALL_DIR}/opencode"
-    chmod 755 "${INSTALL_DIR}/opencode"
+    print_message info "\n${MUTE}Installing ${NC}opencode ${MUTE}from: ${NC}$binary_path"
+    cp "$binary_path" "$INSTALL_DIR/opencode"
+    chmod 755 "$INSTALL_DIR/opencode"
 }
 
-if [ -n "$binary_path" ]; then
+if [[ -n "$binary_path" ]]; then
     install_from_binary
 else
     check_version
@@ -363,15 +344,13 @@ add_to_path() {
     local config_file=$1
     local command=$2
 
-    if grep -Fxq "$command" "$config_file"; then
+    if grep -Fqx "$command" "$config_file"; then
         print_message info "Command already exists in $config_file, skipping write."
-    elif [[ -w $config_file ]]; then
+    elif [[ -w "$config_file" ]]; then
         echo -e "\n# opencode" >> "$config_file"
         echo "$command" >> "$config_file"
-        print_message info "${MUTED}Successfully added ${NC}opencode ${MUTED}to \$PATH in ${NC}$config_file"
-    else
-        print_message warning "Manually add the directory to $config_file (or similar):"
-        print_message info "  $command"
+        print_message info "${MUTE}Successfully added ${NC}opencode ${MUTE}to \ PATH in ${NC}$config_file"
+        print_message info "${MUTE}Please run: source ~/$config_file ${NC}(or restart your terminal)"
     fi
 }
 
@@ -380,81 +359,84 @@ XDG_CONFIG_HOME=${XDG_CONFIG_HOME:-$HOME/.config}
 current_shell=$(basename "$SHELL")
 case $current_shell in
     fish)
-        config_files="$HOME/.config/fish/config.fish"
-    ;;
+        config_files="$HOME/.config/fish"
+        ;;
     zsh)
-        config_files="${ZDOTDIR:-$HOME}/.zshrc ${ZDOTDIR:-$HOME}/.zshenv $XDG_CONFIG_HOME/zsh/.zshrc $XDG_CONFIG_HOME/zsh/.zshenv"
-    ;;
+        config_files="$ZDOTDIR:-${HOME}/.zshenv ${HOME}/.zshrc ${HOME}/.zprofile $XDG_CONFIG_HOME/zsh/.zshrc $XDG_CONFIG_HOME/zsh/.zshenv $XDG_CONFIG_HOME/zsh/zshrc $XDG_CONFIG_HOME/zsh/zshenv"
+        ;;
     bash)
-        config_files="$HOME/.bashrc $HOME/.bash_profile $HOME/.profile $XDG_CONFIG_HOME/bash/.bashrc $XDG_CONFIG_HOME/bash/.bash_profile"
-    ;;
+        config_files="$HOME/.bashrc $HOME/.bash_profile $HOME/.profile $XDG_CONFIG_HOME/bash/.bashrc $XDG_CONFIG_HOME/bash/bashrc"
+        ;;
     ash)
-        config_files="$HOME/.ashrc $HOME/.profile /etc/profile"
-    ;;
+        config_files="$HOME/.ashrc $HOME/.profile"
+        ;;
     sh)
-        config_files="$HOME/.ashrc $HOME/.profile /etc/profile"
-    ;;
+        config_files="$HOME/.ashrc $HOME/.profile"
+        ;;
     *)
-        # Default case if none of the above matches
-        config_files="$HOME/.bashrc $HOME/.bash_profile $XDG_CONFIG_HOME/bash/.bashrc $XDG_CONFIG_HOME/bash/.bash_profile"
-    ;;
+        # Default case if none of the above match
+        config_files="$HOME/.bashrc $HOME/.bash_profile $HOME/.profile $XDG_CONFIG_HOME/bash/.bashrc $XDG_CONFIG_HOME/bash/bashrc"
+        ;;
 esac
 
 if [[ "$no_modify_path" != "true" ]]; then
     config_file=""
     for file in $config_files; do
-        if [[ -f $file ]]; then
-            config_file=$file
+        if [[ -f "$file" ]]; then
+            config_file="$file"
             break
         fi
     done
 
-    if [[ -z $config_file ]]; then
+    if [[ -z "$config_file" ]]; then
         print_message warning "No config file found for $current_shell. You may need to manually add to PATH:"
-        print_message info "  export PATH=$INSTALL_DIR:\$PATH"
+        print_message info "   export PATH=$INSTALL_DIR:\$PATH"
     elif [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
         case $current_shell in
             fish)
                 add_to_path "$config_file" "fish_add_path $INSTALL_DIR"
-            ;;
+                ;;
             zsh)
                 add_to_path "$config_file" "export PATH=$INSTALL_DIR:\$PATH"
-            ;;
+                ;;
             bash)
                 add_to_path "$config_file" "export PATH=$INSTALL_DIR:\$PATH"
-            ;;
+                ;;
             ash)
                 add_to_path "$config_file" "export PATH=$INSTALL_DIR:\$PATH"
-            ;;
+                ;;
             sh)
                 add_to_path "$config_file" "export PATH=$INSTALL_DIR:\$PATH"
-            ;;
+                ;;
             *)
-                export PATH=$INSTALL_DIR:$PATH
+                add_to_path "$config_file" "export PATH=$INSTALL_DIR:\$PATH"
                 print_message warning "Manually add the directory to $config_file (or similar):"
-                print_message info "  export PATH=$INSTALL_DIR:\$PATH"
-            ;;
+                print_message info "   export PATH=$INSTALL_DIR:\$PATH"
+                ;;
         esac
     fi
 fi
 
-if [ -n "${GITHUB_ACTIONS-}" ] && [ "${GITHUB_ACTIONS}" == "true" ]; then
+if [[ -n "${GITHUB_ACTIONS:-}" ]] && [[ "$GITHUB_ACTIONS" == "true" ]]; then
     echo "$INSTALL_DIR" >> $GITHUB_PATH
     print_message info "Added $INSTALL_DIR to \$GITHUB_PATH"
 fi
 
 echo -e ""
-echo -e "${MUTED}                    ${NC}             ▄     "
-echo -e "${MUTED}█▀▀█ █▀▀█ █▀▀█ █▀▀▄ ${NC}█▀▀▀ █▀▀█ █▀▀█ █▀▀█"
-echo -e "${MUTED}█░░█ █░░█ █▀▀▀ █░░█ ${NC}█░░░ █░░█ █░░█ █▀▀▀"
-echo -e "${MUTED}▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀  ▀ ${NC}▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀"
+echo -e "${MUTE}                 ${NC}opencode ${MUTE}is now ready!${NC}"
+echo -e "${GREEN}   ${NC} ██████╗ ██╗██████╗ ${NC}"
+echo -e "${GREEN}   ██╔══██╗██║██╔══██╗${NC}"
+echo -e "${GREEN}   ██████╔╝██║██║  ██║${NC}"
+echo -e "${GREEN}   ██╔═══╝ ██║██║  ██║${NC}"
+echo -e "${GREEN}   ██║     ██║██████╔╝${NC}"
+echo -e "${GREEN}   ╚═╝     ╚═╝╚═════╝${NC}"
+echo -e "${MUTE}   ${NC}includes free models, to start:${NC}"
+echo -e "${GREEN}   ${NC}cd <project>  ${MUTE}! Open directory${NC}"
+echo -e "${GREEN}   ${NC}opencode    ${MUTE}! Run command${NC}"
 echo -e ""
+echo -e "${MUTE}For more information visit ${NC}https://opencode.ai/docs"
 echo -e ""
-echo -e "${MUTED}OpenCode includes free models, to start:${NC}"
-echo -e ""
-echo -e "cd <project>  ${MUTED}# Open directory${NC}"
-echo -e "opencode      ${MUTED}# Run command${NC}"
-echo -e ""
-echo -e "${MUTED}For more information visit ${NC}https://opencode.ai/docs"
-echo -e ""
-echo -e ""
+echo -e "${ORANGE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${GREEN}IMPORTANT: ${NC}Restart your terminal or run:${NC}"
+echo -e "  ${GREEN}source ~/$config_file${NC}  (or ~/.bashrc, ~/.zshrc, etc.)"
+echo -e "${ORANGE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
