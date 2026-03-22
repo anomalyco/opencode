@@ -53,7 +53,6 @@ export namespace Bus {
                 type: InstanceDisposed.type,
                 properties: { directory: ctx.directory },
               })
-              // Shut down all PubSubs — ends all Stream.fromPubSub consumers
               yield* PubSub.shutdown(wildcard)
               for (const ps of typed.values()) {
                 yield* PubSub.shutdown(ps)
@@ -65,14 +64,16 @@ export namespace Bus {
         }),
       )
 
-      const getOrCreate = Effect.fn("Bus.getOrCreate")(function* (state: State, type: string) {
-        let ps = state.typed.get(type)
-        if (!ps) {
-          ps = yield* PubSub.unbounded<Payload>()
-          state.typed.set(type, ps)
-        }
-        return ps
-      })
+      function getOrCreate(state: State, type: string) {
+        return Effect.gen(function* () {
+          let ps = state.typed.get(type)
+          if (!ps) {
+            ps = yield* PubSub.unbounded<Payload>()
+            state.typed.set(type, ps)
+          }
+          return ps
+        })
+      }
 
       function publish<D extends BusEvent.Definition>(def: D, properties: z.output<D["properties"]>) {
         return Effect.gen(function* () {
@@ -118,6 +119,15 @@ export namespace Bus {
 
   const { runPromise, runFork } = makeRuntime(Service, layer)
 
+  function forkStream<T>(streamFn: (svc: Interface) => Stream.Stream<T>, callback: (msg: T) => void) {
+    const fiber = runFork((svc) =>
+      streamFn(svc).pipe(Stream.runForEach((msg) => Effect.sync(() => callback(msg)))),
+    )
+    return () => {
+      Effect.runFork(Fiber.interrupt(fiber))
+    }
+  }
+
   export async function publish<D extends BusEvent.Definition>(
     def: D,
     properties: z.output<D["properties"]>,
@@ -129,20 +139,10 @@ export namespace Bus {
     def: D,
     callback: (event: { type: D["type"]; properties: z.infer<D["properties"]> }) => void,
   ) {
-    const fiber = runFork((svc) =>
-      svc.subscribe(def).pipe(Stream.runForEach((msg) => Effect.sync(() => callback(msg)))),
-    )
-    return () => {
-      Effect.runFork(Fiber.interrupt(fiber))
-    }
+    return forkStream((svc) => svc.subscribe(def), callback)
   }
 
   export function subscribeAll(callback: (event: any) => void) {
-    const fiber = runFork((svc) =>
-      svc.subscribeAll().pipe(Stream.runForEach((msg) => Effect.sync(() => callback(msg)))),
-    )
-    return () => {
-      Effect.runFork(Fiber.interrupt(fiber))
-    }
+    return forkStream((svc) => svc.subscribeAll(), callback)
   }
 }

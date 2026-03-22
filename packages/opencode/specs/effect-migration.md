@@ -6,7 +6,7 @@ Practical reference for new and migrated Effect code in `packages/opencode`.
 
 Use `InstanceState` (from `src/effect/instance-state.ts`) for services that need per-directory state, per-instance cleanup, or project-bound background work. InstanceState uses a `ScopedCache` keyed by directory, so each open project gets its own copy of the state that is automatically cleaned up on disposal.
 
-Use `makeRunPromise` (from `src/effect/run-service.ts`) to create a per-service `ManagedRuntime` that lazily initializes and shares layers via a global `memoMap`.
+Use `makeRuntime` (from `src/effect/run-service.ts`) to create a per-service `ManagedRuntime` that lazily initializes and shares layers via a global `memoMap`. Returns `{ runPromise, runFork }`.
 
 - Global services (no per-directory state): Account, Auth, Installation, Truncate
 - Instance-scoped (per-directory state via InstanceState): File, FileTime, FileWatcher, Format, Permission, Question, Skill, Snapshot, Vcs, ProviderAuth
@@ -46,7 +46,7 @@ export namespace Foo {
   export const defaultLayer = layer.pipe(Layer.provide(FooDep.layer))
 
   // Per-service runtime (inside the namespace)
-  const runPromise = makeRunPromise(Service, defaultLayer)
+  const { runPromise } = makeRuntime(Service, defaultLayer)
 
   // Async facade functions
   export async function get(id: FooID) {
