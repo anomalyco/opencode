@@ -71,6 +71,14 @@ const FIXTURES = {
     `data: {"choices":[{"finish_reason":"tool_calls","index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"function":{"arguments":"{}","name":"read_file"},"id":"call_reasoning_only_2","index":1,"type":"function"}]}}],"created":1769917420,"id":"opaque-only","usage":{"completion_tokens":12,"prompt_tokens":123,"prompt_tokens_details":{"cached_tokens":0},"total_tokens":135,"reasoning_tokens":0},"model":"gemini-3-flash-preview"}`,
     `data: [DONE]`,
   ],
+
+  // Case where reasoning_opaque is split across multiple chunks during parallel tool calls
+  multipleReasoningOpaqueChunks: [
+    `data: {"choices":[{"index":0,"delta":{"content":null,"role":"assistant","reasoning_text":"**Planning the Approach**\\n\\nI need to read multiple files to understand the codebase.\\n\\n"}}],"created":1770000000,"id":"multi-opaque","usage":{"completion_tokens":0,"prompt_tokens":0,"prompt_tokens_details":{"cached_tokens":0},"total_tokens":0,"reasoning_tokens":0},"model":"claude-sonnet-4-6"}`,
+    `data: {"choices":[{"index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"function":{"arguments":"{\\"path\\":\\"/src/index.ts\\"}","name":"read_file"},"id":"call_aaa","index":0,"type":"function"}],"reasoning_opaque":"firstPartOfOpaque"}}],"created":1770000000,"id":"multi-opaque","usage":{"completion_tokens":0,"prompt_tokens":0,"prompt_tokens_details":{"cached_tokens":0},"total_tokens":0,"reasoning_tokens":0},"model":"claude-sonnet-4-6"}`,
+    `data: {"choices":[{"finish_reason":"tool_calls","index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"function":{"arguments":"{\\"path\\":\\"/src/utils.ts\\"}","name":"read_file"},"id":"call_bbb","index":1,"type":"function"}],"reasoning_opaque":"secondPartOfOpaque"}}],"created":1770000000,"id":"multi-opaque","usage":{"completion_tokens":30,"prompt_tokens":5000,"prompt_tokens_details":{"cached_tokens":2000},"total_tokens":5100,"reasoning_tokens":70},"model":"claude-sonnet-4-6"}`,
+    `data: [DONE]`,
+  ],
 }
 
 function createMockFetch(chunks: string[]) {
@@ -477,6 +485,61 @@ describe("doStream", () => {
       providerMetadata: {
         copilot: {
           reasoningOpaque: "opaque-xyz",
+        },
+      },
+    })
+  })
+
+  test("should concatenate multiple reasoning_opaque values across chunks", async () => {
+    const mockFetch = createMockFetch(FIXTURES.multipleReasoningOpaqueChunks)
+    const model = createModel(mockFetch)
+
+    const { stream } = await model.doStream({
+      prompt: TEST_PROMPT,
+      includeRawChunks: false,
+    })
+
+    const parts = await convertReadableStreamToArray(stream)
+
+    // reasoning-end is emitted when first tool call chunk arrives,
+    // so it only has the first part of the opaque value
+    const reasoningEnd = parts.find((p) => p.type === "reasoning-end")
+    expect(reasoningEnd).toMatchObject({
+      type: "reasoning-end",
+      id: "reasoning-0",
+      providerMetadata: {
+        copilot: {
+          reasoningOpaque: "firstPartOfOpaque",
+        },
+      },
+    })
+
+    // Both tool calls should be emitted
+    const starts = parts.filter((p) => p.type === "tool-input-start")
+    expect(starts).toHaveLength(2)
+    expect(starts).toContainEqual({ type: "tool-input-start", id: "call_aaa", toolName: "read_file" })
+    expect(starts).toContainEqual({ type: "tool-input-start", id: "call_bbb", toolName: "read_file" })
+
+    // First tool call has only the first opaque part (emitted in same chunk)
+    const calls = parts.filter((p) => p.type === "tool-call")
+    expect(calls[0]).toMatchObject({
+      toolCallId: "call_aaa",
+      providerMetadata: { copilot: { reasoningOpaque: "firstPartOfOpaque" } },
+    })
+    // Second tool call has the full concatenated value
+    expect(calls[1]).toMatchObject({
+      toolCallId: "call_bbb",
+      providerMetadata: { copilot: { reasoningOpaque: "firstPartOfOpaquesecondPartOfOpaque" } },
+    })
+
+    // Finish event carries the fully concatenated value
+    const finish = parts.find((p) => p.type === "finish")
+    expect(finish).toMatchObject({
+      type: "finish",
+      finishReason: "tool-calls",
+      providerMetadata: {
+        copilot: {
+          reasoningOpaque: "firstPartOfOpaquesecondPartOfOpaque",
         },
       },
     })
