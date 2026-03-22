@@ -190,14 +190,14 @@ export async function AnthropicAuthPlugin({ client }: PluginInput): Promise<Hook
             return {
               url: result.url,
               instructions: "Complete authorization in your browser and paste the code.",
-              method: "manual" as const,
+              method: "code" as const,
               callback: async (code: string) => {
                 const tokens = await exchange(code, result.verifier, result.state)
                 if (tokens.type === "failed" || !tokens.refresh || !tokens.access || !tokens.expires) {
                   throw new Error("Authentication failed")
                 }
                 return {
-                  type: "oauth" as const,
+                  type: "success" as const,
                   refresh: tokens.refresh,
                   access: tokens.access,
                   expires: tokens.expires,
