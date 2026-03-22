@@ -1,10 +1,16 @@
 import type { Hooks, PluginInput, Plugin as PluginInstance } from "@opencode-ai/plugin"
+import { Config } from "../config/config"
 import { Bus } from "../bus"
 import { Log } from "../util/log"
 import { createOpencodeClient } from "@opencode-ai/sdk"
+import { Server } from "../server/server"
 import { BunProc } from "../bun"
 import { Flag } from "../flag/flag"
+import { CodexAuthPlugin } from "./codex"
+import { Session } from "../session"
 import { NamedError } from "@opencode-ai/util/error"
+import { CopilotAuthPlugin } from "./copilot"
+import { gitlabAuthPlugin as GitlabAuthPlugin } from "opencode-gitlab-auth"
 import { Effect, Layer, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRunPromise } from "@/effect/run-service"
@@ -33,6 +39,9 @@ export namespace Plugin {
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Plugin") {}
 
+  // Built-in plugins that are directly imported (not installed from npm)
+  const INTERNAL_PLUGINS: PluginInstance[] = [CodexAuthPlugin, CopilotAuthPlugin, GitlabAuthPlugin]
+
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -41,18 +50,6 @@ export namespace Plugin {
           const hooks: Hooks[] = []
 
           yield* Effect.promise(async () => {
-            const [{ Config }, { Server }, codex, copilot, gitlab] = await Promise.all([
-              import("../config/config"),
-              import("../server/server"),
-              import("./codex"),
-              import("./copilot"),
-              import("opencode-gitlab-auth"),
-            ])
-            const internal: PluginInstance[] = [
-              codex.CodexAuthPlugin,
-              copilot.CopilotAuthPlugin,
-              gitlab.gitlabAuthPlugin,
-            ]
             const client = createOpencodeClient({
               baseUrl: "http://localhost:4096",
               directory: ctx.directory,
@@ -75,7 +72,7 @@ export namespace Plugin {
               $: Bun.$,
             }
 
-            for (const plugin of internal) {
+            for (const plugin of INTERNAL_PLUGINS) {
               log.info("loading internal plugin", { name: plugin.name })
               const init = await plugin(input).catch((err) => {
                 log.error("failed to load internal plugin", { name: plugin.name, error: err })
@@ -97,13 +94,11 @@ export namespace Plugin {
                   const cause = err instanceof Error ? err.cause : err
                   const detail = cause instanceof Error ? cause.message : String(cause ?? err)
                   log.error("failed to install plugin", { pkg, version, error: detail })
-                  void import("../session").then(({ Session }) =>
-                    Bus.publish(Session.Event.Error, {
-                      error: new NamedError.Unknown({
-                        message: `Failed to install plugin ${pkg}@${version}: ${detail}`,
-                      }).toObject(),
-                    }),
-                  )
+                  Bus.publish(Session.Event.Error, {
+                    error: new NamedError.Unknown({
+                      message: `Failed to install plugin ${pkg}@${version}: ${detail}`,
+                    }).toObject(),
+                  })
                   return ""
                 })
                 if (!plugin) continue
@@ -121,13 +116,11 @@ export namespace Plugin {
                 .catch((err) => {
                   const message = err instanceof Error ? err.message : String(err)
                   log.error("failed to load plugin", { path: plugin, error: message })
-                  void import("../session").then(({ Session }) =>
-                    Bus.publish(Session.Event.Error, {
-                      error: new NamedError.Unknown({
-                        message: `Failed to load plugin ${plugin}: ${message}`,
-                      }).toObject(),
-                    }),
-                  )
+                  Bus.publish(Session.Event.Error, {
+                    error: new NamedError.Unknown({
+                      message: `Failed to load plugin ${plugin}: ${message}`,
+                    }).toObject(),
+                  })
                 })
             }
           })
@@ -166,7 +159,6 @@ export namespace Plugin {
         if (state.started) return
         state.started = true
         yield* Effect.promise(async () => {
-          const { Config } = await import("../config/config")
           const cfg = await Config.get()
           for (const hook of state.hooks) {
             await (hook as any).config?.(cfg)
