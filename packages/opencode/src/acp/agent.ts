@@ -671,19 +671,22 @@ export namespace ACP {
         const cursor = params.cursor ? Number(params.cursor) : undefined
         const limit = 100
 
-        const sessions = await this.sdk.session
+        // Use global session list so sessions from all projects are returned,
+        // not just the current project scoped by Instance.project.id
+        const sessions = await this.sdk.experimental.session
           .list(
             {
               directory: params.cwd ?? undefined,
               roots: true,
+              cursor,
+              limit: limit + 1,
             },
             { throwOnError: true },
           )
           .then((x) => x.data ?? [])
 
-        const sorted = sessions.toSorted((a, b) => b.time.updated - a.time.updated)
-        const filtered = cursor ? sorted.filter((s) => s.time.updated < cursor) : sorted
-        const page = filtered.slice(0, limit)
+        const hasMore = sessions.length > limit
+        const page = hasMore ? sessions.slice(0, limit) : sessions
 
         const entries: SessionInfo[] = page.map((session) => ({
           sessionId: session.id,
@@ -693,7 +696,7 @@ export namespace ACP {
         }))
 
         const last = page[page.length - 1]
-        const next = filtered.length > limit && last ? String(last.time.updated) : undefined
+        const next = hasMore && last ? String(last.time.updated) : undefined
 
         const response: ListSessionsResponse = {
           sessions: entries,
