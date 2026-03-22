@@ -4,18 +4,35 @@ import z from "zod"
 import { Session } from "../session"
 import { SessionID, MessageID } from "../session/schema"
 import { MessageV2 } from "../session/message-v2"
-import { Identifier } from "../id/id"
 import { Agent } from "../agent/agent"
 import { SessionPrompt } from "../session/prompt"
 import { iife } from "@/util/iife"
 import { defer } from "@/util/defer"
 import { Config } from "../config/config"
 import { Permission } from "@/permission"
+import { Instance } from "@/project/instance"
+import { ModelID, ProviderID } from "@/provider/schema"
+
+const dynamicAgentConfig = z
+  .object({
+    prompt: z.string().optional(),
+    temperature: z.number().optional(),
+    top_p: z.number().optional(),
+    color: z.string().optional(),
+    steps: z.number().int().positive().optional(),
+    permission: z.record(z.string(), z.any()).optional(),
+    options: z.record(z.string(), z.any()).optional(),
+  })
+  .strict()
 
 const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
   prompt: z.string().describe("The task for the agent to perform"),
   subagent_type: z.string().describe("The type of specialized agent to use for this task"),
+  subagent_description: z
+    .string()
+    .describe("Optional specialization for an ad hoc dynamic subagent")
+    .optional(),
   task_id: z
     .string()
     .describe(
@@ -23,7 +40,78 @@ const parameters = z.object({
     )
     .optional(),
   command: z.string().describe("The command that triggered this task").optional(),
+  model: z.string().describe('Optional model override in the format "provider/model"').optional(),
+  variant: z.string().describe("Optional reasoning or thinking level override").optional(),
+  agent_config: dynamicAgentConfig.describe("Internal dynamic task agent configuration").optional(),
 })
+
+function parseModel(model: string) {
+  const separator = model.indexOf("/")
+  if (separator <= 0 || separator === model.length - 1) {
+    throw new Error(`Invalid model "${model}". Expected "provider/model".`)
+  }
+
+  return {
+    providerID: ProviderID.make(model.slice(0, separator)),
+    modelID: ModelID.make(model.slice(separator + 1)),
+  }
+}
+
+function buildDynamicAgentPrompt(input: {
+  name: string
+  description: string
+  workingDirectory: string
+  projectRoot: string
+  prompt?: string
+}) {
+  return [
+    ...(input.prompt ? [input.prompt, ""] : []),
+    `You are @${input.name}, a dynamic subagent.`,
+    `Specialization: ${input.description}`,
+    "",
+    `Current working directory: ${input.workingDirectory}`,
+    ...(input.projectRoot !== input.workingDirectory ? [`Project root: ${input.projectRoot}`] : []),
+    "",
+    "Treat the specialization as authoritative for this run.",
+    "Resolve relative paths from the current working directory shown above.",
+    "Do not invent absolute filesystem paths. If the task gives a relative project path, use that exact relative path unless you verify a different path exists first.",
+  ].join("\n")
+}
+
+async function buildDynamicAgent(params: z.infer<typeof parameters>) {
+  if (!params.subagent_description) return
+
+  const general = await Agent.get("general")
+  if (!general) {
+    throw new Error('Dynamic subagents require the native "general" agent to be available.')
+  }
+
+  return Agent.Info.parse({
+    ...general,
+    name: params.subagent_type,
+    description: params.subagent_description,
+    mode: "subagent",
+    hidden: true,
+    prompt: buildDynamicAgentPrompt({
+      name: params.subagent_type,
+      description: params.subagent_description,
+      workingDirectory: Instance.directory,
+      projectRoot: Instance.worktree,
+      prompt: params.agent_config?.prompt,
+    }),
+    temperature: params.agent_config?.temperature ?? general.temperature,
+    topP: params.agent_config?.top_p ?? general.topP,
+    color: params.agent_config?.color ?? general.color,
+    steps: params.agent_config?.steps ?? general.steps,
+    options: {
+      ...general.options,
+      ...(params.agent_config?.options ?? {}),
+    },
+    permission: params.agent_config?.permission
+      ? Permission.merge(general.permission, Permission.fromConfig(params.agent_config.permission))
+      : general.permission,
+  })
+}
 
 export const TaskTool = Tool.define("task", async (ctx) => {
   const agents = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
@@ -46,6 +134,8 @@ export const TaskTool = Tool.define("task", async (ctx) => {
     parameters,
     async execute(params: z.infer<typeof parameters>, ctx) {
       const config = await Config.get()
+      const dynamicAgent = await buildDynamicAgent(params)
+      const agent = dynamicAgent ?? (await Agent.get(params.subagent_type))
 
       // Skip permission check when user explicitly invoked via @ or command subtask
       if (!ctx.extra?.bypassAgentCheck) {
@@ -60,7 +150,6 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         })
       }
 
-      const agent = await Agent.get(params.subagent_type)
       if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
 
       const hasTaskPermission = agent.permission.some((rule) => rule.permission === "task")
@@ -105,16 +194,20 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       const msg = await MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
       if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
 
-      const model = agent.model ?? {
-        modelID: msg.info.modelID,
-        providerID: msg.info.providerID,
-      }
+      const model =
+        (params.model ? parseModel(params.model) : undefined) ??
+        agent.model ?? {
+          modelID: msg.info.modelID,
+          providerID: msg.info.providerID,
+        }
+      const variant = params.variant ?? agent.variant
 
       ctx.metadata({
         title: params.description,
         metadata: {
           sessionId: session.id,
           model,
+          ...(variant ? { variant } : {}),
         },
       })
 
@@ -135,6 +228,8 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           providerID: model.providerID,
         },
         agent: agent.name,
+        agentContext: dynamicAgent,
+        ...(variant ? { variant } : {}),
         tools: {
           todowrite: false,
           todoread: false,
@@ -159,6 +254,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         metadata: {
           sessionId: session.id,
           model,
+          ...(variant ? { variant } : {}),
         },
         output,
       }

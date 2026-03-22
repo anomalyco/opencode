@@ -4,6 +4,8 @@ Available agent types and the tools they have access to:
 {agents}
 
 When using the Task tool, you must specify a subagent_type parameter to select which agent type to use.
+To create an ad hoc dynamic subagent, provide a fresh subagent_type plus subagent_description.
+You may optionally provide model and variant to choose the subagent model and thinking level for this task.
 
 When to use the Task tool:
 - When you are instructed to execute custom slash commands. Use the Task tool with the slash command invocation as the entire prompt. The slash command can take arguments. For example: Task(description="Check the file", prompt="/check-file path/to/file.py")

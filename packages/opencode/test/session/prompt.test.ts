@@ -210,3 +210,58 @@ describe("session.prompt agent variant", () => {
     }
   })
 })
+
+describe("session.prompt inline agent context", () => {
+  test("persists agentContext for dynamic task sessions", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      config: {
+        agent: {
+          build: {
+            model: "openai/gpt-5.2",
+          },
+        },
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const message = await SessionPrompt.prompt({
+          sessionID: session.id,
+          noReply: true,
+          agent: "spark-scout",
+          agentContext: {
+            name: "spark-scout",
+            description: "Focused code search subagent",
+            mode: "subagent",
+            hidden: true,
+            permission: [],
+            options: {},
+            prompt: "You are a focused scout.",
+          },
+          model: { providerID: ProviderID.make("openai"), modelID: ModelID.make("gpt-5.4") },
+          variant: "high",
+          parts: [{ type: "text", text: "Inspect apps/studio/src/hooks." }],
+        })
+
+        if (message.info.role !== "user") throw new Error("expected user message")
+        expect(message.info.agent).toBe("spark-scout")
+        expect(message.info.agentContext?.description).toBe("Focused code search subagent")
+        expect(message.info.variant).toBe("high")
+
+        const stored = await MessageV2.get({ sessionID: session.id, messageID: message.info.id })
+        expect(stored.info.role).toBe("user")
+        if (stored.info.role !== "user") throw new Error("expected stored user message")
+        expect(stored.info.agentContext?.prompt).toBe("You are a focused scout.")
+        expect(stored.info.model).toEqual({
+          providerID: ProviderID.make("openai"),
+          modelID: ModelID.make("gpt-5.4"),
+        })
+
+        await Session.remove(session.id)
+      },
+    })
+  })
+})

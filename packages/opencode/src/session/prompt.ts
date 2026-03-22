@@ -102,6 +102,7 @@ export namespace SessionPrompt {
       })
       .optional(),
     agent: z.string().optional(),
+    agentContext: MessageV2.AgentContext.optional(),
     noReply: z.boolean().optional(),
     tools: z
       .record(z.string(), z.boolean())
@@ -158,6 +159,15 @@ export namespace SessionPrompt {
     ),
   })
   export type PromptInput = z.infer<typeof PromptInput>
+
+  async function resolvePromptAgent(input: { agent?: string; agentContext?: MessageV2.AgentContext }) {
+    if (input.agentContext) return input.agentContext
+
+    const name = input.agent ?? (await Agent.defaultAgent())
+    const agent = await Agent.get(name)
+    if (!agent) throw new Error(`Agent not found: "${name}"`)
+    return agent
+  }
 
   export const prompt = fn(PromptInput, async (input) => {
     const session = await Session.get(input.sessionID)
@@ -394,7 +404,29 @@ export namespace SessionPrompt {
               prompt: task.prompt,
               description: task.description,
               subagent_type: task.agent,
+              ...(task.agentContext?.description ? { subagent_description: task.agentContext.description } : {}),
               command: task.command,
+              ...(task.model
+                ? {
+                    model: `${task.model.providerID}/${task.model.modelID}`,
+                  }
+                : {}),
+              ...(task.variant ? { variant: task.variant } : {}),
+              ...(task.agentContext
+                ? {
+                    agent_config: {
+                      ...(task.agentContext.prompt ? { prompt: task.agentContext.prompt } : {}),
+                      ...(task.agentContext.temperature !== undefined
+                        ? { temperature: task.agentContext.temperature }
+                        : {}),
+                      ...(task.agentContext.topP !== undefined ? { top_p: task.agentContext.topP } : {}),
+                      ...(task.agentContext.color ? { color: task.agentContext.color } : {}),
+                      ...(task.agentContext.steps !== undefined ? { steps: task.agentContext.steps } : {}),
+                      ...(task.agentContext.permission.length > 0 ? { permission: task.agentContext.permission } : {}),
+                      ...(Object.keys(task.agentContext.options).length > 0 ? { options: task.agentContext.options } : {}),
+                    },
+                  }
+                : {}),
             },
             time: {
               start: Date.now(),
@@ -405,7 +437,27 @@ export namespace SessionPrompt {
           prompt: task.prompt,
           description: task.description,
           subagent_type: task.agent,
+          ...(task.agentContext?.description ? { subagent_description: task.agentContext.description } : {}),
           command: task.command,
+          ...(task.model
+            ? {
+                model: `${task.model.providerID}/${task.model.modelID}`,
+              }
+            : {}),
+          ...(task.variant ? { variant: task.variant } : {}),
+          ...(task.agentContext
+            ? {
+                agent_config: {
+                  ...(task.agentContext.prompt ? { prompt: task.agentContext.prompt } : {}),
+                  ...(task.agentContext.temperature !== undefined ? { temperature: task.agentContext.temperature } : {}),
+                  ...(task.agentContext.topP !== undefined ? { top_p: task.agentContext.topP } : {}),
+                  ...(task.agentContext.color ? { color: task.agentContext.color } : {}),
+                  ...(task.agentContext.steps !== undefined ? { steps: task.agentContext.steps } : {}),
+                  ...(task.agentContext.permission.length > 0 ? { permission: task.agentContext.permission } : {}),
+                  ...(Object.keys(task.agentContext.options).length > 0 ? { options: task.agentContext.options } : {}),
+                },
+              }
+            : {}),
         }
         await Plugin.trigger(
           "tool.execute.before",
@@ -417,7 +469,10 @@ export namespace SessionPrompt {
           { args: taskArgs },
         )
         let executionError: Error | undefined
-        const taskAgent = await Agent.get(task.agent)
+        const taskAgent = task.agentContext ?? (await Agent.get(task.agent))
+        if (!taskAgent) {
+          throw new Error(`Task agent not found: "${task.agent}"`)
+        }
         const taskCtx: Tool.Context = {
           agent: task.agent,
           messageID: assistantMessage.id,
@@ -559,7 +614,10 @@ export namespace SessionPrompt {
       }
 
       // normal processing
-      const agent = await Agent.get(lastUser.agent)
+      const agent = lastUser.agentContext ?? (await Agent.get(lastUser.agent))
+      if (!agent) {
+        throw new Error(`Agent not found: "${lastUser.agent}"`)
+      }
       const maxSteps = agent.steps ?? Infinity
       const isLastStep = step >= maxSteps
       msgs = await insertReminders({
@@ -964,7 +1022,7 @@ export namespace SessionPrompt {
   }
 
   async function createUserMessage(input: PromptInput) {
-    const agent = await Agent.get(input.agent ?? (await Agent.defaultAgent()))
+    const agent = await resolvePromptAgent(input)
 
     const model = input.model ?? agent.model ?? (await lastModel(input.sessionID))
     const full =
@@ -982,6 +1040,7 @@ export namespace SessionPrompt {
       },
       tools: input.tools,
       agent: agent.name,
+      agentContext: input.agentContext,
       model,
       system: input.system,
       format: input.format,
@@ -1156,7 +1215,7 @@ export namespace SessionPrompt {
                     const readCtx: Tool.Context = {
                       sessionID: input.sessionID,
                       abort: new AbortController().signal,
-                      agent: input.agent!,
+                      agent: agent.name,
                       messageID: info.id,
                       extra: { bypassCwdCheck: true, model },
                       messages: [],
@@ -1215,7 +1274,7 @@ export namespace SessionPrompt {
                 const listCtx: Tool.Context = {
                   sessionID: input.sessionID,
                   abort: new AbortController().signal,
-                  agent: input.agent!,
+                  agent: agent.name,
                   messageID: info.id,
                   extra: { bypassCwdCheck: true },
                   messages: [],
@@ -1308,7 +1367,7 @@ export namespace SessionPrompt {
       "chat.message",
       {
         sessionID: input.sessionID,
-        agent: input.agent,
+        agent: agent.name,
         model: input.model,
         messageID: input.messageID,
         variant: input.variant,

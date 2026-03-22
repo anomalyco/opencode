@@ -46,4 +46,42 @@ describe("tool.task", () => {
       },
     })
   })
+
+  test("parameters accept dynamic subagent model and variant inputs", async () => {
+    await using tmp = await tmpdir({
+      config: {
+        agent: {
+          zebra: {
+            description: "Zebra agent",
+            mode: "subagent",
+          },
+        },
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const build = await Agent.get("build")
+        const task = await TaskTool.init({ agent: build })
+
+        const parsed = task.parameters.parse({
+          description: "Search hooks",
+          prompt: "Inspect apps/studio/src/hooks for candidates.",
+          subagent_type: "spark-scout",
+          subagent_description: "Focused code search subagent",
+          model: "openai/gpt-5.4",
+          variant: "high",
+          agent_config: {
+            temperature: 0.2,
+          },
+        })
+
+        expect(parsed.subagent_description).toBe("Focused code search subagent")
+        expect(parsed.model).toBe("openai/gpt-5.4")
+        expect(parsed.variant).toBe("high")
+        expect(parsed.agent_config).toEqual({ temperature: 0.2 })
+      },
+    })
+  })
 })

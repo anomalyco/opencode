@@ -16,6 +16,7 @@ import { iife } from "@/util/iife"
 import type { SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
+import { Permission } from "@/permission"
 
 export namespace MessageV2 {
   export function isMedia(mime: string) {
@@ -207,17 +208,44 @@ export namespace MessageV2 {
   })
   export type CompactionPart = z.infer<typeof CompactionPart>
 
+  export const AgentContext = z.object({
+    name: z.string(),
+    description: z.string().optional(),
+    mode: z.enum(["subagent", "primary", "all"]),
+    native: z.boolean().optional(),
+    hidden: z.boolean().optional(),
+    topP: z.number().optional(),
+    temperature: z.number().optional(),
+    color: z.string().optional(),
+    permission: Permission.Ruleset,
+    model: z
+      .object({
+        modelID: ModelID.zod,
+        providerID: ProviderID.zod,
+      })
+      .optional(),
+    variant: z.string().optional(),
+    prompt: z.string().optional(),
+    options: z.record(z.string(), z.any()),
+    steps: z.number().int().positive().optional(),
+  }).meta({
+    ref: "AgentContext",
+  })
+  export type AgentContext = z.infer<typeof AgentContext>
+
   export const SubtaskPart = PartBase.extend({
     type: z.literal("subtask"),
     prompt: z.string(),
     description: z.string(),
     agent: z.string(),
+    agentContext: AgentContext.optional(),
     model: z
       .object({
         providerID: ProviderID.zod,
         modelID: ModelID.zod,
       })
       .optional(),
+    variant: z.string().optional(),
     command: z.string().optional(),
   }).meta({
     ref: "SubtaskPart",
@@ -359,7 +387,7 @@ export namespace MessageV2 {
         title: z.string().optional(),
         body: z.string().optional(),
         diffs: Snapshot.FileDiff.array(),
-      })
+    })
       .optional(),
     agent: z.string(),
     model: z.object({
@@ -369,6 +397,7 @@ export namespace MessageV2 {
     system: z.string().optional(),
     tools: z.record(z.string(), z.boolean()).optional(),
     variant: z.string().optional(),
+    agentContext: AgentContext.optional(),
   }).meta({
     ref: "UserMessage",
   })
