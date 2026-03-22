@@ -90,13 +90,11 @@ describe("Worktree", () => {
   })
 
   describe("createFromInfo", () => {
-    test("creates git worktree and returns bootstrap function", async () => {
+    test("creates and bootstraps git worktree", async () => {
       await using tmp = await tmpdir({ git: true })
 
       const info = await withInstance(tmp.path, () => Worktree.makeWorktreeInfo("from-info-test"))
-      const bootstrap = await withInstance(tmp.path, () => Worktree.createFromInfo(info))
-
-      expect(typeof bootstrap).toBe("function")
+      await withInstance(tmp.path, () => Worktree.createFromInfo(info))
 
       // Worktree should exist in git
       const list = await $`git worktree list --porcelain`.cwd(tmp.path).quiet().text()
