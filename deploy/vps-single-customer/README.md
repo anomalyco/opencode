@@ -15,6 +15,8 @@ Create an `A` record for your test domain, for example:
 
 - `customer1.example.com -> <your-vps-ip>`
 
+Verify DNS propagation before starting the stack (e.g. `dig +short customer1.example.com`). Let's Encrypt requires the domain to resolve to your server IP before Caddy can obtain a certificate.
+
 ## 2. Prepare the VPS
 
 Install the base packages first:
@@ -81,16 +83,27 @@ Create the dedicated customer repo or workspace mount if you have not already:
 mkdir -p /srv/numeral/customer1/workspace
 ```
 
+<<<<<<< Updated upstream
 ## 6. Configure environment variables
+=======
+Ensure the directory is writable by the user running `docker compose`. Only mount paths that this customer is allowed to access. Numeral is not a security sandbox.
+
+## 3. Configure environment variables
+>>>>>>> Stashed changes
 
 Copy `.env.example` to `.env` and fill in:
 
 - `NUMERAL_DOMAIN`
 - `LETSENCRYPT_EMAIL`
+<<<<<<< Updated upstream
 - `OPENCODE_SERVER_PASSWORD`
 - `OPENCODE_SERVER_USERNAME`
 - `VITE_OPENCODE_LICENSE_URL`
 - `CUSTOMER_WORKSPACE`
+=======
+- `OPENCODE_SERVER_PASSWORD` (required; without it the server runs without authentication)
+- `CUSTOMER_WORKSPACE` (use an absolute path; `~` is not expanded in `.env`)
+>>>>>>> Stashed changes
 
 The workflow and deploy script read this file from:
 
@@ -152,9 +165,28 @@ The server should require HTTP Basic Auth using:
 - the production workflow only runs on runners labeled `prod-vps`
 - runtime secrets stay on the VPS in `.env`
 
+## Post-deploy: Configure model credentials
+
+After deployment, log in and configure API keys for your model providers in the app settings.
+
+## Rebuilding after code changes
+
+1. Rsync from your development machine to the VPS, e.g. `rsync -avz ./ user@openclaw:~/numeral-opencode/`
+2. On the VPS: `cd ~/numeral-opencode/deploy/vps-single-customer && docker compose up -d --build`
+
+## Troubleshooting realtime updates (SSE)
+
+The web UI uses a long-lived `GET /global/event` stream. The bundled Caddy config disables response buffering on the reverse proxy and avoids site-wide `zstd`/`gzip` encoding so Server-Sent Events are not buffered.
+
+If follow-up messages still stall only in production:
+
+1. In Cloudflare DNS, try **DNS only** (gray cloud) for this hostname to rule out proxy buffering or timeouts on long-lived connections.
+2. Check Caddy logs for `502` to the `numeral` upstream during the issue.
+3. In the browser Network tab, confirm `/global/event` stays open and receives data after a second prompt.
+
 ## Notes
 
 - The backend serves the locally built `packages/app/dist` when `OPENCODE_WEB_DIST` is set.
 - The web app bakes in `VITE_OPENCODE_LICENSE_URL` at build time and uses it for `POST /v1/licenses/activate` and `POST /v1/licenses/refresh`.
 - If no local web build is present, the server falls back to proxying `app.opencode.ai`.
-- Customers should add their own model/provider credentials inside the running app.
+- The Numeral container runs as root. If the workspace directory is owned by a different host user, ensure it has appropriate permissions (e.g. `chmod 755`) so the container can read and write.

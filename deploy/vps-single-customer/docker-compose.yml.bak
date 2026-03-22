@@ -1,0 +1,50 @@
+services:
+  numeral:
+    build:
+      context: ../..
+      dockerfile: deploy/vps-single-customer/Dockerfile
+    restart: unless-stopped
+    environment:
+      OPENCODE_SERVER_PASSWORD: ${OPENCODE_SERVER_PASSWORD}
+      OPENCODE_SERVER_USERNAME: ${OPENCODE_SERVER_USERNAME:-opencode}
+      OPENCODE_WEB_DIST: /app/packages/app/dist
+      XDG_DATA_HOME: /data/share
+      XDG_CONFIG_HOME: /data/config
+      XDG_STATE_HOME: /data/state
+      XDG_CACHE_HOME: /data/cache
+    working_dir: /workspace
+    command:
+      - bun
+      - run
+      - --preload
+      - "@opentui/solid/preload"
+      - /app/packages/opencode/src/index.ts
+      - serve
+      - --hostname
+      - 0.0.0.0
+      - --port
+      - "4096"
+    volumes:
+      - numeral-data:/data
+      - ${CUSTOMER_WORKSPACE}:/workspace
+
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    depends_on:
+      - numeral
+    environment:
+      NUMERAL_DOMAIN: ${NUMERAL_DOMAIN}
+      LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  numeral-data:
+  caddy-data:
+  caddy-config:
