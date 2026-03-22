@@ -103,7 +103,14 @@ export namespace Skill {
   }
 
   const scan = async (state: State, root: string, pattern: string, opts?: { dot?: boolean; scope?: string }) => {
-    if (!(await Filesystem.isDir(root))) return
+    // Preserve the old glob scope so we do not walk unrelated siblings such as
+    // .opencode/node_modules just to find SKILL.md files under skill roots.
+    const roots =
+      pattern === EXTERNAL_SKILL_PATTERN
+        ? [path.join(root, "skills")]
+        : pattern === OPENCODE_SKILL_PATTERN
+          ? [path.join(root, "skill"), path.join(root, "skills")]
+          : [root]
 
     // Skill roots may be symlinked into other tool-managed trees. Track the
     // physical directory so we can follow valid symlinked roots without
@@ -123,7 +130,7 @@ export namespace Skill {
         const next = rel ? path.join(rel, item.name) : item.name
 
         if (item.isFile()) {
-          if (Glob.match(pattern, next.replaceAll(path.sep, "/"))) await add(state, abs)
+          if (Glob.match(SKILL_PATTERN, next.replaceAll(path.sep, "/"))) await add(state, abs)
           continue
         }
 
@@ -140,7 +147,7 @@ export namespace Skill {
         if (!info) continue
 
         if (info.isFile()) {
-          if (Glob.match(pattern, next.replaceAll(path.sep, "/"))) await add(state, abs)
+          if (Glob.match(SKILL_PATTERN, next.replaceAll(path.sep, "/"))) await add(state, abs)
           continue
         }
 
@@ -150,10 +157,13 @@ export namespace Skill {
       }
     }
 
-    return walk(root, "").catch((error) => {
-      if (!opts?.scope) throw error
-      log.error(`failed to scan ${opts.scope} skills`, { dir: root, error })
-    })
+    for (const dir of roots) {
+      if (!(await Filesystem.isDir(dir))) continue
+      await walk(dir, "").catch((error) => {
+        if (!opts?.scope) throw error
+        log.error(`failed to scan ${opts.scope} skills`, { dir, error })
+      })
+    }
   }
 
   // TODO: Migrate to Effect
