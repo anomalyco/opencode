@@ -1785,7 +1785,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
   }
 
   async function idle(sessionID: SessionID) {
-    while (SessionStatus.get(sessionID).type !== "idle") {
+    while ((await SessionStatus.get(sessionID)).type !== "idle") {
       await Bun.sleep(50)
     }
   }
@@ -1872,7 +1872,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
     const lines = await Promise.all(
       kids.map(async (child) => {
-        const state = SessionStatus.get(child.id)
+        const state = await SessionStatus.get(child.id)
         if (state.type === "busy") return `- ${child.title} (\`${child.id}\`) - running`
         if (state.type === "retry") return `- ${child.title} (\`${child.id}\`) - retry ${state.attempt}`
 
