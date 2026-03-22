@@ -137,7 +137,6 @@ const ProjectTile = (props: {
         }}
         onClick={() => {
           props.setOpen(false)
-          props.setSuppressHover(true)
           if (props.selected()) {
             layout.sidebar.toggle()
             return
