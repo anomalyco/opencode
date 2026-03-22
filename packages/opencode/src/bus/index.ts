@@ -1,5 +1,5 @@
 import z from "zod"
-import { Effect, Layer, PubSub, ServiceMap, Stream } from "effect"
+import { Effect, Exit, Layer, PubSub, Scope, ServiceMap, Stream } from "effect"
 import { Log } from "../util/log"
 import { Instance } from "../project/instance"
 import { BusEvent } from "./bus-event"
@@ -34,6 +34,11 @@ export namespace Bus {
     ) => Effect.Effect<void>
     readonly subscribe: <D extends BusEvent.Definition>(def: D) => Stream.Stream<Payload<D>>
     readonly subscribeAll: () => Stream.Stream<Payload>
+    readonly subscribeCallback: <D extends BusEvent.Definition>(
+      def: D,
+      callback: (event: Payload<D>) => unknown,
+    ) => Effect.Effect<() => void>
+    readonly subscribeAllCallback: (callback: (event: any) => unknown) => Effect.Effect<() => void>
   }
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Bus") {}
@@ -64,14 +69,14 @@ export namespace Bus {
         }),
       )
 
-      function getOrCreate(state: State, type: string) {
+      function getOrCreate<D extends BusEvent.Definition>(state: State, def: D) {
         return Effect.gen(function* () {
-          let ps = state.typed.get(type)
+          let ps = state.typed.get(def.type)
           if (!ps) {
             ps = yield* PubSub.unbounded<Payload>()
-            state.typed.set(type, ps)
+            state.typed.set(def.type, ps)
           }
-          return ps
+          return ps as unknown as PubSub.PubSub<Payload<D>>
         })
       }
 
@@ -97,8 +102,8 @@ export namespace Bus {
         return Stream.unwrap(
           Effect.gen(function* () {
             const state = yield* InstanceState.get(cache)
-            const ps = yield* getOrCreate(state, def.type)
-            return Stream.fromPubSub(ps) as Stream.Stream<Payload<D>>
+            const ps = yield* getOrCreate(state, def)
+            return Stream.fromPubSub(ps)
           }),
         ).pipe(Stream.ensuring(Effect.sync(() => log.info("unsubscribing", { type: def.type }))))
       }
@@ -113,33 +118,66 @@ export namespace Bus {
         ).pipe(Stream.ensuring(Effect.sync(() => log.info("unsubscribing", { type: "*" }))))
       }
 
-      return Service.of({ publish, subscribe, subscribeAll })
+      function on<T>(pubsub: PubSub.PubSub<T>, type: string, callback: (event: T) => unknown) {
+        return Effect.gen(function* () {
+          log.info("subscribing", { type })
+          const scope = yield* Scope.make()
+          const subscription = yield* Scope.provide(scope)(PubSub.subscribe(pubsub))
+
+          yield* Scope.provide(scope)(
+            Stream.fromSubscription(subscription).pipe(
+              Stream.runForEach((msg) =>
+                Effect.tryPromise({
+                  try: () => Promise.resolve().then(() => callback(msg)),
+                  catch: (cause) => {
+                    log.error("subscriber failed", { type, cause })
+                    return cause
+                  },
+                }).pipe(Effect.ignore),
+              ),
+              Effect.forkScoped,
+            ),
+          )
+
+          return () => {
+            log.info("unsubscribing", { type })
+            Effect.runFork(Scope.close(scope, Exit.void))
+          }
+        })
+      }
+
+      const subscribeCallback = Effect.fn("Bus.subscribeCallback")(function* <D extends BusEvent.Definition>(
+        def: D,
+        callback: (event: Payload<D>) => unknown,
+      ) {
+        const state = yield* InstanceState.get(cache)
+        const ps = yield* getOrCreate(state, def)
+        return yield* on(ps, def.type, callback)
+      })
+
+      const subscribeAllCallback = Effect.fn("Bus.subscribeAllCallback")(function* (callback: (event: any) => unknown) {
+        const state = yield* InstanceState.get(cache)
+        return yield* on(state.wildcard, "*", callback)
+      })
+
+      return Service.of({ publish, subscribe, subscribeAll, subscribeCallback, subscribeAllCallback })
     }),
   )
 
-  const { runPromise, runCallback } = makeRuntime(Service, layer)
+  const { runPromise, runSync } = makeRuntime(Service, layer)
 
-  function forkStream<T>(streamFn: (svc: Interface) => Stream.Stream<T>, callback: (msg: T) => void) {
-    return runCallback((svc) =>
-      streamFn(svc).pipe(Stream.runForEach((msg) => Effect.sync(() => callback(msg)))),
-    )
-  }
-
-  export async function publish<D extends BusEvent.Definition>(
-    def: D,
-    properties: z.output<D["properties"]>,
-  ) {
+  export async function publish<D extends BusEvent.Definition>(def: D, properties: z.output<D["properties"]>) {
     return runPromise((svc) => svc.publish(def, properties))
   }
 
   export function subscribe<D extends BusEvent.Definition>(
     def: D,
-    callback: (event: { type: D["type"]; properties: z.infer<D["properties"]> }) => void,
+    callback: (event: { type: D["type"]; properties: z.infer<D["properties"]> }) => unknown,
   ) {
-    return forkStream((svc) => svc.subscribe(def), callback)
+    return runSync((svc) => svc.subscribeCallback(def, callback))
   }
 
-  export function subscribeAll(callback: (event: any) => void) {
-    return forkStream((svc) => svc.subscribeAll(), callback)
+  export function subscribeAll(callback: (event: any) => unknown) {
+    return runSync((svc) => svc.subscribeAllCallback(callback))
   }
 }

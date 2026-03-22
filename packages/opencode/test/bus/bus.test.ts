@@ -18,6 +18,21 @@ describe("Bus", () => {
   afterEach(() => Instance.disposeAll())
 
   describe("publish + subscribe", () => {
+    test("subscriber is live immediately after subscribe returns", async () => {
+      await using tmp = await tmpdir()
+      const received: number[] = []
+
+      await withInstance(tmp.path, async () => {
+        Bus.subscribe(TestEvent.Ping, (evt) => {
+          received.push(evt.properties.value)
+        })
+        await Bus.publish(TestEvent.Ping, { value: 42 })
+        await Bun.sleep(10)
+      })
+
+      expect(received).toEqual([42])
+    })
+
     test("subscriber receives matching events", async () => {
       await using tmp = await tmpdir()
       const received: number[] = []
@@ -86,6 +101,21 @@ describe("Bus", () => {
   })
 
   describe("subscribeAll", () => {
+    test("subscribeAll is live immediately after subscribe returns", async () => {
+      await using tmp = await tmpdir()
+      const received: string[] = []
+
+      await withInstance(tmp.path, async () => {
+        Bus.subscribeAll((evt) => {
+          received.push(evt.type)
+        })
+        await Bus.publish(TestEvent.Ping, { value: 1 })
+        await Bun.sleep(10)
+      })
+
+      expect(received).toEqual(["test.ping"])
+    })
+
     test("receives all event types", async () => {
       await using tmp = await tmpdir()
       const received: string[] = []
@@ -112,8 +142,12 @@ describe("Bus", () => {
       const b: number[] = []
 
       await withInstance(tmp.path, async () => {
-        Bus.subscribe(TestEvent.Ping, (evt) => a.push(evt.properties.value))
-        Bus.subscribe(TestEvent.Ping, (evt) => b.push(evt.properties.value))
+        Bus.subscribe(TestEvent.Ping, (evt) => {
+          a.push(evt.properties.value)
+        })
+        Bus.subscribe(TestEvent.Ping, (evt) => {
+          b.push(evt.properties.value)
+        })
         await Bun.sleep(10)
         await Bus.publish(TestEvent.Ping, { value: 7 })
         await Bun.sleep(10)
@@ -132,12 +166,16 @@ describe("Bus", () => {
       const receivedB: number[] = []
 
       await withInstance(tmpA.path, async () => {
-        Bus.subscribe(TestEvent.Ping, (evt) => receivedA.push(evt.properties.value))
+        Bus.subscribe(TestEvent.Ping, (evt) => {
+          receivedA.push(evt.properties.value)
+        })
         await Bun.sleep(10)
       })
 
       await withInstance(tmpB.path, async () => {
-        Bus.subscribe(TestEvent.Ping, (evt) => receivedB.push(evt.properties.value))
+        Bus.subscribe(TestEvent.Ping, (evt) => {
+          receivedB.push(evt.properties.value)
+        })
         await Bun.sleep(10)
       })
 

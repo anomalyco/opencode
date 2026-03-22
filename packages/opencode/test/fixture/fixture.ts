@@ -2,6 +2,8 @@ import { $ } from "bun"
 import * as fs from "fs/promises"
 import os from "os"
 import path from "path"
+import { Effect, FileSystem } from "effect"
+import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import type { Config } from "../../src/config/config"
 
 // Strip null bytes from paths (defensive fix for CI environment issues)
@@ -70,4 +72,37 @@ export async function tmpdir<T>(options?: TmpDirOptions<T>) {
     extra: extra as T,
   }
   return result
+}
+
+/** Effectful scoped tmpdir — cleaned up when the scope closes */
+export function tmpdirScoped(options?: { git?: boolean; config?: Partial<Config.Info> }) {
+  return Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+    const dir = yield* fs.makeTempDirectoryScoped({ prefix: "opencode-test-" })
+
+    function git(...args: string[]) {
+      return Effect.gen(function* () {
+        const handle = yield* spawner.spawn(ChildProcess.make("git", args, { cwd: dir }))
+        yield* handle.exitCode
+      })
+    }
+
+    if (options?.git) {
+      yield* git("init")
+      yield* git("config", "core.fsmonitor", "false")
+      yield* git("config", "user.email", "test@opencode.test")
+      yield* git("config", "user.name", "Test")
+      yield* git("commit", "--allow-empty", "-m", "root commit")
+    }
+
+    if (options?.config) {
+      yield* fs.writeFileString(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({ $schema: "https://opencode.ai/config.json", ...options.config }),
+      )
+    }
+
+    return dir
+  })
 }
