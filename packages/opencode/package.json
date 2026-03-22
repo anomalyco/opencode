@@ -36,7 +36,6 @@
   "devDependencies": {
     "@babel/core": "7.28.4",
     "@effect/language-service": "0.79.0",
-    "@octokit/webhooks-types": "7.6.1",
     "@opencode-ai/script": "workspace:*",
     "@parcel/watcher-darwin-arm64": "2.5.1",
     "@parcel/watcher-darwin-x64": "2.5.1",
@@ -60,13 +59,10 @@
     "drizzle-kit": "catalog:",
     "drizzle-orm": "catalog:",
     "typescript": "catalog:",
-    "vscode-languageserver-types": "3.17.5",
     "why-is-node-running": "3.2.2",
     "zod-to-json-schema": "3.24.5"
   },
   "dependencies": {
-    "@actions/core": "1.11.1",
-    "@actions/github": "6.0.1",
     "@agentclientprotocol/sdk": "0.14.1",
     "@ai-sdk/amazon-bedrock": "3.0.82",
     "@ai-sdk/anthropic": "2.0.65",
@@ -93,8 +89,6 @@
     "@hono/standard-validator": "0.1.5",
     "@hono/zod-validator": "catalog:",
     "@modelcontextprotocol/sdk": "1.25.2",
-    "@octokit/graphql": "9.0.2",
-    "@octokit/rest": "catalog:",
     "@openauthjs/openauth": "catalog:",
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/script": "workspace:*",
@@ -142,7 +136,6 @@
     "tree-sitter-bash": "0.25.0",
     "turndown": "7.2.0",
     "ulid": "catalog:",
-    "vscode-jsonrpc": "8.2.1",
     "web-tree-sitter": "0.25.10",
     "which": "6.0.1",
     "xdg-basedir": "5.1.0",
