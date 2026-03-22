@@ -3,8 +3,15 @@ import { Bus } from "@/bus"
 import { SessionID } from "@/session/schema"
 import z from "zod"
 
+const IdeContextFile = z.object({
+  path: z.string(),
+  selection: z.object({ startLine: z.number(), endLine: z.number() }).optional(),
+  active: z.boolean(),
+})
+
 export const TuiEvent = {
   PromptAppend: BusEvent.define("tui.prompt.append", z.object({ text: z.string() })),
+  ContextSync: BusEvent.define("tui.context.sync", z.object({ files: IdeContextFile.array() })),
   CommandExecute: BusEvent.define(
     "tui.command.execute",
     z.object({

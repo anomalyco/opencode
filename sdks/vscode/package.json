@@ -20,9 +20,29 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onCommand:opencode.openTerminal",
+    "onCommand:opencode.openNewTerminal",
+    "onCommand:opencode.syncContext",
+    "onCommand:opencode.addFilepathToTerminal"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
+    "configuration": {
+      "title": "opencode",
+      "properties": {
+        "opencode.context.autoSync": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically sync file context to opencode when files or selections change. Enabled by default."
+        },
+        "opencode.context.includeInactiveFiles": {
+          "type": "boolean",
+          "default": true,
+          "description": "Include open inactive files in the IDE context. Enabled by default."
+        }
+      }
+    },
     "commands": [
       {
         "command": "opencode.openTerminal",
@@ -43,6 +63,10 @@
       {
         "command": "opencode.addFilepathToTerminal",
         "title": "Add Filepath to Terminal"
+      },
+      {
+        "command": "opencode.syncContext",
+        "title": "Sync IDE Context"
       }
     ],
     "menus": {
@@ -71,8 +95,8 @@
         "linux": "ctrl+shift+escape"
       },
       {
-        "command": "opencode.addFilepathToTerminal",
-        "title": "opencode: Insert At-Mentioned",
+        "command": "opencode.syncContext",
+        "title": "Sync IDE Context",
         "key": "cmd+alt+k",
         "mac": "cmd+alt+k",
         "win": "ctrl+alt+K",

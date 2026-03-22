@@ -35,6 +35,7 @@ import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
+import { useIdeContext } from "../../context/ide-context"
 
 export type PromptProps = {
   sessionID?: string
@@ -72,6 +73,24 @@ export function Prompt(props: PromptProps) {
   const sync = useSync()
   const dialog = useDialog()
   const toast = useToast()
+  const ideContext = useIdeContext()
+
+  const ideContextBar = createMemo(() => {
+    const files = ideContext.files()
+    if (files.length === 0) return ""
+    const active = files.find((f) => f.active)
+    const others = files.filter((f) => !f.active).length
+    if (active) {
+      const name = path.basename(active.path)
+      const sel = active.selection ? `#L${active.selection.startLine}-${active.selection.endLine}` : ""
+      const more = others > 0 ? ` · ${others} more` : ""
+      return `📄 ${name}${sel}${more}`
+    }
+    const first = files[0]
+    const name = path.basename(first.path)
+    const sel = first.selection ? `#L${first.selection.startLine}-${first.selection.endLine}` : ""
+    return `📄 ${name}${sel}`
+  })
   const status = createMemo(() => sync.data.session_status?.[props.sessionID ?? ""] ?? { type: "idle" })
   const history = usePromptHistory()
   const stash = usePromptStash()
@@ -832,6 +851,11 @@ export function Prompt(props: PromptProps) {
             backgroundColor={theme.backgroundElement}
             flexGrow={1}
           >
+            <Show when={ideContext.files().length > 0}>
+              <box flexShrink={0} paddingBottom={1}>
+                <text fg={theme.text}>{ideContextBar()}</text>
+              </box>
+            </Show>
             <textarea
               placeholder={placeholderText()}
               textColor={keybind.leader ? theme.textMuted : theme.text}

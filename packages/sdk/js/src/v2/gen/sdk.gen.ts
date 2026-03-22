@@ -21,6 +21,7 @@ import type {
   ConfigUpdateResponses,
   EventSubscribeResponses,
   EventTuiCommandExecute,
+  EventTuiContextSync,
   EventTuiPromptAppend,
   EventTuiSessionSelect,
   EventTuiToastShow,
@@ -158,6 +159,8 @@ import type {
   TuiAppendPromptErrors,
   TuiAppendPromptResponses,
   TuiClearPromptResponses,
+  TuiContextSyncErrors,
+  TuiContextSyncResponses,
   TuiControlNextResponses,
   TuiControlResponseResponses,
   TuiExecuteCommandErrors,
@@ -3260,6 +3263,50 @@ export class Tui extends HeyApiClient {
   }
 
   /**
+   * Sync IDE context
+   *
+   * Sync IDE context from VSCode or other editors
+   */
+  public contextSync<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      files?: Array<{
+        path: string
+        selection?: {
+          startLine: number
+          endLine: number
+        }
+        active: boolean
+      }>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "files" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<TuiContextSyncResponses, TuiContextSyncErrors, ThrowOnError>({
+      url: "/tui/context/sync",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
    * Open help dialog
    *
    * Open the help dialog in the TUI to display user assistance information.
@@ -3528,7 +3575,12 @@ export class Tui extends HeyApiClient {
     parameters?: {
       directory?: string
       workspace?: string
-      body?: EventTuiPromptAppend | EventTuiCommandExecute | EventTuiToastShow | EventTuiSessionSelect
+      body?:
+        | EventTuiPromptAppend
+        | EventTuiContextSync
+        | EventTuiCommandExecute
+        | EventTuiToastShow
+        | EventTuiSessionSelect
     },
     options?: Options<never, ThrowOnError>,
   ) {

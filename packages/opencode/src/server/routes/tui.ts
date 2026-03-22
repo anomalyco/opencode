@@ -102,6 +102,30 @@ export const TuiRoutes = lazy(() =>
       },
     )
     .post(
+      "/context/sync",
+      describeRoute({
+        summary: "Sync IDE context",
+        description: "Sync IDE context from VSCode or other editors",
+        operationId: "tui.contextSync",
+        responses: {
+          200: {
+            description: "Context synced successfully",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator("json", TuiEvent.ContextSync.properties),
+      async (c) => {
+        await Bus.publish(TuiEvent.ContextSync, c.req.valid("json"))
+        return c.json(true)
+      },
+    )
+    .post(
       "/open-help",
       describeRoute({
         summary: "Open help dialog",

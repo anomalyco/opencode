@@ -723,6 +723,20 @@ export type EventTuiPromptAppend = {
   }
 }
 
+export type EventTuiContextSync = {
+  type: "tui.context.sync"
+  properties: {
+    files: Array<{
+      path: string
+      selection?: {
+        startLine: number
+        endLine: number
+      }
+      active: boolean
+    }>
+  }
+}
+
 export type EventTuiCommandExecute = {
   type: "tui.command.execute"
   properties: {
@@ -983,6 +997,7 @@ export type Event =
   | EventFileWatcherUpdated
   | EventTodoUpdated
   | EventTuiPromptAppend
+  | EventTuiContextSync
   | EventTuiCommandExecute
   | EventTuiToastShow
   | EventTuiSessionSelect
@@ -4518,6 +4533,43 @@ export type TuiAppendPromptResponses = {
 
 export type TuiAppendPromptResponse = TuiAppendPromptResponses[keyof TuiAppendPromptResponses]
 
+export type TuiContextSyncData = {
+  body?: {
+    files: Array<{
+      path: string
+      selection?: {
+        startLine: number
+        endLine: number
+      }
+      active: boolean
+    }>
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/tui/context/sync"
+}
+
+export type TuiContextSyncErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type TuiContextSyncError = TuiContextSyncErrors[keyof TuiContextSyncErrors]
+
+export type TuiContextSyncResponses = {
+  /**
+   * Context synced successfully
+   */
+  200: boolean
+}
+
+export type TuiContextSyncResponse = TuiContextSyncResponses[keyof TuiContextSyncResponses]
+
 export type TuiOpenHelpData = {
   body?: never
   path?: never
@@ -4690,7 +4742,7 @@ export type TuiShowToastResponses = {
 export type TuiShowToastResponse = TuiShowToastResponses[keyof TuiShowToastResponses]
 
 export type TuiPublishData = {
-  body?: EventTuiPromptAppend | EventTuiCommandExecute | EventTuiToastShow | EventTuiSessionSelect
+  body?: EventTuiPromptAppend | EventTuiContextSync | EventTuiCommandExecute | EventTuiToastShow | EventTuiSessionSelect
   path?: never
   query?: {
     directory?: string
