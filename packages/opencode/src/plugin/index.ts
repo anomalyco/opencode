@@ -107,6 +107,9 @@ export namespace Plugin {
                 if (!plugin) continue
               }
 
+              // Prevent duplicate initialization when plugins export the same function
+              // as both a named export and default export (e.g., `export const X` and `export default X`).
+              // Object.entries(mod) would return both entries pointing to the same function reference.
               await import(plugin)
                 .then(async (mod) => {
                   const seen = new Set<PluginInstance>()
