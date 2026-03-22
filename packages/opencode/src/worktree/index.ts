@@ -14,7 +14,9 @@ import { Process } from "../util/process"
 import { git } from "../util/git"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
-import { Effect, Layer, ServiceMap } from "effect"
+import { Effect, FileSystem, Layer, Path, ServiceMap, Stream } from "effect"
+import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
+import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node"
 import { makeRunPromise } from "@/effect/run-service"
 
 export namespace Worktree {
@@ -350,21 +352,60 @@ export namespace Worktree {
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Worktree") {}
 
-  export const layer = Layer.effect(
+  type GitResult = { code: number; text: string; stderr: string }
+
+  export const layer: Layer.Layer<
+    Service,
+    never,
+    FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner
+  > = Layer.effect(
     Service,
     Effect.gen(function* () {
+      const fsys = yield* FileSystem.FileSystem
+      const pathSvc = yield* Path.Path
+      const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+
+      const gitRun = Effect.fnUntraced(
+        function* (args: string[], opts?: { cwd?: string }) {
+          const handle = yield* spawner.spawn(ChildProcess.make("git", args, { cwd: opts?.cwd, extendEnv: true }))
+          const [text, stderr] = yield* Effect.all(
+            [Stream.mkString(Stream.decodeText(handle.stdout)), Stream.mkString(Stream.decodeText(handle.stderr))],
+            { concurrency: 2 },
+          )
+          const code = yield* handle.exitCode
+          return { code, text, stderr } satisfies GitResult
+        },
+        Effect.scoped,
+        Effect.catch(() => Effect.succeed({ code: 1, text: "", stderr: "" } satisfies GitResult)),
+      )
+
+      const candidateEffect = Effect.fn("Worktree.candidate")(function* (root: string, base?: string) {
+        for (const attempt of Array.from({ length: 26 }, (_, i) => i)) {
+          const name = base ? (attempt === 0 ? base : `${base}-${randomName()}`) : randomName()
+          const branch = `opencode/${name}`
+          const directory = pathSvc.join(root, name)
+
+          if (yield* fsys.exists(directory).pipe(Effect.orDie)) continue
+
+          const ref = `refs/heads/${branch}`
+          const branchCheck = yield* gitRun(["show-ref", "--verify", "--quiet", ref], { cwd: Instance.worktree })
+          if (branchCheck.code === 0) continue
+
+          return Info.parse({ name, branch, directory })
+        }
+        throw new NameGenerationFailedError({ message: "Failed to generate a unique worktree name" })
+      })
+
       const makeWorktreeInfoFn = Effect.fn("Worktree.makeWorktreeInfo")(function* (name?: string) {
-        return yield* Effect.promise(async () => {
-          if (Instance.project.vcs !== "git") {
-            throw new NotGitError({ message: "Worktrees are only supported for git projects" })
-          }
+        if (Instance.project.vcs !== "git") {
+          throw new NotGitError({ message: "Worktrees are only supported for git projects" })
+        }
 
-          const root = path.join(Global.Path.data, "worktree", Instance.project.id)
-          await fs.mkdir(root, { recursive: true })
+        const root = pathSvc.join(Global.Path.data, "worktree", Instance.project.id)
+        yield* fsys.makeDirectory(root, { recursive: true }).pipe(Effect.orDie)
 
-          const base = name ? slug(name) : ""
-          return candidate(root, base || undefined)
-        })
+        const base = name ? slug(name) : ""
+        return yield* candidateEffect(root, base || undefined)
       })
 
       const createFromInfoFn = Effect.fn("Worktree.createFromInfo")(function* (
@@ -452,11 +493,11 @@ export namespace Worktree {
       })
 
       const removeFn = Effect.fn("Worktree.remove")(function* (input: RemoveInput) {
-        return yield* Effect.promise(async () => {
-          if (Instance.project.vcs !== "git") {
-            throw new NotGitError({ message: "Worktrees are only supported for git projects" })
-          }
+        if (Instance.project.vcs !== "git") {
+          throw new NotGitError({ message: "Worktrees are only supported for git projects" })
+        }
 
+        return yield* Effect.promise(async () => {
           const directory = await canonical(input.directory)
           const locate = async (stdout: Uint8Array | undefined) => {
             const lines = outputText(stdout)
@@ -552,11 +593,11 @@ export namespace Worktree {
       })
 
       const resetFn = Effect.fn("Worktree.reset")(function* (input: ResetInput) {
-        return yield* Effect.promise(async () => {
-          if (Instance.project.vcs !== "git") {
-            throw new NotGitError({ message: "Worktrees are only supported for git projects" })
-          }
+        if (Instance.project.vcs !== "git") {
+          throw new NotGitError({ message: "Worktrees are only supported for git projects" })
+        }
 
+        return yield* Effect.promise(async () => {
           const directory = await canonical(input.directory)
           const primary = await canonical(Instance.worktree)
           if (directory === primary) {
@@ -711,7 +752,12 @@ export namespace Worktree {
     }),
   )
 
-  const runPromise = makeRunPromise(Service, layer)
+  const defaultLayer = layer.pipe(
+    Layer.provide(NodeChildProcessSpawner.layer),
+    Layer.provide(NodeFileSystem.layer),
+    Layer.provide(NodePath.layer),
+  )
+  const runPromise = makeRunPromise(Service, defaultLayer)
 
   export async function makeWorktreeInfo(name?: string) {
     return runPromise((svc) => svc.makeWorktreeInfo(name))
