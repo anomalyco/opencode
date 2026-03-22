@@ -129,7 +129,7 @@ describe("Format", () => {
     try {
       await withServices(tmp.path, Format.layer, async (rt) => {
         await rt.runPromise(Format.Service.use((s) => s.init()))
-        await Bus.publish(File.Event.Edited, { file })
+        await rt.runPromise(Format.Service.use((s) => s.file(file)))
       })
     } finally {
       Formatter.gofmt.extensions = one.extensions
@@ -164,7 +164,7 @@ describe("Format", () => {
 
     await withServices(tmp.path, Format.layer, async (rt) => {
       await rt.runPromise(Format.Service.use((s) => s.init()))
-      await Bus.publish(File.Event.Edited, { file })
+      await rt.runPromise(Format.Service.use((s) => s.file(file)))
     })
 
     expect(await Bun.file(file).text()).toBe("xAB")
