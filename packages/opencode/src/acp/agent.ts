@@ -43,7 +43,16 @@ import { Config } from "@/config/config"
 import { Todo } from "@/session/todo"
 import { z } from "zod"
 import { LoadAPIKeyError } from "ai"
-import type { AssistantMessage, Event, OpencodeClient, SessionMessageResponse, ToolPart } from "@opencode-ai/sdk/v2"
+import type {
+  AssistantMessage,
+  Event,
+  OpencodeClient,
+  QuestionAnswer,
+  QuestionInfo,
+  QuestionRequest,
+  SessionMessageResponse,
+  ToolPart,
+} from "@opencode-ai/sdk/v2"
 import { applyPatch } from "diff"
 
 type ModeOption = { id: string; name: string; description?: string }
@@ -140,7 +149,7 @@ export namespace ACP {
     private eventStarted = false
     private bashSnapshots = new Map<string, string>()
     private toolStarts = new Set<string>()
-    private permissionQueues = new Map<string, Promise<void>>()
+    private promptQueues = new Map<string, Promise<void>>()
     private permissionOptions: PermissionOption[] = [
       { optionId: "once", kind: "allow_once", name: "Allow once" },
       { optionId: "always", kind: "allow_always", name: "Always allow" },
@@ -188,7 +197,7 @@ export namespace ACP {
           const session = this.sessionManager.tryGet(permission.sessionID)
           if (!session) return
 
-          const prev = this.permissionQueues.get(permission.sessionID) ?? Promise.resolve()
+          const prev = this.promptQueues.get(permission.sessionID) ?? Promise.resolve()
           const next = prev
             .then(async () => {
               const directory = session.cwd
@@ -256,11 +265,62 @@ export namespace ACP {
               log.error("failed to handle permission", { error, permissionID: permission.id })
             })
             .finally(() => {
-              if (this.permissionQueues.get(permission.sessionID) === next) {
-                this.permissionQueues.delete(permission.sessionID)
+              if (this.promptQueues.get(permission.sessionID) === next) {
+                this.promptQueues.delete(permission.sessionID)
               }
             })
-          this.permissionQueues.set(permission.sessionID, next)
+          this.promptQueues.set(permission.sessionID, next)
+          return
+        }
+
+        case "question.asked": {
+          const question = event.properties
+          const session = this.sessionManager.tryGet(question.sessionID)
+          if (!session) return
+
+          const prev = this.promptQueues.get(question.sessionID) ?? Promise.resolve()
+          const next = prev
+            .then(async () => {
+              const directory = session.cwd
+              const reject = () =>
+                this.sdk.question.reject({ requestID: question.id, directory }).catch((error) => {
+                  log.error("failed to reject question", {
+                    error,
+                    requestID: question.id,
+                    sessionID: question.sessionID,
+                  })
+                })
+
+              const answers = await requestQuestion(this.connection, question)
+              if (!answers) {
+                await reject()
+                return
+              }
+
+              await this.sdk.question
+                .reply({
+                  requestID: question.id,
+                  answers,
+                  directory,
+                })
+                .catch(async (error) => {
+                  log.error("failed to reply to question", {
+                    error,
+                    requestID: question.id,
+                    sessionID: question.sessionID,
+                  })
+                  await reject()
+                })
+            })
+            .catch((error) => {
+              log.error("failed to handle question", { error, requestID: question.id, sessionID: question.sessionID })
+            })
+            .finally(() => {
+              if (this.promptQueues.get(question.sessionID) === next) {
+                this.promptQueues.delete(question.sessionID)
+              }
+            })
+          this.promptQueues.set(question.sessionID, next)
           return
         }
 
@@ -1525,6 +1585,120 @@ export namespace ACP {
       default:
         return []
     }
+  }
+
+  async function requestQuestion(connection: AgentSideConnection, request: QuestionRequest) {
+    const answers: QuestionAnswer[] = []
+
+    for (const [i, item] of request.questions.entries()) {
+      const opts = toQuestionOptions(item)
+      if (!opts) {
+        log.error("failed to map question to ACP", {
+          requestID: request.id,
+          sessionID: request.sessionID,
+          index: i,
+        })
+        return
+      }
+
+      const res = await connection
+        .requestPermission({
+          sessionId: request.sessionID,
+          toolCall: {
+            toolCallId: toQuestionToolCallID(request, i),
+            status: "pending",
+            title: item.header,
+            kind: "other",
+            rawInput: {
+              requestID: request.id,
+              index: i,
+              total: request.questions.length,
+              question: item,
+              tool: request.tool,
+            },
+            content: [
+              {
+                type: "content",
+                content: {
+                  type: "text",
+                  text: toQuestionText(item, i, request.questions.length),
+                },
+              },
+            ],
+          },
+          options: opts,
+        })
+        .catch((error) => {
+          log.error("failed to request question from ACP", {
+            error,
+            requestID: request.id,
+            sessionID: request.sessionID,
+            index: i,
+          })
+          return undefined
+        })
+
+      if (!res) return
+      if (res.outcome.outcome !== "selected") return
+      if (res.outcome.optionId === "reject") return
+
+      const answer = toQuestionAnswer(item, res.outcome.optionId)
+      if (!answer) {
+        log.error("failed to map ACP answer to question reply", {
+          requestID: request.id,
+          sessionID: request.sessionID,
+          index: i,
+          optionID: res.outcome.optionId,
+        })
+        return
+      }
+
+      answers.push(answer)
+    }
+
+    return answers
+  }
+
+  function toQuestionOptions(item: QuestionInfo) {
+    if (item.multiple === true) return
+    if (item.options.length === 0) return
+    return [
+      ...item.options.map((opt, i) => ({
+        optionId: String(i),
+        kind: "allow_once" as const,
+        name: opt.label,
+      })),
+      {
+        optionId: "reject",
+        kind: "reject_once" as const,
+        name: "Dismiss",
+      },
+    ]
+  }
+
+  function toQuestionToolCallID(request: QuestionRequest, i: number) {
+    const id = request.tool?.callID ?? request.id
+    if (request.questions.length === 1) return id
+    return `${id}:${i}`
+  }
+
+  function toQuestionAnswer(item: QuestionInfo, id: string): QuestionAnswer | undefined {
+    const index = Number(id)
+    if (!Number.isInteger(index)) return
+    const opt = item.options[index]
+    if (!opt) return
+    return [opt.label]
+  }
+
+  function toQuestionText(item: QuestionInfo, i: number, total: number) {
+    return [
+      total > 1 ? `Question ${i + 1} of ${total}` : undefined,
+      item.question,
+      ...item.options.map((opt, index) => `${index + 1}. ${opt.label}: ${opt.description}`),
+      item.custom === false ? undefined : "Custom answers are not supported in this ACP prompt.",
+    ]
+      .filter((item): item is string => !!item)
+      .join("\n")
   }
 
   async function defaultModel(config: ACPConfig, cwd?: string): Promise<{ providerID: ProviderID; modelID: ModelID }> {

@@ -198,7 +198,15 @@ function createFakeAgent() {
       },
     },
     permission: {
-      respond: async () => {
+      reply: async () => {
+        return { data: true }
+      },
+    },
+    question: {
+      reply: async () => {
+        return { data: true }
+      },
+      reject: async () => {
         return { data: true }
       },
     },
@@ -400,6 +408,223 @@ describe("acp.agent event subscription", () => {
         await new Promise((r) => setTimeout(r, 20))
 
         expect(permissionReplies).toContain("perm_1")
+
+        stop()
+      },
+    })
+  })
+
+  test("question.asked events are handled and replied", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const questionReplies: Array<{ requestID: string; answers: string[][] }> = []
+        const prompts: RequestPermissionParams[] = []
+        const { agent, controller, stop, sdk, connection } = createFakeAgent()
+        connection.requestPermission = async (params: RequestPermissionParams) => {
+          prompts.push(params)
+          return { outcome: { outcome: "selected", optionId: prompts.length === 1 ? "1" : "0" } } as RequestPermissionResult
+        }
+        sdk.question.reply = async (params: any) => {
+          questionReplies.push({
+            requestID: params.requestID,
+            answers: params.answers,
+          })
+          return { data: true }
+        }
+        const cwd = "/tmp/opencode-acp-test"
+
+        const sessionA = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "question.asked",
+            properties: {
+              id: "question_1",
+              sessionID: sessionA,
+              questions: [
+                {
+                  header: "First",
+                  question: "Pick a first option",
+                  options: [
+                    { label: "Alpha", description: "Pick alpha" },
+                    { label: "Beta", description: "Pick beta" },
+                  ],
+                },
+                {
+                  header: "Second",
+                  question: "Pick a second option",
+                  options: [
+                    { label: "Gamma", description: "Pick gamma" },
+                    { label: "Delta", description: "Pick delta" },
+                  ],
+                  custom: false,
+                },
+              ],
+              tool: {
+                messageID: "msg_question",
+                callID: "call_question",
+              },
+            },
+          },
+        } as any)
+
+        await new Promise((r) => setTimeout(r, 20))
+
+        expect(prompts).toHaveLength(2)
+        expect(prompts[0]?.toolCall.toolCallId).toBe("call_question:0")
+        expect(prompts[1]?.toolCall.toolCallId).toBe("call_question:1")
+        expect(questionReplies).toEqual([
+          {
+            requestID: "question_1",
+            answers: [["Beta"], ["Gamma"]],
+          },
+        ])
+
+        stop()
+      },
+    })
+  })
+
+  test("unsupported question.asked events are rejected", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const questionRejects: string[] = []
+        const { agent, controller, stop, sdk } = createFakeAgent()
+        sdk.question.reject = async (params: any) => {
+          questionRejects.push(params.requestID)
+          return { data: true }
+        }
+        const cwd = "/tmp/opencode-acp-test"
+
+        const sessionA = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "question.asked",
+            properties: {
+              id: "question_unsupported",
+              sessionID: sessionA,
+              questions: [
+                {
+                  header: "Multi",
+                  question: "Pick more than one option",
+                  options: [
+                    { label: "Alpha", description: "Pick alpha" },
+                    { label: "Beta", description: "Pick beta" },
+                  ],
+                  multiple: true,
+                },
+              ],
+            },
+          },
+        } as any)
+
+        await new Promise((r) => setTimeout(r, 20))
+
+        expect(questionRejects).toContain("question_unsupported")
+
+        stop()
+      },
+    })
+  })
+
+  test("question prompt waits behind an existing permission prompt in the same session", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        let open: (() => void) | undefined
+        const wait = new Promise<void>((resolve) => {
+          open = resolve
+        })
+        const calls: string[] = []
+        const permissionReplies: string[] = []
+        const questionReplies: Array<{ requestID: string; answers: string[][] }> = []
+        const { agent, controller, stop, sdk, connection } = createFakeAgent()
+
+        connection.requestPermission = async (params: RequestPermissionParams) => {
+          calls.push(params.toolCall.toolCallId)
+          if (params.toolCall.toolCallId === "perm_queued") {
+            await wait
+            return { outcome: { outcome: "selected", optionId: "once" } } as RequestPermissionResult
+          }
+          return { outcome: { outcome: "selected", optionId: "0" } } as RequestPermissionResult
+        }
+
+        sdk.permission.reply = async (params: any) => {
+          permissionReplies.push(params.requestID)
+          return { data: true }
+        }
+
+        sdk.question.reply = async (params: any) => {
+          questionReplies.push({
+            requestID: params.requestID,
+            answers: params.answers,
+          })
+          return { data: true }
+        }
+
+        const cwd = "/tmp/opencode-acp-test"
+        const sessionA = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "permission.asked",
+            properties: {
+              id: "perm_queued",
+              sessionID: sessionA,
+              permission: "bash",
+              patterns: ["*"],
+              metadata: {},
+              always: [],
+            },
+          },
+        } as any)
+
+        await new Promise((r) => setTimeout(r, 10))
+
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "question.asked",
+            properties: {
+              id: "question_after_permission",
+              sessionID: sessionA,
+              questions: [
+                {
+                  header: "After",
+                  question: "Pick an option after permission",
+                  options: [{ label: "Alpha", description: "Pick alpha" }],
+                },
+              ],
+            },
+          },
+        } as any)
+
+        await new Promise((r) => setTimeout(r, 20))
+
+        expect(calls).toEqual(["perm_queued"])
+        expect(permissionReplies).not.toContain("perm_queued")
+        expect(questionReplies).toHaveLength(0)
+
+        open!()
+        await new Promise((r) => setTimeout(r, 30))
+
+        expect(calls).toEqual(["perm_queued", "question_after_permission"])
+        expect(permissionReplies).toContain("perm_queued")
+        expect(questionReplies).toEqual([
+          {
+            requestID: "question_after_permission",
+            answers: [["Alpha"]],
+          },
+        ])
 
         stop()
       },
