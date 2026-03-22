@@ -160,10 +160,8 @@ export namespace Plugin {
         const state = yield* InstanceState.get(cache)
         yield* Effect.promise(async () => {
           for (const hook of state.hooks) {
-            const fn = hook[name]
+            const fn = hook[name] as any
             if (!fn) continue
-            // @ts-expect-error correlated union — TS can't prove Input/Output match hook[Name]
-            // see https://github.com/microsoft/TypeScript/issues/30581
             await fn(input, output)
           }
         })
