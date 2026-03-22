@@ -31,7 +31,9 @@ export namespace Shell {
       if (!opts?.exited?.()) {
         process.kill(-pid, "SIGKILL")
       }
-    } catch (_e) {
+    } catch (e) {
+      // Log error for debugging purposes
+      console.error(`Failed to kill process group ${pid}:`, e)
       proc.kill("SIGTERM")
       await sleep(SIGKILL_TIMEOUT_MS)
       if (!opts?.exited?.()) {
