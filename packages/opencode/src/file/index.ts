@@ -598,7 +598,12 @@ export const layer = Layer.effect(
         if (exclude.includes(entry.name)) continue
         const absolute = path.join(resolved, entry.name)
         const file = path.relative(ctx.directory, absolute)
-        const type = entry.type === "directory" ? "directory" : "file"
+        const type =
+          entry.type === "directory"
+            ? "directory"
+            : entry.type === "symlink" && (yield* appFs.isDir(absolute))
+              ? "directory"
+              : "file"
         nodes.push({
           name: entry.name,
           path: file,
