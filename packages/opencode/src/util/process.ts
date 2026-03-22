@@ -33,11 +33,30 @@ export namespace Process {
   }
 
   export class RunFailedError extends Error {
+    /**
+     * The command that was executed.
+     */
     readonly cmd: string[]
+    /**
+     * The exit code of the process.
+     */
     readonly code: number
+    /**
+     * The stdout output as a Buffer.
+     */
     readonly stdout: Buffer
+    /**
+     * The stderr output as a Buffer.
+     */
     readonly stderr: Buffer
 
+    /**
+     * Creates a new RunFailedError.
+     * @param cmd - The command array that was executed
+     * @param code - The exit code
+     * @param stdout - The stdout buffer
+     * @param stderr - The stderr buffer
+     */
     constructor(cmd: string[], code: number, stdout: Buffer, stderr: Buffer) {
       const text = stderr.toString().trim()
       super(
@@ -45,7 +64,7 @@ export namespace Process {
           ? `Command failed with code ${code}: ${cmd.join(" ")}\n${text}`
           : `Command failed with code ${code}: ${cmd.join(" ")}`,
       )
-      this.name = "ProcessRunFailedError"
+      this.name = "RunFailedError"
       this.cmd = [...cmd]
       this.code = code
       this.stdout = stdout
