@@ -13,9 +13,11 @@ mod windows;
 
 use crate::cli::CommandChild;
 use futures::{FutureExt, TryFutureExt};
+use serde_json::json;
 use std::{
     collections::VecDeque,
     env,
+    fs,
     future::Future,
     net::TcpListener,
     path::PathBuf,
@@ -23,7 +25,9 @@ use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
-use tauri::{AppHandle, Emitter, Listener, Manager, RunEvent, State, ipc::Channel};
+use tauri::{
+    AppHandle, Emitter, Listener, Manager, RunEvent, State, ipc::Channel, path::BaseDirectory,
+};
 #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
 use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_specta::Event;
@@ -35,6 +39,17 @@ use tokio::{
 use crate::cli::{sqlite_migration::SqliteMigrationProgress, sync_cli};
 use crate::constants::*;
 use crate::windows::{LoadingWindow, MainWindow};
+
+#[derive(Clone, serde::Serialize, specta::Type, Debug)]
+#[serde(rename_all = "camelCase")]
+struct ConfigFile {
+    id: String,
+    label: String,
+    path: String,
+    exists: bool,
+    scope: String,
+    kind: String,
+}
 
 #[derive(Clone, serde::Serialize, specta::Type, Debug)]
 struct ServerReadyData {
@@ -78,6 +93,148 @@ struct LogState(Arc<Mutex<VecDeque<String>>>);
 #[derive(Clone, Default)]
 struct InitialPathState(Arc<Mutex<Option<String>>>);
 
+const BRIDGE_FILE: &str = "openclaw-bridge.json";
+
+fn config_root() -> Option<PathBuf> {
+    if let Ok(dir) = env::var("XDG_CONFIG_HOME") {
+        if !dir.is_empty() {
+            return Some(PathBuf::from(dir).join("opencode"));
+        }
+    }
+
+    env::var("HOME")
+        .ok()
+        .map(|dir| PathBuf::from(dir).join(".config").join("opencode"))
+}
+
+fn push_config_file(list: &mut Vec<ConfigFile>, id: &str, label: &str, path: PathBuf, scope: &str, kind: &str) {
+    let exists = path.is_file();
+    list.push(ConfigFile {
+        id: id.to_string(),
+        label: label.to_string(),
+        path: path.to_string_lossy().to_string(),
+        exists,
+        scope: scope.to_string(),
+        kind: kind.to_string(),
+    });
+}
+
+#[tauri::command]
+#[specta::specta]
+fn list_config_files(directory: Option<String>) -> Vec<ConfigFile> {
+    let mut list = Vec::new();
+
+    if let Some(root) = config_root() {
+        push_config_file(
+            &mut list,
+            "global-opencode-jsonc",
+            "Global opencode.jsonc",
+            root.join("opencode.jsonc"),
+            "global",
+            "config",
+        );
+        push_config_file(
+            &mut list,
+            "global-opencode-json",
+            "Global opencode.json",
+            root.join("opencode.json"),
+            "global",
+            "config",
+        );
+        push_config_file(
+            &mut list,
+            "global-tui-jsonc",
+            "Global tui.jsonc",
+            root.join("tui.jsonc"),
+            "global",
+            "tui",
+        );
+        push_config_file(
+            &mut list,
+            "global-tui-json",
+            "Global tui.json",
+            root.join("tui.json"),
+            "global",
+            "tui",
+        );
+    }
+
+    if let Some(dir) = directory {
+        let root = PathBuf::from(dir);
+        push_config_file(
+            &mut list,
+            "project-opencode-jsonc",
+            "Project opencode.jsonc",
+            root.join("opencode.jsonc"),
+            "project",
+            "config",
+        );
+        push_config_file(
+            &mut list,
+            "project-opencode-json",
+            "Project opencode.json",
+            root.join("opencode.json"),
+            "project",
+            "config",
+        );
+        push_config_file(
+            &mut list,
+            "project-tui-jsonc",
+            "Project tui.jsonc",
+            root.join("tui.jsonc"),
+            "project",
+            "tui",
+        );
+        push_config_file(
+            &mut list,
+            "project-tui-json",
+            "Project tui.json",
+            root.join("tui.json"),
+            "project",
+            "tui",
+        );
+        push_config_file(
+            &mut list,
+            "project-dir-opencode-jsonc",
+            ".opencode/opencode.jsonc",
+            root.join(".opencode").join("opencode.jsonc"),
+            "project",
+            "config_dir",
+        );
+        push_config_file(
+            &mut list,
+            "project-dir-opencode-json",
+            ".opencode/opencode.json",
+            root.join(".opencode").join("opencode.json"),
+            "project",
+            "config_dir",
+        );
+    }
+
+    list
+}
+
+#[tauri::command]
+#[specta::specta]
+fn read_config_file(path: String) -> Result<Option<String>, String> {
+    match fs::read_to_string(&path) {
+        Ok(text) => Ok(Some(text)),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(err) => Err(format!("Failed to read file: {err}")),
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+fn write_config_file(path: String, content: String) -> Result<(), String> {
+    let Some(parent) = PathBuf::from(&path).parent().map(PathBuf::from) else {
+        return Err("Failed to resolve parent directory".to_string());
+    };
+
+    fs::create_dir_all(&parent).map_err(|err| format!("Failed to create parent directory: {err}"))?;
+    fs::write(path, content).map_err(|err| format!("Failed to write file: {err}"))
+}
+
 fn resolve_path_from_args(args: &[String], cwd: &str) -> Option<String> {
     let path_arg = args.get(1)?;
     if path_arg.starts_with('-') {
@@ -95,6 +252,55 @@ fn resolve_path_from_args(args: &[String], cwd: &str) -> Option<String> {
         absolute.canonicalize().ok()?.to_str().map(String::from)
     } else {
         None
+    }
+}
+
+fn bridge_path(app: &AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .resolve(BRIDGE_FILE, BaseDirectory::AppLocalData)
+        .map_err(|e| format!("Failed to resolve bridge path: {e}"))
+}
+
+fn publish_bridge(app: &AppHandle, server: &ServerReadyData) -> Result<(), String> {
+    let file = bridge_path(app)?;
+    let dir = file
+        .parent()
+        .ok_or_else(|| "Failed to resolve bridge parent directory".to_string())?;
+
+    fs::create_dir_all(dir).map_err(|e| format!("Failed to create bridge directory: {e}"))?;
+
+    let body = serde_json::to_vec_pretty(&json!({
+        "version": 1,
+        "app": {
+            "name": app.package_info().name,
+            "version": app.package_info().version.to_string(),
+            "pid": std::process::id(),
+        },
+        "server": {
+            "url": server.url,
+            "username": server.username,
+            "password": server.password,
+        },
+        "time": chrono::Utc::now().timestamp_millis(),
+    }))
+    .map_err(|e| format!("Failed to serialize bridge file: {e}"))?;
+
+    let tmp = file.with_extension("json.tmp");
+    fs::write(&tmp, body).map_err(|e| format!("Failed to write bridge file: {e}"))?;
+    fs::rename(&tmp, &file).map_err(|e| format!("Failed to publish bridge file: {e}"))?;
+    tracing::info!(path = %file.display(), "Published bridge file");
+    Ok(())
+}
+
+fn clear_bridge(app: &AppHandle) {
+    let Ok(file) = bridge_path(app) else {
+        return;
+    };
+
+    match fs::remove_file(&file) {
+        Ok(()) => tracing::info!(path = %file.display(), "Cleared bridge file"),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(err) => tracing::warn!(path = %file.display(), "Failed to clear bridge file: {err}"),
     }
 }
 
@@ -118,6 +324,7 @@ fn kill_sidecar(app: AppHandle) {
     };
 
     let _ = server_state.kill();
+    clear_bridge(&app);
 
     tracing::info!("Killed server");
 }
@@ -147,7 +354,14 @@ async fn reload_sidecar(app: AppHandle) -> Result<(), String> {
         let _ = child.kill();
     }
 
-    let (child, health_check) = server::spawn_local_server(app, hostname, port, password);
+    let data = ServerReadyData {
+        url: format!("http://{hostname}:{port}"),
+        username: Some("opencode".to_string()),
+        password: Some(password.clone()),
+    };
+
+    let (child, health_check) = server::spawn_local_server(app.clone(), hostname, port, password);
+    publish_bridge(&app, &data)?;
 
     {
         let mut state = server_state
@@ -708,6 +922,9 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             set_custom_editor_path,
             get_default_editor,
             set_default_editor,
+            list_config_files,
+            read_config_file,
+            write_config_file,
             wsl_path,
             resolve_app_path,
             open_path
@@ -755,6 +972,16 @@ async fn initialize(app: AppHandle) {
     tracing::info!("Spawning sidecar on {url}");
     let (child, health_check) =
         server::spawn_local_server(app.clone(), hostname.to_string(), port, password.clone());
+
+    publish_bridge(
+        &app,
+        &ServerReadyData {
+            url: url.clone(),
+            username: Some("opencode".to_string()),
+            password: Some(password.clone()),
+        },
+    )
+    .expect("Failed to publish bridge file");
 
     // Make sidecar credentials available immediately (before health check completes)
     let (ready_tx, ready_rx) = oneshot::channel();

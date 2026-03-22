@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto"
 import { EventEmitter } from "node:events"
 import { existsSync } from "node:fs"
+import { mkdir, rm, writeFile } from "node:fs/promises"
 import { createServer } from "node:net"
 import { homedir } from "node:os"
 import { join } from "node:path"
@@ -45,6 +46,8 @@ const pendingDeepLinks: string[] = []
 
 const serverReady = defer<ServerReadyData>()
 const logger = initLogging()
+
+const BRIDGE_FILE = "openclaw-bridge.json"
 
 logger.log("app starting", {
   version: app.getVersion(),
@@ -122,6 +125,11 @@ async function initialize() {
   logger.log("spawning sidecar", { url })
   const { child, health, events } = spawnLocalServer(hostname, port, password)
   sidecar = child
+  void publishBridge({
+    url,
+    username: "opencode",
+    password,
+  })
   serverReady.resolve({
     url,
     username: "opencode",
@@ -234,8 +242,49 @@ registerIpcHandlers({
 
 function killSidecar() {
   if (!sidecar) return
+  void clearBridge()
   sidecar.kill()
   sidecar = null
+}
+
+async function publishBridge(server: ServerReadyData) {
+  const dir = app.getPath("userData")
+  const file = join(dir, BRIDGE_FILE)
+  const body = JSON.stringify(
+    {
+      version: 1,
+      app: {
+        name: app.getName(),
+        version: app.getVersion(),
+        pid: process.pid,
+      },
+      server: {
+        url: server.url,
+        username: server.username,
+        password: server.password,
+      },
+      time: Date.now(),
+    },
+    null,
+    2,
+  )
+
+  try {
+    await mkdir(dir, { recursive: true })
+    await writeFile(file, body, "utf8")
+    logger.log("bridge published", { file })
+  } catch (error) {
+    logger.error("failed to publish bridge", error)
+  }
+}
+
+async function clearBridge() {
+  const file = join(app.getPath("userData"), BRIDGE_FILE)
+  try {
+    await rm(file, { force: true })
+  } catch (error) {
+    logger.error("failed to clear bridge", error)
+  }
 }
 
 function ensureLoopbackNoProxy() {
