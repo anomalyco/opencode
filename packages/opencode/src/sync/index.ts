@@ -6,6 +6,7 @@ import { Bus as ProjectBus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { EventSequenceTable, EventTable } from "./event.sql"
 import { EventID } from "./schema"
+import { Flag } from "@/flag/flag"
 
 export namespace SyncEvent {
   export type Definition = {
@@ -108,25 +109,28 @@ export namespace SyncEvent {
 
     Database.transaction((tx) => {
       projector(tx, input.data)
-      tx.insert(EventSequenceTable)
-        .values({
-          aggregate_id: input.aggregateID,
-          seq: input.seq,
-        })
-        .onConflictDoUpdate({
-          target: EventSequenceTable.aggregate_id,
-          set: { seq: input.seq },
-        })
-        .run()
-      tx.insert(EventTable)
-        .values({
-          id: input.id,
-          seq: input.seq,
-          aggregate_id: input.aggregateID,
-          name: def.type,
-          data: input.data as Record<string, unknown>,
-        })
-        .run()
+
+      if (Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
+        tx.insert(EventSequenceTable)
+          .values({
+            aggregate_id: input.aggregateID,
+            seq: input.seq,
+          })
+          .onConflictDoUpdate({
+            target: EventSequenceTable.aggregate_id,
+            set: { seq: input.seq },
+          })
+          .run()
+        tx.insert(EventTable)
+          .values({
+            id: input.id,
+            seq: input.seq,
+            aggregate_id: input.aggregateID,
+            name: def.type,
+            data: input.data as Record<string, unknown>,
+          })
+          .run()
+      }
     })
   }
 
@@ -155,7 +159,6 @@ export namespace SyncEvent {
       throw new Error(`Sequence mismatch for aggregate "${event.aggregateID}": expected ${expected}, got ${event.seq}`)
     }
 
-    console.log("seq", event.seq)
     process(def, event)
   }
 
@@ -167,9 +170,9 @@ export namespace SyncEvent {
       throw new Error(`SyncEvent.run: "${def.aggregate}" required but not found: ${JSON.stringify(data)}`)
     }
 
-    // if (!latest || def.version !== latest.version) {
-    //   throw new Error(`SyncEvent.run: running old versions of events is not allowed: ${def.type}`)
-    // }
+    if (def.version !== versions.get(def.type)) {
+      throw new Error(`SyncEvent.run: running old versions of events is not allowed: ${def.type}`)
+    }
 
     // Note that this is an "immediate" transaction which is critical.
     // We need to make sure we can safely read and write with nothing
