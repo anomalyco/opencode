@@ -18,11 +18,11 @@ Example patch:
 *** Begin Patch
 *** Add File: hello.txt
 +Hello world
-*** Update File: src/app.py
-*** Move to: src/main.py
-@@ def greet():
--print("Hi")
-+print("Hello, world!")
+*** Update File: data/config.yaml
+*** Move to: data/settings.yaml
+@@ name: greeting
+-value: Hi
++value: Hello, world!
 *** Delete File: obsolete.txt
 *** End Patch
 ```
