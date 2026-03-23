@@ -553,6 +553,9 @@ export namespace Session {
     }
     if (input?.directory) {
       conditions.push(eq(SessionTable.directory, input.directory))
+      if (!WorkspaceContext.workspaceID) {
+        conditions.push(isNull(SessionTable.workspace_id))
+      }
     }
     if (input?.roots) {
       conditions.push(isNull(SessionTable.parent_id))
