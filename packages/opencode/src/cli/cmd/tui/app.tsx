@@ -247,6 +247,13 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     })
 
   useKeyboard((evt) => {
+    if (!keybind.match("app_exit", evt)) return
+    const prompt = promptRef.current?.current
+    if (prompt && prompt.input !== "") return
+    exit()
+  })
+
+  useKeyboard((evt) => {
     if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
     const sel = renderer.getSelection()
     if (!sel) return
