@@ -12,7 +12,7 @@ import type { Provider } from "@/provider/provider"
 import { LLM } from "./llm"
 import { Config } from "@/config/config"
 import { SessionCompaction } from "./compaction"
-import { PermissionNext } from "@/permission"
+import { Permission } from "@/permission"
 import { Question } from "@/question"
 import { PartID } from "./schema"
 import type { SessionID, MessageID } from "./schema"
@@ -57,7 +57,7 @@ export namespace SessionProcessor {
               input.abort.throwIfAborted()
               switch (value.type) {
                 case "start":
-                  SessionStatus.set(input.sessionID, { type: "busy" })
+                  await SessionStatus.set(input.sessionID, { type: "busy" })
                   break
 
                 case "reasoning-start":
@@ -163,7 +163,7 @@ export namespace SessionProcessor {
                       )
                     ) {
                       const agent = await Agent.get(input.assistantMessage.agent)
-                      await PermissionNext.ask({
+                      await Permission.ask({
                         permission: "doom_loop",
                         patterns: [value.toolName],
                         sessionID: input.assistantMessage.sessionID,
@@ -210,7 +210,7 @@ export namespace SessionProcessor {
                       state: {
                         status: "error",
                         input: value.input ?? match.state.input,
-                        error: (value.error as any).toString(),
+                        error: value.error instanceof Error ? value.error.message : String(value.error),
                         time: {
                           start: match.state.time.start,
                           end: Date.now(),
@@ -219,7 +219,7 @@ export namespace SessionProcessor {
                     })
 
                     if (
-                      value.error instanceof PermissionNext.RejectedError ||
+                      value.error instanceof Permission.RejectedError ||
                       value.error instanceof Question.RejectedError
                     ) {
                       blocked = shouldBreak
@@ -368,7 +368,7 @@ export namespace SessionProcessor {
               if (retry !== undefined) {
                 attempt++
                 const delay = SessionRetry.delay(attempt, error.name === "APIError" ? error : undefined)
-                SessionStatus.set(input.sessionID, {
+                await SessionStatus.set(input.sessionID, {
                   type: "retry",
                   attempt,
                   message: retry,
@@ -382,7 +382,7 @@ export namespace SessionProcessor {
                 sessionID: input.assistantMessage.sessionID,
                 error: input.assistantMessage.error,
               })
-              SessionStatus.set(input.sessionID, { type: "idle" })
+              await SessionStatus.set(input.sessionID, { type: "idle" })
             }
           }
           if (snapshot) {

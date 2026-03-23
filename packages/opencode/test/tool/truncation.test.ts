@@ -1,15 +1,16 @@
 import { describe, test, expect } from "bun:test"
 import { NodeFileSystem } from "@effect/platform-node"
 import { Effect, FileSystem, Layer } from "effect"
-import { Truncate } from "../../src/tool/truncate"
-import { TruncateEffect } from "../../src/tool/truncate-effect"
+import { Truncate, Truncate as TruncateSvc } from "../../src/tool/truncate"
 import { Identifier } from "../../src/id/id"
+import { Process } from "../../src/util/process"
 import { Filesystem } from "../../src/util/filesystem"
 import path from "path"
 import { testEffect } from "../lib/effect"
 import { writeFileStringScoped } from "../lib/filesystem"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
+const ROOT = path.resolve(import.meta.dir, "..", "..")
 
 describe("Truncate", () => {
   describe("output", () => {
@@ -125,11 +126,19 @@ describe("Truncate", () => {
       if (result.truncated) throw new Error("expected not truncated")
       expect("outputPath" in result).toBe(false)
     })
+
+    test("loads truncate effect in a fresh process", async () => {
+      const out = await Process.run([process.execPath, "run", path.join(ROOT, "src", "tool", "truncate.ts")], {
+        cwd: ROOT,
+      })
+
+      expect(out.code).toBe(0)
+    }, 20000)
   })
 
   describe("cleanup", () => {
     const DAY_MS = 24 * 60 * 60 * 1000
-    const it = testEffect(Layer.mergeAll(TruncateEffect.defaultLayer, NodeFileSystem.layer))
+    const it = testEffect(Layer.mergeAll(TruncateSvc.defaultLayer, NodeFileSystem.layer))
 
     it.effect("deletes files older than 7 days and preserves recent files", () =>
       Effect.gen(function* () {
@@ -142,7 +151,7 @@ describe("Truncate", () => {
 
         yield* writeFileStringScoped(old, "old content")
         yield* writeFileStringScoped(recent, "recent content")
-        yield* TruncateEffect.Service.use((s) => s.cleanup())
+        yield* TruncateSvc.Service.use((s) => s.cleanup())
 
         expect(yield* fs.exists(old)).toBe(false)
         expect(yield* fs.exists(recent)).toBe(true)

@@ -204,6 +204,7 @@ export const dict = {
   "common.cancel": "إلغاء",
   "common.connect": "اتصال",
   "common.disconnect": "قطع الاتصال",
+  "common.continue": "إرسال",
   "common.submit": "إرسال",
   "common.save": "حفظ",
   "common.saving": "جارٍ الحفظ...",
