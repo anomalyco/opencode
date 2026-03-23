@@ -7,13 +7,13 @@ import { Context } from "../util/context"
 import { Project } from "./project"
 import { State } from "./state"
 
-interface Context {
+export interface Shape {
   directory: string
   worktree: string
   project: Project.Info
 }
-const context = Context.create<Context>("instance")
-const cache = new Map<string, Promise<Context>>()
+const context = Context.create<Shape>("instance")
+const cache = new Map<string, Promise<Shape>>()
 
 const disposal = {
   all: undefined as Promise<void> | undefined,
@@ -52,7 +52,7 @@ function boot(input: { directory: string; init?: () => Promise<any>; project?: P
   })
 }
 
-function track(directory: string, next: Promise<Context>) {
+function track(directory: string, next: Promise<Shape>) {
   const task = next.catch((error) => {
     if (cache.get(directory) === task) cache.delete(directory)
     throw error
