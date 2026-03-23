@@ -1,6 +1,8 @@
 // @refresh reload
 
 import {
+  ACCEPTED_FILE_EXTENSIONS,
+  filePickerFilters,
   AppBaseProviders,
   AppInterface,
   handleNotificationClick,
@@ -98,6 +100,7 @@ const createPlatform = (): Platform => {
         directory: false,
         multiple: opts?.multiple ?? false,
         title: opts?.title ?? t("desktop.dialog.chooseFile"),
+        filters: filePickerFilters(opts?.extensions ?? ACCEPTED_FILE_EXTENSIONS),
       })
       return handleWslPicker(result)
     },
