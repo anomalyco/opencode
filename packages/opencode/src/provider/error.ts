@@ -8,6 +8,7 @@ export namespace ProviderError {
   // https://github.com/badlogic/pi-mono/blob/main/packages/ai/src/utils/overflow.ts
   const OVERFLOW_PATTERNS = [
     /prompt is too long/i, // Anthropic
+    /extra usage is required for long context/i, // Anthropic (billing tier context limit)
     /input is too long for requested model/i, // Amazon Bedrock
     /exceeds the context window/i, // OpenAI (Completions + Responses API message text)
     /input token count.*exceeds the maximum/i, // Google (Gemini)
