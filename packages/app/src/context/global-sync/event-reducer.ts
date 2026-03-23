@@ -9,6 +9,7 @@ import type {
   QuestionRequest,
   Session,
   SessionStatus,
+  SidebarItem,
   Todo,
 } from "@opencode-ai/sdk/v2/client"
 import type { State, VcsCache } from "./types"
@@ -19,10 +20,17 @@ export function applyGlobalEvent(input: {
   event: { type: string; properties?: unknown }
   project: Project[]
   setGlobalProject: (next: Project[] | ((draft: Project[]) => void)) => void
+  setSidebar: (items: SidebarItem[]) => void
   refresh: () => void
 }) {
   if (input.event.type === "global.disposed" || input.event.type === "server.connected") {
     input.refresh()
+    return
+  }
+
+  if (input.event.type === "project.sidebar.updated") {
+    const properties = input.event.properties as { items: SidebarItem[] }
+    input.setSidebar(properties.items)
     return
   }
 

@@ -1845,6 +1845,8 @@ export default function Layout(props: ParentProps) {
 
   function handleDragEnd() {
     setStore("activeProject", undefined)
+    // Commit the final reorder to the server after drag completes
+    layout.projects.commitOrder()
   }
 
   function workspaceIds(project: LocalProject | undefined) {

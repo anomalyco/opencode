@@ -5,6 +5,7 @@ import type {
   Project,
   ProviderAuthResponse,
   ProviderListResponse,
+  SidebarItem,
   Todo,
 } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@opencode-ai/ui/toast"
@@ -42,6 +43,7 @@ type GlobalStore = {
   error?: InitError
   path: Path
   project: Project[]
+  sidebar: SidebarItem[]
   session_todo: {
     [sessionID: string]: Todo[]
   }
@@ -71,6 +73,7 @@ function createGlobalSync() {
     ready: false,
     path: { state: "", config: "", worktree: "", directory: "", home: "" },
     project: projectCache.value,
+    sidebar: [],
     session_todo: {},
     provider: { all: [], connected: [], default: {} },
     provider_auth: {},
@@ -285,6 +288,7 @@ function createGlobalSync() {
         project: globalStore.project,
         refresh: queue.refresh,
         setGlobalProject: setProjects,
+        setSidebar: (items) => set("sidebar", items),
       })
       if (event.type === "server.connected" || event.type === "global.disposed") {
         for (const directory of Object.keys(children.children)) {

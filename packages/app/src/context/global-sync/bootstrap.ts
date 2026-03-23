@@ -7,6 +7,7 @@ import type {
   ProviderAuthResponse,
   ProviderListResponse,
   QuestionRequest,
+  SidebarItem,
   Todo,
 } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@opencode-ai/ui/toast"
@@ -22,6 +23,7 @@ type GlobalStore = {
   ready: boolean
   path: Path
   project: Project[]
+  sidebar: SidebarItem[]
   session_todo: {
     [sessionID: string]: Todo[]
   }
@@ -83,6 +85,11 @@ export async function bootstrapGlobal(input: {
     retry(() =>
       input.globalSDK.provider.auth().then((x) => {
         input.setGlobalStore("provider_auth", x.data ?? {})
+      }),
+    ),
+    retry(() =>
+      input.globalSDK.project.sidebar.list().then((x) => {
+        input.setGlobalStore("sidebar", x.data ?? [])
       }),
     ),
   ]

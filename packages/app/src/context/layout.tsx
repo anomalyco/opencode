@@ -1,6 +1,7 @@
 import { createStore, produce } from "solid-js/store"
 import { batch, createEffect, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
+import { showToast } from "@opencode-ai/ui/toast"
 import { useGlobalSync } from "./global-sync"
 import { useGlobalSDK } from "./global-sdk"
 import { useServer } from "./server"
@@ -458,27 +459,37 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     }
 
     createEffect(() => {
-      const projects = server.projects.list()
-      const seen = new Set(projects.map((project) => project.worktree))
+      const items = globalSync.data.sidebar
+      const seen = new Set(items.map((item) => item.worktree))
 
       batch(() => {
-        for (const project of projects) {
-          const root = rootFor(project.worktree)
-          if (root === project.worktree) continue
-
-          server.projects.close(project.worktree)
+        for (const item of items) {
+          const root = rootFor(item.worktree)
+          if (root === item.worktree) continue
 
           if (!seen.has(root)) {
-            server.projects.open(root)
             seen.add(root)
           }
-
-          if (project.expanded) server.projects.expand(root)
         }
       })
     })
 
-    const enriched = createMemo(() => server.projects.list().map(enrich))
+    // Optimistic local sidebar order for smooth DnD.
+    // When null, uses globalSync.data.sidebar directly.
+    const [optimistic, setOptimistic] = createStore<{ order: string[] | null }>({ order: null })
+
+    const sidebarWorktrees = createMemo(() => {
+      if (optimistic.order) return optimistic.order
+      return globalSync.data.sidebar.map((x) => x.worktree)
+    })
+
+    // Derive visible rail from synced sidebar, enrich with local expanded state
+    const enriched = createMemo(() =>
+      sidebarWorktrees().map((worktree) => {
+        const local = server.projects.list().find((x) => x.worktree === worktree)
+        return enrich({ worktree, expanded: local?.expanded ?? true })
+      }),
+    )
     const list = createMemo(() => {
       const projects = enriched()
       return projects.map((project) => {
@@ -544,10 +555,33 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     })
 
     onMount(() => {
+      // One-time migration: seed server sidebar from legacy local rail.
+      // Uses origin key so each server connection migrates independently.
+      const migrationKey = `sidebar.migrated.${server.key}`
+      const migrated = localStorage.getItem(migrationKey)
+      if (!migrated) {
+        const legacy = server.projects.list()
+        const serverHasItems = globalSync.data.sidebar.length > 0
+        if (legacy.length > 0 && !serverHasItems) {
+          const worktrees = legacy.map((p) => rootFor(p.worktree))
+          const deduped = [...new Set(worktrees)]
+          void globalSdk.client.project.sidebar
+            .reorder({ worktrees: deduped })
+            .then(() => {
+              localStorage.setItem(migrationKey, "1")
+            })
+            .catch(() => {
+              // Migration will retry on next session
+            })
+        } else {
+          localStorage.setItem(migrationKey, "1")
+        }
+      }
+
+      // Load sessions for visible rail projects
+      const items = globalSync.data.sidebar.length > 0 ? globalSync.data.sidebar : server.projects.list()
       Promise.all(
-        server.projects.list().map((project) => {
-          return globalSync.project.loadSessions(project.worktree)
-        }),
+        items.map((item) => globalSync.project.loadSessions(item.worktree)),
       )
     })
 
@@ -567,12 +601,20 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         list,
         open(directory: string) {
           const root = rootFor(directory)
-          if (server.projects.list().find((x) => x.worktree === root)) return
+          if (globalSync.data.sidebar.find((x) => x.worktree === root)) return
           globalSync.project.loadSessions(root)
+          // Keep local expanded state in sync
           server.projects.open(root)
+          // Sync to server
+          void globalSdk.client.project.sidebar.open({ worktree: root }).catch(() => {
+            showToast({ variant: "error", title: "Failed to sync sidebar" })
+          })
         },
         close(directory: string) {
           server.projects.close(directory)
+          void globalSdk.client.project.sidebar.close({ worktree: directory }).catch(() => {
+            showToast({ variant: "error", title: "Failed to sync sidebar" })
+          })
         },
         expand(directory: string) {
           server.projects.expand(directory)
@@ -581,7 +623,24 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           server.projects.collapse(directory)
         },
         move(directory: string, toIndex: number) {
-          server.projects.move(directory, toIndex)
+          // Optimistic local reorder for smooth DnD
+          const current = sidebarWorktrees()
+          const fromIndex = current.indexOf(directory)
+          if (fromIndex === -1 || fromIndex === toIndex) return
+          const next = [...current]
+          const [item] = next.splice(fromIndex, 1)
+          next.splice(toIndex, 0, item)
+          setOptimistic("order", next)
+        },
+        // Commit full order to server after drag-end
+        commitOrder() {
+          const order = optimistic.order
+          if (!order) return
+          setOptimistic("order", null)
+          void globalSdk.client.project.sidebar.reorder({ worktrees: order }).catch((err: unknown) => {
+            showToast({ variant: "error", title: "Failed to sync sidebar order" })
+            console.error(err)
+          })
         },
       },
       sidebar: {

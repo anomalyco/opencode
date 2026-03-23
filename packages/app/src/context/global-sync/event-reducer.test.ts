@@ -94,6 +94,7 @@ describe("applyGlobalEvent", () => {
       refresh: () => {
         refreshCount += 1
       },
+      setSidebar() {},
       setGlobalProject(next) {
         if (typeof next === "function") next(project)
       },
@@ -111,6 +112,7 @@ describe("applyGlobalEvent", () => {
       refresh: () => {
         refreshCount += 1
       },
+      setSidebar() {},
       setGlobalProject() {},
     })
 
@@ -125,6 +127,7 @@ describe("applyGlobalEvent", () => {
       refresh: () => {
         refreshCount += 1
       },
+      setSidebar() {},
       setGlobalProject() {},
     })
 
