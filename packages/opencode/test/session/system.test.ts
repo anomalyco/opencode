@@ -6,6 +6,30 @@ import { SystemPrompt } from "../../src/session/system"
 import { tmpdir } from "../fixture/fixture"
 
 describe("session.system", () => {
+  test("environment uses the session creation day", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const environment = await SystemPrompt.environment(
+          {
+            providerID: "openai",
+            api: {
+              id: "gpt-5.2",
+            },
+          } as any,
+          Date.UTC(2026, 2, 22, 23, 59, 59),
+        )
+
+        expect(environment).toHaveLength(1)
+        expect(environment[0]).toContain("Today's date: Sun Mar 22 2026")
+      },
+    })
+  })
+
   test("skills output is sorted by name and stable across calls", async () => {
     await using tmp = await tmpdir({
       git: true,

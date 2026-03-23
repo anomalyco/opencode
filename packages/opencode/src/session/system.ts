@@ -25,7 +25,7 @@ export namespace SystemPrompt {
     return [PROMPT_DEFAULT]
   }
 
-  export async function environment(model: Provider.Model) {
+  export async function environment(model: Provider.Model, sessionCreatedAt: number) {
     const project = Instance.project
     return [
       [
@@ -36,7 +36,8 @@ export namespace SystemPrompt {
         `  Workspace root folder: ${Instance.worktree}`,
         `  Is directory a git repo: ${project.vcs === "git" ? "yes" : "no"}`,
         `  Platform: ${process.platform}`,
-        `  Today's date: ${new Date().toDateString()}`,
+        // Keep the session day stable so long-lived sessions do not churn the prompt at midnight.
+        `  Today's date: ${new Date(sessionCreatedAt).toDateString()}`,
         `</env>`,
         `<directories>`,
         `  ${
