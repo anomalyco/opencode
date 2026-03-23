@@ -1,4 +1,4 @@
-# # OpenCode Studio
+# OpenCode Studio
 
 > 基于 [OpenCode](https://github.com/anomalyco/opencode) 的桌面应用定制版本
 
