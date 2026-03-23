@@ -130,6 +130,7 @@ test("custom agent from config creates new agent", async () => {
         my_custom_agent: {
           model: "openai/gpt-4",
           description: "My custom agent",
+          summary: "Short custom summary",
           temperature: 0.5,
           top_p: 0.9,
         },
@@ -144,10 +145,33 @@ test("custom agent from config creates new agent", async () => {
       expect(String(custom?.model?.providerID)).toBe("openai")
       expect(String(custom?.model?.modelID)).toBe("gpt-4")
       expect(custom?.description).toBe("My custom agent")
+      expect(custom?.summary).toBe("Short custom summary")
       expect(custom?.temperature).toBe(0.5)
       expect(custom?.topP).toBe(0.9)
       expect(custom?.native).toBe(false)
       expect(custom?.mode).toBe("all")
+    },
+  })
+})
+
+test("custom agent summary overrides native display summary without changing description", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      agent: {
+        build: {
+          description: "Longer description used for routing build tasks",
+          summary: "Short build summary",
+        },
+      },
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const build = await Agent.get("build")
+      expect(build).toBeDefined()
+      expect(build?.description).toBe("Longer description used for routing build tasks")
+      expect(build?.summary).toBe("Short build summary")
     },
   })
 })

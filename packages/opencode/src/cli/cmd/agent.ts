@@ -187,10 +187,12 @@ const AgentCreateCommand = cmd({
         // Build frontmatter
         const frontmatter: {
           description: string
+          summary: string
           mode: AgentMode
           tools?: Record<string, boolean>
         } = {
           description: generated.whenToUse,
+          summary: generated.summary,
           mode,
         }
         if (Object.keys(tools).length > 0) {

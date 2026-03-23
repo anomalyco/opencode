@@ -26,6 +26,7 @@ export namespace Agent {
     .object({
       name: z.string(),
       description: z.string().optional(),
+      summary: z.string().optional(),
       mode: z.enum(["subagent", "primary", "all"]),
       native: z.boolean().optional(),
       hidden: z.boolean().optional(),
@@ -221,6 +222,7 @@ export namespace Agent {
       item.variant = value.variant ?? item.variant
       item.prompt = value.prompt ?? item.prompt
       item.description = value.description ?? item.description
+      item.summary = value.summary ?? item.summary
       item.temperature = value.temperature ?? item.temperature
       item.topP = value.top_p ?? item.topP
       item.mode = value.mode ?? item.mode
@@ -317,6 +319,7 @@ export namespace Agent {
       model: language,
       schema: z.object({
         identifier: z.string(),
+        summary: z.string(),
         whenToUse: z.string(),
         systemPrompt: z.string(),
       }),
