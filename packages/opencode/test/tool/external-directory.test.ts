@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
+import { Global } from "../../src/global"
 import type { Tool } from "../../src/tool/tool"
 import { Instance } from "../../src/project/instance"
 import { assertExternalDirectory } from "../../src/tool/external-directory"
@@ -51,6 +52,59 @@ describe("tool.assertExternalDirectory", () => {
         await assertExternalDirectory(ctx, path.join("/tmp/project", "file.txt"))
       },
     })
+
+    expect(requests.length).toBe(0)
+  })
+
+  test("no-ops for AGENTS.md inside Global.Path.config", async () => {
+    const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+    const ctx: Tool.Context = {
+      ...baseCtx,
+      ask: async (req) => {
+        requests.push(req)
+      },
+    }
+
+    const prev = Global.Path.config
+    ;(Global.Path as { config: string }).config = "/tmp/opencode-config"
+
+    try {
+      await Instance.provide({
+        directory: "/tmp/project",
+        fn: async () => {
+          await assertExternalDirectory(ctx, path.join(Global.Path.config, "AGENTS.md"))
+        },
+      })
+    } finally {
+      ;(Global.Path as { config: string }).config = prev
+    }
+
+    expect(requests.length).toBe(0)
+  })
+
+  test("no-ops for AGENTS.md inside OPENCODE_CONFIG_DIR", async () => {
+    const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+    const ctx: Tool.Context = {
+      ...baseCtx,
+      ask: async (req) => {
+        requests.push(req)
+      },
+    }
+
+    const prev = process.env["OPENCODE_CONFIG_DIR"]
+    process.env["OPENCODE_CONFIG_DIR"] = "/tmp/opencode-profile"
+
+    try {
+      await Instance.provide({
+        directory: "/tmp/project",
+        fn: async () => {
+          await assertExternalDirectory(ctx, path.join(process.env["OPENCODE_CONFIG_DIR"]!, "AGENTS.md"))
+        },
+      })
+    } finally {
+      if (prev === undefined) delete process.env["OPENCODE_CONFIG_DIR"]
+      else process.env["OPENCODE_CONFIG_DIR"] = prev
+    }
 
     expect(requests.length).toBe(0)
   })

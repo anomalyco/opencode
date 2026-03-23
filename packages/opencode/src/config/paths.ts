@@ -8,6 +8,10 @@ import { Flag } from "@/flag/flag"
 import { Global } from "@/global"
 
 export namespace ConfigPaths {
+  export function globalDirectories() {
+    return [Global.Path.config, ...(Flag.OPENCODE_CONFIG_DIR ? [Flag.OPENCODE_CONFIG_DIR] : [])]
+  }
+
   export async function projectFiles(name: string, directory: string, worktree: string) {
     const files: string[] = []
     for (const file of [`${name}.jsonc`, `${name}.json`]) {
@@ -20,8 +24,9 @@ export namespace ConfigPaths {
   }
 
   export async function directories(directory: string, worktree: string) {
+    const global = globalDirectories()
     return [
-      Global.Path.config,
+      global[0],
       ...(!Flag.OPENCODE_DISABLE_PROJECT_CONFIG
         ? await Array.fromAsync(
             Filesystem.up({
@@ -38,7 +43,7 @@ export namespace ConfigPaths {
           stop: Global.Path.home,
         }),
       )),
-      ...(Flag.OPENCODE_CONFIG_DIR ? [Flag.OPENCODE_CONFIG_DIR] : []),
+      ...global.slice(1),
     ]
   }
 
