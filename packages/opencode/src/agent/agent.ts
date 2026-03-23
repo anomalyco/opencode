@@ -160,9 +160,9 @@ export namespace Agent {
         name: "orchestrator",
         description: "Parallel task orchestrator. Chat to plan your task, then launch parallel workers.",
         prompt: PROMPT_ORCHESTRATOR,
-        permission: PermissionNext.merge(
+        permission: Permission.merge(
           defaults,
-          PermissionNext.fromConfig({
+          Permission.fromConfig({
             question: "allow",
             parallel_plan: "allow",
             parallel_execute: "allow",
