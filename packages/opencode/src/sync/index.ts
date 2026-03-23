@@ -133,7 +133,7 @@ export namespace SyncEvent {
             id: event.id,
             seq: event.seq,
             aggregate_id: event.aggregateID,
-            name: versionedType(def.type, def.version),
+            type: versionedType(def.type, def.version),
             data: event.data as Record<string, unknown>,
           })
           .run()

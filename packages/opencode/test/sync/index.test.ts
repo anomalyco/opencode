@@ -10,7 +10,7 @@ import { Identifier } from "../../src/id/id"
 import { Flag } from "../../src/flag/flag"
 
 beforeEach(() => {
-  Database.Client.reset()
+  Database.close()
 })
 
 const original = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
@@ -59,19 +59,19 @@ describe("SyncEvent", () => {
     test(
       "inserts event row",
       withInstance(() => {
-        SyncEvent.run(Created, { id: "msg_1", name: "first" })
+        SyncEvent.run(Created, { id: "evt_1", name: "first" })
         const rows = Database.use((db) => db.select().from(EventTable).all())
         expect(rows).toHaveLength(1)
-        expect(rows[0].name).toBe("item.created.1")
-        expect(rows[0].aggregate_id).toBe("msg_1")
+        expect(rows[0].type).toBe("item.created.1")
+        expect(rows[0].aggregate_id).toBe("evt_1")
       }),
     )
 
     test(
       "increments seq per aggregate",
       withInstance(() => {
-        SyncEvent.run(Created, { id: "msg_1", name: "first" })
-        SyncEvent.run(Created, { id: "msg_1", name: "second" })
+        SyncEvent.run(Created, { id: "evt_1", name: "first" })
+        SyncEvent.run(Created, { id: "evt_1", name: "second" })
         const rows = Database.use((db) => db.select().from(EventTable).all())
         expect(rows).toHaveLength(2)
         expect(rows[1].seq).toBe(rows[0].seq + 1)
@@ -81,10 +81,10 @@ describe("SyncEvent", () => {
     test(
       "uses custom aggregate field from agg()",
       withInstance(() => {
-        SyncEvent.run(Sent, { item_id: "msg_1", to: "james" })
+        SyncEvent.run(Sent, { item_id: "evt_1", to: "james" })
         const rows = Database.use((db) => db.select().from(EventTable).all())
         expect(rows).toHaveLength(1)
-        expect(rows[0].aggregate_id).toBe("msg_1")
+        expect(rows[0].aggregate_id).toBe("evt_1")
       }),
     )
 
@@ -93,22 +93,18 @@ describe("SyncEvent", () => {
       withInstance(async () => {
         const events: Array<{
           type: string
-          properties: { seq: number; aggregateID: string; data: { id: string; name: string } }
+          properties: { id: string; name: string }
         }> = []
         const unsub = Bus.subscribeAll((event) => events.push(event))
 
-        SyncEvent.run(Created, { id: "msg_1", name: "test" })
+        SyncEvent.run(Created, { id: "evt_1", name: "test" })
 
         expect(events).toHaveLength(1)
         expect(events[0]).toEqual({
-          type: "item.created.1",
+          type: "item.created",
           properties: {
-            seq: 0,
-            aggregateID: "msg_1",
-            data: {
-              id: "msg_1",
-              name: "test",
-            },
+            id: "evt_1",
+            name: "test",
           },
         })
 
