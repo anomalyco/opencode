@@ -10,6 +10,10 @@ import { tmpdir } from "../fixture/fixture"
 
 const live = CrossSpawnSpawner.layer.pipe(Layer.provide(NodeFileSystem.layer), Layer.provide(NodePath.layer))
 
+function js(code: string, opts?: ChildProcess.CommandOptions) {
+  return ChildProcess.make("node", ["-e", code], opts)
+}
+
 function run<A, E>(effect: Effect.Effect<A, E, ChildProcessSpawner.ChildProcessSpawner>) {
   return Effect.runPromise(effect.pipe(Effect.provide(live)))
 }
@@ -49,7 +53,7 @@ describe("cross-spawn spawner", () => {
     test("captures multiple lines", async () => {
       const out = await runScoped(
         Effect.gen(function* () {
-          const handle = yield* ChildProcess.make("sh", ["-c", "echo line1; echo line2; echo line3"])
+          const handle = yield* js('console.log("line1"); console.log("line2"); console.log("line3")')
           return yield* decodeByteStream(handle.stdout)
         }),
       )
@@ -59,7 +63,7 @@ describe("cross-spawn spawner", () => {
     test("returns exit code", async () => {
       const code = await runScoped(
         Effect.gen(function* () {
-          const handle = yield* ChildProcess.make("sh", ["-c", "exit 0"])
+          const handle = yield* js("process.exit(0)")
           return yield* handle.exitCode
         }),
       )
@@ -69,7 +73,7 @@ describe("cross-spawn spawner", () => {
     test("returns non-zero exit code", async () => {
       const code = await runScoped(
         Effect.gen(function* () {
-          const handle = yield* ChildProcess.make("sh", ["-c", "exit 42"])
+          const handle = yield* js("process.exit(42)")
           return yield* handle.exitCode
         }),
       )
@@ -105,7 +109,7 @@ describe("cross-spawn spawner", () => {
     test("passes environment variables with extendEnv", async () => {
       const out = await runScoped(
         Effect.gen(function* () {
-          const handle = yield* ChildProcess.make("sh", ["-c", "echo $TEST_VAR"], {
+          const handle = yield* js('process.stdout.write(process.env.TEST_VAR ?? "")', {
             env: { TEST_VAR: "test_value" },
             extendEnv: true,
           })
@@ -118,10 +122,13 @@ describe("cross-spawn spawner", () => {
     test("passes multiple environment variables", async () => {
       const out = await runScoped(
         Effect.gen(function* () {
-          const handle = yield* ChildProcess.make("sh", ["-c", "echo $VAR1-$VAR2-$VAR3"], {
-            env: { VAR1: "one", VAR2: "two", VAR3: "three" },
-            extendEnv: true,
-          })
+          const handle = yield* js(
+            "process.stdout.write(`${process.env.VAR1}-${process.env.VAR2}-${process.env.VAR3}`)",
+            {
+              env: { VAR1: "one", VAR2: "two", VAR3: "three" },
+              extendEnv: true,
+            },
+          )
           return yield* decodeByteStream(handle.stdout)
         }),
       )
@@ -133,7 +140,7 @@ describe("cross-spawn spawner", () => {
     test("captures stderr output", async () => {
       const err = await runScoped(
         Effect.gen(function* () {
-          const handle = yield* ChildProcess.make("sh", ["-c", "echo error message >&2"])
+          const handle = yield* js('process.stderr.write("error message")')
           return yield* decodeByteStream(handle.stderr)
         }),
       )
@@ -143,7 +150,7 @@ describe("cross-spawn spawner", () => {
     test("captures both stdout and stderr", async () => {
       const { stdout, stderr } = await runScoped(
         Effect.gen(function* () {
-          const handle = yield* ChildProcess.make("sh", ["-c", "echo stdout; echo stderr >&2"])
+          const handle = yield* js('process.stdout.write("stdout\\n"); process.stderr.write("stderr\\n")')
           const [stdout, stderr] = yield* Effect.all([decodeByteStream(handle.stdout), decodeByteStream(handle.stderr)])
           return { stdout, stderr }
         }),
@@ -167,7 +174,7 @@ describe("cross-spawn spawner", () => {
     test("captures stderr via .all when no stdout", async () => {
       const all = await runScoped(
         Effect.gen(function* () {
-          const handle = yield* ChildProcess.make("sh", ["-c", "echo hello from stderr >&2"])
+          const handle = yield* js('process.stderr.write("hello from stderr")')
           return yield* decodeByteStream(handle.all)
         }),
       )
@@ -181,7 +188,10 @@ describe("cross-spawn spawner", () => {
         Effect.gen(function* () {
           const input = "a b c"
           const stdin = Stream.make(Buffer.from(input, "utf-8"))
-          const handle = yield* ChildProcess.make("cat", { stdin })
+          const handle = yield* js(
+            'process.stdin.setEncoding("utf8"); let out = ""; process.stdin.on("data", (chunk) => out += chunk); process.stdin.on("end", () => process.stdout.write(out))',
+            { stdin },
+          )
           const output = yield* decodeByteStream(handle.stdout)
           yield* handle.exitCode
           return output
@@ -196,7 +206,7 @@ describe("cross-spawn spawner", () => {
       const exit = await Effect.runPromiseExit(
         Effect.scoped(
           Effect.gen(function* () {
-            const handle = yield* ChildProcess.make("sleep", ["10"])
+            const handle = yield* js("setTimeout(() => {}, 10_000)")
             yield* handle.kill()
             return yield* handle.exitCode
           }),
@@ -208,7 +218,7 @@ describe("cross-spawn spawner", () => {
     test("isRunning reflects process state", async () => {
       await runScoped(
         Effect.gen(function* () {
-          const handle = yield* ChildProcess.make("sh", ["-c", "echo done"])
+          const handle = yield* js('process.stdout.write("done")')
           yield* handle.exitCode
           const running = yield* handle.isRunning
           expect(running).toBe(false)
@@ -230,8 +240,12 @@ describe("cross-spawn spawner", () => {
     test("pipes stdout of one command to stdin of another", async () => {
       const out = await runScoped(
         Effect.gen(function* () {
-          const handle = yield* ChildProcess.make`echo hello world`.pipe(
-            ChildProcess.pipeTo(ChildProcess.make`tr a-z A-Z`),
+          const handle = yield* js('process.stdout.write("hello world")').pipe(
+            ChildProcess.pipeTo(
+              js(
+                'process.stdin.setEncoding("utf8"); let out = ""; process.stdin.on("data", (chunk) => out += chunk); process.stdin.on("end", () => process.stdout.write(out.toUpperCase()))',
+              ),
+            ),
           )
           const output = yield* decodeByteStream(handle.stdout)
           yield* handle.exitCode
@@ -244,9 +258,17 @@ describe("cross-spawn spawner", () => {
     test("three-stage pipeline", async () => {
       const out = await runScoped(
         Effect.gen(function* () {
-          const handle = yield* ChildProcess.make`echo hello world`.pipe(
-            ChildProcess.pipeTo(ChildProcess.make`tr a-z A-Z`),
-            ChildProcess.pipeTo(ChildProcess.make("tr", [" ", "-"])),
+          const handle = yield* js('process.stdout.write("hello world")').pipe(
+            ChildProcess.pipeTo(
+              js(
+                'process.stdin.setEncoding("utf8"); let out = ""; process.stdin.on("data", (chunk) => out += chunk); process.stdin.on("end", () => process.stdout.write(out.toUpperCase()))',
+              ),
+            ),
+            ChildProcess.pipeTo(
+              js(
+                'process.stdin.setEncoding("utf8"); let out = ""; process.stdin.on("data", (chunk) => out += chunk); process.stdin.on("end", () => process.stdout.write(out.replaceAll(" ", "-")))',
+              ),
+            ),
           )
           const output = yield* decodeByteStream(handle.stdout)
           yield* handle.exitCode
@@ -259,8 +281,13 @@ describe("cross-spawn spawner", () => {
     test("pipes stderr with { from: 'stderr' }", async () => {
       const out = await runScoped(
         Effect.gen(function* () {
-          const handle = yield* ChildProcess.make("sh", ["-c", "echo error >&2"]).pipe(
-            ChildProcess.pipeTo(ChildProcess.make`cat`, { from: "stderr" }),
+          const handle = yield* js('process.stderr.write("error")').pipe(
+            ChildProcess.pipeTo(
+              js(
+                'process.stdin.setEncoding("utf8"); let out = ""; process.stdin.on("data", (chunk) => out += chunk); process.stdin.on("end", () => process.stdout.write(out))',
+              ),
+              { from: "stderr" },
+            ),
           )
           const output = yield* decodeByteStream(handle.stdout)
           yield* handle.exitCode
@@ -275,7 +302,7 @@ describe("cross-spawn spawner", () => {
     test("reads data from output fd3", async () => {
       const out = await runScoped(
         Effect.gen(function* () {
-          const handle = yield* ChildProcess.make("sh", ["-c", "echo 'hello from fd3' >&3"], {
+          const handle = yield* js('require("node:fs").writeSync(3, "hello from fd3\\n")', {
             additionalFds: { fd3: { type: "output" } },
           })
           const fd3Output = yield* decodeByteStream(handle.getOutputFd(3))
@@ -289,10 +316,9 @@ describe("cross-spawn spawner", () => {
     test("writes data to input fd3", async () => {
       const out = await runScoped(
         Effect.gen(function* () {
-          const inputData = "data from parent"
-          const inputStream = Stream.make(new TextEncoder().encode(inputData))
-          const handle = yield* ChildProcess.make("sh", ["-c", "cat <&3"], {
-            additionalFds: { fd3: { type: "input", stream: inputStream } },
+          const input = Stream.make(new TextEncoder().encode("data from parent"))
+          const handle = yield* js('process.stdout.write(require("node:fs").readFileSync(3, "utf8"))', {
+            additionalFds: { fd3: { type: "input", stream: input } },
           })
           const stdout = yield* decodeByteStream(handle.stdout)
           yield* handle.exitCode
@@ -305,7 +331,7 @@ describe("cross-spawn spawner", () => {
     test("returns empty stream for unconfigured fd", async () => {
       const out = await runScoped(
         Effect.gen(function* () {
-          const handle = yield* ChildProcess.make("sh", ["-c", "echo test"])
+          const handle = yield* js('process.stdout.write("test")')
           const fd3Output = yield* decodeByteStream(handle.getOutputFd(3))
           yield* handle.exitCode
           return fd3Output
@@ -317,9 +343,12 @@ describe("cross-spawn spawner", () => {
     test("works alongside normal stdout and stderr", async () => {
       const result = await runScoped(
         Effect.gen(function* () {
-          const handle = yield* ChildProcess.make("sh", ["-c", "echo 'stdout'; echo 'stderr' >&2; echo 'fd3' >&3"], {
-            additionalFds: { fd3: { type: "output" } },
-          })
+          const handle = yield* js(
+            'require("node:fs").writeSync(3, "fd3\\n"); process.stdout.write("stdout\\n"); process.stderr.write("stderr\\n")',
+            {
+              additionalFds: { fd3: { type: "output" } },
+            },
+          )
           const stdout = yield* decodeByteStream(handle.stdout)
           const stderr = yield* decodeByteStream(handle.stderr)
           const fd3 = yield* decodeByteStream(handle.getOutputFd(3))
@@ -339,10 +368,13 @@ describe("cross-spawn spawner", () => {
       async () => {
         const out = await runScoped(
           Effect.gen(function* () {
-            const handle = yield* ChildProcess.make("sh", ["-c", "seq 1 100000"])
+            const handle = yield* js("for (let i = 1; i <= 100000; i++) process.stdout.write(`${i}\\n`)")
             const output = yield* handle.stdout.pipe(
               Stream.decodeText(),
-              Stream.runFold(() => "", (acc, chunk) => acc + chunk),
+              Stream.runFold(
+                () => "",
+                (acc, chunk) => acc + chunk,
+              ),
             )
             yield* handle.exitCode
             return output
