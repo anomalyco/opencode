@@ -17,6 +17,7 @@ type State = {
   agent?: string
   model?: ModelKey
   variant?: string | null
+  message?: string
 }
 
 type Saved = {
@@ -27,6 +28,31 @@ const WORKSPACE_KEY = "__workspace__"
 const handoff = new Map<string, State>()
 
 const handoffKey = (dir: string, id: string) => `${dir}\n${id}`
+
+const key = (item: { id?: string; name: string }) => item.id ?? item.name
+
+const pickByKey = <T extends { id?: string; name: string }>(items: T[], value: string | undefined) => {
+  if (!value) return undefined
+  return items.find((item) => key(item) === value) ?? items.find((item) => item.name === value)
+}
+
+export const pickAgentItem = <T extends { id?: string; name: string }>(items: T[], value: string | undefined) => {
+  if (items.length === 0) return undefined
+  return pickByKey(items, value) ?? items[0]
+}
+
+export const syncSessionState = (
+  prev: State | undefined,
+  msg: { id: string; agent: string; model: ModelKey; variant?: string },
+) => {
+  if (prev?.message === msg.id) return
+  return {
+    agent: msg.agent,
+    model: msg.model,
+    variant: msg.variant ?? null,
+    message: msg.id,
+  } satisfies State
+}
 
 const migrate = (value: unknown) => {
   if (!value || typeof value !== "object") return { session: {} }
@@ -85,7 +111,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         variant?: string | null
       }
     }>({
-      current: list()[0]?.name,
+      current: (() => {
+        const first = list()[0]
+        if (!first) return undefined
+        return key(first)
+      })(),
       draft: undefined,
       last: undefined,
     })
@@ -103,11 +133,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
     }
 
-    const pickAgent = (name: string | undefined) => {
-      const items = list()
-      if (items.length === 0) return undefined
-      return items.find((item) => item.name === name) ?? items[0]
-    }
+    const pickAgent = (value: string | undefined) => pickAgentItem(list(), value)
 
     createEffect(() => {
       const items = list()
@@ -115,8 +141,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         if (store.current !== undefined) setStore("current", undefined)
         return
       }
-      if (items.some((item) => item.name === store.current)) return
-      setStore("current", items[0]?.name)
+      if (items.some((item) => key(item) === store.current || item.name === store.current)) return
+      const first = items[0]
+      setStore("current", first ? key(first) : undefined)
     })
 
     const scope = createMemo<State | undefined>(() => {
@@ -177,15 +204,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       current() {
         return pickAgent(scope()?.agent ?? store.current)
       },
-      set(name: string | undefined) {
-        const item = pickAgent(name)
+      set(value: string | undefined) {
+        const item = pickAgent(value)
         if (!item) {
           setStore("current", undefined)
           return
         }
 
         batch(() => {
-          setStore("current", item.name)
+          setStore("current", key(item))
           setStore("last", {
             type: "agent",
             agent: item.name,
@@ -194,9 +221,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           })
           const prev = scope()
           const next = {
-            agent: item.name,
+            agent: key(item),
             model: item.model ?? prev?.model,
             variant: item.variant ?? prev?.variant,
+            message: prev?.message,
           } satisfies State
           const session = id()
           if (session) {
@@ -213,7 +241,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           return
         }
 
-        let next = items.findIndex((item) => item.name === agent.current()?.name) + direction
+        const current = agent.current()
+        let next = items.findIndex((item) => current && key(item) === key(current)) + direction
         if (next < 0) next = items.length - 1
         if (next >= items.length) next = 0
         const item = items[next]
@@ -245,17 +274,20 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const selected = () => scope()?.variant
 
     const snapshot = () => {
+      const item = agent.current()
       const model = current()
       return {
-        agent: agent.current()?.name,
+        agent: item ? key(item) : undefined,
         model: model ? { providerID: model.provider.id, modelID: model.id } : undefined,
         variant: selected(),
+        message: scope()?.message,
       } satisfies State
     }
 
     const write = (next: Partial<State>) => {
+      const item = agent.current()
       const state = {
-        ...(scope() ?? { agent: agent.current()?.name }),
+        ...(scope() ?? { agent: item ? key(item) : undefined }),
         ...next,
       } satisfies State
 
@@ -373,18 +405,16 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           handoff.set(handoffKey(dir, session), next)
           setStore("draft", undefined)
         },
-        restore(msg: { sessionID: string; agent: string; model: ModelKey; variant?: string }) {
+        restore(msg: { id: string; sessionID: string; agent: string; model: ModelKey; variant?: string }) {
           const session = id()
           if (!session) return
           if (msg.sessionID !== session) return
-          if (saved.session[session] !== undefined) return
           if (handoff.has(handoffKey(sdk.directory, session))) return
 
-          setSaved("session", session, {
-            agent: msg.agent,
-            model: msg.model,
-            variant: msg.variant ?? null,
-          })
+          const next = syncSessionState(saved.session[session], msg)
+          if (!next) return
+
+          setSaved("session", session, next)
         },
       },
     }
