@@ -5,6 +5,7 @@ export function mapOpenAICompatibleFinishReason(finishReason: string | null | un
     case "stop":
       return "stop"
     case "length":
+    case "model_context_window_exceeded":
       return "length"
     case "content_filter":
       return "content-filter"
