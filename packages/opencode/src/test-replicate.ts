@@ -61,7 +61,6 @@ async function run() {
     if (!payload.type.startsWith("server.")) {
       console.log(payload)
       try {
-        console.log("replaying")
         SyncEvent.replay({
           type: payload.type,
           id: payload.id,
@@ -71,7 +70,7 @@ async function run() {
         })
 
         // console.log("[apply] ok:", event.type)
-        // console.log("db path", Database.Path)
+        console.log("db path", Database.Path)
       } catch (err) {
         console.error("[apply] error:", err)
       }
@@ -80,7 +79,7 @@ async function run() {
 
   console.log("\ndisconnected")
   Database.close()
-  await fs.rm(dir, { recursive: true, force: true })
+  // await fs.rm(dir, { recursive: true, force: true })
 }
 
 run()
