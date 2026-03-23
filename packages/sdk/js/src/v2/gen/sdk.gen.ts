@@ -81,6 +81,10 @@ import type {
   ProjectCurrentResponses,
   ProjectInitGitResponses,
   ProjectListResponses,
+  ProjectSidebarCloseResponses,
+  ProjectSidebarListResponses,
+  ProjectSidebarOpenResponses,
+  ProjectSidebarReorderResponses,
   ProjectUpdateErrors,
   ProjectUpdateResponses,
   ProviderAuthResponses,
@@ -391,6 +395,149 @@ export class Auth extends HeyApiClient {
   }
 }
 
+export class Sidebar extends HeyApiClient {
+  /**
+   * List sidebar items
+   *
+   * Get the ordered list of projects visible in the sidebar rail.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ProjectSidebarListResponses, unknown, ThrowOnError>({
+      url: "/project/sidebar",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Open sidebar item
+   *
+   * Add a project to the sidebar rail by worktree path. Idempotent.
+   */
+  public open<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      worktree?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "worktree" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<ProjectSidebarOpenResponses, unknown, ThrowOnError>({
+      url: "/project/sidebar/open",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Close sidebar item
+   *
+   * Remove a project from the sidebar rail by worktree path. Idempotent.
+   */
+  public close<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      worktree?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "worktree" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<ProjectSidebarCloseResponses, unknown, ThrowOnError>({
+      url: "/project/sidebar/close",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Reorder sidebar items
+   *
+   * Replace the full sidebar rail with the given ordered worktree list.
+   */
+  public reorder<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      worktrees?: Array<string>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "worktrees" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<ProjectSidebarReorderResponses, unknown, ThrowOnError>({
+      url: "/project/sidebar/reorder",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Project extends HeyApiClient {
   /**
    * List all projects
@@ -532,6 +679,11 @@ export class Project extends HeyApiClient {
         ...params.headers,
       },
     })
+  }
+
+  private _sidebar?: Sidebar
+  get sidebar(): Sidebar {
+    return (this._sidebar ??= new Sidebar({ client: this.client }))
   }
 }
 

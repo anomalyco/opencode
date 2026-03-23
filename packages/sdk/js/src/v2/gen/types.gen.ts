@@ -903,6 +903,18 @@ export type EventWorkspaceFailed = {
   }
 }
 
+export type SidebarItem = {
+  worktree: string
+  sort_order: number
+}
+
+export type EventProjectSidebarUpdated = {
+  type: "project.sidebar.updated"
+  properties: {
+    items: Array<SidebarItem>
+  }
+}
+
 export type Pty = {
   id: string
   title: string
@@ -997,6 +1009,7 @@ export type Event =
   | EventVcsBranchUpdated
   | EventWorkspaceReady
   | EventWorkspaceFailed
+  | EventProjectSidebarUpdated
   | EventPtyCreated
   | EventPtyUpdated
   | EventPtyExited
@@ -2222,6 +2235,88 @@ export type ProjectUpdateResponses = {
 }
 
 export type ProjectUpdateResponse = ProjectUpdateResponses[keyof ProjectUpdateResponses]
+
+export type ProjectSidebarListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/project/sidebar"
+}
+
+export type ProjectSidebarListResponses = {
+  /**
+   * Ordered sidebar items
+   */
+  200: Array<SidebarItem>
+}
+
+export type ProjectSidebarListResponse = ProjectSidebarListResponses[keyof ProjectSidebarListResponses]
+
+export type ProjectSidebarOpenData = {
+  body?: {
+    worktree: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/project/sidebar/open"
+}
+
+export type ProjectSidebarOpenResponses = {
+  /**
+   * Updated sidebar items
+   */
+  200: Array<SidebarItem>
+}
+
+export type ProjectSidebarOpenResponse = ProjectSidebarOpenResponses[keyof ProjectSidebarOpenResponses]
+
+export type ProjectSidebarCloseData = {
+  body?: {
+    worktree: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/project/sidebar/close"
+}
+
+export type ProjectSidebarCloseResponses = {
+  /**
+   * Updated sidebar items
+   */
+  200: Array<SidebarItem>
+}
+
+export type ProjectSidebarCloseResponse = ProjectSidebarCloseResponses[keyof ProjectSidebarCloseResponses]
+
+export type ProjectSidebarReorderData = {
+  body?: {
+    worktrees: Array<string>
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/project/sidebar/reorder"
+}
+
+export type ProjectSidebarReorderResponses = {
+  /**
+   * Updated sidebar items
+   */
+  200: Array<SidebarItem>
+}
+
+export type ProjectSidebarReorderResponse = ProjectSidebarReorderResponses[keyof ProjectSidebarReorderResponses]
 
 export type PtyListData = {
   body?: never
