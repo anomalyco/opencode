@@ -4,6 +4,7 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { Popover } from "@opencode-ai/ui/popover"
 import { Switch } from "@opencode-ai/ui/switch"
 import { Tabs } from "@opencode-ai/ui/tabs"
+import { useMutation } from "@tanstack/solid-query"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useNavigate } from "@solidjs/router"
 import { type Accessor, createEffect, createMemo, createSignal, For, type JSXElement, onCleanup, Show } from "solid-js"
@@ -130,41 +131,30 @@ const useDefaultServerKey = (
   }
 }
 
-const useMcpToggle = (input: {
-  sync: ReturnType<typeof useSync>
-  sdk: ReturnType<typeof useSDK>
-  language: ReturnType<typeof useLanguage>
-}) => {
-  const [loading, setLoading] = createSignal<string | null>(null)
+const useMcpToggleMutation = () => {
+  const sync = useSync()
+  const sdk = useSDK()
+  const language = useLanguage()
 
-  const toggle = async (name: string) => {
-    if (loading()) return
-    setLoading(name)
-
-    try {
-      const status = input.sync.data.mcp[name]
-      await (status?.status === "connected"
-        ? input.sdk.client.mcp.disconnect({ name })
-        : input.sdk.client.mcp.connect({ name }))
-      const result = await input.sdk.client.mcp.status()
-      if (result.data) input.sync.set("mcp", result.data)
-    } catch (err) {
+  return useMutation(() => ({
+    mutationFn: async (name: string) => {
+      const status = sync.data.mcp[name]
+      await (status?.status === "connected" ? sdk.client.mcp.disconnect({ name }) : sdk.client.mcp.connect({ name }))
+      const result = await sdk.client.mcp.status()
+      if (result.data) sync.set("mcp", result.data)
+    },
+    onError: (err) => {
       showToast({
         variant: "error",
-        title: input.language.t("common.requestFailed"),
+        title: language.t("common.requestFailed"),
         description: err instanceof Error ? err.message : String(err),
       })
-    } finally {
-      setLoading(null)
-    }
-  }
-
-  return { loading, toggle }
+    },
+  }))
 }
 
 export function StatusPopover() {
   const sync = useSync()
-  const sdk = useSDK()
   const server = useServer()
   const platform = usePlatform()
   const dialog = useDialog()
@@ -181,7 +171,7 @@ export function StatusPopover() {
   })
   const health = useServerHealth(servers)
   const sortedServers = createMemo(() => listServersByHealth(servers(), server.key, health))
-  const mcp = useMcpToggle({ sync, sdk, language })
+  const toggleMcp = useMcpToggleMutation()
   const defaultServer = useDefaultServerKey(platform.getDefaultServer)
   const mcpNames = createMemo(() => Object.keys(sync.data.mcp ?? {}).sort((a, b) => a.localeCompare(b)))
   const mcpStatus = (name: string) => sync.data.mcp?.[name]?.status
@@ -277,8 +267,8 @@ export function StatusPopover() {
                         aria-disabled={isBlocked()}
                         onClick={() => {
                           if (isBlocked()) return
-                          server.setActive(key)
                           navigate("/")
+                          queueMicrotask(() => server.setActive(key))
                         }}
                       >
                         <ServerHealthIndicator health={health[key]} />
@@ -337,8 +327,11 @@ export function StatusPopover() {
                         <button
                           type="button"
                           class="flex items-center gap-2 w-full h-8 pl-3 pr-2 py-1 rounded-md hover:bg-surface-raised-base-hover transition-colors text-left"
-                          onClick={() => mcp.toggle(name)}
-                          disabled={mcp.loading() === name}
+                          onClick={() => {
+                            if (toggleMcp.isPending) return
+                            toggleMcp.mutate(name)
+                          }}
+                          disabled={toggleMcp.isPending && toggleMcp.variables === name}
                         >
                           <div
                             classList={{
@@ -354,8 +347,11 @@ export function StatusPopover() {
                           <div onClick={(event) => event.stopPropagation()}>
                             <Switch
                               checked={enabled()}
-                              disabled={mcp.loading() === name}
-                              onChange={() => mcp.toggle(name)}
+                              disabled={toggleMcp.isPending && toggleMcp.variables === name}
+                              onChange={() => {
+                                if (toggleMcp.isPending) return
+                                toggleMcp.mutate(name)
+                              }}
                             />
                           </div>
                         </button>

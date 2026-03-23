@@ -4,6 +4,7 @@ import fs from "fs/promises"
 import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { ProviderAuth } from "../../src/provider/auth"
+import { ProviderID } from "../../src/provider/schema"
 
 describe("plugin.auth-override", () => {
   test("user plugin overrides built-in github-copilot auth", async () => {
@@ -30,15 +31,26 @@ describe("plugin.auth-override", () => {
       },
     })
 
-    await Instance.provide({
+    await using plain = await tmpdir()
+
+    const methods = await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const methods = await ProviderAuth.methods()
-        const copilot = methods["github-copilot"]
-        expect(copilot).toBeDefined()
-        expect(copilot.length).toBe(1)
-        expect(copilot[0].label).toBe("Test Override Auth")
+        return ProviderAuth.methods()
       },
     })
+
+    const plainMethods = await Instance.provide({
+      directory: plain.path,
+      fn: async () => {
+        return ProviderAuth.methods()
+      },
+    })
+
+    const copilot = methods[ProviderID.make("github-copilot")]
+    expect(copilot).toBeDefined()
+    expect(copilot.length).toBe(1)
+    expect(copilot[0].label).toBe("Test Override Auth")
+    expect(plainMethods[ProviderID.make("github-copilot")][0].label).not.toBe("Test Override Auth")
   }, 30000) // Increased timeout for plugin installation
 })

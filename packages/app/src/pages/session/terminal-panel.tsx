@@ -280,21 +280,24 @@ export function TerminalPanel() {
               </Tabs>
               <div class="flex-1 min-h-0 relative">
                 <Show when={terminal.active()} keyed>
-                  {(id) => (
-                    <Show when={all().find((pty) => pty.id === id)}>
-                      {(pty) => (
-                        <div id={`terminal-wrapper-${id}`} class="absolute inset-0">
-                          <Terminal
-                            pty={pty()}
-                            autoFocus={opened()}
-                            onConnect={() => terminal.trim(id)}
-                            onCleanup={terminal.update}
-                            onConnectError={() => terminal.clone(id)}
-                          />
-                        </div>
-                      )}
-                    </Show>
-                  )}
+                  {(id) => {
+                    const ops = terminal.bind()
+                    return (
+                      <Show when={all().find((pty) => pty.id === id)}>
+                        {(pty) => (
+                          <div id={`terminal-wrapper-${id}`} class="absolute inset-0">
+                            <Terminal
+                              pty={pty()}
+                              autoFocus={opened()}
+                              onConnect={() => ops.trim(id)}
+                              onCleanup={ops.update}
+                              onConnectError={() => ops.clone(id)}
+                            />
+                          </div>
+                        )}
+                      </Show>
+                    )
+                  }}
                 </Show>
               </div>
             </div>
