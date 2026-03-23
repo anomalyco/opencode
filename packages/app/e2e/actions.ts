@@ -175,9 +175,9 @@ export async function runTerminal(page: Page, input: { cmd: string; token: strin
   await expect.poll(() => terminalHas(page, { term, token: input.token }), { timeout }).toBe(true)
 }
 
-export async function openPalette(page: Page) {
+export async function openPalette(page: Page, key = "K") {
   await defocus(page)
-  await page.keyboard.press(`${modKey}+P`)
+  await page.keyboard.press(`${modKey}+${key}`)
 
   const dialog = page.getByRole("dialog")
   await expect(dialog).toBeVisible()
