@@ -23,6 +23,13 @@ export type ProviderContext = {
   options: Record<string, any>
 }
 
+export type SkillInfo = {
+  name: string
+  description: string
+  location: string
+  content: string
+}
+
 export type PluginInput = {
   client: ReturnType<typeof createOpencodeClient>
   project: Project
@@ -30,6 +37,11 @@ export type PluginInput = {
   worktree: string
   serverUrl: URL
   $: BunShell
+  skills: {
+    all(): Promise<SkillInfo[]>
+    get(name: string): Promise<SkillInfo | undefined>
+    dirs(): Promise<string[]>
+  }
 }
 
 export type PluginOptions = Record<string, unknown>

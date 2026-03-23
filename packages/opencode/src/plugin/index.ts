@@ -16,6 +16,7 @@ import { makeRuntime } from "@/effect/run-service"
 import { errorMessage } from "@/util/error"
 import { PluginLoader } from "./loader"
 import { parsePluginSpecifier, readPluginId, readV1Plugin, resolvePluginId } from "./shared"
+import { Skill } from "../skill"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
@@ -129,6 +130,11 @@ export namespace Plugin {
               return Server.url ?? new URL("http://localhost:4096")
             },
             $: Bun.$,
+            skills: {
+              all: () => Skill.all(),
+              get: (name: string) => Skill.get(name),
+              dirs: () => Skill.dirs(),
+            },
           }
 
           for (const plugin of INTERNAL_PLUGINS) {
