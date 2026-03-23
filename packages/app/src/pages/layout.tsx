@@ -3,6 +3,7 @@ import {
   createEffect,
   createMemo,
   createResource,
+  createSignal,
   For,
   on,
   onCleanup,
@@ -2312,7 +2313,16 @@ export default function Layout(props: ParentProps) {
       aimMove={aim.move}
       projects={projects}
       renderProject={(project) => (
-        <SortableProject ctx={projectSidebarCtx} project={project} sortNow={sortNow} mobile={mobile} />
+        <SortableProject
+          onHoverOpenChanged={(hoverOpen) => {
+            if (!hoverOpen && state.hoverProject && state.hoverProject !== project.worktree) return
+            setState("hoverProject", hoverOpen ? project.worktree : undefined)
+          }}
+          ctx={projectSidebarCtx}
+          project={project}
+          sortNow={sortNow}
+          mobile={mobile}
+        />
       )}
       handleDragStart={handleDragStart}
       handleDragEnd={handleDragEnd}
