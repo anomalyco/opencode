@@ -45,6 +45,7 @@ import { z } from "zod"
 import { LoadAPIKeyError } from "ai"
 import type { AssistantMessage, Event, OpencodeClient, SessionMessageResponse, ToolPart } from "@opencode-ai/sdk/v2"
 import { applyPatch } from "diff"
+import { Instance } from "@/project/instance"
 
 type ModeOption = { id: string; name: string; description?: string }
 type ModelOption = { modelId: string; name: string }
@@ -1122,7 +1123,7 @@ export namespace ACP {
       return agents
         .filter((agent) => agent.mode !== "subagent" && !agent.hidden)
         .map((agent) => ({
-          id: agent.name,
+          id: agent.id,
           name: agent.name,
           description: agent.description,
         }))
@@ -1137,9 +1138,12 @@ export namespace ACP {
         this.sessionManager.get(sessionId).modeId ||
         (await (async () => {
           if (!availableModes.length) return undefined
-          const defaultAgentName = await AgentModule.defaultAgent()
+          const defaultAgentName = await Instance.provide({
+            directory,
+            fn: () => AgentModule.defaultAgent(),
+          })
           const resolvedModeId =
-            availableModes.find((mode) => mode.name === defaultAgentName)?.id ?? availableModes[0].id
+            availableModes.find((mode) => mode.id === defaultAgentName)?.id ?? availableModes[0].id
           this.sessionManager.setMode(sessionId, resolvedModeId)
           return resolvedModeId
         })())
@@ -1295,7 +1299,12 @@ export namespace ACP {
       if (!current) {
         this.sessionManager.setModel(session.id, model)
       }
-      const agent = session.modeId ?? (await AgentModule.defaultAgent())
+      const agent =
+        session.modeId ??
+        (await Instance.provide({
+          directory,
+          fn: () => AgentModule.defaultAgent(),
+        }))
 
       const parts: Array<
         | { type: "text"; text: string; synthetic?: boolean; ignored?: boolean }
