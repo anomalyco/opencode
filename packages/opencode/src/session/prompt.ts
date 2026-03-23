@@ -320,7 +320,7 @@ export namespace SessionPrompt {
 
       if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
 
-      // Check if the last assistant message has tool parts (some providers like Gemini
+      // Check if the last assistant message has tool parts (some providers
       // return finish_reason "stop" instead of "tool_calls" even when tools were called)
       const lastAssistantMsg = msgs.findLast((m) => m.info.role === "assistant" && m.info.id === lastAssistant?.id)
       const hasToolCalls = lastAssistantMsg?.parts.some((p) => p.type === "tool") ?? false
