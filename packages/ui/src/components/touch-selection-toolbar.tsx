@@ -26,7 +26,7 @@ export function useTouchSelection() {
 
     setHasSelection(true)
     setPosition({
-      top: rect.top - 44 + window.scrollY,
+      top: rect.top - 44,
       left: rect.left + rect.width / 2,
     })
   }

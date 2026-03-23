@@ -456,15 +456,10 @@ export function FileTabContent(props: { tab: string }) {
           <Match when={state()?.error}>{(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}</Match>
         </Switch>
       </ScrollView>
-      <Show when={isTouch()}>
+      <Show when={isTouch() && activeSelection()}>
         <TouchSelectionToolbar
           position={touchSelection.position()}
-          onAddComment={() => {
-            const selection = activeSelection()
-            if (selection) {
-              commentsUi.note.openDraft(selection)
-            }
-          }}
+          onAddComment={() => commentsUi.note.openDraft(activeSelection()!)}
           onClose={touchSelection.clearSelection}
         />
       </Show>
