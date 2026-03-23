@@ -196,15 +196,15 @@ export interface Hooks {
     output: { parts: Part[] },
   ) => Promise<void>
   "tool.execute.before"?: (
-    input: { tool: string; sessionID: string; callID: string },
-    output: { args: any },
+    input: { tool: string; sessionID: string; callID: string; callChain?: string[] },
+    output: { args: any; result?: { title: string; output: string; metadata?: Record<string, any> } },
   ) => Promise<void>
   "shell.env"?: (
     input: { cwd: string; sessionID?: string; callID?: string },
     output: { env: Record<string, string> },
   ) => Promise<void>
   "tool.execute.after"?: (
-    input: { tool: string; sessionID: string; callID: string; args: any },
+    input: { tool: string; sessionID: string; callID: string; callChain?: string[]; args: any },
     output: {
       title: string
       output: string

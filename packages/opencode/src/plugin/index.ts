@@ -14,6 +14,8 @@ import { gitlabAuthPlugin as GitlabAuthPlugin } from "opencode-gitlab-auth"
 import { Effect, Layer, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRunPromise } from "@/effect/run-service"
+import { PipelineExecutor, type BeforeHook, type AfterHook, type ErrorHook } from "./pipeline"
+import { resolveHookName, getAllHookNames } from "./compat"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
@@ -203,4 +205,83 @@ export namespace Plugin {
   export async function init() {
     return runPromise((svc) => svc.init())
   }
+}
+
+/**
+ * Wraps tool execution through PipelineExecutor for unified before/after/error handling.
+ * Supports both old hook names (tool.execute.before/after) and new names (pipeline.tool.before/after).
+ */
+export async function triggerToolExecution(opts: {
+  tool: string
+  toolSource?: string
+  sessionID: string
+  callID: string
+  args: unknown
+  execute: () => Promise<any>
+  session: { id: string; agent: string }
+  callChain?: string[]
+}) {
+  const plugins = await Plugin.list()
+
+  const canonicalBefore = resolveHookName("tool.execute.before")
+  const canonicalAfter = resolveHookName("tool.execute.after")
+
+  const beforeHookNames = getAllHookNames(canonicalBefore)
+  const afterHookNames = getAllHookNames(canonicalAfter)
+
+  const beforeHooks: BeforeHook[] = []
+  const afterHooks: AfterHook[] = []
+  const errorHooks: ErrorHook[] = []
+
+  for (const plugin of plugins) {
+    for (const name of beforeHookNames) {
+      const hook = plugin[name as keyof Hooks] as any
+      if (hook) {
+        beforeHooks.push({
+          name,
+          handle: async (input) => {
+            const output = { args: input, result: undefined as any }
+            await hook(
+              { tool: opts.tool, sessionID: opts.sessionID, callID: opts.callID, callChain: opts.callChain },
+              output,
+            )
+            if (output.result) {
+              return { data: output.result, shortCircuit: true }
+            }
+            return { data: output.args }
+          },
+        })
+      }
+    }
+
+    for (const name of afterHookNames) {
+      const hook = plugin[name as keyof Hooks] as any
+      if (hook) {
+        afterHooks.push({
+          name,
+          handle: async (input) => {
+            await hook(
+              { tool: opts.tool, sessionID: opts.sessionID, callID: opts.callID, args: input },
+              { title: "", output: "", metadata: undefined },
+            )
+          },
+        })
+      }
+    }
+  }
+
+  const operation = {
+    type: "tool" as const,
+    name: opts.tool,
+    source: (opts.toolSource as any) ?? "custom",
+  }
+
+  return await PipelineExecutor.dispatch(operation, opts.args, {
+    beforeHooks,
+    afterHooks,
+    errorHooks,
+    execute: opts.execute,
+    session: opts.session,
+    callChain: opts.callChain,
+  })
 }

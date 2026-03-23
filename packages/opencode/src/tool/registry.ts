@@ -30,6 +30,8 @@ import { ApplyPatchTool } from "./apply_patch"
 import { Glob } from "../util/glob"
 import { pathToFileURL } from "url"
 import { Effect, Layer, ServiceMap } from "effect"
+import { ToolSource } from "../tool/source"
+import { MCP } from "../mcp"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRunPromise } from "@/effect/run-service"
 
@@ -46,7 +48,7 @@ export namespace ToolRegistry {
     readonly tools: (
       model: { providerID: ProviderID; modelID: ModelID },
       agent?: Agent.Info,
-    ) => Effect.Effect<(Awaited<ReturnType<Tool.Info["init"]>> & { id: string })[]>
+    ) => Effect.Effect<(Awaited<ReturnType<Tool.Info["init"]>> & { id: string; source?: Tool.Info["source"] })[]>
   }
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/ToolRegistry") {}
@@ -158,9 +160,14 @@ export namespace ToolRegistry {
       ) {
         const state = yield* InstanceState.get(cache)
         const allTools = yield* Effect.promise(() => all(state.custom))
+
+        // Compose built-in and MCP tools - MCP tools win on duplicate IDs
+        const source = ToolSource.compose(ToolSource.fromBuiltin(allTools), MCP.fromMCPLayer())
+        const composedTools = yield* Effect.promise(() => source.tools())
+
         return yield* Effect.promise(() =>
           Promise.all(
-            allTools
+            composedTools
               .filter((tool) => {
                 // Enable websearch/codesearch for zen users OR via enable flag
                 if (tool.id === "codesearch" || tool.id === "websearch") {
@@ -185,6 +192,7 @@ export namespace ToolRegistry {
                 await Plugin.trigger("tool.definition", { toolID: tool.id }, output)
                 return {
                   id: tool.id,
+                  source: tool.source,
                   ...next,
                   description: output.description,
                   parameters: output.parameters,

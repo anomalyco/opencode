@@ -18,7 +18,7 @@ import { Bus } from "../bus"
 import { ProviderTransform } from "../provider/transform"
 import { SystemPrompt } from "./system"
 import { InstructionPrompt } from "./instruction"
-import { Plugin } from "../plugin"
+import { Plugin, triggerToolExecution } from "../plugin"
 import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
@@ -48,6 +48,7 @@ import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
 import { Truncate } from "@/tool/truncate"
 import { decodeDataUrl } from "@/util/data-url"
+import { toJSONSchema as toJSONSchemaV4 } from "zod/v4/core"
 import { Process } from "@/util/process"
 
 // @ts-ignore
@@ -407,14 +408,8 @@ export namespace SessionPrompt {
           subagent_type: task.agent,
           command: task.command,
         }
-        await Plugin.trigger(
-          "tool.execute.before",
-          {
-            tool: "task",
-            sessionID,
-            callID: part.id,
-          },
-          { args: taskArgs },
+        const taskCallChain = msgs.flatMap((msg) =>
+          msg.parts.filter((p): p is MessageV2.ToolPart => p.type === "tool").map((p) => p.callID),
         )
         let executionError: Error | undefined
         const taskAgent = await Agent.get(task.agent)
@@ -424,6 +419,7 @@ export namespace SessionPrompt {
           sessionID: sessionID,
           abort,
           callID: part.callID,
+          callChain: taskCallChain,
           extra: { bypassAgentCheck: true },
           messages: msgs,
           async metadata(input) {
@@ -444,26 +440,27 @@ export namespace SessionPrompt {
             })
           },
         }
-        const result = await taskTool.execute(taskArgs, taskCtx).catch((error) => {
-          executionError = error
-          log.error("subtask execution failed", { error, agent: task.agent, description: task.description })
-          return undefined
-        })
-        const attachments = result?.attachments?.map((attachment) => ({
-          ...attachment,
-          id: PartID.ascending(),
+        const result = await triggerToolExecution({
+          tool: "task",
           sessionID,
-          messageID: assistantMessage.id,
-        }))
-        await Plugin.trigger(
-          "tool.execute.after",
-          {
-            tool: "task",
+          callID: part.id,
+          args: taskArgs,
+          execute: () =>
+            taskTool.execute(taskArgs, taskCtx).catch((error) => {
+              executionError = error
+              log.error("subtask execution failed", { error, agent: task.agent, description: task.description })
+              return undefined
+            }),
+          session: { id: sessionID, agent: task.agent },
+          callChain: taskCallChain,
+        })
+        const attachments = result?.attachments?.map(
+          (attachment: Omit<MessageV2.FilePart, "id" | "sessionID" | "messageID">) => ({
+            ...attachment,
+            id: PartID.ascending(),
             sessionID,
-            callID: part.id,
-            args: taskArgs,
-          },
-          result,
+            messageID: assistantMessage.id,
+          }),
         )
         assistantMessage.finish = "tool-calls"
         assistantMessage.time.completed = Date.now()
@@ -755,11 +752,16 @@ export namespace SessionPrompt {
     using _ = log.time("resolveTools")
     const tools: Record<string, AITool> = {}
 
+    const callChain = input.messages.flatMap((msg) =>
+      msg.parts.filter((p): p is MessageV2.ToolPart => p.type === "tool").map((p) => p.callID),
+    )
+
     const context = (args: any, options: ToolCallOptions): Tool.Context => ({
       sessionID: input.session.id,
       abort: options.abortSignal!,
       messageID: input.processor.message.id,
       callID: options.toolCallId,
+      callChain,
       extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck },
       agent: input.agent.name,
       messages: input.messages,
@@ -794,44 +796,49 @@ export namespace SessionPrompt {
       { modelID: ModelID.make(input.model.api.id), providerID: input.model.providerID },
       input.agent,
     )) {
-      const schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters))
+      // Handle different parameter types: Zod v3, Zod v4, or plain JSONSchema7
+      const paramsSchema = (() => {
+        if (item.parameters instanceof z.ZodType) {
+          // Zod v3 schema - use z.toJSONSchema
+          return z.toJSONSchema(item.parameters)
+        }
+        if ("~standard" in item.parameters) {
+          // Zod v4 schema - use toJSONSchema from zod/v4/core
+          return toJSONSchemaV4(item.parameters as any)
+        }
+        // Plain JSONSchema7 object - use directly
+        return item.parameters
+      })()
+
+      const schema = ProviderTransform.schema(input.model, paramsSchema)
       tools[item.id] = tool({
         id: item.id as any,
         description: item.description,
         inputSchema: jsonSchema(schema as any),
         async execute(args, options) {
           const ctx = context(args, options)
-          await Plugin.trigger(
-            "tool.execute.before",
-            {
-              tool: item.id,
-              sessionID: ctx.sessionID,
-              callID: ctx.callID,
-            },
-            {
-              args,
-            },
-          )
-          const result = await item.execute(args, ctx)
+          const result = await triggerToolExecution({
+            tool: item.id,
+            toolSource: item.source,
+            sessionID: ctx.sessionID,
+            callID: ctx.callID ?? "",
+            args,
+            execute: () => item.execute(args, ctx),
+            session: { id: ctx.sessionID, agent: ctx.agent },
+            callChain: ctx.callChain,
+          })
+          if (!result) return { title: "", metadata: {}, output: "" }
           const output = {
             ...result,
-            attachments: result.attachments?.map((attachment) => ({
-              ...attachment,
-              id: PartID.ascending(),
-              sessionID: ctx.sessionID,
-              messageID: input.processor.message.id,
-            })),
+            attachments: result.attachments?.map(
+              (attachment: Omit<MessageV2.FilePart, "id" | "sessionID" | "messageID">) => ({
+                ...attachment,
+                id: PartID.ascending(),
+                sessionID: ctx.sessionID,
+                messageID: input.processor.message.id,
+              }),
+            ),
           }
-          await Plugin.trigger(
-            "tool.execute.after",
-            {
-              tool: item.id,
-              sessionID: ctx.sessionID,
-              callID: ctx.callID,
-              args,
-            },
-            output,
-          )
           return output
         },
       })
@@ -847,37 +854,27 @@ export namespace SessionPrompt {
       item.execute = async (args, opts) => {
         const ctx = context(args, opts)
 
-        await Plugin.trigger(
-          "tool.execute.before",
-          {
-            tool: key,
-            sessionID: ctx.sessionID,
-            callID: opts.toolCallId,
-          },
-          {
-            args,
-          },
-        )
-
         await ctx.ask({
           permission: key,
           metadata: {},
-          patterns: ["*"],
-          always: ["*"],
+          patterns: [key],
+          always: [key],
         })
 
-        const result = await execute(args, opts)
+        const result = await triggerToolExecution({
+          tool: key,
+          toolSource: "mcp",
+          sessionID: ctx.sessionID,
+          callID: opts.toolCallId,
+          args,
+          execute: () => execute(args, opts),
+          session: { id: ctx.sessionID, agent: ctx.agent },
+          callChain: ctx.callChain,
+        })
+        if (!result) return { title: "", metadata: {}, output: "" }
 
-        await Plugin.trigger(
-          "tool.execute.after",
-          {
-            tool: key,
-            sessionID: ctx.sessionID,
-            callID: opts.toolCallId,
-            args,
-          },
-          result,
-        )
+        // Short-circuit result from plugin (has title/output but no content array)
+        if (!result.content) return result
 
         const textParts: string[] = []
         const attachments: Omit<MessageV2.FilePart, "id" | "sessionID" | "messageID">[] = []

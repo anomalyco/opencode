@@ -1,4 +1,6 @@
 import { dynamicTool, type Tool, jsonSchema, type JSONSchema7 } from "ai"
+import { Tool as ToolModule } from "../tool/tool"
+import { ToolSource } from "../tool/source"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
@@ -8,6 +10,7 @@ import {
   CallToolResultSchema,
   type Tool as MCPToolDef,
   ToolListChangedNotificationSchema,
+  type CallToolResult,
 } from "@modelcontextprotocol/sdk/types.js"
 import { Config } from "../config/config"
 import { Log } from "../util/log"
@@ -973,5 +976,90 @@ export namespace MCP {
     if (!hasTokens) return "not_authenticated"
     const expired = await McpAuth.isTokenExpired(mcpName)
     return expired ? "expired" : "authenticated"
+  }
+
+  // Convert a single MCP tool definition to Tool.Info
+  export function fromMcpTool(
+    mcpTool: MCPToolDef,
+    client: MCPClient,
+    serverName: string,
+    timeout?: number,
+  ): ToolModule.Info<JSONSchema7> {
+    return ToolModule.define(
+      `${serverName}_${mcpTool.name}`.replace(/[^a-zA-Z0-9_-]/g, "_"),
+      async () => {
+        const schema: JSONSchema7 = {
+          ...(mcpTool.inputSchema as JSONSchema7),
+          type: "object",
+          properties: (mcpTool.inputSchema?.properties ?? {}) as JSONSchema7["properties"],
+          additionalProperties: false,
+        }
+
+        return {
+          description: mcpTool.description ?? "",
+          parameters: schema,
+          async execute(args) {
+            const rawResult = await client.callTool(
+              { name: mcpTool.name, arguments: (args || {}) as Record<string, unknown> },
+              CallToolResultSchema,
+              { resetTimeoutOnProgress: true, timeout },
+            )
+
+            const textParts: string[] = []
+            for (const item of rawResult.content as CallToolResult["content"]) {
+              if (item.type === "text") textParts.push(item.text)
+            }
+
+            return {
+              title: "",
+              output: textParts.join("\n\n"),
+              metadata: {},
+            }
+          },
+        }
+      },
+      { source: "mcp" },
+    )
+  }
+
+  // Wrap all MCP clients into a ToolSource
+  export function fromMCPLayer(): ToolSource.Interface {
+    return {
+      id: "mcp:layer",
+      description: "All connected MCP servers",
+      async tools(): Promise<ToolModule.Info<JSONSchema7>[]> {
+        const result: ToolModule.Info<JSONSchema7>[] = []
+        const s = await state()
+        const cfg = await Config.get()
+        const config = cfg.mcp ?? {}
+        const defaultTimeout = cfg.experimental?.mcp_timeout
+
+        const clientsSnapshot = await clients()
+        const connectedClients = Object.entries(clientsSnapshot).filter(
+          ([clientName]) => s.status[clientName]?.status === "connected",
+        )
+
+        for (const [clientName, client] of connectedClients) {
+          const mcpConfig = config[clientName]
+          const entry = isMcpConfigured(mcpConfig) ? mcpConfig : undefined
+          const timeout = entry?.timeout ?? defaultTimeout
+
+          let toolsResult: Awaited<ReturnType<MCPClient["listTools"]>> | undefined
+          try {
+            toolsResult = await client.listTools()
+          } catch (e) {
+            log.error("failed to get tools", { clientName, error: (e as Error).message })
+            continue
+          }
+
+          if (!toolsResult) continue
+          for (const mcpTool of toolsResult.tools) {
+            const sanitizedClientName = clientName.replace(/[^a-zA-Z0-9_-]/g, "_")
+            result.push(fromMcpTool(mcpTool, client, sanitizedClientName, timeout))
+          }
+        }
+        return result
+      },
+    } as unknown as ToolSource.Interface
   }
 }

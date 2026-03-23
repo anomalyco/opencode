@@ -59,6 +59,11 @@ export const BatchTool = Tool.define("batch", async () => {
               `Tool '${call.tool}' not in registry. External tools (MCP, environment) cannot be batched - call them directly. Available tools: ${availableToolsList.join(", ")}`,
             )
           }
+          if (tool.source === "mcp") {
+            throw new Error(
+              `Tool '${call.tool}' not in registry. External tools (MCP, environment) cannot be batched - call them directly.`,
+            )
+          }
           const validatedParams = tool.parameters.parse(call.parameters)
 
           await Session.updatePart({
