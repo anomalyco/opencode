@@ -19,7 +19,7 @@ import { Log } from "@/util/log"
 
 const log = Log.create({ service: "tool.task" })
 
-/** Tracks active background agent count per instance for concurrency limiting */
+/** Tracks active background agent count (process-wide) for concurrency limiting */
 let running = 0
 
 const parameters = z.object({
@@ -189,38 +189,40 @@ export const TaskTool = Tool.define("task", async (ctx) => {
 
         running++
         const teamID = params.team_id ? TeamID.make(params.team_id) : undefined
-        try {
-          const bound = Instance.bind(() => {
-            SessionPrompt.prompt(promptInput)
-              .catch(async (err) => {
-                log.error("background agent failed", {
+        const bound = Instance.bind(() => {
+          SessionPrompt.prompt(promptInput)
+            .catch(async (err) => {
+              log.error("background agent failed", {
+                sessionID: session.id,
+                agent: agent.name,
+                error: err,
+              })
+              if (teamID) {
+                Team.failMember({
+                  teamID,
                   sessionID: session.id,
                   agent: agent.name,
-                  error: err,
                 })
-                if (teamID) {
-                  Team.failMember({
-                    teamID,
-                    sessionID: session.id,
-                    agent: agent.name,
-                  })
-                  // Notify the lead about the failure
-                  const lead = Team.leadSession(teamID)
-                  if (lead) {
-                    await SessionInject.send({
-                      sessionID: lead.sessionID,
-                      from: agent.name,
-                      fromSessionID: session.id,
-                      content: `[AGENT FAILURE] @${agent.name} crashed with error: ${err instanceof Error ? err.message : String(err)}`,
-                      teamID: params.team_id,
-                    }).catch((e) => log.error("failed to notify lead of agent failure", { error: e }))
-                  }
+                // Notify the lead about the failure
+                const lead = Team.leadSession(teamID)
+                if (lead) {
+                  await SessionInject.send({
+                    sessionID: lead.sessionID,
+                    from: agent.name,
+                    fromSessionID: session.id,
+                    content: `[AGENT FAILURE] @${agent.name} crashed with error: ${err instanceof Error ? err.message : String(err)}`,
+                    teamID: params.team_id,
+                  }).catch((e) => log.error("failed to notify lead of agent failure", { error: e }))
                 }
-              })
-              .finally(() => {
-                running--
-              })
-          })
+              }
+            })
+            .finally(() => {
+              running--
+              // Clean up the abort listener when the agent completes
+              ctx.abort.removeEventListener("abort", cancel)
+            })
+        })
+        try {
           bound()
         } catch (e) {
           running--
