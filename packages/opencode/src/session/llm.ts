@@ -74,8 +74,10 @@ export namespace LLM {
         ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)),
         // any custom prompt passed into this call
         ...input.system,
-        // any custom prompt from last user message
-        ...(input.user.system ? [input.user.system] : []),
+        // Skip per-message system prompts for hidden agents (compaction, title, summary).
+        // These agents have their own dedicated prompts and must not be overridden by
+        // client-injected system prompts (e.g. Kiro's identity prompt).
+        ...(!input.agent.hidden && input.user.system ? [input.user.system] : []),
       ]
         .filter((x) => x)
         .join("\n"),
