@@ -393,3 +393,75 @@ describe("Project.update", () => {
     expect(updated.commands?.start).toBe("make start")
   })
 })
+
+describe("Project.list and Project.get", () => {
+  test("list returns all projects", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const { project } = await Project.fromDirectory(Filesystem.resolve(tmp.path))
+
+    const all = Project.list()
+    expect(all.length).toBeGreaterThan(0)
+    expect(all.find((p) => p.id === project.id)).toBeDefined()
+  })
+
+  test("get returns project by id", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const { project } = await Project.fromDirectory(Filesystem.resolve(tmp.path))
+
+    const found = Project.get(project.id)
+    expect(found).toBeDefined()
+    expect(found!.id).toBe(project.id)
+  })
+
+  test("get returns undefined for unknown id", () => {
+    const found = Project.get(ProjectID.make("nonexistent"))
+    expect(found).toBeUndefined()
+  })
+})
+
+describe("Project.setInitialized", () => {
+  test("sets time_initialized on project", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const { project } = await Project.fromDirectory(Filesystem.resolve(tmp.path))
+
+    expect(project.time.initialized).toBeUndefined()
+
+    Project.setInitialized(project.id)
+
+    const updated = Project.get(project.id)
+    expect(updated?.time.initialized).toBeDefined()
+  })
+})
+
+describe("Project.addSandbox and Project.removeSandbox", () => {
+  test("addSandbox adds directory and removeSandbox removes it", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const { project } = await Project.fromDirectory(Filesystem.resolve(tmp.path))
+    const sandboxDir = path.join(tmp.path, "sandbox-test")
+
+    await Project.addSandbox(project.id, sandboxDir)
+
+    let found = Project.get(project.id)
+    expect(found?.sandboxes).toContain(sandboxDir)
+
+    await Project.removeSandbox(project.id, sandboxDir)
+
+    found = Project.get(project.id)
+    expect(found?.sandboxes).not.toContain(sandboxDir)
+  })
+
+  test("addSandbox emits GlobalBus event", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const { project } = await Project.fromDirectory(Filesystem.resolve(tmp.path))
+    const sandboxDir = path.join(tmp.path, "sandbox-event")
+
+    const events: any[] = []
+    const on = (evt: any) => events.push(evt)
+    GlobalBus.on("event", on)
+
+    await Project.addSandbox(project.id, sandboxDir)
+
+    GlobalBus.off("event", on)
+    expect(events.some((e) => e.payload.type === Project.Event.Updated.type)).toBe(true)
+  })
+})
