@@ -131,11 +131,11 @@ export function DialogCustomProvider(props: Props) {
     const auth = result.key
       ? globalSDK.client.auth.set({
           providerID: result.providerID,
-          body: {
+          auth: {
             type: "api",
             key: result.key,
           },
-        } as any)
+        })
       : Promise.resolve()
 
     auth

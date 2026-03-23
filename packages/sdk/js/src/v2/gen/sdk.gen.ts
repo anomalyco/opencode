@@ -4,11 +4,11 @@ import { client } from "./client.gen.js"
 import { buildClientParams, type Client, type Options as Options2, type TDataShape } from "./client/index.js"
 import type {
   AgentPartInput,
-  ApiAuth,
   AppAgentsResponses,
   AppLogErrors,
   AppLogResponses,
   AppSkillsResponses,
+  Auth as Auth3,
   AuthRemoveErrors,
   AuthRemoveResponses,
   AuthSetErrors,
@@ -46,6 +46,8 @@ import type {
   GlobalDisposeResponses,
   GlobalEventResponses,
   GlobalHealthResponses,
+  GlobalUpgradeErrors,
+  GlobalUpgradeResponses,
   InstanceDisposeResponses,
   LspStatusResponses,
   McpAddErrors,
@@ -63,7 +65,6 @@ import type {
   McpLocalConfig,
   McpRemoteConfig,
   McpStatusResponses,
-  OAuth,
   OutputFormat,
   Part as Part2,
   PartDeleteErrors,
@@ -174,7 +175,6 @@ import type {
   TuiShowToastResponses,
   TuiSubmitPromptResponses,
   VcsGetResponses,
-  WellKnownAuth,
   WorktreeCreateErrors,
   WorktreeCreateInput,
   WorktreeCreateResponses,
@@ -305,6 +305,30 @@ export class Global extends HeyApiClient {
     })
   }
 
+  /**
+   * Upgrade opencode
+   *
+   * Upgrade opencode to the specified version or latest if not specified.
+   */
+  public upgrade<ThrowOnError extends boolean = false>(
+    parameters?: {
+      target?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "target" }] }])
+    return (options?.client ?? this.client).post<GlobalUpgradeResponses, GlobalUpgradeErrors, ThrowOnError>({
+      url: "/global/upgrade",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
   private _config?: Config
   get config(): Config {
     return (this._config ??= new Config({ client: this.client }))
@@ -339,7 +363,7 @@ export class Auth extends HeyApiClient {
   public set<ThrowOnError extends boolean = false>(
     parameters: {
       providerID: string
-      body?: OAuth | ApiAuth | WellKnownAuth
+      auth?: Auth3
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -349,7 +373,7 @@ export class Auth extends HeyApiClient {
         {
           args: [
             { in: "path", key: "providerID" },
-            { key: "body", map: "body" },
+            { key: "auth", map: "body" },
           ],
         },
       ],

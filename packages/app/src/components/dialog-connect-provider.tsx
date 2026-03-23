@@ -383,11 +383,11 @@ export function DialogConnectProvider(props: { provider: string }) {
       setFormStore("error", undefined)
       await globalSDK.client.auth.set({
         providerID: props.provider,
-        body: {
+        auth: {
           type: "api",
           key: apiKey,
         },
-      } as any)
+      })
       await complete()
     }
 

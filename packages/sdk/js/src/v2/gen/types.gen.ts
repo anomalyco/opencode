@@ -1534,6 +1534,8 @@ export type WellKnownAuth = {
   token: string
 }
 
+export type Auth = OAuth | ApiAuth | WellKnownAuth
+
 export type NotFoundError = {
   name: "NotFoundError"
   data: {
@@ -2028,6 +2030,41 @@ export type GlobalDisposeResponses = {
 
 export type GlobalDisposeResponse = GlobalDisposeResponses[keyof GlobalDisposeResponses]
 
+export type GlobalUpgradeData = {
+  body?: {
+    target?: string
+  }
+  path?: never
+  query?: never
+  url: "/global/upgrade"
+}
+
+export type GlobalUpgradeErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type GlobalUpgradeError = GlobalUpgradeErrors[keyof GlobalUpgradeErrors]
+
+export type GlobalUpgradeResponses = {
+  /**
+   * Upgrade result
+   */
+  200:
+    | {
+        success: true
+        version: string
+      }
+    | {
+        success: false
+        error: string
+      }
+}
+
+export type GlobalUpgradeResponse = GlobalUpgradeResponses[keyof GlobalUpgradeResponses]
+
 export type AuthRemoveData = {
   body?: never
   path: {
@@ -2056,7 +2093,7 @@ export type AuthRemoveResponses = {
 export type AuthRemoveResponse = AuthRemoveResponses[keyof AuthRemoveResponses]
 
 export type AuthSetData = {
-  body?: OAuth | ApiAuth | WellKnownAuth
+  body?: Auth
   path: {
     providerID: string
   }

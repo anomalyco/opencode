@@ -32,7 +32,7 @@ export namespace Auth {
     token: Schema.String,
   }) {}
 
-  const _Info = Schema.Union([Oauth, Api, WellKnown])
+  const _Info = Schema.Union([Oauth, Api, WellKnown]).annotate({ discriminator: "type", identifier: "Auth" })
   export const Info = Object.assign(_Info, { zod: zod(_Info) })
   export type Info = Schema.Schema.Type<typeof _Info>
 
