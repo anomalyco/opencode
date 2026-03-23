@@ -20,15 +20,22 @@ export function match(a: Info | undefined, b: Info): boolean {
  * Convert OpenTUI's ParsedKey to our Keybind.Info format.
  * This helper ensures all required fields are present and avoids manual object creation.
  */
-export function fromParsedKey(key: ParsedKey, leader = false): Info {
-  return {
-    name: key.name === " " ? "space" : key.name,
+export function fromParsedKey(
+  key: Pick<ParsedKey, "name" | "ctrl" | "meta" | "shift" | "super">,
+  leader = false,
+): Info {
+  const info = {
+    name: key.name,
     ctrl: key.ctrl,
     meta: key.meta,
     shift: key.shift,
     super: key.super ?? false,
     leader,
   }
+  if (key.name === "\x00") return { ...info, name: "space", ctrl: true }
+  if (key.name === "\x1F") return { ...info, name: "_", ctrl: true }
+  if (key.name === " ") return { ...info, name: "space" }
+  return info
 }
 
 export function toString(info: Info | undefined): string {

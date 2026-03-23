@@ -52,6 +52,7 @@ export const { use: useKeybind, provider: KeybindProvider } = createSimpleContex
 
     useKeyboard(async (evt) => {
       if (!store.leader && result.match("leader", evt)) {
+        evt.preventDefault()
         leader(true)
         return
       }
@@ -74,10 +75,6 @@ export const { use: useKeybind, provider: KeybindProvider } = createSimpleContex
         return store.leader
       },
       parse(evt: ParsedKey): Keybind.Info {
-        // Handle special case for Ctrl+Underscore (represented as \x1F)
-        if (evt.name === "\x1F") {
-          return Keybind.fromParsedKey({ ...evt, name: "_", ctrl: true }, store.leader)
-        }
         return Keybind.fromParsedKey(evt, store.leader)
       },
       match(key: string, evt: ParsedKey) {

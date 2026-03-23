@@ -54,6 +54,17 @@ describe("Keybind.toString", () => {
     expect(Keybind.toString(info)).toBe("pgup")
   })
 
+  test("should convert space key to string", () => {
+    const info: Keybind.Info = {
+      ctrl: false,
+      meta: false,
+      shift: false,
+      leader: false,
+      name: "space",
+    }
+    expect(Keybind.toString(info)).toBe("space")
+  })
+
   test("should handle empty name", () => {
     const info: Keybind.Info = { ctrl: true, meta: false, shift: false, leader: false, name: "" }
     expect(Keybind.toString(info)).toBe("ctrl")
@@ -172,6 +183,44 @@ describe("Keybind.match", () => {
     const a: Keybind.Info = { ctrl: true, meta: true, shift: true, super: true, leader: false, name: "a" }
     const b: Keybind.Info = { ctrl: true, meta: true, shift: true, super: false, leader: false, name: "a" }
     expect(Keybind.match(a, b)).toBe(false)
+  })
+})
+
+describe("Keybind.fromParsedKey", () => {
+  test("should parse ' ' as space", () => {
+    const result = Keybind.fromParsedKey({ name: " ", ctrl: false, meta: false, shift: false, super: false })
+    expect(result).toEqual({
+      ctrl: false,
+      meta: false,
+      shift: false,
+      super: false,
+      leader: false,
+      name: "space",
+    })
+  })
+
+  test("should parse \x1F as ctrl+_", () => {
+    const result = Keybind.fromParsedKey({ name: "\x1F", ctrl: false, meta: false, shift: false, super: false })
+    expect(result).toEqual({
+      ctrl: true,
+      meta: false,
+      shift: false,
+      super: false,
+      leader: false,
+      name: "_",
+    })
+  })
+
+  test("should parse \x00 as ctrl+space", () => {
+    const result = Keybind.fromParsedKey({ name: "\x00", ctrl: false, meta: false, shift: false, super: false })
+    expect(result).toEqual({
+      ctrl: true,
+      meta: false,
+      shift: false,
+      super: false,
+      leader: false,
+      name: "space",
+    })
   })
 })
 
