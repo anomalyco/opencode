@@ -35,6 +35,7 @@ export type CommandEvent =
 export type SqliteMigrationProgress = { type: "InProgress"; value: number } | { type: "Done" }
 
 export type CommandChild = {
+  pid: number | undefined
   kill: () => void
 }
 
@@ -191,7 +192,7 @@ export function spawnCommand(args: string, extraEnv: Record<string, string>) {
     treeKill(child.pid)
   }
 
-  return { events, child: { kill }, exit }
+  return { events, child: { pid: child.pid, kill }, exit }
 }
 
 function handleSqliteProgress(events: EventEmitter, line: string) {
