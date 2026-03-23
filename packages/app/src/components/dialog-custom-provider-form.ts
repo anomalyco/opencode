@@ -1,5 +1,5 @@
 const PROVIDER_ID = /^[a-z0-9][a-z0-9-_]*$/
-const OPENAI_COMPATIBLE = "@ai-sdk/openai-compatible"
+export const OPENAI_COMPATIBLE = "@ai-sdk/openai-compatible"
 
 type Translator = (key: string, vars?: Record<string, string | number | boolean>) => string
 
@@ -29,6 +29,7 @@ export type HeaderRow = {
 
 export type FormState = {
   providerID: string
+  npm?: string
   name: string
   baseURL: string
   apiKey: string
@@ -47,10 +48,12 @@ type ValidateArgs = {
   t: Translator
   disabledProviders: string[]
   existingProviderIDs: Set<string>
+  currentProviderID?: string
 }
 
 export function validateCustomProvider(input: ValidateArgs) {
   const providerID = input.form.providerID.trim()
+  const npm = input.form.npm?.trim() || OPENAI_COMPATIBLE
   const name = input.form.name.trim()
   const baseURL = input.form.baseURL.trim()
   const apiKey = input.form.apiKey.trim()
@@ -74,7 +77,7 @@ export function validateCustomProvider(input: ValidateArgs) {
   const disabled = input.disabledProviders.includes(providerID)
   const existsError = idError
     ? undefined
-    : input.existingProviderIDs.has(providerID) && !disabled
+    : input.existingProviderIDs.has(providerID) && providerID !== input.currentProviderID && !disabled
       ? input.t("provider.custom.error.providerID.exists")
       : undefined
 
@@ -138,7 +141,7 @@ export function validateCustomProvider(input: ValidateArgs) {
       name,
       key,
       config: {
-        npm: OPENAI_COMPATIBLE,
+        npm,
         name,
         ...(env ? { env: [env] } : {}),
         options: {

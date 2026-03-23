@@ -9,6 +9,36 @@ type OpenFilePickerOptions = { title?: string; multiple?: boolean }
 type SaveFilePickerOptions = { title?: string; defaultPath?: string }
 type UpdateInfo = { updateAvailable: boolean; version?: string }
 
+export type ConfigFile = {
+  id: string
+  label: string
+  path: string
+  exists: boolean
+  scope: string
+  kind: string
+}
+
+export type ConfigWorkspaceFile = {
+  name: string
+  path: string
+  kind: string
+}
+
+export type ConfigWorkspace = {
+  configRoot?: string
+  agentsRoot?: string
+  skillsRoot?: string
+  pluginsRoot?: string
+  agentsMdPath?: string
+  agents: ConfigWorkspaceFile[]
+  plugins: ConfigWorkspaceFile[]
+}
+
+export type ConfigTreeItem = {
+  path: string
+  kind: "file" | "directory"
+}
+
 export type Platform = {
   /** Platform discriminator */
   platform: "web" | "desktop"
@@ -117,6 +147,21 @@ export type Platform = {
 
   /** Search for text in the current page (desktop only) */
   find?(query: string, dir?: 1 | -1): Promise<boolean | void>
+
+  /** List known config files (desktop only) */
+  listConfigFiles?(directory?: string | null): Promise<ConfigFile[]>
+
+  /** Read config file text (desktop only) */
+  readConfigFile?(path: string): Promise<string | null>
+
+  /** Write config file text (desktop only) */
+  writeConfigFile?(path: string, content: string): Promise<void>
+
+  /** Inspect global config workspace (desktop only) */
+  getConfigWorkspace?(): Promise<ConfigWorkspace>
+
+  /** List config directory tree (desktop only) */
+  listConfigDirectory?(path: string): Promise<ConfigTreeItem[]>
 }
 
 export type DisplayBackend = "auto" | "wayland"

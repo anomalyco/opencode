@@ -26,6 +26,8 @@ export const commands = {
 	getDefaultEditor: () => __TAURI_INVOKE<string | null>("get_default_editor"),
 	setDefaultEditor: (editor: string | null) => __TAURI_INVOKE<null>("set_default_editor", { editor }),
 	listConfigFiles: (directory: string | null) => __TAURI_INVOKE<ConfigFile[]>("list_config_files", { directory }),
+	getConfigWorkspace: () => __TAURI_INVOKE<ConfigWorkspace>("get_config_workspace"),
+	listConfigDirectory: (path: string) => __TAURI_INVOKE<ConfigTreeItem[]>("list_config_directory", { path }),
 	readConfigFile: (path: string) => __TAURI_INVOKE<string | null>("read_config_file", { path }),
 	writeConfigFile: (path: string, content: string) => __TAURI_INVOKE<null>("write_config_file", { path, content }),
 	wslPath: (path: string, mode: "windows" | "linux" | null) => __TAURI_INVOKE<string>("wsl_path", { path, mode }),
@@ -46,6 +48,27 @@ export type ConfigFile = {
 		path: string,
 		exists: boolean,
 		scope: string,
+		kind: string,
+	};
+
+export type ConfigTreeItem = {
+		path: string,
+		kind: string,
+	};
+
+export type ConfigWorkspace = {
+		configRoot: string | null,
+		agentsRoot: string | null,
+		skillsRoot: string | null,
+		pluginsRoot: string | null,
+		agentsMdPath: string | null,
+		agents: ConfigWorkspaceFile[],
+		plugins: ConfigWorkspaceFile[],
+	};
+
+export type ConfigWorkspaceFile = {
+		name: string,
+		path: string,
 		kind: string,
 	};
 

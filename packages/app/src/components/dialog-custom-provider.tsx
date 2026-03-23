@@ -11,7 +11,13 @@ import { Link } from "@/components/link"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
-import { type FormState, headerRow, modelRow, validateCustomProvider } from "./dialog-custom-provider-form"
+import {
+  OPENAI_COMPATIBLE,
+  type FormState,
+  headerRow,
+  modelRow,
+  validateCustomProvider,
+} from "./dialog-custom-provider-form"
 import { DialogSelectProvider } from "./dialog-select-provider"
 
 type Props = {
@@ -26,6 +32,7 @@ export function DialogCustomProvider(props: Props) {
 
   const [form, setForm] = createStore<FormState>({
     providerID: "",
+    npm: OPENAI_COMPATIBLE,
     name: "",
     baseURL: "",
     apiKey: "",
@@ -81,9 +88,9 @@ export function DialogCustomProvider(props: Props) {
     )
   }
 
-  const setField = (key: "providerID" | "name" | "baseURL" | "apiKey", value: string) => {
+  const setField = (key: "providerID" | "npm" | "name" | "baseURL" | "apiKey", value: string) => {
     setForm(key, value)
-    if (key === "apiKey") return
+    if (key === "apiKey" || key === "npm") return
     setForm("err", key, undefined)
   }
 
@@ -198,6 +205,12 @@ export function DialogCustomProvider(props: Props) {
               onChange={(v) => setField("providerID", v)}
               validationState={form.err.providerID ? "invalid" : undefined}
               error={form.err.providerID}
+            />
+            <TextField
+              label="npm"
+              placeholder="@ai-sdk/openai-compatible"
+              value={form.npm}
+              onChange={(v) => setField("npm", v)}
             />
             <TextField
               label={language.t("provider.custom.field.name.label")}

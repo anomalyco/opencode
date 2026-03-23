@@ -52,6 +52,33 @@ struct ConfigFile {
 }
 
 #[derive(Clone, serde::Serialize, specta::Type, Debug)]
+#[serde(rename_all = "camelCase")]
+struct ConfigWorkspaceFile {
+    name: String,
+    path: String,
+    kind: String,
+}
+
+#[derive(Clone, serde::Serialize, specta::Type, Debug)]
+#[serde(rename_all = "camelCase")]
+struct ConfigWorkspace {
+    config_root: Option<String>,
+    agents_root: Option<String>,
+    skills_root: Option<String>,
+    plugins_root: Option<String>,
+    agents_md_path: Option<String>,
+    agents: Vec<ConfigWorkspaceFile>,
+    plugins: Vec<ConfigWorkspaceFile>,
+}
+
+#[derive(Clone, serde::Serialize, specta::Type, Debug)]
+#[serde(rename_all = "camelCase")]
+struct ConfigTreeItem {
+    path: String,
+    kind: String,
+}
+
+#[derive(Clone, serde::Serialize, specta::Type, Debug)]
 struct ServerReadyData {
     url: String,
     username: Option<String>,
@@ -117,6 +144,86 @@ fn push_config_file(list: &mut Vec<ConfigFile>, id: &str, label: &str, path: Pat
         scope: scope.to_string(),
         kind: kind.to_string(),
     });
+}
+
+fn list_workspace_files(dir: &PathBuf, exts: &[&str], kind: &str) -> Vec<ConfigWorkspaceFile> {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return Vec::new();
+    };
+
+    let mut list = entries
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path())
+        .filter(|path| path.is_file())
+        .filter(|path| {
+            path.extension()
+                .and_then(|ext| ext.to_str())
+                .is_some_and(|ext| exts.iter().any(|item| item.eq_ignore_ascii_case(ext)))
+        })
+        .map(|path| ConfigWorkspaceFile {
+            name: path
+                .file_stem()
+                .and_then(|name| name.to_str())
+                .unwrap_or_default()
+                .to_string(),
+            path: path.to_string_lossy().to_string(),
+            kind: kind.to_string(),
+        })
+        .collect::<Vec<_>>();
+
+    list.sort_by(|a, b| a.name.cmp(&b.name));
+    list
+}
+
+#[tauri::command]
+#[specta::specta]
+fn list_config_directory(path: String) -> Result<Vec<ConfigTreeItem>, String> {
+    let root = PathBuf::from(path);
+    let Ok(entries) = fs::read_dir(&root) else {
+        return Ok(Vec::new());
+    };
+
+    let mut list = entries
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path())
+        .map(|path| ConfigTreeItem {
+            path: path.to_string_lossy().to_string(),
+            kind: if path.is_dir() {
+                "directory".to_string()
+            } else {
+                "file".to_string()
+            },
+        })
+        .collect::<Vec<_>>();
+
+    list.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(list)
+}
+
+#[tauri::command]
+#[specta::specta]
+fn get_config_workspace() -> ConfigWorkspace {
+    let root = config_root();
+    let agents_root = root.as_ref().map(|dir| dir.join("agents"));
+    let skills_root = root.as_ref().map(|dir| dir.join("skills"));
+    let plugins_root = root.as_ref().map(|dir| dir.join("plugins"));
+    let agents_md_path = root.as_ref().map(|dir| dir.join("AGENTS.md"));
+
+    ConfigWorkspace {
+        config_root: root.as_ref().map(|dir| dir.to_string_lossy().to_string()),
+        agents_root: agents_root.as_ref().map(|dir| dir.to_string_lossy().to_string()),
+        skills_root: skills_root.as_ref().map(|dir| dir.to_string_lossy().to_string()),
+        plugins_root: plugins_root.as_ref().map(|dir| dir.to_string_lossy().to_string()),
+        agents_md_path: agents_md_path.as_ref().map(|file| file.to_string_lossy().to_string()),
+        agents: agents_root
+            .as_ref()
+            .map(|dir| list_workspace_files(dir, &["md"], "agent"))
+            .unwrap_or_default(),
+        plugins: plugins_root
+            .as_ref()
+            .map(|dir| list_workspace_files(dir, &["ts", "js", "mjs"], "plugin"))
+            .unwrap_or_default(),
+    }
 }
 
 #[tauri::command]
@@ -923,6 +1030,8 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             get_default_editor,
             set_default_editor,
             list_config_files,
+            get_config_workspace,
+            list_config_directory,
             read_config_file,
             write_config_file,
             wsl_path,

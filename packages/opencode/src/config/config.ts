@@ -495,7 +495,7 @@ export namespace Config {
   async function loadPlugin(dir: string) {
     const plugins: string[] = []
 
-    for (const item of await Glob.scan("{plugin,plugins}/*.{ts,js}", {
+    for (const item of await Glob.scan("{plugin,plugins}/*.{ts,js,mjs}", {
       cwd: dir,
       absolute: true,
       dot: true,

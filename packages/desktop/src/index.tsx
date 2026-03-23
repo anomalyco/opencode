@@ -224,6 +224,39 @@ const createPlatform = (): Platform => {
       await commands.openPath(path, app ?? null)
     },
 
+    async listConfigFiles(directory) {
+      return commands.listConfigFiles(directory ?? null)
+    },
+
+    async listConfigDirectory(path: string) {
+      const list = await commands.listConfigDirectory(path)
+      return list.map((item) => ({
+        path: item.path,
+        kind: item.kind === "directory" ? "directory" : "file",
+      }))
+    },
+
+    async readConfigFile(path: string) {
+      return commands.readConfigFile(path)
+    },
+
+    async writeConfigFile(path: string, content: string) {
+      await commands.writeConfigFile(path, content)
+    },
+
+    async getConfigWorkspace() {
+      const data = await commands.getConfigWorkspace()
+      return {
+        configRoot: data.configRoot ?? undefined,
+        agentsRoot: data.agentsRoot ?? undefined,
+        skillsRoot: data.skillsRoot ?? undefined,
+        pluginsRoot: data.pluginsRoot ?? undefined,
+        agentsMdPath: data.agentsMdPath ?? undefined,
+        agents: data.agents,
+        plugins: data.plugins,
+      }
+    },
+
     back() {
       window.history.back()
     },

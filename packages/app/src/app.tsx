@@ -48,6 +48,7 @@ import { useCheckServerHealth } from "./utils/server-health"
 
 const Home = lazy(() => import("@/pages/home"))
 const Session = lazy(() => import("@/pages/session"))
+const Config = lazy(() => import("@/pages/config"))
 const Loading = () => <div class="size-full" />
 
 const HomeRoute = () => (
@@ -65,6 +66,12 @@ const SessionRoute = () => (
 )
 
 const SessionIndexRoute = () => <Navigate href="session" />
+
+const ConfigRoute = () => (
+  <Suspense fallback={<Loading />}>
+    <Config />
+  </Suspense>
+)
 
 function UiI18nBridge(props: ParentProps) {
   const language = useLanguage()
@@ -293,6 +300,7 @@ export function AppInterface(props: {
               <Route path="/:dir" component={DirectoryLayout}>
                 <Route path="/" component={SessionIndexRoute} />
                 <Route path="/session/:id?" component={SessionRoute} />
+                <Route path="/config" component={ConfigRoute} />
               </Route>
             </Dynamic>
           </GlobalSyncProvider>
