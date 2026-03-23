@@ -148,17 +148,15 @@ export const make = Effect.gen(function* () {
     serr: ChildProcess.StderrConfig,
     extra: ReadonlyArray<{ fd: number; config: ChildProcess.AdditionalFdConfig }>,
   ): NodeChildProcess.StdioOptions => {
-    const pipe = (x: NodeChildProcess.IOType | undefined) =>
-      process.platform === "win32" && x === "pipe" ? "overlapped" : x
     const arr: Array<NodeChildProcess.IOType | undefined> = [
-      pipe(input(sin.stream)),
-      pipe(output(sout.stream)),
-      pipe(output(serr.stream)),
+      input(sin.stream),
+      output(sout.stream),
+      output(serr.stream),
     ]
     if (extra.length === 0) return arr as NodeChildProcess.StdioOptions
     const max = extra.reduce((acc, x) => Math.max(acc, x.fd), 2)
     for (let i = 3; i <= max; i++) arr[i] = "ignore"
-    for (const x of extra) arr[x.fd] = pipe("pipe")
+    for (const x of extra) arr[x.fd] = "pipe"
     return arr as NodeChildProcess.StdioOptions
   }
 
@@ -186,7 +184,6 @@ export const make = Effect.gen(function* () {
             sink = NodeSink.fromWritable({
               evaluate: () => node,
               onError: (err) => toPlatformError(`fromWritable(fd${x.fd})`, toError(err), command),
-              endOnDone: true,
             })
           }
           if (x.config.stream) yield* Effect.forkScoped(Stream.run(x.config.stream, sink))
@@ -265,18 +262,11 @@ export const make = Effect.gen(function* () {
     Effect.callback<readonly [NodeChildProcess.ChildProcess, ExitSignal], PlatformError.PlatformError>((resume) => {
       const signal = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
       const proc = launch(command.command, command.args, opts)
-      let end = false
-      let exit: readonly [code: number | null, signal: NodeJS.Signals | null] | undefined
       proc.on("error", (err) => {
         resume(Effect.fail(toPlatformError("spawn", err, command)))
       })
       proc.on("exit", (...args) => {
-        exit = args
-      })
-      proc.on("close", (...args) => {
-        if (end) return
-        end = true
-        Deferred.doneUnsafe(signal, Exit.succeed(exit ?? args))
+        Deferred.doneUnsafe(signal, Exit.succeed(args))
       })
       proc.on("spawn", () => {
         resume(Effect.succeed([proc, signal]))
@@ -293,7 +283,7 @@ export const make = Effect.gen(function* () {
   ) => {
     if (globalThis.process.platform === "win32") {
       return Effect.callback<void, PlatformError.PlatformError>((resume) => {
-        NodeChildProcess.exec(`taskkill /pid ${proc.pid} /T /F`, { windowsHide: true }, (err) => {
+        NodeChildProcess.exec(`taskkill /pid ${proc.pid} /T /F`, (err) => {
           if (err) return resume(Effect.fail(toPlatformError("kill", toError(err), command)))
           resume(Effect.void)
         })
@@ -374,14 +364,12 @@ export const make = Effect.gen(function* () {
               stdio: stdios(sin, sout, serr, extra),
               detached: command.options.detached ?? process.platform !== "win32",
               shell: command.options.shell,
-              windowsHide: process.platform === "win32",
             }),
             Effect.fnUntraced(function* ([proc, signal]) {
               const done = yield* Deferred.isDone(signal)
               const kill = timeout(proc, command, command.options)
               if (done) {
                 const [code] = yield* Deferred.await(signal)
-                if (process.platform === "win32") return yield* Effect.void
                 if (code !== 0 && Predicate.isNotNull(code)) return yield* Effect.ignore(kill(killGroup))
                 return yield* Effect.void
               }
