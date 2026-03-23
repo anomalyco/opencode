@@ -110,7 +110,7 @@ MacOS 版本打开应用若出现`已损坏`警告，
 cd /Applications
 xattr -d com.apple.quarantine OpenCode.app
 ```
-
+然后正常打开 `Opencode` 应用就可以了
 
 
 ### 从源码构建
