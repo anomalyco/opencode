@@ -122,6 +122,7 @@ const ZEN_LITE_PRICE = new sst.Linkable("ZEN_LITE_PRICE", {
   properties: {
     product: zenLiteProduct.id,
     price: zenLitePrice.id,
+    priceInr: 92900,
     firstMonth50Coupon: zenLiteCouponFirstMonth50.id,
   },
 })

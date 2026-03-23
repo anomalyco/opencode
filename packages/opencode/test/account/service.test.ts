@@ -3,7 +3,7 @@ import { Duration, Effect, Layer, Option, Schema } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 
 import { AccountRepo } from "../../src/account/repo"
-import { AccountEffect } from "../../src/account/effect"
+import { Account } from "../../src/account"
 import { AccessToken, AccountID, DeviceCode, Login, Org, OrgID, RefreshToken, UserCode } from "../../src/account/schema"
 import { Database } from "../../src/storage/db"
 import { testEffect } from "../lib/effect"
@@ -19,7 +19,7 @@ const truncate = Layer.effectDiscard(
 const it = testEffect(Layer.merge(AccountRepo.layer, truncate))
 
 const live = (client: HttpClient.HttpClient) =>
-  AccountEffect.layer.pipe(Layer.provide(Layer.succeed(HttpClient.HttpClient, client)))
+  Account.layer.pipe(Layer.provide(Layer.succeed(HttpClient.HttpClient, client)))
 
 const json = (req: Parameters<typeof HttpClientResponse.fromWeb>[0], body: unknown, status = 200) =>
   HttpClientResponse.fromWeb(
@@ -33,6 +33,26 @@ const json = (req: Parameters<typeof HttpClientResponse.fromWeb>[0], body: unkno
 const encodeOrg = Schema.encodeSync(Org)
 
 const org = (id: string, name: string) => encodeOrg(new Org({ id: OrgID.make(id), name }))
+
+const login = () =>
+  new Login({
+    code: DeviceCode.make("device-code"),
+    user: UserCode.make("user-code"),
+    url: "https://one.example.com/verify",
+    server: "https://one.example.com",
+    expiry: Duration.seconds(600),
+    interval: Duration.seconds(5),
+  })
+
+const deviceTokenClient = (body: unknown, status = 400) =>
+  HttpClient.make((req) =>
+    Effect.succeed(
+      req.url === "https://one.example.com/auth/device/token" ? json(req, body, status) : json(req, {}, 404),
+    ),
+  )
+
+const poll = (body: unknown, status = 400) =>
+  Account.Service.use((s) => s.poll(login())).pipe(Effect.provide(live(deviceTokenClient(body, status))))
 
 it.effect("orgsByAccount groups orgs per account", () =>
   Effect.gen(function* () {
@@ -77,7 +97,7 @@ it.effect("orgsByAccount groups orgs per account", () =>
       }),
     )
 
-    const rows = yield* AccountEffect.Service.use((s) => s.orgsByAccount()).pipe(Effect.provide(live(client)))
+    const rows = yield* Account.Service.use((s) => s.orgsByAccount()).pipe(Effect.provide(live(client)))
 
     expect(rows.map((row) => [row.account.id, row.orgs.map((org) => org.id)]).map(([id, orgs]) => [id, orgs])).toEqual([
       [AccountID.make("user-1"), [OrgID.make("org-1")]],
@@ -115,7 +135,7 @@ it.effect("token refresh persists the new token", () =>
       ),
     )
 
-    const token = yield* AccountEffect.Service.use((s) => s.token(id)).pipe(Effect.provide(live(client)))
+    const token = yield* Account.Service.use((s) => s.token(id)).pipe(Effect.provide(live(client)))
 
     expect(Option.getOrThrow(token)).toBeDefined()
     expect(String(Option.getOrThrow(token))).toBe("at_new")
@@ -158,9 +178,7 @@ it.effect("config sends the selected org header", () =>
       }),
     )
 
-    const cfg = yield* AccountEffect.Service.use((s) => s.config(id, OrgID.make("org-9"))).pipe(
-      Effect.provide(live(client)),
-    )
+    const cfg = yield* Account.Service.use((s) => s.config(id, OrgID.make("org-9"))).pipe(Effect.provide(live(client)))
 
     expect(Option.getOrThrow(cfg)).toEqual({ theme: "light", seats: 5 })
     expect(seen).toEqual({
@@ -172,15 +190,6 @@ it.effect("config sends the selected org header", () =>
 
 it.effect("poll stores the account and first org on success", () =>
   Effect.gen(function* () {
-    const login = new Login({
-      code: DeviceCode.make("device-code"),
-      user: UserCode.make("user-code"),
-      url: "https://one.example.com/verify",
-      server: "https://one.example.com",
-      expiry: Duration.seconds(600),
-      interval: Duration.seconds(5),
-    })
-
     const client = HttpClient.make((req) =>
       Effect.succeed(
         req.url === "https://one.example.com/auth/device/token"
@@ -198,7 +207,7 @@ it.effect("poll stores the account and first org on success", () =>
       ),
     )
 
-    const res = yield* AccountEffect.Service.use((s) => s.poll(login)).pipe(Effect.provide(live(client)))
+    const res = yield* Account.Service.use((s) => s.poll(login())).pipe(Effect.provide(live(client)))
 
     expect(res._tag).toBe("PollSuccess")
     if (res._tag === "PollSuccess") {
@@ -213,5 +222,61 @@ it.effect("poll stores the account and first org on success", () =>
         active_org_id: "org-1",
       }),
     )
+  }),
+)
+
+for (const [name, body, expectedTag] of [
+  [
+    "pending",
+    {
+      error: "authorization_pending",
+      error_description: "The authorization request is still pending",
+    },
+    "PollPending",
+  ],
+  [
+    "slow",
+    {
+      error: "slow_down",
+      error_description: "Polling too frequently, please slow down",
+    },
+    "PollSlow",
+  ],
+  [
+    "denied",
+    {
+      error: "access_denied",
+      error_description: "The authorization request was denied",
+    },
+    "PollDenied",
+  ],
+  [
+    "expired",
+    {
+      error: "expired_token",
+      error_description: "The device code has expired",
+    },
+    "PollExpired",
+  ],
+] as const) {
+  it.effect(`poll returns ${name} for ${body.error}`, () =>
+    Effect.gen(function* () {
+      const result = yield* poll(body)
+      expect(result._tag).toBe(expectedTag)
+    }),
+  )
+}
+
+it.effect("poll returns poll error for other OAuth errors", () =>
+  Effect.gen(function* () {
+    const result = yield* poll({
+      error: "server_error",
+      error_description: "An unexpected error occurred",
+    })
+
+    expect(result._tag).toBe("PollError")
+    if (result._tag === "PollError") {
+      expect(String(result.cause)).toContain("server_error")
+    }
   }),
 )

@@ -11,7 +11,6 @@ const seed = async () => {
   const { Instance } = await import("../src/project/instance")
   const { InstanceBootstrap } = await import("../src/project/bootstrap")
   const { Config } = await import("../src/config/config")
-  const { disposeRuntime } = await import("../src/effect/runtime")
   const { Session } = await import("../src/session")
   const { MessageID, PartID } = await import("../src/session/schema")
   const { Project } = await import("../src/project/project")
@@ -55,7 +54,6 @@ const seed = async () => {
     })
   } finally {
     await Instance.disposeAll().catch(() => {})
-    await disposeRuntime().catch(() => {})
   }
 }
 

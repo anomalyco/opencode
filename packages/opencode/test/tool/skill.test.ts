@@ -1,7 +1,7 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
 import path from "path"
 import { pathToFileURL } from "url"
-import type { PermissionNext } from "../../src/permission"
+import type { Permission } from "../../src/permission"
 import type { Tool } from "../../src/tool/tool"
 import { Instance } from "../../src/project/instance"
 import { SkillTool } from "../../src/tool/skill"
@@ -17,6 +17,10 @@ const baseCtx: Omit<Tool.Context, "ask"> = {
   messages: [],
   metadata: () => {},
 }
+
+afterEach(async () => {
+  await Instance.disposeAll()
+})
 
 describe("tool.skill", () => {
   test("description lists skill location URL", async () => {
@@ -54,6 +58,56 @@ description: Skill for tool tests.
     }
   })
 
+  test("description sorts skills by name and is stable across calls", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      init: async (dir) => {
+        for (const [name, description] of [
+          ["zeta-skill", "Zeta skill."],
+          ["alpha-skill", "Alpha skill."],
+          ["middle-skill", "Middle skill."],
+        ]) {
+          const skillDir = path.join(dir, ".opencode", "skill", name)
+          await Bun.write(
+            path.join(skillDir, "SKILL.md"),
+            `---
+name: ${name}
+description: ${description}
+---
+
+# ${name}
+`,
+          )
+        }
+      },
+    })
+
+    const home = process.env.OPENCODE_TEST_HOME
+    process.env.OPENCODE_TEST_HOME = tmp.path
+
+    try {
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const first = await SkillTool.init()
+          const second = await SkillTool.init()
+
+          expect(first.description).toBe(second.description)
+
+          const alpha = first.description.indexOf("**alpha-skill**: Alpha skill.")
+          const middle = first.description.indexOf("**middle-skill**: Middle skill.")
+          const zeta = first.description.indexOf("**zeta-skill**: Zeta skill.")
+
+          expect(alpha).toBeGreaterThan(-1)
+          expect(middle).toBeGreaterThan(alpha)
+          expect(zeta).toBeGreaterThan(middle)
+        },
+      })
+    } finally {
+      process.env.OPENCODE_TEST_HOME = home
+    }
+  })
+
   test("execute returns skill content block with files", async () => {
     await using tmp = await tmpdir({
       git: true,
@@ -83,7 +137,7 @@ Use this skill.
         directory: tmp.path,
         fn: async () => {
           const tool = await SkillTool.init()
-          const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+          const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
           const ctx: Tool.Context = {
             ...baseCtx,
             ask: async (req) => {
