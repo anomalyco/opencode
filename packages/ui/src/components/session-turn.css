@@ -62,6 +62,38 @@
     }
   }
 
+  [data-slot="session-turn-thinking-toggle"] {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+  }
+
+  [data-slot="session-turn-thinking-toggle-button"] {
+    border: none;
+    background: transparent;
+    padding: 0;
+    margin: 0;
+    color: var(--text-weak);
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-large);
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  [data-slot="session-turn-thinking-toggle-button"]:hover {
+    color: var(--text-base);
+  }
+
+  [data-slot="session-turn-thinking-toggle-button"]:focus-visible {
+    outline: 1px solid var(--border-selected);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+
   [data-component="text-reveal"].session-turn-thinking-heading {
     flex: 1 1 auto;
     min-width: 0;
