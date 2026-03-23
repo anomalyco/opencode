@@ -51,6 +51,7 @@ export namespace SessionProcessor {
           try {
             let currentText: MessageV2.TextPart | undefined
             let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
+            let empty = true
             const stream = await LLM.stream(streamInput)
 
             for await (const value of stream.fullStream) {
@@ -61,6 +62,7 @@ export namespace SessionProcessor {
                   break
 
                 case "reasoning-start":
+                  empty = false
                   if (value.id in reasoningMap) {
                     continue
                   }
@@ -80,6 +82,7 @@ export namespace SessionProcessor {
                   break
 
                 case "reasoning-delta":
+                  empty = false
                   if (value.id in reasoningMap) {
                     const part = reasoningMap[value.id]
                     part.text += value.text
@@ -110,6 +113,7 @@ export namespace SessionProcessor {
                   break
 
                 case "tool-input-start":
+                  empty = false
                   const part = await Session.updatePart({
                     id: toolcalls[value.id]?.id ?? PartID.ascending(),
                     messageID: input.assistantMessage.id,
@@ -133,6 +137,7 @@ export namespace SessionProcessor {
                   break
 
                 case "tool-call": {
+                  empty = false
                   const match = toolcalls[value.toolCallId]
                   if (match) {
                     const part = await Session.updatePart({
@@ -243,17 +248,23 @@ export namespace SessionProcessor {
                   break
 
                 case "finish-step":
+                  const reason =
+                    value.finishReason === "unknown" &&
+                    input.model.api.npm === "@ai-sdk/openai-compatible" &&
+                    empty
+                      ? "length"
+                      : value.finishReason
                   const usage = Session.getUsage({
                     model: input.model,
                     usage: value.usage,
                     metadata: value.providerMetadata,
                   })
-                  input.assistantMessage.finish = value.finishReason
+                  input.assistantMessage.finish = reason
                   input.assistantMessage.cost += usage.cost
                   input.assistantMessage.tokens = usage.tokens
                   await Session.updatePart({
                     id: PartID.ascending(),
-                    reason: value.finishReason,
+                    reason,
                     snapshot: await Snapshot.track(),
                     messageID: input.assistantMessage.id,
                     sessionID: input.assistantMessage.sessionID,
@@ -289,6 +300,7 @@ export namespace SessionProcessor {
                   break
 
                 case "text-start":
+                  empty = false
                   currentText = {
                     id: PartID.ascending(),
                     messageID: input.assistantMessage.id,
@@ -304,6 +316,7 @@ export namespace SessionProcessor {
                   break
 
                 case "text-delta":
+                  empty = false
                   if (currentText) {
                     currentText.text += value.text
                     if (value.providerMetadata) currentText.metadata = value.providerMetadata
