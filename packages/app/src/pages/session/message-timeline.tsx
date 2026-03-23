@@ -256,7 +256,6 @@ export function MessageTimeline(props: {
   const workingStatus = createMemo<"hidden" | "showing" | "hiding">((prev) => {
     if (working()) return "showing"
     if (prev === "showing" || !timeoutDone()) return "hiding"
-
     return "hidden"
   })
 
@@ -661,17 +660,15 @@ export function MessageTimeline(props: {
                       <div
                         class="shrink-0 flex items-center justify-center overflow-hidden transition-[width,margin] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
                         style={{
-                          width: workingStatus() === "showing" ? "16px" : "0px",
-                          "margin-right": workingStatus() === "showing" ? "8px" : "0px",
+                          width: working() ? "16px" : "0px",
+                          "margin-right": working() ? "8px" : "0px",
                         }}
                         aria-hidden="true"
                       >
                         <Show when={workingStatus() !== "hidden"}>
                           <div
                             class="transition-opacity duration-200 ease-out"
-                            classList={{
-                              "opacity-0": workingStatus() === "hiding",
-                            }}
+                            classList={{ "opacity-0": workingStatus() === "hiding" }}
                           >
                             <Spinner class="size-4" style={{ color: tint() ?? "var(--icon-interactive-base)" }} />
                           </div>
