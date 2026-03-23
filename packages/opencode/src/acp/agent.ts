@@ -51,6 +51,7 @@ type ModeOption = { id: string; name: string; description?: string }
 type ModelOption = { modelId: string; name: string }
 
 const DEFAULT_VARIANT_VALUE = "default"
+const pickMode = (modes: ModeOption[], value: string) => modes.find((mode) => mode.id === value || mode.name === value)
 
 export namespace ACP {
   const log = Log.create({ service: "acp-agent" })
@@ -1142,8 +1143,7 @@ export namespace ACP {
             directory,
             fn: () => AgentModule.defaultAgent(),
           })
-          const resolvedModeId =
-            availableModes.find((mode) => mode.id === defaultAgentName)?.id ?? availableModes[0].id
+          const resolvedModeId = pickMode(availableModes, defaultAgentName)?.id ?? availableModes[0].id
           this.sessionManager.setMode(sessionId, resolvedModeId)
           return resolvedModeId
         })())
@@ -1303,7 +1303,11 @@ export namespace ACP {
         session.modeId ??
         (await Instance.provide({
           directory,
-          fn: () => AgentModule.defaultAgent(),
+          fn: async () => {
+            const mode = await this.loadAvailableModes(directory)
+            if (!mode.length) return await AgentModule.defaultAgent()
+            return pickMode(mode, await AgentModule.defaultAgent())?.id ?? mode[0].id
+          },
         }))
 
       const parts: Array<
