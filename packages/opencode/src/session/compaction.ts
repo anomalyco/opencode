@@ -32,6 +32,8 @@ export namespace SessionCompaction {
 
   export async function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: Provider.Model }) {
     const config = await Config.get()
+    const maxOutput = ProviderTransform.maxOutputTokens(input.model)
+
     if (config.compaction?.auto === false) return false
     const context = input.model.limit.context
     if (context === 0) return false
@@ -40,24 +42,36 @@ export namespace SessionCompaction {
       input.tokens.total ||
       input.tokens.input + input.tokens.output + input.tokens.cache.read + input.tokens.cache.write
 
-    const reserved =
-      config.compaction?.reserved ?? Math.min(COMPACTION_BUFFER, ProviderTransform.maxOutputTokens(input.model))
-    const usable = input.model.limit.input
-      ? input.model.limit.input - reserved
-      : context - ProviderTransform.maxOutputTokens(input.model)
+    const contextLimit = config.compaction?.contextLimit
+    const effectiveContext =
+      typeof contextLimit === "number" && contextLimit > 0 ? Math.min(context, contextLimit) : context
+
+    const inputLimit = input.model.limit.input
+    const hasInputLimit = typeof inputLimit === "number" && inputLimit > 0
+    const effectiveInput = hasInputLimit
+      ? typeof contextLimit === "number" && contextLimit > 0
+        ? Math.min(inputLimit, contextLimit)
+        : inputLimit
+      : undefined
+
+    const reserved = config.compaction?.reserved ?? Math.min(COMPACTION_BUFFER, maxOutput)
+    const usable = typeof effectiveInput === "number"
+      ? Math.max(0, effectiveInput - reserved)
+      : Math.max(0, effectiveContext - maxOutput)
     return count >= usable
   }
 
-  export const PRUNE_MINIMUM = 20_000
-  export const PRUNE_PROTECT = 40_000
+  export const DEFAULT_PRUNE_MINIMUM = 20_000
+  export const DEFAULT_PRUNE_PROTECT = 40_000
 
   const PRUNE_PROTECTED_TOOLS = ["skill"]
 
-  // goes backwards through parts until there are 40_000 tokens worth of tool
-  // calls. then erases output of previous tool calls. idea is to throw away old
-  // tool calls that are no longer relevant.
+  // goes backwards through parts until there are tokens worth of tool calls,
+  // then marks them compacted. idea is to throw away old tool calls that are no longer relevant.
   export async function prune(input: { sessionID: SessionID }) {
     const config = await Config.get()
+    const pruneProtect = config.compaction?.pruneProtect ?? DEFAULT_PRUNE_PROTECT
+    const pruneMinimum = config.compaction?.pruneMinimum ?? DEFAULT_PRUNE_MINIMUM
     if (config.compaction?.prune === false) return
     log.info("pruning")
     const msgs = await Session.messages({ sessionID: input.sessionID })
@@ -80,7 +94,7 @@ export namespace SessionCompaction {
             if (part.state.time.compacted) break loop
             const estimate = Token.estimate(part.state.output)
             total += estimate
-            if (total > PRUNE_PROTECT) {
+            if (total > pruneProtect) {
               pruned += estimate
               toPrune.push(part)
             }
@@ -88,7 +102,7 @@ export namespace SessionCompaction {
       }
     }
     log.info("found", { pruned, total })
-    if (pruned > PRUNE_MINIMUM) {
+    if (pruned > pruneMinimum) {
       for (const part of toPrune) {
         if (part.state.status === "completed") {
           part.state.time.compacted = Date.now()
