@@ -76,6 +76,7 @@ function EditBody(props: { request: PermissionRequest }) {
           }}
         >
           <diff
+            fg={theme.text}
             diff={diff()}
             view={view()}
             filetype={ft()}
@@ -83,7 +84,6 @@ function EditBody(props: { request: PermissionRequest }) {
             showLineNumbers={true}
             width="100%"
             wrapMode="word"
-            fg={theme.text}
             addedBg={theme.diffAddedBg}
             removedBg={theme.diffRemovedBg}
             contextBg={theme.diffContextBg}
