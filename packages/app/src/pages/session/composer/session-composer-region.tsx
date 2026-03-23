@@ -4,7 +4,7 @@ import { useSpring } from "@opencode-ai/ui/motion-spring"
 import { PromptInput } from "@/components/prompt-input"
 import { useLanguage } from "@/context/language"
 import { usePrompt } from "@/context/prompt"
-import { getSessionHandoff, setSessionHandoff } from "@/pages/session/handoff"
+import { getSessionHandoff, setSessionHandoff, takeSessionDraft } from "@/pages/session/handoff"
 import { useSessionKey } from "@/pages/session/session-layout"
 import { SessionPermissionDock } from "@/pages/session/composer/session-permission-dock"
 import { SessionQuestionDock } from "@/pages/session/composer/session-question-dock"
@@ -47,6 +47,14 @@ export function SessionComposerRegion(props: {
   const route = useSessionKey()
 
   const handoffPrompt = createMemo(() => getSessionHandoff(route.sessionKey())?.prompt)
+
+  createEffect(() => {
+    const key = route.sessionKey()
+    if (!prompt.ready()) return
+    const next = takeSessionDraft(key)
+    if (!next) return
+    prompt.set(next)
+  })
 
   const previewPrompt = () =>
     prompt

@@ -128,24 +128,19 @@ function createPromptActions(
       items: (ContextItem & { key: string })[]
     }
   }>,
-  whenReady: (write: VoidFunction) => void,
 ) {
   return {
     set(prompt: Prompt, cursorPosition?: number) {
       const next = clonePrompt(prompt)
-      whenReady(() => {
-        batch(() => {
-          setStore("prompt", next)
-          if (cursorPosition !== undefined) setStore("cursor", cursorPosition)
-        })
+      batch(() => {
+        setStore("prompt", next)
+        if (cursorPosition !== undefined) setStore("cursor", cursorPosition)
       })
     },
     reset() {
-      whenReady(() => {
-        batch(() => {
-          setStore("prompt", clonePrompt(DEFAULT_PROMPT))
-          setStore("cursor", 0)
-        })
+      batch(() => {
+        setStore("prompt", clonePrompt(DEFAULT_PROMPT))
+        setStore("cursor", 0)
       })
     },
   }
@@ -186,12 +181,7 @@ function createPromptSession(dir: string, id: string | undefined) {
     }),
   )
 
-  const whenReady = (write: VoidFunction) => {
-    if (!ready.promise) return write()
-    void ready.promise.then(write, write)
-  }
-
-  const actions = createPromptActions(setStore, whenReady)
+  const actions = createPromptActions(setStore)
 
   return {
     ready,
@@ -203,36 +193,30 @@ function createPromptSession(dir: string, id: string | undefined) {
       add(item: ContextItem) {
         const key = contextItemKey(item)
         if (store.context.items.find((x) => x.key === key)) return
-        whenReady(() => setStore("context", "items", (items) => [...items, { key, ...item }]))
+        setStore("context", "items", (items) => [...items, { key, ...item }])
       },
       remove(key: string) {
-        whenReady(() => setStore("context", "items", (items) => items.filter((x) => x.key !== key)))
+        setStore("context", "items", (items) => items.filter((x) => x.key !== key))
       },
       removeComment(path: string, commentID: string) {
-        whenReady(() =>
-          setStore("context", "items", (items) =>
-            items.filter((item) => !(item.type === "file" && item.path === path && item.commentID === commentID)),
-          ),
+        setStore("context", "items", (items) =>
+          items.filter((item) => !(item.type === "file" && item.path === path && item.commentID === commentID)),
         )
       },
       updateComment(path: string, commentID: string, next: Partial<FileContextItem> & { comment?: string }) {
-        whenReady(() =>
-          setStore("context", "items", (items) =>
-            items.map((item) => {
-              if (item.type !== "file" || item.path !== path || item.commentID !== commentID) return item
-              const value = { ...item, ...next }
-              return { ...value, key: contextItemKey(value) }
-            }),
-          ),
+        setStore("context", "items", (items) =>
+          items.map((item) => {
+            if (item.type !== "file" || item.path !== path || item.commentID !== commentID) return item
+            const value = { ...item, ...next }
+            return { ...value, key: contextItemKey(value) }
+          }),
         )
       },
       replaceComments(items: FileContextItem[]) {
-        whenReady(() =>
-          setStore("context", "items", (current) => [
-            ...current.filter((item) => !isCommentItem(item)),
-            ...items.map((item) => ({ ...item, key: contextItemKey(item) })),
-          ]),
-        )
+        setStore("context", "items", (current) => [
+          ...current.filter((item) => !isCommentItem(item)),
+          ...items.map((item) => ({ ...item, key: contextItemKey(item) })),
+        ])
       },
     },
     set: actions.set,

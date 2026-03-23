@@ -42,6 +42,7 @@ import { useTerminal } from "@/context/terminal"
 import { type FollowupDraft, sendFollowupDraft } from "@/components/prompt-input/submit"
 import { createSessionComposerState, SessionComposerRegion } from "@/pages/session/composer"
 import { createOpenReviewFile, createSessionTabs, createSizing, focusTerminalById } from "@/pages/session/helpers"
+import { setSessionHandoff } from "@/pages/session/handoff"
 import { MessageTimeline } from "@/pages/session/message-timeline"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
 import { useSessionLayout } from "@/pages/session/session-layout"
@@ -1330,6 +1331,72 @@ export default function Page() {
     return `[${language.t("common.attachment")}]`
   }
 
+  const preview = (value: ReturnType<typeof draft>) => {
+    const text = value
+      .map((part) => {
+        if (part.type === "image") return `[image:${part.filename}]`
+        if (part.type === "file") return `[file:${part.path}]`
+        if (part.type === "agent") return `@${part.name}`
+        return part.content
+      })
+      .join("")
+      .replace(/\s+/g, " ")
+      .trim()
+    if (text) return text
+    return `[${language.t("common.attachment")}]`
+  }
+
+  const seed = (next: Exclude<ReturnType<typeof info>, undefined>) => {
+    sync.set("session", (list) => {
+      const idx = list.findIndex((item) => item.id === next.id)
+      if (idx >= 0) {
+        const out = list.slice()
+        out[idx] = next
+        return out
+      }
+
+      const out = list.slice()
+      const at = out.findIndex((item) => item.id > next.id)
+      if (at >= 0) {
+        out.splice(at, 0, next)
+        return out
+      }
+
+      out.push(next)
+      return out
+    })
+  }
+
+  const handoffFork = (next: Exclude<ReturnType<typeof info>, undefined>, value: ReturnType<typeof draft>) => {
+    const dir = sdk.directory
+    const slug = base64Encode(dir)
+    const key = `${slug}/${next.id}`
+    const all = normalizeTabs(tabs().all())
+    const active = tabs().active()
+    const nextTabs = layout.tabs(key)
+
+    nextTabs.setAll(all)
+    nextTabs.setActive(active ? normalizeTab(active) : all[0])
+    local.session.promote(dir, next.id)
+    seed(next)
+    setSessionHandoff(key, {
+      prompt: preview(value),
+      draft: value,
+      files: all.reduce<Record<string, SelectedLineRange | null>>((acc, tab) => {
+        const path = file.pathFromTab(tab)
+        if (!path) return acc
+
+        const selected = file.selectedLines(path)
+        acc[path] =
+          selected && typeof selected === "object" && "start" in selected && "end" in selected
+            ? (selected as SelectedLineRange)
+            : null
+        return acc
+      }, {}),
+    })
+    navigate(`/${slug}/session/${next.id}`)
+  }
+
   const fail = (err: unknown) => {
     showToast({
       variant: "error",
@@ -1549,7 +1616,6 @@ export default function Page() {
 
   const fork = (input: { sessionID: string; messageID: string }) => {
     const value = draft(input.messageID)
-    const dir = base64Encode(sdk.directory)
     return sdk.client.session
       .fork(input)
       .then((result) => {
@@ -1561,8 +1627,7 @@ export default function Page() {
           })
           return
         }
-        prompt.set(value, undefined, { dir, id: next.id })
-        navigate(`/${dir}/session/${next.id}`)
+        handoffFork(next, value)
       })
       .catch(fail)
   }
