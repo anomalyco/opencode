@@ -342,11 +342,10 @@ export function Prompt(props: PromptProps) {
           dialog.replace(() => (
             <DialogSkill
               onSelect={(skill) => {
-                input.setText(`/${skill} `)
-                setStore("prompt", {
-                  input: `/${skill} `,
-                  parts: [],
-                })
+                input.gotoBufferEnd()
+                const text = `/${skill} `
+                input.insertText(text)
+                setStore("prompt", "input", (value) => value + text)
                 input.gotoBufferEnd()
               }}
             />
