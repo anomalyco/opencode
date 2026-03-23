@@ -32,6 +32,8 @@ export const TeamTaskTool = Tool.define("team_task", {
     if (!team) throw new Error(`Team not found: ${args.team_id}`)
     if (team.status === "disbanded") throw new Error(`Team has been disbanded: ${args.team_id}`)
 
+    type Meta = { task?: TeamTask.Info; tasks?: TeamTask.Info[] }
+
     if (args.operation === "create") {
       if (!args.subject) throw new Error("subject is required for create operation")
       const task = TeamTask.create({
@@ -44,7 +46,7 @@ export const TeamTaskTool = Tool.define("team_task", {
       return {
         title: `Task created: ${task.subject}`,
         output: JSON.stringify(task, null, 2),
-        metadata: { task },
+        metadata: { task } as Meta,
       }
     }
 
@@ -61,7 +63,7 @@ export const TeamTaskTool = Tool.define("team_task", {
       return {
         title: `Task updated: ${task.subject}`,
         output: JSON.stringify(task, null, 2),
-        metadata: { task },
+        metadata: { task } as Meta,
       }
     }
 
@@ -72,7 +74,7 @@ export const TeamTaskTool = Tool.define("team_task", {
       return {
         title: `Task: ${task.subject}`,
         output: JSON.stringify(task, null, 2),
-        metadata: { task },
+        metadata: { task } as Meta,
       }
     }
 
@@ -81,7 +83,7 @@ export const TeamTaskTool = Tool.define("team_task", {
     return {
       title: `${tasks.length} tasks`,
       output: JSON.stringify(tasks, null, 2),
-      metadata: { tasks },
+      metadata: { tasks } as Meta,
     }
   },
 })

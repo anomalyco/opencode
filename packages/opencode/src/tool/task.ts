@@ -280,6 +280,8 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         metadata: {
           sessionId: session.id,
           model,
+          background: false as boolean,
+          teamID: undefined as string | undefined,
         },
         output,
       }

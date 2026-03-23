@@ -6,13 +6,8 @@ import DESCRIPTION from "./agent-memory.txt"
 export const AgentMemoryTool = Tool.define("agent_memory", {
   description: DESCRIPTION,
   parameters: z.object({
-    operation: z
-      .enum(["read", "write", "append"])
-      .describe("The operation to perform"),
-    content: z
-      .string()
-      .optional()
-      .describe("Content to write or append (required for write/append)"),
+    operation: z.enum(["read", "write", "append"]).describe("The operation to perform"),
+    content: z.string().optional().describe("Content to write or append (required for write/append)"),
   }),
   async execute(params, ctx) {
     await ctx.ask({
@@ -28,7 +23,7 @@ export const AgentMemoryTool = Tool.define("agent_memory", {
         return {
           title: "No memory found",
           output: `No stored memory found for agent "${ctx.agent}" in this project. This is a fresh start.`,
-          metadata: { agent: ctx.agent },
+          metadata: { agent: ctx.agent, updated: undefined as number | undefined },
         }
       }
       return {
@@ -36,30 +31,28 @@ export const AgentMemoryTool = Tool.define("agent_memory", {
         output: memory.content,
         metadata: {
           agent: ctx.agent,
-          updated: memory.time.updated,
+          updated: memory.time.updated as number | undefined,
         },
       }
     }
 
     if (params.operation === "write") {
-      if (!params.content)
-        throw new Error("content is required for write operation")
+      if (!params.content) throw new Error("content is required for write operation")
       AgentMemory.write(ctx.agent, params.content)
       return {
         title: "Memory updated",
         output: `Memory for agent "${ctx.agent}" has been updated.`,
-        metadata: { agent: ctx.agent },
+        metadata: { agent: ctx.agent, updated: undefined as number | undefined },
       }
     }
 
     // append
-    if (!params.content)
-      throw new Error("content is required for append operation")
+    if (!params.content) throw new Error("content is required for append operation")
     AgentMemory.append(ctx.agent, params.content)
     return {
       title: "Memory appended",
       output: `New content appended to memory for agent "${ctx.agent}".`,
-      metadata: { agent: ctx.agent },
+      metadata: { agent: ctx.agent, updated: undefined as number | undefined },
     }
   },
 })
