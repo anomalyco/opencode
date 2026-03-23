@@ -44,7 +44,7 @@ type SessionView = {
 }
 
 type MobilePanel = {
-  active: "session" | "review" | "fileTree" | null
+  active: "review" | "fileTree" | null
 }
 
 type TabHandoff = {
@@ -697,7 +697,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       },
       mobilePanel: {
         active: createMemo(() => store.mobilePanel?.active ?? null),
-        set: (panel: "session" | "review" | "fileTree" | null) => {
+        set: (panel: "review" | "fileTree" | null) => {
           setStore("mobilePanel", "active", panel)
         },
         showReview: () => {
@@ -705,9 +705,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         showFileTree: () => {
           setStore("mobilePanel", "active", "fileTree")
-        },
-        showSession: () => {
-          setStore("mobilePanel", "active", "session")
         },
         hide: () => {
           setStore("mobilePanel", "active", null)
