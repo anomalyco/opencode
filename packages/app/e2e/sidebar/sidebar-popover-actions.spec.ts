@@ -1,5 +1,6 @@
 import { test, expect } from "../fixtures"
 import {
+  defocus,
   cleanupSession,
   cleanupTestProject,
   closeSidebar,
@@ -71,6 +72,43 @@ test("open sidebar project popover stays closed after clicking avatar", async ({
 
         await waitSession(page, { directory: other })
         await expect(card).toHaveCount(0)
+      },
+      { extra: [other] },
+    )
+  } finally {
+    await cleanupTestProject(other)
+  }
+})
+
+test("open sidebar project switch activates on first tabbed enter", async ({ page, withProject }) => {
+  await page.setViewportSize({ width: 1400, height: 800 })
+
+  const other = await createTestProject()
+  const slug = dirSlug(other)
+
+  try {
+    await withProject(
+      async () => {
+        await openSidebar(page)
+        await defocus(page)
+
+        const project = page.locator(projectSwitchSelector(slug)).first()
+
+        await expect(project).toBeVisible()
+
+        let hit = false
+        for (let i = 0; i < 20; i++) {
+          hit = await project.evaluate((el) => {
+            return el.matches(":focus") || !!el.parentElement?.matches(":focus")
+          })
+          if (hit) break
+          await page.keyboard.press("Tab")
+        }
+
+        expect(hit).toBe(true)
+
+        await page.keyboard.press("Enter")
+        await waitSession(page, { directory: other })
       },
       { extra: [other] },
     )
