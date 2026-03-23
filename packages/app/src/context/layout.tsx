@@ -43,6 +43,10 @@ type SessionView = {
   pendingMessageAt?: number
 }
 
+type MobilePanel = {
+  active: "session" | "review" | "fileTree" | null
+}
+
 type TabHandoff = {
   dir: string
   id: string
@@ -253,6 +257,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         mobileSidebar: {
           opened: false,
         },
+        mobilePanel: {
+          active: null,
+        } as MobilePanel,
         sessionTabs: {} as Record<string, SessionTabs>,
         sessionView: {} as Record<string, SessionView>,
         handoff: {
@@ -686,6 +693,24 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         toggle() {
           setStore("mobileSidebar", "opened", (x) => !x)
+        },
+      },
+      mobilePanel: {
+        active: createMemo(() => store.mobilePanel?.active ?? null),
+        set: (panel: "session" | "review" | "fileTree" | null) => {
+          setStore("mobilePanel", "active", panel)
+        },
+        showReview: () => {
+          setStore("mobilePanel", "active", "review")
+        },
+        showFileTree: () => {
+          setStore("mobilePanel", "active", "fileTree")
+        },
+        showSession: () => {
+          setStore("mobilePanel", "active", "session")
+        },
+        hide: () => {
+          setStore("mobilePanel", "active", null)
         },
       },
       pendingMessage: {

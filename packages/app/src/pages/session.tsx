@@ -47,6 +47,7 @@ import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { syncSessionModel } from "@/pages/session/session-model-helpers"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
+import { MobileFullscreenPanel } from "@/pages/session/mobile-fullscreen-panel"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
@@ -1822,6 +1823,14 @@ export default function Page() {
           reviewSnap={ui.reviewSnap}
           size={size}
         />
+
+        <Show when={!isDesktop()}>
+          <MobileFullscreenPanel
+            active={layout.mobilePanel.active()}
+            onClose={() => layout.mobilePanel.hide()}
+            reviewPanel={reviewPanel}
+          />
+        </Show>
       </div>
 
       <TerminalPanel />

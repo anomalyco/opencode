@@ -490,7 +490,12 @@ export function SessionHeader() {
                       id: "review",
                       label: language.t("command.review.toggle"),
                       icon: view().reviewPanel.opened() ? "review-active" : "review",
-                      onClick: () => view().reviewPanel.toggle(),
+                      onClick: () => {
+                        view().reviewPanel.toggle()
+                        if (!isMd()) {
+                          layout.mobilePanel.showReview()
+                        }
+                      },
                       active: view().reviewPanel.opened(),
                       visible: isMd(),
                     },
@@ -498,7 +503,12 @@ export function SessionHeader() {
                       id: "fileTree",
                       label: language.t("command.fileTree.toggle"),
                       icon: layout.fileTree.opened() ? "file-tree-active" : "file-tree",
-                      onClick: () => layout.fileTree.toggle(),
+                      onClick: () => {
+                        layout.fileTree.toggle()
+                        if (!isMd()) {
+                          layout.mobilePanel.showFileTree()
+                        }
+                      },
                       active: layout.fileTree.opened(),
                       visible: isMd(),
                     },
