@@ -187,7 +187,6 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           )
         }
 
-        running++
         const teamID = params.team_id ? TeamID.make(params.team_id) : undefined
         const bound = Instance.bind(() => {
           SessionPrompt.prompt(promptInput)
@@ -222,6 +221,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
               ctx.abort.removeEventListener("abort", cancel)
             })
         })
+        running++
         try {
           bound()
         } catch (e) {

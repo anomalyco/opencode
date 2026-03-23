@@ -283,7 +283,6 @@ export namespace Team {
 
   /** Reconcile stale teams on startup — mark active teams as disbanded */
   export function reconcile() {
-    const now = Date.now()
     const stale = Database.use((db) => db.select().from(TeamTable).where(eq(TeamTable.status, "active")).all())
     for (const row of stale) {
       log.info("reconciling stale team", { id: row.id, name: row.name })

@@ -405,7 +405,9 @@ export namespace SessionPrompt {
           const injected = await waitForInjection(sessionID, abort)
           if (injected) continue
           // Mark member as completed on normal exit (timeout or no more messages)
-          import("../team").then(({ Team }) => Team.completeMember(sessionID)).catch(() => {})
+          import("../team")
+            .then(({ Team }) => Team.completeMember(sessionID))
+            .catch((e) => log.error("failed to complete team member", { sessionID, error: e }))
         }
         log.info("exiting loop", { sessionID })
         break
