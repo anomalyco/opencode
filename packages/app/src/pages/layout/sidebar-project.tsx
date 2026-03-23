@@ -109,8 +109,14 @@ const ProjectTile = (props: {
           "bg-surface-base-hover border border-border-weak-base": !props.selected() && props.active(),
         }}
         onPointerDown={(event) => {
+          if (event.button === 0 && !event.ctrlKey) {
+            props.setOpen(false)
+            props.setSuppressHover(true)
+            return
+          }
           if (!props.overlay()) return
           if (event.button !== 2 && !(event.button === 0 && event.ctrlKey)) return
+          props.setOpen(false)
           props.setSuppressHover(true)
           event.preventDefault()
         }}
@@ -130,12 +136,11 @@ const ProjectTile = (props: {
           props.onProjectFocus(props.project.worktree)
         }}
         onClick={() => {
+          props.setOpen(false)
           if (props.selected()) {
-            props.setSuppressHover(true)
             layout.sidebar.toggle()
             return
           }
-          props.setSuppressHover(false)
           props.navigateToProject(props.project.worktree)
         }}
         onBlur={() => props.setOpen(false)}
