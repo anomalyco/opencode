@@ -1,10 +1,12 @@
-import { createEffect, createMemo, Match, on, onCleanup, Switch } from "solid-js"
+import { createEffect, createMemo, Match, on, onCleanup, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
+import { createMediaQuery } from "@solid-primitives/media"
 import type { FileSearchHandle } from "@opencode-ai/ui/file"
 import { useFileComponent } from "@opencode-ai/ui/context/file"
 import { cloneSelectedLineRange, previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
 import { createLineCommentController } from "@opencode-ai/ui/line-comment-annotations"
+import { TouchSelectionToolbar, useTouchSelection } from "@opencode-ai/ui/touch-selection-toolbar"
 import { sampledChecksum } from "@opencode-ai/util/encode"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -64,6 +66,9 @@ export function FileTabContent(props: { tab: string }) {
     pathFromTab: file.pathFromTab,
     normalizeTab: (tab) => (tab.startsWith("file://") ? file.tab(tab) : tab),
   }).activeFileTab
+
+  const isTouch = createMediaQuery("(hover: none)")
+  const touchSelection = useTouchSelection()
 
   let scroll: HTMLDivElement | undefined
   let scrollFrame: number | undefined
@@ -398,7 +403,7 @@ export function FileTabContent(props: { tab: string }) {
           cacheKey: cacheKey(),
         }}
         enableLineSelection
-        enableHoverUtility
+        enableHoverUtility={!isTouch()}
         selectedLines={activeSelection()}
         commentedLines={commentedLines()}
         onRendered={() => {
@@ -406,7 +411,7 @@ export function FileTabContent(props: { tab: string }) {
         }}
         annotations={commentsUi.annotations()}
         renderAnnotation={commentsUi.renderAnnotation}
-        renderHoverUtility={commentsUi.renderHoverUtility}
+        renderHoverUtility={!isTouch() ? commentsUi.renderHoverUtility : undefined}
         onLineSelected={(range: SelectedLineRange | null) => {
           commentsUi.onLineSelected(range)
         }}
@@ -451,6 +456,18 @@ export function FileTabContent(props: { tab: string }) {
           <Match when={state()?.error}>{(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}</Match>
         </Switch>
       </ScrollView>
+      <Show when={isTouch()}>
+        <TouchSelectionToolbar
+          position={touchSelection.position()}
+          onAddComment={() => {
+            const selection = activeSelection()
+            if (selection) {
+              commentsUi.note.openDraft(selection)
+            }
+          }}
+          onClose={touchSelection.clearSelection}
+        />
+      </Show>
     </Tabs.Content>
   )
 }
