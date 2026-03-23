@@ -1,4 +1,5 @@
 import "./index.css"
+import { marked } from "marked"
 import { Title, Meta } from "@solidjs/meta"
 import { createAsync } from "@solidjs/router"
 import { Header } from "~/component/header"
@@ -6,7 +7,7 @@ import { Footer } from "~/component/footer"
 import { Legal } from "~/component/legal"
 import { changelog } from "~/lib/changelog"
 import type { HighlightGroup } from "~/lib/changelog"
-import { For, Show, createSignal } from "solid-js"
+import { For, Show, createSignal, type JSX } from "solid-js"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import { LocaleLinks } from "~/component/locale-links"
@@ -20,24 +21,54 @@ function formatDate(dateString: string, locale: string) {
   })
 }
 
-function ReleaseItem(props: { item: string }) {
-  const parts = () => {
-    const match = props.item.match(/^(.+?)(\s*\(@([\w-]+)\))?$/)
-    if (match) {
-      return {
-        text: match[1],
-        username: match[3],
-      }
-    }
-    return { text: props.item, username: undefined }
+function splitAuthor(item: string) {
+  const match = item.match(/^(.+?)(\s*\(@([\w-]+)\))?$/)
+  return {
+    text: match?.[1] ?? item,
+    user: match?.[3],
   }
+}
+
+function parseInline(text: string) {
+  return marked.Lexer.lexInline(text, {
+    async: false,
+    breaks: false,
+    gfm: true,
+  })
+}
+
+function renderToken(token: ReturnType<typeof parseInline>[number]): Array<JSX.Element | string> {
+  if (token.type === "strong") return [<strong>{renderInline(token.tokens ?? [])}</strong>]
+  if (token.type === "em") return [<em>{renderInline(token.tokens ?? [])}</em>]
+  if (token.type === "codespan") return [<code>{token.text}</code>]
+  if (token.type === "del") return [<del>{renderInline(token.tokens ?? [])}</del>]
+  if (token.type === "br") return [<br />]
+  if (token.type === "link") {
+    return [
+      <a href={token.href} target="_blank" rel="noopener noreferrer">
+        {renderInline(token.tokens ?? [])}
+      </a>,
+    ]
+  }
+  if (token.type === "text" && token.tokens) return renderInline(token.tokens)
+  if (token.type === "escape") return [token.text]
+  if (token.type === "html" || token.type === "text") return [token.raw]
+  return [token.raw]
+}
+
+function renderInline(tokens: ReturnType<typeof parseInline>) {
+  return tokens.flatMap(renderToken)
+}
+
+function ReleaseItem(props: { item: string }) {
+  const part = splitAuthor(props.item)
 
   return (
     <li>
-      <span>{parts().text}</span>
-      <Show when={parts().username}>
-        <a data-slot="author" href={`https://github.com/${parts().username}`} target="_blank" rel="noopener noreferrer">
-          (@{parts().username})
+      {renderInline(parseInline(part.text))}
+      <Show when={part.user}>
+        <a data-slot="author" href={`https://github.com/${part.user}`} target="_blank" rel="noopener noreferrer">
+          (@{part.user})
         </a>
       </Show>
     </li>

@@ -97,6 +97,7 @@
         "@solidjs/start": "catalog:",
         "@stripe/stripe-js": "8.6.1",
         "chart.js": "4.5.1",
+        "marked": "catalog:",
         "nitro": "3.0.1-alpha.1",
         "solid-js": "catalog:",
         "solid-list": "0.3.0",
