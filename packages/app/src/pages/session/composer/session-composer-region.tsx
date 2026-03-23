@@ -1,4 +1,4 @@
-import { Show, createEffect, createMemo, onCleanup } from "solid-js"
+import { Show, createEffect, createMemo, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
 import { PromptInput } from "@/components/prompt-input"
@@ -48,13 +48,17 @@ export function SessionComposerRegion(props: {
 
   const handoffPrompt = createMemo(() => getSessionHandoff(route.sessionKey())?.prompt)
 
-  createEffect(() => {
-    const key = route.sessionKey()
-    if (!prompt.ready()) return
-    const next = takeSessionDraft(key)
-    if (!next) return
-    prompt.set(next)
-  })
+  createEffect(
+    on(
+      () => [route.sessionKey(), prompt.ready()] as const,
+      ([key, ready]) => {
+        if (!ready) return
+        const next = takeSessionDraft(key)
+        if (!next) return
+        prompt.set(next)
+      },
+    ),
+  )
 
   const previewPrompt = () =>
     prompt

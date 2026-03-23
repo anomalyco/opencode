@@ -1331,26 +1331,10 @@ export default function Page() {
     return `[${language.t("common.attachment")}]`
   }
 
-  const preview = (value: ReturnType<typeof draft>) => {
-    const text = value
-      .map((part) => {
-        if (part.type === "image") return `[image:${part.filename}]`
-        if (part.type === "file") return `[file:${part.path}]`
-        if (part.type === "agent") return `@${part.name}`
-        return part.content
-      })
-      .join("")
-      .replace(/\s+/g, " ")
-      .trim()
-    if (text) return text
-    return `[${language.t("common.attachment")}]`
-  }
-
   const handoffFork = (next: Exclude<ReturnType<typeof info>, undefined>, value: ReturnType<typeof draft>) => {
     const slug = base64Encode(sdk.directory)
     const key = `${slug}/${next.id}`
     setSessionHandoff(key, {
-      prompt: preview(value),
       draft: value,
     })
     navigate(`/${slug}/session/${next.id}`)

@@ -30,21 +30,6 @@ export const DialogFork: Component = () => {
   const dialog = useDialog()
   const language = useLanguage()
 
-  const preview = (value: ReturnType<typeof extractPromptFromParts>) => {
-    const text = value
-      .map((part) => {
-        if (part.type === "image") return `[image:${part.filename}]`
-        if (part.type === "file") return `[file:${part.path}]`
-        if (part.type === "agent") return `@${part.name}`
-        return part.content
-      })
-      .join("")
-      .replace(/\s+/g, " ")
-      .trim()
-    if (text) return text
-    return `[${language.t("common.attachment")}]`
-  }
-
   const messages = createMemo((): ForkableMessage[] => {
     const sessionID = params.id
     if (!sessionID) return []
@@ -92,7 +77,6 @@ export const DialogFork: Component = () => {
         }
         const key = `${dir}/${next.id}`
         setSessionHandoff(key, {
-          prompt: preview(restored),
           draft: restored,
         })
         dialog.close()
