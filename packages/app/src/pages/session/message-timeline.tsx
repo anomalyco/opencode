@@ -30,6 +30,7 @@ import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { messageAgentColor } from "@/utils/agent"
 import { parseCommentNote, readCommentMetadata } from "@/utils/comment-note"
+import { makeTimer } from "@solid-primitives/timer"
 
 type MessageComment = {
   path: string
@@ -250,32 +251,22 @@ export function MessageTimeline(props: {
   const working = createMemo(() => !!pending() || sessionStatus().type !== "idle")
   const tint = createMemo(() => messageAgentColor(sessionMessages(), sync.data.agent))
 
-  const [workingStatus, setWorkingIndicator] = createSignal<"hidden" | "showing" | "hiding">(
-    working() ? "showing" : "hidden",
-  )
+  const [timeoutDone, setTimeoutDone] = createSignal(true)
 
-  let f: number | undefined
-  const clear = () => {
-    if (f !== undefined) window.clearTimeout(f)
-    f = undefined
-  }
+  const workingStatus = createMemo<"hidden" | "showing" | "hiding">((prev) => {
+    if (working()) return "showing"
+    if (prev === "showing" || !timeoutDone()) return "hiding"
 
-  onCleanup(clear)
-  createEffect(
-    on(working, (on, prev) => {
-      clear()
-      if (on) {
-        setWorkingIndicator("showing")
-        return
-      }
-      if (prev) {
-        setWorkingIndicator("hiding")
-        f = window.setTimeout(() => setWorkingIndicator("hidden"), 260)
-        return
-      }
-      setWorkingIndicator("hidden")
-    }),
-  )
+    return "hidden"
+  })
+
+  createEffect(() => {
+    if (workingStatus() !== "hiding") return
+
+    setTimeoutDone(false)
+    makeTimer(() => setTimeoutDone(true), 260, setTimeout)
+  })
+
   const activeMessageID = createMemo(() => {
     const parentID = pending()?.parentID
     if (parentID) {
@@ -675,7 +666,7 @@ export function MessageTimeline(props: {
                         }}
                         aria-hidden="true"
                       >
-                        <Show when={workingStatus() === "showing"}>
+                        <Show when={workingStatus() !== "hidden"}>
                           <div
                             class="transition-opacity duration-200 ease-out"
                             classList={{
