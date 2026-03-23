@@ -296,10 +296,7 @@ export const SortableProject = (props: {
   const isHoverProject = () => props.ctx.hoverProject() === props.project.worktree
   const preview = createMemo(() => !props.mobile && props.ctx.sidebarOpened())
   const overlay = createMemo(() => !props.mobile && !props.ctx.sidebarOpened())
-  const active = createMemo(
-    () =>
-      state.menu || (preview() ? isHoverProject() : overlay() && props.ctx.hoverProject() === props.project.worktree),
-  )
+  const active = createMemo(() => state.menu || (preview() ? isHoverProject() : overlay() && isHoverProject()))
 
   const hoverOpen = () => isHoverProject() && preview() && !selected() && !state.menu
 
