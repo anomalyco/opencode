@@ -235,22 +235,16 @@ export namespace Team {
   /** Mark a member as completed (normal exit) */
   export function completeMember(sessionID: SessionID) {
     const now = Date.now()
-    const row = Database.use((db) =>
-      db
-        .select()
-        .from(TeamMemberTable)
-        .where(and(eq(TeamMemberTable.session_id, sessionID), eq(TeamMemberTable.status, "active")))
-        .get(),
-    )
-    if (!row) return
-    Database.use((db) =>
+    const updated = Database.use((db) =>
       db
         .update(TeamMemberTable)
         .set({ status: "completed", time_updated: now })
         .where(and(eq(TeamMemberTable.session_id, sessionID), eq(TeamMemberTable.status, "active")))
-        .run(),
+        .returning()
+        .get(),
     )
-    const member = toMember({ ...row, status: "completed" })
+    if (!updated) return
+    const member = toMember(updated)
     Database.effect(() => Bus.publish(Event.MemberUpdated, { member }))
   }
 

@@ -64,7 +64,7 @@ export namespace AgentMemory {
 
   export function write(agent: string, content: string) {
     if (Buffer.byteLength(content, "utf8") > MAX_SIZE) {
-      content = content.slice(0, MAX_SIZE)
+      content = Buffer.from(content, "utf8").subarray(0, MAX_SIZE).toString("utf8")
       log.warn("memory truncated to 100KB", { agent })
     }
     const pid = Instance.project.id

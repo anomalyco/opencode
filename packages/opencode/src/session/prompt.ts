@@ -298,18 +298,28 @@ export namespace SessionPrompt {
    * Wait for an injected message to arrive in this session.
    * Returns true if a message was injected, false if aborted or timed out.
    */
-  function waitForInjection(sessionID: SessionID, abort: AbortSignal): Promise<boolean> {
-    return new Promise<boolean>(async (resolve) => {
-      const config = await Config.get()
-      const duration = config.team?.member_timeout ?? 300_000
+  async function waitForInjection(sessionID: SessionID, abort: AbortSignal): Promise<boolean> {
+    const config = await Config.get()
+    const duration = config.team?.member_timeout ?? 300_000
+    const { SessionInject } = await import("./inject")
+
+    // Check for messages already injected before we start waiting (race fix)
+    const msgs = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
+    const last = msgs.findLast((m) => m.info.role === "assistant")
+    const pending = msgs.find((m) => m.info.role === "user" && last && m.info.id > last.info.id)
+    if (pending) return true
+
+    return new Promise<boolean>((resolve) => {
+      let resolved = false
 
       const timeout = setTimeout(() => {
-        cleanup()
-        resolve(false)
+        if (!resolved) {
+          resolved = true
+          cleanup()
+          resolve(false)
+        }
       }, duration)
 
-      const { SessionInject } = await import("./inject")
-      let resolved = false
       const unsub = Bus.subscribe(SessionInject.Event.MessageInjected, (event) => {
         if (event.properties.sessionID === sessionID && !resolved) {
           resolved = true
@@ -318,20 +328,12 @@ export namespace SessionPrompt {
         }
       })
 
-      // Check for messages injected before subscription was established (race fix)
-      const msgs = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
-      const last = msgs.findLast((m) => m.info.role === "assistant")
-      const pending = msgs.find((m) => m.info.role === "user" && last && m.info.id > last.info.id)
-      if (pending && !resolved) {
-        resolved = true
-        cleanup()
-        resolve(true)
-        return
-      }
-
       function onAbort() {
-        cleanup()
-        resolve(false)
+        if (!resolved) {
+          resolved = true
+          cleanup()
+          resolve(false)
+        }
       }
       abort.addEventListener("abort", onAbort)
 

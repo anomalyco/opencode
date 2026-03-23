@@ -189,38 +189,43 @@ export const TaskTool = Tool.define("task", async (ctx) => {
 
         running++
         const teamID = params.team_id ? TeamID.make(params.team_id) : undefined
-        const bound = Instance.bind(() => {
-          SessionPrompt.prompt(promptInput)
-            .catch(async (err) => {
-              log.error("background agent failed", {
-                sessionID: session.id,
-                agent: agent.name,
-                error: err,
-              })
-              if (teamID) {
-                Team.failMember({
-                  teamID,
+        try {
+          const bound = Instance.bind(() => {
+            SessionPrompt.prompt(promptInput)
+              .catch(async (err) => {
+                log.error("background agent failed", {
                   sessionID: session.id,
                   agent: agent.name,
+                  error: err,
                 })
-                // Notify the lead about the failure
-                const lead = Team.leadSession(teamID)
-                if (lead) {
-                  await SessionInject.send({
-                    sessionID: lead.sessionID,
-                    from: agent.name,
-                    fromSessionID: session.id,
-                    content: `[AGENT FAILURE] @${agent.name} crashed with error: ${err instanceof Error ? err.message : String(err)}`,
-                    teamID: params.team_id,
-                  }).catch((e) => log.error("failed to notify lead of agent failure", { error: e }))
+                if (teamID) {
+                  Team.failMember({
+                    teamID,
+                    sessionID: session.id,
+                    agent: agent.name,
+                  })
+                  // Notify the lead about the failure
+                  const lead = Team.leadSession(teamID)
+                  if (lead) {
+                    await SessionInject.send({
+                      sessionID: lead.sessionID,
+                      from: agent.name,
+                      fromSessionID: session.id,
+                      content: `[AGENT FAILURE] @${agent.name} crashed with error: ${err instanceof Error ? err.message : String(err)}`,
+                      teamID: params.team_id,
+                    }).catch((e) => log.error("failed to notify lead of agent failure", { error: e }))
+                  }
                 }
-              }
-            })
-            .finally(() => {
-              running--
-            })
-        })
-        bound()
+              })
+              .finally(() => {
+                running--
+              })
+          })
+          bound()
+        } catch (e) {
+          running--
+          throw e
+        }
 
         // Wire up abort to cancel the child session
         function cancel() {

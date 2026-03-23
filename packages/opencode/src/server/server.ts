@@ -599,7 +599,9 @@ export namespace Server {
     if (!server) throw new Error(`Failed to start server on port ${opts.port}`)
 
     // Reconcile stale teams from previous sessions
-    import("../team").then(({ Team }) => Team.reconcile()).catch(() => {})
+    import("../team")
+      .then(({ Team }) => Team.reconcile())
+      .catch((e) => log.error("team reconciliation failed", { error: e }))
 
     const shouldPublishMDNS =
       opts.mdns &&
