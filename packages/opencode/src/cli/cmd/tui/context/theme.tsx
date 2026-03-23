@@ -54,6 +54,8 @@ type ThemeColors = {
   text: RGBA
   textMuted: RGBA
   selectedListItemText: RGBA
+  // Used only in system theme
+  transparent?: RGBA
   background: RGBA
   backgroundPanel: RGBA
   backgroundElement: RGBA
@@ -131,9 +133,10 @@ type ColorValue = HexColor | RefName | Variant | RGBA
 type ThemeJson = {
   $schema?: string
   defs?: Record<string, HexColor | RefName>
-  theme: Omit<Record<keyof ThemeColors, ColorValue>, "selectedListItemText" | "backgroundMenu"> & {
+  theme: Omit<Record<keyof ThemeColors, ColorValue>, "selectedListItemText" | "backgroundMenu" | "transparent"> & {
     selectedListItemText?: ColorValue
     backgroundMenu?: ColorValue
+    transparent?: ColorValue
     thinkingOpacity?: number
   }
 }
@@ -479,8 +482,11 @@ function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJs
       textMuted,
       selectedListItemText: bg,
 
-      // Background colors - use transparent to respect terminal transparency
-      background: transparent,
+      // Transparent color to respect terminal transparency
+      transparent: transparent,
+
+      // Background colors
+      background: bg,
       backgroundPanel: grays[2],
       backgroundElement: grays[3],
       backgroundMenu: grays[3],
