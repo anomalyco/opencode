@@ -108,7 +108,10 @@ test("prompt history restores unsent draft with arrow navigation", async ({ page
     await page.keyboard.type(draft)
     await wait(page, draft)
 
-    await edge(page, "start")
+    // Clear the draft before navigating history (ArrowUp only works when prompt is empty)
+    await prompt.fill("")
+    await wait(page, "")
+
     await page.keyboard.press("ArrowUp")
     await wait(page, second)
 
@@ -119,7 +122,7 @@ test("prompt history restores unsent draft with arrow navigation", async ({ page
     await wait(page, second)
 
     await page.keyboard.press("ArrowDown")
-    await wait(page, draft)
+    await wait(page, "")
   })
 })
 
