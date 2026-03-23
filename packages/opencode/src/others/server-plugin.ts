@@ -8,6 +8,7 @@ import { Hono } from "hono"
 import { AuthRoutes } from "./routes/auth"
 import { OthersConfigRoutes } from "./routes/config"
 import { ProjectRoutes } from "./routes/project"
+import { FilesRoutes } from "./routes/files"
 import { createAuthMiddleware } from "./auth/middleware"
 
 /**
@@ -20,6 +21,7 @@ export function registerOthersRoutes(app: Hono): Hono {
     .route("/others/auth", AuthRoutes())
     .route("/others/config", OthersConfigRoutes())
     .route("/others/project", ProjectRoutes())
+    .route("/others/files", FilesRoutes())
     .use(createAuthMiddleware())
 }
 

@@ -11,7 +11,7 @@ import { ConstrainDragXAxis } from "@/utils/solid-dnd"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { type LocalProject } from "@/context/layout"
-import { UserMenu, CreateProjectButton } from "@/others"
+import { UserMenu, CreateProjectButton, FileManagerButton } from "@/others"
 
 export const SidebarContent = (props: {
   mobile?: boolean
@@ -93,6 +93,9 @@ export const SidebarContent = (props: {
         </div>
         <div class="shrink-0 w-full pt-3 pb-6 flex flex-col items-center gap-2">
           <UserMenu />
+          <Tooltip placement={placement()} value="文件管理">
+            <FileManagerButton placement={placement()} />
+          </Tooltip>
           <TooltipKeybind placement={placement()} title={props.settingsLabel()} keybind={props.settingsKeybind() ?? ""}>
             <IconButton
               icon="settings-gear"
