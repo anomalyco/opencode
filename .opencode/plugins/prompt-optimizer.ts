@@ -1,4 +1,42 @@
-import type { Plugin } from "@opencode-ai/plugin"
+type Item = {
+  info: {
+    role: string
+  }
+  parts: {
+    type: string
+    text?: string
+  }[]
+}
+
+type Client = {
+  session: {
+    messages(input: {
+      path: {
+        id: string
+      }
+      query: {
+        limit: number
+      }
+    }): Promise<{
+      data?: Item[]
+    }>
+  }
+}
+
+type Input = {
+  id: string
+  action: string
+  context?: {
+    prompt?: string
+    sessionID?: string
+  }
+}
+
+type Output = {
+  values?: Record<string, unknown>
+  action?: string
+  cancelled?: boolean
+}
 
 /**
  * Prompt Optimizer Plugin
@@ -11,9 +49,9 @@ import type { Plugin } from "@opencode-ai/plugin"
  * To use this plugin instead of the built-in optimizer, change the frontend
  * to call /tui/ui-interact with action "prompt.optimize".
  */
-export const PromptOptimizerPlugin: Plugin = async ({ client }) => {
+export const PromptOptimizerPlugin = async ({ client }: { client: Client }) => {
   return {
-    "tui.ui.interact": async (input, output) => {
+    "tui.ui.interact": async (input: Input, output: Output) => {
       if (input.action !== "prompt.optimize") return
 
       const prompt = input.context?.prompt ?? ""
@@ -33,7 +71,7 @@ export const PromptOptimizerPlugin: Plugin = async ({ client }) => {
                 const role = m.info.role
                 const text = m.parts
                   .filter((p) => p.type === "text")
-                  .map((p) => (p.type === "text" ? p.text.slice(0, 200) : ""))
+                  .map((p) => (p.type === "text" ? (p.text ?? "").slice(0, 200) : ""))
                   .join(" ")
                 return `${role}: ${text}`
               })

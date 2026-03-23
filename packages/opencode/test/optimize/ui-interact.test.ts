@@ -1,21 +1,23 @@
 import { describe, expect, it } from "bun:test"
 
 import { TuiEvent } from "../../src/cli/cmd/tui/event"
+import { SessionID } from "../../src/session/schema"
 import PromptOptimizerPlugin from "../../../../.opencode/plugins/prompt-optimizer"
 
 describe("optimize ui interact", () => {
   it("accepts prompt optimize payloads", () => {
+    const sessionID = SessionID.make("ses_test")
     const data = TuiEvent.UiInteract.properties.parse({
       id: "optimize-1",
       action: "prompt.optimize",
       context: {
         prompt: "fix this bug",
-        sessionID: "ses_test",
+        sessionID,
       },
     })
 
     expect(data.action).toBe("prompt.optimize")
-    expect(data.context?.sessionID).toBe("ses_test")
+    expect(data.context?.sessionID).toBe(sessionID)
   })
 
   it("rejects invalid session ids", () => {
