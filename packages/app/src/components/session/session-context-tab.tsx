@@ -267,14 +267,14 @@ export function SessionContextTab() {
 
   return (
     <ScrollView
-      class="@container h-full pb-10"
+      class="@container h-full"
       viewportRef={(el) => {
         scroll = el
         restoreScroll()
       }}
       onScroll={handleScroll}
     >
-      <div class="px-6 pt-4 flex flex-col gap-10">
+      <div class="px-6 pt-4 pb-10 flex flex-col gap-10">
         <div class="grid grid-cols-1 @[32rem]:grid-cols-2 gap-4">
           <For each={stats}>
             {(stat) => <Stat label={language.t(stat.label as Parameters<typeof language.t>[0])} value={stat.value()} />}
