@@ -2,16 +2,13 @@ import { useFile } from "@/context/file"
 import { encodeFilePath } from "@/context/file/path"
 import { useLanguage } from "@/context/language"
 import { usePrompt } from "@/context/prompt"
-import { useLongPress } from "@/hooks/use-long-press"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
-import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
+import { ContextMenu } from "@opencode-ai/ui/context-menu"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
-import { createMediaQuery } from "@solid-primitives/media"
 import {
   createEffect,
   createMemo,
-  createSignal,
   For,
   Match,
   on,
@@ -130,23 +127,14 @@ type FileTreeItemProps = ParentProps &
 function FileTreeItemWithContextMenu(props: FileTreeItemProps & { onFileClick?: (file: FileNode) => void }) {
   const prompt = usePrompt()
   const t = useLanguage().t
-  const [open, setOpen] = createSignal(false)
-  const isTouch = createMediaQuery("(pointer: coarse)")
-
-  const longPress = useLongPress({
-    onLongPress: () => {
-      setOpen(true)
-    },
-  })
 
   const handleAddToContext = () => {
     prompt.context.add({ type: "file", path: props.node.path })
-    setOpen(false)
   }
 
   return (
-    <DropdownMenu open={open()} onOpenChange={setOpen}>
-      <DropdownMenu.Trigger asChild {...(isTouch() ? longPress.bind : {})}>
+    <ContextMenu>
+      <ContextMenu.Trigger asChild>
         <FileTreeNode
           node={props.node}
           level={props.level}
@@ -161,19 +149,19 @@ function FileTreeItemWithContextMenu(props: FileTreeItemProps & { onFileClick?: 
         >
           {props.children}
         </FileTreeNode>
-      </DropdownMenu.Trigger>
-      <DropdownMenu.Portal>
-        <DropdownMenu.Content class="min-w-36 p-1 bg-surface-raised-base border border-border-base rounded-lg shadow-lg">
-          <DropdownMenu.Item
+      </ContextMenu.Trigger>
+      <ContextMenu.Portal>
+        <ContextMenu.Content class="min-w-36 p-1 bg-surface-raised-base border border-border-base rounded-lg shadow-lg">
+          <ContextMenu.Item
             class="flex items-center gap-2 px-3 py-2 text-13-regular text-text-strong rounded-md cursor-pointer hover:bg-surface-raised-base-hover outline-none"
             onSelect={handleAddToContext}
           >
             <Icon name="plus" size="small" class="text-icon-weak" />
             {t("fileTree.addToConversation")}
-          </DropdownMenu.Item>
-        </DropdownMenu.Content>
-      </DropdownMenu.Portal>
-    </DropdownMenu>
+          </ContextMenu.Item>
+        </ContextMenu.Content>
+      </ContextMenu.Portal>
+    </ContextMenu>
   )
 }
 
