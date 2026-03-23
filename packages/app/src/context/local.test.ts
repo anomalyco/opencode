@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { pickAgentItem, syncSessionState, type ModelKey } from "./local"
+import { pickAgentItem, syncSessionState, type ModelKey } from "./local-state"
 
 describe("pickAgentItem", () => {
   test("matches by id before name", () => {
