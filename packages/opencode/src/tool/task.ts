@@ -105,7 +105,14 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       const msg = await MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
       if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
 
-      const model = agent.model ?? {
+      const preferredModel = ctx.extra?.preferredModel as
+        | {
+            providerID: MessageV2.Assistant["providerID"]
+            modelID: MessageV2.Assistant["modelID"]
+          }
+        | undefined
+
+      const model = preferredModel ?? agent.model ?? {
         modelID: msg.info.modelID,
         providerID: msg.info.providerID,
       }

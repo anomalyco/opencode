@@ -424,7 +424,14 @@ export namespace SessionPrompt {
           sessionID: sessionID,
           abort,
           callID: part.callID,
-          extra: { bypassAgentCheck: true },
+          // Reuse the subtask model resolved upstream instead of re-resolving against the agent.
+          extra: {
+            bypassAgentCheck: true,
+            preferredModel: {
+              providerID: taskModel.providerID,
+              modelID: taskModel.id,
+            },
+          },
           messages: msgs,
           async metadata(input) {
             part = (await Session.updatePart({
@@ -1834,13 +1841,13 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       if (command.model) {
         return Provider.parseModel(command.model)
       }
+      if (input.model) return Provider.parseModel(input.model)
       if (command.agent) {
         const cmdAgent = await Agent.get(command.agent)
         if (cmdAgent?.model) {
           return cmdAgent.model
         }
       }
-      if (input.model) return Provider.parseModel(input.model)
       return await lastModel(input.sessionID)
     })()
 

@@ -1,11 +1,12 @@
 import path from "path"
-import { describe, expect, test } from "bun:test"
+import { describe, expect, spyOn, test } from "bun:test"
 import { fileURLToPath } from "url"
 import { Instance } from "../../src/project/instance"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Session } from "../../src/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { SessionPrompt } from "../../src/session/prompt"
+import { MessageID } from "../../src/session/schema"
 import { Log } from "../../src/util/log"
 import { tmpdir } from "../fixture/fixture"
 
@@ -179,6 +180,10 @@ describe("session.prompt agent variant", () => {
             parts: [{ type: "text", text: "hello" }],
           })
           if (other.info.role !== "user") throw new Error("expected user message")
+          expect(other.info.model).toEqual({
+            providerID: ProviderID.make("opencode"),
+            modelID: ModelID.make("kimi-k2.5-free"),
+          })
           expect(other.info.variant).toBeUndefined()
 
           const match = await SessionPrompt.prompt({
@@ -200,6 +205,84 @@ describe("session.prompt agent variant", () => {
           })
           if (override.info.role !== "user") throw new Error("expected user message")
           expect(override.info.variant).toBe("high")
+
+          await Session.remove(session.id)
+        },
+      })
+    } finally {
+      if (prev === undefined) delete process.env.OPENAI_API_KEY
+      else process.env.OPENAI_API_KEY = prev
+    }
+  })
+})
+
+describe("session.command model precedence", () => {
+  test("preserves explicit model on subtask commands before execution continues", async () => {
+    const prev = process.env.OPENAI_API_KEY
+    process.env.OPENAI_API_KEY = "test-openai-key"
+
+    try {
+      await using tmp = await tmpdir({
+        git: true,
+        config: {
+          agent: {
+            general: {
+              model: "openai/gpt-5.2",
+            },
+          },
+          command: {
+            delegated: {
+              agent: "general",
+              subtask: true,
+              template: "delegate this task",
+            },
+          },
+        },
+      })
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const session = await Session.create({})
+          const explicitModel = "opencode/kimi-k2.5-free"
+          const expectedModel = {
+            providerID: ProviderID.make("opencode"),
+            modelID: ModelID.make("kimi-k2.5-free"),
+          }
+          const stop = new Error("stop after user message")
+          const originalUpdateMessage = Session.updateMessage
+          let userMessageID: MessageID | undefined
+
+          const updateSpy = spyOn(Session, "updateMessage").mockImplementation(
+            (async (message: any) => {
+              if (message.role === "user") {
+                userMessageID = message.id
+                return await originalUpdateMessage(message)
+              }
+              throw stop
+            }) as any,
+          )
+
+          try {
+            await SessionPrompt.command({
+              sessionID: session.id,
+              command: "delegated",
+              arguments: "",
+              model: explicitModel,
+            })
+            throw new Error("expected command execution to stop early")
+          } catch (error) {
+            expect(error).toBe(stop)
+          } finally {
+            updateSpy.mockRestore()
+          }
+
+          if (!userMessageID) throw new Error("expected user message to be created")
+
+          const stored = await MessageV2.get({ sessionID: session.id, messageID: userMessageID })
+          const subtask = stored.parts.find((part) => part.type === "subtask")
+          if (!subtask || subtask.type !== "subtask") throw new Error("expected subtask part")
+          expect(subtask.model).toEqual(expectedModel)
 
           await Session.remove(session.id)
         },
