@@ -489,7 +489,7 @@ export namespace Project {
       const pathSvc = yield* Path.Path
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
 
-      const gitRun = Effect.fnUntraced(
+      const git = Effect.fnUntraced(
         function* (args: string[], opts?: { cwd?: string }) {
           const handle = yield* spawner.spawn(ChildProcess.make("git", args, { cwd: opts?.cwd, extendEnv: true }))
           const [text, stderr] = yield* Effect.all(
@@ -503,9 +503,8 @@ export namespace Project {
         Effect.catch(() => Effect.succeed({ code: 1, text: "", stderr: "" } satisfies GitResult)),
       )
 
-      function db<T>(fn: () => T) {
-        return Effect.sync(fn)
-      }
+      const db = <T>(fn: (d: Parameters<typeof Database.use>[0] extends (trx: infer D) => any ? D : never) => T) =>
+        Effect.sync(() => Database.use(fn))
 
       function emitUpdated(data: Info) {
         GlobalBus.emit("event", {
@@ -543,30 +542,29 @@ export namespace Project {
         }),
 
         list: Effect.fn("Project.list")(function* () {
-          return yield* db(() => list())
+          return yield* db((d) => d.select().from(ProjectTable).all().map(fromRow))
         }),
 
         get: Effect.fn("Project.get")(function* (id: ProjectID) {
-          return yield* db(() => get(id))
+          const row = yield* db((d) => d.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
+          return row ? fromRow(row) : undefined
         }),
 
         update: Effect.fn("Project.update")(function* (input: UpdateInput) {
           const id = ProjectID.make(input.projectID)
-          const result = yield* db(() =>
-            Database.use((d) =>
-              d
-                .update(ProjectTable)
-                .set({
-                  name: input.name,
-                  icon_url: input.icon?.url,
-                  icon_color: input.icon?.color,
-                  commands: input.commands,
-                  time_updated: Date.now(),
-                })
-                .where(eq(ProjectTable.id, id))
-                .returning()
-                .get(),
-            ),
+          const result = yield* db((d) =>
+            d
+              .update(ProjectTable)
+              .set({
+                name: input.name,
+                icon_url: input.icon?.url,
+                icon_color: input.icon?.color,
+                commands: input.commands,
+                time_updated: Date.now(),
+              })
+              .where(eq(ProjectTable.id, id))
+              .returning()
+              .get(),
           )
           if (!result) throw new Error(`Project not found: ${input.projectID}`)
           const data = fromRow(result)
@@ -576,7 +574,7 @@ export namespace Project {
 
         initGit: Effect.fn("Project.initGit")(function* (input: { directory: string; project: Info }) {
           if (input.project.vcs === "git") return input.project
-          const result = yield* gitRun(["init", "--quiet"], { cwd: input.directory })
+          const result = yield* git(["init", "--quiet"], { cwd: input.directory })
           if (result.code !== 0) {
             throw new Error(result.stderr.trim() || result.text.trim() || "Failed to initialize git repository")
           }
@@ -585,13 +583,13 @@ export namespace Project {
         }),
 
         setInitialized: Effect.fn("Project.setInitialized")(function* (id: ProjectID) {
-          yield* db(() => setInitialized(id))
+          yield* db((d) =>
+            d.update(ProjectTable).set({ time_initialized: Date.now() }).where(eq(ProjectTable.id, id)).run(),
+          )
         }),
 
         sandboxes: Effect.fn("Project.sandboxes")(function* (id: ProjectID) {
-          const row = yield* db(() =>
-            Database.use((d) => d.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get()),
-          )
+          const row = yield* db((d) => d.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
           if (!row) return []
           const data = fromRow(row)
           const valid: string[] = []
@@ -602,31 +600,23 @@ export namespace Project {
         }),
 
         addSandbox: Effect.fn("Project.addSandbox")(function* (id: ProjectID, directory: string) {
-          const row = yield* db(() =>
-            Database.use((d) => d.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get()),
-          )
+          const row = yield* db((d) => d.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
           if (!row) throw new Error(`Project not found: ${id}`)
           const sboxes = [...row.sandboxes]
           if (!sboxes.includes(directory)) sboxes.push(directory)
-          const result = yield* db(() =>
-            Database.use((d) =>
+          const result = yield* db((d) =>
               d.update(ProjectTable).set({ sandboxes: sboxes, time_updated: Date.now() }).where(eq(ProjectTable.id, id)).returning().get(),
-            ),
           )
           if (!result) throw new Error(`Project not found: ${id}`)
           emitUpdated(fromRow(result))
         }),
 
         removeSandbox: Effect.fn("Project.removeSandbox")(function* (id: ProjectID, directory: string) {
-          const row = yield* db(() =>
-            Database.use((d) => d.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get()),
-          )
+          const row = yield* db((d) => d.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
           if (!row) throw new Error(`Project not found: ${id}`)
           const sboxes = row.sandboxes.filter((s) => s !== directory)
-          const result = yield* db(() =>
-            Database.use((d) =>
+          const result = yield* db((d) =>
               d.update(ProjectTable).set({ sandboxes: sboxes, time_updated: Date.now() }).where(eq(ProjectTable.id, id)).returning().get(),
-            ),
           )
           if (!result) throw new Error(`Project not found: ${id}`)
           emitUpdated(fromRow(result))
