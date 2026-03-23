@@ -10002,6 +10002,10 @@
             "description": "Description of when to use the agent",
             "type": "string"
           },
+          "summary": {
+            "description": "Short summary used when listing agents in the UI",
+            "type": "string"
+          },
           "mode": {
             "type": "string",
             "enum": ["subagent", "primary", "all"]
@@ -12056,6 +12060,9 @@
             "type": "string"
           },
           "description": {
+            "type": "string"
+          },
+          "summary": {
             "type": "string"
           },
           "mode": {

@@ -1092,6 +1092,10 @@ export type AgentConfig = {
    * Description of when to use the agent
    */
   description?: string
+  /**
+   * Short summary used when listing agents in the UI
+   */
+  summary?: string
   mode?: "subagent" | "primary" | "all"
   /**
    * Hide this subagent from the @ autocomplete menu (default: false, only applies to mode: subagent)
@@ -1906,6 +1910,7 @@ export type Command = {
 export type Agent = {
   name: string
   description?: string
+  summary?: string
   mode: "subagent" | "primary" | "all"
   native?: boolean
   hidden?: boolean
