@@ -213,6 +213,7 @@ export namespace Installation {
             if (formula.includes("/")) {
               const infoJson = yield* text(["brew", "info", "--json=v2", formula])
               const info = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(BrewInfoV2))(infoJson)
+              if (info.formulae.length === 0) return "unknown"
               return info.formulae[0].versions.stable
             }
             const response = yield* httpOk.execute(
@@ -243,6 +244,7 @@ export namespace Installation {
               ).pipe(HttpClientRequest.setHeaders({ Accept: "application/json;odata=verbose" })),
             )
             const data = yield* HttpClientResponse.schemaBodyJson(ChocoPackage)(response)
+            if (data.d.results.length === 0) return "unknown"
             return data.d.results[0].Version
           }
 
