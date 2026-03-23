@@ -255,7 +255,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         id: "file.open",
         title: language.t("command.file.open"),
         description: language.t("palette.search.placeholder"),
-        keybind: "mod+p",
+        keybind: "mod+k,mod+p",
         slash: "open",
         onSelect: () => dialog.show(() => <DialogSelectFile onOpenFile={showAllFiles} />),
       }),
