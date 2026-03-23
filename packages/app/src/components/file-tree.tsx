@@ -1,11 +1,17 @@
 import { useFile } from "@/context/file"
 import { encodeFilePath } from "@/context/file/path"
+import { useLanguage } from "@/context/language"
+import { usePrompt } from "@/context/prompt"
+import { useLongPress } from "@/hooks/use-long-press"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
+import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
+import { createMediaQuery } from "@solid-primitives/media"
 import {
   createEffect,
   createMemo,
+  createSignal,
   For,
   Match,
   on,
@@ -108,20 +114,70 @@ const withFileDragImage = (event: DragEvent) => {
   setTimeout(() => document.body.removeChild(image), 0)
 }
 
-const FileTreeNode = (
-  p: ParentProps &
-    ComponentProps<"div"> &
-    ComponentProps<"button"> & {
-      node: FileNode
-      level: number
-      active?: string
-      nodeClass?: string
-      draggable: boolean
-      kinds?: ReadonlyMap<string, Kind>
-      marks?: Set<string>
-      as?: "div" | "button"
+type FileTreeItemProps = ParentProps &
+  ComponentProps<"div"> &
+  ComponentProps<"button"> & {
+    node: FileNode
+    level: number
+    active?: string
+    nodeClass?: string
+    draggable: boolean
+    kinds?: ReadonlyMap<string, Kind>
+    marks?: Set<string>
+    as?: "div" | "button"
+  }
+
+function FileTreeItemWithContextMenu(props: FileTreeItemProps & { onFileClick?: (file: FileNode) => void }) {
+  const prompt = usePrompt()
+  const t = useLanguage().t
+  const [open, setOpen] = createSignal(false)
+  const isTouch = createMediaQuery("(pointer: coarse)")
+
+  const longPress = useLongPress({
+    onLongPress: () => {
+      setOpen(true)
     },
-) => {
+  })
+
+  const handleAddToContext = () => {
+    prompt.context.add({ type: "file", path: props.node.path })
+    setOpen(false)
+  }
+
+  return (
+    <DropdownMenu open={open()} onOpenChange={setOpen}>
+      <DropdownMenu.Trigger asChild {...(isTouch() ? longPress.bind : {})}>
+        <FileTreeNode
+          node={props.node}
+          level={props.level}
+          active={props.active}
+          nodeClass={props.nodeClass}
+          draggable={props.draggable}
+          kinds={props.kinds}
+          marks={props.marks}
+          as={props.as}
+          type={props.as === "button" ? "button" : undefined}
+          onClick={() => props.onFileClick?.(props.node)}
+        >
+          {props.children}
+        </FileTreeNode>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content class="min-w-36 p-1 bg-surface-raised-base border border-border-base rounded-lg shadow-lg">
+          <DropdownMenu.Item
+            class="flex items-center gap-2 px-3 py-2 text-13-regular text-text-strong rounded-md cursor-pointer hover:bg-surface-raised-base-hover outline-none"
+            onSelect={handleAddToContext}
+          >
+            <Icon name="plus" size="small" class="text-icon-weak" />
+            {t("fileTree.addToConversation")}
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu>
+  )
+}
+
+const FileTreeNode = (p: FileTreeItemProps) => {
   const [local, rest] = splitProps(p, [
     "node",
     "level",
@@ -452,7 +508,7 @@ export default function FileTree(props: {
                 </Collapsible>
               </Match>
               <Match when={node.type === "file"}>
-                <FileTreeNode
+                <FileTreeItemWithContextMenu
                   node={node}
                   level={level}
                   active={props.active}
@@ -461,8 +517,7 @@ export default function FileTree(props: {
                   kinds={kinds()}
                   marks={marks()}
                   as="button"
-                  type="button"
-                  onClick={() => props.onFileClick?.(node)}
+                  onFileClick={props.onFileClick}
                 >
                   <div class="w-4 shrink-0" />
                   <Switch>
@@ -496,7 +551,7 @@ export default function FileTree(props: {
                       </span>
                     </Match>
                   </Switch>
-                </FileTreeNode>
+                </FileTreeItemWithContextMenu>
               </Match>
             </Switch>
           )
