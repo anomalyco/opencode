@@ -1,20 +1,26 @@
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tabs } from "@opencode-ai/ui/tabs"
-import { Show, Switch, Match, type JSX } from "solid-js"
+import { Show, Switch, Match, type JSX, createMemo } from "solid-js"
 import FileTree from "@/components/file-tree"
 import { useLanguage } from "@/context/language"
 import { useFile } from "@/context/file"
 import { useFileTreePanel } from "@/pages/session/use-file-tree-panel"
+import { createSessionTabs } from "@/pages/session/helpers"
+import { useSessionLayout } from "@/pages/session/session-layout"
+import { FileTabContent } from "@/pages/session/file-tabs"
 
 type MobileFullscreenPanelProps = {
-  active: "review" | "fileTree" | null
+  active: "review" | "fileTree" | "file" | null
   onClose: () => void
+  onShowFile: () => void
+  onShowFileTree: () => void
   reviewPanel: () => JSX.Element
 }
 
 export function MobileFullscreenPanel(props: MobileFullscreenPanelProps) {
   const language = useLanguage()
   const file = useFile()
+  const { tabs } = useSessionLayout()
   const {
     diffFiles,
     kinds,
@@ -30,21 +36,48 @@ export function MobileFullscreenPanel(props: MobileFullscreenPanelProps) {
     reviewCount,
   } = useFileTreePanel()
 
-  const isOpen = () => props.active === "review" || props.active === "fileTree"
+  const tabState = createSessionTabs({
+    tabs,
+    pathFromTab: file.pathFromTab,
+    normalizeTab: (tab) => (tab.startsWith("file://") ? file.tab(tab) : tab),
+  })
+
+  const activeFileTab = tabState.activeFileTab
+
+  const isOpen = () => props.active === "review" || props.active === "fileTree" || props.active === "file"
+
+  const handleFileClick = (node: { path: string }) => {
+    openTab(file.tab(node.path))
+    props.onShowFile()
+  }
+
+  const titleText = createMemo(() => {
+    if (props.active === "review") return language.t("session.tab.review")
+    if (props.active === "file") {
+      const tab = activeFileTab()
+      if (tab) {
+        const path = file.pathFromTab(tab)
+        if (path) return path.split("/").pop() ?? tab
+      }
+      return language.t("session.files.title")
+    }
+    return language.t("session.files.title")
+  })
+
+  const handleBack = () => {
+    if (props.active === "file") {
+      props.onShowFileTree()
+    } else {
+      props.onClose()
+    }
+  }
 
   return (
     <Show when={isOpen()}>
       <div class="fixed inset-0 z-40 flex flex-col bg-background-base md:hidden">
         <div class="flex items-center justify-between h-11 px-2 border-b border-border-weak-base shrink-0">
-          <IconButton
-            icon="arrow-left"
-            variant="ghost"
-            onClick={props.onClose}
-            aria-label={language.t("common.back")}
-          />
-          <span class="text-14-medium">
-            {props.active === "review" ? language.t("session.tab.review") : language.t("session.files.title")}
-          </span>
+          <IconButton icon="arrow-left" variant="ghost" onClick={handleBack} aria-label={language.t("common.back")} />
+          <span class="text-14-medium truncate max-w-[60%]">{titleText()}</span>
           <div class="w-8" />
         </div>
 
@@ -87,11 +120,7 @@ export function MobileFullscreenPanel(props: MobileFullscreenPanelProps) {
                           allowed={diffFiles()}
                           kinds={kinds()}
                           draggable={false}
-                          onFileClick={(node) => {
-                            showAllFiles()
-                            openTab(file.tab(node.path))
-                            props.onClose()
-                          }}
+                          onFileClick={handleFileClick}
                         />
                       </Show>
                     </Match>
@@ -107,16 +136,19 @@ export function MobileFullscreenPanel(props: MobileFullscreenPanelProps) {
                         class="pt-3"
                         modified={diffFiles()}
                         kinds={kinds()}
-                        onFileClick={(node) => {
-                          openTab(file.tab(node.path))
-                          props.onClose()
-                        }}
+                        onFileClick={handleFileClick}
                       />
                     </Match>
                   </Switch>
                 </Tabs.Content>
               </Tabs>
             </div>
+          </Show>
+
+          <Show when={props.active === "file"}>
+            <Show when={activeFileTab()} keyed>
+              {(tab) => <FileTabContent tab={tab} />}
+            </Show>
           </Show>
         </div>
       </div>

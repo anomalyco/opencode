@@ -1828,6 +1828,8 @@ export default function Page() {
           <MobileFullscreenPanel
             active={layout.mobilePanel.active()}
             onClose={() => layout.mobilePanel.hide()}
+            onShowFile={() => layout.mobilePanel.showFile()}
+            onShowFileTree={() => layout.mobilePanel.showFileTree()}
             reviewPanel={reviewPanel}
           />
         </Show>
