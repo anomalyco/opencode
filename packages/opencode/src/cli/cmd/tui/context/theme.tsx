@@ -428,7 +428,7 @@ export function tint(base: RGBA, overlay: RGBA, alpha: number): RGBA {
 function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJson {
   const bg = RGBA.fromHex(colors.defaultBackground ?? colors.palette[0]!)
   const fg = RGBA.fromHex(colors.defaultForeground ?? colors.palette[7]!)
-  const transparent = RGBA.fromInts(0, 0, 0, 0)
+  const transparent = RGBA.fromValues(bg.r, bg.g, bg.b, 0)
   const isDark = mode == "dark"
 
   const col = (i: number) => {
