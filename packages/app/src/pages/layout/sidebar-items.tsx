@@ -157,34 +157,45 @@ const SessionHoverPreview = (props: {
   messageLabel: (message: Message) => string | undefined
   onMessageSelect: (message: Message) => void
   trigger: JSX.Element
-}): JSX.Element => (
-  <HoverCard
-    openDelay={1000}
-    closeDelay={props.sidebarHovering() ? 600 : 0}
-    placement="right-start"
-    gutter={16}
-    shift={-2}
-    trigger={props.trigger}
-    open={props.hoverSession() === props.session.id}
-    onOpenChange={(open) => props.setHoverSession(open ? props.session.id : undefined)}
-  >
-    <Show
-      when={props.hoverReady()}
-      fallback={<div class="text-12-regular text-text-weak">{props.language.t("session.messages.loading")}</div>}
+}): JSX.Element => {
+  let ref: HTMLDivElement | undefined
+
+  return (
+    <HoverCard
+      openDelay={1000}
+      closeDelay={props.sidebarHovering() ? 600 : 0}
+      placement="right-start"
+      gutter={16}
+      shift={-2}
+      trigger={<div ref={ref}>{props.trigger}</div>}
+      open={props.hoverSession() === props.session.id}
+      onOpenChange={(open) => {
+        if (!open) {
+          props.setHoverSession(undefined)
+          return
+        }
+        if (!ref?.matches(":hover")) return
+        props.setHoverSession(props.session.id)
+      }}
     >
-      <div class="overflow-y-auto overflow-x-hidden max-h-72 h-full">
-        <MessageNav
-          messages={props.hoverMessages() ?? []}
-          current={undefined}
-          getLabel={props.messageLabel}
-          onMessageSelect={props.onMessageSelect}
-          size="normal"
-          class="w-60"
-        />
-      </div>
-    </Show>
-  </HoverCard>
-)
+      <Show
+        when={props.hoverReady()}
+        fallback={<div class="text-12-regular text-text-weak">{props.language.t("session.messages.loading")}</div>}
+      >
+        <div class="overflow-y-auto overflow-x-hidden max-h-72 h-full">
+          <MessageNav
+            messages={props.hoverMessages() ?? []}
+            current={undefined}
+            getLabel={props.messageLabel}
+            onMessageSelect={props.onMessageSelect}
+            size="normal"
+            class="w-60"
+          />
+        </div>
+      </Show>
+    </HoverCard>
+  )
+}
 
 export const SessionItem = (props: SessionItemProps): JSX.Element => {
   const params = useParams()
