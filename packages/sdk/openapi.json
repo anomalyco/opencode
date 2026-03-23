@@ -12052,6 +12052,9 @@
       "Agent": {
         "type": "object",
         "properties": {
+          "id": {
+            "type": "string"
+          },
           "name": {
             "type": "string"
           },
@@ -12111,7 +12114,7 @@
             "maximum": 9007199254740991
           }
         },
-        "required": ["name", "mode", "permission", "options"]
+        "required": ["id", "name", "mode", "permission", "options"]
       },
       "LSPStatus": {
         "type": "object",

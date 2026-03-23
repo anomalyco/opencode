@@ -11,6 +11,28 @@ import { createClient } from "@hey-api/openapi-ts"
 
 await $`bun dev generate > ${dir}/openapi.json`.cwd(path.resolve(dir, "../../opencode"))
 
+const specPath = path.join(dir, "openapi.json")
+const spec = JSON.parse(await Bun.file(specPath).text()) as {
+  components?: {
+    schemas?: {
+      Agent?: {
+        type?: string
+        properties?: Record<string, unknown>
+        required?: string[]
+      }
+    }
+  }
+}
+const agent = spec.components?.schemas?.Agent
+if (agent && agent.type === "object") {
+  agent.properties = {
+    id: { type: "string" },
+    ...(agent.properties ?? {}),
+  }
+  agent.required = agent.required?.includes("id") ? agent.required : ["id", ...(agent.required ?? [])]
+  await Bun.write(specPath, `${JSON.stringify(spec, null, 2)}\n`)
+}
+
 await createClient({
   input: "./openapi.json",
   output: {
