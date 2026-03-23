@@ -1,0 +1,33 @@
+name: release
+
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - run: bun install
+
+      - name: Build CLI
+        run: ./packages/opencode/script/build.ts --single --skip-install
+        working-directory: packages/opencode
+
+      - name: Package
+        run: |
+          cd packages/opencode/dist
+          tar -czf opencode-linux-x64.tar.gz opencode-linux-x64/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: opencode-linux-x64
+          path: packages/opencode/dist/opencode-linux-x64.tar.gz
+          retention-days: 30
