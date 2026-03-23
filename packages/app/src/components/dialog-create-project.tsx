@@ -108,7 +108,7 @@ export function DialogCreateProject(props: DialogCreateProjectProps) {
 
   return (
     <Dialog title="创建项目">
-      <div class="flex flex-col gap-4">
+      <div class="flex flex-col gap-4" style="padding: 0 20px 20px 20px;">
         <div class="text-12-regular text-text-weak">
           将在 {home()} 下创建项目目录
         </div>
