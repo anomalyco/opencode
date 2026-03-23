@@ -261,6 +261,19 @@ export namespace Snapshot {
             const diffFull = Effect.fnUntraced(function* (from: string, to: string) {
               const result: Snapshot.FileDiff[] = []
               const status = new Map<string, "added" | "deleted" | "modified">()
+              const max = 2 * 1024 * 1024
+
+              const load = Effect.fnUntraced(function* (rev: string, file: string) {
+                const probe = yield* git([...args(["cat-file", "-s", `${rev}:${file}`])], {
+                  cwd: state.directory,
+                })
+                const size = parseInt(probe.text.trim(), 10)
+                if (Number.isFinite(size) && size > max) return ""
+                const result = yield* git([...cfg, ...args(["show", `${rev}:${file}`])], {
+                  cwd: state.directory,
+                })
+                return result.text
+              })
 
               const statuses = yield* git(
                 [...quote, ...args(["diff", "--no-ext-diff", "--name-status", "--no-renames", from, to, "--", "."])],
@@ -288,13 +301,7 @@ export namespace Snapshot {
                 const binary = adds === "-" && dels === "-"
                 const [before, after] = binary
                   ? ["", ""]
-                  : yield* Effect.all(
-                      [
-                        git([...cfg, ...args(["show", `${from}:${file}`])]).pipe(Effect.map((item) => item.text)),
-                        git([...cfg, ...args(["show", `${to}:${file}`])]).pipe(Effect.map((item) => item.text)),
-                      ],
-                      { concurrency: 2 },
-                    )
+                  : yield* Effect.all([load(from, file), load(to, file)], { concurrency: 2 })
                 const additions = binary ? 0 : parseInt(adds)
                 const deletions = binary ? 0 : parseInt(dels)
                 result.push({
