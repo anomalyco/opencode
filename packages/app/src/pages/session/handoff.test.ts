@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { getSessionHandoff, setSessionHandoff, takeSessionDraft } from "./handoff"
+import { getSessionHandoff, setSessionDraft, setSessionHandoff, takeSessionDraft } from "./handoff"
 
 describe("session handoff", () => {
   test("consumes draft and keeps other handoff state", () => {
@@ -8,14 +8,15 @@ describe("session handoff", () => {
 
     setSessionHandoff(key, {
       prompt: "forked prompt",
-      draft: [...draft],
+      files: {},
     })
+    setSessionDraft(key, [...draft])
 
     expect(takeSessionDraft(key)).toEqual(draft)
     expect(takeSessionDraft(key)).toBeUndefined()
     expect(getSessionHandoff(key)).toEqual({
       prompt: "forked prompt",
-      draft: undefined,
+      files: {},
     })
   })
 })

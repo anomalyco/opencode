@@ -3,14 +3,14 @@ import type { Prompt } from "@/context/prompt"
 
 type HandoffSession = {
   prompt: string
-  draft?: Prompt
-  files?: Record<string, SelectedLineRange | null>
+  files: Record<string, SelectedLineRange | null>
 }
 
 const MAX = 40
 
 const store = {
   session: new Map<string, HandoffSession>(),
+  draft: new Map<string, Prompt>(),
   terminal: new Map<string, string[]>(),
 }
 
@@ -25,18 +25,21 @@ const touch = <K, V>(map: Map<K, V>, key: K, value: V) => {
 }
 
 export const setSessionHandoff = (key: string, patch: Partial<HandoffSession>) => {
-  const prev = store.session.get(key) ?? { prompt: "" }
+  const prev = store.session.get(key) ?? { prompt: "", files: {} }
   touch(store.session, key, { ...prev, ...patch })
 }
 
 export const getSessionHandoff = (key: string) => store.session.get(key)
 
-export const takeSessionDraft = (key: string) => {
-  const prev = store.session.get(key)
-  const draft = prev?.draft
-  if (!prev || !draft) return
+export const setSessionDraft = (key: string, value: Prompt) => {
+  touch(store.draft, key, value)
+}
 
-  touch(store.session, key, { ...prev, draft: undefined })
+export const takeSessionDraft = (key: string) => {
+  const draft = store.draft.get(key)
+  if (!draft) return
+
+  store.draft.delete(key)
   return draft
 }
 

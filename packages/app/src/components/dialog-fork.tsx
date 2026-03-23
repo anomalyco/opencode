@@ -6,7 +6,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { showToast } from "@opencode-ai/ui/toast"
-import { setSessionHandoff } from "@/pages/session/handoff"
+import { setSessionDraft } from "@/pages/session/handoff"
 import { extractPromptFromParts } from "@/utils/prompt"
 import type { TextPart as SDKTextPart } from "@opencode-ai/sdk/v2/client"
 import { base64Encode } from "@opencode-ai/util/encode"
@@ -75,10 +75,7 @@ export const DialogFork: Component = () => {
           showToast({ title: language.t("common.requestFailed") })
           return
         }
-        const key = `${dir}/${next.id}`
-        setSessionHandoff(key, {
-          draft: restored,
-        })
+        setSessionDraft(`${dir}/${next.id}`, restored)
         dialog.close()
         navigate(`/${dir}/session/${next.id}`)
       })

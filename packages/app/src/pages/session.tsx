@@ -42,7 +42,7 @@ import { useTerminal } from "@/context/terminal"
 import { type FollowupDraft, sendFollowupDraft } from "@/components/prompt-input/submit"
 import { createSessionComposerState, SessionComposerRegion } from "@/pages/session/composer"
 import { createOpenReviewFile, createSessionTabs, createSizing, focusTerminalById } from "@/pages/session/helpers"
-import { setSessionHandoff } from "@/pages/session/handoff"
+import { setSessionDraft } from "@/pages/session/handoff"
 import { MessageTimeline } from "@/pages/session/message-timeline"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
 import { useSessionLayout } from "@/pages/session/session-layout"
@@ -1333,10 +1333,7 @@ export default function Page() {
 
   const handoffFork = (next: Exclude<ReturnType<typeof info>, undefined>, value: ReturnType<typeof draft>) => {
     const slug = base64Encode(sdk.directory)
-    const key = `${slug}/${next.id}`
-    setSessionHandoff(key, {
-      draft: value,
-    })
+    setSessionDraft(`${slug}/${next.id}`, value)
     navigate(`/${slug}/session/${next.id}`)
   }
 
