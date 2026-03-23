@@ -438,12 +438,10 @@ export function SessionSidePanel(props: {
                   size={layout.fileTree.width()}
                   min={200}
                   max={480}
-                  collapseThreshold={160}
                   onResize={(width) => {
                     props.size.touch()
                     layout.fileTree.resize(width)
                   }}
-                  onCollapse={layout.fileTree.close}
                 />
               </div>
             </Show>
