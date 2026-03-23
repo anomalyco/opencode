@@ -28,9 +28,6 @@ const log = Log.create({ service: "db" })
 
 export namespace Database {
   export const Path = iife(() => {
-    if (Installation.isTesting()) {
-      return ":memory:"
-    }
     if (Flag.OPENCODE_DB) {
       if (path.isAbsolute(Flag.OPENCODE_DB)) return Flag.OPENCODE_DB
       return path.join(Global.Path.data, Flag.OPENCODE_DB)

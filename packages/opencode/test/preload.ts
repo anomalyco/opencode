@@ -74,6 +74,9 @@ delete process.env["SAMBANOVA_API_KEY"]
 delete process.env["OPENCODE_SERVER_PASSWORD"]
 delete process.env["OPENCODE_SERVER_USERNAME"]
 
+// Use in-memory sqlite
+process.env["OPENCODE_DB"] = ":memory:"
+
 // Now safe to import from src/
 const { Log } = await import("../src/util/log")
 const { initProjectors } = await import("../src/server/projectors")

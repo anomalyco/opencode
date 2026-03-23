@@ -15,6 +15,8 @@ export namespace SyncEvent {
     aggregate: string
     schema: z.ZodObject
 
+    // This is temporary and only exists for compatibility with bus
+    // event definitions
     properties: z.ZodObject
   }
 
@@ -69,8 +71,8 @@ export namespace SyncEvent {
     Type extends string,
     Agg extends string,
     Schema extends ZodObject<Record<Agg, z.ZodType<string>>>,
-    BusSchema extends ZodObject<Record<Agg, z.ZodType<string>>> | undefined,
-  >(input: { type: Type; version: number; aggregate: Agg; schema: Schema; busSchema: BusSchema }) {
+    BusSchema extends ZodObject = Schema,
+  >(input: { type: Type; version: number; aggregate: Agg; schema: Schema; busSchema?: BusSchema }) {
     if (frozen) {
       throw new Error("Error defining sync event: sync system has been frozen")
     }
@@ -80,9 +82,7 @@ export namespace SyncEvent {
       version: input.version,
       aggregate: input.aggregate,
       schema: input.schema,
-      properties: (input.busSchema ?? input.schema) as BusSchema extends ZodObject<Record<Agg, z.ZodType<string>>>
-        ? BusSchema
-        : Schema,
+      properties: input.busSchema ? input.busSchema : input.schema,
     }
 
     versions.set(def.type, Math.max(def.version, versions.get(def.type) || 0))

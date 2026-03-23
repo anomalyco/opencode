@@ -233,8 +233,6 @@ export namespace Session {
     ),
   }
 
-  type X = z.infer<(typeof Event.Updated)["properties"]>
-
   export const create = fn(
     z
       .object({
@@ -336,6 +334,16 @@ export namespace Session {
         // Silently ignore sharing errors during session creation
       })
     }
+
+    if (!Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
+      // This only exist for backwards compatibility. We should not be
+      // manually publishing this event; it is a sync event now
+      Bus.publish(Event.Updated, {
+        sessionID: result.id,
+        info: result,
+      })
+    }
+
     return result
   }
 

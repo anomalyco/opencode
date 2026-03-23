@@ -14,18 +14,9 @@ export function initProjectors() {
 
   SyncEvent.init({
     projectors: sessionProjectors,
-    convertDefinition: (type, data) => {
-      if (type === "session.updated") {
-        return z.object({
-          sessionID: SessionID.zod,
-          info: Session.Info,
-        })
-      }
-      return data
-    },
     convertEvent: (type, data) => {
       if (type === "session.updated") {
-        const sessionID = (data as z.infer<typeof Session.Event.Updated.data>).sessionID
+        const sessionID = (data as z.infer<typeof Session.Event.Updated.schema>).sessionID
         return {
           sessionID: SessionID.zod,
           info: Session.get(sessionID),

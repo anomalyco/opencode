@@ -1,4 +1,3 @@
-
 # Goal
 
 ## Syncing with only one writer
@@ -17,9 +16,9 @@ The difference in event sourcing is events are sent _before_ the mutation happen
 
 So the goal is:
 
-* Introduce a new syncing abstraction to handle event sourcing and projectors
-* Seamlessly integrate these new events into the same existing `Bus` abstraction
-* Maintain full backwards compatibility to reduce risk
+- Introduce a new syncing abstraction to handle event sourcing and projectors
+- Seamlessly integrate these new events into the same existing `Bus` abstraction
+- Maintain full backwards compatibility to reduce risk
 
 ## My approach
 
@@ -53,7 +52,6 @@ const Created = SyncEvent.define({
 })
 ```
 
-
 Not too different, except they track a version and an "aggregate" field (will explain that later).
 
 You do this to run an event, which is kind of like `Bus.publish` except that it runs through the event sourcing system:
@@ -68,7 +66,7 @@ Importantly, **sync events automatically re-publish as bus events**. This makes 
 
 ### Event shape
 
-* The shape of the events are slightly different. A sync event has the `type`, `id`, `seq`, `aggregateID`, and `data` fields. A bus event has the `type` and `properties` fields. `data` and `properties` are largely the same thing. This conversation is automatically handled when the sync system re-published the event throught the bus.
+- The shape of the events are slightly different. A sync event has the `type`, `id`, `seq`, `aggregateID`, and `data` fields. A bus event has the `type` and `properties` fields. `data` and `properties` are largely the same thing. This conversation is automatically handled when the sync system re-published the event throught the bus.
 
 The reason for this is because sync events need to track more information. I chose not to copy the `properties` naming to more clearly disambiguate the event types.
 
@@ -84,11 +82,11 @@ You should never "publish" a sync event however: `Bus.publish(Created, ...)`. Th
 
 The system install projectors in `server/projectors.js`. It calls `SyncEvent.init` to do this. It also installs two different hooks for providing backwards compatibility:
 
-* `convertDefinition`: a function that convert a zod definition for an event schema
-* `convertEvent`: a function that converts an individual event's data
+- `convertDefinition`: a function that convert a zod definition for an event schema
+- `convertEvent`: a function that converts an individual event's data
 
 These hooks allow for arbitrary conversions at runtime, allowing for us to provide a backwards compatible interface to clients.
 
 For example, the sync system changed the `session.updated` event to only include the fields that were changed, compared to before where it returned the full session object. We install converters to load the full session object and return it to clients.
 
-**Important**: 
+**Important**:
