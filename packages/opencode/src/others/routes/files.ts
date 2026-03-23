@@ -538,7 +538,7 @@ export function FilesRoutes() {
         const buffer = await readFileBuffer(spacePath, targetPath)
         const filename = path.basename(targetPath)
 
-        return new Response(buffer, {
+        return new Response(new Uint8Array(buffer), {
           headers: {
             "Content-Type": "application/octet-stream",
             "Content-Disposition": `attachment; filename="${encodeURIComponent(filename)}"`,
