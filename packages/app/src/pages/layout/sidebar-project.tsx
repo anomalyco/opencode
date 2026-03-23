@@ -15,6 +15,7 @@ import { childMapByParent, displayName, sortedRootSessions } from "./helpers"
 
 export type ProjectSidebarContext = {
   currentDir: Accessor<string>
+  currentProject: Accessor<LocalProject | undefined>
   sidebarOpened: Accessor<boolean>
   sidebarHovering: Accessor<boolean>
   hoverProject: Accessor<string | undefined>
@@ -108,8 +109,14 @@ const ProjectTile = (props: {
           "bg-surface-base-hover border border-border-weak-base": !props.selected() && props.active(),
         }}
         onPointerDown={(event) => {
+          if (event.button === 0 && !event.ctrlKey) {
+            props.setOpen(false)
+            props.setSuppressHover(true)
+            return
+          }
           if (!props.overlay()) return
           if (event.button !== 2 && !(event.button === 0 && event.ctrlKey)) return
+          props.setOpen(false)
           props.setSuppressHover(true)
           event.preventDefault()
         }}
@@ -129,12 +136,11 @@ const ProjectTile = (props: {
           props.onProjectFocus(props.project.worktree)
         }}
         onClick={() => {
+          props.setOpen(false)
           if (props.selected()) {
-            props.setSuppressHover(true)
             layout.sidebar.toggle()
             return
           }
-          props.setSuppressHover(false)
           props.navigateToProject(props.project.worktree)
         }}
         onBlur={() => props.setOpen(false)}
@@ -278,11 +284,7 @@ export const SortableProject = (props: {
   const globalSync = useGlobalSync()
   const language = useLanguage()
   const sortable = createSortable(props.project.worktree)
-  const selected = createMemo(
-    () =>
-      props.project.worktree === props.ctx.currentDir() ||
-      props.project.sandboxes?.includes(props.ctx.currentDir()) === true,
-  )
+  const selected = createMemo(() => props.ctx.currentProject()?.worktree === props.project.worktree)
   const workspaces = createMemo(() => props.ctx.workspaceIds(props.project).slice(0, 2))
   const workspaceEnabled = createMemo(() => props.ctx.workspacesEnabled(props.project))
   const dirs = createMemo(() => props.ctx.workspaceIds(props.project))

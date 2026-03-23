@@ -1,10 +1,7 @@
-import { BusEvent } from "@/bus/bus-event"
-import { Bus } from "@/bus"
 import { Log } from "../util/log"
 import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler } from "hono-openapi"
 import { Hono } from "hono"
 import { cors } from "hono/cors"
-import { streamSSE } from "hono/streaming"
 import { proxy } from "hono/proxy"
 import { basicAuth } from "hono/basic-auth"
 import z from "zod"
@@ -14,10 +11,9 @@ import { LSP } from "../lsp"
 import { Format } from "../format"
 import { TuiRoutes } from "./routes/tui"
 import { Instance } from "../project/instance"
-import { Vcs, VcsService } from "../project/vcs"
-import { runPromiseInstance } from "@/effect/runtime"
+import { Vcs } from "../project/vcs"
 import { Agent } from "../agent/agent"
-import { Skill } from "../skill/skill"
+import { Skill } from "../skill"
 import { Auth } from "../auth"
 import { Flag } from "../flag/flag"
 import { Command } from "../command"
@@ -34,6 +30,7 @@ import { FileRoutes } from "./routes/file"
 import { ConfigRoutes } from "./routes/config"
 import { ExperimentalRoutes } from "./routes/experimental"
 import { ProviderRoutes } from "./routes/provider"
+import { EventRoutes } from "./routes/event"
 import { InstanceBootstrap } from "../project/bootstrap"
 import { NotFoundError } from "../storage/db"
 import type { ContentfulStatusCode } from "hono/utils/http-status"
@@ -66,6 +63,7 @@ export namespace Server {
           let status: ContentfulStatusCode
           if (err instanceof NotFoundError) status = 404
           else if (err instanceof Provider.ModelNotFoundError) status = 400
+          else if (err.name === "ProviderAuthValidationFailed") status = 400
           else if (err.name.startsWith("Worktree")) status = 400
           else status = 500
           return c.json(err.toObject(), { status })
@@ -153,7 +151,7 @@ export namespace Server {
             providerID: ProviderID.zod,
           }),
         ),
-        validator("json", Auth.Info),
+        validator("json", Auth.Info.zod),
         async (c) => {
           const providerID = c.req.valid("param").providerID
           const info = c.req.valid("json")
@@ -250,6 +248,7 @@ export namespace Server {
       .route("/question", QuestionRoutes())
       .route("/provider", ProviderRoutes())
       .route("/", FileRoutes())
+      .route("/", EventRoutes())
       .route("/mcp", McpRoutes())
       .route("/tui", TuiRoutes())
       .post(
@@ -331,7 +330,7 @@ export namespace Server {
           },
         }),
         async (c) => {
-          const branch = await runPromiseInstance(VcsService.use((s) => s.branch()))
+          const branch = await Vcs.branch()
           return c.json({
             branch,
           })
@@ -495,64 +494,6 @@ export namespace Server {
         }),
         async (c) => {
           return c.json(await Format.status())
-        },
-      )
-      .get(
-        "/event",
-        describeRoute({
-          summary: "Subscribe to events",
-          description: "Get events",
-          operationId: "event.subscribe",
-          responses: {
-            200: {
-              description: "Event stream",
-              content: {
-                "text/event-stream": {
-                  schema: resolver(BusEvent.payloads()),
-                },
-              },
-            },
-          },
-        }),
-        async (c) => {
-          log.info("event connected")
-          c.header("X-Accel-Buffering", "no")
-          c.header("X-Content-Type-Options", "nosniff")
-          return streamSSE(c, async (stream) => {
-            stream.writeSSE({
-              data: JSON.stringify({
-                type: "server.connected",
-                properties: {},
-              }),
-            })
-            const unsub = Bus.subscribeAll(async (event) => {
-              await stream.writeSSE({
-                data: JSON.stringify(event),
-              })
-              if (event.type === Bus.InstanceDisposed.type) {
-                stream.close()
-              }
-            })
-
-            // Send heartbeat every 10s to prevent stalled proxy streams.
-            const heartbeat = setInterval(() => {
-              stream.writeSSE({
-                data: JSON.stringify({
-                  type: "server.heartbeat",
-                  properties: {},
-                }),
-              })
-            }, 10_000)
-
-            await new Promise<void>((resolve) => {
-              stream.onAbort(() => {
-                clearInterval(heartbeat)
-                unsub()
-                resolve()
-                log.info("event disconnected")
-              })
-            })
-          })
         },
       )
       .all("/*", async (c) => {
