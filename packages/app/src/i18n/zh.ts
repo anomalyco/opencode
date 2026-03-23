@@ -496,6 +496,7 @@ export const dict = {
   "home.empty.title": "没有最近项目",
   "home.empty.description": "通过打开本地项目开始使用",
 
+  "session.backToChat": "回到聊天",
   "session.tab.session": "会话",
   "session.tab.review": "审查",
   "session.tab.context": "上下文",

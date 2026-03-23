@@ -28,3 +28,4 @@ opencode-dev
 logs/
 *.bun-build
 tsconfig.tsbuildinfo
+**/.superpowers

@@ -487,6 +487,15 @@ export function SessionHeader() {
                 <ToolbarOverflowMenu
                   items={[
                     {
+                      id: "backToChat",
+                      label: language.t("session.backToChat"),
+                      icon: "message",
+                      onClick: () => {
+                        layout.mobilePanel.hide()
+                      },
+                      visible: false,
+                    },
+                    {
                       id: "review",
                       label: language.t("command.review.toggle"),
                       icon: view().reviewPanel.opened() ? "review-active" : "review",
