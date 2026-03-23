@@ -1,26 +1,46 @@
+import z from "zod"
 import { Worktree } from "@/worktree"
-import type { Config } from "../config"
-import type { Adaptor } from "./types"
+import { type Adaptor, WorkspaceInfo } from "../types"
 
-type WorktreeConfig = Extract<Config, { type: "worktree" }>
+const Config = WorkspaceInfo.extend({
+  name: WorkspaceInfo.shape.name.unwrap(),
+  branch: WorkspaceInfo.shape.branch.unwrap(),
+  directory: WorkspaceInfo.shape.directory.unwrap(),
+})
 
-export const WorktreeAdaptor: Adaptor<WorktreeConfig> = {
-  async create(_from: WorktreeConfig, _branch: string) {
-    const next = await Worktree.create(undefined)
+type Config = z.infer<typeof Config>
+
+export const WorktreeAdaptor: Adaptor = {
+  async configure(info) {
+    const worktree = await Worktree.makeWorktreeInfo(info.name ?? undefined)
     return {
-      config: {
-        type: "worktree",
-        directory: next.directory,
-      },
-      // Hack for now: `Worktree.create` puts all its async code in a
-      // `setTimeout` so it doesn't use this, but we should change that
-      init: async () => {},
+      ...info,
+      name: worktree.name,
+      branch: worktree.branch,
+      directory: worktree.directory,
     }
   },
-  async remove(config: WorktreeConfig) {
+  async create(info) {
+    const config = Config.parse(info)
+    const bootstrap = await Worktree.createFromInfo({
+      name: config.name,
+      directory: config.directory,
+      branch: config.branch,
+    })
+    return bootstrap()
+  },
+  async remove(info) {
+    const config = Config.parse(info)
     await Worktree.remove({ directory: config.directory })
   },
-  async request(_from: WorktreeConfig, _method: string, _url: string, _data?: BodyInit, _signal?: AbortSignal) {
-    throw new Error("worktree does not support request")
+  async fetch(info, input: RequestInfo | URL, init?: RequestInit) {
+    const config = Config.parse(info)
+    const { WorkspaceServer } = await import("../workspace-server/server")
+    const url = input instanceof Request || input instanceof URL ? input : new URL(input, "http://opencode.internal")
+    const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined))
+    headers.set("x-opencode-directory", config.directory)
+
+    const request = new Request(url, { ...init, headers })
+    return WorkspaceServer.App().fetch(request)
   },
 }

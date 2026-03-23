@@ -1,3 +1,5 @@
+import { isDefaultTitle as isDefaultTerminalTitle } from "@/context/terminal-title"
+
 export const terminalTabLabel = (input: {
   title?: string
   titleNumber?: number
@@ -5,9 +7,7 @@ export const terminalTabLabel = (input: {
 }) => {
   const title = input.title ?? ""
   const number = input.titleNumber ?? 0
-  const match = title.match(/^Terminal (\d+)$/)
-  const parsed = match ? Number(match[1]) : undefined
-  const isDefaultTitle = Number.isFinite(number) && number > 0 && Number.isFinite(parsed) && parsed === number
+  const isDefaultTitle = Number.isFinite(number) && number > 0 && isDefaultTerminalTitle(title, number)
 
   if (title && !isDefaultTitle) return title
   if (number > 0) return input.t("terminal.title.numbered", { number })

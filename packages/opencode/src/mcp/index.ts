@@ -11,6 +11,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js"
 import { Config } from "../config/config"
 import { Log } from "../util/log"
+import { Process } from "../util/process"
 import { NamedError } from "@opencode-ai/util/error"
 import z from "zod/v4"
 import { Instance } from "../project/instance"
@@ -166,14 +167,10 @@ export namespace MCP {
     const queue = [pid]
     while (queue.length > 0) {
       const current = queue.shift()!
-      const proc = Bun.spawn(["pgrep", "-P", String(current)], { stdout: "pipe", stderr: "pipe" })
-      const [code, out] = await Promise.all([proc.exited, new Response(proc.stdout).text()]).catch(
-        () => [-1, ""] as const,
-      )
-      if (code !== 0) continue
-      for (const tok of out.trim().split(/\s+/)) {
+      const lines = await Process.lines(["pgrep", "-P", String(current)], { nothrow: true })
+      for (const tok of lines) {
         const cpid = parseInt(tok, 10)
-        if (!isNaN(cpid) && pids.indexOf(cpid) === -1) {
+        if (!isNaN(cpid) && !pids.includes(cpid)) {
           pids.push(cpid)
           queue.push(cpid)
         }
@@ -396,8 +393,14 @@ export namespace MCP {
         } catch (error) {
           lastError = error instanceof Error ? error : new Error(String(error))
 
-          // Handle OAuth-specific errors
-          if (error instanceof UnauthorizedError) {
+          // Handle OAuth-specific errors.
+          // The SDK throws UnauthorizedError when auth() returns 'REDIRECT',
+          // but may also throw plain Errors when auth() fails internally
+          // (e.g. during discovery, registration, or state generation).
+          // When an authProvider is attached, treat both cases as auth-related.
+          const isAuthError =
+            error instanceof UnauthorizedError || (authProvider && lastError.message.includes("OAuth"))
+          if (isAuthError) {
             log.info("mcp server requires authentication", { key, transport: name })
 
             // Check if this is a "needs registration" error

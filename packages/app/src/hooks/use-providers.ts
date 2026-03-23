@@ -18,25 +18,27 @@ const popularProviderSet = new Set(popularProviders)
 export function useProviders() {
   const globalSync = useGlobalSync()
   const params = useParams()
-  const currentDirectory = createMemo(() => decode64(params.dir) ?? "")
-  const providers = createMemo(() => {
-    if (currentDirectory()) {
-      const [projectStore] = globalSync.child(currentDirectory())
+  const dir = createMemo(() => decode64(params.dir) ?? "")
+  const providers = () => {
+    if (dir()) {
+      const [projectStore] = globalSync.child(dir())
       return projectStore.provider
     }
     return globalSync.data.provider
-  })
-  const connectedIDs = createMemo(() => new Set(providers().connected))
-  const connected = createMemo(() => providers().all.filter((p) => connectedIDs().has(p.id)))
-  const paid = createMemo(() =>
-    connected().filter((p) => p.id !== "opencode" || Object.values(p.models).find((m) => m.cost?.input)),
-  )
-  const popular = createMemo(() => providers().all.filter((p) => popularProviderSet.has(p.id)))
+  }
   return {
-    all: createMemo(() => providers().all),
-    default: createMemo(() => providers().default),
-    popular,
-    connected,
-    paid,
+    all: () => providers().all,
+    default: () => providers().default,
+    popular: () => providers().all.filter((p) => popularProviderSet.has(p.id)),
+    connected: () => {
+      const connected = new Set(providers().connected)
+      return providers().all.filter((p) => connected.has(p.id))
+    },
+    paid: () => {
+      const connected = new Set(providers().connected)
+      return providers().all.filter(
+        (p) => connected.has(p.id) && (p.id !== "opencode" || Object.values(p.models).some((m) => m.cost?.input)),
+      )
+    },
   }
 }
