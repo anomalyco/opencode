@@ -484,17 +484,19 @@ export function SessionHeader() {
                   </div>
                 </Show>
 
+                <Show when={!isMd()}>
+                  <Button
+                    variant="ghost"
+                    class="titlebar-icon w-8 h-6 p-0 box-border shrink-0"
+                    onClick={() => layout.mobilePanel.hide()}
+                    aria-label={language.t("session.backToChat")}
+                  >
+                    <Icon size="small" name="arrow-left" />
+                  </Button>
+                </Show>
+
                 <ToolbarOverflowMenu
                   items={[
-                    {
-                      id: "backToChat",
-                      label: language.t("session.backToChat"),
-                      icon: "message",
-                      onClick: () => {
-                        layout.mobilePanel.hide()
-                      },
-                      visible: false,
-                    },
                     {
                       id: "review",
                       label: language.t("command.review.toggle"),
