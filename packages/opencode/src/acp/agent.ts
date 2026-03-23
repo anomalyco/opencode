@@ -39,6 +39,7 @@ import { ModelID, ProviderID } from "../provider/schema"
 import { Agent as AgentModule } from "../agent/agent"
 import { Installation } from "@/installation"
 import { MessageV2 } from "@/session/message-v2"
+import { Session } from "@/session"
 import { Config } from "@/config/config"
 import { Todo } from "@/session/todo"
 import { z } from "zod"
@@ -670,20 +671,9 @@ export namespace ACP {
       try {
         const cursor = params.cursor ? Number(params.cursor) : undefined
         const limit = 100
-
-        const sessions = await this.sdk.session
-          .list(
-            {
-              directory: params.cwd ?? undefined,
-              roots: true,
-            },
-            { throwOnError: true },
-          )
-          .then((x) => x.data ?? [])
-
-        const sorted = sessions.toSorted((a, b) => b.time.updated - a.time.updated)
-        const filtered = cursor ? sorted.filter((s) => s.time.updated < cursor) : sorted
-        const page = filtered.slice(0, limit)
+        const list = [...Session.listGlobal({ roots: true, cursor, limit: limit + 1 })]
+        const more = list.length > limit
+        const page = more ? list.slice(0, limit) : list
 
         const entries: SessionInfo[] = page.map((session) => ({
           sessionId: session.id,
@@ -693,7 +683,7 @@ export namespace ACP {
         }))
 
         const last = page[page.length - 1]
-        const next = filtered.length > limit && last ? String(last.time.updated) : undefined
+        const next = more && last ? String(last.time.updated) : undefined
 
         const response: ListSessionsResponse = {
           sessions: entries,
