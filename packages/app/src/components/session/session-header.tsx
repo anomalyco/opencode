@@ -420,6 +420,17 @@ export function SessionHeader() {
                 </div>
               </Show>
               <div class="flex items-center gap-1">
+                <Show when={!isMd()}>
+                  <Button
+                    variant="ghost"
+                    class="titlebar-icon w-8 h-6 p-0 box-border shrink-0"
+                    onClick={() => layout.mobilePanel.hide()}
+                    aria-label={language.t("session.backToChat")}
+                  >
+                    <Icon size="small" name="arrow-left" />
+                  </Button>
+                </Show>
+
                 <Tooltip placement="bottom" value={language.t("status.popover.trigger")}>
                   <StatusPopover />
                 </Tooltip>
@@ -482,17 +493,6 @@ export function SessionHeader() {
                       </Button>
                     </TooltipKeybind>
                   </div>
-                </Show>
-
-                <Show when={!isMd()}>
-                  <Button
-                    variant="ghost"
-                    class="titlebar-icon w-8 h-6 p-0 box-border shrink-0"
-                    onClick={() => layout.mobilePanel.hide()}
-                    aria-label={language.t("session.backToChat")}
-                  >
-                    <Icon size="small" name="arrow-left" />
-                  </Button>
                 </Show>
 
                 <ToolbarOverflowMenu
