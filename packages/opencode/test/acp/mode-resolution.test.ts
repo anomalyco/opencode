@@ -103,10 +103,10 @@ function createFakeAgent(input: {
 }
 
 describe("acp mode resolution", () => {
-  test("newSession resolves default display name to canonical mode id", async () => {
+  test("newSession resolves default agent and uses canonical mode id", async () => {
     await using tmp = await tmpdir({
       config: {
-        default_agent: "Pulse",
+        default_agent: "pulse",
         agent: {
           pulse: {
             name: "Pulse",
@@ -127,10 +127,10 @@ describe("acp mode resolution", () => {
     stop()
   })
 
-  test("prompt uses canonical mode id when current mode is display-named", async () => {
+  test("prompt uses canonical mode id from session", async () => {
     await using tmp = await tmpdir({
       config: {
-        default_agent: "Pulse",
+        default_agent: "pulse",
         agent: {
           pulse: {
             name: "Pulse",
