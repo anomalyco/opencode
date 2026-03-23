@@ -305,7 +305,7 @@ describe("cross-spawn spawner", () => {
     test("returns empty stream for unconfigured fd", async () => {
       const out = await runScoped(
         Effect.gen(function* () {
-          const handle = yield* ChildProcess.make("echo", ["test"])
+          const handle = yield* ChildProcess.make("sh", ["-c", "echo test"])
           const fd3Output = yield* decodeByteStream(handle.getOutputFd(3))
           yield* handle.exitCode
           return fd3Output
