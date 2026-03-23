@@ -1,12 +1,11 @@
 import { createEffect, createMemo, Match, on, onCleanup, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
-import { createMediaQuery } from "@solid-primitives/media"
 import type { FileSearchHandle } from "@opencode-ai/ui/file"
 import { useFileComponent } from "@opencode-ai/ui/context/file"
 import { cloneSelectedLineRange, previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
 import { createLineCommentController } from "@opencode-ai/ui/line-comment-annotations"
-import { TouchSelectionToolbar, useTouchSelection } from "@opencode-ai/ui/touch-selection-toolbar"
+import { SelectionToolbar, useTextSelection, getTextSelectionLines } from "@opencode-ai/ui/selection-toolbar"
 import { sampledChecksum } from "@opencode-ai/util/encode"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -69,8 +68,7 @@ export function FileTabContent(props: { tab: string }) {
     normalizeTab: (tab) => (tab.startsWith("file://") ? file.tab(tab) : tab),
   }).activeFileTab
 
-  const isTouch = createMediaQuery("(hover: none)")
-  const touchSelection = useTouchSelection()
+  const textSelection = useTextSelection()
 
   let scroll: HTMLDivElement | undefined
   let scrollFrame: number | undefined
@@ -434,7 +432,7 @@ export function FileTabContent(props: { tab: string }) {
               cacheKey: cacheKey(),
             }}
             enableLineSelection
-            enableHoverUtility={!isTouch()}
+            enableHoverUtility
             selectedLines={activeSelection()}
             commentedLines={commentedLines()}
             onRendered={() => {
@@ -442,7 +440,7 @@ export function FileTabContent(props: { tab: string }) {
             }}
             annotations={commentsUi.annotations()}
             renderAnnotation={commentsUi.renderAnnotation}
-            renderHoverUtility={!isTouch() ? commentsUi.renderHoverUtility : undefined}
+            renderHoverUtility={commentsUi.renderHoverUtility}
             onLineSelected={(range: SelectedLineRange | null) => {
               commentsUi.onLineSelected(range)
             }}
@@ -493,11 +491,16 @@ export function FileTabContent(props: { tab: string }) {
           <Match when={state()?.error}>{(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}</Match>
         </Switch>
       </ScrollView>
-      <Show when={isTouch() && activeSelection()}>
-        <TouchSelectionToolbar
-          position={touchSelection.position()}
-          onAddComment={() => commentsUi.note.openDraft(activeSelection()!)}
-          onClose={touchSelection.clearSelection}
+      <Show when={textSelection.position()}>
+        <SelectionToolbar
+          position={textSelection.position()!}
+          onAddComment={() => {
+            const lines = getTextSelectionLines()
+            if (lines) {
+              commentsUi.note.openDraft(lines)
+            }
+          }}
+          onClose={textSelection.clearSelection}
         />
       </Show>
     </Tabs.Content>

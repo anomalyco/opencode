@@ -1,16 +1,47 @@
 import { createEffect, createSignal, onCleanup, Show } from "solid-js"
 import { IconButton } from "./icon-button"
 
-export type TouchSelectionPosition = { top: number; left: number }
+export type SelectionPosition = { top: number; left: number }
 
-export function useTouchSelection() {
-  const [hasSelection, setHasSelection] = createSignal(false)
-  const [position, setPosition] = createSignal<TouchSelectionPosition | null>(null)
+export interface SelectedLineRange {
+  start: number
+  end: number
+}
+
+function findLineFromNode(node: Node): number | null {
+  let current: Node | null = node
+  while (current) {
+    if (current instanceof HTMLElement) {
+      const lineAttr = current.getAttribute("data-line")
+      if (lineAttr) return parseInt(lineAttr, 10)
+    }
+    current = current.parentNode
+  }
+  return null
+}
+
+export function getTextSelectionLines(): SelectedLineRange | null {
+  const selection = window.getSelection()
+  if (!selection || selection.isCollapsed) return null
+
+  const range = selection.getRangeAt(0)
+  const startLine = findLineFromNode(range.startContainer)
+  const endLine = findLineFromNode(range.endContainer)
+
+  if (startLine === null || endLine === null) return null
+
+  return {
+    start: Math.min(startLine, endLine),
+    end: Math.max(startLine, endLine),
+  }
+}
+
+export function useTextSelection() {
+  const [position, setPosition] = createSignal<SelectionPosition | null>(null)
 
   const checkSelection = () => {
     const selection = window.getSelection()
     if (!selection || selection.isCollapsed) {
-      setHasSelection(false)
       setPosition(null)
       return
     }
@@ -19,12 +50,10 @@ export function useTouchSelection() {
     const rect = range.getBoundingClientRect()
 
     if (rect.width === 0 && rect.height === 0) {
-      setHasSelection(false)
       setPosition(null)
       return
     }
 
-    setHasSelection(true)
     setPosition({
       top: rect.top - 44,
       left: rect.left + rect.width / 2,
@@ -35,35 +64,27 @@ export function useTouchSelection() {
     setTimeout(checkSelection, 10)
   }
 
-  const handleTouchEnd = () => {
-    setTimeout(checkSelection, 100)
-  }
-
   createEffect(() => {
     document.addEventListener("selectionchange", handleSelectionChange)
-    document.addEventListener("touchend", handleTouchEnd)
     document.addEventListener("mouseup", handleSelectionChange)
 
     onCleanup(() => {
       document.removeEventListener("selectionchange", handleSelectionChange)
-      document.removeEventListener("touchend", handleTouchEnd)
       document.removeEventListener("mouseup", handleSelectionChange)
     })
   })
 
   return {
-    hasSelection,
     position,
     clearSelection: () => {
       window.getSelection()?.removeAllRanges()
-      setHasSelection(false)
       setPosition(null)
     },
   }
 }
 
-export function TouchSelectionToolbar(props: {
-  position: TouchSelectionPosition | null
+export function SelectionToolbar(props: {
+  position: SelectionPosition | null
   onAddComment: () => void
   onClose: () => void
 }) {
@@ -93,3 +114,5 @@ export function TouchSelectionToolbar(props: {
     </Show>
   )
 }
+
+export { useTextSelection as useTouchSelection, SelectionToolbar as TouchSelectionToolbar }
