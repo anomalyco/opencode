@@ -1,6 +1,8 @@
 // @refresh reload
 
 import {
+  ACCEPTED_FILE_EXTENSIONS,
+  ACCEPTED_FILE_TYPES,
   AppBaseProviders,
   AppInterface,
   handleNotificationClick,
@@ -111,6 +113,8 @@ const createPlatform = (): Platform => {
       const result = await window.api.openFilePicker({
         multiple: opts?.multiple ?? false,
         title: opts?.title ?? t("desktop.dialog.chooseFile"),
+        accept: opts?.accept ?? ACCEPTED_FILE_TYPES,
+        extensions: opts?.extensions ?? ACCEPTED_FILE_EXTENSIONS,
       })
       return handleWslPicker(result)
     },
@@ -152,12 +156,12 @@ const createPlatform = (): Platform => {
     storage,
 
     checkUpdate: async () => {
-      if (!UPDATER_ENABLED) return { updateAvailable: false }
+      if (!UPDATER_ENABLED()) return { updateAvailable: false }
       return window.api.checkUpdate()
     },
 
     update: async () => {
-      if (!UPDATER_ENABLED) return
+      if (!UPDATER_ENABLED()) return
       await window.api.installUpdate()
     },
 
