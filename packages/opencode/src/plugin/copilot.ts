@@ -4,6 +4,56 @@ import { iife } from "@/util/iife"
 import { setTimeout as sleep } from "node:timers/promises"
 
 const CLIENT_ID = "Ov23li8tweQw6odWQebz"
+
+// Cached Copilot session token (obtained via token exchange like VS Code does)
+let cachedSessionToken: { token: string; expires_at: number; endpoints?: { api?: string } } | null = null
+
+async function getCopilotSessionToken(githubOAuthToken: string, enterpriseDomain?: string): Promise<{
+  token: string
+  apiEndpoint?: string
+}> {
+  const now = Math.floor(Date.now() / 1000)
+
+  // Reuse cached token if still valid (with 60s safety margin)
+  if (cachedSessionToken && cachedSessionToken.expires_at - now > 60) {
+    return {
+      token: cachedSessionToken.token,
+      apiEndpoint: cachedSessionToken.endpoints?.api,
+    }
+  }
+
+  // Exchange GitHub OAuth token for a short-lived Copilot session token
+  // This is what VS Code and Zed do but OpenCode was previously skipping
+  const domain = enterpriseDomain || "api.github.com"
+  const tokenUrl = `https://${domain}/copilot_internal/v2/token`
+
+  const response = await fetch(tokenUrl, {
+    headers: {
+      Authorization: `token ${githubOAuthToken}`,
+      "User-Agent": "GitHubCopilotChat/0.25.2024",
+      Accept: "application/json",
+      "Editor-Version": "vscode/1.96.2",
+      "Editor-Plugin-Version": "copilot-chat/0.25.2024",
+    },
+  })
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "")
+    throw new Error(`Copilot token exchange failed: ${response.status} ${response.statusText} ${text}`)
+  }
+
+  const data = (await response.json()) as {
+    token: string
+    expires_at: number
+    endpoints?: { api?: string; proxy?: string }
+  }
+
+  cachedSessionToken = data
+  return {
+    token: data.token,
+    apiEndpoint: data.endpoints?.api,
+  }
+}
 // Add a small safety buffer when polling to avoid hitting the server
 // slightly too early due to clock skew / timer drift.
 const OAUTH_POLLING_SAFETY_MARGIN_MS = 3000 // 3 seconds
@@ -65,7 +115,30 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
             const info = await getAuth()
             if (info.type !== "oauth") return fetch(request, init)
 
-            const url = request instanceof URL ? request.href : request.toString()
+            // Exchange the GitHub OAuth token for a Copilot session token
+            // This is what VS Code and Zed do - critical for corporate networks
+            const githubToken = info.refresh
+            let sessionToken = githubToken
+            let resolvedEndpoint: string | undefined
+            try {
+              const result = await getCopilotSessionToken(githubToken, enterpriseUrl ? normalizeDomain(enterpriseUrl) : undefined)
+              sessionToken = result.token
+              resolvedEndpoint = result.apiEndpoint
+            } catch {
+              // Fall back to raw OAuth token if exchange fails
+            }
+
+            // Rewrite the request URL to use the endpoint returned by token exchange
+            // (e.g., api.individual.githubcopilot.com instead of api.githubcopilot.com)
+            let url = request instanceof URL ? request.href : request.toString()
+            if (resolvedEndpoint && !baseURL) {
+              const defaultBase = "https://api.githubcopilot.com"
+              if (url.startsWith(defaultBase)) {
+                const resolvedBase = resolvedEndpoint.replace(/\/$/, "")
+                url = resolvedBase + url.slice(defaultBase.length)
+                request = url
+              }
+            }
             const { isVision, isAgent } = iife(() => {
               try {
                 const body = typeof init?.body === "string" ? JSON.parse(init.body) : init?.body
@@ -122,8 +195,11 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
             const headers: Record<string, string> = {
               "x-initiator": isAgent ? "agent" : "user",
               ...(init?.headers as Record<string, string>),
-              "User-Agent": `opencode/${Installation.VERSION}`,
-              Authorization: `Bearer ${info.refresh}`,
+              "User-Agent": "GitHubCopilotChat/0.25.2024",
+              "Editor-Version": "vscode/1.96.2",
+              "Editor-Plugin-Version": "copilot-chat/0.25.2024",
+              "Copilot-Integration-Id": "vscode-chat",
+              Authorization: `Bearer ${sessionToken}`,
               "Openai-Intent": "conversation-edits",
             }
 
