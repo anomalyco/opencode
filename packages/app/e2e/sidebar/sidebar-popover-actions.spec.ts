@@ -1,6 +1,15 @@
 import { test, expect } from "../fixtures"
-import { cleanupSession, closeSidebar, hoverSessionItem } from "../actions"
+import {
+  cleanupSession,
+  cleanupTestProject,
+  closeSidebar,
+  createTestProject,
+  hoverSessionItem,
+  openSidebar,
+  waitSession,
+} from "../actions"
 import { projectSwitchSelector } from "../selectors"
+import { dirSlug } from "../utils"
 
 test("collapsed sidebar popover stays open when archiving a session", async ({ page, slug, sdk, gotoSession }) => {
   const stamp = Date.now()
@@ -35,5 +44,37 @@ test("collapsed sidebar popover stays open when archiving a session", async ({ p
   } finally {
     await cleanupSession({ sdk, sessionID: one.id })
     await cleanupSession({ sdk, sessionID: two.id })
+  }
+})
+
+test("open sidebar project popover stays closed after clicking avatar", async ({ page, withProject }) => {
+  await page.setViewportSize({ width: 1400, height: 800 })
+
+  const other = await createTestProject()
+  const slug = dirSlug(other)
+
+  try {
+    await withProject(
+      async () => {
+        await openSidebar(page)
+
+        const project = page.locator(projectSwitchSelector(slug)).first()
+        const card = page.locator('[data-component="hover-card-content"]')
+
+        await expect(project).toBeVisible()
+        await project.hover()
+        await expect(card.getByText(/recent sessions/i)).toBeVisible()
+
+        await page.mouse.down()
+        await expect(card).toHaveCount(0)
+        await page.mouse.up()
+
+        await waitSession(page, { directory: other })
+        await expect(card).toHaveCount(0)
+      },
+      { extra: [other] },
+    )
+  } finally {
+    await cleanupTestProject(other)
   }
 })
