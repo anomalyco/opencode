@@ -487,44 +487,33 @@ function fuzzy(text: string, query: string) {
   return a.includes(b)
 }
 
-function SectionButton(props: { current: boolean; title: string; note: string; onClick: () => void }) {
+function SectionButton(props: { current: boolean; title: string; onClick: () => void }) {
   return (
     <button
       type="button"
-      class="group flex w-full flex-col gap-1 border-b border-border-weak-base px-3 py-3 text-left transition-colors"
+      class="group flex w-full items-center justify-between gap-3 border-b border-border-weak-base px-3 py-3 text-left transition-colors"
       classList={{
         "bg-surface-base hover:bg-surface-base-hover": !props.current,
         "border-border-success-base bg-surface-success-base": props.current,
       }}
       onClick={props.onClick}
     >
-      <div class="flex items-center justify-between gap-3">
-        <div
-          class="text-13-medium transition-colors"
-          classList={{
-            "text-text-strong": !props.current,
-            "text-text-on-success-base": props.current,
-          }}
-        >
-          {props.title}
-        </div>
-        <div
-          class="size-2 rounded-full transition-colors"
-          classList={{
-            "bg-border-strong": !props.current,
-            "bg-icon-success-base": props.current,
-          }}
-        />
-      </div>
       <div
-        class="text-12-regular transition-colors"
+        class="text-15-medium transition-colors"
         classList={{
-          "text-text-weak": !props.current,
-          "text-text-on-success-weak": props.current,
+          "text-text-strong": !props.current,
+          "text-text-on-success-base": props.current,
         }}
       >
-        {props.note}
+        {props.title}
       </div>
+      <div
+        class="size-2 rounded-full transition-colors"
+        classList={{
+          "bg-border-strong": !props.current,
+          "bg-icon-success-base": props.current,
+        }}
+      />
     </button>
   )
 }
@@ -1998,7 +1987,7 @@ export default function ConfigPage() {
   return (
     <div class="size-full overflow-hidden bg-background-base">
       <div class="flex h-full min-h-0 flex-col bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.03),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.015),transparent_22%)] xl:flex-row">
-        <aside class="shrink-0 border-b border-border-weak-base bg-surface-base/92 backdrop-blur xl:w-[240px] xl:border-r xl:border-b-0">
+        <aside class="shrink-0 border-b border-border-weak-base bg-surface-base/92 backdrop-blur xl:w-[200px] xl:border-r xl:border-b-0">
           <div class="flex h-full min-h-0 flex-col">
             <div class="border-b border-border-weak-base px-4 py-4">
               <div class="text-18-medium text-text-strong">{t("config.title")}</div>
@@ -2009,31 +1998,26 @@ export default function ConfigPage() {
                 <SectionButton
                   current={state.section === "agents-md"}
                   title="AGENTS.md"
-                  note={t("config.section.agentsMd")}
                   onClick={() => setState("section", "agents-md")}
                 />
                 <SectionButton
                   current={state.section === "providers"}
                   title={t("config.providers.title")}
-                  note={t("config.section.providers")}
                   onClick={() => setState("section", "providers")}
                 />
                 <SectionButton
                   current={state.section === "agents"}
                   title={t("config.agents.title")}
-                  note={t("config.section.agents")}
                   onClick={() => setState("section", "agents")}
                 />
                 <SectionButton
                   current={state.section === "skills"}
                   title={t("config.skills.title")}
-                  note={t("config.section.skills")}
                   onClick={() => setState("section", "skills")}
                 />
                 <SectionButton
                   current={state.section === "plugins"}
                   title={t("config.plugins.title")}
-                  note={t("config.section.plugins")}
                   onClick={() => setState("section", "plugins")}
                 />
               </div>
