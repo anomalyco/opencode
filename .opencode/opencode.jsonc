@@ -15,4 +15,5 @@
     "github-triage": false,
     "github-pr-search": false,
   },
+  "plugin": ["./plugins/prompt-optimizer.ts"],
 }

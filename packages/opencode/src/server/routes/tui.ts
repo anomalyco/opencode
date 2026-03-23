@@ -9,9 +9,11 @@ import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 import { generateText, APICallError } from "ai"
 import { Provider } from "@/provider/provider"
+import { ModelID, ProviderID } from "@/provider/schema"
 import { ProviderTransform } from "@/provider/transform"
 import { Config } from "@/config/config"
 import { Auth } from "@/auth"
+import { SessionID } from "@/session/schema"
 
 const TuiRequest = z.object({
   path: z.string(),
@@ -130,7 +132,7 @@ export const TuiRoutes = lazy(() =>
         const { Plugin } = await import("@/plugin")
 
         const safeOutput = {
-          values: {} as Record<string, any>,
+          values: {} as Record<string, unknown>,
           action: "",
           cancelled: false,
         }
@@ -184,87 +186,65 @@ export const TuiRoutes = lazy(() =>
         "json",
         z.object({
           prompt: z.string(),
-          sessionID: z.string().optional(),
+          sessionID: SessionID.zod.optional(),
         }),
       ),
       async (c) => {
         const { prompt, sessionID } = c.req.valid("json")
 
         try {
-          // Check if provider is usable (github-copilot requires OAuth)
-          const canUseProvider = async (providerID: string) => {
+          const canUse = async (providerID: ProviderID) => {
             if (!providerID.includes("github-copilot")) return true
             const auth = await Auth.get(providerID)
             return auth?.type === "oauth"
           }
 
-          // Get model for optimization - prefer session model, then configured model, fallback to default
+          const load = async (ref?: string) => {
+            if (!ref) return
+            const [head, ...tail] = ref.split("/")
+            if (!head || tail.length === 0) return
+            const providerID = ProviderID.make(head)
+            const modelID = ModelID.make(tail.join("/"))
+            if (!(await canUse(providerID))) return
+            return Provider.getModel(providerID, modelID)
+          }
+
           const cfg = await Config.get()
           let model = undefined
 
-          // First: try to get the model used in the current session
           if (sessionID) {
             try {
               const messages = await Session.messages({ sessionID, limit: 10 })
               for (const msg of messages) {
                 if (msg.info.role === "user" && msg.info.model) {
                   const modelInfo = msg.info.model
-                  if (await canUseProvider(modelInfo.providerID)) {
+                  if (await canUse(modelInfo.providerID)) {
                     model = await Provider.getModel(modelInfo.providerID, modelInfo.modelID)
-                    console.log("Using session model:", model.id, "from provider:", model.providerID)
                     break
                   }
                 }
               }
-            } catch (e) {
-              console.log("Failed to get session model:", e)
-            }
+            } catch {}
           }
 
-          // Second: try configured model (user's main model)
-          if (!model && cfg.model) {
-            const parts = cfg.model.split("/")
-            const providerID = parts[0]
-            const modelID = parts.slice(1).join("/")
-            if (await canUseProvider(providerID)) {
-              model = await Provider.getModel(providerID, modelID)
-              console.log("Using configured model:", model.id)
-            }
-          }
+          if (!model) model = await load(cfg.model)
 
-          // Third: try default model (includes recent model selection)
           if (!model) {
             try {
-              const defaultModel = await Provider.defaultModel()
-              if (await canUseProvider(defaultModel.providerID)) {
-                model = await Provider.getModel(defaultModel.providerID, defaultModel.modelID)
-                console.log("Using default model:", model.id)
+              const item = await Provider.defaultModel()
+              if (await canUse(item.providerID)) {
+                model = await Provider.getModel(item.providerID, item.modelID)
               }
-            } catch (e) {
-              // Ignore error if defaultModel fails
-            }
+            } catch {}
           }
 
-          // Fourth: try configured small_model
-          if (!model && cfg.small_model) {
-            const parts = cfg.small_model.split("/")
-            const providerID = parts[0]
-            const modelID = parts.slice(1).join("/")
-            if (await canUseProvider(providerID)) {
-              model = await Provider.getModel(providerID, modelID)
-              console.log("Using small_model:", model.id)
-            }
-          }
+          if (!model) model = await load(cfg.small_model)
 
-          // Fifth: find available small model from configured providers
           if (!model) {
             for (const provider of Object.values(await Provider.list())) {
-              if (!(await canUseProvider(provider.id))) continue
+              if (!(await canUse(provider.id))) continue
               model = await Provider.getSmallModel(provider.id)
-              if (model) {
-                console.log("Using available small model:", model.id)
-                break
-              }
+              if (model) break
             }
           }
 
@@ -274,8 +254,7 @@ export const TuiRoutes = lazy(() =>
 
           const language = await Provider.getLanguage(model)
 
-          // Build context from session messages if available
-          let contextText = ""
+          let ctx = ""
           if (sessionID) {
             const messages = await Session.messages({ sessionID, limit: 10 })
             if (messages.length > 0) {
@@ -291,11 +270,11 @@ export const TuiRoutes = lazy(() =>
                   return `${role}: ${text}`
                 })
                 .join("\n\n")
-              contextText = `\n\nRecent conversation context:\n${recentMessages}`
+              ctx = `\n\nRecent conversation context:\n${recentMessages}`
             }
           }
 
-          const systemPrompt = `You are a helpful assistant. Your task is to rewrite user prompts to be more specific and actionable.
+          const system = `You are a helpful assistant. Your task is to rewrite user prompts to be more specific and actionable.
 
 You must respond with ONLY the rewritten prompt itself. Do not include any introductory text like "Here is the rewritten prompt" or "将 prompt 重写为...". Just output the rewritten prompt directly.
 
@@ -305,27 +284,24 @@ You: "Find and fix the bug in the code. Provide: 1) Bug description, 2) Root cau
 
 Keep the same language as the input (Chinese → Chinese, English → English).`
 
-          const smallOptions = ProviderTransform.smallOptions(model)
-          
-          const containsChinese = /[\u4e00-\u9fa5]/.test(prompt)
-          const languageNote = containsChinese 
+          const note = /[\u4e00-\u9fa5]/.test(prompt)
             ? "IMPORTANT: The input is in Chinese, so the optimized prompt MUST also be in Chinese."
             : "IMPORTANT: The input is in English, so the optimized prompt MUST also be in English."
 
-          const generateParams: any = {
+          const params = {
             model: language,
-            system: systemPrompt,
-            prompt: `Rewrite this prompt: "${prompt}"${contextText}
+            system,
+            prompt: `Rewrite this prompt: "${prompt}"${ctx}
 
-${languageNote}`,
+${note}`,
             providerOptions: ProviderTransform.providerOptions(model, {
-              ...smallOptions,
-              store: false
+              ...ProviderTransform.smallOptions(model),
+              store: false,
             }),
             maxRetries: 0,
           }
 
-          const result = await generateText(generateParams)
+          const result = await generateText(params)
           const optimized = result.text.trim()
 
           return c.json({

@@ -5,6 +5,19 @@ import z from "zod"
 
 export const TuiEvent = {
   PromptAppend: BusEvent.define("tui.prompt.append", z.object({ text: z.string() })),
+  UiInteract: BusEvent.define(
+    "tui.ui.interact",
+    z.object({
+      id: z.string(),
+      action: z.string(),
+      context: z
+        .object({
+          prompt: z.string().optional(),
+          sessionID: SessionID.zod.optional(),
+        })
+        .optional(),
+    }),
+  ),
   CommandExecute: BusEvent.define(
     "tui.command.execute",
     z.object({

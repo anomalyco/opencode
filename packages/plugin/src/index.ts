@@ -166,6 +166,21 @@ export interface Hooks {
     [key: string]: ToolDefinition
   }
   auth?: AuthHook
+  "tui.ui.interact"?: (
+    input: {
+      id: string
+      action: string
+      context?: {
+        prompt?: string
+        sessionID?: string
+      }
+    },
+    output: {
+      values?: Record<string, any>
+      action?: string
+      cancelled?: boolean
+    },
+  ) => Promise<void>
   /**
    * Called when a new message is received
    */
