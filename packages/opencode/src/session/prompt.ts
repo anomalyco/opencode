@@ -67,7 +67,7 @@ export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
 
   // Tracks plugin-routed models per session for subagent inheritance
-  const routedModels: Record<string, { providerID: string; modelID: string }> = {}
+  const routedModels: Record<string, { providerID: ProviderID; modelID: ModelID }> = {}
 
   export function getRoutedModel(sessionID: string) {
     return routedModels[sessionID]
@@ -977,23 +977,28 @@ export namespace SessionPrompt {
     const proposedModel = input.model ?? agent.model ?? (await lastModel(input.sessionID))
 
     // Fire chat.model hook to allow plugins to dynamically route to different models
+    // Plugin types use plain strings; cast branded types for the hook interface
     const modelOverride = await Plugin.trigger(
       "chat.model",
       {
         sessionID: input.sessionID,
         agent: agent.name,
-        proposedModel,
+        proposedModel: { providerID: proposedModel.providerID as string, modelID: proposedModel.modelID as string },
       },
       { model: undefined as { providerID: string; modelID: string } | undefined },
     )
 
-    // If plugin set a model, persist it for subagent inheritance
-    const model = modelOverride.model ?? proposedModel
+    // If plugin set a model, convert plain strings back to branded types and persist
+    let model = proposedModel as { providerID: ProviderID; modelID: ModelID }
     if (modelOverride.model) {
-      routedModels[input.sessionID] = modelOverride.model
+      model = {
+        providerID: ProviderID.make(modelOverride.model.providerID),
+        modelID: ModelID.make(modelOverride.model.modelID),
+      }
+      routedModels[input.sessionID] = model
       log.info("plugin routed model", {
         sessionID: input.sessionID,
-        model: modelOverride.model,
+        model,
       })
     }
     const full =
