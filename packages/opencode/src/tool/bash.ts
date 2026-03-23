@@ -30,6 +30,14 @@ const resolveWasm = (asset: string) => {
   return fileURLToPath(url)
 }
 
+function trim(input: string) {
+  return input.replace(/^['"]|['"]$/g, "")
+}
+
+function redirect(input: string) {
+  return /(^|[^<])>>?|&>|>&|<>/.test(input)
+}
+
 const parser = lazy(async () => {
   const { Parser } = await import("web-tree-sitter")
   const { default: treeWasm } = await import("web-tree-sitter/tree-sitter.wasm" as string, {
@@ -89,6 +97,7 @@ export const BashTool = Tool.define("bash", async () => {
       if (!Instance.containsPath(cwd)) directories.add(cwd)
       const patterns = new Set<string>()
       const always = new Set<string>()
+      const edits = new Set<string>()
 
       for (const node of tree.rootNode.descendantsOfType("command")) {
         if (!node) continue
@@ -110,6 +119,20 @@ export const BashTool = Tool.define("bash", async () => {
             continue
           }
           command.push(child.text)
+        }
+
+        if (node.parent?.type === "redirected_statement" && redirect(commandText)) {
+          edits.add("*")
+        }
+        if (command[0] === "sed" && command.includes("-i")) {
+          const arg = command.at(-1)
+          if (!arg || arg.startsWith("-")) {
+            edits.add("*")
+          } else {
+            const file = path.resolve(cwd, trim(arg))
+            if (!Instance.containsPath(file)) edits.add("*")
+            else edits.add(path.relative(Instance.worktree, file))
+          }
         }
 
         // not an exhaustive list, but covers most common cases
@@ -146,6 +169,15 @@ export const BashTool = Tool.define("bash", async () => {
           permission: "external_directory",
           patterns: globs,
           always: globs,
+          metadata: {},
+        })
+      }
+
+      if (edits.size > 0) {
+        await ctx.ask({
+          permission: "edit",
+          patterns: Array.from(edits),
+          always: ["*"],
           metadata: {},
         })
       }

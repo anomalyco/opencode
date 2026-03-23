@@ -177,8 +177,14 @@ export namespace SessionPrompt {
       })
     }
     if (permissions.length > 0) {
-      session.permission = permissions
-      await Session.setPermission({ sessionID: session.id, permission: permissions })
+      const next = [
+        ...(session.permission ?? []).filter(
+          (item) => !permissions.some((rule) => rule.permission === item.permission && rule.pattern === item.pattern),
+        ),
+        ...permissions,
+      ]
+      session.permission = next
+      await Session.setPermission({ sessionID: session.id, permission: next })
     }
 
     if (input.noReply === true) {

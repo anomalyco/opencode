@@ -148,6 +148,52 @@ describe("session.prompt special characters", () => {
   })
 })
 
+describe("session.prompt permissions", () => {
+  test("merges legacy tool permissions into existing session rules", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({
+          permission: [
+            {
+              permission: "edit",
+              pattern: "*",
+              action: "deny",
+            },
+          ],
+        })
+
+        await SessionPrompt.prompt({
+          sessionID: session.id,
+          agent: "build",
+          noReply: true,
+          tools: {
+            task: false,
+          },
+          parts: [{ type: "text", text: "hello" }],
+        })
+
+        const next = await Session.get(session.id)
+
+        expect(next.permission).toContainEqual({
+          permission: "edit",
+          pattern: "*",
+          action: "deny",
+        })
+        expect(next.permission).toContainEqual({
+          permission: "task",
+          pattern: "*",
+          action: "deny",
+        })
+
+        await Session.remove(session.id)
+      },
+    })
+  })
+})
+
 describe("session.prompt agent variant", () => {
   test("applies agent variant only when using agent model", async () => {
     const prev = process.env.OPENAI_API_KEY

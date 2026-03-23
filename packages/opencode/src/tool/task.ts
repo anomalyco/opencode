@@ -46,6 +46,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
     parameters,
     async execute(params: z.infer<typeof parameters>, ctx) {
       const config = await Config.get()
+      const caller = await Agent.get(ctx.agent)
 
       // Skip permission check when user explicitly invoked via @ or command subtask
       if (!ctx.extra?.bypassAgentCheck) {
@@ -62,8 +63,41 @@ export const TaskTool = Tool.define("task", async (ctx) => {
 
       const agent = await Agent.get(params.subagent_type)
       if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
+      if (!caller) throw new Error(`Unknown agent type: ${ctx.agent}`)
 
       const hasTaskPermission = agent.permission.some((rule) => rule.permission === "task")
+      const parent = await Session.get(ctx.sessionID)
+      const rules = Permission.merge(caller.permission, parent.permission ?? [])
+      const perm = [
+        {
+          permission: "todowrite" as const,
+          pattern: "*" as const,
+          action: "deny" as const,
+        },
+        {
+          permission: "todoread" as const,
+          pattern: "*" as const,
+          action: "deny" as const,
+        },
+        ...(hasTaskPermission
+          ? []
+          : [
+              {
+                permission: "task" as const,
+                pattern: "*" as const,
+                action: "deny" as const,
+              },
+            ]),
+        ...(Permission.evaluate("edit", "*", rules).action === "deny"
+          ? [
+              {
+                permission: "edit" as const,
+                pattern: "*" as const,
+                action: "deny" as const,
+              },
+            ]
+          : []),
+      ]
 
       const session = await iife(async () => {
         if (params.task_id) {
@@ -75,25 +109,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           parentID: ctx.sessionID,
           title: params.description + ` (@${agent.name} subagent)`,
           permission: [
-            {
-              permission: "todowrite",
-              pattern: "*",
-              action: "deny",
-            },
-            {
-              permission: "todoread",
-              pattern: "*",
-              action: "deny",
-            },
-            ...(hasTaskPermission
-              ? []
-              : [
-                  {
-                    permission: "task" as const,
-                    pattern: "*" as const,
-                    action: "deny" as const,
-                  },
-                ]),
+            ...perm,
             ...(config.experimental?.primary_tools?.map((t) => ({
               pattern: "*",
               action: "allow" as const,
@@ -102,6 +118,28 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           ],
         })
       })
+      const curr = session.permission ?? []
+      const next = [
+        ...curr.filter(
+          (item) => !perm.some((rule) => rule.permission === item.permission && rule.pattern === item.pattern),
+        ),
+        ...perm,
+      ]
+      const same =
+        next.length === curr.length &&
+        next.every(
+          (rule, i) =>
+            rule.permission === curr[i]?.permission &&
+            rule.pattern === curr[i]?.pattern &&
+            rule.action === curr[i]?.action,
+        )
+      if (!same) {
+        session.permission = next
+        await Session.setPermission({
+          sessionID: session.id,
+          permission: next,
+        })
+      }
       const msg = await MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
       if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
 

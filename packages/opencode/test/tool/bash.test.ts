@@ -285,8 +285,37 @@ describe("tool.bash permissions", () => {
         }
         await bash.execute({ command: "cat > /tmp/output.txt", description: "Redirect ls output" }, testCtx)
         const bashReq = requests.find((r) => r.permission === "bash")
+        const editReq = requests.find((r) => r.permission === "edit")
         expect(bashReq).toBeDefined()
+        expect(editReq).toBeDefined()
+        expect(editReq!.patterns).toContain("*")
         expect(bashReq!.patterns).toContain("cat > /tmp/output.txt")
+      },
+    })
+  })
+
+  test("asks for edit permission when sed writes in place", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "a.txt"), "a\n")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+        const testCtx = {
+          ...ctx,
+          ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
+            requests.push(req)
+          },
+        }
+        await bash.execute({ command: "sed -i 's/a/b/' a.txt", description: "Edit file in place" }, testCtx)
+        const editReq = requests.find((r) => r.permission === "edit")
+        expect(editReq).toBeDefined()
+        expect(editReq!.patterns).toContain("a.txt")
       },
     })
   })
