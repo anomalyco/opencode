@@ -929,4 +929,7 @@ export const dict = {
   "terminal.connectionLost.abnormalClose": "WebSocket 异常关闭：{{code}}",
 
   "fileTree.addToConversation": "添加到对话",
+
+  "markdown.view.rendered": "渲染",
+  "markdown.view.source": "源码",
 } satisfies Partial<Record<Keys, string>>

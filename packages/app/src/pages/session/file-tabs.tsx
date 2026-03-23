@@ -13,7 +13,9 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { showToast } from "@opencode-ai/ui/toast"
+import { Markdown } from "@opencode-ai/ui/markdown"
 import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/context/file"
+import { MarkdownViewToggle, type MarkdownViewMode } from "@/components/markdown-view-toggle"
 import { useComments } from "@/context/comments"
 import { useLanguage } from "@/context/language"
 import { usePrompt } from "@/context/prompt"
@@ -170,6 +172,20 @@ export function FileTabContent(props: { tab: string }) {
     openedComment: null as string | null,
     commenting: null as SelectedLineRange | null,
     selected: null as SelectedLineRange | null,
+  })
+
+  const isMarkdown = createMemo(() => {
+    const p = path()
+    if (!p) return false
+    return p.endsWith(".md") || p.endsWith(".markdown")
+  })
+
+  const [mdViewMode, setMdViewMode] = createStore<Record<string, MarkdownViewMode>>({})
+
+  const currentMdMode = createMemo(() => {
+    const p = path()
+    if (!p) return "rendered"
+    return mdViewMode[p] ?? "rendered"
   })
 
   const syncSelected = (range: SelectedLineRange | null) => {
@@ -394,47 +410,68 @@ export function FileTabContent(props: { tab: string }) {
 
   const renderFile = (source: string) => (
     <div class="relative overflow-hidden pb-40">
-      <Dynamic
-        component={fileComponent}
-        mode="text"
-        file={{
-          name: path() ?? "",
-          contents: source,
-          cacheKey: cacheKey(),
-        }}
-        enableLineSelection
-        enableHoverUtility={!isTouch()}
-        selectedLines={activeSelection()}
-        commentedLines={commentedLines()}
-        onRendered={() => {
-          queueRestore()
-        }}
-        annotations={commentsUi.annotations()}
-        renderAnnotation={commentsUi.renderAnnotation}
-        renderHoverUtility={!isTouch() ? commentsUi.renderHoverUtility : undefined}
-        onLineSelected={(range: SelectedLineRange | null) => {
-          commentsUi.onLineSelected(range)
-        }}
-        onLineNumberSelectionEnd={commentsUi.onLineNumberSelectionEnd}
-        onLineSelectionEnd={(range: SelectedLineRange | null) => {
-          commentsUi.onLineSelectionEnd(range)
-        }}
-        search={search}
-        class="select-text"
-        media={{
-          mode: "auto",
-          path: path(),
-          current: state()?.content,
-          onLoad: queueRestore,
-          onError: (args: { kind: "image" | "audio" | "svg" }) => {
-            if (args.kind !== "svg") return
-            showToast({
-              variant: "error",
-              title: language.t("toast.file.loadFailed.title"),
-            })
-          },
-        }}
-      />
+      <Show when={isMarkdown()}>
+        <div class="absolute top-2 right-4 z-10">
+          <MarkdownViewToggle
+            mode={currentMdMode()}
+            onChange={(mode) => {
+              const p = path()
+              if (p) setMdViewMode(p, mode)
+            }}
+          />
+        </div>
+      </Show>
+
+      <Show
+        when={isMarkdown() && currentMdMode() === "rendered"}
+        fallback={
+          <Dynamic
+            component={fileComponent}
+            mode="text"
+            file={{
+              name: path() ?? "",
+              contents: source,
+              cacheKey: cacheKey(),
+            }}
+            enableLineSelection
+            enableHoverUtility={!isTouch()}
+            selectedLines={activeSelection()}
+            commentedLines={commentedLines()}
+            onRendered={() => {
+              queueRestore()
+            }}
+            annotations={commentsUi.annotations()}
+            renderAnnotation={commentsUi.renderAnnotation}
+            renderHoverUtility={!isTouch() ? commentsUi.renderHoverUtility : undefined}
+            onLineSelected={(range: SelectedLineRange | null) => {
+              commentsUi.onLineSelected(range)
+            }}
+            onLineNumberSelectionEnd={commentsUi.onLineNumberSelectionEnd}
+            onLineSelectionEnd={(range: SelectedLineRange | null) => {
+              commentsUi.onLineSelectionEnd(range)
+            }}
+            search={search}
+            class="select-text"
+            media={{
+              mode: "auto",
+              path: path(),
+              current: state()?.content,
+              onLoad: queueRestore,
+              onError: (args: { kind: "image" | "audio" | "svg" }) => {
+                if (args.kind !== "svg") return
+                showToast({
+                  variant: "error",
+                  title: language.t("toast.file.loadFailed.title"),
+                })
+              },
+            }}
+          />
+        }
+      >
+        <div class="pt-10 px-4">
+          <Markdown text={source} cacheKey={cacheKey()} />
+        </div>
+      </Show>
     </div>
   )
 

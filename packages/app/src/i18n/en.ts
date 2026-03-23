@@ -947,4 +947,7 @@ export const dict = {
   "workspace.reset.note": "This will reset the workspace to match the default branch.",
 
   "fileTree.addToConversation": "Add to conversation",
+
+  "markdown.view.rendered": "Rendered",
+  "markdown.view.source": "Source",
 }
