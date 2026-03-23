@@ -66,6 +66,13 @@ const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested struc
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
 
+  // Tracks plugin-routed models per session for subagent inheritance
+  const routedModels: Record<string, { providerID: string; modelID: string }> = {}
+
+  export function getRoutedModel(sessionID: string) {
+    return routedModels[sessionID]
+  }
+
   const state = Instance.state(
     () => {
       const data: Record<
@@ -966,7 +973,29 @@ export namespace SessionPrompt {
   async function createUserMessage(input: PromptInput) {
     const agent = await Agent.get(input.agent ?? (await Agent.defaultAgent()))
 
-    const model = input.model ?? agent.model ?? (await lastModel(input.sessionID))
+    // Resolve the proposed model before plugin can override
+    const proposedModel = input.model ?? agent.model ?? (await lastModel(input.sessionID))
+
+    // Fire chat.model hook to allow plugins to dynamically route to different models
+    const modelOverride = await Plugin.trigger(
+      "chat.model",
+      {
+        sessionID: input.sessionID,
+        agent: agent.name,
+        proposedModel,
+      },
+      { model: undefined as { providerID: string; modelID: string } | undefined },
+    )
+
+    // If plugin set a model, persist it for subagent inheritance
+    const model = modelOverride.model ?? proposedModel
+    if (modelOverride.model) {
+      routedModels[input.sessionID] = modelOverride.model
+      log.info("plugin routed model", {
+        sessionID: input.sessionID,
+        model: modelOverride.model,
+      })
+    }
     const full =
       !input.variant && agent.variant
         ? await Provider.getModel(model.providerID, model.modelID).catch(() => undefined)

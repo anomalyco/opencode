@@ -180,6 +180,21 @@ export interface Hooks {
     output: { message: UserMessage; parts: Part[] },
   ) => Promise<void>
   /**
+   * Called to dynamically route messages to different models.
+   * When a plugin sets output.model, OpenCode updates the session's
+   * active model so future turns and subagents inherit the routed model.
+   */
+  "chat.model"?: (
+    input: {
+      sessionID: string
+      agent: string
+      proposedModel: { providerID: string; modelID: string }
+    },
+    output: {
+      model?: { providerID: string; modelID: string }
+    },
+  ) => Promise<void>
+  /**
    * Modify parameters sent to LLM
    */
   "chat.params"?: (
