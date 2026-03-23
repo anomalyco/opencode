@@ -104,7 +104,7 @@ const SessionRow = (props: {
 }): JSX.Element => (
   <A
     href={`/${props.slug}/session/${props.session.id}`}
-    class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none transition-[padding] ${props.mobile ? "pr-7" : ""} group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7 ${props.dense ? "py-0.5" : "py-1"}`}
+    class={`flex items-center gap-3 min-w-0 text-left focus:outline-none ${props.dense ? "py-0.5" : "py-1"}`}
     onPointerDown={props.warmPress}
     onPointerEnter={props.warmHover}
     onPointerLeave={props.cancelHoverPrefetch}
@@ -115,7 +115,7 @@ const SessionRow = (props: {
       props.clearHoverProjectSoon()
     }}
   >
-    <div class="flex items-center gap-1 w-full">
+    <div class="flex flex-1 items-center gap-1 min-w-0">
       <div
         class="shrink-0 size-6 flex items-center justify-center"
         style={{ color: props.tint() ?? "var(--icon-interactive-base)" }}
@@ -135,9 +135,7 @@ const SessionRow = (props: {
           </Match>
         </Switch>
       </div>
-      <span class="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate">
-        {props.session.title}
-      </span>
+      <span class="text-14-regular text-text-strong flex-1 min-w-0 truncate">{props.session.title}</span>
     </div>
   </A>
 )
@@ -167,7 +165,11 @@ const SessionHoverPreview = (props: {
       placement="right-start"
       gutter={16}
       shift={-2}
-      trigger={<div ref={ref}>{props.trigger}</div>}
+      trigger={
+        <div ref={ref} class="min-w-0">
+          {props.trigger}
+        </div>
+      }
       open={props.hoverSession() === props.session.id}
       onOpenChange={(open) => {
         if (!open) {
@@ -309,62 +311,66 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   return (
     <div
       data-session-id={props.session.id}
-      class="group/session relative w-full rounded-md cursor-default pl-2 pr-3 transition-colors
+      class="group/session w-full rounded-md cursor-default pl-2 pr-3 transition-colors
              hover:bg-surface-raised-base-hover [&:has(:focus-visible)]:bg-surface-raised-base-hover has-[[data-expanded]]:bg-surface-raised-base-hover has-[.active]:bg-surface-base-active"
     >
-      <Show
-        when={hoverEnabled()}
-        fallback={
-          <Tooltip placement={props.mobile ? "bottom" : "right"} value={props.session.title} gutter={10}>
-            {item}
-          </Tooltip>
-        }
-      >
-        <SessionHoverPreview
-          mobile={props.mobile}
-          nav={props.nav}
-          hoverSession={props.hoverSession}
-          session={props.session}
-          sidebarHovering={props.sidebarHovering}
-          hoverReady={hoverReady}
-          hoverMessages={hoverMessages}
-          language={language}
-          isActive={isActive}
-          slug={props.slug}
-          setHoverSession={props.setHoverSession}
-          messageLabel={messageLabel}
-          onMessageSelect={(message) => {
-            if (!isActive())
-              layout.pendingMessage.set(`${base64Encode(props.session.directory)}/${props.session.id}`, message.id)
+      <div class="flex min-w-0 w-full items-center gap-1 overflow-hidden">
+        <div class="flex-1 min-w-0 overflow-hidden">
+          <Show
+            when={hoverEnabled()}
+            fallback={
+              <Tooltip placement={props.mobile ? "bottom" : "right"} value={props.session.title} gutter={10}>
+                {item}
+              </Tooltip>
+            }
+          >
+            <SessionHoverPreview
+              mobile={props.mobile}
+              nav={props.nav}
+              hoverSession={props.hoverSession}
+              session={props.session}
+              sidebarHovering={props.sidebarHovering}
+              hoverReady={hoverReady}
+              hoverMessages={hoverMessages}
+              language={language}
+              isActive={isActive}
+              slug={props.slug}
+              setHoverSession={props.setHoverSession}
+              messageLabel={messageLabel}
+              onMessageSelect={(message) => {
+                if (!isActive())
+                  layout.pendingMessage.set(`${base64Encode(props.session.directory)}/${props.session.id}`, message.id)
 
-            navigate(`${props.slug}/session/${props.session.id}#message-${message.id}`)
+                navigate(`${props.slug}/session/${props.session.id}#message-${message.id}`)
+              }}
+              trigger={item}
+            />
+          </Show>
+        </div>
+
+        <div
+          class="flex shrink-0 items-center justify-end overflow-hidden transition-[width,opacity] duration-150"
+          classList={{
+            "w-6 opacity-100 pointer-events-auto": !!props.mobile,
+            "w-0 opacity-0 pointer-events-none": !props.mobile,
+            "group-hover/session:w-6 group-hover/session:opacity-100 group-hover/session:pointer-events-auto": true,
+            "group-focus-within/session:w-6 group-focus-within/session:opacity-100 group-focus-within/session:pointer-events-auto": true,
           }}
-          trigger={item}
-        />
-      </Show>
-
-      <div
-        class={`absolute ${props.dense ? "top-0.5 right-0.5" : "top-1 right-1"} flex items-center gap-0.5 transition-opacity`}
-        classList={{
-          "opacity-100 pointer-events-auto": !!props.mobile,
-          "opacity-0 pointer-events-none": !props.mobile,
-          "group-hover/session:opacity-100 group-hover/session:pointer-events-auto": true,
-          "group-focus-within/session:opacity-100 group-focus-within/session:pointer-events-auto": true,
-        }}
-      >
-        <Tooltip value={language.t("common.archive")} placement="top">
-          <IconButton
-            icon="archive"
-            variant="ghost"
-            class="size-6 rounded-md"
-            aria-label={language.t("common.archive")}
-            onClick={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              void props.archiveSession(props.session)
-            }}
-          />
-        </Tooltip>
+        >
+          <Tooltip value={language.t("common.archive")} placement="top">
+            <IconButton
+              icon="archive"
+              variant="ghost"
+              class="size-6 rounded-md"
+              aria-label={language.t("common.archive")}
+              onClick={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                void props.archiveSession(props.session)
+              }}
+            />
+          </Tooltip>
+        </div>
       </div>
     </div>
   )
