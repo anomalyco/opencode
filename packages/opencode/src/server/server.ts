@@ -52,8 +52,10 @@ export namespace Server {
 
   export const Default = lazy(() => createApp({}))
 
-  export const createApp = (opts: { cors?: string[] }): Hono => {
+  export const createApp = (opts: { cors?: string[]; app?: string }): Hono => {
     const app = new Hono()
+    const appUrl = opts.app ?? "https://app.opencode.ai"
+    const appHost = new URL(appUrl).host
     return app
       .onError((err, c) => {
         log.error("failed", {
@@ -499,11 +501,11 @@ export namespace Server {
       .all("/*", async (c) => {
         const path = c.req.path
 
-        const response = await proxy(`https://app.opencode.ai${path}`, {
+        const response = await proxy(`${appUrl}${path}`, {
           ...c.req,
           headers: {
             ...c.req.raw.headers,
-            host: "app.opencode.ai",
+            host: appHost,
           },
         })
         response.headers.set(
@@ -538,6 +540,7 @@ export namespace Server {
     mdns?: boolean
     mdnsDomain?: string
     cors?: string[]
+    app?: string
   }) {
     url = new URL(`http://${opts.hostname}:${opts.port}`)
     const app = createApp(opts)

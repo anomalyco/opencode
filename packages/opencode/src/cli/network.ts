@@ -28,6 +28,11 @@ const options = {
     describe: "additional domains to allow for CORS",
     default: [] as string[],
   },
+  app: {
+    type: "string" as const,
+    describe: "URL of the frontend app to proxy to",
+    default: "https://app.opencode.ai",
+  },
 }
 
 export type NetworkOptions = InferredOptionTypes<typeof options>
@@ -43,6 +48,7 @@ export async function resolveNetworkOptions(args: NetworkOptions) {
   const mdnsExplicitlySet = process.argv.includes("--mdns")
   const mdnsDomainExplicitlySet = process.argv.includes("--mdns-domain")
   const corsExplicitlySet = process.argv.includes("--cors")
+  const appExplicitlySet = process.argv.includes("--app")
 
   const mdns = mdnsExplicitlySet ? args.mdns : (config?.server?.mdns ?? args.mdns)
   const mdnsDomain = mdnsDomainExplicitlySet ? args["mdns-domain"] : (config?.server?.mdnsDomain ?? args["mdns-domain"])
@@ -55,6 +61,7 @@ export async function resolveNetworkOptions(args: NetworkOptions) {
   const configCors = config?.server?.cors ?? []
   const argsCors = Array.isArray(args.cors) ? args.cors : args.cors ? [args.cors] : []
   const cors = [...configCors, ...argsCors]
+  const app = appExplicitlySet ? args.app : (config?.server?.app ?? args.app)
 
-  return { hostname, port, mdns, mdnsDomain, cors }
+  return { hostname, port, mdns, mdnsDomain, cors, app }
 }

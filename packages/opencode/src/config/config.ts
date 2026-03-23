@@ -905,6 +905,7 @@ export namespace Config {
       mdns: z.boolean().optional().describe("Enable mDNS service discovery"),
       mdnsDomain: z.string().optional().describe("Custom domain name for mDNS service (default: opencode.local)"),
       cors: z.array(z.string()).optional().describe("Additional domains to allow for CORS"),
+      app: z.string().optional().describe("URL of the frontend app to proxy to (default: https://app.opencode.ai)"),
     })
     .strict()
     .meta({
