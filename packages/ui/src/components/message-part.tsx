@@ -356,6 +356,57 @@ function sessionLink(id: string | undefined, path: string, href?: (id: string) =
   return `${path.slice(0, idx)}/session/${id}`
 }
 
+function childTool(
+  store: {
+    message: {
+      [sessionID: string]: MessageType[]
+    }
+    part: {
+      [messageID: string]: PartType[]
+    }
+  },
+  sessionID: string,
+) {
+  const msgs = store.message[sessionID] ?? []
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const msg = msgs[i]
+    if (msg.role !== "assistant") continue
+    const parts = store.part[msg.id] ?? []
+    for (let j = parts.length - 1; j >= 0; j--) {
+      const part = parts[j]
+      if (part.type !== "tool") continue
+      if (part.state.status !== "pending" && part.state.status !== "running") continue
+      return part
+    }
+  }
+}
+
+function childStep(part: ToolPart | undefined) {
+  if (!part) return "delegating"
+  switch (part.tool) {
+    case "task":
+      return "delegating"
+    case "read":
+    case "list":
+      return "gatheringContext"
+    case "glob":
+    case "grep":
+    case "codesearch":
+      return "searchingCodebase"
+    case "webfetch":
+    case "websearch":
+      return "searchingWeb"
+    case "edit":
+    case "write":
+    case "apply_patch":
+      return "makingEdits"
+    case "bash":
+      return "runningCommands"
+    default:
+      return "thinking"
+  }
+}
+
 const CONTEXT_GROUP_TOOLS = new Set(["read", "glob", "grep", "list"])
 const HIDDEN_TOOLS = new Set(["todowrite", "todoread"])
 
@@ -1655,15 +1706,30 @@ ToolRegistry.register({
       return childSessionId()
     })
     const running = createMemo(() => props.status === "pending" || props.status === "running")
+    const child = createMemo(() => {
+      const id = childSessionId()
+      if (!id) return
+      return childTool(data.store, id)
+    })
+    const step = createMemo(() => {
+      if (!running()) return title()
+      const id = childSessionId()
+      if (!id) return i18n.t("ui.sessionTurn.status.delegating")
+      const part = child()
+      if (part) return i18n.t(`ui.sessionTurn.status.${childStep(part)}`)
+      const status = data.store.session_status[id]
+      if (status && status.type !== "idle") return i18n.t("ui.sessionTurn.status.thinking")
+      return title()
+    })
 
     const href = createMemo(() => sessionLink(childSessionId(), location.pathname, data.sessionHref))
 
-    const titleContent = () => <TextShimmer text={title()} active={running()} />
+    const titleContent = () => <TextShimmer text={step()} active={running()} />
 
     const trigger = () => (
       <div data-slot="basic-tool-tool-info-structured">
         <div data-slot="basic-tool-tool-info-main">
-          <span data-slot="basic-tool-tool-title" class="capitalize agent-title">
+          <span data-slot="basic-tool-tool-title" class="agent-title">
             {titleContent()}
           </span>
           <Show when={subtitle()}>
