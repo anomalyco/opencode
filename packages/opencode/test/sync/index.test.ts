@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach } from "bun:test"
+import { describe, test, expect, beforeEach, afterEach } from "bun:test"
 import { tmpdir } from "../fixture/fixture"
 import z from "zod"
 import { Bus } from "../../src/bus"
@@ -7,9 +7,19 @@ import { SyncEvent } from "../../src/sync"
 import { Database } from "../../src/storage/db"
 import { EventTable } from "../../src/sync/event.sql"
 import { Identifier } from "../../src/id/id"
+import { Flag } from "../../src/flag/flag"
 
 beforeEach(() => {
   Database.Client.reset()
+})
+
+const original = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
+// @ts-expect-error don't do this normally, but it works
+Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
+
+afterEach(() => {
+  // @ts-expect-error don't do this normally, but it works
+  Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = original
 })
 
 function withInstance(fn: () => void | Promise<void>) {
@@ -26,6 +36,8 @@ function withInstance(fn: () => void | Promise<void>) {
 }
 
 describe("SyncEvent", () => {
+  SyncEvent.reset()
+
   const Created = SyncEvent.define({
     type: "item.created",
     version: 1,

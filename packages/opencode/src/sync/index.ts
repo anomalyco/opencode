@@ -39,6 +39,12 @@ export namespace SyncEvent {
 
   const Bus = new EventEmitter<{ event: [{ def: Definition; event: Event }] }>()
 
+  export function reset() {
+    frozen = false
+    projectors = undefined
+    convertEvent = (_, data) => data
+  }
+
   export function init(input: { projectors: Array<[Definition, ProjectorFunc]>; convertEvent?: typeof convertEvent }) {
     projectors = new Map(input.projectors)
 
