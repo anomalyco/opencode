@@ -77,6 +77,7 @@ type ProviderCfg = NonNullable<Config["provider"]>[string]
 type CustomState = FormState & {
   mode: "create" | "edit"
   deleting: boolean
+  secret: boolean
 }
 
 const CUSTOM_NEW = "provider:_new_custom"
@@ -317,6 +318,17 @@ function paintCode(raw: string) {
   return out || "&nbsp;"
 }
 
+function sourceKey(source?: string) {
+  if (source === "opencode") return "config.badge.opencode"
+  if (source === "project") return "config.badge.project"
+  if (source === "external") return "config.badge.external"
+  if (source === "env") return "config.badge.env"
+  if (source === "api") return "config.badge.api"
+  if (source === "config") return "config.badge.config"
+  if (source === "custom") return "config.badge.custom"
+  return undefined
+}
+
 function home(path: string) {
   const list = norm(path).split("/").filter(Boolean)
   if (list.at(-1) !== "opencode") return
@@ -428,13 +440,14 @@ function providerCfg(input: ProviderCfg | undefined): CustomState {
   const headers = input?.options?.headers
   const models = Object.entries(input?.models ?? {})
   const env = Array.isArray(input?.env) && input.env.length > 0 ? `{env:${input.env[0]}}` : ""
+  const api = typeof input?.options?.apiKey === "string" ? input.options.apiKey : ""
   return {
     mode: input ? "edit" : "create",
     providerID: "",
     npm: input?.npm ?? OPENAI_COMPATIBLE,
     name: input?.name ?? "",
     baseURL: typeof input?.options?.baseURL === "string" ? input.options.baseURL : "",
-    apiKey: env,
+    apiKey: api || env,
     models:
       models.length > 0
         ? models.map(([id, item]) => ({
@@ -457,6 +470,7 @@ function providerCfg(input: ProviderCfg | undefined): CustomState {
         : [blankHeaderRow()],
     saving: false,
     deleting: false,
+    secret: true,
     err: {},
   }
 }
@@ -672,6 +686,7 @@ function MarkdownField(props: {
   paint?: (value: string) => string
 }) {
   const settings = useSettings()
+  const language = useLanguage()
   let box: HTMLTextAreaElement | undefined
   let back: HTMLDivElement | undefined
   const html = createMemo(() => (props.paint ?? paint)(props.text))
@@ -701,7 +716,9 @@ function MarkdownField(props: {
         <div class="min-h-full w-full" innerHTML={html()} />
       </div>
       <Show when={props.busy}>
-        <div class="pointer-events-none absolute left-4 top-3 z-10 text-12-regular text-text-weak">Loading file...</div>
+        <div class="pointer-events-none absolute left-4 top-3 z-10 text-12-regular text-text-weak">
+          {language.t("config.editor.loadingFile")}
+        </div>
       </Show>
       <textarea
         ref={(el) => {
@@ -746,21 +763,26 @@ function Editor(props: {
   const language = useLanguage()
   const settings = useSettings()
   const font = createMemo(() => monoFontFamily(settings.appearance.font()))
+  const source = createMemo(() => sourceKey(props.item?.source))
 
   return (
     <div class="flex h-full min-h-0 flex-col">
       <div class="border-b border-border-weak-base px-5 py-4">
         <div class="min-w-0">
           <div class="flex items-center gap-2">
-            <div class="truncate text-15-medium text-text-strong">{props.item?.label ?? "Select an item"}</div>
+            <div class="truncate text-15-medium text-text-strong">
+              {props.item?.label ?? language.t("config.editor.selectItem")}
+            </div>
             <Show when={props.item?.editable !== undefined}>
               <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
-                {props.item?.editable ? "editable" : "read only"}
+                {props.item?.editable
+                  ? language.t("config.editor.badge.editable")
+                  : language.t("config.editor.badge.readOnly")}
               </span>
             </Show>
-            <Show when={props.item?.source}>
+            <Show when={source()}>
               <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
-                {props.item?.source}
+                {language.t(source()!)}
               </span>
             </Show>
           </div>
@@ -780,7 +802,7 @@ function Editor(props: {
             <Show when={props.onOpenFolder}>
               <Button size="small" variant="ghost" onClick={props.onOpenFolder}>
                 <Icon name="folder" size="small" class="shrink-0" />
-                Open folder
+                {language.t("config.action.openFolder")}
               </Button>
             </Show>
             <Button size="small" variant="ghost" onClick={props.onReload}>
@@ -812,7 +834,7 @@ function Editor(props: {
               fallback={
                 <div class="flex h-full min-h-0 flex-col rounded-xl border border-border-weak-base bg-background-base p-3">
                   <Show when={props.busy} fallback={null}>
-                    <div class="mb-3 text-12-regular text-text-weak">Loading file...</div>
+                    <div class="mb-3 text-12-regular text-text-weak">{language.t("config.editor.loadingFile")}</div>
                   </Show>
                   <Show
                     when={script(props.item?.path)}
@@ -849,13 +871,15 @@ function Editor(props: {
           </div>
           <Show when={props.treeRoot}>
             <div class="flex h-full min-h-0 flex-col rounded-xl border border-border-weak-base bg-background-base p-3">
-              <div class="mb-3 text-11-medium uppercase tracking-[0.08em] text-text-weak">Structure</div>
+              <div class="mb-3 text-11-medium uppercase tracking-[0.08em] text-text-weak">
+                {language.t("config.editor.structure")}
+              </div>
               <Show when={props.treeBusy}>
-                <div class="mb-3 text-12-regular text-text-weak">Loading structure...</div>
+                <div class="mb-3 text-12-regular text-text-weak">{language.t("config.editor.loadingStructure")}</div>
               </Show>
               <Show
                 when={(props.tree ?? []).length > 0}
-                fallback={<div class="text-12-regular text-text-weak">No files found in this directory.</div>}
+                fallback={<div class="text-12-regular text-text-weak">{language.t("config.editor.noFiles")}</div>}
               >
                 <div class="min-h-0 flex-1 overflow-y-auto pr-1">
                   <Tree
@@ -879,11 +903,13 @@ function ProviderDetail(props: {
   busy: boolean
   onToggle: (item: ProviderItem, enabled: boolean) => void
 }) {
+  const language = useLanguage()
+
   return (
     <div class="flex h-full min-h-0 flex-col">
       <Show
         when={props.item}
-        fallback={<div class="px-4 py-10 text-13-regular text-text-weak">Select a provider to inspect its models.</div>}
+        fallback={<div class="px-4 py-10 text-13-regular text-text-weak">{language.t("config.provider.select")}</div>}
       >
         <div class="flex flex-wrap items-start justify-between gap-3 border-b border-border-weak-base px-4 py-4">
           <div>
@@ -891,12 +917,14 @@ function ProviderDetail(props: {
               <div class="text-15-medium text-text-strong">{props.item?.id}</div>
               <Show when={props.item}>
                 <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
-                  {props.item?.connected ? "enabled" : "known"}
+                  {props.item?.connected
+                    ? language.t("config.provider.badge.enabled")
+                    : language.t("config.provider.badge.known")}
                 </span>
               </Show>
-              <Show when={props.item?.source}>
+              <Show when={sourceKey(props.item?.source)}>
                 <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
-                  {props.item?.source}
+                  {language.t(sourceKey(props.item?.source)!)}
                 </span>
               </Show>
               <Show when={props.item?.sdk}>
@@ -905,19 +933,19 @@ function ProviderDetail(props: {
                 </span>
               </Show>
               <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
-                {(props.item?.models.length ?? 0) + " models"}
+                {language.t("config.provider.modelsCount", { count: props.item?.models.length ?? 0 })}
               </span>
             </div>
             <div class="mt-2 text-12-regular text-text-weak">
               {props.item?.custom
                 ? props.item?.allowed
-                  ? "This custom provider is enabled by config. Turn it off to add it to disabled_providers."
-                  : "This custom provider is configured, but currently disabled in config. Turn it on to remove it from disabled_providers."
+                  ? language.t("config.provider.customEnabled")
+                  : language.t("config.provider.customDisabled")
                 : props.item?.connected
                   ? props.item?.source === "env"
-                    ? "This provider is connected from your environment and cannot be disconnected from here."
-                    : "This provider is currently enabled and visible to the runtime."
-                  : "This provider exists in the catalog, but it is not currently enabled in your runtime."}
+                    ? language.t("config.provider.envConnected")
+                    : language.t("config.provider.connected")
+                  : language.t("config.provider.known")}
             </div>
           </div>
           <Toggle
@@ -925,16 +953,20 @@ function ProviderDetail(props: {
             disabled={props.busy || (!!props.item && !props.item.custom && props.item.source === "env")}
             onChange={(value) => props.item && props.onToggle(props.item, value)}
           >
-            {props.item?.custom ? "Enabled in config" : "Connected"}
+            {props.item?.custom
+              ? language.t("config.provider.toggle.enabledInConfig")
+              : language.t("config.provider.toggle.connected")}
           </Toggle>
         </div>
         <div class="min-h-0 flex-1 overflow-y-auto p-4">
-          <div class="mb-3 text-11-medium uppercase tracking-[0.08em] text-text-weak">Models</div>
+          <div class="mb-3 text-11-medium uppercase tracking-[0.08em] text-text-weak">
+            {language.t("config.provider.modelsTitle")}
+          </div>
           <Show
             when={(props.item?.models.length ?? 0) > 0}
             fallback={
               <div class="rounded-xl border border-border-weak-base bg-background-base px-4 py-6 text-12-regular text-text-weak">
-                No models exposed by this provider.
+                {language.t("config.provider.noModels")}
               </div>
             }
           >
@@ -972,25 +1004,24 @@ function CustomEditor(props: {
   onSave: () => void
   onDelete: () => void
   onCreate: () => void
+  onSecret: () => void
 }) {
+  const language = useLanguage()
+
   return (
     <div class="flex h-full min-h-0 flex-col">
       <Show
         when={props.item || props.form.mode === "create"}
-        fallback={
-          <div class="px-4 py-10 text-13-regular text-text-weak">
-            Select a provider to inspect it, or create a new custom provider.
-          </div>
-        }
+        fallback={<div class="px-4 py-10 text-13-regular text-text-weak">{language.t("config.custom.select")}</div>}
       >
         <div class="flex flex-wrap items-start justify-between gap-3 border-b border-border-weak-base px-4 py-4">
           <div>
             <div class="flex items-center gap-2">
               <div class="text-15-medium text-text-strong">
-                {props.form.mode === "create" ? "New custom provider" : props.item?.id}
+                {props.form.mode === "create" ? language.t("config.custom.new") : props.item?.id}
               </div>
               <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
-                custom
+                {language.t("config.badge.custom")}
               </span>
               <Show when={props.item?.sdk || props.form.npm}>
                 <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 font-mono text-[10px] text-text-weak">
@@ -998,10 +1029,7 @@ function CustomEditor(props: {
                 </span>
               </Show>
             </div>
-            <div class="mt-2 text-12-regular text-text-weak">
-              Edit the custom provider config inline. This updates `provider`, `disabled_providers`, and auth when
-              needed.
-            </div>
+            <div class="mt-2 text-12-regular text-text-weak">{language.t("config.custom.description")}</div>
           </div>
           <div class="flex flex-wrap items-center gap-2">
             <Show when={props.item}>
@@ -1010,19 +1038,19 @@ function CustomEditor(props: {
                 disabled={props.busy}
                 onChange={(value) => props.item && props.onToggle(props.item, value)}
               >
-                Enabled in config
+                {language.t("config.provider.toggle.enabledInConfig")}
               </Toggle>
             </Show>
             <Show
               when={props.form.mode === "create"}
               fallback={
                 <Button size="small" variant="ghost" onClick={props.onDelete} disabled={props.busy}>
-                  Delete
+                  {language.t("config.action.delete")}
                 </Button>
               }
             >
               <Button size="small" variant="secondary" onClick={props.onCreate}>
-                New custom provider
+                {language.t("config.custom.new")}
               </Button>
             </Show>
             <Button
@@ -1030,7 +1058,7 @@ function CustomEditor(props: {
               onClick={props.onSave}
               disabled={props.busy || props.form.saving || props.form.deleting}
             >
-              Save provider
+              {language.t("config.custom.saveProvider")}
             </Button>
           </div>
         </div>
@@ -1040,7 +1068,7 @@ function CustomEditor(props: {
             <div class="grid gap-4 lg:grid-cols-2">
               <TextField
                 autofocus={props.form.mode === "create"}
-                label="provider id"
+                label={language.t("config.custom.field.providerID")}
                 placeholder="my-provider"
                 value={props.form.providerID}
                 onChange={(value) => props.onField("providerID", value)}
@@ -1048,21 +1076,21 @@ function CustomEditor(props: {
                 error={props.form.err.providerID}
               />
               <TextField
-                label="npm"
+                label={language.t("config.custom.field.npm")}
                 placeholder="@ai-sdk/openai-compatible"
                 value={props.form.npm}
                 onChange={(value) => props.onField("npm", value)}
               />
               <TextField
-                label="name"
-                placeholder="My Provider"
+                label={language.t("config.custom.field.name")}
+                placeholder={language.t("config.custom.field.namePlaceholder")}
                 value={props.form.name}
                 onChange={(value) => props.onField("name", value)}
                 validationState={props.form.err.name ? "invalid" : undefined}
                 error={props.form.err.name}
               />
               <TextField
-                label="baseURL"
+                label={language.t("config.custom.field.baseURL")}
                 placeholder="https://api.example.com/v1"
                 value={props.form.baseURL}
                 onChange={(value) => props.onField("baseURL", value)}
@@ -1071,24 +1099,37 @@ function CustomEditor(props: {
               />
             </div>
 
-            <TextField
-              label="apiKey"
-              placeholder="sk-... or {env:MY_PROVIDER_KEY}"
-              description="Bare keys are stored in provider auth. {env:VAR} is written into config env."
-              value={props.form.apiKey}
-              onChange={(value) => props.onField("apiKey", value)}
-            />
+            <div class="space-y-2">
+              <div class="text-12-medium text-text-weak">{language.t("config.custom.field.apiKey")}</div>
+              <div class="rounded-xl border border-border-weak-base bg-background-base px-3 py-2.5">
+                <div class="flex items-center gap-2">
+                  <input
+                    type={props.form.secret ? "password" : "text"}
+                    placeholder="sk-... or {env:MY_PROVIDER_KEY}"
+                    value={props.form.apiKey}
+                    class="min-w-0 flex-1 bg-transparent text-13-regular text-text-base outline-none placeholder:text-text-weak"
+                    onInput={(event) => props.onField("apiKey", event.currentTarget.value)}
+                  />
+                  <IconButton
+                    type="button"
+                    icon={props.form.secret ? "eye" : "close-small"}
+                    variant="ghost"
+                    onClick={props.onSecret}
+                    aria-label={props.form.secret ? "Show API key" : "Hide API key"}
+                  />
+                </div>
+              </div>
+              <div class="text-12-regular text-text-weak">{language.t("config.custom.field.apiKeyDescription")}</div>
+            </div>
 
             <div class="rounded-xl border border-border-weak-base bg-background-base p-4">
               <div class="mb-3 flex items-center justify-between gap-3">
                 <div>
-                  <div class="text-13-medium text-text-strong">Models</div>
-                  <div class="text-12-regular text-text-weak">
-                    Add, rename, or remove model ids exposed by this provider.
-                  </div>
+                  <div class="text-13-medium text-text-strong">{language.t("config.custom.models.title")}</div>
+                  <div class="text-12-regular text-text-weak">{language.t("config.custom.models.description")}</div>
                 </div>
                 <Button size="small" variant="ghost" icon="plus-small" onClick={props.onAddModel}>
-                  Add model
+                  {language.t("config.custom.models.add")}
                 </Button>
               </div>
               <div class="flex flex-col gap-3">
@@ -1096,7 +1137,7 @@ function CustomEditor(props: {
                   {(item, idx) => (
                     <div class="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]" data-row={item.row}>
                       <TextField
-                        label="model id"
+                        label={language.t("config.custom.models.id")}
                         hideLabel
                         placeholder="gpt-4.1"
                         value={item.id}
@@ -1105,7 +1146,7 @@ function CustomEditor(props: {
                         error={item.err.id}
                       />
                       <TextField
-                        label="model name"
+                        label={language.t("config.custom.models.name")}
                         hideLabel
                         placeholder="GPT-4.1"
                         value={item.name}
@@ -1120,7 +1161,7 @@ function CustomEditor(props: {
                         class="mt-1.5"
                         onClick={() => props.onRemoveModel(idx())}
                         disabled={props.form.models.length <= 1}
-                        aria-label="Remove model"
+                        aria-label={language.t("config.custom.models.remove")}
                       />
                     </div>
                   )}
@@ -1131,13 +1172,11 @@ function CustomEditor(props: {
             <div class="rounded-xl border border-border-weak-base bg-background-base p-4">
               <div class="mb-3 flex items-center justify-between gap-3">
                 <div>
-                  <div class="text-13-medium text-text-strong">Headers</div>
-                  <div class="text-12-regular text-text-weak">
-                    Optional request headers merged into provider options.headers.
-                  </div>
+                  <div class="text-13-medium text-text-strong">{language.t("config.custom.headers.title")}</div>
+                  <div class="text-12-regular text-text-weak">{language.t("config.custom.headers.description")}</div>
                 </div>
                 <Button size="small" variant="ghost" icon="plus-small" onClick={props.onAddHeader}>
-                  Add header
+                  {language.t("config.custom.headers.add")}
                 </Button>
               </div>
               <div class="flex flex-col gap-3">
@@ -1145,7 +1184,7 @@ function CustomEditor(props: {
                   {(item, idx) => (
                     <div class="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]" data-row={item.row}>
                       <TextField
-                        label="header key"
+                        label={language.t("config.custom.headers.key")}
                         hideLabel
                         placeholder="Authorization"
                         value={item.key}
@@ -1154,7 +1193,7 @@ function CustomEditor(props: {
                         error={item.err.key}
                       />
                       <TextField
-                        label="header value"
+                        label={language.t("config.custom.headers.value")}
                         hideLabel
                         placeholder="Bearer ..."
                         value={item.value}
@@ -1169,7 +1208,7 @@ function CustomEditor(props: {
                         class="mt-1.5"
                         onClick={() => props.onRemoveHeader(idx())}
                         disabled={props.form.headers.length <= 1}
-                        aria-label="Remove header"
+                        aria-label={language.t("config.custom.headers.remove")}
                       />
                     </div>
                   )}
@@ -1232,6 +1271,7 @@ export default function ConfigPage() {
 
   const space = createMemo(() => workspace() as ConfigWorkspace | undefined)
   const cfg = createMemo(() => globalSync.data.config)
+  const t = language.t
   const opened = createMemo(() =>
     [...globalSync.data.project].sort((a, b) => (a.name ?? name(a.worktree)).localeCompare(b.name ?? name(b.worktree))),
   )
@@ -1241,11 +1281,11 @@ export default function ConfigPage() {
     return [
       {
         id: "agents-md:global",
-        label: "Global AGENTS.md",
+        label: t("config.agentsMd.title"),
         path: space()!.agentsMdPath!,
         editable: true,
         source: "opencode",
-        note: "Shared top-level guidance for the global config workspace.",
+        note: t("config.agentsMd.note"),
       },
     ]
   })
@@ -1257,7 +1297,7 @@ export default function ConfigPage() {
       path: item.path,
       editable: true,
       source: "opencode",
-      note: "Agent markdown definition.",
+      note: t("config.agents.note"),
     })),
   )
 
@@ -1280,7 +1320,7 @@ export default function ConfigPage() {
           !item.name.trim() || !item.description.trim()
             ? `Incomplete metadata. Add ${[!item.name.trim() && "`name`", !item.description.trim() && "`description`"]
                 .filter((part): part is string => !!part)
-                .join(" and ")} to the frontmatter.`
+                .join(t("config.common.and"))} ${t("config.skills.warn.metadataSuffix")}`
             : undefined,
       }
     })
@@ -1493,7 +1533,7 @@ export default function ConfigPage() {
         path: item.path!,
         editable: true,
         source: "opencode",
-        note: item.enabled ? "Enabled plugin entrypoint." : "Available plugin entrypoint.",
+        note: item.enabled ? t("config.plugins.note.enabled") : t("config.plugins.note.available"),
       })),
   )
 
@@ -1663,6 +1703,7 @@ export default function ConfigPage() {
         setState("customID", id)
         setState("customApiDirty", false)
         setState("custom", next)
+        setState("custom", "secret", true)
       },
     ),
   )
@@ -1681,7 +1722,7 @@ export default function ConfigPage() {
       .writeConfigFile(item.path, state.text)
       .then(() => {
         setState("saved", state.text)
-        showToast({ title: "Saved", description: item.label })
+        showToast({ title: t("common.save"), description: item.label })
       })
       .catch((err: unknown) => {
         showToast({
@@ -1770,6 +1811,10 @@ export default function ConfigPage() {
     setState("custom", providerCfg(undefined))
   }
 
+  function toggleCustomSecret() {
+    setState("custom", "secret", (value) => !value)
+  }
+
   function validateCustom() {
     const output = validateCustomProvider({
       form: state.custom,
@@ -1790,7 +1835,7 @@ export default function ConfigPage() {
       (item) => item.scope === "global" && item.kind === "config" && item.label.includes("opencode"),
     )
     if (!file?.path || !platform.readConfigFile || !platform.writeConfigFile)
-      throw new Error("Global config file is unavailable")
+      throw new Error(t("config.error.globalConfigUnavailable"))
     const text = (await platform.readConfigFile(file.path)) ?? "{}"
     const json = patchText(text, ["provider"], next.provider ?? {})
     const disabled = patchText(json, ["disabled_providers"], next.disabled_providers ?? [])
@@ -1808,22 +1853,18 @@ export default function ConfigPage() {
     const nextProvider = { ...(cfg().provider ?? {}) } as NonNullable<Config["provider"]>
     if (prev && prev !== id) delete nextProvider[prev]
     nextProvider[id] = result.config as ProviderCfg
+    if (!nextProvider[id].options) nextProvider[id].options = {}
+    nextProvider[id].options = {
+      ...nextProvider[id].options,
+      ...(result.key ? { apiKey: result.key } : {}),
+    }
+    if (!result.key && nextProvider[id].options && "apiKey" in nextProvider[id].options)
+      delete nextProvider[id].options.apiKey
     const nextDisabled = (cfg().disabled_providers ?? []).filter((item) => item !== id && item !== prev)
     const tasks: Promise<unknown>[] = []
     if (prev && prev !== id) tasks.push(globalSDK.client.auth.remove({ providerID: prev }).catch(() => undefined))
-    if (state.customApiDirty) {
-      if (state.custom.apiKey.trim()) {
-        const env = state.custom.apiKey
-          .trim()
-          .match(/^\{env:([^}]+)\}$/)?.[1]
-          ?.trim()
-        if (env) tasks.push(globalSDK.client.auth.remove({ providerID: id }).catch(() => undefined))
-        else
-          tasks.push(
-            globalSDK.client.auth.set({ providerID: id, auth: { type: "api", key: state.custom.apiKey.trim() } }),
-          )
-      } else tasks.push(globalSDK.client.auth.remove({ providerID: id }).catch(() => undefined))
-    }
+    if (state.customApiDirty || result.key)
+      tasks.push(globalSDK.client.auth.remove({ providerID: id }).catch(() => undefined))
     await Promise.all(tasks)
       .then(() => writeGlobalConfig({ ...cfg(), provider: nextProvider, disabled_providers: nextDisabled }))
       .then(() => {
@@ -1831,7 +1872,8 @@ export default function ConfigPage() {
         setState("customID", id)
         setState("customApiDirty", false)
         setState("custom", "mode", "edit")
-        showToast({ variant: "success", title: "Saved", description: id })
+        setState("custom", "secret", true)
+        showToast({ variant: "success", title: t("common.save"), description: id })
       })
       .catch((err: unknown) => {
         showToast({
@@ -1855,7 +1897,7 @@ export default function ConfigPage() {
       .then(() => writeGlobalConfig({ ...cfg(), provider: nextProvider, disabled_providers: nextDisabled }))
       .then(() => {
         createCustomProvider()
-        showToast({ variant: "success", title: "Deleted", description: id })
+        showToast({ variant: "success", title: t("config.action.delete"), description: id })
       })
       .catch((err: unknown) => {
         showToast({
@@ -1907,7 +1949,7 @@ export default function ConfigPage() {
     setState("providerBusy", item.id)
     void disconnectProvider(item)
       .then(() => {
-        showToast({ variant: "success", title: "Disconnected", description: item.name })
+        showToast({ variant: "success", title: t("common.disconnect"), description: item.name })
       })
       .catch((err: unknown) => {
         showToast({
@@ -1933,41 +1975,39 @@ export default function ConfigPage() {
         <aside class="shrink-0 border-b border-border-weak-base bg-surface-base/92 backdrop-blur xl:w-[240px] xl:border-r xl:border-b-0">
           <div class="flex h-full min-h-0 flex-col">
             <div class="border-b border-border-weak-base px-4 py-4">
-              <div class="text-18-medium text-text-strong">Config</div>
-              <div class="mt-1 text-12-regular text-text-weak">
-                A structured workspace for global config files, providers, agents, skills, and plugins.
-              </div>
+              <div class="text-18-medium text-text-strong">{t("config.title")}</div>
+              <div class="mt-1 text-12-regular text-text-weak">{t("config.description")}</div>
             </div>
             <div class="flex-1 overflow-y-auto p-3">
               <div class="flex flex-col">
                 <SectionButton
                   current={state.section === "agents-md"}
                   title="AGENTS.md"
-                  note="Global workspace guidance"
+                  note={t("config.section.agentsMd")}
                   onClick={() => setState("section", "agents-md")}
                 />
                 <SectionButton
                   current={state.section === "providers"}
-                  title="Providers"
-                  note="Enable providers and inspect models"
+                  title={t("config.providers.title")}
+                  note={t("config.section.providers")}
                   onClick={() => setState("section", "providers")}
                 />
                 <SectionButton
                   current={state.section === "agents"}
-                  title="Agents"
-                  note="Browse and edit agent markdown"
+                  title={t("config.agents.title")}
+                  note={t("config.section.agents")}
                   onClick={() => setState("section", "agents")}
                 />
                 <SectionButton
                   current={state.section === "skills"}
-                  title="Skills"
-                  note="Load SKILL.md and inspect package layout"
+                  title={t("config.skills.title")}
+                  note={t("config.section.skills")}
                   onClick={() => setState("section", "skills")}
                 />
                 <SectionButton
                   current={state.section === "plugins"}
-                  title="Plugins"
-                  note="Manage enabled plugins and source files"
+                  title={t("config.plugins.title")}
+                  note={t("config.section.plugins")}
                   onClick={() => setState("section", "plugins")}
                 />
               </div>
@@ -1982,60 +2022,49 @@ export default function ConfigPage() {
                 <Switch>
                   <Match when={state.section === "agents-md"}>
                     <div class="text-15-medium text-text-strong">AGENTS.md</div>
-                    <div class="mt-1 text-12-regular text-text-weak">
-                      Top-level instructions for the global config root.
-                    </div>
+                    <div class="mt-1 text-12-regular text-text-weak">{t("config.agentsMd.header")}</div>
                   </Match>
                   <Match when={state.section === "providers"}>
-                    <div class="text-15-medium text-text-strong">Providers</div>
-                    <div class="mt-1 text-12-regular text-text-weak">
-                      Standard providers toggle connection state. Custom `@ai-sdk/...` providers toggle
-                      `disabled_providers` in config.
-                    </div>
+                    <div class="text-15-medium text-text-strong">{t("config.providers.title")}</div>
+                    <div class="mt-1 text-12-regular text-text-weak">{t("config.providers.header")}</div>
                     <div class="mt-3">
                       <Button size="small" variant="secondary" icon="plus-small" onClick={createCustomProvider}>
-                        New custom provider
+                        {t("config.custom.new")}
                       </Button>
                     </div>
                     <div class="mt-3 rounded-xl border border-border-weak-base bg-background-base px-3 py-2.5">
                       <input
                         type="text"
                         value={state.query}
-                        placeholder="Search providers"
+                        placeholder={t("dialog.provider.search.placeholder")}
                         class="w-full bg-transparent text-13-regular text-text-base outline-none placeholder:text-text-weak"
                         onInput={(event) => setState("query", event.currentTarget.value)}
                       />
                       <div class="mt-2 flex items-center justify-between gap-3 text-[11px] uppercase tracking-[0.08em] text-text-weak">
-                        <span>{providerList().length} matches</span>
+                        <span>{t("config.providers.matches", { count: providerList().length })}</span>
                         <Show when={state.query}>
                           <button
                             type="button"
                             class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] text-text-weak transition-colors hover:text-text-base"
                             onClick={() => setState("query", "")}
                           >
-                            Clear
+                            {t("ui.list.clearFilter")}
                           </button>
                         </Show>
                       </div>
                     </div>
                   </Match>
                   <Match when={state.section === "agents"}>
-                    <div class="text-15-medium text-text-strong">Agents</div>
-                    <div class="mt-1 text-12-regular text-text-weak">
-                      Agent definitions in the global config workspace.
-                    </div>
+                    <div class="text-15-medium text-text-strong">{t("config.agents.title")}</div>
+                    <div class="mt-1 text-12-regular text-text-weak">{t("config.agents.header")}</div>
                   </Match>
                   <Match when={state.section === "skills"}>
-                    <div class="text-15-medium text-text-strong">Skills</div>
-                    <div class="mt-1 text-12-regular text-text-weak">
-                      Each skill opens its `SKILL.md` and companion folder structure.
-                    </div>
+                    <div class="text-15-medium text-text-strong">{t("config.skills.title")}</div>
+                    <div class="mt-1 text-12-regular text-text-weak">{t("config.skills.header")}</div>
                   </Match>
                   <Match when={state.section === "plugins"}>
-                    <div class="text-15-medium text-text-strong">Plugins</div>
-                    <div class="mt-1 text-12-regular text-text-weak">
-                      Inspect plugin files and toggle what stays enabled in config.
-                    </div>
+                    <div class="text-15-medium text-text-strong">{t("config.plugins.title")}</div>
+                    <div class="mt-1 text-12-regular text-text-weak">{t("config.plugins.header")}</div>
                   </Match>
                 </Switch>
               </div>
@@ -2066,7 +2095,7 @@ export default function ConfigPage() {
                         when={providerList().length > 0}
                         fallback={
                           <div class="rounded-xl border border-dashed border-border-weak-base bg-surface-base px-4 py-8 text-12-regular text-text-weak">
-                            No providers match `"{state.query}"`.
+                            {t("config.providers.empty", { query: state.query })}
                           </div>
                         }
                       >
@@ -2074,7 +2103,9 @@ export default function ConfigPage() {
                           <Show when={providerOn().length > 0}>
                             <div class="flex flex-col">
                               <div class="flex items-center justify-between gap-3 px-1">
-                                <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">Enabled</div>
+                                <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
+                                  {t("config.providers.group.enabled")}
+                                </div>
                                 <div class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
                                   {providerOn().length}
                                 </div>
@@ -2086,8 +2117,8 @@ export default function ConfigPage() {
                                     title={item.id}
                                     note={
                                       item.custom
-                                        ? `${item.models.length} models available · custom provider enabled in config`
-                                        : `${item.models.length} models available`
+                                        ? t("config.providers.note.customEnabled", { count: item.models.length })
+                                        : t("config.providers.note.models", { count: item.models.length })
                                     }
                                     meta={item.custom ? item.sdk : undefined}
                                     onClick={() => setState("pick", `provider:${item.id}`)}
@@ -2113,15 +2144,14 @@ export default function ConfigPage() {
                             <div class="flex flex-col gap-2">
                               <div class="flex items-center justify-between gap-3 px-1">
                                 <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
-                                  Existing, not enabled
+                                  {t("config.providers.group.existing")}
                                 </div>
                                 <div class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
                                   {providerOff().length}
                                 </div>
                               </div>
                               <div class="rounded-xl border border-border-weak-base bg-surface-base px-3 py-2 text-12-regular text-text-weak">
-                                These providers are known to OpenCode, but they are not currently connected in your
-                                runtime.
+                                {t("config.providers.existingNote")}
                               </div>
                               <div class="flex flex-col">
                                 <For each={providerOff()}>
@@ -2131,8 +2161,10 @@ export default function ConfigPage() {
                                       title={item.id}
                                       note={
                                         item.custom
-                                          ? `${item.models.length} models available · custom provider ${item.allowed ? "enabled in config" : "disabled in config"}`
-                                          : `${item.models.length} models available · known but not currently enabled`
+                                          ? item.allowed
+                                            ? t("config.providers.note.customEnabled", { count: item.models.length })
+                                            : t("config.providers.note.customDisabled", { count: item.models.length })
+                                          : t("config.providers.note.known", { count: item.models.length })
                                       }
                                       meta={item.custom ? item.sdk : undefined}
                                       onClick={() => setState("pick", `provider:${item.id}`)}
@@ -2181,7 +2213,9 @@ export default function ConfigPage() {
                         <Show when={skillOpenCode().length > 0}>
                           <div class="flex flex-col">
                             <div class="flex items-center justify-between gap-3 px-1">
-                              <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">OpenCode</div>
+                              <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
+                                {t("config.skills.group.opencode")}
+                              </div>
                               <div class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
                                 {skillOpenCode().length}
                               </div>
@@ -2198,7 +2232,7 @@ export default function ConfigPage() {
                                   extra={
                                     <Show when={item.warn}>
                                       <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-danger-base">
-                                        needs metadata
+                                        {t("config.skills.badge.needsMetadata")}
                                       </span>
                                     </Show>
                                   }
@@ -2212,7 +2246,9 @@ export default function ConfigPage() {
                         <Show when={skillClaude().length > 0}>
                           <div class="flex flex-col">
                             <div class="flex items-center justify-between gap-3 px-1">
-                              <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">.claude</div>
+                              <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
+                                {t("config.skills.group.claude")}
+                              </div>
                               <div class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
                                 {skillClaude().length}
                               </div>
@@ -2229,7 +2265,7 @@ export default function ConfigPage() {
                                   extra={
                                     <Show when={item.warn}>
                                       <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-danger-base">
-                                        needs metadata
+                                        {t("config.skills.badge.needsMetadata")}
                                       </span>
                                     </Show>
                                   }
@@ -2243,7 +2279,9 @@ export default function ConfigPage() {
                         <Show when={skillExternal().length > 0}>
                           <div class="flex flex-col">
                             <div class="flex items-center justify-between gap-3 px-1">
-                              <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">External</div>
+                              <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
+                                {t("config.skills.group.external")}
+                              </div>
                               <div class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
                                 {skillExternal().length}
                               </div>
@@ -2260,7 +2298,7 @@ export default function ConfigPage() {
                                   extra={
                                     <Show when={item.warn}>
                                       <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-danger-base">
-                                        needs metadata
+                                        {t("config.skills.badge.needsMetadata")}
                                       </span>
                                     </Show>
                                   }
@@ -2274,7 +2312,9 @@ export default function ConfigPage() {
                         <Show when={skillProject().length > 0}>
                           <div class="flex flex-col">
                             <div class="flex items-center justify-between gap-3 px-1">
-                              <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">Project</div>
+                              <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
+                                {t("config.skills.group.project")}
+                              </div>
                               <div class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
                                 {skillProject().length}
                               </div>
@@ -2323,7 +2363,7 @@ export default function ConfigPage() {
                                             extra={
                                               <Show when={item.warn}>
                                                 <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-danger-base">
-                                                  needs metadata
+                                                  {t("config.skills.badge.needsMetadata")}
                                                 </span>
                                               </Show>
                                             }
@@ -2350,9 +2390,9 @@ export default function ConfigPage() {
                             note={
                               item.exists
                                 ? item.enabled
-                                  ? "Enabled plugin source."
-                                  : "Available plugin source."
-                                : "Enabled in config, but no ts/js/mjs entry file was found."
+                                  ? t("config.plugins.note.enabled")
+                                  : t("config.plugins.note.available")
+                                : t("config.plugins.note.missing")
                             }
                             meta={item.path ? short(item.path, space()?.pluginsRoot) : undefined}
                             warn={item.enabled && !item.exists}
@@ -2405,6 +2445,7 @@ export default function ConfigPage() {
                     onSave={() => void saveCustom()}
                     onDelete={() => void deleteCustom()}
                     onCreate={createCustomProvider}
+                    onSecret={toggleCustomSecret}
                   />
                 </Show>
               </Match>
@@ -2414,14 +2455,12 @@ export default function ConfigPage() {
                   when={selectedPlugin()?.path}
                   fallback={
                     <div class="bg-surface-base px-4 py-10">
-                      <div class="text-15-medium text-text-strong">{selectedPlugin()?.label ?? "Select a plugin"}</div>
+                      <div class="text-15-medium text-text-strong">
+                        {selectedPlugin()?.label ?? t("config.plugins.select")}
+                      </div>
                       <div class="mt-2 text-12-regular text-text-weak">
-                        <Show
-                          when={selectedPlugin()}
-                          fallback={"Choose a plugin from the list to inspect its source file and enabled state."}
-                        >
-                          This plugin is referenced in config, but there is no local `ts`, `js`, or `mjs` entry file
-                          inside the global plugins directory.
+                        <Show when={selectedPlugin()} fallback={t("config.plugins.empty")}>
+                          {t("config.plugins.missingDetail")}
                         </Show>
                       </div>
                       <Show when={selectedPlugin()}>
@@ -2430,7 +2469,7 @@ export default function ConfigPage() {
                             checked={!!selectedPlugin()?.enabled}
                             onChange={(value) => selectedPlugin() && togglePlugin(selectedPlugin()!, value)}
                           >
-                            Enabled
+                            {t("config.provider.badge.enabled")}
                           </Toggle>
                         </div>
                       </Show>
@@ -2451,10 +2490,10 @@ export default function ConfigPage() {
                         checked={!!selectedPlugin()?.enabled}
                         onChange={(value) => selectedPlugin() && togglePlugin(selectedPlugin()!, value)}
                       >
-                        Enabled
+                        {t("config.provider.badge.enabled")}
                       </Toggle>
                     }
-                    empty="Choose a plugin to inspect its source file."
+                    empty={t("config.plugins.empty")}
                   />
                 </Show>
               </Match>
@@ -2475,7 +2514,7 @@ export default function ConfigPage() {
                   onReload={() => void reload()}
                   onOpenFolder={selectedDoc() ? openFolder : undefined}
                   warn={selectedDoc()?.warn}
-                  empty="Choose a skill to load its `SKILL.md` and inspect the package structure."
+                  empty={t("config.skills.empty")}
                   markdown
                 />
               </Match>
@@ -2493,11 +2532,11 @@ export default function ConfigPage() {
                   extra={
                     <Show when={selectedAgent()}>
                       <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
-                        {loadedMap().get(selectedAgent()!.label)?.mode ?? "agent"}
+                        {loadedMap().get(selectedAgent()!.label)?.mode ?? t("config.agents.badge.agent")}
                       </span>
                     </Show>
                   }
-                  empty="Choose an agent markdown file from the list."
+                  empty={t("config.agents.empty")}
                   markdown
                 />
               </Match>
@@ -2512,7 +2551,7 @@ export default function ConfigPage() {
                   onSave={() => void save()}
                   onReload={() => void reload()}
                   onOpenFolder={selectedDoc() ? openFolder : undefined}
-                  empty="Select the global AGENTS.md file to edit workspace guidance."
+                  empty={t("config.agentsMd.empty")}
                   markdown
                 />
               </Match>
