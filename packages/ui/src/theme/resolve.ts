@@ -4,6 +4,7 @@ import { blend, generateNeutralScale, generateScale, hexToOklch, hexToRgb, shift
 export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): ResolvedTheme {
   const colors = getColors(variant)
   const { overrides = {} } = variant
+  const soft = colors.compact && !isDark
 
   const neutral = generateNeutralScale(colors.neutral, isDark, colors.ink)
   const primary = generateScale(colors.primary, isDark)
@@ -63,11 +64,14 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
       stronger: alphaTone(seed, alpha.stronger),
     }
   }
-  const background = backgroundHex ?? neutral[0]
+  const background = backgroundHex ?? (soft ? neutral[1] : neutral[0])
   const alphaTone = (color: HexColor, alpha: number) =>
     overlay ? (withAlpha(color, alpha) as ColorValue) : blend(color, background, alpha)
   const borderTone = (light: number, dark: number) =>
-    alphaTone(ink, isDark ? Math.min(1, dark + 0.024 + (colors.compact ? 0.08 : 0)) : Math.min(1, light + 0.024))
+    alphaTone(
+      ink,
+      isDark ? Math.min(1, dark + 0.024 + (colors.compact ? 0.08 : 0)) : Math.min(1, light + (soft ? 0.09 : 0.024)),
+    )
   const diffHiddenSurface = surface(
     isDark ? shift(colors.interactive, { c: 0.55, l: 0 }) : shift(colors.interactive, { c: 0.45, l: 0.08 }),
     isDark
@@ -75,7 +79,7 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
       : { base: 0.12, weak: 0.08, weaker: 0.16, strong: 0.24, stronger: 0.36 },
   )
 
-  const neutralAlpha = generateNeutralAlphaScale(neutral, isDark)
+  const neutralAlpha = generateNeutralAlphaScale(neutral, isDark, background)
   const brandb = primary[8]
   const brandh = primary[9]
   const interb = interactive[isDark ? 6 : 4]
@@ -113,37 +117,37 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
 
   const tokens: ResolvedTheme = {}
 
-  tokens["background-base"] = neutral[0]
-  tokens["background-weak"] = neutral[2]
+  tokens["background-base"] = background
+  tokens["background-weak"] = soft ? neutral[2] : neutral[2]
   tokens["background-strong"] = neutral[0]
-  tokens["background-stronger"] = isDark ? neutral[1] : "#fcfcfc"
+  tokens["background-stronger"] = isDark ? neutral[1] : neutral[0]
 
-  tokens["surface-base"] = neutralAlpha[1]
-  tokens["base"] = neutralAlpha[1]
-  tokens["surface-base-hover"] = neutralAlpha[2]
-  tokens["surface-base-active"] = neutralAlpha[2]
+  tokens["surface-base"] = soft ? neutral[0] : neutralAlpha[1]
+  tokens["base"] = tokens["surface-base"]
+  tokens["surface-base-hover"] = soft ? neutral[1] : neutralAlpha[2]
+  tokens["surface-base-active"] = soft ? neutral[2] : neutralAlpha[2]
   tokens["surface-base-interactive-active"] = withAlpha(interactive[2], 0.3) as ColorValue
-  tokens["base2"] = neutralAlpha[1]
-  tokens["base3"] = neutralAlpha[1]
-  tokens["surface-inset-base"] = neutralAlpha[1]
-  tokens["surface-inset-base-hover"] = neutralAlpha[2]
+  tokens["base2"] = tokens["surface-base"]
+  tokens["base3"] = tokens["surface-base"]
+  tokens["surface-inset-base"] = soft ? neutral[2] : tokens["surface-base"]
+  tokens["surface-inset-base-hover"] = soft ? neutral[3] : tokens["surface-base-hover"]
   tokens["surface-inset-strong"] = isDark
     ? (withAlpha(neutral[0], 0.5) as ColorValue)
-    : (withAlpha(neutral[3], 0.09) as ColorValue)
+    : (withAlpha(neutral[soft ? 5 : 3], soft ? 0.14 : 0.09) as ColorValue)
   tokens["surface-inset-strong-hover"] = tokens["surface-inset-strong"]
-  tokens["surface-raised-base"] = neutralAlpha[0]
+  tokens["surface-raised-base"] = soft ? neutral[0] : neutralAlpha[0]
   tokens["surface-float-base"] = isDark ? neutral[1] : neutral[11]
   tokens["surface-float-base-hover"] = isDark ? neutral[2] : neutral[10]
-  tokens["surface-raised-base-hover"] = neutralAlpha[1]
-  tokens["surface-raised-base-active"] = neutralAlpha[2]
+  tokens["surface-raised-base-hover"] = soft ? neutral[1] : neutralAlpha[1]
+  tokens["surface-raised-base-active"] = soft ? neutral[2] : neutralAlpha[2]
   tokens["surface-raised-strong"] = isDark ? neutralAlpha[3] : neutral[0]
   tokens["surface-raised-strong-hover"] = isDark ? neutralAlpha[5] : "#ffffff"
   tokens["surface-raised-stronger"] = isDark ? neutralAlpha[5] : "#ffffff"
   tokens["surface-raised-stronger-hover"] = isDark ? neutralAlpha[6] : "#ffffff"
-  tokens["surface-weak"] = neutralAlpha[2]
-  tokens["surface-weaker"] = neutralAlpha[3]
+  tokens["surface-weak"] = soft ? neutral[1] : neutralAlpha[2]
+  tokens["surface-weaker"] = soft ? neutral[2] : neutralAlpha[3]
   tokens["surface-strong"] = isDark ? neutralAlpha[6] : "#ffffff"
-  tokens["surface-raised-stronger-non-alpha"] = isDark ? neutral[2] : "#ffffff"
+  tokens["surface-raised-stronger-non-alpha"] = isDark ? neutral[2] : neutral[0]
 
   tokens["surface-brand-base"] = brandb
   tokens["surface-brand-hover"] = brandh
@@ -185,21 +189,23 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   tokens["surface-diff-delete-stronger"] = diffDelete[isDark ? 10 : 8]
 
   tokens["input-base"] = isDark ? neutral[1] : neutral[0]
-  tokens["input-hover"] = isDark ? neutral[2] : neutral[1]
+  tokens["input-hover"] = isDark ? neutral[2] : soft ? neutral[0] : neutral[1]
   tokens["input-active"] = isDark ? interactive[6] : interactive[0]
   tokens["input-selected"] = isDark ? interactive[7] : interactive[3]
   tokens["input-focus"] = isDark ? interactive[6] : interactive[0]
   tokens["input-disabled"] = neutral[3]
 
   tokens["text-base"] = colors.compact ? (body as HexColor) : neutral[10]
-  tokens["text-weak"] = colors.compact ? shift(body as HexColor, { l: isDark ? -0.11 : 0.11, c: 0.9 }) : neutral[8]
+  tokens["text-weak"] = colors.compact
+    ? shift(body as HexColor, { l: isDark ? -0.11 : soft ? 0.085 : 0.11, c: soft ? 0.94 : 0.9 })
+    : neutral[8]
   tokens["text-weaker"] = colors.compact
-    ? shift(body as HexColor, { l: isDark ? -0.2 : 0.21, c: isDark ? 0.78 : 0.72 })
+    ? shift(body as HexColor, { l: isDark ? -0.2 : soft ? 0.165 : 0.21, c: isDark ? 0.78 : soft ? 0.78 : 0.72 })
     : neutral[7]
   tokens["text-strong"] = colors.compact
     ? isDark
       ? blend("#ffffff", body as HexColor, 0.9)
-      : shift(body as HexColor, { l: -0.07, c: 1.04 })
+      : shift(body as HexColor, { l: soft ? -0.085 : -0.07, c: soft ? 1.06 : 1.04 })
     : neutral[11]
   tokens["text-invert-base"] = isDark ? neutral[10] : neutral[1]
   tokens["text-invert-weak"] = isDark ? neutral[8] : neutral[2]
@@ -513,12 +519,12 @@ function getColors(variant: ThemeVariant): ThemeColors {
   throw new Error("Theme variant requires `palette` or `seeds`")
 }
 
-function generateNeutralAlphaScale(neutralScale: HexColor[], isDark: boolean): HexColor[] {
+function generateNeutralAlphaScale(neutralScale: HexColor[], isDark: boolean, background?: HexColor): HexColor[] {
   const alphas = isDark
     ? [0.038, 0.066, 0.1, 0.142, 0.19, 0.252, 0.334, 0.446, 0.58, 0.718, 0.854, 0.985]
     : [0.03, 0.06, 0.1, 0.145, 0.2, 0.265, 0.35, 0.47, 0.61, 0.74, 0.86, 0.97]
 
-  return alphas.map((alpha) => blend(neutralScale[11], neutralScale[0], alpha))
+  return alphas.map((alpha) => blend(neutralScale[11], background ?? neutralScale[0], alpha))
 }
 
 function getHex(value: ColorValue | undefined): HexColor | undefined {
