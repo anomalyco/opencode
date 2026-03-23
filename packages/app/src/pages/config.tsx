@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createResource, For, Match, on, Show, Switch, type JSX } from "solid-js"
+import { batch, createEffect, createMemo, createResource, For, Match, on, Show, Switch, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -805,18 +805,17 @@ function Editor(props: {
                 {language.t("config.action.openFolder")}
               </Button>
             </Show>
-            <Button size="small" variant="ghost" onClick={props.onReload}>
-              <Icon name="reset" size="small" class="shrink-0" />
+            <Button size="small" variant="ghost" icon="reset" onClick={props.onReload}>
               {language.t("command.server.reloadBackend")}
             </Button>
             <Button
               size="small"
-              variant="ghost"
+              variant="secondary"
+              icon="check-small"
               onClick={props.onSave}
               disabled={!props.item?.editable || !props.dirty}
             >
-              <Icon name="check-small" size="small" class="shrink-0" />
-              Save
+              {language.t("common.save")}
             </Button>
           </div>
         </div>
@@ -1002,6 +1001,7 @@ function CustomEditor(props: {
   onAddHeader: () => void
   onRemoveHeader: (index: number) => void
   onSave: () => void
+  onReload?: () => void
   onDelete: () => void
   onCreate: () => void
   onSecret: () => void
@@ -1053,8 +1053,21 @@ function CustomEditor(props: {
                 {language.t("config.custom.new")}
               </Button>
             </Show>
+            <Show when={props.onReload}>
+              <Button
+                size="small"
+                variant="ghost"
+                icon="reset"
+                onClick={() => props.onReload?.()}
+                disabled={props.busy || props.form.saving || props.form.deleting}
+              >
+                {language.t("command.server.reloadBackend")}
+              </Button>
+            </Show>
             <Button
               size="small"
+              variant="secondary"
+              icon="check-small"
               onClick={props.onSave}
               disabled={props.busy || props.form.saving || props.form.deleting}
             >
@@ -1736,7 +1749,8 @@ export default function ConfigPage() {
     if (!platform.reloadBackend) return
     await platform
       .reloadBackend()
-      .then(() => {
+      .then(async () => {
+        await globalSync.bootstrap()
         showToast({
           variant: "success",
           title: language.t("toast.server.reloadBackend.success.title"),
@@ -1758,16 +1772,22 @@ export default function ConfigPage() {
     void platform.openInFinder(dir(item.path))
   }
 
+  const setConfig = (next: Config) => globalSync.set("config", next)
+
+  async function patchConfig(patch: Partial<Config>) {
+    const next = { ...cfg(), ...patch }
+    await globalSDK.client.global.config.update({ config: patch as Config })
+    setConfig(next)
+    return next
+  }
+
   async function update(next: Partial<Config>) {
-    await globalSync
-      .updateConfig(next as Config)
-      .then(() => setState("tick", (value) => value + 1))
-      .catch((err: unknown) => {
-        showToast({
-          title: language.t("common.requestFailed"),
-          description: err instanceof Error ? err.message : String(err),
-        })
+    await patchConfig(next).catch((err: unknown) => {
+      showToast({
+        title: language.t("common.requestFailed"),
+        description: err instanceof Error ? err.message : String(err),
       })
+    })
   }
 
   function setCustomField(key: "providerID" | "npm" | "name" | "baseURL" | "apiKey", value: string) {
@@ -1840,8 +1860,6 @@ export default function ConfigPage() {
     const json = patchText(text, ["provider"], next.provider ?? {})
     const disabled = patchText(json, ["disabled_providers"], next.disabled_providers ?? [])
     await platform.writeConfigFile(file.path, disabled)
-    await reload()
-    await globalSync.bootstrap()
   }
 
   async function saveCustom() {
@@ -1861,18 +1879,22 @@ export default function ConfigPage() {
     if (!result.key && nextProvider[id].options && "apiKey" in nextProvider[id].options)
       delete nextProvider[id].options.apiKey
     const nextDisabled = (cfg().disabled_providers ?? []).filter((item) => item !== id && item !== prev)
+    const next = { ...cfg(), provider: nextProvider, disabled_providers: nextDisabled }
     const tasks: Promise<unknown>[] = []
     if (prev && prev !== id) tasks.push(globalSDK.client.auth.remove({ providerID: prev }).catch(() => undefined))
     if (state.customApiDirty || result.key)
       tasks.push(globalSDK.client.auth.remove({ providerID: id }).catch(() => undefined))
     await Promise.all(tasks)
-      .then(() => writeGlobalConfig({ ...cfg(), provider: nextProvider, disabled_providers: nextDisabled }))
+      .then(() => writeGlobalConfig(next))
       .then(() => {
-        setState("pick", `provider:${id}`)
-        setState("customID", id)
-        setState("customApiDirty", false)
-        setState("custom", "mode", "edit")
-        setState("custom", "secret", true)
+        batch(() => {
+          setConfig(next)
+          setState("pick", `provider:${id}`)
+          setState("customID", id)
+          setState("customApiDirty", false)
+          setState("custom", "mode", "edit")
+          setState("custom", "secret", true)
+        })
         showToast({ variant: "success", title: t("common.save"), description: id })
       })
       .catch((err: unknown) => {
@@ -1891,12 +1913,16 @@ export default function ConfigPage() {
     const nextProvider = { ...(cfg().provider ?? {}) } as NonNullable<Config["provider"]>
     delete nextProvider[id]
     const nextDisabled = (cfg().disabled_providers ?? []).filter((item) => item !== id)
+    const next = { ...cfg(), provider: nextProvider, disabled_providers: nextDisabled }
     await globalSDK.client.auth
       .remove({ providerID: id })
       .catch(() => undefined)
-      .then(() => writeGlobalConfig({ ...cfg(), provider: nextProvider, disabled_providers: nextDisabled }))
+      .then(() => writeGlobalConfig(next))
       .then(() => {
-        createCustomProvider()
+        batch(() => {
+          setConfig(next)
+          createCustomProvider()
+        })
         showToast({ variant: "success", title: t("config.action.delete"), description: id })
       })
       .catch((err: unknown) => {
@@ -1928,7 +1954,7 @@ export default function ConfigPage() {
       await globalSDK.client.auth.remove({ providerID: item.id }).catch(() => undefined)
       const prev = cfg().disabled_providers ?? []
       const next = prev.includes(item.id) ? prev : [...prev, item.id]
-      await globalSync.updateConfig({ disabled_providers: next } as Config)
+      await patchConfig({ disabled_providers: next })
       await globalSDK.client.global.dispose()
       return
     }
@@ -2442,6 +2468,7 @@ export default function ConfigPage() {
                     onRemoveModel={removeCustomModel}
                     onAddHeader={addCustomHeader}
                     onRemoveHeader={removeCustomHeader}
+                    onReload={platform.reloadBackend ? () => void reload() : undefined}
                     onSave={() => void saveCustom()}
                     onDelete={() => void deleteCustom()}
                     onCreate={createCustomProvider}
