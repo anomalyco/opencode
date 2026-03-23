@@ -81,6 +81,17 @@ function setupApp() {
     killSidecar()
   })
 
+  app.on("will-quit", () => {
+    killSidecar()
+  })
+
+  for (const signal of ["SIGINT", "SIGTERM"] as const) {
+    process.on(signal, () => {
+      killSidecar()
+      app.exit(0)
+    })
+  }
+
   void app.whenReady().then(async () => {
     // migrate()
     app.setAsDefaultProtocolClient("opencode")
@@ -234,8 +245,15 @@ registerIpcHandlers({
 
 function killSidecar() {
   if (!sidecar) return
+  const pid = sidecar.pid
   sidecar.kill()
   sidecar = null
+  // tree-kill is async; also send process group signal as immediate fallback
+  if (pid && process.platform !== "win32") {
+    try {
+      process.kill(-pid, "SIGTERM")
+    } catch {}
+  }
 }
 
 function ensureLoopbackNoProxy() {
