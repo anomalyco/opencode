@@ -78,6 +78,7 @@ import { Global } from "@/global"
 import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
+import { overlayColor } from "../../ui/overlay"
 import { formatTranscript } from "../../util/transcript"
 import { UI } from "@/cli/ui.ts"
 import { useTuiConfig } from "../../context/tui-config"
@@ -1205,7 +1206,7 @@ export function Session() {
                 right={0}
                 bottom={0}
                 alignItems="flex-end"
-                backgroundColor={RGBA.fromInts(0, 0, 0, 70)}
+                backgroundColor={overlayColor(theme, 70 / 255)}
               >
                 <Sidebar sessionID={route.sessionID} />
               </box>
