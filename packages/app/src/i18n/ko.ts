@@ -207,6 +207,7 @@ export const dict = {
   "common.cancel": "취소",
   "common.connect": "연결",
   "common.disconnect": "연결 해제",
+  "common.continue": "제출",
   "common.submit": "제출",
   "common.save": "저장",
   "common.saving": "저장 중...",

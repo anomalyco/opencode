@@ -60,6 +60,12 @@ function union(ast: SchemaAST.Union): z.ZodTypeAny {
   const items = ast.types.map(walk)
   if (items.length === 1) return items[0]
   if (items.length < 2) return fail(ast)
+
+  const discriminator = (ast as any).annotations?.discriminator
+  if (discriminator) {
+    return z.discriminatedUnion(discriminator, items as [z.ZodObject<any>, z.ZodObject<any>, ...z.ZodObject<any>[]])
+  }
+
   return z.union(items as [z.ZodTypeAny, z.ZodTypeAny, ...Array<z.ZodTypeAny>])
 }
 

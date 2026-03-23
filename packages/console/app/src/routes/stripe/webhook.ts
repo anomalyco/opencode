@@ -244,6 +244,7 @@ export async function POST(input: APIEvent) {
             customerID,
             enrichment: {
               type: productID === LiteData.productID() ? "lite" : "subscription",
+              currency: body.data.object.currency === "inr" ? "inr" : undefined,
               couponID,
             },
           }),
@@ -331,16 +332,17 @@ export async function POST(input: APIEvent) {
       )
       if (!workspaceID) throw new Error("Workspace ID not found")
 
-      const amount = await Database.use((tx) =>
+      const payment = await Database.use((tx) =>
         tx
           .select({
             amount: PaymentTable.amount,
+            enrichment: PaymentTable.enrichment,
           })
           .from(PaymentTable)
           .where(and(eq(PaymentTable.paymentID, paymentIntentID), eq(PaymentTable.workspaceID, workspaceID)))
-          .then((rows) => rows[0]?.amount),
+          .then((rows) => rows[0]),
       )
-      if (!amount) throw new Error("Payment not found")
+      if (!payment) throw new Error("Payment not found")
 
       await Database.transaction(async (tx) => {
         await tx
@@ -350,12 +352,15 @@ export async function POST(input: APIEvent) {
           })
           .where(and(eq(PaymentTable.paymentID, paymentIntentID), eq(PaymentTable.workspaceID, workspaceID)))
 
-        await tx
-          .update(BillingTable)
-          .set({
-            balance: sql`${BillingTable.balance} - ${amount}`,
-          })
-          .where(eq(BillingTable.workspaceID, workspaceID))
+        // deduct balance only for top up
+        if (!payment.enrichment?.type) {
+          await tx
+            .update(BillingTable)
+            .set({
+              balance: sql`${BillingTable.balance} - ${payment.amount}`,
+            })
+            .where(eq(BillingTable.workspaceID, workspaceID))
+        }
       })
     }
   })()
