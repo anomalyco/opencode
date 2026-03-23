@@ -87,12 +87,12 @@ export namespace Format {
             for (const item of Object.values(formatters)) {
               log.info("checking", { name: item.name, ext })
               if (!item.extensions.includes(ext)) continue
-              const command = await isEnabled(item)
-              if (!command) continue
+              const cmd = await isEnabled(item)
+              if (!cmd) continue
               log.info("enabled", { name: item.name, ext })
               result.push({
                 name: item.name,
-                command,
+                command: cmd,
                 environment: item.environment,
               })
             }
