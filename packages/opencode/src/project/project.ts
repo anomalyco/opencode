@@ -514,9 +514,186 @@ export namespace Project {
 
       return Service.of({
         fromDirectory: Effect.fn("Project.fromDirectory")(function* (directory: string) {
-          // fromDirectory is complex (git detection, ID caching, session migration)
-          // Keep as Effect.promise for now, convert git calls incrementally
-          return yield* Effect.promise(() => fromDirectory(directory))
+          log.info("fromDirectory", { directory })
+
+          const resolveGitPath = (cwd: string, name: string) => {
+            if (!name) return cwd
+            name = name.replace(/[\r\n]+$/, "")
+            if (!name) return cwd
+            name = Filesystem.windowsPath(name)
+            if (pathSvc.isAbsolute(name)) return pathSvc.normalize(name)
+            return pathSvc.resolve(cwd, name)
+          }
+
+          const readCachedProjectId = Effect.fnUntraced(function* (dir: string) {
+            const content = yield* fsys.readFileString(pathSvc.join(dir, "opencode")).pipe(
+              Effect.map((x) => x.trim()),
+              Effect.map(ProjectID.make),
+              Effect.catch(() => Effect.succeed(undefined)),
+            )
+            return content
+          })
+
+          // Phase 1: discover git info
+          type DiscoveryResult = { id: ProjectID; worktree: string; sandbox: string; vcs: Info["vcs"] }
+
+          const data: DiscoveryResult = yield* Effect.gen(function* () {
+            const matches = Filesystem.up({ targets: [".git"], start: directory })
+            const dotgit = yield* Effect.promise(() => matches.next().then((x) => x.value))
+            yield* Effect.promise(() => matches.return())
+
+            if (!dotgit) {
+              return {
+                id: ProjectID.global,
+                worktree: "/",
+                sandbox: "/",
+                vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
+              }
+            }
+
+            let sandbox = pathSvc.dirname(dotgit)
+            const gitBinary = which("git")
+            let id = yield* readCachedProjectId(dotgit)
+
+            if (!gitBinary) {
+              return {
+                id: id ?? ProjectID.global,
+                worktree: sandbox,
+                sandbox,
+                vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
+              }
+            }
+
+            const commonDir = yield* git(["rev-parse", "--git-common-dir"], { cwd: sandbox })
+            const worktree = commonDir.code === 0
+              ? (() => {
+                  const common = resolveGitPath(sandbox, commonDir.text.trim())
+                  return common === sandbox ? sandbox : pathSvc.dirname(common)
+                })()
+              : undefined
+
+            if (!worktree) {
+              return {
+                id: id ?? ProjectID.global,
+                worktree: sandbox,
+                sandbox,
+                vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
+              }
+            }
+
+            if (id == null) {
+              id = yield* readCachedProjectId(pathSvc.join(worktree, ".git"))
+            }
+
+            if (!id) {
+              const revList = yield* git(["rev-list", "--max-parents=0", "HEAD"], { cwd: sandbox })
+              const roots = revList.code === 0
+                ? revList.text.split("\n").filter(Boolean).map((x) => x.trim()).toSorted()
+                : undefined
+
+              if (!roots) {
+                return {
+                  id: ProjectID.global,
+                  worktree: sandbox,
+                  sandbox,
+                  vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
+                }
+              }
+
+              id = roots[0] ? ProjectID.make(roots[0]) : undefined
+              if (id) {
+                yield* fsys.writeFileString(pathSvc.join(worktree, ".git", "opencode"), id).pipe(Effect.ignore)
+              }
+            }
+
+            if (!id) {
+              return { id: ProjectID.global, worktree: sandbox, sandbox, vcs: "git" as const }
+            }
+
+            const topLevel = yield* git(["rev-parse", "--show-toplevel"], { cwd: sandbox })
+            if (topLevel.code === 0) {
+              sandbox = resolveGitPath(sandbox, topLevel.text.trim())
+            } else {
+              return {
+                id,
+                worktree: sandbox,
+                sandbox,
+                vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
+              }
+            }
+
+            return { id, sandbox, worktree, vcs: "git" as const }
+          })
+
+          // Phase 2: upsert
+          const row = yield* db((d) => d.select().from(ProjectTable).where(eq(ProjectTable.id, data.id)).get())
+          const existing = row
+            ? fromRow(row)
+            : {
+                id: data.id,
+                worktree: data.worktree,
+                vcs: data.vcs,
+                sandboxes: [] as string[],
+                time: { created: Date.now(), updated: Date.now() },
+              }
+
+          if (Flag.OPENCODE_EXPERIMENTAL_ICON_DISCOVERY) discover(existing)
+
+          const result: Info = {
+            ...existing,
+            worktree: data.worktree,
+            vcs: data.vcs,
+            time: { ...existing.time, updated: Date.now() },
+          }
+          if (data.sandbox !== result.worktree && !result.sandboxes.includes(data.sandbox))
+            result.sandboxes.push(data.sandbox)
+          result.sandboxes = yield* Effect.forEach(
+            result.sandboxes,
+            (s) => fsys.exists(s).pipe(Effect.orDie, Effect.map((exists) => (exists ? s : undefined))),
+            { concurrency: "unbounded" },
+          ).pipe(Effect.map((arr) => arr.filter((x): x is string => x !== undefined)))
+
+          yield* db((d) =>
+            d.insert(ProjectTable).values({
+              id: result.id,
+              worktree: result.worktree,
+              vcs: result.vcs ?? null,
+              name: result.name,
+              icon_url: result.icon?.url,
+              icon_color: result.icon?.color,
+              time_created: result.time.created,
+              time_updated: result.time.updated,
+              time_initialized: result.time.initialized,
+              sandboxes: result.sandboxes,
+              commands: result.commands,
+            }).onConflictDoUpdate({
+              target: ProjectTable.id,
+              set: {
+                worktree: result.worktree,
+                vcs: result.vcs ?? null,
+                name: result.name,
+                icon_url: result.icon?.url,
+                icon_color: result.icon?.color,
+                time_updated: result.time.updated,
+                time_initialized: result.time.initialized,
+                sandboxes: result.sandboxes,
+                commands: result.commands,
+              },
+            }).run(),
+          )
+
+          if (data.id !== ProjectID.global) {
+            yield* db((d) =>
+              d
+                .update(SessionTable)
+                .set({ project_id: data.id })
+                .where(and(eq(SessionTable.project_id, ProjectID.global), eq(SessionTable.directory, data.worktree)))
+                .run(),
+            )
+          }
+
+          emitUpdated(result)
+          return { project: result, sandbox: data.sandbox }
         }),
 
         discover: Effect.fn("Project.discover")(function* (input: Info) {
