@@ -1934,7 +1934,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             prompt: templateParts.find((y) => y.type === "text")?.text ?? "",
           },
         ]
-      : [...templateParts]
+      : [...templateParts, ...(input.parts ?? [])]
 
     const userAgent = isSubtask ? (input.agent ?? (await Agent.defaultAgent())) : agentName
     const userModel = isSubtask
@@ -1952,8 +1952,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       },
       { parts },
     )
-
-    if (!isSubtask) parts.push(...(input.parts ?? []))
 
     const result = (await prompt({
       sessionID: input.sessionID,

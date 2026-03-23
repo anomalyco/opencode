@@ -1,10 +1,8 @@
 import path from "path"
 import { describe, expect, test } from "bun:test"
-import fs from "fs/promises"
 import { NamedError } from "@opencode-ai/util/error"
-import { fileURLToPath, pathToFileURL } from "url"
+import { fileURLToPath } from "url"
 import { Instance } from "../../src/project/instance"
-import { Provider } from "../../src/provider/provider"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Session } from "../../src/session"
 import { MessageV2 } from "../../src/session/message-v2"
@@ -287,100 +285,4 @@ describe("session.agent-resolution", () => {
       },
     })
   }, 30000)
-})
-
-const key = "__command_template_capture__"
-
-type Part = {
-  type: string
-  filename?: string | null
-  text?: string | null
-}
-
-describe("session.command-template", () => {
-  test("command hook receives template parts before input parts are merged", async () => {
-    Reflect.deleteProperty(globalThis, key)
-
-    await using tmp = await tmpdir({
-      git: true,
-      config: {
-        command: {
-          inspect: {
-            agent: "build",
-            template: "Inspect @template.txt",
-          },
-        },
-      },
-      init: async (dir) => {
-        const plugin = path.join(dir, ".opencode", "plugin")
-        await fs.mkdir(plugin, { recursive: true })
-        await Bun.write(path.join(dir, "template.txt"), "from template\n")
-        await Bun.write(path.join(dir, "input.txt"), "from input\n")
-        await Bun.write(
-          path.join(plugin, "capture-command-hook.js"),
-          [
-            "export default async () => ({",
-            '  "command.execute.before": async (_input, output) => {',
-            `    globalThis[${JSON.stringify(key)}] = output.parts.map((part) => ({`,
-            "      type: part.type,",
-            '      filename: "filename" in part ? (part.filename ?? null) : null,',
-            '      text: part.type === "text" ? part.text : null,',
-            "    }))",
-            '    throw new Error("capture-stop")',
-            "  },",
-            "})",
-            "",
-          ].join("\n"),
-        )
-      },
-    })
-
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const session = await Session.create({})
-        const model = await Provider.defaultModel()
-        const err = await SessionPrompt.command({
-          sessionID: session.id,
-          command: "inspect",
-          arguments: "",
-          model: `${model.providerID}/${model.modelID}`,
-          parts: [
-            {
-              type: "file",
-              mime: "text/plain",
-              url: pathToFileURL(path.join(tmp.path, "input.txt")).href,
-              filename: "input.txt",
-            },
-          ],
-        }).then(
-          () => undefined,
-          (err) => err,
-        )
-
-        expect(err).toBeInstanceOf(Error)
-        expect(err instanceof Error ? err.message : String(err)).toContain("capture-stop")
-
-        const parts = Reflect.get(globalThis, key)
-        expect(parts).toBeDefined()
-        expect(Array.isArray(parts)).toBe(true)
-        expect(parts).toEqual([
-          {
-            type: "text",
-            filename: null,
-            text: "Inspect @template.txt",
-          },
-          {
-            type: "file",
-            filename: "template.txt",
-            text: null,
-          },
-        ] satisfies Part[])
-
-        await Session.remove(session.id)
-      },
-    })
-
-    Reflect.deleteProperty(globalThis, key)
-  })
 })
