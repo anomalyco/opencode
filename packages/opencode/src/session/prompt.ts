@@ -1319,6 +1319,14 @@ export namespace SessionPrompt {
       },
     )
 
+    // Ensure all part IDs are valid after plugin hooks may have mutated the parts array.
+    // Plugins can push parts with non-compliant IDs (e.g., missing "prt" prefix).
+    for (const part of parts) {
+      if (!part.id || typeof part.id !== "string" || !part.id.startsWith("prt")) {
+        ;(part as any).id = PartID.ascending()
+      }
+    }
+
     const parsedInfo = MessageV2.Info.safeParse(info)
     if (!parsedInfo.success) {
       log.error("invalid user message before save", {
