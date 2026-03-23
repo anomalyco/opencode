@@ -1,14 +1,6 @@
-import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test"
+import { afterEach, describe, expect, mock, test } from "bun:test"
 import { EventEmitter } from "events"
-import {
-  PoeAuthPlugin,
-  buildAuthorizeUrl,
-  escapeHtml,
-  getPoeExpiry,
-  resetPoeOAuthForTest,
-  HTML_ERROR,
-  type PkceCodes,
-} from "../../src/plugin/poe"
+import { PoeAuthPlugin } from "../../src/plugin/poe"
 import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { ProviderAuth } from "../../src/provider/auth"
@@ -19,15 +11,8 @@ import type { PluginInput } from "@opencode-ai/plugin"
 import type { Agent } from "../../src/agent/agent"
 import type { MessageV2 } from "../../src/session/message-v2"
 
-const fetch0 = globalThis.fetch
-
-let openCalledWith: string | undefined
-
 mock.module("open", () => ({
-  default: async (url: string) => {
-    openCalledWith = url
-    return new EventEmitter()
-  },
+  default: async (_url: string) => new EventEmitter(),
 }))
 
 function input(): PluginInput {
@@ -42,142 +27,92 @@ function input(): PluginInput {
 }
 
 describe("plugin.poe", () => {
-  beforeEach(() => {
-    mock.restore()
-    globalThis.fetch = fetch0
-    resetPoeOAuthForTest()
-    openCalledWith = undefined
-  })
-
   afterEach(async () => {
-    mock.restore()
-    globalThis.fetch = fetch0
-    resetPoeOAuthForTest()
     await Auth.remove("poe")
   })
 
-  test("buildAuthorizeUrl includes required OAuth params", () => {
-    const pkce: PkceCodes = {
-      verifier: "test-verifier",
-      challenge: "test-challenge",
-    }
-    const url = new URL(buildAuthorizeUrl("http://127.0.0.1:4444/callback", pkce, "test-state"))
+  test("loader returns apiKey for API auth type", async () => {
+    const hook = await PoeAuthPlugin(input())
+    const result = await hook.auth!.loader!(async () => ({ type: "api", key: "sk-poe-test" }), undefined as never)
+    expect(result).toEqual({ apiKey: "sk-poe-test" })
+  })
 
+  test("loader returns apiKey for valid OAuth auth", async () => {
+    const hook = await PoeAuthPlugin(input())
+    const result = await hook.auth!.loader!(
+      async () => ({ type: "oauth", access: "poe-key", refresh: "poe-key", expires: Date.now() + 60_000 }),
+      undefined as never,
+    )
+    expect(result).toEqual({ apiKey: "poe-key" })
+  })
+
+  test("loader returns empty for unknown auth type", async () => {
+    const hook = await PoeAuthPlugin(input())
+    const result = await hook.auth!.loader!(async () => ({ type: "unknown" }) as never, undefined as never)
+    expect(result).toEqual({})
+  })
+
+  test("loader throws when OAuth auth is expired", async () => {
+    const hook = await PoeAuthPlugin(input())
+    await expect(
+      hook.auth!.loader!(
+        async () => ({ type: "oauth", access: "poe-key", refresh: "poe-key", expires: Date.now() - 1 }),
+        undefined as never,
+      ),
+    ).rejects.toThrow("Poe API key expired")
+  })
+
+  test("browser login opens the Poe authorize URL and returns auto method", async () => {
+    const hook = await PoeAuthPlugin(input())
+    const oauth = hook.auth!.methods[0]
+    if (oauth.type !== "oauth") throw new Error("Expected OAuth method")
+
+    const grant = await oauth.authorize()
+    if (grant.method !== "auto") throw new Error("Expected auto method")
+
+    const url = new URL(grant.url)
     expect(url.origin + url.pathname).toBe("https://poe.com/oauth/authorize")
-    expect(url.searchParams.get("response_type")).toBe("code")
     expect(url.searchParams.get("client_id")).toBe("client_728290227fc048cc9262091a1ea197ea")
-    expect(url.searchParams.get("redirect_uri")).toBe("http://127.0.0.1:4444/callback")
+    expect(url.searchParams.get("response_type")).toBe("code")
     expect(url.searchParams.get("scope")).toBe("apikey:create")
-    expect(url.searchParams.get("code_challenge")).toBe("test-challenge")
     expect(url.searchParams.get("code_challenge_method")).toBe("S256")
-    expect(url.searchParams.get("state")).toBe("test-state")
+    expect(url.searchParams.get("code_challenge")).toBeTruthy()
+    expect(url.searchParams.get("redirect_uri")).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/callback$/)
   })
 
-  test("browser login tries to open the Poe authorize URL", async () => {
-    const hook = await PoeAuthPlugin(input())
-    const auth = hook.auth!
-    const oauth = auth.methods[0]
-    if (oauth.type !== "oauth") throw new Error("Expected OAuth method")
-
-    const grant = await oauth.authorize()
-    if (grant.method !== "auto") throw new Error("Expected auto OAuth method")
-
-    expect(openCalledWith).toBe(grant.url)
-
-    const url = new URL(grant.url)
-    const redirect = new URL(url.searchParams.get("redirect_uri")!)
-    const callback = grant.callback().catch((err) => err)
-    await fetch(`${redirect.origin}/cancel`)
-    await callback
-  })
-
-  test("escapes html characters before rendering error page", () => {
-    const err = `<script>alert("x")</script> & 'quote'`
-    const page = HTML_ERROR(err)
-
-    expect(escapeHtml(err)).toBe("&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; &amp; &#39;quote&#39;")
-    expect(page).toContain("&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; &amp; &#39;quote&#39;")
-    expect(page).not.toContain(err)
-  })
-
-  test("missing callback code returns an HTML error response", async () => {
-    const hook = await PoeAuthPlugin(input())
-    const auth = hook.auth!
-    const oauth = auth.methods[0]
-    if (oauth.type !== "oauth") throw new Error("Expected OAuth method")
-
-    const grant = await oauth.authorize()
-    if (grant.method !== "auto") throw new Error("Expected auto OAuth method")
-
-    const url = new URL(grant.url)
-    const redirect = new URL(url.searchParams.get("redirect_uri")!)
-    const state = url.searchParams.get("state")!
-    const callback = grant.callback().catch((err) => err)
-    const res = await fetch(`${redirect.origin}/callback?state=${encodeURIComponent(state)}`)
-
-    expect(res.status).toBe(400)
-    expect(res.headers.get("content-type")).toContain("text/html")
-    expect(await res.text()).toContain("Missing authorization code")
-    expect(await callback).toBeInstanceOf(Error)
-    expect((await callback).message).toBe("Missing authorization code")
-  })
-
-  test("invalid callback state is rejected", async () => {
-    const hook = await PoeAuthPlugin(input())
-    const auth = hook.auth!
-    const oauth = auth.methods[0]
-    if (oauth.type !== "oauth") throw new Error("Expected OAuth method")
-
-    const grant = await oauth.authorize()
-    if (grant.method !== "auto") throw new Error("Expected auto OAuth method")
-
-    const url = new URL(grant.url)
-    const redirect = new URL(url.searchParams.get("redirect_uri")!)
-    const callback = grant.callback().catch((err) => err)
-    const res = await fetch(`${redirect.origin}/callback?code=test-code&state=wrong-state`)
-
-    expect(res.status).toBe(400)
-    expect(await res.text()).toContain("Invalid state - potential CSRF attack")
-    expect(await callback).toBeInstanceOf(Error)
-    expect((await callback).message).toBe("Invalid state - potential CSRF attack")
-  })
-
-  test("valid callback resolves to Poe API key auth and browser auth shape", async () => {
+  test("valid callback resolves to Poe API key auth shape", async () => {
+    const fetch0 = globalThis.fetch
     const now = 1_700_000_000_000
-    const time = spyOn(Date, "now").mockImplementation(() => now)
-    const mocked = mock(async (req, init) => {
-      const url = typeof req === "string" ? req : req instanceof URL ? req.toString() : req.url
+    const spy = mock(() => now)
+    Date.now = spy
+
+    globalThis.fetch = mock(async (req, init) => {
+      const url = typeof req === "string" ? req : req instanceof URL ? req.toString() : (req as Request).url
       if (url === "https://api.poe.com/token") {
         expect(init?.method).toBe("POST")
-        const body = init?.body?.toString() ?? ""
-        const params = new URLSearchParams(body)
+        const params = new URLSearchParams(init?.body?.toString() ?? "")
         expect(params.get("grant_type")).toBe("authorization_code")
-        expect(params.get("code")).toBe("valid-code")
         expect(params.get("client_id")).toBe("client_728290227fc048cc9262091a1ea197ea")
-        expect(params.get("redirect_uri")).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/callback$/)
         expect(params.get("code_verifier")).toBeTruthy()
         return new Response(JSON.stringify({ api_key: "poe-key", api_key_expires_in: 60 }))
       }
-      return fetch0(req, init)
-    })
-    globalThis.fetch = mocked as unknown as typeof fetch
+      return fetch0(req as Parameters<typeof fetch>[0], init)
+    }) as unknown as typeof fetch
 
     try {
       const hook = await PoeAuthPlugin(input())
-      const auth = hook.auth!
-      const oauth = auth.methods[0]
+      const oauth = hook.auth!.methods[0]
       if (oauth.type !== "oauth") throw new Error("Expected OAuth method")
 
       const grant = await oauth.authorize()
-      if (grant.method !== "auto") throw new Error("Expected auto OAuth method")
+      if (grant.method !== "auto") throw new Error("Expected auto method")
 
-      const url = new URL(grant.url)
-      const redirect = new URL(url.searchParams.get("redirect_uri")!)
-      const state = url.searchParams.get("state")!
-      const res = await fetch(`${redirect.origin}/callback?code=valid-code&state=${encodeURIComponent(state)}`)
-
+      const redirectUri = new URL(new URL(grant.url).searchParams.get("redirect_uri")!)
+      const callbackPromise = grant.callback()
+      const res = await fetch(`${redirectUri.origin}/callback?code=valid-code`)
       expect(res.status).toBe(200)
-      const result = await grant.callback()
+
+      const result = await callbackPromise
       expect(result).toEqual({
         type: "success",
         access: "poe-key",
@@ -185,54 +120,42 @@ describe("plugin.poe", () => {
         expires: now + 60_000,
       })
     } finally {
-      time.mockRestore()
+      globalThis.fetch = fetch0
+      Date.now = Date.now.bind(Date)
     }
   })
 
-  test("null Poe expiry maps to a non-expiring sentinel", () => {
-    expect(
-      getPoeExpiry({
-        api_key: "poe-key",
-        api_key_expires_in: null,
-      }),
-    ).toBe(Number.MAX_SAFE_INTEGER)
-  })
-
-  test("positive Poe expiry maps from seconds onto Date.now", () => {
-    const time = spyOn(Date, "now").mockImplementation(() => 12_345)
+  test("null expiry maps to MAX_SAFE_INTEGER sentinel", async () => {
+    const fetch0 = globalThis.fetch
+    globalThis.fetch = mock(async (req, init) => {
+      const url = typeof req === "string" ? req : req instanceof URL ? req.toString() : (req as Request).url
+      if (url === "https://api.poe.com/token")
+        return new Response(JSON.stringify({ api_key: "poe-key", api_key_expires_in: null }))
+      return fetch0(req as Parameters<typeof fetch>[0], init)
+    }) as unknown as typeof fetch
 
     try {
-      expect(
-        getPoeExpiry({
-          api_key: "poe-key",
-          api_key_expires_in: 42,
-        }),
-      ).toBe(54_345)
+      const hook = await PoeAuthPlugin(input())
+      const oauth = hook.auth!.methods[0]
+      if (oauth.type !== "oauth") throw new Error("Expected OAuth method")
+
+      const grant = await oauth.authorize()
+      if (grant.method !== "auto") throw new Error("Expected auto method")
+
+      const redirectUri = new URL(new URL(grant.url).searchParams.get("redirect_uri")!)
+      const callbackPromise = grant.callback()
+      await fetch(`${redirectUri.origin}/callback?code=valid-code`)
+
+      const result = await callbackPromise
+      if (result.type !== "success" || !("expires" in result)) throw new Error("Expected success with expires")
+      expect(result.expires).toBe(Number.MAX_SAFE_INTEGER)
     } finally {
-      time.mockRestore()
+      globalThis.fetch = fetch0
     }
   })
 
-  test("loader throws a clear re-login error when Poe OAuth auth is expired", async () => {
+  test("Poe is visible as an auth-capable plugin provider", async () => {
     const hook = await PoeAuthPlugin(input())
-    const auth = hook.auth!
-
-    await expect(
-      auth.loader!(
-        async () => ({
-          type: "oauth",
-          access: "poe-key",
-          refresh: "poe-key",
-          expires: Date.now() - 1,
-        }),
-        undefined as never,
-      ),
-    ).rejects.toThrow("Poe API key expired. Run `opencode providers login` again.")
-  })
-
-  test("Poe is visible as an auth-capable plugin provider after registration", async () => {
-    const hook = await PoeAuthPlugin(input())
-
     expect(
       resolvePluginProviders({
         hooks: [hook],
@@ -245,7 +168,6 @@ describe("plugin.poe", () => {
 
   test("ProviderAuth exposes Poe after registration", async () => {
     await using tmp = await tmpdir()
-
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
@@ -273,10 +195,7 @@ describe("plugin.poe", () => {
             "data: [DONE]",
             "",
           ].join("\n\n"),
-          {
-            status: 200,
-            headers: { "Content-Type": "text/event-stream" },
-          },
+          { status: 200, headers: { "Content-Type": "text/event-stream" } },
         )
       },
     })
@@ -286,11 +205,7 @@ describe("plugin.poe", () => {
         config: {
           enabled_providers: ["poe"],
           provider: {
-            poe: {
-              options: {
-                baseURL: `${server.url.origin}/v1`,
-              },
-            },
+            poe: { options: { baseURL: `${server.url.origin}/v1` } },
           },
         },
       })

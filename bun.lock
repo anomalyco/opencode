@@ -372,6 +372,7 @@
         "opencode-gitlab-auth": "2.0.0",
         "opentui-spinner": "0.0.6",
         "partial-json": "0.1.7",
+        "poe-oauth": "0.0.3",
         "remeda": "catalog:",
         "semver": "^7.6.3",
         "solid-js": "catalog:",
@@ -3923,6 +3924,8 @@
     "plist": ["plist@3.1.0", "", { "dependencies": { "@xmldom/xmldom": "^0.8.8", "base64-js": "^1.5.1", "xmlbuilder": "^15.1.1" } }, "sha512-uysumyrvkUX0rX/dEVqt8gC3sTBzd4zoWfLeS29nb53imdaXVvLINYXTI2GNqzaMuvacNx4uJQ8+b3zXR0pkgQ=="],
 
     "pngjs": ["pngjs@7.0.0", "", {}, "sha512-LKWqWJRhstyYo9pGvgor/ivk2w94eSjE3RGVuzLGlr3NmD8bf7RcYGze1mNdEHRP6TRP6rMuDHk5t44hnTRyow=="],
+
+    "poe-oauth": ["poe-oauth@0.0.3", "", {}, "sha512-KgxDylcuq/mov8URSplrBGjrIjkQwjN/Ml8BhqaGsAvHzYN3yhuROdv1sDRfwqncg7TT8XzJvMeJAWmv/4NDLw=="],
 
     "possible-typed-array-names": ["possible-typed-array-names@1.1.0", "", {}, "sha512-/+5VFTchJDoVj3bhoqi6UeymcD00DAwb1nJwamzPvHEszJ4FpF6SNNbUbOS8yI56qHzdV8eK0qEfOSiodkTdxg=="],
 
