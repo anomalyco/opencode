@@ -9,6 +9,20 @@
 [data-component="file"][data-mode="markdown"] {
   overflow: hidden;
 
+  [data-slot="file-markdown-actions"] {
+    [data-component="radio-group"] {
+      [data-slot="radio-group-wrapper"] {
+        border-radius: 6px;
+      }
+
+      [data-slot="radio-group-item-input"]:not([data-checked], [data-disabled])
+        + [data-slot="radio-group-item-label"]:hover
+        [data-slot="radio-group-item-control"] {
+        border-radius: 4px;
+      }
+    }
+  }
+
   [data-slot="file-markdown-preview"] {
     min-height: 0;
   }
