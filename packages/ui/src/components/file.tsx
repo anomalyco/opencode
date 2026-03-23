@@ -948,7 +948,6 @@ function TextViewer<T>(props: TextFileProps<T>) {
         options={["preview", "source"] as const}
         current={mode()}
         size="small"
-        pad="none"
         value={(value) => value}
         label={(value) => i18n.t(value === "preview" ? "ui.file.preview" : "ui.file.source")}
         onSelect={(value) => value && setMode(value)}
