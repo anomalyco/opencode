@@ -17,6 +17,7 @@ permissions:
 
 jobs:
   close-stale-prs:
+    if: github.repository == 'anomalyco/opencode'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
