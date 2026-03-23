@@ -5,6 +5,7 @@ import { AccountID, Account, OrgID, PollExpired, type PollResult } from "@/accou
 import { type AccountError } from "@/account/schema"
 import * as Prompt from "../effect/prompt"
 import open from "open"
+import { formatConsoleAccountLabel, formatConsoleOrgLine } from "./account-display"
 
 const openBrowser = (url: string) => Effect.promise(() => open(url).catch(() => undefined))
 
@@ -76,10 +77,9 @@ const logoutEffect = Effect.fn("logout")(function* (email?: string) {
 
   const opts = accounts.map((a) => {
     const isActive = Option.isSome(activeID) && activeID.value === a.id
-    const server = UI.Style.TEXT_DIM + a.url + UI.Style.TEXT_NORMAL
     return {
       value: a,
-      label: isActive ? `${a.email} ${server}` + UI.Style.TEXT_DIM + " (active)" : `${a.email} ${server}`,
+      label: formatConsoleAccountLabel(a, isActive),
     }
   })
 
@@ -139,13 +139,28 @@ const orgsEffect = Effect.fn("orgs")(function* () {
   for (const group of groups) {
     for (const org of group.orgs) {
       const isActive = isActiveOrgChoice(active, { accountID: group.account.id, orgID: org.id })
-      const dot = isActive ? UI.Style.TEXT_SUCCESS + "●" + UI.Style.TEXT_NORMAL : " "
-      const name = isActive ? UI.Style.TEXT_HIGHLIGHT_BOLD + org.name + UI.Style.TEXT_NORMAL : org.name
-      const email = UI.Style.TEXT_DIM + group.account.email + UI.Style.TEXT_NORMAL
-      const id = UI.Style.TEXT_DIM + org.id + UI.Style.TEXT_NORMAL
-      yield* println(`  ${dot} ${name}  ${email}  ${id}`)
+      yield* println(
+        formatConsoleOrgLine(
+          {
+            id: org.id,
+            name: org.name,
+            email: group.account.email,
+            url: group.account.url,
+          },
+          isActive,
+        ),
+      )
     }
   }
+})
+
+const openEffect = Effect.fn("open")(function* () {
+  const service = yield* Account.Service
+  const active = yield* service.active()
+  if (Option.isNone(active)) return yield* println("No active account")
+
+  yield* openBrowser(active.value.url)
+  yield* Prompt.outro("Opened " + active.value.url)
 })
 
 export const LoginCommand = cmd({
@@ -195,6 +210,15 @@ export const OrgsCommand = cmd({
   },
 })
 
+export const OpenCommand = cmd({
+  command: "open",
+  describe: false,
+  async handler() {
+    UI.empty()
+    await Account.runPromise((_svc) => openEffect())
+  },
+})
+
 export const ConsoleCommand = cmd({
   command: "console",
   describe: false,
@@ -215,6 +239,10 @@ export const ConsoleCommand = cmd({
       .command({
         ...OrgsCommand,
         describe: "list orgs",
+      })
+      .command({
+        ...OpenCommand,
+        describe: "open active console account",
       })
       .demandCommand(),
   async handler() {},
