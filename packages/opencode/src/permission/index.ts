@@ -2,7 +2,7 @@ import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { Config } from "@/config/config"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRunPromise } from "@/effect/run-service"
+import { makeRuntime } from "@/effect/run-service"
 import { ProjectID } from "@/project/schema"
 import { Instance } from "@/project/instance"
 import { MessageID, SessionID } from "@/session/schema"
@@ -306,7 +306,7 @@ export namespace Permission {
     return result
   }
 
-  export const runPromise = makeRunPromise(Service, layer)
+  export const { runPromise } = makeRuntime(Service, layer)
 
   export async function ask(input: z.infer<typeof AskInput>) {
     return runPromise((s) => s.ask(input))

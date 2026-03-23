@@ -1,8 +1,8 @@
-import { Effect, Layer, ServiceMap } from "effect"
+import { Effect, Layer, ServiceMap, Stream } from "effect"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRunPromise } from "@/effect/run-service"
+import { makeRuntime } from "@/effect/run-service"
 import { FileWatcher } from "@/file/watcher"
 import { Log } from "@/util/log"
 import { git } from "@/util/git"
@@ -44,6 +44,8 @@ export namespace Vcs {
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
+      const bus = yield* Bus.Service
+
       const state = yield* InstanceState.make<State>(
         Effect.fn("Vcs.state")((ctx) =>
           Effect.gen(function* () {
@@ -65,23 +67,22 @@ export namespace Vcs {
             }
             log.info("initialized", { branch: value.current })
 
-            yield* Effect.acquireRelease(
-              Effect.sync(() =>
-                Bus.subscribe(
-                  FileWatcher.Event.Updated,
-                  Instance.bind(async (evt) => {
-                    if (!evt.properties.file.endsWith("HEAD")) return
-                    const next = await getCurrentBranch()
+            yield* bus
+              .subscribe(FileWatcher.Event.Updated)
+              .pipe(
+                Stream.filter((evt) => evt.properties.file.endsWith("HEAD")),
+                Stream.runForEach((evt) =>
+                  Effect.gen(function* () {
+                    const next = yield* Effect.promise(() => getCurrentBranch())
                     if (next !== value.current) {
                       log.info("branch changed", { from: value.current, to: next })
                       value.current = next
-                      Bus.publish(Event.BranchUpdated, { branch: next })
+                      yield* bus.publish(Event.BranchUpdated, { branch: next })
                     }
                   }),
                 ),
-              ),
-              (unsubscribe) => Effect.sync(unsubscribe),
-            )
+                Effect.forkScoped,
+              )
 
             return value
           }),
@@ -99,7 +100,8 @@ export namespace Vcs {
     }),
   )
 
-  const runPromise = makeRunPromise(Service, layer)
+  const defaultLayer = layer.pipe(Layer.provide(Bus.layer))
+  const { runPromise } = makeRuntime(Service, defaultLayer)
 
   export function init() {
     return runPromise((svc) => svc.init())

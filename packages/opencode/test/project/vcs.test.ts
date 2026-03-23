@@ -2,9 +2,7 @@ import { $ } from "bun"
 import { afterEach, describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { Effect, Layer, ManagedRuntime } from "effect"
 import { tmpdir } from "../fixture/fixture"
-import { watcherConfigLayer, withServices } from "../fixture/instance"
 import { FileWatcher } from "../../src/file/watcher"
 import { Instance } from "../../src/project/instance"
 import { GlobalBus } from "../../src/bus/global"
@@ -17,21 +15,16 @@ const describeVcs = FileWatcher.hasNativeBinding() && !process.env.CI ? describe
 // Helpers
 // ---------------------------------------------------------------------------
 
-function withVcs(
-  directory: string,
-  body: (rt: ManagedRuntime.ManagedRuntime<FileWatcher.Service | Vcs.Service, never>) => Promise<void>,
-) {
-  return withServices(
+async function withVcs(directory: string, body: () => Promise<void>) {
+  return Instance.provide({
     directory,
-    Layer.merge(FileWatcher.layer, Vcs.layer),
-    async (rt) => {
-      await rt.runPromise(FileWatcher.Service.use((s) => s.init()))
-      await rt.runPromise(Vcs.Service.use((s) => s.init()))
+    fn: async () => {
+      FileWatcher.init()
+      Vcs.init()
       await Bun.sleep(500)
-      await body(rt)
+      await body()
     },
-    { provide: [watcherConfigLayer] },
-  )
+  })
 }
 
 type BranchEvent = { directory?: string; payload: { type: string; properties: { branch?: string } } }
@@ -74,8 +67,8 @@ describeVcs("Vcs", () => {
   test("branch() returns current branch name", async () => {
     await using tmp = await tmpdir({ git: true })
 
-    await withVcs(tmp.path, async (rt) => {
-      const branch = await rt.runPromise(Vcs.Service.use((s) => s.branch()))
+    await withVcs(tmp.path, async () => {
+      const branch = await Vcs.branch()
       expect(branch).toBeDefined()
       expect(typeof branch).toBe("string")
     })
@@ -84,8 +77,8 @@ describeVcs("Vcs", () => {
   test("branch() returns undefined for non-git directories", async () => {
     await using tmp = await tmpdir()
 
-    await withVcs(tmp.path, async (rt) => {
-      const branch = await rt.runPromise(Vcs.Service.use((s) => s.branch()))
+    await withVcs(tmp.path, async () => {
+      const branch = await Vcs.branch()
       expect(branch).toBeUndefined()
     })
   })
@@ -111,14 +104,14 @@ describeVcs("Vcs", () => {
     const branch = `test-${Math.random().toString(36).slice(2)}`
     await $`git branch ${branch}`.cwd(tmp.path).quiet()
 
-    await withVcs(tmp.path, async (rt) => {
+    await withVcs(tmp.path, async () => {
       const pending = nextBranchUpdate(tmp.path)
 
       const head = path.join(tmp.path, ".git", "HEAD")
       await fs.writeFile(head, `ref: refs/heads/${branch}\n`)
 
       await pending
-      const current = await rt.runPromise(Vcs.Service.use((s) => s.branch()))
+      const current = await Vcs.branch()
       expect(current).toBe(branch)
     })
   })

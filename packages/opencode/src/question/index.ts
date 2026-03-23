@@ -2,7 +2,7 @@ import { Deferred, Effect, Layer, Schema, ServiceMap } from "effect"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRunPromise } from "@/effect/run-service"
+import { makeRuntime } from "@/effect/run-service"
 import { SessionID, MessageID } from "@/session/schema"
 import { Log } from "@/util/log"
 import z from "zod"
@@ -197,7 +197,7 @@ export namespace Question {
     }),
   )
 
-  const runPromise = makeRunPromise(Service, layer)
+  const { runPromise } = makeRuntime(Service, layer)
 
   export async function ask(input: {
     sessionID: SessionID

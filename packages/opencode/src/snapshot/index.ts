@@ -4,7 +4,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import path from "path"
 import z from "zod"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRunPromise } from "@/effect/run-service"
+import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@/filesystem"
 import { Config } from "../config/config"
 import { Global } from "../global"
@@ -360,7 +360,7 @@ export namespace Snapshot {
     Layer.provide(NodePath.layer),
   )
 
-  const runPromise = makeRunPromise(Service, defaultLayer)
+  const { runPromise } = makeRuntime(Service, defaultLayer)
 
   export async function init() {
     return runPromise((svc) => svc.init())
