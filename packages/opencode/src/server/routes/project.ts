@@ -3,6 +3,7 @@ import { describeRoute, validator } from "hono-openapi"
 import { resolver } from "hono-openapi"
 import { Instance } from "../../project/instance"
 import { Project } from "../../project/project"
+import { Sidebar } from "../../project/sidebar"
 import z from "zod"
 import { ProjectID } from "../../project/schema"
 import { errors } from "../error"
@@ -113,6 +114,96 @@ export const ProjectRoutes = lazy(() =>
         const body = c.req.valid("json")
         const project = await Project.update({ ...body, projectID })
         return c.json(project)
+      },
+    )
+    .get(
+      "/sidebar",
+      describeRoute({
+        summary: "List sidebar items",
+        description: "Get the ordered list of projects visible in the sidebar rail.",
+        operationId: "project.sidebar.list",
+        responses: {
+          200: {
+            description: "Ordered sidebar items",
+            content: {
+              "application/json": {
+                schema: resolver(Sidebar.Item.array()),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        return c.json(Sidebar.list())
+      },
+    )
+    .post(
+      "/sidebar/open",
+      describeRoute({
+        summary: "Open sidebar item",
+        description: "Add a project to the sidebar rail by worktree path. Idempotent.",
+        operationId: "project.sidebar.open",
+        responses: {
+          200: {
+            description: "Updated sidebar items",
+            content: {
+              "application/json": {
+                schema: resolver(Sidebar.Item.array()),
+              },
+            },
+          },
+        },
+      }),
+      validator("json", z.object({ worktree: z.string() })),
+      async (c) => {
+        const body = c.req.valid("json")
+        return c.json(Sidebar.open(body.worktree))
+      },
+    )
+    .post(
+      "/sidebar/close",
+      describeRoute({
+        summary: "Close sidebar item",
+        description: "Remove a project from the sidebar rail by worktree path. Idempotent.",
+        operationId: "project.sidebar.close",
+        responses: {
+          200: {
+            description: "Updated sidebar items",
+            content: {
+              "application/json": {
+                schema: resolver(Sidebar.Item.array()),
+              },
+            },
+          },
+        },
+      }),
+      validator("json", z.object({ worktree: z.string() })),
+      async (c) => {
+        const body = c.req.valid("json")
+        return c.json(Sidebar.close(body.worktree))
+      },
+    )
+    .post(
+      "/sidebar/reorder",
+      describeRoute({
+        summary: "Reorder sidebar items",
+        description: "Replace the full sidebar rail with the given ordered worktree list.",
+        operationId: "project.sidebar.reorder",
+        responses: {
+          200: {
+            description: "Updated sidebar items",
+            content: {
+              "application/json": {
+                schema: resolver(Sidebar.Item.array()),
+              },
+            },
+          },
+        },
+      }),
+      validator("json", z.object({ worktrees: z.array(z.string()) })),
+      async (c) => {
+        const body = c.req.valid("json")
+        return c.json(Sidebar.reorder(body.worktrees))
       },
     ),
 )
