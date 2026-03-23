@@ -424,6 +424,7 @@ export namespace Provider {
           headers: {
             "HTTP-Referer": "https://opencode.ai/",
             "X-Title": "opencode",
+            "X-Source": "opencode",
           },
         },
       }
