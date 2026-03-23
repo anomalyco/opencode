@@ -27,7 +27,7 @@
       "entityType": "tables"
     },
     {
-      "name": "sidebar",
+      "name": "project_sidebar",
       "entityType": "tables"
     },
     {
@@ -432,7 +432,7 @@
       "generated": null,
       "name": "worktree",
       "entityType": "columns",
-      "table": "sidebar"
+      "table": "project_sidebar"
     },
     {
       "type": "integer",
@@ -442,7 +442,7 @@
       "generated": null,
       "name": "sort_order",
       "entityType": "columns",
-      "table": "sidebar"
+      "table": "project_sidebar"
     },
     {
       "type": "text",
@@ -1096,7 +1096,7 @@
       ],
       "nameExplicit": false,
       "name": "sidebar_pk",
-      "table": "sidebar",
+      "table": "project_sidebar",
       "entityType": "pks"
     },
     {
