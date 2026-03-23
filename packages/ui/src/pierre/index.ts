@@ -1,5 +1,6 @@
 import { DiffLineAnnotation, FileContents, FileDiffOptions, type SelectedLineRange } from "@pierre/diffs"
 import { ComponentProps } from "solid-js"
+import { lineCommentStyles } from "../components/line-comment-styles"
 
 export type DiffProps<T = {}> = FileDiffOptions<T> & {
   before: FileContents
@@ -7,13 +8,15 @@ export type DiffProps<T = {}> = FileDiffOptions<T> & {
   annotations?: DiffLineAnnotation<T>[]
   selectedLines?: SelectedLineRange | null
   commentedLines?: SelectedLineRange[]
+  onLineNumberSelectionEnd?: (selection: SelectedLineRange | null) => void
   onRendered?: () => void
   class?: string
   classList?: ComponentProps<"div">["classList"]
 }
 
 const unsafeCSS = `
-[data-diff] {
+[data-diff],
+[data-file] {
   --diffs-bg: light-dark(var(--diffs-light-bg), var(--diffs-dark-bg));
   --diffs-bg-buffer: var(--diffs-bg-buffer-override, light-dark( color-mix(in lab, var(--diffs-bg) 92%, var(--diffs-mixer)), color-mix(in lab, var(--diffs-bg) 92%, var(--diffs-mixer))));
   --diffs-bg-hover: var(--diffs-bg-hover-override, light-dark( color-mix(in lab, var(--diffs-bg) 97%, var(--diffs-mixer)), color-mix(in lab, var(--diffs-bg) 91%, var(--diffs-mixer))));
@@ -44,7 +47,8 @@ const unsafeCSS = `
   --diffs-bg-selection-text: rgb(from var(--surface-warning-strong) r g b / 0.2);
 }
 
-:host([data-color-scheme='dark']) [data-diff] {
+:host([data-color-scheme='dark']) [data-diff],
+:host([data-color-scheme='dark']) [data-file] {
   --diffs-selection-number-fg: #fdfbfb;
   --diffs-bg-selection: var(--diffs-bg-selection-override, rgb(from var(--solaris-dark-6) r g b / 0.65));
   --diffs-bg-selection-number: var(
@@ -53,7 +57,8 @@ const unsafeCSS = `
   );
 }
 
-[data-diff] ::selection {
+[data-diff] ::selection,
+[data-file] ::selection {
   background-color: var(--diffs-bg-selection-text);
 }
 
@@ -69,7 +74,16 @@ const unsafeCSS = `
   box-shadow: inset 0 0 0 9999px var(--diffs-bg-selection);
 }
 
+[data-file] [data-line][data-comment-selected]:not([data-selected-line]) {
+  box-shadow: inset 0 0 0 9999px var(--diffs-bg-selection);
+}
+
 [data-diff] [data-column-number][data-comment-selected]:not([data-selected-line]) {
+  box-shadow: inset 0 0 0 9999px var(--diffs-bg-selection-number);
+  color: var(--diffs-selection-number-fg);
+}
+
+[data-file] [data-column-number][data-comment-selected]:not([data-selected-line]) {
   box-shadow: inset 0 0 0 9999px var(--diffs-bg-selection-number);
   color: var(--diffs-selection-number-fg);
 }
@@ -78,12 +92,26 @@ const unsafeCSS = `
   box-shadow: inset 0 0 0 9999px var(--diffs-bg-selection);
 }
 
+[data-file] [data-line-annotation][data-comment-selected]:not([data-selected-line]) [data-annotation-content] {
+  box-shadow: inset 0 0 0 9999px var(--diffs-bg-selection);
+}
+
 [data-diff] [data-line][data-selected-line] {
   background-color: var(--diffs-bg-selection);
   box-shadow: inset 2px 0 0 var(--diffs-selection-border);
 }
 
+[data-file] [data-line][data-selected-line] {
+  background-color: var(--diffs-bg-selection);
+  box-shadow: inset 2px 0 0 var(--diffs-selection-border);
+}
+
 [data-diff] [data-column-number][data-selected-line] {
+  background-color: var(--diffs-bg-selection-number);
+  color: var(--diffs-selection-number-fg);
+}
+
+[data-file] [data-column-number][data-selected-line] {
   background-color: var(--diffs-bg-selection-number);
   color: var(--diffs-selection-number-fg);
 }
@@ -123,9 +151,13 @@ const unsafeCSS = `
   }
   [data-code] {
     overflow-x: auto !important;
-    overflow-y: hidden !important;
+    overflow-y: clip !important;
   }
-}`
+}
+
+${lineCommentStyles}
+
+`
 
 export function createDefaultOptions<T>(style: FileDiffOptions<T>["diffStyle"]) {
   return {

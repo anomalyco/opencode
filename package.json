@@ -4,11 +4,13 @@
   "description": "AI-powered development tool",
   "private": true,
   "type": "module",
-  "packageManager": "bun@1.3.9",
+  "packageManager": "bun@1.3.11",
   "scripts": {
     "dev": "bun run --cwd packages/opencode --conditions=browser src/index.ts",
     "dev:desktop": "bun --cwd packages/desktop tauri dev",
     "dev:web": "bun --cwd packages/app dev",
+    "dev:console": "ulimit -n 10240 2>/dev/null; bun run --cwd packages/console/app dev",
+    "dev:storybook": "bun --cwd packages/storybook storybook",
     "typecheck": "bun turbo typecheck",
     "prepare": "husky",
     "random": "echo 'Random script'",
@@ -23,7 +25,8 @@
       "packages/slack"
     ],
     "catalog": {
-      "@types/bun": "1.3.9",
+      "@effect/platform-node": "4.0.0-beta.35",
+      "@types/bun": "1.3.11",
       "@octokit/rest": "22.0.0",
       "@hono/zod-validator": "0.4.2",
       "ulid": "3.0.1",
@@ -35,13 +38,14 @@
       "@tsconfig/bun": "1.0.9",
       "@cloudflare/workers-types": "4.20251008.0",
       "@openauthjs/openauth": "0.0.0-20250322224806",
-      "@pierre/diffs": "1.1.0-beta.13",
+      "@pierre/diffs": "1.1.0-beta.18",
       "@solid-primitives/storage": "4.3.3",
       "@tailwindcss/vite": "4.1.11",
       "diff": "8.0.2",
       "dompurify": "3.3.1",
-      "drizzle-kit": "1.0.0-beta.12-a5629fb",
-      "drizzle-orm": "1.0.0-beta.12-a5629fb",
+      "drizzle-kit": "1.0.0-beta.19-d95b7a4",
+      "drizzle-orm": "1.0.0-beta.19-d95b7a4",
+      "effect": "4.0.0-beta.35",
       "ai": "5.0.124",
       "hono": "4.10.7",
       "hono-openapi": "1.1.2",
@@ -70,12 +74,13 @@
     "@actions/artifact": "5.0.1",
     "@tsconfig/bun": "catalog:",
     "@types/mime-types": "3.0.1",
+    "@typescript/native-preview": "catalog:",
     "glob": "13.0.5",
     "husky": "9.1.7",
     "prettier": "3.6.2",
     "semver": "^7.6.0",
     "sst": "3.18.10",
-    "turbo": "2.5.6"
+    "turbo": "2.8.13"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.933.0",
@@ -98,7 +103,8 @@
     "protobufjs",
     "tree-sitter",
     "tree-sitter-bash",
-    "web-tree-sitter"
+    "web-tree-sitter",
+    "electron"
   ],
   "overrides": {
     "@types/bun": "catalog:",
@@ -106,6 +112,8 @@
   },
   "patchedDependencies": {
     "@standard-community/standard-openapi@0.2.9": "patches/@standard-community%2Fstandard-openapi@0.2.9.patch",
-    "@openrouter/ai-sdk-provider@1.5.4": "patches/@openrouter%2Fai-sdk-provider@1.5.4.patch"
+    "@openrouter/ai-sdk-provider@1.5.4": "patches/@openrouter%2Fai-sdk-provider@1.5.4.patch",
+    "@ai-sdk/xai@2.0.51": "patches/@ai-sdk%2Fxai@2.0.51.patch",
+    "solid-js@1.9.10": "patches/solid-js@1.9.10.patch"
   }
 }

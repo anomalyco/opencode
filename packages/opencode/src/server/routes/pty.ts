@@ -3,6 +3,7 @@ import { describeRoute, validator, resolver } from "hono-openapi"
 import { upgradeWebSocket } from "hono/bun"
 import z from "zod"
 import { Pty } from "@/pty"
+import { PtyID } from "@/pty/schema"
 import { NotFoundError } from "../../storage/db"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
@@ -27,7 +28,7 @@ export const PtyRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        return c.json(Pty.list())
+        return c.json(await Pty.list())
       },
     )
     .post(
@@ -72,9 +73,9 @@ export const PtyRoutes = lazy(() =>
           ...errors(404),
         },
       }),
-      validator("param", z.object({ ptyID: z.string() })),
+      validator("param", z.object({ ptyID: PtyID.zod })),
       async (c) => {
-        const info = Pty.get(c.req.valid("param").ptyID)
+        const info = await Pty.get(c.req.valid("param").ptyID)
         if (!info) {
           throw new NotFoundError({ message: "Session not found" })
         }
@@ -99,7 +100,7 @@ export const PtyRoutes = lazy(() =>
           ...errors(400),
         },
       }),
-      validator("param", z.object({ ptyID: z.string() })),
+      validator("param", z.object({ ptyID: PtyID.zod })),
       validator("json", Pty.UpdateInput),
       async (c) => {
         const info = await Pty.update(c.req.valid("param").ptyID, c.req.valid("json"))
@@ -124,7 +125,7 @@ export const PtyRoutes = lazy(() =>
           ...errors(404),
         },
       }),
-      validator("param", z.object({ ptyID: z.string() })),
+      validator("param", z.object({ ptyID: PtyID.zod })),
       async (c) => {
         await Pty.remove(c.req.valid("param").ptyID)
         return c.json(true)
@@ -148,9 +149,9 @@ export const PtyRoutes = lazy(() =>
           ...errors(404),
         },
       }),
-      validator("param", z.object({ ptyID: z.string() })),
-      upgradeWebSocket((c) => {
-        const id = c.req.param("ptyID")
+      validator("param", z.object({ ptyID: PtyID.zod })),
+      upgradeWebSocket(async (c) => {
+        const id = PtyID.zod.parse(c.req.param("ptyID"))
         const cursor = (() => {
           const value = c.req.query("cursor")
           if (!value) return
@@ -158,8 +159,8 @@ export const PtyRoutes = lazy(() =>
           if (!Number.isSafeInteger(parsed) || parsed < -1) return
           return parsed
         })()
-        let handler: ReturnType<typeof Pty.connect>
-        if (!Pty.get(id)) throw new Error("Session not found")
+        let handler: Awaited<ReturnType<typeof Pty.connect>>
+        if (!(await Pty.get(id))) throw new Error("Session not found")
 
         type Socket = {
           readyState: number
@@ -175,17 +176,27 @@ export const PtyRoutes = lazy(() =>
           return typeof (value as { readyState?: unknown }).readyState === "number"
         }
 
+        const pending: string[] = []
+        let ready = false
+
         return {
-          onOpen(_event, ws) {
+          async onOpen(_event, ws) {
             const socket = ws.raw
             if (!isSocket(socket)) {
               ws.close()
               return
             }
-            handler = Pty.connect(id, socket, cursor)
+            handler = await Pty.connect(id, socket, cursor)
+            ready = true
+            for (const msg of pending) handler?.onMessage(msg)
+            pending.length = 0
           },
           onMessage(event) {
             if (typeof event.data !== "string") return
+            if (!ready) {
+              pending.push(event.data)
+              return
+            }
             handler?.onMessage(event.data)
           },
           onClose() {

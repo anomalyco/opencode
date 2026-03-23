@@ -1,8 +1,0 @@
-Use this tool to assign and/or label a GitHub issue.
-
-Choose labels and assignee using the current triage policy and ownership rules.
-Pick the most fitting labels for the issue and assign one owner.
-
-If unsure, choose the team/section with the most overlap with the issue and assign a member from that team at random.
-
-(Note: rekram1-node is on vacation, do not assign issues to him.)

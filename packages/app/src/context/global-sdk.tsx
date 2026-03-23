@@ -4,6 +4,7 @@ import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { batch, onCleanup } from "solid-js"
 import z from "zod"
 import { createSdkForServer } from "@/utils/server"
+import { useLanguage } from "./language"
 import { usePlatform } from "./platform"
 import { useServer } from "./server"
 
@@ -14,6 +15,7 @@ const abortError = z.object({
 export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleContext({
   name: "GlobalSDK",
   init: () => {
+    const language = useLanguage()
     const server = useServer()
     const platform = usePlatform()
     const abort = new AbortController()
@@ -30,7 +32,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     })()
 
     const currentServer = server.current
-    if (!currentServer) throw new Error("No server available")
+    if (!currentServer) throw new Error(language.t("error.globalSDK.noServerAvailable"))
 
     const eventSdk = createSdkForServer({
       signal: abort.signal,
@@ -49,8 +51,11 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     let queue: Queued[] = []
     let buffer: Queued[] = []
     const coalesced = new Map<string, number>()
+    const staleDeltas = new Set<string>()
     let timer: ReturnType<typeof setTimeout> | undefined
     let last = 0
+
+    const deltaKey = (directory: string, messageID: string, partID: string) => `${directory}:${messageID}:${partID}`
 
     const key = (directory: string, payload: Event) => {
       if (payload.type === "session.status") return `session.status:${directory}:${payload.properties.sessionID}`
@@ -68,14 +73,20 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       if (queue.length === 0) return
 
       const events = queue
+      const skip = staleDeltas.size > 0 ? new Set(staleDeltas) : undefined
       queue = buffer
       buffer = events
       queue.length = 0
       coalesced.clear()
+      staleDeltas.clear()
 
       last = Date.now()
       batch(() => {
         for (const event of events) {
+          if (skip && event.payload.type === "message.part.delta") {
+            const props = event.payload.properties
+            if (skip.has(deltaKey(event.directory, props.messageID, props.partID))) continue
+          }
           emitter.emit(event.directory, event.payload)
         }
       })
@@ -144,6 +155,10 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
               const i = coalesced.get(k)
               if (i !== undefined) {
                 queue[i] = { directory, payload }
+                if (payload.type === "message.part.updated") {
+                  const part = payload.properties.part
+                  staleDeltas.add(deltaKey(directory, part.messageID, part.id))
+                }
                 continue
               }
               coalesced.set(k, queue.length)
@@ -205,7 +220,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       event: emitter,
       createClient(opts: Omit<Parameters<typeof createSdkForServer>[0], "server" | "fetch">) {
         const s = server.current
-        if (!s) throw new Error("Server not available")
+        if (!s) throw new Error(language.t("error.globalSDK.serverNotAvailable"))
         return createSdkForServer({
           server: s.http,
           fetch: platform.fetch,

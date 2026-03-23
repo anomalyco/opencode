@@ -8,7 +8,7 @@ import { DialogPrompt } from "../ui/dialog-prompt"
 import { Link } from "../ui/link"
 import { useTheme } from "../context/theme"
 import { TextAttributes } from "@opentui/core"
-import type { ProviderAuthAuthorization } from "@opencode-ai/sdk/v2"
+import type { ProviderAuthAuthorization, ProviderAuthMethod } from "@opencode-ai/sdk/v2"
 import { DialogModel } from "./dialog-model"
 import { useKeyboard } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
@@ -16,16 +16,18 @@ import { useToast } from "../ui/toast"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
   opencode: 0,
-  anthropic: 1,
-  "github-copilot": 2,
-  openai: 3,
-  google: 4,
+  "opencode-go": 1,
+  openai: 2,
+  "github-copilot": 3,
+  anthropic: 4,
+  google: 5,
 }
 
 export function createDialogProviderOptions() {
   const sync = useSync()
   const dialog = useDialog()
   const sdk = useSDK()
+  const toast = useToast()
   const options = createMemo(() => {
     return pipe(
       sync.data.provider_next.all,
@@ -35,8 +37,9 @@ export function createDialogProviderOptions() {
         value: provider.id,
         description: {
           opencode: "(Recommended)",
-          anthropic: "(Claude Max or API key)",
+          anthropic: "(API key)",
           openai: "(ChatGPT Plus/Pro or API key)",
+          "opencode-go": "Low cost subscription for everyone",
         }[provider.id],
         category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Other",
         async onSelect() {
@@ -67,10 +70,29 @@ export function createDialogProviderOptions() {
           if (index == null) return
           const method = methods[index]
           if (method.type === "oauth") {
+            let inputs: Record<string, string> | undefined
+            if (method.prompts?.length) {
+              const value = await PromptsMethod({
+                dialog,
+                prompts: method.prompts,
+              })
+              if (!value) return
+              inputs = value
+            }
+
             const result = await sdk.client.provider.oauth.authorize({
               providerID: provider.id,
               method: index,
+              inputs,
             })
+            if (result.error) {
+              toast.show({
+                variant: "error",
+                message: JSON.stringify(result.error),
+              })
+              dialog.clear()
+              return
+            }
             if (result.data?.method === "code") {
               dialog.replace(() => (
                 <CodeMethod providerID={provider.id} title={method.label} index={index} authorization={result.data!} />
@@ -214,16 +236,30 @@ function ApiMethod(props: ApiMethodProps) {
       title={props.title}
       placeholder="API key"
       description={
-        props.providerID === "opencode" ? (
-          <box gap={1}>
-            <text fg={theme.textMuted}>
-              OpenCode Zen gives you access to all the best coding models at the cheapest prices with a single API key.
-            </text>
-            <text fg={theme.text}>
-              Go to <span style={{ fg: theme.primary }}>https://opencode.ai/zen</span> to get a key
-            </text>
-          </box>
-        ) : undefined
+        {
+          opencode: (
+            <box gap={1}>
+              <text fg={theme.textMuted}>
+                OpenCode Zen gives you access to all the best coding models at the cheapest prices with a single API
+                key.
+              </text>
+              <text fg={theme.text}>
+                Go to <span style={{ fg: theme.primary }}>https://opencode.ai/zen</span> to get a key
+              </text>
+            </box>
+          ),
+          "opencode-go": (
+            <box gap={1}>
+              <text fg={theme.textMuted}>
+                OpenCode Go is a $10 per month subscription that provides reliable access to popular open coding models
+                with generous usage limits.
+              </text>
+              <text fg={theme.text}>
+                Go to <span style={{ fg: theme.primary }}>https://opencode.ai/zen</span> and enable OpenCode Go
+              </text>
+            </box>
+          ),
+        }[props.providerID] ?? undefined
       }
       onConfirm={async (value) => {
         if (!value) return
@@ -240,4 +276,54 @@ function ApiMethod(props: ApiMethodProps) {
       }}
     />
   )
+}
+
+interface PromptsMethodProps {
+  dialog: ReturnType<typeof useDialog>
+  prompts: NonNullable<ProviderAuthMethod["prompts"]>[number][]
+}
+async function PromptsMethod(props: PromptsMethodProps) {
+  const inputs: Record<string, string> = {}
+  for (const prompt of props.prompts) {
+    if (prompt.when) {
+      const value = inputs[prompt.when.key]
+      if (value === undefined) continue
+      const matches = prompt.when.op === "eq" ? value === prompt.when.value : value !== prompt.when.value
+      if (!matches) continue
+    }
+
+    if (prompt.type === "select") {
+      const value = await new Promise<string | null>((resolve) => {
+        props.dialog.replace(
+          () => (
+            <DialogSelect
+              title={prompt.message}
+              options={prompt.options.map((x) => ({
+                title: x.label,
+                value: x.value,
+                description: x.hint,
+              }))}
+              onSelect={(option) => resolve(option.value)}
+            />
+          ),
+          () => resolve(null),
+        )
+      })
+      if (value === null) return null
+      inputs[prompt.key] = value
+      continue
+    }
+
+    const value = await new Promise<string | null>((resolve) => {
+      props.dialog.replace(
+        () => (
+          <DialogPrompt title={prompt.message} placeholder={prompt.placeholder} onConfirm={(value) => resolve(value)} />
+        ),
+        () => resolve(null),
+      )
+    })
+    if (value === null) return null
+    inputs[prompt.key] = value
+  }
+  return inputs
 }
