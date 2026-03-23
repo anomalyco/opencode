@@ -30,8 +30,12 @@ export namespace SessionCompaction {
 
   const COMPACTION_BUFFER = 20_000
 
-  export async function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: Provider.Model }) {
-    const config = await Config.get()
+  export async function isOverflow(input: {
+    tokens: MessageV2.Assistant["tokens"]
+    model: Provider.Model
+    config?: Awaited<ReturnType<typeof Config.get>>
+  }) {
+    const config = input.config ?? (await Config.get())
     const maxOutput = ProviderTransform.maxOutputTokens(input.model)
 
     if (config.compaction?.auto === false) return false
@@ -55,9 +59,13 @@ export namespace SessionCompaction {
       : undefined
 
     const reserved = config.compaction?.reserved ?? Math.min(COMPACTION_BUFFER, maxOutput)
+    const pruneProtect = config.compaction?.pruneProtect ?? DEFAULT_PRUNE_PROTECT
+    const pruneMinimum = config.compaction?.pruneMinimum ?? DEFAULT_PRUNE_MINIMUM
+
     const usable = typeof effectiveInput === "number"
       ? Math.max(0, effectiveInput - reserved)
       : Math.max(0, effectiveContext - maxOutput)
+
     return count >= usable
   }
 
@@ -68,10 +76,13 @@ export namespace SessionCompaction {
 
   // goes backwards through parts until there are tokens worth of tool calls,
   // then marks them compacted. idea is to throw away old tool calls that are no longer relevant.
-  export async function prune(input: { sessionID: SessionID }) {
-    const config = await Config.get()
-    const pruneProtect = config.compaction?.pruneProtect ?? DEFAULT_PRUNE_PROTECT
-    const pruneMinimum = config.compaction?.pruneMinimum ?? DEFAULT_PRUNE_MINIMUM
+  export async function prune(input: {
+    sessionID: SessionID
+    config?: Awaited<ReturnType<typeof Config.get>>
+  }) {
+    const config = input.config ?? (await Config.get())
+    const protect = config.compaction?.pruneProtect ?? DEFAULT_PRUNE_PROTECT
+    const minimum = config.compaction?.pruneMinimum ?? DEFAULT_PRUNE_MINIMUM
     if (config.compaction?.prune === false) return
     log.info("pruning")
     const msgs = await Session.messages({ sessionID: input.sessionID })
@@ -94,7 +105,7 @@ export namespace SessionCompaction {
             if (part.state.time.compacted) break loop
             const estimate = Token.estimate(part.state.output)
             total += estimate
-            if (total > pruneProtect) {
+            if (total > protect) {
               pruned += estimate
               toPrune.push(part)
             }
@@ -102,7 +113,7 @@ export namespace SessionCompaction {
       }
     }
     log.info("found", { pruned, total })
-    if (pruned > pruneMinimum) {
+    if (pruned > minimum) {
       for (const part of toPrune) {
         if (part.state.status === "completed") {
           part.state.time.compacted = Date.now()

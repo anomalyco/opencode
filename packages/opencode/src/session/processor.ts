@@ -280,11 +280,11 @@ export namespace SessionProcessor {
                     sessionID: input.sessionID,
                     messageID: input.assistantMessage.parentID,
                   })
-                  if (
-                    !input.assistantMessage.summary &&
-                    (await SessionCompaction.isOverflow({ tokens: usage.tokens, model: input.model }))
-                  ) {
-                    needsCompaction = true
+                  if (!input.assistantMessage.summary) {
+                    const config = await Config.get()
+                    if (await SessionCompaction.isOverflow({ tokens: usage.tokens, model: input.model, config })) {
+                      needsCompaction = true
+                    }
                   }
                   break
 
