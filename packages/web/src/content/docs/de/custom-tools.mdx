@@ -17,7 +17,7 @@ Tools werden als **TypeScript**- oder **JavaScript**-Dateien definiert. Die Tool
 
 Sie können wie folgt definiert werden:
 
-- Lokal, indem Sie sie im Verzeichnis `.opencode/tools/` Ihres Projekts platzieren.
+- Lokal, indem Sie sie im Verzeichnis `.opencode/tool/` Ihres Projekts platzieren.
 - Oder global, indem Sie sie in `~/.config/opencode/tools/` platzieren.
 
 ---
@@ -26,7 +26,7 @@ Sie können wie folgt definiert werden:
 
 Der einfachste Weg, Tools zu erstellen, ist die Verwendung des `tool()`-Helfers, der Typsicherheit und Validierung bietet.
 
-```ts title=".opencode/tools/database.ts" {1}
+```ts title=".opencode/tool/database.ts" {1}
 import { tool } from "@opencode-ai/plugin"
 
 export default tool({
@@ -49,7 +49,7 @@ Der **Dateiname** wird zum **Toolnamen**. Das Obige erstellt ein `database`-Tool
 
 Sie können auch mehrere Tools aus einer einzigen Datei exportieren. Jeder Export wird zu **einem separaten Tool** mit dem Namen **`<filename>_<exportname>`**:
 
-```ts title=".opencode/tools/math.ts"
+```ts title=".opencode/tool/math.ts"
 import { tool } from "@opencode-ai/plugin"
 
 export const add = tool({
@@ -112,7 +112,7 @@ export default {
 
 Tools erhalten Kontext zur aktuellen Sitzung:
 
-```ts title=".opencode/tools/project.ts" {8}
+```ts title=".opencode/tool/project.ts" {8}
 import { tool } from "@opencode-ai/plugin"
 
 export default tool({
@@ -139,7 +139,7 @@ Sie können Ihre Tools in jeder gewünschten Sprache schreiben. Hier ist ein Bei
 
 Erstellen Sie zunächst das Tool als Python-Skript:
 
-```python title=".opencode/tools/add.py"
+```python title=".opencode/tool/add.py"
 import sys
 
 a = int(sys.argv[1])
@@ -149,7 +149,7 @@ print(a + b)
 
 Erstellen Sie dann die Werkzeugdefinition, die es aufruft:
 
-```ts title=".opencode/tools/python-add.ts" {10}
+```ts title=".opencode/tool/python-add.ts" {10}
 import { tool } from "@opencode-ai/plugin"
 import path from "path"
 
@@ -160,7 +160,7 @@ export default tool({
     b: tool.schema.number().describe("Second number"),
   },
   async execute(args, context) {
-    const script = path.join(context.worktree, ".opencode/tools/add.py")
+    const script = path.join(context.worktree, ".opencode/tool/add.py")
     const result = await Bun.$`python3 ${script} ${args.a} ${args.b}`.text()
     return result.trim()
   },

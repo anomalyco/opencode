@@ -17,7 +17,7 @@ description: สร้างเครื่องมือที่ LLM สา�
 
 สามารถกำหนดได้:
 
-- ภายในเครื่องโดยวางไว้ในไดเรกทอรี `.opencode/tools/` ของโครงการของคุณ
+- ภายในเครื่องโดยวางไว้ในไดเรกทอรี `.opencode/tool/` ของโครงการของคุณ
 - หรือทั่วโลกโดยวางไว้ที่ `~/.config/opencode/tools/`
 
 ---
@@ -26,7 +26,7 @@ description: สร้างเครื่องมือที่ LLM สา�
 
 วิธีที่ง่ายที่สุดในการสร้างเครื่องมือคือการใช้ตัวช่วย `tool()` ซึ่งให้ความปลอดภัยและการตรวจสอบประเภท
 
-```ts title=".opencode/tools/database.ts" {1}
+```ts title=".opencode/tool/database.ts" {1}
 import { tool } from "@opencode-ai/plugin"
 
 export default tool({
@@ -49,7 +49,7 @@ export default tool({
 
 คุณยังสามารถส่งออกเครื่องมือหลายรายการจากไฟล์เดียวได้ การส่งออกแต่ละครั้งจะกลายเป็น **เครื่องมือแยกต่างหาก** โดยมีชื่อ **`<filename>_<exportname>`**:
 
-```ts title=".opencode/tools/math.ts"
+```ts title=".opencode/tool/math.ts"
 import { tool } from "@opencode-ai/plugin"
 
 export const add = tool({
@@ -85,7 +85,7 @@ export const multiply = tool({
 
 ตัวอย่างเช่น ไฟล์นี้จะแทนที่เครื่องมือ `bash` ในตัว:
 
-```ts title=".opencode/tools/bash.ts"
+```ts title=".opencode/tool/bash.ts"
 import { tool } from "@opencode-ai/plugin"
 
 export default tool({
@@ -138,7 +138,7 @@ export default {
 
 เครื่องมือได้รับบริบทเกี่ยวกับเซสชันปัจจุบัน:
 
-```ts title=".opencode/tools/project.ts" {8}
+```ts title=".opencode/tool/project.ts" {8}
 import { tool } from "@opencode-ai/plugin"
 
 export default tool({
@@ -165,7 +165,7 @@ export default tool({
 
 ขั้นแรก สร้างเครื่องมือเป็นสคริปต์ Python:
 
-```python title=".opencode/tools/add.py"
+```python title=".opencode/tool/add.py"
 import sys
 
 a = int(sys.argv[1])
@@ -175,7 +175,7 @@ print(a + b)
 
 จากนั้นสร้างคำจำกัดความของเครื่องมือที่เรียกใช้:
 
-```ts title=".opencode/tools/python-add.ts" {10}
+```ts title=".opencode/tool/python-add.ts" {10}
 import { tool } from "@opencode-ai/plugin"
 import path from "path"
 
@@ -186,7 +186,7 @@ export default tool({
     b: tool.schema.number().describe("Second number"),
   },
   async execute(args, context) {
-    const script = path.join(context.worktree, ".opencode/tools/add.py")
+    const script = path.join(context.worktree, ".opencode/tool/add.py")
     const result = await Bun.$`python3 ${script} ${args.a} ${args.b}`.text()
     return result.trim()
   },

@@ -17,7 +17,7 @@ description: 创建 LLM 可在 opencode 中调用的工具。
 
 工具可以在以下位置定义：
 
-- 本地定义：将工具文件放在项目的 `.opencode/tools/` 目录中。
+- 本地定义：将工具文件放在项目的 `.opencode/tool/` 目录中。
 - 全局定义：将工具文件放在 `~/.config/opencode/tools/` 中。
 
 ---
@@ -26,7 +26,7 @@ description: 创建 LLM 可在 opencode 中调用的工具。
 
 创建工具最简单的方式是使用 `tool()` 辅助函数，它提供类型安全和参数校验。
 
-```ts title=".opencode/tools/database.ts" {1}
+```ts title=".opencode/tool/database.ts" {1}
 import { tool } from "@opencode-ai/plugin"
 
 export default tool({
@@ -49,7 +49,7 @@ export default tool({
 
 你也可以从单个文件中导出多个工具。每个导出都会成为**一个独立的工具**，命名格式为 **`<filename>_<exportname>`**：
 
-```ts title=".opencode/tools/math.ts"
+```ts title=".opencode/tool/math.ts"
 import { tool } from "@opencode-ai/plugin"
 
 export const add = tool({
@@ -85,7 +85,7 @@ export const multiply = tool({
 
 例如，这个文件取代了内置的bash工具：
 
-```ts title=".opencode/tools/bash.ts"
+```ts title=".opencode/tool/bash.ts"
 import { tool } from "@opencode-ai/plugin"
 
 export default tool({
@@ -138,7 +138,7 @@ export default {
 
 工具会接收当前会话的上下文信息：
 
-```ts title=".opencode/tools/project.ts" {8}
+```ts title=".opencode/tool/project.ts" {8}
 import { tool } from "@opencode-ai/plugin"
 
 export default tool({
@@ -165,7 +165,7 @@ export default tool({
 
 首先，创建一个 Python 脚本作为工具：
 
-```python title=".opencode/tools/add.py"
+```python title=".opencode/tool/add.py"
 import sys
 
 a = int(sys.argv[1])
@@ -175,7 +175,7 @@ print(a + b)
 
 然后创建调用该脚本的工具定义：
 
-```ts title=".opencode/tools/python-add.ts" {10}
+```ts title=".opencode/tool/python-add.ts" {10}
 import { tool } from "@opencode-ai/plugin"
 import path from "path"
 
@@ -186,7 +186,7 @@ export default tool({
     b: tool.schema.number().describe("Second number"),
   },
   async execute(args, context) {
-    const script = path.join(context.worktree, ".opencode/tools/add.py")
+    const script = path.join(context.worktree, ".opencode/tool/add.py")
     const result = await Bun.$`python3 ${script} ${args.a} ${args.b}`.text()
     return result.trim()
   },

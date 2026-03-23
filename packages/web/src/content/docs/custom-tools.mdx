@@ -17,7 +17,7 @@ Tools are defined as **TypeScript** or **JavaScript** files. However, the tool d
 
 They can be defined:
 
-- Locally by placing them in the `.opencode/tools/` directory of your project.
+- Locally by placing them in the `.opencode/tool/` directory of your project.
 - Or globally, by placing them in `~/.config/opencode/tools/`.
 
 ---
@@ -26,7 +26,7 @@ They can be defined:
 
 The easiest way to create tools is using the `tool()` helper which provides type-safety and validation.
 
-```ts title=".opencode/tools/database.ts" {1}
+```ts title=".opencode/tool/database.ts" {1}
 import { tool } from "@opencode-ai/plugin"
 
 export default tool({
@@ -49,7 +49,7 @@ The **filename** becomes the **tool name**. The above creates a `database` tool.
 
 You can also export multiple tools from a single file. Each export becomes **a separate tool** with the name **`<filename>_<exportname>`**:
 
-```ts title=".opencode/tools/math.ts"
+```ts title=".opencode/tool/math.ts"
 import { tool } from "@opencode-ai/plugin"
 
 export const add = tool({
@@ -85,7 +85,7 @@ Custom tools are keyed by tool name. If a custom tool uses the same name as a bu
 
 For example, this file replaces the built-in `bash` tool:
 
-```ts title=".opencode/tools/bash.ts"
+```ts title=".opencode/tool/bash.ts"
 import { tool } from "@opencode-ai/plugin"
 
 export default tool({
@@ -138,7 +138,7 @@ export default {
 
 Tools receive context about the current session:
 
-```ts title=".opencode/tools/project.ts" {8}
+```ts title=".opencode/tool/project.ts" {8}
 import { tool } from "@opencode-ai/plugin"
 
 export default tool({
@@ -165,7 +165,7 @@ You can write your tools in any language you want. Here's an example that adds t
 
 First, create the tool as a Python script:
 
-```python title=".opencode/tools/add.py"
+```python title=".opencode/tool/add.py"
 import sys
 
 a = int(sys.argv[1])
@@ -175,7 +175,7 @@ print(a + b)
 
 Then create the tool definition that invokes it:
 
-```ts title=".opencode/tools/python-add.ts" {10}
+```ts title=".opencode/tool/python-add.ts" {10}
 import { tool } from "@opencode-ai/plugin"
 import path from "path"
 
@@ -186,7 +186,7 @@ export default tool({
     b: tool.schema.number().describe("Second number"),
   },
   async execute(args, context) {
-    const script = path.join(context.worktree, ".opencode/tools/add.py")
+    const script = path.join(context.worktree, ".opencode/tool/add.py")
     const result = await Bun.$`python3 ${script} ${args.a} ${args.b}`.text()
     return result.trim()
   },

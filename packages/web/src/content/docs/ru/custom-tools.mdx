@@ -17,7 +17,7 @@ description: Создавайте инструменты, которые LLM м�
 
 Их можно определить:
 
-- Локально, поместив их в каталог `.opencode/tools/` вашего проекта.
+- Локально, поместив их в каталог `.opencode/tool/` вашего проекта.
 - Или глобально, поместив их в `~/.config/opencode/tools/`.
 
 ---
@@ -26,7 +26,7 @@ description: Создавайте инструменты, которые LLM м�
 
 Самый простой способ создания инструментов — использовать помощник `tool()`, который обеспечивает безопасность типов и проверку.
 
-```ts title=".opencode/tools/database.ts" {1}
+```ts title=".opencode/tool/database.ts" {1}
 import { tool } from "@opencode-ai/plugin"
 
 export default tool({
@@ -49,7 +49,7 @@ export default tool({
 
 Вы также можете экспортировать несколько инструментов из одного файла. Каждый экспорт становится **отдельным инструментом** с именем **`<filename>_<exportname>`**:
 
-```ts title=".opencode/tools/math.ts"
+```ts title=".opencode/tool/math.ts"
 import { tool } from "@opencode-ai/plugin"
 
 export const add = tool({
@@ -112,7 +112,7 @@ export default {
 
 Инструменты получают контекст текущего сеанса:
 
-```ts title=".opencode/tools/project.ts" {8}
+```ts title=".opencode/tool/project.ts" {8}
 import { tool } from "@opencode-ai/plugin"
 
 export default tool({
@@ -139,7 +139,7 @@ export default tool({
 
 Сначала создайте инструмент как скрипт Python:
 
-```python title=".opencode/tools/add.py"
+```python title=".opencode/tool/add.py"
 import sys
 
 a = int(sys.argv[1])
@@ -149,7 +149,7 @@ print(a + b)
 
 Затем создайте определение инструмента, которое его вызывает:
 
-```ts title=".opencode/tools/python-add.ts" {10}
+```ts title=".opencode/tool/python-add.ts" {10}
 import { tool } from "@opencode-ai/plugin"
 import path from "path"
 
@@ -160,7 +160,7 @@ export default tool({
     b: tool.schema.number().describe("Second number"),
   },
   async execute(args, context) {
-    const script = path.join(context.worktree, ".opencode/tools/add.py")
+    const script = path.join(context.worktree, ".opencode/tool/add.py")
     const result = await Bun.$`python3 ${script} ${args.a} ${args.b}`.text()
     return result.trim()
   },
