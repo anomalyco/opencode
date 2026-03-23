@@ -202,7 +202,7 @@ export const LineTrimmedReplacer: Replacer = function* (content, find) {
   const originalLines = content.split("\n")
   const searchLines = find.split("\n")
 
-  if (searchLines[searchLines.length - 1] === "") {
+  if (searchLines.length > 0 && searchLines[searchLines.length - 1] === "") {
     searchLines.pop()
   }
 
@@ -246,7 +246,7 @@ export const BlockAnchorReplacer: Replacer = function* (content, find) {
     return
   }
 
-  if (searchLines[searchLines.length - 1] === "") {
+  if (searchLines.length > 0 && searchLines[searchLines.length - 1] === "") {
     searchLines.pop()
   }
 
