@@ -454,4 +454,61 @@ export namespace Project {
     })
     return data
   }
+
+  // ---------------------------------------------------------------------------
+  // Effect service
+  // ---------------------------------------------------------------------------
+
+  export interface Interface {
+    readonly fromDirectory: (directory: string) => Effect.Effect<{ project: Info; sandbox: string }>
+    readonly discover: (input: Info) => Effect.Effect<void>
+    readonly list: () => Effect.Effect<Info[]>
+    readonly get: (id: ProjectID) => Effect.Effect<Info | undefined>
+    readonly update: (input: UpdateInput) => Effect.Effect<Info>
+    readonly initGit: (input: { directory: string; project: Info }) => Effect.Effect<Info>
+    readonly setInitialized: (id: ProjectID) => Effect.Effect<void>
+    readonly sandboxes: (id: ProjectID) => Effect.Effect<string[]>
+    readonly addSandbox: (id: ProjectID, directory: string) => Effect.Effect<void>
+    readonly removeSandbox: (id: ProjectID, directory: string) => Effect.Effect<void>
+  }
+
+  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Project") {}
+
+  export const layer = Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      return Service.of({
+        fromDirectory: Effect.fn("Project.fromDirectory")(function* (directory: string) {
+          return yield* Effect.promise(() => fromDirectory(directory))
+        }),
+        discover: Effect.fn("Project.discover")(function* (input: Info) {
+          yield* Effect.promise(() => discover(input))
+        }),
+        list: Effect.fn("Project.list")(function* () {
+          return list()
+        }),
+        get: Effect.fn("Project.get")(function* (id: ProjectID) {
+          return get(id)
+        }),
+        update: Effect.fn("Project.update")(function* (input: UpdateInput) {
+          return yield* Effect.promise(() => update(input))
+        }),
+        initGit: Effect.fn("Project.initGit")(function* (input: { directory: string; project: Info }) {
+          return yield* Effect.promise(() => initGit(input))
+        }),
+        setInitialized: Effect.fn("Project.setInitialized")(function* (id: ProjectID) {
+          setInitialized(id)
+        }),
+        sandboxes: Effect.fn("Project.sandboxes")(function* (id: ProjectID) {
+          return yield* Effect.promise(() => sandboxes(id))
+        }),
+        addSandbox: Effect.fn("Project.addSandbox")(function* (id: ProjectID, directory: string) {
+          yield* Effect.promise(() => addSandbox(id, directory))
+        }),
+        removeSandbox: Effect.fn("Project.removeSandbox")(function* (id: ProjectID, directory: string) {
+          yield* Effect.promise(() => removeSandbox(id, directory))
+        }),
+      })
+    }),
+  )
 }
