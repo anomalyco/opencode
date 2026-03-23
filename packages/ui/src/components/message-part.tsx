@@ -460,14 +460,14 @@ function index<T extends { id: string }>(items: readonly T[]) {
   return new Map(items.map((item) => [item.id, item] as const))
 }
 
-function renderable(part: PartType, showReasoningSummaries = true) {
+function renderable(part: PartType, showReasoning = false) {
   if (part.type === "tool") {
     if (HIDDEN_TOOLS.has(part.tool)) return false
     if (part.tool === "question") return part.state.status !== "pending" && part.state.status !== "running"
     return true
   }
   if (part.type === "text") return !!part.text?.trim()
-  if (part.type === "reasoning") return showReasoningSummaries && !!part.text?.trim()
+  if (part.type === "reasoning") return showReasoning && !!part.text?.trim()
   return !!PART_MAPPING[part.type]
 }
 
@@ -486,7 +486,7 @@ export function AssistantParts(props: {
   showAssistantCopyPartID?: string | null
   turnDurationMs?: number
   working?: boolean
-  showReasoningSummaries?: boolean
+  showReasoning?: boolean
   shellToolDefaultOpen?: boolean
   editToolDefaultOpen?: boolean
 }) {
@@ -506,7 +506,7 @@ export function AssistantParts(props: {
       groupParts(
         props.messages.flatMap((message) =>
           list(data.store.part?.[message.id], emptyParts)
-            .filter((part) => renderable(part, props.showReasoningSummaries ?? true))
+            .filter((part) => renderable(part, props.showReasoning ?? false))
             .map((part) => ({
               messageID: message.id,
               part,

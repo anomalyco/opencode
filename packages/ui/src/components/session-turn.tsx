@@ -87,17 +87,14 @@ function list<T>(value: T[] | undefined | null, fallback: T[]) {
 
 const hidden = new Set(["todowrite", "todoread"])
 
-function partState(part: PartType, showReasoningSummaries: boolean) {
+function partState(part: PartType) {
   if (part.type === "tool") {
     if (hidden.has(part.tool)) return
     if (part.tool === "question" && (part.state.status === "pending" || part.state.status === "running")) return
     return "visible" as const
   }
   if (part.type === "text") return part.text?.trim() ? ("visible" as const) : undefined
-  if (part.type === "reasoning") {
-    if (showReasoningSummaries && part.text?.trim()) return "visible" as const
-    return
-  }
+  if (part.type === "reasoning") return
   if (PART_MAPPING[part.type]) return "visible" as const
   return
 }
@@ -244,9 +241,11 @@ export function SessionTurn(
   const [state, setState] = createStore({
     open: false,
     expanded: [] as string[],
+    thinking: false,
   })
   const open = () => state.open
   const expanded = () => state.expanded
+  const thinking = () => state.thinking
 
   createEffect(
     on(
@@ -321,6 +320,26 @@ export function SessionTurn(
   const working = createMemo(() => status().type !== "idle" && active())
   const showReasoningSummaries = createMemo(() => props.showReasoningSummaries ?? true)
 
+  const reasoning = createMemo(() =>
+    assistantMessages()
+      .flatMap((message) => list(data.store.part?.[message.id], emptyParts))
+      .filter((part): part is PartType & { type: "reasoning"; text: string } => part.type === "reasoning")
+      .filter((part) => !!part.text?.trim()),
+  )
+  const hasReasoning = createMemo(() => reasoning().length > 0)
+
+  createEffect(
+    on(
+      hasReasoning,
+      (value) => {
+        if (value) return
+        if (!thinking()) return
+        setState("thinking", false)
+      },
+      { defer: true },
+    ),
+  )
+
   const assistantCopyPartID = createMemo(() => {
     if (working()) return null
     return showAssistantCopyPartID() ?? null
@@ -343,23 +362,21 @@ export function SessionTurn(
   const assistantVisible = createMemo(() =>
     assistantMessages().reduce((count, message) => {
       const parts = list(data.store.part?.[message.id], emptyParts)
-      return count + parts.filter((part) => partState(part, showReasoningSummaries()) === "visible").length
+      return count + parts.filter((part) => partState(part) === "visible").length
     }, 0),
   )
   const assistantTailVisible = createMemo(() =>
     assistantMessages()
       .flatMap((message) => list(data.store.part?.[message.id], emptyParts))
       .flatMap((part) => {
-        if (partState(part, showReasoningSummaries()) !== "visible") return []
+        if (partState(part) !== "visible") return []
         if (part.type === "text") return ["text" as const]
         return ["other" as const]
       })
       .at(-1),
   )
   const reasoningHeading = createMemo(() =>
-    assistantMessages()
-      .flatMap((message) => list(data.store.part?.[message.id], emptyParts))
-      .filter((part): part is PartType & { type: "reasoning"; text: string } => part.type === "reasoning")
+    reasoning()
       .map((part) => heading(part.text))
       .filter((text): text is string => !!text)
       .at(-1),
@@ -408,16 +425,27 @@ export function SessionTurn(
                     showAssistantCopyPartID={assistantCopyPartID()}
                     turnDurationMs={turnDurationMs()}
                     working={working()}
-                    showReasoningSummaries={showReasoningSummaries()}
+                    showReasoning={thinking()}
                     shellToolDefaultOpen={props.shellToolDefaultOpen}
                     editToolDefaultOpen={props.editToolDefaultOpen}
                   />
                 </div>
               </Show>
+              <Show when={hasReasoning()}>
+                <div data-slot="session-turn-thinking-toggle">
+                  <button
+                    type="button"
+                    data-slot="session-turn-thinking-toggle-button"
+                    onClick={() => setState("thinking", !thinking())}
+                  >
+                    {thinking() ? i18n.t("ui.sessionTurn.steps.hide") : i18n.t("ui.sessionTurn.steps.show")}
+                  </button>
+                </div>
+              </Show>
               <Show when={showThinking()}>
                 <div data-slot="session-turn-thinking">
                   <TextShimmer text={i18n.t("ui.sessionTurn.status.thinking")} />
-                  <Show when={!showReasoningSummaries()}>
+                  <Show when={!showReasoningSummaries() && !thinking()}>
                     <TextReveal
                       text={reasoningHeading()}
                       class="session-turn-thinking-heading"
