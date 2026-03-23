@@ -37,8 +37,8 @@ export namespace Format {
     Service,
     Effect.gen(function* () {
       const state = yield* InstanceState.make(
-        Effect.fn("Format.state")(function* (_ctx) {
-          const enabled: Record<string, boolean> = {}
+        Effect.fn("Format.state")(function* (ctx) {
+          const enabled: Record<string, string[] | false> = {}
           const formatters: Record<string, Formatter.Info> = {}
 
           const cfg = yield* Effect.promise(() => Config.get())
@@ -63,7 +63,7 @@ export namespace Format {
               formatters[name] = {
                 ...info,
                 name,
-                enabled: async () => true,
+                enabled: async () => info.command,
               }
             }
           } else {
@@ -80,21 +80,24 @@ export namespace Format {
           }
 
           async function getFormatter(ext: string) {
-            const matching = Object.values(formatters).filter((item) => item.extensions.includes(ext))
-            const checks = await Promise.all(
-              matching.map(async (item) => {
-                log.info("checking", { name: item.name, ext })
-                const on = await isEnabled(item)
-                if (on) {
-                  log.info("enabled", { name: item.name, ext })
-                }
-                return {
-                  item,
-                  enabled: on,
-                }
-              }),
-            )
-            return checks.filter((x) => x.enabled).map((x) => x.item)
+            const result: Array<{
+              name: string
+              command: string[]
+              environment?: Record<string, string>
+            }> = []
+            for (const item of Object.values(formatters)) {
+              log.info("checking", { name: item.name, ext })
+              if (!item.extensions.includes(ext)) continue
+              const cmd = await isEnabled(item)
+              if (!cmd) continue
+              log.info("enabled", { name: item.name, ext })
+              result.push({
+                name: item.name,
+                command: cmd,
+                environment: item.environment,
+              })
+            }
+            return result
           }
 
           yield* Effect.acquireRelease(
@@ -112,7 +115,7 @@ export namespace Format {
                       const proc = Process.spawn(
                         item.command.map((x) => x.replace("$FILE", file)),
                         {
-                          cwd: Instance.directory,
+                          cwd: ctx.directory,
                           env: { ...process.env, ...item.environment },
                           stdout: "ignore",
                           stderr: "ignore",
@@ -160,7 +163,7 @@ export namespace Format {
           result.push({
             name: formatter.name,
             extensions: formatter.extensions,
-            enabled: isOn,
+            enabled: !!isOn,
           })
         }
         return result

@@ -1,6 +1,6 @@
 import { Log } from "../util/log"
 import path from "path"
-import { pathToFileURL, fileURLToPath } from "url"
+import { pathToFileURL } from "url"
 import { createRequire } from "module"
 import os from "os"
 import z from "zod"
@@ -22,7 +22,6 @@ import {
 } from "jsonc-parser"
 import { Instance } from "../project/instance"
 import { LSPServer } from "../lsp/server"
-import { BunProc } from "@/bun"
 import { Installation } from "@/installation"
 import { ConfigMarkdown } from "./markdown"
 import { constants, existsSync } from "fs"
@@ -30,14 +29,11 @@ import { Bus } from "@/bus"
 import { GlobalBus } from "@/bus/global"
 import { Event } from "../server/event"
 import { Glob } from "../util/glob"
-import { PackageRegistry } from "@/bun/registry"
-import { proxied } from "@/util/proxied"
 import { iife } from "@/util/iife"
 import { Account } from "@/account"
 import { ConfigPaths } from "./paths"
 import { Filesystem } from "@/util/filesystem"
-import { Process } from "@/util/process"
-import { Lock } from "@/util/lock"
+import { Npm } from "@/npm"
 
 export namespace Config {
   const ModelId = z.string().meta({ $ref: "https://models.dev/model-schema.json#/$defs/Model" })
@@ -154,8 +150,7 @@ export namespace Config {
 
       deps.push(
         iife(async () => {
-          const shouldInstall = await needsInstall(dir)
-          if (shouldInstall) await installDependencies(dir)
+          await installDependencies(dir)
         }),
       )
 
@@ -271,6 +266,10 @@ export namespace Config {
   }
 
   export async function installDependencies(dir: string) {
+    if (!(await isWritable(dir))) {
+      log.info("config dir is not writable, skipping dependency install", { dir })
+      return
+    }
     const pkg = path.join(dir, "package.json")
     const targetVersion = Installation.isLocal() ? "*" : Installation.VERSION
 
@@ -284,43 +283,15 @@ export namespace Config {
     await Filesystem.writeJson(pkg, json)
 
     const gitignore = path.join(dir, ".gitignore")
-    const hasGitIgnore = await Filesystem.exists(gitignore)
-    if (!hasGitIgnore)
-      await Filesystem.write(gitignore, ["node_modules", "package.json", "bun.lock", ".gitignore"].join("\n"))
+    if (!(await Filesystem.exists(gitignore)))
+      await Filesystem.write(
+        gitignore,
+        ["node_modules", "plans", "package.json", "bun.lock", ".gitignore", "package-lock.json"].join("\n"),
+      )
 
     // Install any additional dependencies defined in the package.json
     // This allows local plugins and custom tools to use external packages
-    using _ = await Lock.write("bun-install")
-    await BunProc.run(
-      [
-        "install",
-        // TODO: get rid of this case (see: https://github.com/oven-sh/bun/issues/19936)
-        ...(proxied() || process.env.CI ? ["--no-cache"] : []),
-      ],
-      { cwd: dir },
-    ).catch((err) => {
-      if (err instanceof Process.RunFailedError) {
-        const detail = {
-          dir,
-          cmd: err.cmd,
-          code: err.code,
-          stdout: err.stdout.toString(),
-          stderr: err.stderr.toString(),
-        }
-        if (Flag.OPENCODE_STRICT_CONFIG_DEPS) {
-          log.error("failed to install dependencies", detail)
-          throw err
-        }
-        log.warn("failed to install dependencies", detail)
-        return
-      }
-
-      if (Flag.OPENCODE_STRICT_CONFIG_DEPS) {
-        log.error("failed to install dependencies", { dir, error: err })
-        throw err
-      }
-      log.warn("failed to install dependencies", { dir, error: err })
-    })
+    await Npm.install(dir)
   }
 
   async function isWritable(dir: string) {
@@ -330,41 +301,6 @@ export namespace Config {
     } catch {
       return false
     }
-  }
-
-  export async function needsInstall(dir: string) {
-    // Some config dirs may be read-only.
-    // Installing deps there will fail; skip installation in that case.
-    const writable = await isWritable(dir)
-    if (!writable) {
-      log.debug("config dir is not writable, skipping dependency install", { dir })
-      return false
-    }
-
-    const nodeModules = path.join(dir, "node_modules")
-    if (!existsSync(nodeModules)) return true
-
-    const pkg = path.join(dir, "package.json")
-    const pkgExists = await Filesystem.exists(pkg)
-    if (!pkgExists) return true
-
-    const parsed = await Filesystem.readJson<{ dependencies?: Record<string, string> }>(pkg).catch(() => null)
-    const dependencies = parsed?.dependencies ?? {}
-    const depVersion = dependencies["@opencode-ai/plugin"]
-    if (!depVersion) return true
-
-    const targetVersion = Installation.isLocal() ? "latest" : Installation.VERSION
-    if (targetVersion === "latest") {
-      const isOutdated = await PackageRegistry.isOutdated("@opencode-ai/plugin", depVersion, dir)
-      if (!isOutdated) return false
-      log.info("Cached version is outdated, proceeding with install", {
-        pkg: "@opencode-ai/plugin",
-        cachedVersion: depVersion,
-      })
-      return true
-    }
-    if (depVersion === targetVersion) return false
-    return true
   }
 
   function rel(item: string, patterns: string[]) {
