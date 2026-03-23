@@ -23,6 +23,7 @@ export type ProjectSidebarContext = {
   onProjectMouseEnter: (worktree: string, event: MouseEvent) => void
   onProjectMouseLeave: (worktree: string) => void
   onProjectFocus: (worktree: string) => void
+  onHoverOpenChanged: (worktree: string, hovered: boolean) => void
   navigateToProject: (directory: string) => void
   openSidebar: () => void
   closeProject: (directory: string) => void
@@ -197,7 +198,6 @@ const ProjectPreviewPanel = (props: {
   projectChildren: Accessor<Map<string, string[]>>
   workspaceSessions: (directory: string) => ReturnType<typeof sortedRootSessions>
   workspaceChildren: (directory: string) => Map<string, string[]>
-  setOpen: (value: boolean) => void
   ctx: ProjectSidebarContext
   language: ReturnType<typeof useLanguage>
 }): JSX.Element => (
@@ -264,7 +264,7 @@ const ProjectPreviewPanel = (props: {
         class="flex w-full text-left justify-start text-text-base px-2 hover:bg-transparent active:bg-transparent"
         onClick={() => {
           props.ctx.openSidebar()
-          props.setOpen(false)
+          props.ctx.onHoverOpenChanged(props.project.worktree, false)
           if (props.selected()) return
           props.ctx.navigateToProject(props.project.worktree)
         }}
@@ -280,7 +280,6 @@ export const SortableProject = (props: {
   mobile?: boolean
   ctx: ProjectSidebarContext
   sortNow: Accessor<number>
-  onHoverOpenChanged: (hovered: boolean) => void
 }): JSX.Element => {
   const globalSync = useGlobalSync()
   const language = useLanguage()
@@ -343,7 +342,7 @@ export const SortableProject = (props: {
       workspacesEnabled={props.ctx.workspacesEnabled}
       closeProject={props.ctx.closeProject}
       setMenu={(value) => setState("menu", value)}
-      setOpen={(value) => props.onHoverOpenChanged(value)}
+      setOpen={(value) => props.ctx.onHoverOpenChanged(props.project.worktree, value)}
       setSuppressHover={(value) => setState("suppressHover", value)}
       language={language}
     />
@@ -363,7 +362,7 @@ export const SortableProject = (props: {
           onOpenChange={(value) => {
             if (state.menu) return
             if (value && state.suppressHover) return
-            props.onHoverOpenChanged(value)
+            props.ctx.onHoverOpenChanged(props.project.worktree, value)
             if (value) props.ctx.setHoverSession(undefined)
           }}
         >
@@ -378,7 +377,6 @@ export const SortableProject = (props: {
             projectChildren={projectChildren}
             workspaceSessions={workspaceSessions}
             workspaceChildren={workspaceChildren}
-            setOpen={(value) => props.onHoverOpenChanged(value)}
             ctx={props.ctx}
             language={language}
           />

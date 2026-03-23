@@ -1976,6 +1976,10 @@ export default function Layout(props: ParentProps) {
     onProjectMouseEnter: (worktree, event) => aim.enter(worktree, event),
     onProjectMouseLeave: (worktree) => aim.leave(worktree),
     onProjectFocus: (worktree) => aim.activate(worktree),
+    onHoverOpenChanged: (worktree, hoverOpen) => {
+      if (!hoverOpen && state.hoverProject && state.hoverProject !== worktree) return
+      setState("hoverProject", hoverOpen ? worktree : undefined)
+    },
     navigateToProject,
     openSidebar: () => layout.sidebar.open(),
     closeProject,
@@ -2313,16 +2317,7 @@ export default function Layout(props: ParentProps) {
       aimMove={aim.move}
       projects={projects}
       renderProject={(project) => (
-        <SortableProject
-          onHoverOpenChanged={(hoverOpen) => {
-            if (!hoverOpen && state.hoverProject && state.hoverProject !== project.worktree) return
-            setState("hoverProject", hoverOpen ? project.worktree : undefined)
-          }}
-          ctx={projectSidebarCtx}
-          project={project}
-          sortNow={sortNow}
-          mobile={mobile}
-        />
+        <SortableProject ctx={projectSidebarCtx} project={project} sortNow={sortNow} mobile={mobile} />
       )}
       handleDragStart={handleDragStart}
       handleDragEnd={handleDragEnd}
