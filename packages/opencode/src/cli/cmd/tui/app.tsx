@@ -117,6 +117,9 @@ export function tui(input: {
 }) {
   // promise to prevent immediate exit
   return new Promise<void>(async (resolve) => {
+    const { provisionRevealHandler } = await import("@tui/util/reveal")
+    provisionRevealHandler()
+
     const unguard = win32InstallCtrlCGuard()
     win32DisableProcessedInput()
 

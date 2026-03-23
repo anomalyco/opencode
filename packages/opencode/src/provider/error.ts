@@ -121,7 +121,8 @@ export namespace ProviderError {
     const responseBody = JSON.stringify(body)
     if (body.type !== "error") return
 
-    switch (body?.error?.code) {
+    const code = body?.error?.code ?? body?.error?.type
+    switch (code) {
       case "context_length_exceeded":
         return {
           type: "context_overflow",
@@ -149,6 +150,15 @@ export namespace ProviderError {
           isRetryable: false,
           responseBody,
         }
+    }
+
+    const msg = typeof body?.error?.message === "string" ? body.error.message : responseBody
+    if (isOverflow(msg)) {
+      return {
+        type: "context_overflow",
+        message: msg,
+        responseBody,
+      }
     }
   }
 

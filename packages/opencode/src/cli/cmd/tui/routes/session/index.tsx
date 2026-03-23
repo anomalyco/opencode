@@ -90,7 +90,6 @@ import { FilePathLink, Link } from "../../ui/link"
 import { TextWithLinks } from "../../ui/text-with-links"
 import { UI } from "@/cli/ui.ts"
 import { useTuiConfig } from "../../context/tui-config"
-import { preprocessMarkdownLinks } from "../../ui/preprocess-markdown-links"
 
 addDefaultParsers(parsers.parsers)
 
@@ -1247,7 +1246,7 @@ function processUserMessageText(text: string | undefined, files: FilePart[]): st
     }
   }
 
-  return preprocessMarkdownLinks(processed)
+  return processed
 }
 
 function UserMessage(props: {
@@ -1448,7 +1447,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
   })
 
   const processedContent = createMemo(() => {
-    return preprocessMarkdownLinks("_Thinking:_ " + content())
+    return "_Thinking:_ " + content()
   })
 
   return (
@@ -1481,7 +1480,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
   const { theme, syntax } = useTheme()
 
   const processedContent = createMemo(() => {
-    return preprocessMarkdownLinks(props.part.text.trim())
+    return props.part.text.trim()
   })
 
   return (
