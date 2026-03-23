@@ -1,10 +1,3 @@
-import os from "os"
-import path from "path"
-import { pathToFileURL } from "url"
-import z from "zod"
-import { Effect, Layer, ServiceMap } from "effect"
-import { readdir, realpath, stat } from "fs/promises"
-import { NamedError } from "@opencode-ai/util/error"
 import type { Agent } from "@/agent/agent"
 import { Bus } from "@/bus"
 import { InstanceState } from "@/effect/instance-state"
@@ -13,6 +6,13 @@ import { Flag } from "@/flag/flag"
 import { Global } from "@/global"
 import { Permission } from "@/permission"
 import { Filesystem } from "@/util/filesystem"
+import { NamedError } from "@opencode-ai/util/error"
+import { Effect, Layer, ServiceMap } from "effect"
+import { readdir, realpath, stat } from "fs/promises"
+import os from "os"
+import path from "path"
+import { pathToFileURL } from "url"
+import z from "zod"
 import { Config } from "../config/config"
 import { ConfigMarkdown } from "../config/markdown"
 import { Glob } from "../util/glob"
@@ -113,12 +113,14 @@ export namespace Skill {
       roots = [path.join(root, "skill"), path.join(root, "skills")]
     }
 
-
     // Prevent symlink loops by tracking visited real directories.
     const seenDirs = new Set<string>()
 
     const walk = async (dir: string, relativePath: string) => {
-      const resolvedDir = await realpath(dir).catch(() => dir)
+      const resolvedDir = await realpath(dir).catch(() => {
+        // Fall back to the original path if the directory disappears mid-scan.
+        return dir
+      })
       if (seenDirs.has(resolvedDir)) return
       seenDirs.add(resolvedDir)
 
