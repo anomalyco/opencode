@@ -115,8 +115,6 @@ export function useFileManager(serverUrl: string): FileManagerReturn {
   /**
    * 创建文件或目录
    */
-  async function createFile(path: string): Promise<CreateItemResponse | ApiErrorResponse>
-  async function createDirectory(path: string): Promise<CreateItemResponse | ApiErrorResponse>
   async function createItem(
     params: CreateItemParams,
   ): Promise<CreateItemResponse | ApiErrorResponse> {
