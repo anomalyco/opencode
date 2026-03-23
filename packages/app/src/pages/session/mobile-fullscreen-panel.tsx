@@ -146,9 +146,11 @@ export function MobileFullscreenPanel(props: MobileFullscreenPanelProps) {
           </Show>
 
           <Show when={props.active === "file"}>
-            <Show when={activeFileTab()} keyed>
-              {(tab) => <FileTabContent tab={tab} />}
-            </Show>
+            <Tabs value={activeFileTab() ?? ""} class="h-full">
+              <Show when={activeFileTab()} keyed>
+                {(tab) => <FileTabContent tab={tab} />}
+              </Show>
+            </Tabs>
           </Show>
         </div>
       </div>
