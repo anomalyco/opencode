@@ -513,14 +513,20 @@ You can control context compaction behavior through the `compaction` option.
   "compaction": {
     "auto": true,
     "prune": true,
-    "reserved": 10000
+    "reserved": 10000,
+    "pruneProtect": 40000,
+    "pruneMinimum": 20000,
+    "contextLimit": 110000
   }
 }
 ```
 
 - `auto` - Automatically compact the session when context is full (default: `true`).
 - `prune` - Remove old tool outputs to save tokens (default: `true`).
-- `reserved` - Token buffer for compaction. Leaves enough window to avoid overflow during compaction
+- `reserved` - Token buffer for compaction. Leaves enough window to avoid overflow during compaction.
+- `pruneProtect` - Protects this many tokens worth of recent tool output before pruning begins (default: `40 000`).
+- `pruneMinimum` - Minimum token savings required before tool outputs are marked compacted (default: `20 000`).
+- `contextLimit` - Pretend every model has this context/input limit when deciding whether to compact (useful for simulating smaller models).
 
 ---
 

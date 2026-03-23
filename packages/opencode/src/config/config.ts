@@ -1204,6 +1204,24 @@ export namespace Config {
             .min(0)
             .optional()
             .describe("Token buffer for compaction. Leaves enough window to avoid overflow during compaction."),
+          pruneProtect: z
+            .number()
+            .int()
+            .min(0)
+            .optional()
+            .describe("Keep this many tokens worth of recent tool outputs untouched before pruning anything (default: 40k)."),
+          pruneMinimum: z
+            .number()
+            .int()
+            .min(0)
+            .optional()
+            .describe("Only mark tool outputs as compacted if at least this many tokens would be chopped off (default: 20k)."),
+          contextLimit: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("Clamp model context/input limits to this value during compaction checks (useful to simulate smaller contexts)."),
         })
         .optional(),
       experimental: z

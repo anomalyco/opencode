@@ -1480,6 +1480,18 @@ export type Config = {
      * Token buffer for compaction. Leaves enough window to avoid overflow during compaction.
      */
     reserved?: number
+    /**
+     * Keep this many tokens worth of recent tool outputs untouched before pruning anything (default: 40k).
+     */
+    pruneProtect?: number
+    /**
+     * Only mark tool outputs as compacted if at least this many tokens would be chopped off (default: 20k).
+     */
+    pruneMinimum?: number
+    /**
+     * Clamp model context/input limits to this value during compaction checks (useful to simulate smaller contexts).
+     */
+    contextLimit?: number
   }
   experimental?: {
     disable_paste_summary?: boolean
