@@ -15,6 +15,8 @@ permissions:
 jobs:
   build-cli:
     runs-on: ubuntu-latest
+    env:
+      APP_VERSION: ${{ inputs.version != '' && inputs.version || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
 
@@ -31,7 +33,7 @@ jobs:
           cd packages/opencode
           bun run build
         env:
-          OPENCODE_VERSION: "1.2.22"
+          OPENCODE_VERSION: ${{ env.APP_VERSION }}
 
       - uses: actions/upload-artifact@v4
         with:
@@ -41,6 +43,9 @@ jobs:
   build-macos-x64:
     needs: build-cli
     runs-on: macos-latest
+    env:
+      APP_VERSION: ${{ inputs.version != '' && inputs.version || github.ref_name }}
+      PKG_VERSION: ${{ startsWith(inputs.version != '' && inputs.version || github.ref_name, 'v') && format('{0}', (inputs.version != '' && inputs.version || github.ref_name)) || (inputs.version != '' && inputs.version || github.ref_name) }}
     steps:
       - uses: actions/checkout@v4
 
@@ -71,8 +76,9 @@ jobs:
       - name: Prepare Desktop
         run: |
           cd packages/desktop
+          VERSION="${APP_VERSION#v}"
           # Update version
-          jq '.version = "1.2.22"' package.json > package.json.tmp
+          jq --arg version "$VERSION" '.version = $version' package.json > package.json.tmp
           mv package.json.tmp package.json
 
           # List downloaded files for debugging
@@ -122,6 +128,8 @@ jobs:
   build-macos-arm64:
     needs: [build-cli, build-macos-x64]
     runs-on: macos-latest
+    env:
+      APP_VERSION: ${{ inputs.version != '' && inputs.version || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
 
@@ -152,8 +160,9 @@ jobs:
       - name: Prepare Desktop
         run: |
           cd packages/desktop
+          VERSION="${APP_VERSION#v}"
           # Update version
-          jq '.version = "1.2.22"' package.json > package.json.tmp
+          jq --arg version "$VERSION" '.version = $version' package.json > package.json.tmp
           mv package.json.tmp package.json
 
           # List downloaded files for debugging
