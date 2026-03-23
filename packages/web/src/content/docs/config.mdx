@@ -306,12 +306,22 @@ Bearer tokens (`AWS_BEARER_TOKEN_BEDROCK` or `/connect`) take precedence over pr
 
 ### Themes
 
-Set your UI theme in `tui.json`.
+Set your UI theme in `tui.json`. Use a string for a single theme, or an object to set different themes for dark and light mode.
 
 ```json title="tui.json"
 {
   "$schema": "https://opencode.ai/tui.json",
   "theme": "tokyonight"
+}
+```
+
+```json title="tui.json"
+{
+  "$schema": "https://opencode.ai/tui.json",
+  "theme": {
+    "dark": "tokyonight",
+    "light": "github"
+  }
 }
 ```
 
