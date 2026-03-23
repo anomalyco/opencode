@@ -345,7 +345,11 @@ export const TuiRoutes = lazy(() =>
       ),
       async (c) => {
         const evt = c.req.valid("json")
-        await Bus.publish(Object.values(TuiEvent).find((def) => def.type === evt.type)!, evt.properties)
+        const eventDef = Object.values(TuiEvent).find((def) => def.type === evt.type)
+        if (!eventDef) {
+          return c.json({ error: `Unknown event type: ${evt.type}` }, 400)
+        }
+        await Bus.publish(eventDef, evt.properties)
         return c.json(true)
       },
     )
