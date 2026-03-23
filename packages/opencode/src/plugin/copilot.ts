@@ -71,8 +71,8 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
                 const body = typeof init?.body === "string" ? JSON.parse(init.body) : init?.body
 
                 // Completions API
-                if (body?.messages && url.includes("completions")) {
-                  const last = body.messages[body.messages.length - 1]
+                if (body?.messages?.length && url.includes("completions")) {
+                  const last = body.messages.at(-1)
                   return {
                     isVision: body.messages.some(
                       (msg: any) =>
@@ -83,8 +83,8 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
                 }
 
                 // Responses API
-                if (body?.input) {
-                  const last = body.input[body.input.length - 1]
+                if (body?.input?.length) {
+                  const last = body.input.at(-1)
                   return {
                     isVision: body.input.some(
                       (item: any) =>
@@ -95,8 +95,8 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
                 }
 
                 // Messages API
-                if (body?.messages) {
-                  const last = body.messages[body.messages.length - 1]
+                if (body?.messages?.length) {
+                  const last = body.messages.at(-1)
                   const hasNonToolCalls =
                     Array.isArray(last?.content) && last.content.some((part: any) => part?.type !== "tool_result")
                   return {

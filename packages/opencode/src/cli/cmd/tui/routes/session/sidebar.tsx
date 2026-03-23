@@ -305,7 +305,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
           </Show>
           <text>
             <span style={{ fg: theme.textMuted }}>{directory().split("/").slice(0, -1).join("/")}/</span>
-            <span style={{ fg: theme.text }}>{directory().split("/").at(-1)}</span>
+            <span style={{ fg: theme.text }}>{directory().split("/").at(-1) || "/"}</span>
           </text>
           <text fg={theme.textMuted}>
             <span style={{ fg: theme.success }}>•</span> <b>Open</b>

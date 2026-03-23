@@ -364,7 +364,7 @@ export const ProvidersLoginCommand = cmd({
         if (args.provider) {
           const input = args.provider
           const byID = options.find((x) => x.value === input)
-          const byName = options.find((x) => x.label.toLowerCase() === input.toLowerCase())
+          const byName = options.find((x) => x.label?.toLowerCase() === input.toLowerCase())
           const match = byID ?? byName
           if (!match) {
             prompts.log.error(`Unknown provider "${input}"`)

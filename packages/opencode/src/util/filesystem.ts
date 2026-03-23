@@ -35,7 +35,12 @@ export namespace Filesystem {
   }
 
   export async function readJson<T = any>(p: string): Promise<T> {
-    return JSON.parse(await readFile(p, "utf-8"))
+    const content = await readFile(p, "utf-8")
+    try {
+      return JSON.parse(content)
+    } catch (e) {
+      throw new Error(`Failed to parse JSON from ${p}: ${e}`)
+    }
   }
 
   export async function readBytes(p: string): Promise<Buffer> {
