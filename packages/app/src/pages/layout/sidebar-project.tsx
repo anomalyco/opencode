@@ -23,6 +23,7 @@ export type ProjectSidebarContext = {
   onProjectMouseEnter: (worktree: string, event: MouseEvent) => void
   onProjectMouseLeave: (worktree: string) => void
   onProjectFocus: (worktree: string) => void
+  onHoverOpenChanged: (worktree: string, hovered: boolean) => void
   navigateToProject: (directory: string) => void
   openSidebar: () => void
   closeProject: (directory: string) => void
@@ -109,8 +110,14 @@ const ProjectTile = (props: {
           "bg-surface-base-hover border border-border-weak-base": !props.selected() && props.active(),
         }}
         onPointerDown={(event) => {
+          if (event.button === 0 && !event.ctrlKey) {
+            props.setOpen(false)
+            props.setSuppressHover(true)
+            return
+          }
           if (!props.overlay()) return
           if (event.button !== 2 && !(event.button === 0 && event.ctrlKey)) return
+          props.setOpen(false)
           props.setSuppressHover(true)
           event.preventDefault()
         }}
@@ -130,12 +137,11 @@ const ProjectTile = (props: {
           props.onProjectFocus(props.project.worktree)
         }}
         onClick={() => {
+          props.setOpen(false)
           if (props.selected()) {
-            props.setSuppressHover(true)
             layout.sidebar.toggle()
             return
           }
-          props.setSuppressHover(false)
           props.navigateToProject(props.project.worktree)
         }}
         onBlur={() => props.setOpen(false)}
@@ -192,7 +198,6 @@ const ProjectPreviewPanel = (props: {
   projectChildren: Accessor<Map<string, string[]>>
   workspaceSessions: (directory: string) => ReturnType<typeof sortedRootSessions>
   workspaceChildren: (directory: string) => Map<string, string[]>
-  setOpen: (value: boolean) => void
   ctx: ProjectSidebarContext
   language: ReturnType<typeof useLanguage>
 }): JSX.Element => (
@@ -259,7 +264,7 @@ const ProjectPreviewPanel = (props: {
         class="flex w-full text-left justify-start text-text-base px-2 hover:bg-transparent active:bg-transparent"
         onClick={() => {
           props.ctx.openSidebar()
-          props.setOpen(false)
+          props.ctx.onHoverOpenChanged(props.project.worktree, false)
           if (props.selected()) return
           props.ctx.navigateToProject(props.project.worktree)
         }}
@@ -284,28 +289,16 @@ export const SortableProject = (props: {
   const workspaceEnabled = createMemo(() => props.ctx.workspacesEnabled(props.project))
   const dirs = createMemo(() => props.ctx.workspaceIds(props.project))
   const [state, setState] = createStore({
-    open: false,
     menu: false,
     suppressHover: false,
   })
 
+  const isHoverProject = () => props.ctx.hoverProject() === props.project.worktree
   const preview = createMemo(() => !props.mobile && props.ctx.sidebarOpened())
   const overlay = createMemo(() => !props.mobile && !props.ctx.sidebarOpened())
-  const active = createMemo(
-    () => state.menu || (preview() ? state.open : overlay() && props.ctx.hoverProject() === props.project.worktree),
-  )
+  const active = createMemo(() => state.menu || (preview() ? isHoverProject() : overlay() && isHoverProject()))
 
-  createEffect(() => {
-    if (preview()) return
-    if (!state.open) return
-    setState("open", false)
-  })
-
-  createEffect(() => {
-    if (!selected()) return
-    if (!state.open) return
-    setState("open", false)
-  })
+  const hoverOpen = () => isHoverProject() && preview() && !selected() && !state.menu
 
   const label = (directory: string) => {
     const [data] = globalSync.child(directory, { bootstrap: false })
@@ -346,7 +339,7 @@ export const SortableProject = (props: {
       workspacesEnabled={props.ctx.workspacesEnabled}
       closeProject={props.ctx.closeProject}
       setMenu={(value) => setState("menu", value)}
-      setOpen={(value) => setState("open", value)}
+      setOpen={(value) => props.ctx.onHoverOpenChanged(props.project.worktree, value)}
       setSuppressHover={(value) => setState("suppressHover", value)}
       language={language}
     />
@@ -357,7 +350,7 @@ export const SortableProject = (props: {
     <div use:sortable classList={{ "opacity-30": sortable.isActiveDraggable }}>
       <Show when={preview() && !selected()} fallback={tile()}>
         <HoverCard
-          open={!state.suppressHover && state.open && !state.menu}
+          open={!state.suppressHover && hoverOpen() && !state.menu}
           openDelay={0}
           closeDelay={0}
           placement="right-start"
@@ -366,7 +359,7 @@ export const SortableProject = (props: {
           onOpenChange={(value) => {
             if (state.menu) return
             if (value && state.suppressHover) return
-            setState("open", value)
+            props.ctx.onHoverOpenChanged(props.project.worktree, value)
             if (value) props.ctx.setHoverSession(undefined)
           }}
         >
@@ -381,7 +374,6 @@ export const SortableProject = (props: {
             projectChildren={projectChildren}
             workspaceSessions={workspaceSessions}
             workspaceChildren={workspaceChildren}
-            setOpen={(value) => setState("open", value)}
             ctx={props.ctx}
             language={language}
           />
