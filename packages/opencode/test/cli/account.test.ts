@@ -18,7 +18,9 @@ describe("console account display", () => {
 
   test("includes the account url in org rows", () => {
     expect(
-      stripAnsi(formatOrgLine({ email: "one@example.com", url: "https://one.example.com" }, { id: "org-1", name: "One" }, true)),
+      stripAnsi(
+        formatOrgLine({ email: "one@example.com", url: "https://one.example.com" }, { id: "org-1", name: "One" }, true),
+      ),
     ).toBe("  ● One  one@example.com  https://one.example.com  org-1")
   })
 })
