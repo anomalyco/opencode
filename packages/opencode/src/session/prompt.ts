@@ -303,37 +303,25 @@ export namespace SessionPrompt {
     const duration = config.team?.member_timeout ?? 300_000
     const { SessionInject } = await import("./inject")
 
-    // Check for messages already injected before we start waiting (race fix)
-    const msgs = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
-    const last = msgs.findLast((m) => m.info.role === "assistant")
-    const pending = msgs.find((m) => m.info.role === "user" && last && m.info.id > last.info.id)
-    if (pending) return true
-
-    return new Promise<boolean>((resolve) => {
+    return new Promise<boolean>(async (resolve) => {
       let resolved = false
 
-      const timeout = setTimeout(() => {
-        if (!resolved) {
-          resolved = true
-          cleanup()
-          resolve(false)
-        }
-      }, duration)
+      function done(value: boolean) {
+        if (resolved) return
+        resolved = true
+        cleanup()
+        resolve(value)
+      }
 
+      const timeout = setTimeout(() => done(false), duration)
+
+      // Subscribe FIRST so no events are missed
       const unsub = Bus.subscribe(SessionInject.Event.MessageInjected, (event) => {
-        if (event.properties.sessionID === sessionID && !resolved) {
-          resolved = true
-          cleanup()
-          resolve(true)
-        }
+        if (event.properties.sessionID === sessionID) done(true)
       })
 
       function onAbort() {
-        if (!resolved) {
-          resolved = true
-          cleanup()
-          resolve(false)
-        }
+        done(false)
       }
       abort.addEventListener("abort", onAbort)
 
@@ -341,6 +329,16 @@ export namespace SessionPrompt {
         clearTimeout(timeout)
         unsub()
         abort.removeEventListener("abort", onAbort)
+      }
+
+      // THEN check DB for messages injected before subscribe was established
+      try {
+        const msgs = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
+        const last = msgs.findLast((m) => m.info.role === "assistant")
+        const pending = msgs.find((m) => m.info.role === "user" && last && m.info.id > last.info.id)
+        if (pending) done(true)
+      } catch (e) {
+        log.error("failed to check pending messages", { sessionID, error: e })
       }
     })
   }

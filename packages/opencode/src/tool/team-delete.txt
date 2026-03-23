@@ -1,4 +1,4 @@
-Disband a team and mark all active members as completed.
+Disband a team and mark all active members as cancelled.
 
 Call this after all team work is done. Agents persist any learnings via their memory — they do not need to stay alive for context retention.
 

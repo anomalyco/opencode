@@ -221,19 +221,20 @@ export const TaskTool = Tool.define("task", async (ctx) => {
               ctx.abort.removeEventListener("abort", cancel)
             })
         })
+        // Wire up abort before launching so cancellation works immediately
+        function cancel() {
+          SessionPrompt.cancel(session.id)
+        }
+        ctx.abort.addEventListener("abort", cancel)
+
         running++
         try {
           bound()
         } catch (e) {
           running--
+          ctx.abort.removeEventListener("abort", cancel)
           throw e
         }
-
-        // Wire up abort to cancel the child session
-        function cancel() {
-          SessionPrompt.cancel(session.id)
-        }
-        ctx.abort.addEventListener("abort", cancel)
 
         return {
           title: `${params.description} (background)`,

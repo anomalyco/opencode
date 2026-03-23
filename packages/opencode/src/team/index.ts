@@ -166,19 +166,22 @@ export namespace Team {
     if (!team) throw new Error(`Team not found: ${input.teamID}`)
     if (team.status === "disbanded") throw new Error(`Cannot add member to disbanded team: ${input.teamID}`)
 
-    // Disambiguate duplicate agent names by appending a suffix
-    let agent = input.agent
-    const existing = members(input.teamID).filter((m) => m.role === "member")
-    const taken = new Set(existing.map((m) => m.agent))
-    if (taken.has(agent)) {
-      let i = 2
-      while (taken.has(`${input.agent}-${i}`)) i++
-      agent = `${input.agent}-${i}`
-    }
-
     const now = Date.now()
-    const row = Database.use((db) =>
-      db
+    // Disambiguate + insert in a transaction to prevent TOCTOU races
+    const row = Database.transaction((db) => {
+      let agent = input.agent
+      const existing = db
+        .select()
+        .from(TeamMemberTable)
+        .where(and(eq(TeamMemberTable.team_id, input.teamID), eq(TeamMemberTable.role, "member")))
+        .all()
+      const taken = new Set(existing.map((m) => m.agent))
+      if (taken.has(agent)) {
+        let i = 2
+        while (taken.has(`${input.agent}-${i}`)) i++
+        agent = `${input.agent}-${i}`
+      }
+      return db
         .insert(TeamMemberTable)
         .values({
           team_id: input.teamID,
@@ -190,8 +193,8 @@ export namespace Team {
           time_updated: now,
         })
         .returning()
-        .get(),
-    )
+        .get()
+    })
     const member = toMember(row)
     Database.effect(() => Bus.publish(Event.MemberAdded, { member }))
     return member
