@@ -13,14 +13,16 @@ export namespace SyncEvent {
     type: string
     version: number
     aggregate: string
-    data: z.ZodObject
+    schema: z.ZodObject
+
+    properties: z.ZodObject
   }
 
   export type Event<Def extends Definition = Definition> = {
     id: string
     seq: number
     aggregateID: string
-    data: z.infer<Def["data"]>
+    data: z.infer<Def["schema"]>
   }
 
   export type SerializedEvent<Def extends Definition = Definition> = Event<Def> & { type: string }
@@ -37,7 +39,6 @@ export namespace SyncEvent {
 
   export function init(input: {
     projectors: Array<[Definition, ProjectorFunc]>
-    convertDefinition?: (type: string, data: ZodObject) => ZodObject
     convertEvent?: Exclude<typeof convertEvent, undefined>
   }) {
     projectors = new Map(input.projectors)
@@ -48,9 +49,8 @@ export namespace SyncEvent {
     // simplifies the bus to only use unversioned latest events
     for (let [type, version] of versions.entries()) {
       let def = registry.get(versionedType(type, version))!
-      let data = def.data
 
-      BusEvent.define(def.type, input.convertDefinition ? input.convertDefinition(type, data) : data)
+      BusEvent.define(def.type, def.properties || def.schema)
     }
 
     // Freeze the system so it clearly errors if events are defined
@@ -69,7 +69,8 @@ export namespace SyncEvent {
     Type extends string,
     Agg extends string,
     Schema extends ZodObject<Record<Agg, z.ZodType<string>>>,
-  >(input: { type: Type; version: number; aggregate: Agg; schema: Schema }) {
+    BusSchema extends ZodObject<Record<Agg, z.ZodType<string>>> | undefined,
+  >(input: { type: Type; version: number; aggregate: Agg; schema: Schema; busSchema: BusSchema }) {
     if (frozen) {
       throw new Error("Error defining sync event: sync system has been frozen")
     }
@@ -77,8 +78,11 @@ export namespace SyncEvent {
     const def = {
       type: input.type,
       version: input.version,
-      data: input.schema,
       aggregate: input.aggregate,
+      schema: input.schema,
+      properties: (input.busSchema ?? input.schema) as BusSchema extends ZodObject<Record<Agg, z.ZodType<string>>>
+        ? BusSchema
+        : Schema,
     }
 
     versions.set(def.type, Math.max(def.version, versions.get(def.type) || 0))
@@ -199,7 +203,7 @@ export namespace SyncEvent {
           ProjectBus.publish(
             {
               type: def.type,
-              properties: def.data,
+              properties: def.schema,
             },
             convertEvent ? convertEvent(def.type, event.data) : event.data,
           )
@@ -226,7 +230,7 @@ export namespace SyncEvent {
               .object({
                 type: z.literal(type),
                 aggregate: z.literal(def.aggregate),
-                data: def.data,
+                data: def.schema,
               })
               .meta({
                 ref: "SyncEvent" + "." + def.type,

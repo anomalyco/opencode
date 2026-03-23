@@ -161,6 +161,8 @@ export const GlobalRoutes = lazy(() =>
         c.header("X-Content-Type-Options", "nosniff")
         return streamEvents(c, (q) => {
           return SyncEvent.subscribeAll(({ def, event }) => {
+            // TODO: don't pass def, just pass the type (and it should
+            // be versioned)
             q.push(
               JSON.stringify({
                 payload: {

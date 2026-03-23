@@ -203,6 +203,10 @@ export namespace Session {
           time: Info.shape.time.partial().optional(),
         }),
       }),
+      busSchema: z.object({
+        sessionID: SessionID.zod,
+        info: Info,
+      }),
     }),
     Deleted: SyncEvent.define({
       type: "session.deleted",
@@ -228,6 +232,8 @@ export namespace Session {
       }),
     ),
   }
+
+  type X = z.infer<(typeof Event.Updated)["properties"]>
 
   export const create = fn(
     z

@@ -2,20 +2,11 @@ import z from "zod"
 import { Log } from "../util/log"
 import { Instance } from "../project/instance"
 import { BusEvent } from "./bus-event"
-import { SyncEvent } from "../sync"
 import { GlobalBus } from "./global"
 
 export namespace Bus {
   const log = Log.create({ service: "bus" })
   type Subscription = (event: any) => void
-
-  type SubscribableProperties<Def> = Def extends { data: infer Data }
-    ? z.infer<Data>
-    : Def extends { properties: infer Properties }
-      ? z.infer<Properties>
-      : never
-
-  type SubscribableDefinition = BusEvent.Definition | SyncEvent.Definition
 
   export const InstanceDisposed = BusEvent.define(
     "server.instance.disposed",
@@ -72,16 +63,19 @@ export namespace Bus {
     return Promise.all(pending)
   }
 
-  export function subscribe<Def extends SubscribableDefinition>(
-    def: Def,
-    callback: (event: { type: Def["type"]; properties: SubscribableProperties<Def> }) => void,
+  export function subscribe<Definition extends BusEvent.Definition>(
+    def: Definition,
+    callback: (event: { type: Definition["type"]; properties: z.output<Definition["properties"]> }) => void,
   ) {
     return raw(def.type, callback)
   }
 
-  export function once<Definition extends SubscribableDefinition>(
+  export function once<Definition extends BusEvent.Definition>(
     def: Definition,
-    callback: (event: { type: Definition["type"]; properties: SubscribableProperties<Definition> }) => "done" | undefined,
+    callback: (event: {
+      type: Definition["type"]
+      properties: z.output<Definition["properties"]>
+    }) => "done" | undefined,
   ) {
     const unsub = subscribe(def, (event) => {
       if (callback(event)) unsub()
@@ -106,13 +100,6 @@ export namespace Bus {
       const index = match.indexOf(callback)
       if (index === -1) return
       match.splice(index, 1)
-    }
-  }
-
-  export function fromSyncDefinition(def: SyncEvent.Definition) {
-    return {
-      type: def.type,
-      properties: def.data,
     }
   }
 }
