@@ -1,6 +1,6 @@
 import { DateTime, Effect, Layer, Semaphore, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRunPromise } from "@/effect/run-service"
+import { makeRuntime } from "@/effect/run-service"
 import { Flag } from "@/flag/flag"
 import type { SessionID } from "@/session/schema"
 import { Filesystem } from "../util/filesystem"
@@ -108,7 +108,7 @@ export namespace FileTime {
     }),
   ).pipe(Layer.orDie)
 
-  const runPromise = makeRunPromise(Service, layer)
+  const { runPromise } = makeRuntime(Service, layer)
 
   export function read(sessionID: SessionID, file: string) {
     return runPromise((s) => s.read(sessionID, file))

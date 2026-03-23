@@ -31,7 +31,7 @@ import { Glob } from "../util/glob"
 import { pathToFileURL } from "url"
 import { Effect, Layer, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRunPromise } from "@/effect/run-service"
+import { makeRuntime } from "@/effect/run-service"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -198,7 +198,7 @@ export namespace ToolRegistry {
     }),
   )
 
-  const runPromise = makeRunPromise(Service, layer)
+  const { runPromise } = makeRuntime(Service, layer)
 
   export async function register(tool: Tool.Info) {
     return runPromise((svc) => svc.register(tool))
