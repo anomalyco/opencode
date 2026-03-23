@@ -36,6 +36,7 @@ import { NotFoundError } from "../storage/db"
 import type { ContentfulStatusCode } from "hono/utils/http-status"
 import { websocket } from "hono/bun"
 import { HTTPException } from "hono/http-exception"
+import { ROOT_CONTEXT, context as otelContext, propagation } from "@opentelemetry/api"
 import { errors } from "./error"
 import { Filesystem } from "@/util/filesystem"
 import { QuestionRoutes } from "./routes/question"
@@ -43,6 +44,7 @@ import { PermissionRoutes } from "./routes/permission"
 import { GlobalRoutes } from "./routes/global"
 import { MDNS } from "./mdns"
 import { lazy } from "@/util/lazy"
+import { TelemetryBootstrap } from "@/telemetry/bootstrap"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -53,8 +55,21 @@ export namespace Server {
   export const Default = lazy(() => createApp({}))
 
   export const createApp = (opts: { cors?: string[] }): Hono => {
+    TelemetryBootstrap.init()
     const app = new Hono()
     return app
+      .use(async (_c, next) => {
+        // Continue any incoming distributed trace context.
+        const extractedContext = propagation.extract(ROOT_CONTEXT, _c.req.raw.headers, {
+          get(carrier, key) {
+            return carrier.get(key) ?? undefined
+          },
+          keys(carrier) {
+            return [...carrier.keys()]
+          },
+        })
+        return otelContext.with(extractedContext, next)
+      })
       .onError((err, c) => {
         log.error("failed", {
           error: err,
