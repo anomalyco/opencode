@@ -8,6 +8,7 @@ import { Spinner } from "@opencode-ai/ui/spinner"
 import { showToast } from "@opencode-ai/ui/toast"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { getFilename } from "@opencode-ai/util/path"
+import { createMediaQuery } from "@solid-primitives/media"
 import { createEffect, createMemo, For, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
@@ -24,6 +25,7 @@ import { messageAgentColor } from "@/utils/agent"
 import { decode64 } from "@/utils/base64"
 import { Persist, persisted } from "@/utils/persist"
 import { StatusPopover } from "../status-popover"
+import { ToolbarOverflowMenu, type OverflowItem } from "./toolbar-overflow-menu"
 
 const OPEN_APPS = [
   "vscode",
@@ -265,6 +267,9 @@ export function SessionHeader() {
   const centerMount = createMemo(() => document.getElementById("opencode-titlebar-center"))
   const rightMount = createMemo(() => document.getElementById("opencode-titlebar-right"))
 
+  const isMd = createMediaQuery("(min-width: 768px)")
+  const isXl = createMediaQuery("(min-width: 1280px)")
+
   return (
     <>
       <Show when={centerMount()}>
@@ -434,48 +439,85 @@ export function SessionHeader() {
                   </Button>
                 </TooltipKeybind>
 
-                <div class="hidden md:flex items-center gap-1 shrink-0">
-                  <TooltipKeybind
-                    title={language.t("command.review.toggle")}
-                    keybind={command.keybind("review.toggle")}
-                  >
-                    <Button
-                      variant="ghost"
-                      class="group/review-toggle titlebar-icon w-8 h-6 p-0 box-border"
-                      onClick={() => view().reviewPanel.toggle()}
-                      aria-label={language.t("command.review.toggle")}
-                      aria-expanded={view().reviewPanel.opened()}
-                      aria-controls="review-panel"
+                <Show when={isMd()}>
+                  <div class="flex items-center gap-1 shrink-0">
+                    <TooltipKeybind
+                      title={language.t("command.review.toggle")}
+                      keybind={command.keybind("review.toggle")}
                     >
-                      <Icon size="small" name={view().reviewPanel.opened() ? "review-active" : "review"} />
-                    </Button>
-                  </TooltipKeybind>
+                      <Button
+                        variant="ghost"
+                        class="group/review-toggle titlebar-icon w-8 h-6 p-0 box-border"
+                        onClick={() => view().reviewPanel.toggle()}
+                        aria-label={language.t("command.review.toggle")}
+                        aria-expanded={view().reviewPanel.opened()}
+                        aria-controls="review-panel"
+                      >
+                        <Icon size="small" name={view().reviewPanel.opened() ? "review-active" : "review"} />
+                      </Button>
+                    </TooltipKeybind>
 
-                  <TooltipKeybind
-                    title={language.t("command.fileTree.toggle")}
-                    keybind={command.keybind("fileTree.toggle")}
-                  >
-                    <Button
-                      variant="ghost"
-                      class="titlebar-icon w-8 h-6 p-0 box-border"
-                      onClick={() => layout.fileTree.toggle()}
-                      aria-label={language.t("command.fileTree.toggle")}
-                      aria-expanded={layout.fileTree.opened()}
-                      aria-controls="file-tree-panel"
+                    <TooltipKeybind
+                      title={language.t("command.fileTree.toggle")}
+                      keybind={command.keybind("fileTree.toggle")}
                     >
-                      <div class="relative flex items-center justify-center size-4">
-                        <Icon
-                          size="small"
-                          name={layout.fileTree.opened() ? "file-tree-active" : "file-tree"}
-                          classList={{
-                            "text-icon-strong": layout.fileTree.opened(),
-                            "text-icon-weak": !layout.fileTree.opened(),
-                          }}
-                        />
-                      </div>
-                    </Button>
-                  </TooltipKeybind>
-                </div>
+                      <Button
+                        variant="ghost"
+                        class="titlebar-icon w-8 h-6 p-0 box-border"
+                        onClick={() => layout.fileTree.toggle()}
+                        aria-label={language.t("command.fileTree.toggle")}
+                        aria-expanded={layout.fileTree.opened()}
+                        aria-controls="file-tree-panel"
+                      >
+                        <div class="relative flex items-center justify-center size-4">
+                          <Icon
+                            size="small"
+                            name={layout.fileTree.opened() ? "file-tree-active" : "file-tree"}
+                            classList={{
+                              "text-icon-strong": layout.fileTree.opened(),
+                              "text-icon-weak": !layout.fileTree.opened(),
+                            }}
+                          />
+                        </div>
+                      </Button>
+                    </TooltipKeybind>
+                  </div>
+                </Show>
+
+                <ToolbarOverflowMenu
+                  items={[
+                    {
+                      id: "review",
+                      label: language.t("command.review.toggle"),
+                      icon: view().reviewPanel.opened() ? "review-active" : "review",
+                      onClick: () => view().reviewPanel.toggle(),
+                      active: view().reviewPanel.opened(),
+                      visible: isMd(),
+                    },
+                    {
+                      id: "fileTree",
+                      label: language.t("command.fileTree.toggle"),
+                      icon: layout.fileTree.opened() ? "file-tree-active" : "file-tree",
+                      onClick: () => layout.fileTree.toggle(),
+                      active: layout.fileTree.opened(),
+                      visible: isMd(),
+                    },
+                    {
+                      id: "search",
+                      label: language.t("session.header.searchFiles"),
+                      icon: "magnifying-glass",
+                      onClick: () => command.trigger("file.open"),
+                      visible: isMd(),
+                    },
+                    {
+                      id: "openApp",
+                      label: language.t("session.header.openIn"),
+                      icon: "folder",
+                      onClick: () => openDir(current().id),
+                      visible: isXl(),
+                    },
+                  ]}
+                />
               </div>
             </div>
           </Portal>
