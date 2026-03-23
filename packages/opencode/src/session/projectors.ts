@@ -5,7 +5,7 @@ import { MessageV2 } from "./message-v2"
 import { SessionTable, MessageTable, PartTable } from "./session.sql"
 import { ProjectTable } from "../project/project.sql"
 
-export type DeepPartial<T> = T extends object ? { [K in keyof T]?: DeepPartial<T[K]> } : T
+export type DeepPartial<T> = T extends object ? { [K in keyof T]?: DeepPartial<T[K]> | null } : T
 
 function grab<T extends object, K1 extends keyof T, X>(
   obj: T,
@@ -18,7 +18,12 @@ function grab<T extends object, K1 extends keyof T, X>(
   if (val && typeof val === "object" && cb) {
     return cb(val)
   }
-  return (val === undefined ? null : val) as X | undefined
+  if (val === undefined) {
+    throw new Error(
+      "Session update failure: pass `null` to clear a field instead of `undefined`: " + JSON.stringify(obj),
+    )
+  }
+  return val as X | undefined
 }
 
 export function toPartialRow(info: DeepPartial<Session.Info>) {

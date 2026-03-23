@@ -35,14 +35,11 @@ export namespace SyncEvent {
   let projectors: Map<Definition, ProjectorFunc> | undefined
   const versions = new Map<string, number>()
   let frozen = false
-  let convertEvent: ((type: string, event: Event["data"]) => Record<string, unknown>) | undefined
+  let convertEvent: (type: string, event: Event["data"]) => Promise<Record<string, unknown>> | Record<string, unknown>
 
   const Bus = new EventEmitter<{ event: [{ def: Definition; event: Event }] }>()
 
-  export function init(input: {
-    projectors: Array<[Definition, ProjectorFunc]>
-    convertEvent?: Exclude<typeof convertEvent, undefined>
-  }) {
+  export function init(input: { projectors: Array<[Definition, ProjectorFunc]>; convertEvent?: typeof convertEvent }) {
     projectors = new Map(input.projectors)
 
     // Install all the latest event defs to the bus. We only ever emit
@@ -58,7 +55,7 @@ export namespace SyncEvent {
     // Freeze the system so it clearly errors if events are defined
     // after `init` which would cause bugs
     frozen = true
-    convertEvent = input.convertEvent
+    convertEvent = input.convertEvent || ((_, data) => data)
   }
 
   export function versionedType<A extends string>(type: A): A
@@ -99,7 +96,7 @@ export namespace SyncEvent {
     return [def, func as ProjectorFunc]
   }
 
-  function process<Def extends Definition>(def: Def, input: Event<Def>) {
+  function process<Def extends Definition>(def: Def, event: Event<Def>, options: { publish: boolean }) {
     if (projectors == null) {
       throw new Error("No projectors available. Call `SyncEvent.init` to install projectors")
     }
@@ -112,29 +109,47 @@ export namespace SyncEvent {
     // idempotent: need to ignore any events already logged
 
     Database.transaction((tx) => {
-      projector(tx, input.data)
+      projector(tx, event.data)
 
       if (Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
         tx.insert(EventSequenceTable)
           .values({
-            aggregate_id: input.aggregateID,
-            seq: input.seq,
+            aggregate_id: event.aggregateID,
+            seq: event.seq,
           })
           .onConflictDoUpdate({
             target: EventSequenceTable.aggregate_id,
-            set: { seq: input.seq },
+            set: { seq: event.seq },
           })
           .run()
         tx.insert(EventTable)
           .values({
-            id: input.id,
-            seq: input.seq,
-            aggregate_id: input.aggregateID,
-            name: def.type,
-            data: input.data as Record<string, unknown>,
+            id: event.id,
+            seq: event.seq,
+            aggregate_id: event.aggregateID,
+            name: versionedType(def.type, def.version),
+            data: event.data as Record<string, unknown>,
           })
           .run()
       }
+
+      Database.effect(() => {
+        Bus.emit("event", {
+          def,
+          event,
+        })
+
+        if (options?.publish) {
+          const result = convertEvent(def.type, event.data)
+          if (result instanceof Promise) {
+            result.then((data) => {
+              ProjectBus.publish({ type: def.type, properties: def.schema }, data)
+            })
+          } else {
+            ProjectBus.publish({ type: def.type, properties: def.schema }, result)
+          }
+        }
+      })
     })
   }
 
@@ -144,7 +159,7 @@ export namespace SyncEvent {
   //   and it validets all the sequence ids
   // * when loading events from db, apply zod validation to ensure shape
 
-  export function replay(event: SerializedEvent) {
+  export function replay(event: SerializedEvent, options?: { republish: boolean }) {
     const def = registry.get(event.type)
     if (!def) {
       throw new Error(`Unknown event type: ${event.type}`)
@@ -158,12 +173,17 @@ export namespace SyncEvent {
         .get(),
     )
 
-    const expected = row ? row.seq + 1 : 0
+    const latest = row?.seq ?? -1
+    if (event.seq <= latest) {
+      return
+    }
+
+    const expected = latest + 1
     if (event.seq !== expected) {
       throw new Error(`Sequence mismatch for aggregate "${event.aggregateID}": expected ${expected}, got ${event.seq}`)
     }
 
-    process(def, event)
+    process(def, event, { publish: !!options?.republish })
   }
 
   export function run<Def extends Definition>(def: Def, data: Event<Def>["data"]) {
@@ -192,27 +212,19 @@ export namespace SyncEvent {
         const seq = row?.seq != null ? row.seq + 1 : 0
 
         const event = { id, seq, aggregateID: agg, data }
-        process(def, event)
-
-        Database.effect(() => {
-          Bus.emit("event", {
-            def,
-            event,
-          })
-
-          ProjectBus.publish(
-            {
-              type: def.type,
-              properties: def.schema,
-            },
-            convertEvent ? convertEvent(def.type, event.data) : event.data,
-          )
-        })
+        process(def, event, { publish: true })
       },
       {
         behavior: "immediate",
       },
     )
+  }
+
+  export function remove(aggregateID: string) {
+    Database.transaction((tx) => {
+      tx.delete(EventSequenceTable).where(eq(EventSequenceTable.aggregate_id, aggregateID)).run()
+      tx.delete(EventTable).where(eq(EventTable.aggregate_id, aggregateID)).run()
+    })
   }
 
   export function subscribeAll(handler: (event: { def: Definition; event: Event }) => void) {

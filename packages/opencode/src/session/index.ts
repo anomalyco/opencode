@@ -16,6 +16,7 @@ import { SessionTable } from "./session.sql"
 import { ProjectTable } from "../project/project.sql"
 import { Storage } from "@/storage/storage"
 import { Log } from "../util/log"
+import { updateSchema } from "../util/update-schema"
 import { MessageV2 } from "./message-v2"
 import { Instance } from "../project/instance"
 import { SessionPrompt } from "./prompt"
@@ -198,9 +199,9 @@ export namespace Session {
       aggregate: "sessionID",
       schema: z.object({
         sessionID: SessionID.zod,
-        info: Info.partial().extend({
-          share: Info.shape.share.unwrap().partial().optional(),
-          time: Info.shape.time.partial().optional(),
+        info: updateSchema(Info).extend({
+          share: updateSchema(Info.shape.share.unwrap()).optional(),
+          time: updateSchema(Info.shape.time).optional(),
         }),
       }),
       busSchema: z.object({
@@ -378,7 +379,7 @@ export namespace Session {
     const { ShareNext } = await import("@/share/share-next")
     await ShareNext.remove(id)
 
-    SyncEvent.run(Event.Updated, { sessionID: id, info: { share: { url: undefined } } })
+    SyncEvent.run(Event.Updated, { sessionID: id, info: { share: { url: null } } })
   })
 
   export const setTitle = fn(
@@ -437,7 +438,7 @@ export namespace Session {
       sessionID,
       info: {
         time: { updated: Date.now() },
-        revert: undefined,
+        revert: null,
       },
     })
   })
@@ -615,6 +616,9 @@ export namespace Session {
       await unshare(sessionID).catch(() => {})
 
       SyncEvent.run(Event.Deleted, { sessionID, info: session })
+
+      // Eagerly remove event sourcing data to free up space
+      SyncEvent.remove(sessionID)
     } catch (e) {
       log.error(e)
     }
