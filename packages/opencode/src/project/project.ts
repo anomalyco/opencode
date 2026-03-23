@@ -6,7 +6,6 @@ import { ProjectTable } from "./project.sql"
 import { SessionTable } from "../session/session.sql"
 import { Log } from "../util/log"
 import { Flag } from "@/flag/flag"
-import { fn } from "@opencode-ai/util/fn"
 import { BusEvent } from "@/bus/bus-event"
 import { iife } from "@/util/iife"
 import { GlobalBus } from "@/bus/global"
@@ -15,6 +14,8 @@ import { git } from "../util/git"
 import { Glob } from "../util/glob"
 import { which } from "../util/which"
 import { ProjectID } from "./schema"
+import { Effect, Layer, ServiceMap } from "effect"
+import { makeRunPromise } from "@/effect/run-service"
 
 export namespace Project {
   const log = Log.create({ service: "project" })
@@ -360,40 +361,40 @@ export namespace Project {
     return (await fromDirectory(input.directory)).project
   }
 
-  export const update = fn(
-    z.object({
-      projectID: ProjectID.zod,
-      name: z.string().optional(),
-      icon: Info.shape.icon.optional(),
-      commands: Info.shape.commands.optional(),
-    }),
-    async (input) => {
-      const id = ProjectID.make(input.projectID)
-      const result = Database.use((db) =>
-        db
-          .update(ProjectTable)
-          .set({
-            name: input.name,
-            icon_url: input.icon?.url,
-            icon_color: input.icon?.color,
-            commands: input.commands,
-            time_updated: Date.now(),
-          })
-          .where(eq(ProjectTable.id, id))
-          .returning()
-          .get(),
-      )
-      if (!result) throw new Error(`Project not found: ${input.projectID}`)
-      const data = fromRow(result)
-      GlobalBus.emit("event", {
-        payload: {
-          type: Event.Updated.type,
-          properties: data,
-        },
-      })
-      return data
-    },
-  )
+  export const UpdateInput = z.object({
+    projectID: ProjectID.zod,
+    name: z.string().optional(),
+    icon: Info.shape.icon.optional(),
+    commands: Info.shape.commands.optional(),
+  })
+  export type UpdateInput = z.infer<typeof UpdateInput>
+
+  export async function update(input: UpdateInput) {
+    const id = ProjectID.make(input.projectID)
+    const result = Database.use((db) =>
+      db
+        .update(ProjectTable)
+        .set({
+          name: input.name,
+          icon_url: input.icon?.url,
+          icon_color: input.icon?.color,
+          commands: input.commands,
+          time_updated: Date.now(),
+        })
+        .where(eq(ProjectTable.id, id))
+        .returning()
+        .get(),
+    )
+    if (!result) throw new Error(`Project not found: ${input.projectID}`)
+    const data = fromRow(result)
+    GlobalBus.emit("event", {
+      payload: {
+        type: Event.Updated.type,
+        properties: data,
+      },
+    })
+    return data
+  }
 
   export async function sandboxes(id: ProjectID) {
     const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
