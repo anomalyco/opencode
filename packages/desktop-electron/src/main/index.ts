@@ -5,7 +5,7 @@ import { createServer } from "node:net"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import type { Event } from "electron"
-import { app, type BrowserWindow, dialog } from "electron"
+import { app, BrowserWindow, dialog } from "electron"
 import pkg from "electron-updater"
 
 const APP_NAMES: Record<string, string> = {
@@ -32,7 +32,7 @@ import { initLogging } from "./logging"
 import { parseMarkdown } from "./markdown"
 import { createMenu } from "./menu"
 import { getDefaultServerUrl, getWslConfig, setDefaultServerUrl, setWslConfig, spawnLocalServer } from "./server"
-import { createLoadingWindow, createMainWindow, setDockIcon } from "./windows"
+import { createLoadingWindow, createMainWindow, setBackgroundColor, setDockIcon } from "./windows"
 
 const initEmitter = new EventEmitter()
 let initStep: InitStep = { phase: "server_waiting" }
@@ -80,6 +80,17 @@ function setupApp() {
   app.on("before-quit", () => {
     killSidecar()
   })
+
+  app.on("will-quit", () => {
+    killSidecar()
+  })
+
+  for (const signal of ["SIGINT", "SIGTERM"] as const) {
+    process.on(signal, () => {
+      killSidecar()
+      app.exit(0)
+    })
+  }
 
   void app.whenReady().then(async () => {
     // migrate()
@@ -156,11 +167,8 @@ async function initialize() {
 
   const globals = {
     updaterEnabled: UPDATER_ENABLED,
-    wsl: getWslConfig().enabled,
     deepLinks: pendingDeepLinks,
   }
-
-  wireMenu()
 
   if (needsMigration) {
     const show = await Promise.race([loadingTask.then(() => false), delay(1_000).then(() => true)])
@@ -178,6 +186,7 @@ async function initialize() {
   }
 
   mainWindow = createMainWindow(globals)
+  wireMenu()
 
   overlay?.close()
 }
@@ -231,12 +240,20 @@ registerIpcHandlers({
   runUpdater: async (alertOnFail) => checkForUpdates(alertOnFail),
   checkUpdate: async () => checkUpdate(),
   installUpdate: async () => installUpdate(),
+  setBackgroundColor: (color) => setBackgroundColor(color),
 })
 
 function killSidecar() {
   if (!sidecar) return
+  const pid = sidecar.pid
   sidecar.kill()
   sidecar = null
+  // tree-kill is async; also send process group signal as immediate fallback
+  if (pid && process.platform !== "win32") {
+    try {
+      process.kill(-pid, "SIGTERM")
+    } catch {}
+  }
 }
 
 function ensureLoopbackNoProxy() {

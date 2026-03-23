@@ -164,6 +164,7 @@ function createGlobalSync() {
       sdkCache.delete(directory)
       clearSessionPrefetchDirectory(directory)
     },
+    translate: language.t,
   })
 
   const sdkFor = (directory: string) => {
@@ -377,6 +378,7 @@ function createGlobalSync() {
       return globalStore.error
     },
     child: children.child,
+    peek: children.peek,
     bootstrap,
     updateConfig,
     project: projectApi,

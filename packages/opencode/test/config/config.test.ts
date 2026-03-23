@@ -1,4 +1,4 @@
-import { test, expect, describe, mock, afterEach } from "bun:test"
+import { test, expect, describe, mock, afterEach, spyOn } from "bun:test"
 import { Config } from "../../src/config/config"
 import { Instance } from "../../src/project/instance"
 import { Auth } from "../../src/auth"
@@ -10,6 +10,7 @@ import { pathToFileURL } from "url"
 import { Global } from "../../src/global"
 import { ProjectID } from "../../src/project/schema"
 import { Filesystem } from "../../src/util/filesystem"
+import { BunProc } from "../../src/bun"
 
 // Get managed config directory from environment (set in preload.ts)
 const managedConfigDir = process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR!
@@ -250,7 +251,7 @@ test("resolves env templates in account config with account token", async () => 
   const originalToken = Account.token
   const originalControlToken = process.env["OPENCODE_CONSOLE_TOKEN"]
 
-  Account.active = mock(() => ({
+  Account.active = mock(async () => ({
     id: AccountID.make("account-1"),
     email: "user@example.com",
     url: "https://control.example.com",
@@ -761,6 +762,39 @@ test("installs dependencies in writable OPENCODE_CONFIG_DIR", async () => {
     if (prev === undefined) delete process.env.OPENCODE_CONFIG_DIR
     else process.env.OPENCODE_CONFIG_DIR = prev
   }
+})
+
+test("serializes concurrent config dependency installs", async () => {
+  await using tmp = await tmpdir()
+  const dirs = [path.join(tmp.path, "a"), path.join(tmp.path, "b")]
+  await Promise.all(dirs.map((dir) => fs.mkdir(dir, { recursive: true })))
+
+  const seen: string[] = []
+  let active = 0
+  let max = 0
+  const run = spyOn(BunProc, "run").mockImplementation(async (_cmd, opts) => {
+    active++
+    max = Math.max(max, active)
+    seen.push(opts?.cwd ?? "")
+    await new Promise((resolve) => setTimeout(resolve, 25))
+    active--
+    return {
+      code: 0,
+      stdout: Buffer.alloc(0),
+      stderr: Buffer.alloc(0),
+    }
+  })
+
+  try {
+    await Promise.all(dirs.map((dir) => Config.installDependencies(dir)))
+  } finally {
+    run.mockRestore()
+  }
+
+  expect(max).toBe(1)
+  expect(seen.toSorted()).toEqual(dirs.toSorted())
+  expect(await Filesystem.exists(path.join(dirs[0], "package.json"))).toBe(true)
+  expect(await Filesystem.exists(path.join(dirs[1], "package.json"))).toBe(true)
 })
 
 test("resolves scoped npm plugins in config", async () => {

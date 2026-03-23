@@ -38,7 +38,7 @@ export const UserCode = Schema.String.pipe(
 )
 export type UserCode = Schema.Schema.Type<typeof UserCode>
 
-export class Account extends Schema.Class<Account>("Account")({
+export class Info extends Schema.Class<Info>("Account")({
   id: AccountID,
   email: Schema.String,
   url: Schema.String,

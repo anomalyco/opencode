@@ -255,7 +255,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         id: "file.open",
         title: language.t("command.file.open"),
         description: language.t("palette.search.placeholder"),
-        keybind: "mod+p",
+        keybind: "mod+k,mod+p",
         slash: "open",
         onSelect: () => dialog.show(() => <DialogSelectFile onOpenFile={showAllFiles} />),
       }),
@@ -351,7 +351,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         description: language.t("command.model.choose.description"),
         keybind: "mod+'",
         slash: "model",
-        onSelect: () => dialog.show(() => <DialogSelectModel />),
+        onSelect: () => dialog.show(() => <DialogSelectModel model={local.model} />),
       }),
       mcpCommand({
         id: "mcp.toggle",

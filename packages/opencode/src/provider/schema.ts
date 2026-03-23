@@ -18,11 +18,11 @@ export const ProviderID = providerIdSchema.pipe(
     google: schema.makeUnsafe("google"),
     googleVertex: schema.makeUnsafe("google-vertex"),
     githubCopilot: schema.makeUnsafe("github-copilot"),
-    githubCopilotEnterprise: schema.makeUnsafe("github-copilot-enterprise"),
     amazonBedrock: schema.makeUnsafe("amazon-bedrock"),
     azure: schema.makeUnsafe("azure"),
     openrouter: schema.makeUnsafe("openrouter"),
     mistral: schema.makeUnsafe("mistral"),
+    gitlab: schema.makeUnsafe("gitlab"),
   })),
 )
 
