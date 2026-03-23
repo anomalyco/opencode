@@ -3,7 +3,7 @@ import { Duration, Effect, Layer, Option, Schema } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 
 import { AccountRepo } from "../../src/account/repo"
-import { Account } from "../../src/account/effect"
+import { Account } from "../../src/account"
 import { AccessToken, AccountID, DeviceCode, Login, Org, OrgID, RefreshToken, UserCode } from "../../src/account/schema"
 import { Database } from "../../src/storage/db"
 import { testEffect } from "../lib/effect"
