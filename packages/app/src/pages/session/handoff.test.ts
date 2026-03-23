@@ -9,18 +9,12 @@ describe("session handoff", () => {
     setSessionHandoff(key, {
       prompt: "forked prompt",
       draft: [...draft],
-      files: {
-        "src/app.tsx": { start: 1, end: 3 },
-      },
     })
 
     expect(takeSessionDraft(key)).toEqual(draft)
     expect(takeSessionDraft(key)).toBeUndefined()
     expect(getSessionHandoff(key)).toEqual({
       prompt: "forked prompt",
-      files: {
-        "src/app.tsx": { start: 1, end: 3 },
-      },
       draft: undefined,
     })
   })

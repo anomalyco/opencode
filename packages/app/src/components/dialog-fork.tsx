@@ -1,16 +1,12 @@
 import { Component, createMemo } from "solid-js"
 import { useNavigate, useParams } from "@solidjs/router"
-import { useFile, type SelectedLineRange } from "@/context/file"
-import { useLayout } from "@/context/layout"
 import { useSync } from "@/context/sync"
-import { useLocal } from "@/context/local"
 import { useSDK } from "@/context/sdk"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { showToast } from "@opencode-ai/ui/toast"
 import { setSessionHandoff } from "@/pages/session/handoff"
-import { useSessionLayout } from "@/pages/session/session-layout"
 import { extractPromptFromParts } from "@/utils/prompt"
 import type { TextPart as SDKTextPart } from "@opencode-ai/sdk/v2/client"
 import { base64Encode } from "@opencode-ai/util/encode"
@@ -29,31 +25,10 @@ function formatTime(date: Date): string {
 export const DialogFork: Component = () => {
   const params = useParams()
   const navigate = useNavigate()
-  const file = useFile()
-  const layout = useLayout()
   const sync = useSync()
-  const local = useLocal()
   const sdk = useSDK()
   const dialog = useDialog()
   const language = useLanguage()
-  const { tabs } = useSessionLayout()
-
-  const normalizeTab = (tab: string) => {
-    if (!tab.startsWith("file://")) return tab
-    return file.tab(tab)
-  }
-
-  const normalizeTabs = (list: string[]) => {
-    const seen = new Set<string>()
-    const next: string[] = []
-    for (const item of list) {
-      const value = normalizeTab(item)
-      if (seen.has(value)) continue
-      seen.add(value)
-      next.push(value)
-    }
-    return next
-  }
 
   const preview = (value: ReturnType<typeof extractPromptFromParts>) => {
     const text = value
@@ -68,27 +43,6 @@ export const DialogFork: Component = () => {
       .trim()
     if (text) return text
     return `[${language.t("common.attachment")}]`
-  }
-
-  const seed = (next: NonNullable<ReturnType<typeof sync.session.get>>) => {
-    sync.set("session", (list) => {
-      const idx = list.findIndex((item) => item.id === next.id)
-      if (idx >= 0) {
-        const out = list.slice()
-        out[idx] = next
-        return out
-      }
-
-      const out = list.slice()
-      const at = out.findIndex((item) => item.id > next.id)
-      if (at >= 0) {
-        out.splice(at, 0, next)
-        return out
-      }
-
-      out.push(next)
-      return out
-    })
   }
 
   const messages = createMemo((): ForkableMessage[] => {
@@ -137,28 +91,9 @@ export const DialogFork: Component = () => {
           return
         }
         const key = `${dir}/${next.id}`
-        const all = normalizeTabs(tabs().all())
-        const active = tabs().active()
-        const nextTabs = layout.tabs(key)
-
-        nextTabs.setAll(all)
-        nextTabs.setActive(active ? normalizeTab(active) : all[0])
-        local.session.promote(sdk.directory, next.id)
-        seed(next)
         setSessionHandoff(key, {
           prompt: preview(restored),
           draft: restored,
-          files: all.reduce<Record<string, SelectedLineRange | null>>((acc, tab) => {
-            const path = file.pathFromTab(tab)
-            if (!path) return acc
-
-            const selected = file.selectedLines(path)
-            acc[path] =
-              selected && typeof selected === "object" && "start" in selected && "end" in selected
-                ? (selected as SelectedLineRange)
-                : null
-            return acc
-          }, {}),
         })
         dialog.close()
         navigate(`/${dir}/session/${next.id}`)

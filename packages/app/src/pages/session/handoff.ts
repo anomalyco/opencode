@@ -4,7 +4,7 @@ import type { Prompt } from "@/context/prompt"
 type HandoffSession = {
   prompt: string
   draft?: Prompt
-  files: Record<string, SelectedLineRange | null>
+  files?: Record<string, SelectedLineRange | null>
 }
 
 const MAX = 40
@@ -25,7 +25,7 @@ const touch = <K, V>(map: Map<K, V>, key: K, value: V) => {
 }
 
 export const setSessionHandoff = (key: string, patch: Partial<HandoffSession>) => {
-  const prev = store.session.get(key) ?? { prompt: "", files: {} }
+  const prev = store.session.get(key) ?? { prompt: "" }
   touch(store.session, key, { ...prev, ...patch })
 }
 

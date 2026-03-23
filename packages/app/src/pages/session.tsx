@@ -1346,53 +1346,12 @@ export default function Page() {
     return `[${language.t("common.attachment")}]`
   }
 
-  const seed = (next: Exclude<ReturnType<typeof info>, undefined>) => {
-    sync.set("session", (list) => {
-      const idx = list.findIndex((item) => item.id === next.id)
-      if (idx >= 0) {
-        const out = list.slice()
-        out[idx] = next
-        return out
-      }
-
-      const out = list.slice()
-      const at = out.findIndex((item) => item.id > next.id)
-      if (at >= 0) {
-        out.splice(at, 0, next)
-        return out
-      }
-
-      out.push(next)
-      return out
-    })
-  }
-
   const handoffFork = (next: Exclude<ReturnType<typeof info>, undefined>, value: ReturnType<typeof draft>) => {
-    const dir = sdk.directory
-    const slug = base64Encode(dir)
+    const slug = base64Encode(sdk.directory)
     const key = `${slug}/${next.id}`
-    const all = normalizeTabs(tabs().all())
-    const active = tabs().active()
-    const nextTabs = layout.tabs(key)
-
-    nextTabs.setAll(all)
-    nextTabs.setActive(active ? normalizeTab(active) : all[0])
-    local.session.promote(dir, next.id)
-    seed(next)
     setSessionHandoff(key, {
       prompt: preview(value),
       draft: value,
-      files: all.reduce<Record<string, SelectedLineRange | null>>((acc, tab) => {
-        const path = file.pathFromTab(tab)
-        if (!path) return acc
-
-        const selected = file.selectedLines(path)
-        acc[path] =
-          selected && typeof selected === "object" && "start" in selected && "end" in selected
-            ? (selected as SelectedLineRange)
-            : null
-        return acc
-      }, {}),
     })
     navigate(`/${slug}/session/${next.id}`)
   }
