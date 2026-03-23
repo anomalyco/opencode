@@ -65,7 +65,7 @@ export namespace Bus {
 
   export function subscribe<Definition extends BusEvent.Definition>(
     def: Definition,
-    callback: (event: { type: Definition["type"]; properties: z.output<Definition["properties"]> }) => void,
+    callback: (event: { type: Definition["type"]; properties: z.infer<Definition["properties"]> }) => void,
   ) {
     return raw(def.type, callback)
   }
@@ -74,7 +74,7 @@ export namespace Bus {
     def: Definition,
     callback: (event: {
       type: Definition["type"]
-      properties: z.output<Definition["properties"]>
+      properties: z.infer<Definition["properties"]>
     }) => "done" | undefined,
   ) {
     const unsub = subscribe(def, (event) => {
