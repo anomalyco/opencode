@@ -49,6 +49,8 @@ import { useCheckServerHealth } from "./utils/server-health"
 
 const HomeRoute = lazy(() => import("@/pages/home"))
 const Session = lazy(() => import("@/pages/session"))
+const Config = lazy(() => import("@/pages/config"))
+const Loading = () => <div class="size-full" />
 
 const SessionRoute = Object.assign(
   () => (
@@ -57,6 +59,14 @@ const SessionRoute = Object.assign(
     </SessionProviders>
   ),
   { preload: Session.preload },
+)
+
+const SessionIndexRoute = () => <Navigate href="session" />
+
+const ConfigRoute = () => (
+  <Suspense fallback={<Loading />}>
+    <Config />
+  </Suspense>
 )
 
 function UiI18nBridge(props: ParentProps) {
@@ -297,24 +307,21 @@ export function AppInterface(props: {
       servers={props.servers}
     >
       <ConnectionGate disableHealthCheck={props.disableHealthCheck}>
-        <ServerKey>
-          <QueryProvider>
-            <GlobalSDKProvider>
-              <GlobalSyncProvider>
-                <Dynamic
-                  component={props.router ?? Router}
-                  root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
-                >
-                  <Route path="/" component={HomeRoute} />
-                  <Route path="/:dir" component={DirectoryLayout}>
-                    <Route path="/" component={() => <Navigate href="session" />} />
-                    <Route path="/session/:id?" component={SessionRoute} />
-                  </Route>
-                </Dynamic>
-              </GlobalSyncProvider>
-            </GlobalSDKProvider>
-          </QueryProvider>
-        </ServerKey>
+        <GlobalSDKProvider>
+          <GlobalSyncProvider>
+            <Dynamic
+              component={props.router ?? Router}
+              root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
+            >
+              <Route path="/" component={HomeRoute} />
+              <Route path="/:dir" component={DirectoryLayout}>
+                <Route path="/" component={SessionIndexRoute} />
+                <Route path="/session/:id?" component={SessionRoute} />
+                <Route path="/config" component={ConfigRoute} />
+              </Route>
+            </Dynamic>
+          </GlobalSyncProvider>
+        </GlobalSDKProvider>
       </ConnectionGate>
     </ServerProvider>
   )

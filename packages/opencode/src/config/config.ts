@@ -318,7 +318,8 @@ async function substituteWellKnownRemoteConfig(input: {
   async function loadPlugin(dir: string) {
     const plugins: string[] = []
 
-    for await (const item of PLUGIN_GLOB.scan({
+    for (const item of await Glob.scan("{plugin,plugins}/*.{ts,js,mjs}", {
+      cwd: dir,
       absolute: true,
       followSymlinks: true,
       dot: true,
