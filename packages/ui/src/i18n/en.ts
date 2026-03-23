@@ -1,4 +1,4 @@
-export const dict = {
+export const dict: Record<string, string> = {
   "ui.sessionReview.title": "Session changes",
   "ui.sessionReview.title.lastTurn": "Last turn changes",
   "ui.sessionReview.diffStyle.unified": "Unified",
@@ -13,6 +13,19 @@ export const dict = {
   "ui.sessionReview.largeDiff.title": "Diff too large to render",
   "ui.sessionReview.largeDiff.meta": "Limit: {{limit}} changed lines. Current: {{current}} changed lines.",
   "ui.sessionReview.largeDiff.renderAnyway": "Render anyway",
+  "ui.sessionReview.openFile": "Open file",
+  "ui.sessionReview.selection.line": "line {{line}}",
+  "ui.sessionReview.selection.lines": "lines {{start}}-{{end}}",
+
+  "ui.fileMedia.kind.image": "image",
+  "ui.fileMedia.kind.audio": "audio",
+  "ui.fileMedia.state.removed": "Removed {{kind}} file.",
+  "ui.fileMedia.state.loading": "Loading {{kind}}...",
+  "ui.fileMedia.state.error": "Unable to load {{kind}}.",
+  "ui.fileMedia.state.unavailable": "{{kind}} preview unavailable.",
+  "ui.fileMedia.binary.title": "Binary file",
+  "ui.fileMedia.binary.description.path": "{{path}} is binary.",
+  "ui.fileMedia.binary.description.default": "Binary content",
 
   "ui.lineComment.label.prefix": "Comment on ",
   "ui.lineComment.label.suffix": "",
@@ -28,6 +41,9 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "retrying",
   "ui.sessionTurn.retry.inSeconds": "in {{seconds}}s",
+  "ui.sessionTurn.retry.attempt": "attempt #{{attempt}}",
+  "ui.sessionTurn.retry.attemptLine": "{{line}} - attempt #{{attempt}}",
+  "ui.sessionTurn.retry.geminiHot": "gemini is way too hot right now",
   "ui.sessionTurn.error.freeUsageExceeded": "Free usage exceeded",
   "ui.sessionTurn.error.addCredits": "Add credits",
 
@@ -49,12 +65,25 @@ export const dict = {
   "ui.messagePart.title.write": "Write",
   "ui.messagePart.option.typeOwnAnswer": "Type your own answer",
   "ui.messagePart.review.title": "Review your answers",
+  "ui.messagePart.questions.dismissed": "Questions dismissed",
+  "ui.messagePart.compaction": "Session compacted",
+  "ui.messagePart.context.read.one": "{{count}} read",
+  "ui.messagePart.context.read.other": "{{count}} reads",
+  "ui.messagePart.context.search.one": "{{count}} search",
+  "ui.messagePart.context.search.other": "{{count}} searches",
+  "ui.messagePart.context.list.one": "{{count}} list",
+  "ui.messagePart.context.list.other": "{{count}} lists",
 
   "ui.list.loading": "Loading",
   "ui.list.empty": "No results",
   "ui.list.clearFilter": "Clear filter",
   "ui.list.emptyWithFilter.prefix": "No results for",
   "ui.list.emptyWithFilter.suffix": "",
+
+  "ui.fileSearch.placeholder": "Find",
+  "ui.fileSearch.previousMatch": "Previous match",
+  "ui.fileSearch.nextMatch": "Next match",
+  "ui.fileSearch.close": "Close search",
 
   "ui.messageNav.newMessage": "New message",
 
@@ -63,19 +92,29 @@ export const dict = {
   "ui.textField.copied": "Copied",
 
   "ui.imagePreview.alt": "Image preview",
+  "ui.scrollView.ariaLabel": "scrollable content",
 
   "ui.tool.read": "Read",
   "ui.tool.loaded": "Loaded",
   "ui.tool.list": "List",
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
+  "ui.tool.task": "Task",
   "ui.tool.webfetch": "Webfetch",
+  "ui.tool.websearch": "Web Search",
+  "ui.tool.codesearch": "Code Search",
   "ui.tool.shell": "Shell",
   "ui.tool.patch": "Patch",
   "ui.tool.todos": "To-dos",
   "ui.tool.todos.read": "Read to-dos",
   "ui.tool.questions": "Questions",
   "ui.tool.agent": "{{type}} Agent",
+  "ui.tool.agent.default": "Agent",
+  "ui.tool.skill": "Skill",
+
+  "ui.basicTool.called": "Called `{{tool}}`",
+  "ui.toolErrorCard.failed": "Failed",
+  "ui.toolErrorCard.copyError": "Copy error",
 
   "ui.common.file.one": "file",
   "ui.common.file.other": "files",
@@ -99,9 +138,14 @@ export const dict = {
   "ui.message.collapse": "Collapse message",
   "ui.message.copy": "Copy",
   "ui.message.copyMessage": "Copy message",
+  "ui.message.forkMessage": "Fork to new session",
+  "ui.message.revertMessage": "Revert message",
   "ui.message.copyResponse": "Copy response",
   "ui.message.copied": "Copied",
+  "ui.message.duration.seconds": "{{count}}s",
+  "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
   "ui.message.interrupted": "Interrupted",
+  "ui.message.queued": "Queued",
   "ui.message.attachment.alt": "attachment",
 
   "ui.patch.action.deleted": "Deleted",

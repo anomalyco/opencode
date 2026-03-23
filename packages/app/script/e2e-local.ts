@@ -73,6 +73,7 @@ const serverEnv = {
   OPENCODE_E2E_MESSAGE: "Seeded for UI e2e",
   OPENCODE_E2E_MODEL: "opencode/gpt-5-nano",
   OPENCODE_CLIENT: "app",
+  OPENCODE_STRICT_CONFIG_DEPS: "true",
 } satisfies Record<string, string>
 
 const runnerEnv = {
@@ -145,6 +146,7 @@ try {
     Object.assign(process.env, serverEnv)
     process.env.AGENT = "1"
     process.env.OPENCODE = "1"
+    process.env.OPENCODE_PID = String(process.pid)
 
     const log = await import("../../opencode/src/util/log")
     const install = await import("../../opencode/src/installation")

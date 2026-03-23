@@ -5,8 +5,8 @@ import { MouseButton, TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
 import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
 import { win32DisableProcessedInput, win32FlushInputBuffer, win32InstallCtrlCGuard } from "./win32"
-import { Installation } from "@/installation"
 import { Flag } from "@/flag/flag"
+import semver from "semver"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderList } from "@tui/component/dialog-provider"
 import { SDKProvider, useSDK } from "@tui/context/sdk"
@@ -20,6 +20,7 @@ import { DialogHelp } from "./ui/dialog-help"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
+import { DialogWorkspaceList } from "@tui/component/dialog-workspace-list"
 import { KeybindProvider } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
@@ -28,6 +29,7 @@ import { PromptHistoryProvider } from "./component/prompt/history"
 import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
 import { DialogAlert } from "./ui/dialog-alert"
+import { DialogConfirm } from "./ui/dialog-confirm"
 import { ToastProvider, useToast } from "./ui/toast"
 import { ExitProvider, useExit } from "./context/exit"
 import { Session as SessionApi } from "@/session"
@@ -38,6 +40,8 @@ import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
 import { writeHeapSnapshot } from "v8"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
+import { TuiConfigProvider } from "./context/tui-config"
+import { TuiConfig } from "@/config/tui"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -100,15 +104,16 @@ async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
 }
 
 import type { EventSource } from "./context/sdk"
+import { Installation } from "@/installation"
 
 export function tui(input: {
   url: string
   args: Args
+  config: TuiConfig.Info
   directory?: string
   fetch?: typeof fetch
   headers?: RequestInit["headers"]
   events?: EventSource
-  onExit?: () => Promise<void>
 }) {
   // promise to prevent immediate exit
   return new Promise<void>(async (resolve) => {
@@ -123,7 +128,6 @@ export function tui(input: {
 
     const onExit = async () => {
       unguard?.()
-      await input.onExit?.()
       resolve()
     }
 
@@ -138,35 +142,37 @@ export function tui(input: {
                 <KVProvider>
                   <ToastProvider>
                     <RouteProvider>
-                      <SDKProvider
-                        url={input.url}
-                        directory={input.directory}
-                        fetch={input.fetch}
-                        headers={input.headers}
-                        events={input.events}
-                      >
-                        <SyncProvider>
-                          <ThemeProvider mode={mode}>
-                            <LocalProvider>
-                              <KeybindProvider>
-                                <PromptStashProvider>
-                                  <DialogProvider>
-                                    <CommandProvider>
-                                      <FrecencyProvider>
-                                        <PromptHistoryProvider>
-                                          <PromptRefProvider>
-                                            <App />
-                                          </PromptRefProvider>
-                                        </PromptHistoryProvider>
-                                      </FrecencyProvider>
-                                    </CommandProvider>
-                                  </DialogProvider>
-                                </PromptStashProvider>
-                              </KeybindProvider>
-                            </LocalProvider>
-                          </ThemeProvider>
-                        </SyncProvider>
-                      </SDKProvider>
+                      <TuiConfigProvider config={input.config}>
+                        <SDKProvider
+                          url={input.url}
+                          directory={input.directory}
+                          fetch={input.fetch}
+                          headers={input.headers}
+                          events={input.events}
+                        >
+                          <SyncProvider>
+                            <ThemeProvider mode={mode}>
+                              <LocalProvider>
+                                <KeybindProvider>
+                                  <PromptStashProvider>
+                                    <DialogProvider>
+                                      <CommandProvider>
+                                        <FrecencyProvider>
+                                          <PromptHistoryProvider>
+                                            <PromptRefProvider>
+                                              <App />
+                                            </PromptRefProvider>
+                                          </PromptHistoryProvider>
+                                        </FrecencyProvider>
+                                      </CommandProvider>
+                                    </DialogProvider>
+                                  </PromptStashProvider>
+                                </KeybindProvider>
+                              </LocalProvider>
+                            </ThemeProvider>
+                          </SyncProvider>
+                        </SDKProvider>
+                      </TuiConfigProvider>
                     </RouteProvider>
                   </ToastProvider>
                 </KVProvider>
@@ -368,6 +374,22 @@ function App() {
         dialog.replace(() => <DialogSessionList />)
       },
     },
+    ...(Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
+      ? [
+          {
+            title: "Manage workspaces",
+            value: "workspace.list",
+            category: "Workspace",
+            suggested: true,
+            slash: {
+              name: "workspaces",
+            },
+            onSelect: () => {
+              dialog.replace(() => <DialogWorkspaceList />)
+            },
+          },
+        ]
+      : []),
     {
       title: "New session",
       suggested: route.data.type === "session",
@@ -382,9 +404,12 @@ function App() {
         const current = promptRef.current
         // Don't require focus - if there's any text, preserve it
         const currentPrompt = current?.current?.input ? current.current : undefined
+        const workspaceID =
+          route.data.type === "session" ? sync.session.get(route.data.sessionID)?.workspaceID : undefined
         route.navigate({
           type: "home",
           initialPrompt: currentPrompt,
+          workspaceID,
         })
         dialog.clear()
       },
@@ -654,20 +679,6 @@ function App() {
     },
   ])
 
-  createEffect(() => {
-    const currentModel = local.model.current()
-    if (!currentModel) return
-    if (currentModel.providerID === "openrouter" && !kv.get("openrouter_warning", false)) {
-      untrack(() => {
-        DialogAlert.show(
-          dialog,
-          "Warning",
-          "While openrouter is a convenient way to access LLMs your request will often be routed to subpar providers that do not work well in our testing.\n\nFor reliable access to models check out OpenCode Zen\nhttps://opencode.ai/zen",
-        ).then(() => kv.set("openrouter_warning", true))
-      })
-    }
-  })
-
   sdk.event.on(TuiEvent.CommandExecute.type, (evt) => {
     command.trigger(evt.properties.command)
   })
@@ -720,13 +731,51 @@ function App() {
     })
   })
 
-  sdk.event.on(Installation.Event.UpdateAvailable.type, (evt) => {
+  sdk.event.on("installation.update-available", async (evt) => {
+    const version = evt.properties.version
+
+    const skipped = kv.get("skipped_version")
+    if (skipped && !semver.gt(version, skipped)) return
+
+    const choice = await DialogConfirm.show(
+      dialog,
+      `Update Available`,
+      `A new release v${version} is available. Would you like to update now?`,
+      "skip",
+    )
+
+    if (choice === false) {
+      kv.set("skipped_version", version)
+      return
+    }
+
+    if (choice !== true) return
+
     toast.show({
       variant: "info",
-      title: "Update Available",
-      message: `OpenCode v${evt.properties.version} is available. Run 'opencode upgrade' to update manually.`,
-      duration: 10000,
+      message: `Updating to v${version}...`,
+      duration: 30000,
     })
+
+    const result = await sdk.client.global.upgrade({ target: version })
+
+    if (result.error || !result.data?.success) {
+      toast.show({
+        variant: "error",
+        title: "Update Failed",
+        message: "Update failed",
+        duration: 10000,
+      })
+      return
+    }
+
+    await DialogAlert.show(
+      dialog,
+      "Update Complete",
+      `Successfully updated to OpenCode v${result.data.version}. Please restart the application.`,
+    )
+
+    exit()
   })
 
   return (

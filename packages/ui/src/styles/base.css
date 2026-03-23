@@ -86,6 +86,17 @@ a {
   app-region: drag;
 }
 
+*[data-tauri-drag-region] button,
+*[data-tauri-drag-region] a,
+*[data-tauri-drag-region] input,
+*[data-tauri-drag-region] textarea,
+*[data-tauri-drag-region] select,
+*[data-tauri-drag-region] [role="button"],
+*[data-tauri-drag-region] [role="menuitem"],
+*[data-tauri-drag-region] [contenteditable] {
+  app-region: no-drag;
+}
+
 /*
   Add the correct font weight in Edge and Safari.
 */
