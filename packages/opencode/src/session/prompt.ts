@@ -976,6 +976,12 @@ export namespace SessionPrompt {
     // Resolve the proposed model before plugin can override
     const proposedModel = input.model ?? agent.model ?? (await lastModel(input.sessionID))
 
+    // Extract message text for content-based routing
+    const messageText = input.parts
+      .filter((p): p is typeof p & { type: "text" } => p.type === "text")
+      .map((p) => p.text)
+      .join("\n")
+
     // Fire chat.model hook to allow plugins to dynamically route to different models
     // Plugin types use plain strings; cast branded types for the hook interface
     const modelOverride = await Plugin.trigger(
@@ -984,6 +990,7 @@ export namespace SessionPrompt {
         sessionID: input.sessionID,
         agent: agent.name,
         proposedModel: { providerID: proposedModel.providerID as string, modelID: proposedModel.modelID as string },
+        message: messageText,
       },
       { model: undefined as { providerID: string; modelID: string } | undefined },
     )

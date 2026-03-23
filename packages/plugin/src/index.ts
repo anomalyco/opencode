@@ -189,6 +189,7 @@ export interface Hooks {
       sessionID: string
       agent: string
       proposedModel: { providerID: string; modelID: string }
+      message: string
     },
     output: {
       model?: { providerID: string; modelID: string }
