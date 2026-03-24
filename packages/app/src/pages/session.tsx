@@ -1179,8 +1179,6 @@ export default function Page() {
     on(
       () => sdk.directory,
       () => {
-        void file.tree.list("")
-
         const tab = activeFileTab()
         if (!tab) return
         const path = file.pathFromTab(tab)
@@ -1635,6 +1633,9 @@ export default function Page() {
     sessionID: () => params.id,
     messagesReady,
     visibleUserMessages,
+    historyMore,
+    historyLoading,
+    loadMore: (sessionID) => sync.session.history.loadMore(sessionID),
     turnStart: historyWindow.turnStart,
     currentMessageId: () => store.messageId,
     pendingMessage: () => ui.pendingMessage,
@@ -1706,7 +1707,7 @@ export default function Page() {
           <div class="flex-1 min-h-0 overflow-hidden">
             <Switch>
               <Match when={params.id}>
-                <Show when={lastUserMessage()}>
+                <Show when={messagesReady()}>
                   <MessageTimeline
                     mobileChanges={mobileChanges()}
                     mobileFallback={reviewContent({
