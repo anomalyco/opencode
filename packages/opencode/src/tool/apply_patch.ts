@@ -7,7 +7,7 @@ import { FileWatcher } from "../file/watcher"
 import { Instance } from "../project/instance"
 import { Patch } from "../patch"
 import { createTwoFilesPatch, diffLines } from "diff"
-import { assertExternalDirectory } from "./external-directory"
+import { assertExternalDirectory, editPermissionPattern } from "./external-directory"
 import { trimDiff } from "./edit"
 import { LSP } from "../lsp"
 import { Filesystem } from "../util/filesystem"
@@ -172,13 +172,13 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
     }))
 
     // Check permissions if needed
-    const relativePaths = fileChanges.map((c) => path.relative(Instance.worktree, c.filePath).replaceAll("\\", "/"))
+    const editPatterns = fileChanges.map((change) => editPermissionPattern(change.filePath))
     await ctx.ask({
       permission: "edit",
-      patterns: relativePaths,
+      patterns: editPatterns,
       always: ["*"],
       metadata: {
-        filepath: relativePaths.join(", "),
+        filepath: editPatterns.join(", "),
         diff: totalDiff,
         files,
       },

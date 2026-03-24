@@ -11,7 +11,7 @@ import { FileTime } from "../file/time"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { trimDiff } from "./edit"
-import { assertExternalDirectory } from "./external-directory"
+import { assertExternalDirectory, editPermissionPattern } from "./external-directory"
 
 const MAX_DIAGNOSTICS_PER_FILE = 20
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
@@ -33,7 +33,7 @@ export const WriteTool = Tool.define("write", {
     const diff = trimDiff(createTwoFilesPatch(filepath, filepath, contentOld, params.content))
     await ctx.ask({
       permission: "edit",
-      patterns: [path.relative(Instance.worktree, filepath)],
+      patterns: [editPermissionPattern(filepath)],
       always: ["*"],
       metadata: {
         filepath,

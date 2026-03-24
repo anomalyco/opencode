@@ -148,6 +148,36 @@ describe("tool.write", () => {
   })
 
   describe("file permissions", () => {
+    test("uses absolute edit permission pattern for external files", async () => {
+      await using tmp = await tmpdir()
+      const outsideFile = path.resolve(tmp.path, "..", `opencode-write-permission-test-${Date.now()}.txt`)
+      const requests: any[] = []
+      const askCtx = {
+        ...ctx,
+        ask: async (req: any) => {
+          requests.push(req)
+        },
+      }
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const write = await WriteTool.init()
+          await write.execute(
+            {
+              filePath: outsideFile,
+              content: "outside content",
+            },
+            askCtx,
+          )
+        },
+      })
+
+      const editRequest = requests.find((req) => req.permission === "edit")
+      expect(editRequest).toBeDefined()
+      expect(editRequest.patterns).toEqual([outsideFile.replaceAll("\\", "/")])
+    })
+
     test("sets file permissions when writing sensitive data", async () => {
       await using tmp = await tmpdir()
       const filepath = path.join(tmp.path, "sensitive.json")

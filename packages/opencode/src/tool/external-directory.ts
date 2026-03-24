@@ -30,3 +30,10 @@ export async function assertExternalDirectory(ctx: Tool.Context, target?: string
     },
   })
 }
+
+export function editPermissionPattern(target: string) {
+  if (Instance.containsPath(target)) {
+    return path.relative(Instance.worktree, target).replaceAll("\\", "/")
+  }
+  return path.resolve(target).replaceAll("\\", "/")
+}

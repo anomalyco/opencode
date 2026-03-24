@@ -325,6 +325,40 @@ describe("tool.edit", () => {
         },
       })
     })
+
+    test("uses absolute edit permission pattern for external files", async () => {
+      await using tmp = await tmpdir()
+      const outsideFile = path.resolve(tmp.path, "..", "opencode-edit-permission-test.txt")
+      await fs.writeFile(outsideFile, "old", "utf-8")
+      const requests: any[] = []
+      const askCtx = {
+        ...ctx,
+        ask: async (req: any) => {
+          requests.push(req)
+        },
+      }
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          await FileTime.read(ctx.sessionID, outsideFile)
+
+          const edit = await EditTool.init()
+          await edit.execute(
+            {
+              filePath: outsideFile,
+              oldString: "old",
+              newString: "new",
+            },
+            askCtx,
+          )
+        },
+      })
+
+      const editRequest = requests.find((req) => req.permission === "edit")
+      expect(editRequest).toBeDefined()
+      expect(editRequest.patterns).toEqual([outsideFile.replaceAll("\\", "/")])
+    })
   })
 
   describe("edge cases", () => {
