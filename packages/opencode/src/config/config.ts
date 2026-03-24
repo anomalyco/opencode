@@ -1082,11 +1082,19 @@ export namespace Config {
       disabled_models: z
         .record(z.string(), z.array(z.string()))
         .optional()
-        .describe("Disable specific models within providers. Format: { 'provider-id': ['model-id-1', 'model-id-2'] }"),
+        .describe(
+          "Disable specific models within providers. Format: { 'provider-id': ['model-id-1', 'model-id-2'] }. " +
+          "Example: { 'anthropic': ['claude-opus-4-20250514'], 'openai': ['gpt-4-turbo'] }. " +
+          "Applied after provider-level whitelist/blacklist. Use for cost control or restricting expensive models.",
+        ),
       enabled_models: z
         .record(z.string(), z.array(z.string()))
         .optional()
-        .describe("When set, ONLY these models will be enabled for each provider. Format: { 'provider-id': ['model-id-1', 'model-id-2'] }"),
+        .describe(
+          "When set, ONLY these models will be enabled for each provider. Format: { 'provider-id': ['model-id-1', 'model-id-2'] }. " +
+          "Example: { 'anthropic': ['claude-sonnet-4-20250514'], 'openai': ['gpt-4o'] }. " +
+          "Applied before disabled_models. Use for team standardization or testing environments with approved models only.",
+        ),
       model: ModelId.describe("Model to use in the format of provider/model, eg anthropic/claude-2").optional(),
       small_model: ModelId.describe(
         "Small model to use for tasks like title generation in the format of provider/model",

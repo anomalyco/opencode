@@ -2282,3 +2282,93 @@ test("cloudflare-ai-gateway forwards config metadata options", async () => {
     },
   })
 })
+
+test("disabled_models filters out specific models globally", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          disabled_models: {
+            anthropic: ["claude-sonnet-4-20250514"],
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("ANTHROPIC_API_KEY", "test-api-key")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers[ProviderID.anthropic]).toBeDefined()
+      const models = Object.keys(providers[ProviderID.anthropic].models)
+      expect(models).not.toContain("claude-sonnet-4-20250514")
+    },
+  })
+})
+
+test("enabled_models restricts to only specified models globally", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          enabled_models: {
+            anthropic: ["claude-sonnet-4-20250514"],
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("ANTHROPIC_API_KEY", "test-api-key")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers[ProviderID.anthropic]).toBeDefined()
+      const models = Object.keys(providers[ProviderID.anthropic].models)
+      expect(models).toContain("claude-sonnet-4-20250514")
+      expect(models.length).toBe(1)
+    },
+  })
+})
+
+test("disabled_models applies after enabled_models", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          enabled_models: {
+            anthropic: ["claude-sonnet-4-20250514", "claude-opus-4-20250514"],
+          },
+          disabled_models: {
+            anthropic: ["claude-sonnet-4-20250514"],
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("ANTHROPIC_API_KEY", "test-api-key")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers[ProviderID.anthropic]).toBeDefined()
+      const models = Object.keys(providers[ProviderID.anthropic].models)
+      expect(models).not.toContain("claude-sonnet-4-20250514")
+      expect(models).toContain("claude-opus-4-20250514")
+      expect(models.length).toBe(1)
+    },
+  })
+})
