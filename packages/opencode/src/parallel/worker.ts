@@ -18,6 +18,275 @@ import { Metrics } from "./metrics"
 export namespace WorkerManager {
   const log = Log.create({ service: "worker" })
   const RETRY_LIMIT = 3
+  const STALL_POLL_MS = 5_000
+  const STALL_RETRY_LIMIT = 1
+  const CANCEL_POLL_MS = 250
+  const CANCEL_GRACE_MS = 10_000
+
+  type Retry = {
+    type: "retry"
+    attempt: number
+    reason: string
+  }
+
+  type Progress = {
+    fingerprint: string
+    files: number
+    additions: number
+    deletions: number
+    score: number
+  }
+
+  function sleep(ms: number) {
+    return new Promise<void>((resolve) => setTimeout(resolve, ms))
+  }
+
+  function stallLimit(kind: Subtask["kind"] | undefined, timeoutMs: number, phase: "initial" | "stalled") {
+    const structural = kind === "structural"
+    if (phase === "initial") {
+      return Math.min(timeoutMs / 2, structural ? 75_000 : 180_000)
+    }
+    return Math.min(timeoutMs / 3, structural ? 45_000 : 120_000)
+  }
+
+  export function detectStalledProgress(input: {
+    kind?: Subtask["kind"]
+    elapsedMs: number
+    changedMs: number
+    baseline: Progress
+    current?: Progress
+    timeoutMs: number
+  }) {
+    if (input.current === undefined) return
+    if (input.current.fingerprint === input.baseline.fingerprint) {
+      const limit = stallLimit(input.kind, input.timeoutMs, "initial")
+      if (input.elapsedMs < limit) return
+      const seconds = Math.round(limit / 1000)
+      return `Worker made no meaningful filesystem changes after ${seconds}s; retrying with a stricter execution prompt`
+    }
+
+    const limit = stallLimit(input.kind, input.timeoutMs, "stalled")
+    if (input.changedMs < limit) return
+    const seconds = Math.round(limit / 1000)
+    return `Worker filesystem changes stopped progressing for ${seconds}s; retrying with a stricter execution prompt`
+  }
+
+  function parseProgress(status: string, diff: string): Progress {
+    const lines = status.split("\n").filter(Boolean)
+    let files = 0
+    let additions = 0
+    let deletions = 0
+
+    const rows = diff.split("\n").filter(Boolean)
+    for (const line of rows) {
+      const [add, del] = line.split("\t")
+      additions += add === "-" ? 0 : parseInt(add ?? "0", 10) || 0
+      deletions += del === "-" ? 0 : parseInt(del ?? "0", 10) || 0
+    }
+
+    files = Math.max(lines.length, rows.length)
+    const score = additions + deletions + files * 20
+    return {
+      fingerprint: [status, files, additions, deletions].join("|"),
+      files,
+      additions,
+      deletions,
+      score,
+    }
+  }
+
+  function changed(a: Progress, b: Progress) {
+    return a.fingerprint !== b.fingerprint || a.score !== b.score
+  }
+
+  async function progress(worktreeDir: string) {
+    try {
+      const status = await git(["status", "--porcelain"], { cwd: worktreeDir })
+      if (status.exitCode !== 0) return
+      const diff = await git(["diff", "--numstat", "HEAD"], { cwd: worktreeDir })
+      if (diff.exitCode !== 0) return
+      return parseProgress(outputText(status.stdout), outputText(diff.stdout))
+    } catch {
+      return
+    }
+  }
+
+  async function cancelSession(sessionID: SessionID, worktreeDir: string, project: Project.Info) {
+    return Instance.provide({
+      directory: worktreeDir,
+      init: ParallelBootstrap,
+      fn: async () => {
+        const { SessionPrompt } = await import("../session/prompt")
+        await SessionPrompt.cancel(sessionID)
+      },
+      project,
+      worktree: worktreeDir,
+    })
+  }
+
+  async function sessionStatus(sessionID: SessionID, worktreeDir: string, project: Project.Info) {
+    return Instance.provide({
+      directory: worktreeDir,
+      init: ParallelBootstrap,
+      fn: async () => SessionStatus.get(sessionID),
+      project,
+      worktree: worktreeDir,
+    }).catch(() => undefined)
+  }
+
+  async function waitForIdle(sessionID: SessionID, worktreeDir: string, project: Project.Info, timeoutMs: number) {
+    const started = Date.now()
+    while (Date.now() - started < timeoutMs) {
+      const status = await sessionStatus(sessionID, worktreeDir, project)
+      if (!status || status.type === "idle") return true
+      await sleep(CANCEL_POLL_MS)
+    }
+    return false
+  }
+
+  async function stopSession(input: {
+    sessionID: SessionID
+    worktreeDir: string
+    project: Project.Info
+    reason: "abort" | "stall"
+  }) {
+    await cancelSession(input.sessionID, input.worktreeDir, input.project).catch(() => {})
+    const idle = await waitForIdle(input.sessionID, input.worktreeDir, input.project, CANCEL_GRACE_MS)
+    if (idle) return
+    const action = input.reason === "stall" ? "stall cancellation" : "abort"
+    throw new Error(`Worker session did not become idle within ${CANCEL_GRACE_MS}ms after ${action}`)
+  }
+
+  async function createWorkerSession(input: {
+    plan: Plan
+    subtask: Subtask
+    project: Project.Info
+    worktreeDir: string
+    retry?: Retry
+  }) {
+    return Instance.provide({
+      directory: input.worktreeDir,
+      init: ParallelBootstrap,
+      fn: async () => {
+        const suffix = input.retry ? ` [retry ${input.retry.attempt}]` : ""
+        return Session.createNext({
+          parentID: input.plan.sessionID,
+          directory: input.worktreeDir,
+          title: `[parallel] ${input.subtask.title}${suffix}`,
+        })
+      },
+      project: input.project,
+      worktree: input.worktreeDir,
+    })
+  }
+
+  async function promptWorker(input: {
+    plan: Plan
+    subtask: Subtask
+    project: Project.Info
+    worktreeDir: string
+    sessionID: SessionID
+    abort: AbortSignal
+    timeoutMs: number
+    retry?: Retry
+  }): Promise<{ type: "done" } | Retry> {
+    const baseline = (await progress(input.worktreeDir)) ?? parseProgress("", "")
+    const started = Date.now()
+    let advanced = started
+    let latest = baseline
+    let failed: unknown = undefined
+    let finished = false
+
+    const task = Instance.provide({
+      directory: input.worktreeDir,
+      init: ParallelBootstrap,
+      fn: async () => {
+        const promptText = buildWorkerPrompt(input.plan.task, input.subtask, input.plan.subtasks, {
+          sharedContracts: input.plan.sharedContracts,
+          conventions: input.plan.conventions,
+          retry: input.retry,
+        })
+        const model = input.subtask.model ?? input.plan.workerModel
+        const { SessionPrompt } = await import("../session/prompt")
+        await SessionPrompt.prompt({
+          sessionID: input.sessionID,
+          model,
+          parts: [
+            {
+              type: "text" as const,
+              text: promptText,
+            },
+          ],
+        })
+      },
+      project: input.project,
+      worktree: input.worktreeDir,
+    })
+      .catch((err) => {
+        failed = err
+      })
+      .finally(() => {
+        finished = true
+      })
+
+    while (!finished) {
+      await sleep(STALL_POLL_MS)
+      if (finished) break
+      if (input.abort.aborted) {
+        await stopSession({
+          sessionID: input.sessionID,
+          worktreeDir: input.worktreeDir,
+          project: input.project,
+          reason: "abort",
+        })
+        throw new Error("Aborted")
+      }
+
+      const status = await sessionStatus(input.sessionID, input.worktreeDir, input.project)
+      if (!status || status.type === "idle" || status.type === "retry") continue
+
+      const current = await progress(input.worktreeDir)
+      if (current && changed(latest, current)) {
+        latest = current
+        advanced = Date.now()
+      }
+
+      const reason = detectStalledProgress({
+        kind: input.subtask.kind,
+        elapsedMs: Date.now() - started,
+        changedMs: Date.now() - advanced,
+        baseline,
+        current,
+        timeoutMs: input.timeoutMs,
+      })
+      if (!reason) continue
+
+      const retry: Retry = {
+        type: "retry",
+        attempt: (input.retry?.attempt ?? 0) + 1,
+        reason,
+      }
+      log.warn("worker stalled without filesystem changes", {
+        subtaskID: input.subtask.id,
+        sessionID: input.sessionID,
+        attempt: retry.attempt,
+        kind: input.subtask.kind ?? "semantic",
+        elapsedMs: Date.now() - started,
+      })
+      await stopSession({
+        sessionID: input.sessionID,
+        worktreeDir: input.worktreeDir,
+        project: input.project,
+        reason: "stall",
+      })
+      return retry
+    }
+
+    await task
+
+    if (failed) throw failed
+    return { type: "done" }
+  }
 
   /**
    * Run async tasks with a concurrency limit.
@@ -99,6 +368,8 @@ export namespace WorkerManager {
 
     const info = await Worktree.makeWorktreeInfo(`parallel-${plan.id.slice(0, 12)}-${subtask.id.slice(0, 20)}`)
     const bootstrap = await Worktree.createFromInfo(info, undefined, ParallelBootstrap)
+    const cfg = await Config.get()
+    const timeoutMs = cfg.parallel?.worker_timeout_ms ?? 30 * 60 * 1000
 
     // Register listener BEFORE starting bootstrap to avoid race condition.
     // bootstrap() emits Event.Ready synchronously before returning,
@@ -120,19 +391,12 @@ export namespace WorkerManager {
       Metrics.recordWorkerStartup(duration)
 
       const project = Project.get(plan.projectID) ?? (await Project.fromDirectory(info.directory)).project
-
-      const session = await Instance.provide({
-        directory: info.directory,
-        init: ParallelBootstrap, // Use lightweight bootstrap for workers
-        fn: async () => {
-          return Session.createNext({
-            parentID: plan.sessionID,
-            directory: info.directory,
-            title: `[parallel] ${subtask.title}`,
-          })
-        },
+      let retry: Retry | undefined = undefined
+      let session = await createWorkerSession({
+        plan,
+        subtask,
         project,
-        worktree: info.directory,
+        worktreeDir: info.directory,
       })
 
       await updateWorker(plan.id, subtask.id, {
@@ -141,34 +405,62 @@ export namespace WorkerManager {
         worktreeName: info.name,
         worktreeDir: info.directory,
         branch: info.branch,
+        error: "",
       })
 
-      await Instance.provide({
-        directory: info.directory,
-        init: ParallelBootstrap, // Use lightweight bootstrap
-        fn: async () => {
-          const promptText = buildWorkerPrompt(plan.task, subtask, plan.subtasks, {
-            sharedContracts: plan.sharedContracts,
-            conventions: plan.conventions,
-          })
-          const model = subtask.model ?? plan.workerModel
-          const { SessionPrompt } = await import("../session/prompt")
-          await SessionPrompt.prompt({
-            sessionID: session.id,
-            model,
-            parts: [
-              {
-                type: "text" as const,
-                text: promptText,
-              },
-            ],
-          })
-        },
-        project,
-        worktree: info.directory,
-      })
+      for (const attempt of Array.from({ length: STALL_RETRY_LIMIT + 1 }, (_, i) => i)) {
+        const result = await promptWorker({
+          plan,
+          subtask,
+          project,
+          worktreeDir: info.directory,
+          sessionID: session.id,
+          abort,
+          timeoutMs,
+          retry,
+        })
+        if (result.type === "done") {
+          return { subtaskID: subtask.id, sessionID: session.id }
+        }
+        if (attempt >= STALL_RETRY_LIMIT) {
+          throw new Error(result.reason)
+        }
 
-      return { subtaskID: subtask.id, sessionID: session.id }
+        retry = result
+        await updateWorker(plan.id, subtask.id, {
+          status: "failed",
+          sessionID: session.id,
+          worktreeName: info.name,
+          worktreeDir: info.directory,
+          branch: info.branch,
+          error: result.reason,
+        })
+        await updateWorker(plan.id, subtask.id, {
+          status: "pending",
+          error: "",
+        })
+        await updateWorker(plan.id, subtask.id, {
+          status: "spawning",
+          error: "",
+        })
+        session = await createWorkerSession({
+          plan,
+          subtask,
+          project,
+          worktreeDir: info.directory,
+          retry,
+        })
+        await updateWorker(plan.id, subtask.id, {
+          status: "running",
+          sessionID: session.id,
+          worktreeName: info.name,
+          worktreeDir: info.directory,
+          branch: info.branch,
+          error: "",
+        })
+      }
+
+      throw new Error("Worker retry loop exited unexpectedly")
     } catch (err) {
       Metrics.recordSpawnFailure()
       throw err
@@ -246,10 +538,6 @@ export namespace WorkerManager {
       )
     }
 
-    async function wait(ms: number) {
-      return new Promise<void>((resolve) => setTimeout(resolve, ms))
-    }
-
     async function spawn(plan: Plan, st: Subtask, abort: AbortSignal) {
       let last = "Spawn failed"
       for (const attempt of Array.from({ length: RETRY_LIMIT }, (_, i) => i + 1)) {
@@ -266,7 +554,7 @@ export namespace WorkerManager {
             backoff,
             error: last,
           })
-          await wait(backoff)
+          await sleep(backoff)
         }
       }
       throw new Error(last)
@@ -692,6 +980,7 @@ export namespace WorkerManager {
     options?: {
       sharedContracts?: SharedContract[]
       conventions?: ProjectConventions
+      retry?: Retry
     },
   ): string {
     const depInfo =
@@ -726,6 +1015,15 @@ export namespace WorkerManager {
 - Keep reasoning proportional. If the work is a package/import/path rename, execute it directly and verify the result.`
         : ""
 
+    const retryInfo = options?.retry
+      ? `\n## Retry Directive\nThe previous attempt stalled: ${options.retry.reason}
+
+- This retry must produce a concrete filesystem change quickly.
+- Start with direct search/replace or file operations before any broad exploration.
+- Do not reread large parts of the codebase unless a specific file is ambiguous.
+- If a targeted command can complete the task, use it immediately.`
+      : ""
+
     const contractInfo = (() => {
       const contracts = (options?.sharedContracts ?? []).filter(
         (sc) => sc.producers.includes(subtask.id) || sc.consumers.includes(subtask.id),
@@ -751,7 +1049,7 @@ ${conventionInfo}
 ## Your Specific Subtask
 **${subtask.title}**
 
-${subtask.description}${kindInfo}${constraintInfo}${contractInfo}${depInfo}
+${subtask.description}${kindInfo}${retryInfo}${constraintInfo}${contractInfo}${depInfo}
 
 ## File Scope
 You should primarily modify these files:
