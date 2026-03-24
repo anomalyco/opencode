@@ -341,7 +341,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         }
 
         case "lsp.updated": {
-          sdk.client.lsp.status().then((x) => setStore("lsp", x.data!))
+          sdk.client.lsp.status().then((x) => {
+            if (x.data) setStore("lsp", x.data)
+          })
           break
         }
 
