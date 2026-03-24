@@ -394,3 +394,12 @@ export const dfmt: Info = {
     return which("dfmt") !== null
   },
 }
+
+export const taplo: Info = {
+  name: "taplo",
+  command: ["taplo", "fmt", "$FILE"],
+  extensions: [".toml"],
+  async enabled() {
+    return which("taplo") !== null
+  },
+}
