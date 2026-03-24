@@ -66,12 +66,13 @@ export namespace LLM {
     ])
     // TODO: move this to a proper hook
     const isOpenaiOauth = provider.id === "openai" && auth?.type === "oauth"
+    const tools = await resolveTools(input)
 
     const system: string[] = []
     system.push(
       [
         // use agent prompt otherwise provider prompt
-        ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)),
+        ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model, { tools: Object.keys(tools) })),
         // any custom prompt passed into this call
         ...input.system,
         // any custom prompt from last user message
@@ -165,8 +166,6 @@ export namespace LLM {
       isOpenaiOauth || provider.id.includes("github-copilot")
         ? undefined
         : ProviderTransform.maxOutputTokens(input.model)
-
-    const tools = await resolveTools(input)
 
     // LiteLLM and some Anthropic proxies require the tools parameter to be present
     // when message history contains tool calls, even if no tools are being used.

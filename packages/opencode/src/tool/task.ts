@@ -11,6 +11,7 @@ import { iife } from "@/util/iife"
 import { defer } from "@/util/defer"
 import { Config } from "../config/config"
 import { Permission } from "@/permission"
+import { Wildcard } from "@/util/wildcard"
 
 const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
@@ -63,7 +64,10 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       const agent = await Agent.get(params.subagent_type)
       if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
 
-      const hasTaskPermission = agent.permission.some((rule) => rule.permission === "task")
+      const subagentAccess = resolveSubagentToolAccess({
+        agent,
+        config,
+      })
 
       const session = await iife(async () => {
         if (params.task_id) {
@@ -74,32 +78,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         return await Session.create({
           parentID: ctx.sessionID,
           title: params.description + ` (@${agent.name} subagent)`,
-          permission: [
-            {
-              permission: "todowrite",
-              pattern: "*",
-              action: "deny",
-            },
-            {
-              permission: "todoread",
-              pattern: "*",
-              action: "deny",
-            },
-            ...(hasTaskPermission
-              ? []
-              : [
-                  {
-                    permission: "task" as const,
-                    pattern: "*" as const,
-                    action: "deny" as const,
-                  },
-                ]),
-            ...(config.experimental?.primary_tools?.map((t) => ({
-              pattern: "*",
-              action: "allow" as const,
-              permission: t,
-            })) ?? []),
-          ],
+          permission: subagentAccess.permission,
         })
       })
       const msg = await MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
@@ -135,12 +114,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           providerID: model.providerID,
         },
         agent: agent.name,
-        tools: {
-          todowrite: false,
-          todoread: false,
-          ...(hasTaskPermission ? {} : { task: false }),
-          ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
-        },
+        tools: subagentAccess.tools,
         parts: promptParts,
       })
 
@@ -165,3 +139,53 @@ export const TaskTool = Tool.define("task", async (ctx) => {
     },
   }
 })
+
+type SubagentToolAccessInput = {
+  agent: Agent.Info
+  config: Awaited<ReturnType<typeof Config.get>>
+}
+
+function hasExplicitSubagentToolAccess(permission: string, ruleset: Permission.Ruleset) {
+  const explicit = ruleset.findLast((rule) => rule.permission !== "*" && Wildcard.match(permission, rule.permission))
+  return explicit ? explicit.action !== "deny" : false
+}
+
+/** @internal Exported for testing */
+export function resolveSubagentToolAccess(input: SubagentToolAccessInput) {
+  const permission: Permission.Ruleset = []
+  const tools: Record<string, boolean> = {}
+  const hasTaskPermission = input.agent.permission.some((rule) => rule.permission === "task")
+
+  for (const tool of ["todowrite", "todoread"] as const) {
+    if (hasExplicitSubagentToolAccess(tool, input.agent.permission)) continue
+    permission.push({
+      permission: tool,
+      pattern: "*",
+      action: "deny",
+    })
+    tools[tool] = false
+  }
+
+  if (!hasTaskPermission) {
+    permission.push({
+      permission: "task",
+      pattern: "*",
+      action: "deny",
+    })
+    tools.task = false
+  }
+
+  for (const tool of input.config.experimental?.primary_tools ?? []) {
+    permission.push({
+      permission: tool,
+      pattern: "*",
+      action: "allow",
+    })
+    tools[tool] = false
+  }
+
+  return {
+    permission,
+    tools,
+  }
+}

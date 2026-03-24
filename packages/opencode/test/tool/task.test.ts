@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { Agent } from "../../src/agent/agent"
+import { Config } from "../../src/config/config"
 import { Instance } from "../../src/project/instance"
-import { TaskTool } from "../../src/tool/task"
+import { resolveSubagentToolAccess, TaskTool } from "../../src/tool/task"
 import { tmpdir } from "../fixture/fixture"
 
 afterEach(async () => {
@@ -43,6 +44,66 @@ describe("tool.task", () => {
         expect(explore).toBeGreaterThan(alpha)
         expect(general).toBeGreaterThan(explore)
         expect(zebra).toBeGreaterThan(general)
+      },
+    })
+  })
+
+  test("subagents keep todo tools disabled unless explicitly enabled", async () => {
+    await using tmp = await tmpdir({
+      config: {
+        agent: {
+          default_subagent: {
+            description: "No explicit todo access",
+            mode: "subagent",
+          },
+          explicit_todo_subagent: {
+            description: "Explicit todo access",
+            mode: "subagent",
+            tools: {
+              todowrite: true,
+              todoread: true,
+            },
+            permission: {
+              todowrite: "allow",
+              todoread: "allow",
+            },
+          },
+        },
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        const defaultSubagent = await Agent.get("default_subagent")
+        const explicitTodoSubagent = await Agent.get("explicit_todo_subagent")
+
+        const disabled = resolveSubagentToolAccess({
+          agent: defaultSubagent!,
+          config,
+        })
+        expect(disabled.tools.todowrite).toBe(false)
+        expect(disabled.tools.todoread).toBe(false)
+        expect(disabled.permission).toContainEqual({
+          permission: "todowrite",
+          pattern: "*",
+          action: "deny",
+        })
+        expect(disabled.permission).toContainEqual({
+          permission: "todoread",
+          pattern: "*",
+          action: "deny",
+        })
+
+        const enabled = resolveSubagentToolAccess({
+          agent: explicitTodoSubagent!,
+          config,
+        })
+        expect(enabled.tools.todowrite).toBeUndefined()
+        expect(enabled.tools.todoread).toBeUndefined()
+        expect(enabled.permission.some((rule) => rule.permission === "todowrite")).toBe(false)
+        expect(enabled.permission.some((rule) => rule.permission === "todoread")).toBe(false)
       },
     })
   })
