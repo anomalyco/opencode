@@ -151,6 +151,18 @@ export default function Layout(props: ParentProps) {
   const currentDir = createMemo(() => decode64(params.dir) ?? "")
   const openclawDir = "/openclaw"
   const openclawSlug = base64Encode(openclawDir)
+  const isOpenclawDir = (directory?: string) => directory === openclawDir
+  const openclawProject = createMemo(
+    () =>
+      ({
+        id: "openclaw",
+        worktree: openclawDir,
+        name: "OpenClaw",
+        expanded: true,
+        vcs: undefined,
+        sandboxes: [],
+      }) satisfies LocalProject,
+  )
 
   const [state, setState] = createStore({
     autoselect: !initialDirectory,
@@ -610,17 +622,7 @@ export default function Layout(props: ParentProps) {
   const currentProject = createMemo(() => {
     const directory = currentDir()
     if (!directory) return
-
-    if (directory === openclawDir) {
-      return {
-        id: "openclaw",
-        worktree: openclawDir,
-        name: "OpenClaw",
-        expanded: true,
-        vcs: undefined,
-        sandboxes: [],
-      } satisfies LocalProject
-    }
+    if (isOpenclawDir(directory)) return openclawProject()
 
     const projects = layout.projects.list()
 
@@ -1408,7 +1410,7 @@ export default function Layout(props: ParentProps) {
   }
 
   function projectRoot(directory: string) {
-    if (directory === openclawDir) return openclawDir
+    if (isOpenclawDir(directory)) return openclawDir
     const project = layout.projects
       .list()
       .find((item) => item.worktree === directory || item.sandboxes?.includes(directory))
@@ -1466,7 +1468,7 @@ export default function Layout(props: ParentProps) {
 
   async function navigateToProject(directory: string | undefined) {
     if (!directory) return
-    if (directory === openclawDir) {
+    if (isOpenclawDir(directory)) {
       navigateWithSidebarReset(`/${openclawSlug}/session`)
       return
     }
@@ -2712,7 +2714,7 @@ export default function Layout(props: ParentProps) {
       onOpenProject={chooseProject}
       renderProjectOverlay={projectOverlay}
       openclawLabel={() => language.t("sidebar.openclaw")}
-      openclawActive={() => currentDir() === openclawDir}
+      openclawActive={() => isOpenclawDir(currentDir())}
       onOpenOpenclaw={openOpenclaw}
       configLabel={() => "Config"}
       onOpenConfig={openConfig}
