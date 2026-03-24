@@ -1,3 +1,7 @@
+---
+model: opencode/kimi-k2.5
+---
+
 create UPCOMING_CHANGELOG.md
 
 it should have sections
