@@ -384,15 +384,20 @@ export namespace WorkerManager {
     const warned = new Set<string>() // Track workers that have triggered timeout warning
 
     // Build a map of sessionID -> worker for fast lookup
-    const sessionToWorker = new Map<string, { subtaskID: SubtaskID; worktreeDir: string; startTime: number }>()
+    const sessionToWorker = new Map<
+      string,
+      { subtaskID: SubtaskID; worktreeDir: string; startTime: number; kind: Subtask["kind"] }
+    >()
     for (const worker of running) {
       if (worker.sessionID && worker.worktreeDir) {
         const startTime = Date.now()
         startTimes.set(worker.sessionID, startTime)
+        const subtask = plan.subtasks.find((item) => item.id === worker.subtaskID)
         sessionToWorker.set(worker.sessionID, {
           subtaskID: worker.subtaskID,
           worktreeDir: worker.worktreeDir,
           startTime,
+          kind: subtask?.kind,
         })
       }
     }
@@ -521,9 +526,11 @@ export namespace WorkerManager {
 
           // Check for timeout
           const elapsed = Date.now() - worker.startTime
+          const warnAt =
+            worker.kind === "structural" ? Math.min(warningThreshold, 2 * 60 * 1000) : warningThreshold
 
           // Check for timeout warning at 80% threshold
-          if (elapsed > warningThreshold && !warned.has(sessionID)) {
+          if (elapsed > warnAt && !warned.has(sessionID)) {
             warned.add(sessionID)
             const remainingMs = timeoutMs - elapsed
             log.warn("worker approaching timeout", {
@@ -532,6 +539,7 @@ export namespace WorkerManager {
               elapsedMs: elapsed,
               remainingMs,
               timeoutMs,
+              kind: worker.kind ?? "semantic",
             })
             Bus.publish(ParallelEvent.WorkerTimeoutWarning, {
               planID,
@@ -562,7 +570,7 @@ export namespace WorkerManager {
               directory: worker.worktreeDir,
               init: ParallelBootstrap,
               fn: async () => {
-                const status = SessionStatus.get(SessionID.make(sessionID))
+                const status = await SessionStatus.get(SessionID.make(sessionID))
                 return status.type === "idle"
               },
             })
@@ -708,6 +716,16 @@ export namespace WorkerManager {
       return formatted ? `\n## Project Conventions (ALL workers must follow)\n${formatted}` : ""
     })()
 
+    const kindInfo =
+      subtask.kind === "structural"
+        ? `\n## Execution Mode\nThis is a structural refactor. Treat it as a direct transformation task, not a code-understanding task.
+
+- Start with targeted discovery only: use file listing and search commands to find affected paths/identifiers.
+- Prefer bulk rename, move, and replace operations over reading many files into context.
+- Only open full file contents when a command result shows ambiguity or a file needs manual repair.
+- Keep reasoning proportional. If the work is a package/import/path rename, execute it directly and verify the result.`
+        : ""
+
     const contractInfo = (() => {
       const contracts = (options?.sharedContracts ?? []).filter(
         (sc) => sc.producers.includes(subtask.id) || sc.consumers.includes(subtask.id),
@@ -733,7 +751,7 @@ ${conventionInfo}
 ## Your Specific Subtask
 **${subtask.title}**
 
-${subtask.description}${constraintInfo}${contractInfo}${depInfo}
+${subtask.description}${kindInfo}${constraintInfo}${contractInfo}${depInfo}
 
 ## File Scope
 You should primarily modify these files:

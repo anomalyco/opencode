@@ -36,6 +36,9 @@ export const ModelRef = z
   .meta({ ref: "ModelRef" })
 export type ModelRef = z.infer<typeof ModelRef>
 
+export const SubtaskKind = z.enum(["semantic", "structural"])
+export type SubtaskKind = z.infer<typeof SubtaskKind>
+
 export const Subtask = z.object({
   id: SubtaskID.zod,
   title: z.string(),
@@ -44,6 +47,7 @@ export const Subtask = z.object({
   dependencies: z.array(SubtaskID.zod).default([]),
   model: ModelRef.optional(),
   constraints: z.array(z.string()).optional(),
+  kind: SubtaskKind.optional(),
 })
 export type Subtask = z.infer<typeof Subtask>
 

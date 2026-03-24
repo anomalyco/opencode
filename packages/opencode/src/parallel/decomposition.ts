@@ -4,7 +4,7 @@ import { Provider } from "@/provider/provider"
 import { Log } from "@/util/log"
 import { Glob } from "@/util/glob"
 import { SubtaskID } from "./schema"
-import type { Subtask, ModelRef, SharedContract, ProjectConventions } from "./schema"
+import type { Subtask, ModelRef, SharedContract, ProjectConventions, SubtaskKind } from "./schema"
 import path from "path"
 
 export namespace Decomposition {
@@ -27,6 +27,8 @@ Rules:
 10. When subtasks share an interface boundary (API producer + consumer, shared types, config contracts), define SHARED CONTRACTS with exact type definitions that both sides must conform to. This prevents mismatches when workers implement independently.
 11. Identify NEGATIVE CONSTRAINTS — things each subtask must NOT do (forbidden libraries, services, patterns). Attach relevant constraints to each subtask.
 12. Identify PROJECT CONVENTIONS all workers must follow: serialization format, auth mechanism, timestamp format, naming conventions. Omit if the task is simple enough not to need cross-cutting conventions.
+13. Classify each subtask with kind="structural" when the work is a mechanical rename/move/replace/path update that should favor direct file operations over deep code analysis. Use kind="semantic" for behavior changes or feature work.
+14. For simple structural refactors, prefer the minimum number of subtasks, often exactly one. Do not split identical rename/replace work across many workers.
 
 Output format: a JSON object with "subtasks" array, optional "sharedContracts" array, and optional "conventions" object.`
 
@@ -43,6 +45,10 @@ Output format: a JSON object with "subtasks" array, optional "sharedContracts" a
       .array(z.string())
       .optional()
       .describe("Things this subtask must NOT do — forbidden libs, patterns, services"),
+    kind: z
+      .enum(["semantic", "structural"])
+      .optional()
+      .describe("Use 'structural' for mechanical rename/move/replace tasks, otherwise 'semantic'"),
   })
 
   const OutputSchema = z.object({
@@ -80,7 +86,82 @@ Output format: a JSON object with "subtasks" array, optional "sharedContracts" a
     structure: string
   }
 
-  export async function gatherCodebaseContext(root: string): Promise<CodebaseContext> {
+  export interface Profile {
+    kind: SubtaskKind
+    simple: boolean
+    reason: string
+  }
+
+  const STRUCTURAL = [
+    /\brename\b.*\b(package|namespace|import|path|folder|directory|file|symbol|identifier)\b/,
+    /\b(move|relocate)\b.*\b(file|folder|directory|package|namespace)\b/,
+    /\b(update|rewrite|fix)\b.*\b(imports?|paths?|namespace|package)\b/,
+    /\b(search(?:-| )and(?:-| )replace)\b/,
+    /\breplace\b.+\bwith\b.+/,
+    /\bpackage\b.+\bto\b.+/,
+  ]
+
+  const SEMANTIC = [
+    /\b(add|build|create|implement)\b.*\b(feature|endpoint|workflow|screen|page|service|logic|support)\b/,
+    /\bfix\b.*\b(bug|crash|logic|behavior|runtime)\b/,
+    /\b(refactor|migrate)\b.*\b(api|architecture|state|auth|database|schema|component|service)\b/,
+  ]
+
+  function uniq(input: string[]) {
+    return Array.from(new Set(input.filter(Boolean))).sort()
+  }
+
+  function title(task: string, subtasks: { title: string }[]) {
+    const text = task.trim()
+    if (text) return text.length > 80 ? `${text.slice(0, 77)}...` : text
+    return subtasks[0]?.title || "Apply structural refactor"
+  }
+
+  function describe(task: string) {
+    return [
+      `Apply the requested structural refactor: ${task}`,
+      "Use direct file moves and bulk search/replace where possible.",
+      "Keep behavior unchanged while updating imports, package names, paths, and build/config references in scope.",
+      "Verify the old identifier no longer appears in the touched files unless an intentional exception is required.",
+    ].join("\n")
+  }
+
+  export function profile(task: string): Profile {
+    const text = task.toLowerCase()
+    const structural = STRUCTURAL.some((pattern) => pattern.test(text))
+    const semantic = SEMANTIC.some((pattern) => pattern.test(text))
+
+    if (structural && !semantic) {
+      return {
+        kind: "structural",
+        simple: true,
+        reason: "Task looks like a mechanical rename/move/replace refactor.",
+      }
+    }
+
+    return {
+      kind: "semantic",
+      simple: false,
+      reason: "Task likely needs behavioral understanding or implementation work.",
+    }
+  }
+
+  export function simplify(subtasks: Subtask[], task: string, mode: Profile): Subtask[] {
+    if (mode.kind !== "structural" || !mode.simple || subtasks.length <= 1) return subtasks
+    return [
+      {
+        id: SubtaskID.ascending(),
+        title: title(task, subtasks),
+        description: describe(task),
+        fileScope: uniq(subtasks.flatMap((subtask) => subtask.fileScope)),
+        dependencies: [],
+        constraints: uniq(subtasks.flatMap((subtask) => subtask.constraints ?? [])),
+        kind: "structural",
+      },
+    ]
+  }
+
+  export async function gatherCodebaseContext(root: string, mode?: Profile): Promise<CodebaseContext> {
     log.info("gathering codebase context", { root })
 
     const directories = new Set<string>()
@@ -199,7 +280,7 @@ Output format: a JSON object with "subtasks" array, optional "sharedContracts" a
       ].includes(ext)
     })
 
-    const maxSample = 20
+    const maxSample = mode?.kind === "structural" ? 0 : 20
     const structure = srcFiles.slice(0, maxSample).join("\n")
 
     log.info("codebase context gathered", {
@@ -232,10 +313,11 @@ Output format: a JSON object with "subtasks" array, optional "sharedContracts" a
       ``,
       `Top-Level Directories:`,
       ...ctx.directories.map((d) => `  - ${d}/`),
-      ``,
-      `Sample Source Files (${Math.min(20, ctx.fileCount)} shown):`,
-      ctx.structure || "  (No source files found)",
     ]
+
+    if (ctx.structure) {
+      lines.push("", `Sample Source Files (${Math.min(20, ctx.fileCount)} shown):`, ctx.structure)
+    }
 
     return lines.join("\n")
   }
@@ -350,7 +432,14 @@ Output format: a JSON object with "subtasks" array, optional "sharedContracts" a
   }
 
   export function assignSubtaskIDs<
-    T extends { title: string; description: string; fileScope: string[]; dependencies: number[]; constraints?: string[] },
+    T extends {
+      title: string
+      description: string
+      fileScope: string[]
+      dependencies: number[]
+      constraints?: string[]
+      kind?: SubtaskKind
+    },
   >(subtasks: T[]): Subtask[] {
     const n = subtasks.length
     const ids = Array.from({ length: n }, () => SubtaskID.ascending())
@@ -362,6 +451,7 @@ Output format: a JSON object with "subtasks" array, optional "sharedContracts" a
       fileScope: st.fileScope,
       dependencies: st.dependencies.map((depIdx) => ids[depIdx]),
       constraints: st.constraints,
+      kind: st.kind,
     }))
   }
 
@@ -423,15 +513,17 @@ Output format: a JSON object with "subtasks" array, optional "sharedContracts" a
     task: string
     model: ModelRef
     codebaseContext?: string
+    profile?: Profile
   }): Promise<DecomposeResult> {
     log.info("decomposing task", { task: input.task.slice(0, 100) })
 
     const fullModel = await Provider.getModel(input.model.providerID, input.model.modelID)
     const language = await Provider.getLanguage(fullModel)
+    const mode = input.profile ?? profile(input.task)
 
     const userContent = input.codebaseContext
-      ? `## Task\n${input.task}\n\n## Codebase Context\n${input.codebaseContext}`
-      : input.task
+      ? `## Task\n${input.task}\n\n## Task Profile\n- Kind: ${mode.kind}\n- Reason: ${mode.reason}\n\n## Codebase Context\n${input.codebaseContext}`
+      : `## Task\n${input.task}\n\n## Task Profile\n- Kind: ${mode.kind}\n- Reason: ${mode.reason}`
 
     const result = await generateObject({
       model: language,
@@ -451,7 +543,12 @@ Output format: a JSON object with "subtasks" array, optional "sharedContracts" a
       throw new Error(`Invalid dependencies: ${depError.type} - ${depError.details}`)
     }
 
-    const subtasks = assignSubtaskIDs(result.object.subtasks)
+    let subtasks = assignSubtaskIDs(
+      result.object.subtasks.map((subtask) => ({
+        ...subtask,
+        kind: subtask.kind ?? mode.kind,
+      })),
+    )
     const ids = subtasks.map((s) => s.id)
 
     const refs = (idxs: number[], name: string, role: "producer" | "consumer"): Subtask["dependencies"] =>
@@ -462,18 +559,21 @@ Output format: a JSON object with "subtasks" array, optional "sharedContracts" a
         return ids[idx]
       })
 
-    // Convert index-based contract references to SubtaskID-based
-    const sharedContracts: SharedContract[] | undefined = result.object.sharedContracts?.map((sc) => ({
-      name: sc.name,
-      description: sc.description,
-      types: sc.types,
-      producers: refs(sc.producerIndices, sc.name, "producer"),
-      consumers: refs(sc.consumerIndices, sc.name, "consumer"),
-    }))
+    const structural = mode.kind === "structural" && mode.simple
+    subtasks = simplify(subtasks, input.task, mode)
 
-    const conventions = result.object.conventions
+    const sharedContracts = structural
+      ? undefined
+      : result.object.sharedContracts?.map((sc) => ({
+          name: sc.name,
+          description: sc.description,
+          types: sc.types,
+          producers: refs(sc.producerIndices, sc.name, "producer"),
+          consumers: refs(sc.consumerIndices, sc.name, "consumer"),
+        }))
 
-    // Predict potential conflicts from overlapping file scopes
+    const conventions = structural ? undefined : result.object.conventions
+
     const conflicts = predictConflicts(subtasks)
     if (conflicts.length > 0) {
       log.warn("potential merge conflicts detected", {

@@ -579,23 +579,25 @@ export namespace Orchestrator {
         workerModel: input.workerModel,
       })
       const cfg = await Config.get()
-      const mode = input.publishMode ?? cfg.parallel?.publish_mode ?? "new-branch"
+      const publishMode = input.publishMode ?? cfg.parallel?.publish_mode ?? "new-branch"
 
       const plan = await PlanStore.create({
         projectID: input.projectID,
         sessionID: input.sessionID,
         task: input.task,
         ...models,
-        publishMode: mode,
+        publishMode,
       })
 
-      const codebaseContext = await Decomposition.gatherCodebaseContext(Instance.directory)
+      const kind = Decomposition.profile(input.task)
+      const codebaseContext = await Decomposition.gatherCodebaseContext(Instance.directory, kind)
       const formattedContext = Decomposition.formatCodebaseContext(codebaseContext)
 
       const { subtasks, sharedContracts, conventions } = await Decomposition.decompose({
         task: input.task,
         model: models.orchestratorModel,
         codebaseContext: formattedContext,
+        profile: kind,
       })
 
       await checkSubtaskLimit(subtasks.length)
@@ -622,7 +624,7 @@ export namespace Orchestrator {
         planID: plan.id,
         subtaskCount: subtasks.length,
         autoApprove,
-        publishMode: mode,
+        publishMode,
       })
       return updated
     },
@@ -694,7 +696,7 @@ export namespace Orchestrator {
       log.info("plan execution complete", {
         planID,
         status: "failed",
-        integrationBranch: integrationResult.branch,
+        integrationBranch: integrationResult?.branch,
         publishMode: undefined,
       })
       return
@@ -833,13 +835,15 @@ export namespace Orchestrator {
       }
     }
 
-    const codebaseContext = await Decomposition.gatherCodebaseContext(Instance.directory)
+    const mode = Decomposition.profile(plan.task)
+    const codebaseContext = await Decomposition.gatherCodebaseContext(Instance.directory, mode)
     const formattedContext = Decomposition.formatCodebaseContext(codebaseContext)
 
     const { subtasks, sharedContracts, conventions } = await Decomposition.decompose({
       task: plan.task,
       model: plan.orchestratorModel,
       codebaseContext: formattedContext,
+      profile: mode,
     })
 
     // Restore model overrides where titles match
