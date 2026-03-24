@@ -15,11 +15,30 @@ const STORAGE_KEYS = {
 } as const
 
 const THEME_STYLE_ID = "oc-theme"
-const files = import.meta.glob<{ default: DesktopTheme }>("./themes/*.json")
-const all = Object.keys(files)
-  .map((path) => path.slice("./themes/".length, -".json".length))
-  .sort()
-const known = new Set(all)
+let files: Record<string, () => Promise<{ default: DesktopTheme }>> | undefined
+let ids: string[] | undefined
+let known: Set<string> | undefined
+
+function getFiles() {
+  if (files) return files
+  files = import.meta.glob<{ default: DesktopTheme }>("./themes/*.json")
+  return files
+}
+
+function themeIDs() {
+  if (ids) return ids
+  ids = Object.keys(getFiles())
+    .map((path) => path.slice("./themes/".length, -".json".length))
+    .sort()
+  return ids
+}
+
+function knownThemes() {
+  if (known) return known
+  known = new Set(themeIDs())
+  return known
+}
+
 const names: Record<string, string> = {
   "oc-2": "OC-2",
   amoled: "AMOLED",
@@ -166,7 +185,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       if (hit) return Promise.resolve(hit)
       const pending = loads.get(next)
       if (pending) return pending
-      const file = files[`./themes/${next}.json`]
+      const file = getFiles()[`./themes/${next}.json`]
       if (!file) return Promise.resolve(undefined)
       const task = file()
         .then((mod) => {
@@ -188,19 +207,20 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
 
     const ids = () => {
       const extra = Object.keys(store.themes)
-        .filter((id) => !known.has(id))
+        .filter((id) => !knownThemes().has(id))
         .sort()
+      const all = themeIDs()
       if (extra.length === 0) return all
       return [...all, ...extra]
     }
 
-    const loadThemes = () => Promise.all(all.map(load)).then(() => store.themes)
+    const loadThemes = () => Promise.all(themeIDs().map(load)).then(() => store.themes)
 
     const onStorage = (e: StorageEvent) => {
       if (e.key === STORAGE_KEYS.THEME_ID && e.newValue) {
         const next = normalize(e.newValue)
         if (!next) return
-        if (next !== "oc-2" && !known.has(next) && !store.themes[next]) return
+        if (next !== "oc-2" && !knownThemes().has(next) && !store.themes[next]) return
         setStore("themeId", next)
         if (next === "oc-2") {
           clear()
@@ -259,7 +279,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
         console.warn(`Theme "${id}" not found`)
         return
       }
-      if (next !== "oc-2" && !known.has(next) && !store.themes[next]) {
+      if (next !== "oc-2" && !knownThemes().has(next) && !store.themes[next]) {
         console.warn(`Theme "${id}" not found`)
         return
       }
@@ -296,7 +316,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       previewTheme: (id: string) => {
         const next = normalize(id)
         if (!next) return
-        if (next !== "oc-2" && !known.has(next) && !store.themes[next]) return
+        if (next !== "oc-2" && !knownThemes().has(next) && !store.themes[next]) return
         setStore("previewThemeId", next)
         void load(next).then((theme) => {
           if (!theme || store.previewThemeId !== next) return

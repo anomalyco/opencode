@@ -1,7 +1,6 @@
 import { Component, Show, createMemo, createResource, onMount, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
-import { ensureMonoFont } from "@opencode-ai/ui/font"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Select } from "@opencode-ai/ui/select"
 import { Switch } from "@opencode-ai/ui/switch"
@@ -24,6 +23,13 @@ let demoSoundState = {
 type ThemeOption = {
   id: string
   name: string
+}
+
+let font: Promise<typeof import("@opencode-ai/ui/font-loader")> | undefined
+
+function loadFont() {
+  font ??= import("@opencode-ai/ui/font-loader")
+  return font
 }
 
 // To prevent audio from overlapping/playing very quickly when navigating the settings menus,
@@ -339,7 +345,7 @@ export const SettingsGeneral: Component = () => {
             value={(o) => o.value}
             label={(o) => language.t(o.label)}
             onHighlight={(option) => {
-              void ensureMonoFont(option?.value)
+              void loadFont().then((x) => x.ensureMonoFont(option?.value))
             }}
             onSelect={(option) => option && settings.appearance.setFont(option.value)}
             variant="secondary"
