@@ -1,3 +1,4 @@
+import { $ } from "bun"
 import { afterEach, test, expect } from "bun:test"
 import { Skill } from "../../src/skill"
 import { Instance } from "../../src/project/instance"
@@ -187,6 +188,52 @@ description: A skill in the .claude/skills directory.
       expect(claudeSkill!.location).toContain(path.join(".claude", "skills", "claude-skill", "SKILL.md"))
     },
   })
+})
+
+test("discovers project skills from symlinked .claude/skills in worktree sandbox", async () => {
+  await using tmp = await tmpdir({ git: true })
+
+  const wt = path.join(tmp.path, "..", `${path.basename(tmp.path)}-skills-wt`)
+  const home = process.env.OPENCODE_TEST_HOME
+  process.env.OPENCODE_TEST_HOME = path.join(tmp.path, ".home")
+
+  try {
+    const real = path.join(tmp.path, "shared-skills", "linked-skill")
+    const link = path.join(tmp.path, ".claude", "skills")
+
+    await fs.mkdir(real, { recursive: true })
+    await fs.mkdir(path.dirname(link), { recursive: true })
+    await Bun.write(
+      path.join(real, "SKILL.md"),
+      `---
+name: linked-skill
+description: A project skill behind a symlink.
+---
+
+# Linked Skill
+`,
+    )
+    await fs.symlink(path.join(tmp.path, "shared-skills"), link, "dir")
+
+    await $`git worktree add ${wt} -b linked-skill-${Date.now()}`.cwd(tmp.path).quiet()
+
+    expect(await fs.lstat(link).then((x) => x.isSymbolicLink())).toBe(true)
+    expect(await fs.access(path.join(wt, ".claude")).then(() => true).catch(() => false)).toBe(false)
+
+    await Instance.provide({
+      directory: wt,
+      fn: async () => {
+        const skills = await Skill.all()
+        const skill = skills.find((item) => item.name === "linked-skill")
+
+        expect(skill).toBeDefined()
+        expect(skill!.location).toContain(path.join(".claude", "skills", "linked-skill", "SKILL.md"))
+      },
+    })
+  } finally {
+    process.env.OPENCODE_TEST_HOME = home
+    await $`git worktree remove --force ${wt}`.cwd(tmp.path).quiet().nothrow()
+  }
 })
 
 test("discovers global skills from ~/.claude/skills/ directory", async () => {

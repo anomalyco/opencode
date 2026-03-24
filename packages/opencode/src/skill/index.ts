@@ -117,7 +117,7 @@ export namespace Skill {
   }
 
   // TODO: Migrate to Effect
-  const create = (discovery: Discovery.Interface, directory: string, worktree: string): Cache => {
+  const create = (discovery: Discovery.Interface, directory: string, worktree: string, project: string): Cache => {
     const state: State = {
       skills: {},
       dirs: new Set<string>(),
@@ -131,12 +131,26 @@ export namespace Skill {
           await scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "global" })
         }
 
-        for await (const root of Filesystem.up({
-          targets: EXTERNAL_DIRS,
-          start: directory,
-          stop: worktree,
-        })) {
-          await scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "project" })
+        const seen = new Set<string>()
+        const pull = async (start: string, stop: string, skip = false) => {
+          for await (const root of Filesystem.up({
+            targets: EXTERNAL_DIRS,
+            start,
+            stop,
+          })) {
+            const name = path.basename(root)
+            if (skip && seen.has(name)) continue
+            seen.add(name)
+            await scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "project" })
+          }
+        }
+
+        await pull(directory, worktree)
+
+        if (project !== worktree) {
+          const rel = path.relative(worktree, directory)
+          const root = rel.startsWith("..") ? project : path.join(project, rel)
+          await pull(root, project, true)
         }
       }
 
@@ -185,7 +199,9 @@ export namespace Skill {
     Effect.gen(function* () {
       const discovery = yield* Discovery.Service
       const state = yield* InstanceState.make(
-        Effect.fn("Skill.state")((ctx) => Effect.sync(() => create(discovery, ctx.directory, ctx.worktree))),
+        Effect.fn("Skill.state")((ctx) =>
+          Effect.sync(() => create(discovery, ctx.directory, ctx.worktree, ctx.project.worktree)),
+        ),
       )
 
       const ensure = Effect.fn("Skill.ensure")(function* () {
