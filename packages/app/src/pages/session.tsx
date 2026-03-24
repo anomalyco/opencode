@@ -385,7 +385,9 @@ export default function Page() {
   const desktopFileTreeOpen = createMemo(() => isDesktop() && layout.fileTree.opened())
   const desktopSidePanelOpen = createMemo(() => desktopReviewOpen() || desktopFileTreeOpen())
   const terminalRight = createMemo(() => isDesktop() && layout.terminal.dock() === "right")
+  const browserOpen = createMemo(() => isDesktop() && !terminalRight() && view().browser.opened())
   const sessionPanelWidth = createMemo(() => {
+    if (browserOpen() && !desktopSidePanelOpen()) return `calc(100% - ${layout.browser.width()}px)`
     if (!desktopSidePanelOpen()) return "100%"
     if (desktopReviewOpen()) return `${layout.session.width()}px`
     return `calc(100% - ${layout.fileTree.width()}px)`
@@ -1831,12 +1833,18 @@ export default function Page() {
             reviewSnap={ui.reviewSnap}
             size={size}
           />
+
+          <Show when={!terminalRight()}>
+            <BrowserPanel />
+          </Show>
         </div>
 
         <Show when={terminalRight()}>
           <TerminalPanel />
         </Show>
-        <BrowserPanel />
+        <Show when={terminalRight()}>
+          <BrowserPanel />
+        </Show>
       </div>
 
       <Show when={!terminalRight()}>
