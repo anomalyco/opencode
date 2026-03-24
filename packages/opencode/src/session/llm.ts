@@ -171,12 +171,16 @@ export namespace LLM {
     // This is enabled for:
     // 1. Providers with "litellm" in their ID or API ID (auto-detected)
     // 2. Providers with explicit "litellmProxy: true" option (opt-in for custom gateways)
+    // 3. GitHub Copilot / GitHub Copilot Enterprise (copilot-api proxy rejects tool_calls without tools)
     const isLiteLLMProxy =
       provider.options?.["litellmProxy"] === true ||
       input.model.providerID.toLowerCase().includes("litellm") ||
       input.model.api.id.toLowerCase().includes("litellm")
+    const isCopilot =
+      input.model.providerID.toLowerCase().includes("github-copilot") ||
+      input.model.api.id.toLowerCase().includes("github-copilot")
 
-    if (isLiteLLMProxy && Object.keys(tools).length === 0 && hasToolCalls(input.messages)) {
+    if ((isLiteLLMProxy || isCopilot) && Object.keys(tools).length === 0 && hasToolCalls(input.messages)) {
       tools["_noop"] = tool({
         description:
           "Placeholder for LiteLLM/Anthropic proxy compatibility - required when message history contains tool calls but no active tools are needed",
