@@ -136,7 +136,11 @@ export namespace Plugin {
 
             // Notify plugins of current config
             for (const hook of hooks) {
-              await (hook as any).config?.(cfg)
+              try {
+                await (hook as any).config?.(cfg)
+              } catch (err) {
+                log.error("plugin config hook failed", { error: err })
+              }
             }
           })
 
