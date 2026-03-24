@@ -1,7 +1,4 @@
-import { withAlpha } from "@opencode-ai/ui/theme/color"
-import { useTheme } from "@opencode-ai/ui/theme/context"
-import { resolveThemeVariant } from "@opencode-ai/ui/theme/resolve"
-import type { HexColor } from "@opencode-ai/ui/theme/types"
+import { type HexColor, resolveThemeVariant, useTheme, withAlpha } from "@opencode-ai/ui/theme"
 import { showToast } from "@opencode-ai/ui/toast"
 import type { FitAddon, Ghostty, Terminal as Term } from "ghostty-web"
 import { type ComponentProps, createEffect, createMemo, onCleanup, onMount, splitProps } from "solid-js"
