@@ -1,5 +1,4 @@
 import {
-  type ContentBlock,
   RequestError,
   type Agent as ACPAgent,
   type AgentSideConnection,
@@ -42,7 +41,6 @@ import { Installation } from "@/installation"
 import { MessageV2 } from "@/session/message-v2"
 import { Config } from "@/config/config"
 import { Todo } from "@/session/todo"
-import { MessageID } from "@/session/schema"
 import { z } from "zod"
 import { LoadAPIKeyError } from "ai"
 import type { AssistantMessage, Event, OpencodeClient, SessionMessageResponse, ToolPart } from "@opencode-ai/sdk/v2"
@@ -451,6 +449,19 @@ export namespace ACP {
                 return
             }
           }
+          if (part.type !== "text" && part.type !== "file") return
+          const msg = await this.sdk.session
+            .message(
+              { sessionID: part.sessionID, messageID: part.messageID, directory: session.cwd },
+              { throwOnError: true },
+            )
+            .then((x) => x.data)
+            .catch((err) => {
+              log.error("failed to fetch message for user chunk", { error: err })
+              return undefined
+            })
+          if (!msg || msg.info.role !== "user") return
+          await this.processMessage({ info: msg.info, parts: [part] })
           return
         }
 
@@ -1294,19 +1305,6 @@ export namespace ACP {
       this.sessionManager.setMode(params.sessionId, params.modeId)
     }
 
-    private async emitUserMessageChunks(sessionId: string, messageId: string, prompt: ContentBlock[]) {
-      for (const content of prompt) {
-        await this.connection.sessionUpdate({
-          sessionId,
-          update: {
-            sessionUpdate: "user_message_chunk",
-            messageId,
-            content,
-          },
-        })
-      }
-    }
-
     async prompt(params: PromptRequest) {
       const sessionID = params.sessionId
       const session = this.sessionManager.get(sessionID)
@@ -1423,11 +1421,8 @@ export namespace ACP {
       })
 
       if (!cmd) {
-        const messageID = MessageID.ascending()
-        await this.emitUserMessageChunks(sessionID, messageID, params.prompt)
         const response = await this.sdk.session.prompt({
           sessionID,
-          messageID,
           model: {
             providerID: model.providerID,
             modelID: model.modelID,
@@ -1452,11 +1447,8 @@ export namespace ACP {
         .list({ directory }, { throwOnError: true })
         .then((x) => x.data!.find((c) => c.name === cmd.name))
       if (command) {
-        const messageID = MessageID.ascending()
-        await this.emitUserMessageChunks(sessionID, messageID, params.prompt)
         const response = await this.sdk.session.command({
           sessionID,
-          messageID,
           command: command.name,
           arguments: cmd.args,
           model: model.providerID + "/" + model.modelID,
