@@ -39,15 +39,27 @@ export function SessionRetry(props: { status: SessionStatus; show?: boolean }) {
     if (!current) return false
     return current.message.length > 80
   })
+  const formatDelay = (seconds: number): string => {
+    if (seconds >= 3600) {
+      const hours = Math.floor(seconds / 3600)
+      return t("ui.sessionTurn.retry.inHours", { hours })
+    }
+    if (seconds >= 60) {
+      const minutes = Math.floor(seconds / 60)
+      return t("ui.sessionTurn.retry.inMinutes", { minutes })
+    }
+    return t("ui.sessionTurn.retry.inSeconds", { seconds })
+  }
+
   const info = createMemo(() => {
     const current = retry()
     if (!current) return ""
     const count = Math.max(0, seconds())
-    const delay = count > 0 ? i18n.t("ui.sessionTurn.retry.inSeconds", { seconds: count }) : ""
-    const retrying = i18n.t("ui.sessionTurn.retry.retrying")
+    const delay = count > 0 ? formatDelay(count) : ""
+    const retrying = t("ui.sessionTurn.retry.retrying")
     const line = [retrying, delay].filter(Boolean).join(" ")
-    if (!line) return i18n.t("ui.sessionTurn.retry.attempt", { attempt: current.attempt })
-    return i18n.t("ui.sessionTurn.retry.attemptLine", { line, attempt: current.attempt })
+    if (!line) return t("ui.sessionTurn.retry.attempt", { attempt: current.attempt })
+    return t("ui.sessionTurn.retry.attemptLine", { line, attempt: current.attempt })
   })
 
   return (
