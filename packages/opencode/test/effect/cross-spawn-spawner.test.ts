@@ -39,6 +39,24 @@ function decodeByteStream(stream: Stream.Stream<Uint8Array, PlatformError.Platfo
   )
 }
 
+function alive(pid: number) {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function gone(pid: number, timeout = 5_000) {
+  const end = Date.now() + timeout
+  while (Date.now() < end) {
+    if (!alive(pid)) return true
+    await Bun.sleep(50)
+  }
+  return !alive(pid)
+}
+
 describe("cross-spawn spawner", () => {
   describe("basic spawning", () => {
     test("captures stdout", async () => {
@@ -215,6 +233,37 @@ describe("cross-spawn spawner", () => {
       expect(Exit.isFailure(exit) ? true : exit.value !== ChildProcessSpawner.ExitCode(0)).toBe(true)
     })
 
+    test("kills a child when scope exits", async () => {
+      const pid = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const handle = yield* js("setInterval(() => {}, 10_000)")
+            return Number(handle.pid)
+          }),
+        ).pipe(Effect.provide(live)),
+      )
+
+      expect(await gone(pid)).toBe(true)
+    })
+
+    test("forceKillAfter escalates for stubborn processes", async () => {
+      if (process.platform === "win32") return
+
+      const started = Date.now()
+      const exit = await Effect.runPromiseExit(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const handle = yield* js('process.on("SIGTERM", () => {}); setInterval(() => {}, 10_000)')
+            yield* handle.kill({ forceKillAfter: 100 })
+            return yield* handle.exitCode
+          }),
+        ).pipe(Effect.provide(live)),
+      )
+
+      expect(Date.now() - started).toBeLessThan(1_000)
+      expect(Exit.isFailure(exit) ? true : exit.value !== ChildProcessSpawner.ExitCode(0)).toBe(true)
+    })
+
     test("isRunning reflects process state", async () => {
       await runScoped(
         Effect.gen(function* () {
@@ -300,6 +349,63 @@ describe("cross-spawn spawner", () => {
         }),
       )
       expect(out).toBe("error")
+    })
+
+    test("pipes combined output with { from: 'all' }", async () => {
+      const out = await runScoped(
+        Effect.gen(function* () {
+          const handle = yield* js('process.stdout.write("stdout\\n"); process.stderr.write("stderr\\n")').pipe(
+            ChildProcess.pipeTo(
+              js(
+                'process.stdin.setEncoding("utf8"); let out = ""; process.stdin.on("data", (chunk) => out += chunk); process.stdin.on("end", () => process.stdout.write(out))',
+              ),
+              { from: "all" },
+            ),
+          )
+          const output = yield* decodeByteStream(handle.stdout)
+          yield* handle.exitCode
+          return output
+        }),
+      )
+      expect(out).toContain("stdout")
+      expect(out).toContain("stderr")
+    })
+
+    test("pipes output fd3 with { from: 'fd3' }", async () => {
+      const out = await runScoped(
+        Effect.gen(function* () {
+          const handle = yield* js('require("node:fs").writeSync(3, "hello from fd3\\n")', {
+            additionalFds: { fd3: { type: "output" } },
+          }).pipe(
+            ChildProcess.pipeTo(
+              js(
+                'process.stdin.setEncoding("utf8"); let out = ""; process.stdin.on("data", (chunk) => out += chunk); process.stdin.on("end", () => process.stdout.write(out))',
+              ),
+              { from: "fd3" },
+            ),
+          )
+          const output = yield* decodeByteStream(handle.stdout)
+          yield* handle.exitCode
+          return output
+        }),
+      )
+      expect(out).toBe("hello from fd3")
+    })
+
+    test("pipes stdout to fd3", async () => {
+      if (process.platform === "win32") return
+
+      const out = await runScoped(
+        Effect.gen(function* () {
+          const handle = yield* js('process.stdout.write("hello from stdout")').pipe(
+            ChildProcess.pipeTo(js('process.stdout.write(require("node:fs").readFileSync(3, "utf8"))'), { to: "fd3" }),
+          )
+          const output = yield* decodeByteStream(handle.stdout)
+          yield* handle.exitCode
+          return output
+        }),
+      )
+      expect(out).toBe("hello from stdout")
     })
   })
 
