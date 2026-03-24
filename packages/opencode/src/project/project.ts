@@ -397,11 +397,11 @@ export namespace Project {
         const row = yield* db((d) => d.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
         if (!row) return []
         const data = fromRow(row)
-        const valid: string[] = []
-        for (const dir of data.sandboxes) {
-          if (yield* fsys.isDir(dir).pipe(Effect.orDie)) valid.push(dir)
-        }
-        return valid
+        return yield* Effect.forEach(
+          data.sandboxes,
+          (dir) => fsys.isDir(dir).pipe(Effect.orDie, Effect.map((ok) => (ok ? dir : undefined))),
+          { concurrency: "unbounded" },
+        ).pipe(Effect.map((arr) => arr.filter((x): x is string => x !== undefined)))
       })
 
       const addSandbox = Effect.fn("Project.addSandbox")(function* (id: ProjectID, directory: string) {

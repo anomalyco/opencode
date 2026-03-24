@@ -336,8 +336,6 @@ describe("Project.update", () => {
   })
 
   test("should throw error when project not found", async () => {
-    await using tmp = await tmpdir({ git: true })
-
     await expect(
       Project.update({
         projectID: ProjectID.make("nonexistent-project-id"),
@@ -350,22 +348,22 @@ describe("Project.update", () => {
     await using tmp = await tmpdir({ git: true })
     const { project } = await Project.fromDirectory(tmp.path)
 
-    let eventFired = false
     let eventPayload: any = null
+    const on = (data: any) => { eventPayload = data }
+    GlobalBus.on("event", on)
 
-    GlobalBus.on("event", (data) => {
-      eventFired = true
-      eventPayload = data
-    })
+    try {
+      await Project.update({
+        projectID: project.id,
+        name: "Updated Name",
+      })
 
-    await Project.update({
-      projectID: project.id,
-      name: "Updated Name",
-    })
-
-    expect(eventFired).toBe(true)
-    expect(eventPayload.payload.type).toBe("project.updated")
-    expect(eventPayload.payload.properties.name).toBe("Updated Name")
+      expect(eventPayload).not.toBeNull()
+      expect(eventPayload.payload.type).toBe("project.updated")
+      expect(eventPayload.payload.properties.name).toBe("Updated Name")
+    } finally {
+      GlobalBus.off("event", on)
+    }
   })
 
   test("should update multiple fields at once", async () => {
