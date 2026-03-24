@@ -1461,6 +1461,43 @@ export type Config = {
   tools?: {
     [key: string]: boolean
   }
+  /**
+   * Voice recording and transcription configuration
+   */
+  voice?: {
+    /**
+     * Transcription backend: 'local' for whisper-cli, 'openai' for OpenAI Whisper API
+     */
+    backend?: "local" | "openai"
+    /**
+     * Path to whisper-cli binary. Auto-detected from PATH if not set
+     */
+    whisper_path?: string
+    /**
+     * Whisper model name (tiny, base, small, medium, large). '.en' suffix for English-only models
+     */
+    model?: string
+    /**
+     * Explicit path to GGML model file. Auto-detected from common locations if not set
+     */
+    model_path?: string
+    /**
+     * Language code for transcription (e.g., 'en', 'es', 'auto')
+     */
+    language?: string
+    /**
+     * Path to rec/sox binary. Auto-detected from PATH if not set
+     */
+    sox_path?: string
+    /**
+     * Max recording duration in seconds
+     */
+    max_duration?: number
+    /**
+     * OpenAI API key for Whisper API fallback. Falls back to OPENAI_API_KEY env var
+     */
+    openai_api_key?: string
+  }
   enterprise?: {
     /**
      * Enterprise URL

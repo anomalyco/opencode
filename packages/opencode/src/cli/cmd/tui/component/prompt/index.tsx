@@ -18,7 +18,7 @@ import { usePromptStash } from "./stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useCommandDialog } from "../dialog-command"
-import { useRenderer } from "@opentui/solid"
+import { useRenderer, useKeyboard } from "@opentui/solid"
 import { Editor } from "@tui/util/editor"
 import { useExit } from "../../context/exit"
 import { Clipboard } from "../../util/clipboard"
@@ -35,6 +35,7 @@ import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
+import { Voice, type VoiceCheck } from "@/voice"
 
 export type PromptProps = {
   sessionID?: string
@@ -128,6 +129,14 @@ export function Prompt(props: PromptProps) {
     extmarkToPartIndex: Map<number, number>
     interrupt: number
     placeholder: number
+    voice: {
+      active: boolean
+      state: "idle" | "recording" | "transcribing"
+      elapsed: number
+      handle: Voice.RecordHandle | null
+      deps: VoiceCheck.Result | null
+      timer: ReturnType<typeof setInterval> | null
+    }
   }>({
     placeholder: Math.floor(Math.random() * PLACEHOLDERS.length),
     prompt: {
@@ -137,6 +146,14 @@ export function Prompt(props: PromptProps) {
     mode: "normal",
     extmarkToPartIndex: new Map(),
     interrupt: 0,
+    voice: {
+      active: false,
+      state: "idle",
+      elapsed: 0,
+      handle: null,
+      deps: null,
+      timer: null,
+    },
   })
 
   createEffect(
@@ -351,6 +368,24 @@ export function Prompt(props: PromptProps) {
               }}
             />
           ))
+        },
+      },
+      {
+        title: "Voice input",
+        value: "voice.record",
+        category: "Input",
+        keybind: "voice_record",
+        slash: {
+          name: "voice",
+          aliases: ["v"],
+        },
+        onSelect: async (dialog) => {
+          dialog.clear()
+          if (store.voice.active) {
+            await stopRecording()
+            return
+          }
+          await startRecording()
         },
       },
     ]
@@ -673,6 +708,107 @@ export function Prompt(props: PromptProps) {
   }
   const exit = useExit()
 
+  async function startRecording() {
+    const cfg = sync.data.config.voice
+    const deps = await Voice.check(cfg ?? undefined)
+    if (deps.errors.length) {
+      toast.show({
+        variant: "error",
+        message: deps.errors[0],
+        duration: 8000,
+      })
+      return
+    }
+
+    const handle = Voice.record(cfg ?? undefined)
+    const timer = setInterval(() => {
+      setStore("voice", "elapsed", store.voice.elapsed + 1)
+      if (store.voice.elapsed >= (cfg?.max_duration ?? 60)) {
+        void stopRecording()
+      }
+    }, 1000)
+
+    setStore("voice", {
+      active: true,
+      state: "recording",
+      elapsed: 0,
+      handle,
+      deps,
+      timer,
+    })
+  }
+
+  async function stopRecording() {
+    const { handle, timer, deps } = store.voice
+    if (timer) clearInterval(timer)
+
+    setStore("voice", "state", "transcribing")
+
+    try {
+      const file = await handle!.stop()
+      const cfg = sync.data.config.voice
+      const text = await Voice.transcribe(file, deps!, cfg ?? undefined)
+
+      if (text.trim()) {
+        input.insertText(text.trim())
+        input.gotoBufferEnd()
+        renderer.requestRender()
+      } else {
+        toast.show({ variant: "warning", message: "No speech detected", duration: 3000 })
+      }
+    } catch (err) {
+      toast.error(err)
+    }
+
+    setStore("voice", {
+      active: false,
+      state: "idle",
+      elapsed: 0,
+      handle: null,
+      deps: null,
+      timer: null,
+    })
+  }
+
+  function cancelRecording() {
+    const { handle, timer } = store.voice
+    if (timer) clearInterval(timer)
+    handle?.abort()
+
+    setStore("voice", {
+      active: false,
+      state: "idle",
+      elapsed: 0,
+      handle: null,
+      deps: null,
+      timer: null,
+    })
+  }
+
+  onCleanup(() => {
+    if (store.voice.timer) clearInterval(store.voice.timer)
+    store.voice.handle?.abort()
+  })
+
+  useKeyboard((evt) => {
+    if (!store.voice.active) return
+    if (store.voice.state !== "recording") return
+    if (evt.name === "return") {
+      evt.preventDefault()
+      evt.stopPropagation()
+      void stopRecording()
+      return
+    }
+    if (evt.name === "escape") {
+      evt.preventDefault()
+      evt.stopPropagation()
+      cancelRecording()
+      return
+    }
+    // Swallow all other keys during recording
+    evt.preventDefault()
+  })
+
   function pasteText(text: string, virtualText: string) {
     const currentOffset = input.visualCursor.offset
     const extmarkStart = currentOffset
@@ -792,6 +928,11 @@ export function Prompt(props: PromptProps) {
     }
   })
 
+  const recordingSpinner = createMemo(() => ({
+    frames: createFrames({ color: "#ff4444", style: "diamonds", width: 5, minAlpha: 0.3 }),
+    color: createColors({ color: "#ff4444", style: "diamonds", width: 5, minAlpha: 0.3 }),
+  }))
+
   return (
     <>
       <Autocomplete
@@ -832,7 +973,44 @@ export function Prompt(props: PromptProps) {
             backgroundColor={theme.backgroundElement}
             flexGrow={1}
           >
+            <Show when={store.voice.active}>
+              <box>
+                <box flexDirection="row" gap={1} height={1}>
+                  <Show when={store.voice.state === "recording"}>
+                    <Show
+                      when={kv.get("animations_enabled", true)}
+                      fallback={<text fg={theme.error}>[REC]</text>}
+                    >
+                      <spinner
+                        color={recordingSpinner().color}
+                        frames={recordingSpinner().frames}
+                        interval={40}
+                      />
+                    </Show>
+                    <text fg={theme.error}>Recording</text>
+                    <text fg={theme.textMuted}>
+                      {store.voice.elapsed > 0 ? formatDuration(store.voice.elapsed) : "0s"}
+                    </text>
+                  </Show>
+                  <Show when={store.voice.state === "transcribing"}>
+                    <Show
+                      when={kv.get("animations_enabled", true)}
+                      fallback={<text fg={theme.textMuted}>[...]</text>}
+                    >
+                      <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
+                    </Show>
+                    <text fg={theme.textMuted}>Transcribing...</text>
+                  </Show>
+                </box>
+                <Show when={store.voice.state === "recording"}>
+                  <box paddingTop={1}>
+                    <text fg={theme.textMuted}>Enter to stop · Escape to cancel</text>
+                  </box>
+                </Show>
+              </box>
+            </Show>
             <textarea
+              visible={!store.voice.active}
               placeholder={placeholderText()}
               textColor={keybind.leader ? theme.textMuted : theme.text}
               focusedTextColor={keybind.leader ? theme.textMuted : theme.text}
@@ -1011,22 +1189,31 @@ export function Prompt(props: PromptProps) {
               syntaxStyle={syntax()}
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
-              <text fg={highlight()}>
-                {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
-              </text>
-              <Show when={store.mode === "normal"}>
-                <box flexDirection="row" gap={1}>
-                  <text flexShrink={0} fg={keybind.leader ? theme.textMuted : theme.text}>
-                    {local.model.parsed().model}
+              <Show
+                when={!store.voice.active}
+                fallback={
+                  <text fg={theme.error}>
+                    Voice {store.voice.state === "recording" ? formatDuration(store.voice.elapsed) : ""}
                   </text>
-                  <text fg={theme.textMuted}>{local.model.parsed().provider}</text>
-                  <Show when={showVariant()}>
-                    <text fg={theme.textMuted}>·</text>
-                    <text>
-                      <span style={{ fg: theme.warning, bold: true }}>{local.model.variant.current()}</span>
+                }
+              >
+                <text fg={highlight()}>
+                  {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
+                </text>
+                <Show when={store.mode === "normal"}>
+                  <box flexDirection="row" gap={1}>
+                    <text flexShrink={0} fg={keybind.leader ? theme.textMuted : theme.text}>
+                      {local.model.parsed().model}
                     </text>
-                  </Show>
-                </box>
+                    <text fg={theme.textMuted}>{local.model.parsed().provider}</text>
+                    <Show when={showVariant()}>
+                      <text fg={theme.textMuted}>·</text>
+                      <text>
+                        <span style={{ fg: theme.warning, bold: true }}>{local.model.variant.current()}</span>
+                      </text>
+                    </Show>
+                  </box>
+                </Show>
               </Show>
             </box>
           </box>

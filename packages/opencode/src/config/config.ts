@@ -951,11 +951,45 @@ export namespace Config {
       terminal_title_toggle: z.string().optional().default("none").describe("Toggle terminal title"),
       tips_toggle: z.string().optional().default("<leader>h").describe("Toggle tips on home screen"),
       display_thinking: z.string().optional().default("none").describe("Toggle thinking blocks visibility"),
+      voice_record: z.string().optional().default("none").describe("Start/stop voice recording"),
     })
     .strict()
     .meta({
       ref: "KeybindsConfig",
     })
+
+  export const Voice = z
+    .object({
+      backend: z
+        .enum(["local", "openai"])
+        .optional()
+        .default("local")
+        .describe("Transcription backend: 'local' for whisper-cli, 'openai' for OpenAI Whisper API"),
+      whisper_path: z.string().optional().describe("Path to whisper-cli binary. Auto-detected from PATH if not set"),
+      model: z
+        .string()
+        .optional()
+        .default("base.en")
+        .describe("Whisper model name (tiny, base, small, medium, large). '.en' suffix for English-only models"),
+      model_path: z
+        .string()
+        .optional()
+        .describe("Explicit path to GGML model file. Auto-detected from common locations if not set"),
+      language: z.string().optional().default("en").describe("Language code for transcription (e.g., 'en', 'es', 'auto')"),
+      sox_path: z.string().optional().describe("Path to rec/sox binary. Auto-detected from PATH if not set"),
+      max_duration: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .default(60)
+        .describe("Max recording duration in seconds"),
+      openai_api_key: z
+        .string()
+        .optional()
+        .describe("OpenAI API key for Whisper API fallback. Falls back to OPENAI_API_KEY env var"),
+    })
+    .strict()
 
   export const Server = z
     .object({
@@ -1189,6 +1223,7 @@ export namespace Config {
       layout: Layout.optional().describe("@deprecated Always uses stretch layout."),
       permission: Permission.optional(),
       tools: z.record(z.string(), z.boolean()).optional(),
+      voice: Voice.optional().describe("Voice recording and transcription configuration"),
       enterprise: z
         .object({
           url: z.string().optional().describe("Enterprise URL"),
