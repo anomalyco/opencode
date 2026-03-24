@@ -10,8 +10,8 @@ import { NamedError } from "@opencode-ai/util/error"
 import { LSP } from "../lsp"
 import { Format } from "../format"
 import { TuiRoutes } from "./routes/tui"
+import { PR } from "../project/pr"
 import { Instance } from "../project/instance"
-import { Vcs } from "../project/vcs"
 import { Agent } from "../agent/agent"
 import { Skill } from "../skill"
 import { Auth } from "../auth"
@@ -31,6 +31,7 @@ import { ConfigRoutes } from "./routes/config"
 import { ExperimentalRoutes } from "./routes/experimental"
 import { ProviderRoutes } from "./routes/provider"
 import { EventRoutes } from "./routes/event"
+import { VcsRoutes } from "./routes/vcs"
 import { InstanceBootstrap } from "../project/bootstrap"
 import { NotFoundError } from "../storage/db"
 import type { ContentfulStatusCode } from "hono/utils/http-status"
@@ -65,6 +66,7 @@ export namespace Server {
           else if (err instanceof Provider.ModelNotFoundError) status = 400
           else if (err.name === "ProviderAuthValidationFailed") status = 400
           else if (err.name.startsWith("Worktree")) status = 400
+          else if (PR.PrError.isInstance(err)) status = err.data.code === "NO_PR" ? 404 : 400
           else status = 500
           return c.json(err.toObject(), { status })
         }
@@ -249,6 +251,7 @@ export namespace Server {
       .route("/provider", ProviderRoutes())
       .route("/", FileRoutes())
       .route("/", EventRoutes())
+      .route("/vcs", VcsRoutes())
       .route("/mcp", McpRoutes())
       .route("/tui", TuiRoutes())
       .post(
@@ -309,30 +312,6 @@ export namespace Server {
             config: Global.Path.config,
             worktree: Instance.worktree,
             directory: Instance.directory,
-          })
-        },
-      )
-      .get(
-        "/vcs",
-        describeRoute({
-          summary: "Get VCS info",
-          description: "Retrieve version control system (VCS) information for the current project, such as git branch.",
-          operationId: "vcs.get",
-          responses: {
-            200: {
-              description: "VCS info",
-              content: {
-                "application/json": {
-                  schema: resolver(Vcs.Info),
-                },
-              },
-            },
-          },
-        }),
-        async (c) => {
-          const branch = await Vcs.branch()
-          return c.json({
-            branch,
           })
         },
       )

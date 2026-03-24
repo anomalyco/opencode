@@ -3,6 +3,8 @@ import { cmd } from "./cmd"
 import { Instance } from "@/project/instance"
 import { Process } from "@/util/process"
 import { git } from "@/util/git"
+import { withTimeout } from "@/util/timeout"
+import { $ } from "bun"
 
 export const PrCommand = cmd({
   command: "pr <number>",
@@ -28,35 +30,23 @@ export const PrCommand = cmd({
         UI.println(`Fetching and checking out PR #${prNumber}...`)
 
         // Use gh pr checkout with custom branch name
-        const result = await Process.run(
-          ["gh", "pr", "checkout", `${prNumber}`, "--branch", localBranchName, "--force"],
-          {
-            nothrow: true,
-          },
-        )
+        const result = await withTimeout($`gh pr checkout ${prNumber} --branch ${localBranchName} --force`.nothrow(), 30_000)
 
-        if (result.code !== 0) {
+        if (result.exitCode !== 0) {
           UI.error(`Failed to checkout PR #${prNumber}. Make sure you have gh CLI installed and authenticated.`)
           process.exit(1)
         }
 
         // Fetch PR info for fork handling and session link detection
-        const prInfoResult = await Process.text(
-          [
-            "gh",
-            "pr",
-            "view",
-            `${prNumber}`,
-            "--json",
-            "headRepository,headRepositoryOwner,isCrossRepository,headRefName,body",
-          ],
-          { nothrow: true },
+        const prInfoResult = await withTimeout(
+          $`gh pr view ${prNumber} --json headRepository,headRepositoryOwner,isCrossRepository,headRefName,body`.nothrow(),
+          30_000,
         )
 
         let sessionId: string | undefined
 
-        if (prInfoResult.code === 0) {
-          const prInfoText = prInfoResult.text
+        if (prInfoResult.exitCode === 0) {
+          const prInfoText = prInfoResult.stdout.toString()
           if (prInfoText.trim()) {
             const prInfo = JSON.parse(prInfoText)
 

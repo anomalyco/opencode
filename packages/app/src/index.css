@@ -1,5 +1,16 @@
 @import "@opencode-ai/ui/styles/tailwind";
 
+:root {
+  --pr-color-open: #238636;
+  --pr-color-open-text: #3fb950;
+  --pr-color-merged: #8957e5;
+  --pr-color-merged-text: #a371f7;
+  --pr-color-closed: #da3633;
+  --pr-color-closed-text: #f85149;
+  --pr-color-draft: #768390;
+  --pr-color-draft-text: #768390;
+}
+
 @layer components {
   [data-component="getting-started"] {
     container-type: inline-size;
