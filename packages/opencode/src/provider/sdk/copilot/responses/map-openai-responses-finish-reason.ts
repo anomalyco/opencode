@@ -13,6 +13,7 @@ export function mapOpenAIResponseFinishReason({
     case null:
       return hasFunctionCall ? "tool-calls" : "stop"
     case "max_output_tokens":
+    case "model_context_window_exceeded":
       return "length"
     case "content_filter":
       return "content-filter"

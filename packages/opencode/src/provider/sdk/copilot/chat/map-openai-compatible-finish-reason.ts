@@ -8,6 +8,8 @@ export function mapOpenAICompatibleFinishReason(finishReason: string | null | un
       return "length"
     case "content_filter":
       return "content-filter"
+    case "model_context_window_exceeded":
+      return "length"
     case "function_call":
     case "tool_calls":
       return "tool-calls"
