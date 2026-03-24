@@ -7,12 +7,22 @@ use tokio::task::JoinHandle;
 use crate::{
     cli,
     cli::CommandChild,
-    constants::{DEFAULT_SERVER_URL_KEY, SETTINGS_STORE, WSL_ENABLED_KEY},
+    constants::{
+        DEFAULT_SERVER_URL_KEY, OPENCLAW_ENABLED_KEY, OPENCLAW_TOKEN_KEY, OPENCLAW_URL_KEY,
+        SETTINGS_STORE, WSL_ENABLED_KEY,
+    },
 };
 
 #[derive(Clone, serde::Serialize, serde::Deserialize, specta::Type, Debug, Default)]
 pub struct WslConfig {
     pub enabled: bool,
+}
+
+#[derive(Clone, serde::Serialize, serde::Deserialize, specta::Type, Debug, Default)]
+pub struct OpenclawConfig {
+    pub enabled: bool,
+    pub url: Option<String>,
+    pub token: Option<String>,
 }
 
 #[tauri::command]
@@ -76,6 +86,61 @@ pub fn set_wsl_config(app: AppHandle, config: WslConfig) -> Result<(), String> {
         .map_err(|e| format!("Failed to open settings store: {}", e))?;
 
     store.set(WSL_ENABLED_KEY, serde_json::Value::Bool(config.enabled));
+
+    store
+        .save()
+        .map_err(|e| format!("Failed to save settings: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn get_openclaw_config(app: AppHandle) -> Result<OpenclawConfig, String> {
+    let store = app
+        .store(SETTINGS_STORE)
+        .map_err(|e| format!("Failed to open settings store: {}", e))?;
+
+    Ok(OpenclawConfig {
+        enabled: store
+            .get(OPENCLAW_ENABLED_KEY)
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+        url: store
+            .get(OPENCLAW_URL_KEY)
+            .and_then(|v| v.as_str().map(String::from)),
+        token: store
+            .get(OPENCLAW_TOKEN_KEY)
+            .and_then(|v| v.as_str().map(String::from)),
+    })
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn set_openclaw_config(app: AppHandle, config: OpenclawConfig) -> Result<(), String> {
+    let store = app
+        .store(SETTINGS_STORE)
+        .map_err(|e| format!("Failed to open settings store: {}", e))?;
+
+    store.set(OPENCLAW_ENABLED_KEY, serde_json::Value::Bool(config.enabled));
+
+    match config.url {
+        Some(u) => {
+            store.set(OPENCLAW_URL_KEY, serde_json::Value::String(u));
+        }
+        None => {
+            store.delete(OPENCLAW_URL_KEY);
+        }
+    }
+
+    match config.token {
+        Some(t) => {
+            store.set(OPENCLAW_TOKEN_KEY, serde_json::Value::String(t));
+        }
+        None => {
+            store.delete(OPENCLAW_TOKEN_KEY);
+        }
+    }
 
     store
         .save()

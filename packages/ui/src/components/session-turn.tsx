@@ -533,19 +533,6 @@ export function SessionTurn(
                     />
                   </div>
                 </Show>
-                <Show when={showThinking()}>
-                  <div data-slot="session-turn-thinking">
-                    <TextShimmer text={i18n.t("ui.sessionTurn.status.thinking")} />
-                    <Show when={!showReasoningSummaries()}>
-                      <TextReveal
-                        text={assistantSummary().headingText}
-                        class="session-turn-thinking-heading"
-                        travel={25}
-                        duration={700}
-                      />
-                    </Show>
-                  </div>
-                </Show>
                 <SessionRetry status={status()} show={active()} />
                 <Show when={edited() > 0 && !working()}>
                   <div data-slot="session-turn-diffs">
@@ -653,6 +640,19 @@ export function SessionTurn(
                   <Card variant="error" class="error-card">
                     {errorText()}
                   </Card>
+                </Show>
+                <Show when={showThinking()}>
+                  <div data-slot="session-turn-thinking">
+                    <TextShimmer text={i18n.t("ui.sessionTurn.status.thinking")} />
+                    <Show when={!showReasoningSummaries()}>
+                      <TextReveal
+                        text={assistantSummary().headingText}
+                        class="session-turn-thinking-heading"
+                        travel={25}
+                        duration={700}
+                      />
+                    </Show>
+                  </div>
                 </Show>
               </div>
             )}

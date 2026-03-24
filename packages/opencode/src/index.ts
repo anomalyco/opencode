@@ -31,6 +31,7 @@ import { PrCommand } from "./cli/cmd/pr"
 import { SessionCommand } from "./cli/cmd/session"
 import { DesktopCommand } from "./cli/cmd/desktop"
 import { DbCommand } from "./cli/cmd/db"
+import { OpenClawServeCommand } from "./cli/cmd/openclaw-serve"
 import path from "path"
 import { Global } from "./global"
 import { JsonMigration } from "./storage/json-migration"
@@ -152,6 +153,7 @@ let cli = yargs(hideBin(process.argv))
   .command(SessionCommand)
   .command(DesktopCommand)
   .command(DbCommand)
+  .command(OpenClawServeCommand)
 
 if (Installation.isLocal()) {
   cli = cli.command(WorkspaceServeCommand)

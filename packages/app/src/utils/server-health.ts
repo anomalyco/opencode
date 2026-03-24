@@ -2,7 +2,7 @@ import { usePlatform } from "@/context/platform"
 import type { ServerConnection } from "@/context/server"
 import { createSdkForServer } from "./server"
 
-export type ServerHealth = { healthy: boolean; version?: string }
+export type ServerHealth = { healthy: boolean; version?: string; message?: string }
 
 interface CheckServerHealthOptions {
   timeoutMs?: number
@@ -56,6 +56,28 @@ function retryable(error: unknown, signal?: AbortSignal) {
   return /network|fetch|econnreset|econnrefused|enotfound|timedout/i.test(error.message)
 }
 
+function detail(error: unknown): string | undefined {
+  if (!error || typeof error !== "object") {
+    if (typeof error === "string" && error.trim()) return error
+    return
+  }
+  const obj = error as Record<string, unknown>
+  const direct = [obj.message, obj.detail].find(
+    (item): item is string => typeof item === "string" && item.trim().length > 0,
+  )
+  if (direct) return direct
+  if (obj.data && typeof obj.data === "object") {
+    const data = obj.data as Record<string, unknown>
+    const nested = [data.message, data.detail].find(
+      (item): item is string => typeof item === "string" && item.trim().length > 0,
+    )
+    if (nested) return nested
+  }
+  if (obj.error && typeof obj.error === "object") return detail(obj.error)
+  if (obj.cause && typeof obj.cause === "object") return detail(obj.cause)
+  return
+}
+
 export async function checkServerHealth(
   server: ServerConnection.HttpBase,
   fetch: typeof globalThis.fetch,
@@ -66,10 +88,12 @@ export async function checkServerHealth(
   const retryCount = opts?.retryCount ?? defaultRetryCount
   const retryDelayMs = opts?.retryDelayMs ?? defaultRetryDelayMs
   const next = (count: number, error: unknown) => {
-    if (count >= retryCount || !retryable(error, signal)) return Promise.resolve({ healthy: false } as const)
+    if (count >= retryCount || !retryable(error, signal)) {
+      return Promise.resolve({ healthy: false, message: detail(error) } as const)
+    }
     return wait(retryDelayMs * (count + 1), signal)
       .then(() => attempt(count + 1))
-      .catch(() => ({ healthy: false }))
+      .catch(() => ({ healthy: false, message: detail(error) }))
   }
   const attempt = (count: number): Promise<ServerHealth> =>
     createSdkForServer({
@@ -78,7 +102,11 @@ export async function checkServerHealth(
       signal,
     })
       .global.health()
-      .then((x) => (x.error ? next(count, x.error) : { healthy: x.data?.healthy === true, version: x.data?.version }))
+      .then((x) =>
+        x.error
+          ? next(count, x.error)
+          : { healthy: x.data?.healthy === true, version: x.data?.version, message: undefined },
+      )
       .catch((error) => next(count, error))
   return attempt(0).finally(() => timeout?.clear?.())
 }

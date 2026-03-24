@@ -111,6 +111,11 @@ struct ServerState {
     password: Arc<Mutex<String>>,
 }
 
+struct OpenclawState {
+    child: Arc<Mutex<Option<CommandChild>>>,
+    data: Arc<Mutex<Option<ServerReadyData>>>,
+}
+
 /// Resolves with sidecar credentials as soon as the sidecar is spawned (before health check).
 struct SidecarReady(futures::future::Shared<oneshot::Receiver<ServerReadyData>>);
 
@@ -342,6 +347,22 @@ fn write_config_file(path: String, content: String) -> Result<(), String> {
     fs::write(path, content).map_err(|err| format!("Failed to write file: {err}"))
 }
 
+#[tauri::command]
+#[specta::specta]
+fn create_config_file(path: String, content: String) -> Result<(), String> {
+    let file = PathBuf::from(&path);
+    let Some(parent) = file.parent().map(PathBuf::from) else {
+        return Err("Failed to resolve parent directory".to_string());
+    };
+
+    if file.exists() {
+        return Err("File already exists".to_string());
+    }
+
+    fs::create_dir_all(&parent).map_err(|err| format!("Failed to create parent directory: {err}"))?;
+    fs::write(file, content).map_err(|err| format!("Failed to write file: {err}"))
+}
+
 fn resolve_path_from_args(args: &[String], cwd: &str) -> Option<String> {
     let path_arg = args.get(1)?;
     if path_arg.starts_with('-') {
@@ -484,6 +505,65 @@ async fn reload_sidecar(app: AppHandle) -> Result<(), String> {
         Ok(Err(err)) => Err(err.to_string()),
         Err(_) => Err("Timed out waiting for backend to restart".to_string()),
     }
+}
+
+#[tauri::command]
+#[specta::specta]
+async fn get_openclaw_server(app: AppHandle) -> Result<Option<ServerReadyData>, String> {
+    let cfg = server::get_openclaw_config(app.clone())?;
+    if !cfg.enabled {
+        return Ok(None);
+    }
+
+    if let Some(state) = app.try_state::<OpenclawState>() {
+        let data = state
+            .data
+            .lock()
+            .map_err(|_| "Failed to acquire openclaw state".to_string())?
+            .clone();
+        if data.is_some() {
+            return Ok(data);
+        }
+    }
+
+    let Some(url) = cfg.url.clone() else {
+        return Ok(None);
+    };
+
+    let port = get_sidecar_port();
+    let hostname = "127.0.0.1".to_string();
+    let password = uuid::Uuid::new_v4().to_string();
+    let http = format!("http://{hostname}:{port}");
+
+    let (child, health_check) = crate::cli::serve_openclaw(
+        &app,
+        &hostname,
+        port,
+        &password,
+        &url,
+        cfg.token.as_deref(),
+    );
+
+    let data = ServerReadyData {
+        url: http,
+        username: Some("opencode".to_string()),
+        password: Some(password),
+    };
+
+    if let Some(state) = app.try_state::<OpenclawState>() {
+        if let Ok(mut handle) = state.child.lock() {
+            *handle = Some(child);
+        }
+        if let Ok(mut current) = state.data.lock() {
+            *current = Some(data.clone());
+        }
+    }
+
+    tauri::async_runtime::spawn(async move {
+        let _ = timeout(Duration::from_secs(30), health_check).await;
+    });
+
+    Ok(Some(data))
 }
 
 #[tauri::command]
@@ -1017,8 +1097,11 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             server::set_default_server_url,
             server::get_wsl_config,
             server::set_wsl_config,
+            server::get_openclaw_config,
+            server::set_openclaw_config,
             get_display_backend,
             set_display_backend,
+            get_openclaw_server,
             markdown::parse_markdown_command,
             check_app_exists,
             filter_directories,
@@ -1034,6 +1117,7 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             list_config_directory,
             read_config_file,
             write_config_file,
+            create_config_file,
             wsl_path,
             resolve_app_path,
             open_path
@@ -1215,6 +1299,10 @@ fn setup_app(app: &tauri::AppHandle, init_rx: watch::Receiver<InitStep>) {
     app.deep_link().register_all().ok();
 
     app.manage(InitState { current: init_rx });
+    app.manage(OpenclawState {
+        child: Arc::new(Mutex::new(None)),
+        data: Arc::new(Mutex::new(None)),
+    });
 }
 
 fn spawn_cli_sync_task(app: AppHandle) {

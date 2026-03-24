@@ -60,4 +60,5 @@ export const dict = {
   "desktop.loading.reload.title": "正在重载后端",
   "desktop.loading.reload.message": "正在重启本地后端并刷新其状态。",
   "desktop.server.local": "本地服务器",
+  "desktop.server.openclaw": "OpenClaw",
 }

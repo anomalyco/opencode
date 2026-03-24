@@ -39,6 +39,12 @@ export type ConfigTreeItem = {
   kind: "file" | "directory"
 }
 
+export type OpenclawConfig = {
+  enabled: boolean
+  url?: string
+  token?: string
+}
+
 export type Platform = {
   /** Platform discriminator */
   platform: "web" | "desktop"
@@ -124,6 +130,12 @@ export type Platform = {
   /** Set the configured WSL integration (desktop only) */
   setWslEnabled?(config: boolean): Promise<void> | void
 
+  /** Get the configured OpenClaw integration (desktop only) */
+  getOpenclawConfig?(): Promise<OpenclawConfig>
+
+  /** Set the configured OpenClaw integration (desktop only) */
+  setOpenclawConfig?(config: OpenclawConfig): Promise<void> | void
+
   /** Get the preferred display backend (desktop only) */
   getDisplayBackend?(): Promise<DisplayBackend | null> | DisplayBackend | null
 
@@ -156,6 +168,9 @@ export type Platform = {
 
   /** Write config file text (desktop only) */
   writeConfigFile?(path: string, content: string): Promise<void>
+
+  /** Create a config file and fail if it already exists (desktop only) */
+  createConfigFile?(path: string, content: string): Promise<void>
 
   /** Inspect global config workspace (desktop only) */
   getConfigWorkspace?(): Promise<ConfigWorkspace>

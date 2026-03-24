@@ -13,8 +13,15 @@ export const commands = {
 	setDefaultServerUrl: (url: string | null) => __TAURI_INVOKE<null>("set_default_server_url", { url }),
 	getWslConfig: () => __TAURI_INVOKE<WslConfig>("get_wsl_config"),
 	setWslConfig: (config: WslConfig) => __TAURI_INVOKE<null>("set_wsl_config", { config }),
+	getOpenclawConfig: () => __TAURI_INVOKE<OpenclawConfig>("get_openclaw_config"),
+	setOpenclawConfig: (config: OpenclawConfig) => __TAURI_INVOKE<null>("set_openclaw_config", { config }),
 	getDisplayBackend: () => __TAURI_INVOKE<"wayland" | "auto" | null>("get_display_backend"),
 	setDisplayBackend: (backend: LinuxDisplayBackend) => __TAURI_INVOKE<null>("set_display_backend", { backend }),
+	getOpenclawServer: () => __TAURI_INVOKE<{
+	url: string,
+	username: string | null,
+	password: string | null,
+} | null>("get_openclaw_server"),
 	parseMarkdownCommand: (markdown: string) => __TAURI_INVOKE<string>("parse_markdown_command", { markdown }),
 	checkAppExists: (appName: string) => __TAURI_INVOKE<boolean>("check_app_exists", { appName }),
 	filterDirectories: (paths: string[]) => __TAURI_INVOKE<string[]>("filter_directories", { paths }),
@@ -30,6 +37,7 @@ export const commands = {
 	listConfigDirectory: (path: string) => __TAURI_INVOKE<ConfigTreeItem[]>("list_config_directory", { path }),
 	readConfigFile: (path: string) => __TAURI_INVOKE<string | null>("read_config_file", { path }),
 	writeConfigFile: (path: string, content: string) => __TAURI_INVOKE<null>("write_config_file", { path, content }),
+	createConfigFile: (path: string, content: string) => __TAURI_INVOKE<null>("create_config_file", { path, content }),
 	wslPath: (path: string, mode: "windows" | "linux" | null) => __TAURI_INVOKE<string>("wsl_path", { path, mode }),
 	resolveAppPath: (appName: string) => __TAURI_INVOKE<string | null>("resolve_app_path", { appName }),
 	openPath: (path: string, appName: string | null) => __TAURI_INVOKE<null>("open_path", { path, appName }),
@@ -77,6 +85,12 @@ export type InitStep = { phase: "server_waiting" } | { phase: "sqlite_waiting" }
 export type LinuxDisplayBackend = "wayland" | "auto";
 
 export type LoadingWindowComplete = null;
+
+export type OpenclawConfig = {
+		enabled: boolean,
+		url: string | null,
+		token: string | null,
+	};
 
 export type ServerReadyData = {
 		url: string,

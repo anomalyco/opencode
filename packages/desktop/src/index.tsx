@@ -244,6 +244,10 @@ const createPlatform = (): Platform => {
       await commands.writeConfigFile(path, content)
     },
 
+    async createConfigFile(path: string, content: string) {
+      await commands.createConfigFile(path, content)
+    },
+
     async getConfigWorkspace() {
       const data = await commands.getConfigWorkspace()
       return {
@@ -491,6 +495,23 @@ const createPlatform = (): Platform => {
       await commands.setWslConfig({ enabled })
     },
 
+    getOpenclawConfig: async () => {
+      const next = await commands.getOpenclawConfig().catch(() => null)
+      return {
+        enabled: next?.enabled ?? false,
+        url: next?.url ?? undefined,
+        token: next?.token ?? undefined,
+      }
+    },
+
+    setOpenclawConfig: async (config) => {
+      await commands.setOpenclawConfig({
+        enabled: config.enabled,
+        url: config.url ?? null,
+        token: config.token ?? null,
+      })
+    },
+
     getDefaultServer: async () => {
       const url = await commands.getDefaultServerUrl().catch(() => null)
       if (!url) return null
@@ -560,6 +581,7 @@ render(() => {
 
   // Fetch sidecar credentials from Rust (available immediately, before health check)
   const [sidecar] = createResource(() => commands.awaitInitialization(new Channel<InitStep>() as any))
+  const [openclaw] = createResource(() => commands.getOpenclawServer())
 
   const [defaultServer] = createResource(() =>
     platform.getDefaultServer?.().then((url) => {
@@ -569,20 +591,37 @@ render(() => {
 
   // Build the sidecar server connection once credentials arrive
   const servers = () => {
+    const list = [] as ServerConnection.Any[]
     const data = sidecar()
-    if (!data) return []
-    const http = {
-      url: data.url,
-      username: data.username ?? undefined,
-      password: data.password ?? undefined,
+    if (data) {
+      const http = {
+        url: data.url,
+        username: data.username ?? undefined,
+        password: data.password ?? undefined,
+      }
+      list.push({
+        displayName: t("desktop.server.local"),
+        type: "sidecar",
+        variant: "base",
+        http,
+      })
     }
-    const server: ServerConnection.Sidecar = {
-      displayName: t("desktop.server.local"),
-      type: "sidecar",
-      variant: "base",
-      http,
+
+    const claw = openclaw()
+    if (claw) {
+      list.push({
+        displayName: t("desktop.server.openclaw"),
+        integration: "openclaw",
+        type: "http",
+        http: {
+          url: claw.url,
+          username: claw.username ?? undefined,
+          password: claw.password ?? undefined,
+        },
+      })
     }
-    return [server] as ServerConnection.Any[]
+
+    return list
   }
 
   function handleClick(e: MouseEvent) {
@@ -624,7 +663,7 @@ render(() => {
   return (
     <PlatformProvider value={platform}>
       <AppBaseProviders>
-        <Show when={!defaultServer.loading && !sidecar.loading}>
+        <Show when={!defaultServer.loading && !sidecar.loading && !openclaw.loading}>
           {(_) => {
             return (
               <>

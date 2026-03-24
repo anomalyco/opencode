@@ -643,6 +643,68 @@ pub fn serve(
     (child, exit_rx)
 }
 
+pub fn serve_openclaw(
+    app: &AppHandle,
+    hostname: &str,
+    port: u32,
+    password: &str,
+    gateway_url: &str,
+    gateway_token: Option<&str>,
+) -> (CommandChild, oneshot::Receiver<TerminatedPayload>) {
+    let (exit_tx, exit_rx) = oneshot::channel::<TerminatedPayload>();
+
+    tracing::info!(port, gateway_url, "Spawning OpenClaw adapter");
+
+    let mut envs = vec![
+        ("OPENCODE_SERVER_USERNAME", "opencode".to_string()),
+        ("OPENCODE_SERVER_PASSWORD", password.to_string()),
+    ];
+
+    if let Some(token) = gateway_token {
+        envs.push(("OPENCLAW_GATEWAY_TOKEN", token.to_string()));
+    }
+
+    let cmd = format!(
+        "--print-logs --log-level WARN openclaw-serve --hostname {hostname} --port {port} --gateway-url {gateway_url}"
+    );
+
+    let (events, child) = spawn_command(app, &cmd, &envs).expect("Failed to spawn openclaw adapter");
+
+    let mut exit_tx = Some(exit_tx);
+    tokio::spawn(
+        events
+            .for_each(move |event| {
+                match event {
+                    CommandEvent::Stdout(line) => {
+                        tracing::info!("{line}");
+                    }
+                    CommandEvent::Stderr(line) => {
+                        tracing::info!("{line}");
+                    }
+                    CommandEvent::Error(err) => {
+                        tracing::error!("{err}");
+                    }
+                    CommandEvent::Terminated(payload) => {
+                        tracing::info!(
+                            code = ?payload.code,
+                            signal = ?payload.signal,
+                            "OpenClaw adapter terminated"
+                        );
+
+                        if let Some(tx) = exit_tx.take() {
+                            let _ = tx.send(payload);
+                        }
+                    }
+                }
+
+                future::ready(())
+            })
+            .instrument(tracing::info_span!("openclaw-adapter")),
+    );
+
+    (child, exit_rx)
+}
+
 pub mod sqlite_migration {
     use super::*;
 

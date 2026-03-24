@@ -62,4 +62,5 @@ export const dict = {
   "desktop.loading.reload.message": "Restarting the local backend and refreshing its state.",
 
   "desktop.server.local": "Local Server",
+  "desktop.server.openclaw": "OpenClaw",
 }

@@ -28,10 +28,52 @@ function tr(translator: Translator | undefined, key: string, text: string, vars?
 export function formatServerError(error: unknown, translate?: Translator, fallback?: string) {
   if (isConfigInvalidErrorLike(error)) return parseReadableConfigInvalidError(error, translate)
   if (isProviderModelNotFoundErrorLike(error)) return parseReadableProviderModelNotFoundError(error, translate)
+  const message = nestedMessage(error)
+  if (message) return message
   if (error instanceof Error && error.message) return error.message
   if (typeof error === "string" && error) return error
   if (fallback) return fallback
   return tr(translate, "error.chain.unknown", "Unknown error")
+}
+
+function nestedMessage(error: unknown, seen = new Set<unknown>()): string | undefined {
+  if (!error || typeof error !== "object") return
+  if (seen.has(error)) return
+  seen.add(error)
+
+  const obj = error as Record<string, unknown>
+  const direct = [obj.message, obj.detail, obj.error_description].find(
+    (item): item is string => typeof item === "string" && item.trim().length > 0,
+  )
+  if (direct) return direct
+
+  const data = obj.data
+  if (data && typeof data === "object") {
+    const inner = data as Record<string, unknown>
+    const hit = [inner.message, inner.detail, inner.error_description].find(
+      (item): item is string => typeof item === "string" && item.trim().length > 0,
+    )
+    if (hit) return hit
+  }
+
+  const errorField = obj.error
+  if (typeof errorField === "string" && errorField.trim()) return errorField
+  if (errorField && typeof errorField === "object") {
+    const hit = nestedMessage(errorField, seen)
+    if (hit) return hit
+  }
+
+  const body = obj.body
+  if (body && typeof body === "object") {
+    const hit = nestedMessage(body, seen)
+    if (hit) return hit
+  }
+
+  const cause = obj.cause
+  if (cause instanceof Error && cause.message) return cause.message
+  if (cause && typeof cause === "object") return nestedMessage(cause, seen)
+
+  return
 }
 
 function isConfigInvalidErrorLike(error: unknown): error is ConfigInvalidError {

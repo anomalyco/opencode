@@ -35,6 +35,7 @@ import { usePermission } from "@/context/permission"
 import { useLanguage } from "@/context/language"
 import { dict as enDict } from "@/i18n/en"
 import { usePlatform } from "@/context/platform"
+import { useServer } from "@/context/server"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge } from "./prompt-input/editor-dom"
@@ -290,7 +291,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   type DictKey = keyof typeof enDict
   const kw = (...keys: DictKey[]) => (language.locale() === "en" ? undefined : keys.map((k) => enDict[k]).join(" "))
   const platform = usePlatform()
+  const server = useServer()
   const { params, tabs, view } = useSessionLayout()
+  const openclaw = createMemo(() => server.current?.integration === "openclaw")
   let editorRef!: HTMLDivElement
   let fileInputRef: HTMLInputElement | undefined
   let scrollRef!: HTMLDivElement
@@ -1718,102 +1721,130 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 <div class="size-4 shrink-0" />
               </div>
               <div class="flex items-center gap-1.5 min-w-0 flex-1">
-                <TooltipKeybind
-                  placement="top"
-                  gutter={4}
-                  title={language.t("command.agent.cycle")}
-                  keybind={command.keybind("agent.cycle")}
-                >
-                  <Select
-                    size="normal"
-                    options={agentNames()}
-                    current={local.agent.current()?.name ?? ""}
-                    onSelect={local.agent.set}
-                    class="prompt-pick capitalize max-w-[160px]"
-                    valueClass="truncate"
-                    triggerStyle={control()}
-                    variant="ghost"
-                  />
-                </TooltipKeybind>
                 <Show
-                  when={providers.paid().length > 0}
+                  when={openclaw()}
                   fallback={
-                    <TooltipKeybind
-                      placement="top"
-                      gutter={4}
-                      title={language.t("command.model.choose")}
-                      keybind={command.keybind("model.choose")}
-                    >
-                      <Button
-                        as="div"
-                        variant="ghost"
-                        size="normal"
-                        class="prompt-pick min-w-0 max-w-[320px] group"
-                        style={control()}
-                        onClick={() => dialog.show(() => <DialogSelectModelUnpaid />)}
+                    <>
+                      <TooltipKeybind
+                        placement="top"
+                        gutter={4}
+                        title={language.t("command.agent.cycle")}
+                        keybind={command.keybind("agent.cycle")}
                       >
-                        <Show when={local.model.current()?.provider?.id}>
-                          <ProviderIcon
-                            id={local.model.current()!.provider.id}
-                            class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-150"
-                            style={{ "will-change": "opacity", transform: "translateZ(0)" }}
-                          />
-                        </Show>
-                        <span class="truncate">
-                          {local.model.current()?.name ?? language.t("dialog.model.select.title")}
-                        </span>
-                        <Icon name="chevron-down" size="small" class="shrink-0" />
-                      </Button>
-                    </TooltipKeybind>
+                        <Select
+                          size="normal"
+                          options={agentNames()}
+                          current={local.agent.current()?.name ?? ""}
+                          onSelect={local.agent.set}
+                          class="prompt-pick capitalize max-w-[160px]"
+                          valueClass="truncate"
+                          triggerStyle={control()}
+                          variant="ghost"
+                        />
+                      </TooltipKeybind>
+                      <Show
+                        when={providers.paid().length > 0}
+                        fallback={
+                          <TooltipKeybind
+                            placement="top"
+                            gutter={4}
+                            title={language.t("command.model.choose")}
+                            keybind={command.keybind("model.choose")}
+                          >
+                            <Button
+                              as="div"
+                              variant="ghost"
+                              size="normal"
+                              class="prompt-pick min-w-0 max-w-[320px] group"
+                              style={control()}
+                              onClick={() => dialog.show(() => <DialogSelectModelUnpaid />)}
+                            >
+                              <Show when={local.model.current()?.provider?.id}>
+                                <ProviderIcon
+                                  id={local.model.current()!.provider.id}
+                                  class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-150"
+                                  style={{ "will-change": "opacity", transform: "translateZ(0)" }}
+                                />
+                              </Show>
+                              <span class="truncate">
+                                {local.model.current()?.name ?? language.t("dialog.model.select.title")}
+                              </span>
+                              <Icon name="chevron-down" size="small" class="shrink-0" />
+                            </Button>
+                          </TooltipKeybind>
+                        }
+                      >
+                        <TooltipKeybind
+                          placement="top"
+                          gutter={4}
+                          title={language.t("command.model.choose")}
+                          keybind={command.keybind("model.choose")}
+                        >
+                          <ModelSelectorPopover
+                            triggerAs={Button}
+                            triggerProps={{
+                              variant: "ghost",
+                              size: "normal",
+                              style: control(),
+                              class: "prompt-pick min-w-0 max-w-[320px] group",
+                            }}
+                          >
+                            <Show when={local.model.current()?.provider?.id}>
+                              <ProviderIcon
+                                id={local.model.current()!.provider.id}
+                                class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-150"
+                                style={{ "will-change": "opacity", transform: "translateZ(0)" }}
+                              />
+                            </Show>
+                            <span class="truncate">
+                              {local.model.current()?.name ?? language.t("dialog.model.select.title")}
+                            </span>
+                            <Icon name="chevron-down" size="small" class="shrink-0" />
+                          </ModelSelectorPopover>
+                        </TooltipKeybind>
+                      </Show>
+                      <TooltipKeybind
+                        placement="top"
+                        gutter={4}
+                        title={language.t("command.model.variant.cycle")}
+                        keybind={command.keybind("model.variant.cycle")}
+                      >
+                        <Select
+                          size="normal"
+                          options={variants()}
+                          current={local.model.variant.current() ?? "default"}
+                          label={(x) => (x === "default" ? language.t("common.default") : x)}
+                          onSelect={(x) => local.model.variant.set(x === "default" ? undefined : x)}
+                          class="prompt-pick prompt-variant capitalize max-w-[160px]"
+                          valueClass="truncate"
+                          triggerStyle={control()}
+                          variant="ghost"
+                        />
+                      </TooltipKeybind>
+                    </>
                   }
                 >
-                  <TooltipKeybind
-                    placement="top"
-                    gutter={4}
-                    title={language.t("command.model.choose")}
-                    keybind={command.keybind("model.choose")}
-                  >
-                    <ModelSelectorPopover
-                      triggerAs={Button}
-                      triggerProps={{
-                        variant: "ghost",
-                        size: "normal",
-                        style: control(),
-                        class: "prompt-pick min-w-0 max-w-[320px] group",
-                      }}
+                  <div class="flex items-center gap-1.5 min-w-0">
+                    <Button
+                      as="div"
+                      variant="ghost"
+                      size="normal"
+                      class="prompt-pick min-w-0 max-w-[160px]"
+                      style={control()}
                     >
-                      <Show when={local.model.current()?.provider?.id}>
-                        <ProviderIcon
-                          id={local.model.current()!.provider.id}
-                          class="size-4 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity duration-150"
-                          style={{ "will-change": "opacity", transform: "translateZ(0)" }}
-                        />
-                      </Show>
-                      <span class="truncate">
-                        {local.model.current()?.name ?? language.t("dialog.model.select.title")}
-                      </span>
-                      <Icon name="chevron-down" size="small" class="shrink-0" />
-                    </ModelSelectorPopover>
-                  </TooltipKeybind>
+                      <span class="truncate">OpenClaw</span>
+                    </Button>
+                    <Button
+                      as="div"
+                      variant="ghost"
+                      size="normal"
+                      class="prompt-pick min-w-0 max-w-[220px]"
+                      style={control()}
+                    >
+                      <span class="truncate">Claw</span>
+                    </Button>
+                  </div>
                 </Show>
-                <TooltipKeybind
-                  placement="top"
-                  gutter={4}
-                  title={language.t("command.model.variant.cycle")}
-                  keybind={command.keybind("model.variant.cycle")}
-                >
-                  <Select
-                    size="normal"
-                    options={variants()}
-                    current={local.model.variant.current() ?? "default"}
-                    label={(x) => (x === "default" ? language.t("common.default") : x)}
-                    onSelect={(x) => local.model.variant.set(x === "default" ? undefined : x)}
-                    class="prompt-pick prompt-variant capitalize max-w-[160px]"
-                    valueClass="truncate"
-                    triggerStyle={control()}
-                    variant="ghost"
-                  />
-                </TooltipKeybind>
                 <GitContext />
               </div>
             </div>

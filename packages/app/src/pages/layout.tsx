@@ -74,7 +74,7 @@ import { DialogSwitchProject } from "@/components/dialog-switch-project"
 import { DebugBar } from "@/components/debug-bar"
 import { Titlebar } from "@/components/titlebar"
 import { Spinner } from "@opencode-ai/ui/spinner"
-import { useServer } from "@/context/server"
+import { ServerConnection, useServer } from "@/context/server"
 import { useLanguage, type Locale } from "@/context/language"
 import { dict as enDict } from "@/i18n/en"
 import {
@@ -149,6 +149,8 @@ export default function Layout(props: ParentProps) {
   }
   const colorSchemeLabel = (scheme: ColorScheme) => language.t(colorSchemeKey[scheme])
   const currentDir = createMemo(() => decode64(params.dir) ?? "")
+  const openclawDir = "/openclaw"
+  const openclawSlug = base64Encode(openclawDir)
 
   const [state, setState] = createStore({
     autoselect: !initialDirectory,
@@ -608,6 +610,17 @@ export default function Layout(props: ParentProps) {
   const currentProject = createMemo(() => {
     const directory = currentDir()
     if (!directory) return
+
+    if (directory === openclawDir) {
+      return {
+        id: "openclaw",
+        worktree: openclawDir,
+        name: "OpenClaw",
+        expanded: true,
+        vcs: undefined,
+        sandboxes: [],
+      } satisfies LocalProject
+    }
 
     const projects = layout.projects.list()
 
@@ -1364,7 +1377,38 @@ export default function Layout(props: ParentProps) {
     navigate(`/${params.dir}/config`)
   }
 
+  function openOpenclaw() {
+    const conn = server.list.find((item) => item.integration === "openclaw")
+    if (!conn) {
+      openSettings()
+      return
+    }
+    // The rail button toggles between the synthetic OpenClaw workspace and the
+    // most recent non-OpenClaw project so users can get back without using the
+    // server switcher UI.
+    if (server.current?.integration === "openclaw") {
+      const local =
+        server.list.find((item) => item.type === "sidecar" && item.variant === "base") ??
+        server.list.find((item) => item.integration !== "openclaw")
+      if (!local) return
+      const key = ServerConnection.key(local)
+      server.setActive(key)
+      const last = server.projects.lastFor?.(key) ?? globalSync.data.project[0]?.worktree
+      if (!last) {
+        navigate("/")
+        return
+      }
+      layout.projects.open(last)
+      void navigateToProject(last)
+      return
+    }
+    server.setActive(ServerConnection.key(conn))
+    layout.projects.open(openclawDir)
+    navigateWithSidebarReset(`/${openclawSlug}/session`)
+  }
+
   function projectRoot(directory: string) {
+    if (directory === openclawDir) return openclawDir
     const project = layout.projects
       .list()
       .find((item) => item.worktree === directory || item.sandboxes?.includes(directory))
@@ -1422,6 +1466,10 @@ export default function Layout(props: ParentProps) {
 
   async function navigateToProject(directory: string | undefined) {
     if (!directory) return
+    if (directory === openclawDir) {
+      navigateWithSidebarReset(`/${openclawSlug}/session`)
+      return
+    }
     const root = projectRoot(directory)
     server.projects.touch(root)
     const project = layout.projects.list().find((item) => item.worktree === root)
@@ -2653,6 +2701,9 @@ export default function Layout(props: ParentProps) {
       openProjectKeybind={() => command.keybind("project.open")}
       onOpenProject={chooseProject}
       renderProjectOverlay={projectOverlay}
+      openclawLabel={() => language.t("sidebar.openclaw")}
+      openclawActive={() => currentDir() === openclawDir}
+      onOpenOpenclaw={openOpenclaw}
       configLabel={() => "Config"}
       onOpenConfig={openConfig}
       settingsLabel={() => language.t("sidebar.settings")}

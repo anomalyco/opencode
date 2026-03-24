@@ -34,7 +34,7 @@ function isLocalHost(url: string) {
 }
 
 export namespace ServerConnection {
-  type Base = { displayName?: string }
+  type Base = { displayName?: string; integration?: "openclaw" }
 
   export type HttpBase = {
     url: string
@@ -167,6 +167,14 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       if (state.active !== input) setState("active", input)
     }
 
+    function originFor(key: ServerConnection.Key) {
+      const conn = allServers().find((item) => ServerConnection.key(item) === key)
+      // Keep OpenClaw's synthetic project state isolated from local sidecar projects,
+      // even though both connections run on localhost in desktop development.
+      if (conn?.integration === "openclaw") return "openclaw"
+      return projectsKey(key)
+    }
+
     function add(input: ServerConnection.Http) {
       const url_ = normalizeServerUrl(input.http.url)
       if (!url_) return
@@ -198,6 +206,9 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
 
     const check = (conn: ServerConnection.Any) => checkServerHealth(conn.http).then((x) => x.healthy)
 
+    const current: Accessor<ServerConnection.Any | undefined> = createMemo(
+      () => allServers().find((s) => ServerConnection.key(s) === state.active) ?? allServers()[0],
+    )
     createEffect(() => {
       const current_ = current()
       if (!current_) return
@@ -206,11 +217,14 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       onCleanup(startHealthPolling(current_))
     })
 
-    const origin = createMemo(() => projectsKey(state.active))
+    const origin = createMemo(() => {
+      const conn = current()
+      // OpenClaw reuses the normal project/session UI with a synthetic `/openclaw`
+      // worktree, so it needs its own persisted sidebar/project bucket.
+      if (conn?.integration === "openclaw") return "openclaw"
+      return projectsKey(state.active)
+    })
     const projectsList = createMemo(() => store.projects[origin()] ?? [])
-    const current: Accessor<ServerConnection.Any | undefined> = createMemo(
-      () => allServers().find((s) => ServerConnection.key(s) === state.active) ?? allServers()[0],
-    )
     const isLocal = createMemo(() => {
       const c = current()
       return (c?.type === "sidecar" && c.variant === "base") || (c?.type === "http" && isLocalHost(c.http.url))
@@ -281,6 +295,11 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
         },
         last() {
           const key = origin()
+          if (!key) return
+          return store.lastProject[key]
+        },
+        lastFor(input: ServerConnection.Key) {
+          const key = originFor(input)
           if (!key) return
           return store.lastProject[key]
         },

@@ -10,6 +10,7 @@ import { useLayout } from "@/context/layout"
 import { useLocal } from "@/context/local"
 import { usePermission } from "@/context/permission"
 import { type ContextItem, type ImageAttachmentPart, type Prompt, usePrompt } from "@/context/prompt"
+import { useServer } from "@/context/server"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { Identifier } from "@/utils/id"
@@ -202,6 +203,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
   const sync = useSync()
   const globalSync = useGlobalSync()
   const local = useLocal()
+  const server = useServer()
   const permission = usePermission()
   const prompt = usePrompt()
   const layout = useLayout()
@@ -280,8 +282,17 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       return
     }
 
-    const currentModel = local.model.current()
-    const currentAgent = local.agent.current()
+    const openclaw = server.current?.integration === "openclaw"
+    const currentModel =
+      local.model.current() ??
+      (openclaw
+        ? {
+            id: "claw",
+            name: "Claw",
+            provider: { id: "openclaw", name: "OpenClaw", models: {} },
+          }
+        : undefined)
+    const currentAgent = local.agent.current() ?? (openclaw ? { name: "claw" } : undefined)
     if (!currentModel || !currentAgent) {
       showToast({
         title: language.t("prompt.toast.modelAgentRequired.title"),
