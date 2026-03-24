@@ -654,10 +654,14 @@ export namespace SessionPrompt {
 
       // Build system prompt, adding structured output instruction if needed
       const skills = await SystemPrompt.skills(agent)
+      const notes = (lastUserMsg?.parts ?? []).filter(
+        (part): part is MessageV2.TextPart => part.type === "text" && part.synthetic === true && part.ignored === true,
+      )
       const system = [
         ...(await SystemPrompt.environment(model)),
         ...(skills ? [skills] : []),
         ...(await InstructionPrompt.system()),
+        ...(notes.length > 0 && notes.length === lastUserMsg?.parts.length ? notes.map((part) => part.text) : []),
       ]
       const format = lastUser.format ?? { type: "text" }
       if (format.type === "json_schema") {

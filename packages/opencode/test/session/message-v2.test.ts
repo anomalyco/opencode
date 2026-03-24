@@ -194,7 +194,7 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
-  test("converts user text/file parts and injects compaction/subtask prompts", () => {
+  test("converts user text/file parts and omits compaction prompts", () => {
     const messageID = "m-user"
 
     const input: MessageV2.WithParts[] = [
@@ -260,7 +260,6 @@ describe("session.message-v2.toModelMessage", () => {
             filename: "img.png",
             data: "https://example.com/img.png",
           },
-          { type: "text", text: "What did we do so far?" },
           { type: "text", text: "The following tool was executed by the user" },
         ],
       },
