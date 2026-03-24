@@ -1,4 +1,4 @@
-import { describe, test, expect } from "bun:test"
+import { afterEach, describe, test, expect } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
 import { WriteTool } from "../../src/tool/write"
@@ -16,6 +16,10 @@ const ctx = {
   metadata: () => {},
   ask: async () => {},
 }
+
+afterEach(async () => {
+  await Instance.disposeAll()
+})
 
 describe("tool.write", () => {
   describe("new file creation", () => {

@@ -1,7 +1,8 @@
 import { Hono } from "hono"
-import { describeRoute, resolver, validator } from "hono-openapi"
+import { describeRoute, validator, resolver } from "hono-openapi"
 import { streamSSE } from "hono/streaming"
 import z from "zod"
+import { Bus } from "../../bus"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { AsyncQueue } from "@/util/queue"
@@ -194,6 +195,63 @@ export const GlobalRoutes = lazy(() =>
           },
         })
         return c.json(true)
+      },
+    )
+    .post(
+      "/upgrade",
+      describeRoute({
+        summary: "Upgrade opencode",
+        description: "Upgrade opencode to the specified version or latest if not specified.",
+        operationId: "global.upgrade",
+        responses: {
+          200: {
+            description: "Upgrade result",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.union([
+                    z.object({
+                      success: z.literal(true),
+                      version: z.string(),
+                    }),
+                    z.object({
+                      success: z.literal(false),
+                      error: z.string(),
+                    }),
+                  ]),
+                ),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator(
+        "json",
+        z.object({
+          target: z.string().optional(),
+        }),
+      ),
+      async (c) => {
+        const method = await Installation.method()
+        if (method === "unknown") {
+          return c.json({ success: false, error: "Unknown installation method" }, 400)
+        }
+        const target = c.req.valid("json").target || (await Installation.latest(method))
+        const result = await Installation.upgrade(method, target)
+          .then(() => ({ success: true as const, version: target }))
+          .catch((e) => ({ success: false as const, error: e instanceof Error ? e.message : String(e) }))
+        if (result.success) {
+          GlobalBus.emit("event", {
+            directory: "global",
+            payload: {
+              type: Installation.Event.Updated.type,
+              properties: { version: target },
+            },
+          })
+          return c.json(result)
+        }
+        return c.json(result, 500)
       },
     ),
 )
