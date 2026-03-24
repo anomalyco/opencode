@@ -1,11 +1,13 @@
 import path from "path"
-import { describe, expect, test } from "bun:test"
+import { describe, expect, spyOn, test } from "bun:test"
 import { fileURLToPath } from "url"
 import { Instance } from "../../src/project/instance"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Session } from "../../src/session"
+import { LLM } from "../../src/session/llm"
 import { MessageV2 } from "../../src/session/message-v2"
 import { SessionPrompt } from "../../src/session/prompt"
+import { SessionProcessor } from "../../src/session/processor"
 import { Log } from "../../src/util/log"
 import { tmpdir } from "../fixture/fixture"
 
@@ -202,6 +204,148 @@ describe("session.prompt agent variant", () => {
           expect(override.info.variant).toBe("high")
 
           await Session.remove(session.id)
+        },
+      })
+    } finally {
+      if (prev === undefined) delete process.env.OPENAI_API_KEY
+      else process.env.OPENAI_API_KEY = prev
+    }
+  })
+})
+
+describe("session.prompt main instruction loading", () => {
+  test("loads project and config instructions for a primary root session", async () => {
+    const prev = process.env.OPENAI_API_KEY
+    process.env.OPENAI_API_KEY = "test-openai-key"
+
+    try {
+      await using tmp = await tmpdir({
+        git: true,
+        config: {
+          instructions: ["primary-instructions.md"],
+          agent: {
+            build: {
+              model: "openai/gpt-5.2",
+            },
+          },
+        },
+        init: async (dir) => {
+          await Bun.write(path.join(dir, "AGENTS.md"), "# Root Instructions")
+          await Bun.write(path.join(dir, "primary-instructions.md"), "# Extra Instructions")
+        },
+      })
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const session = await Session.create({ title: "primary-session" })
+          let capturedSystem: string[] | undefined
+
+          const createSpy = spyOn(SessionProcessor, "create").mockImplementation((input) => {
+            return {
+              message: input.assistantMessage,
+              partFromToolCall() {
+                return undefined
+              },
+              async process(streamInput: LLM.StreamInput) {
+                capturedSystem = streamInput.system
+                input.assistantMessage.finish = "stop"
+                return "stop"
+              },
+            } as any
+          })
+
+          try {
+            await SessionPrompt.prompt({
+              sessionID: session.id,
+              agent: "build",
+              parts: [{ type: "text", text: "hello" }],
+            })
+          } finally {
+            createSpy.mockRestore()
+          }
+
+          expect(capturedSystem).toBeDefined()
+          const system = capturedSystem!.join("\n")
+          expect(system).toContain(`Instructions from: ${path.join(tmp.path, "AGENTS.md")}`)
+          expect(system).toContain(`Instructions from: ${path.join(tmp.path, "primary-instructions.md")}`)
+
+          await Session.remove(session.id)
+        },
+      })
+    } finally {
+      if (prev === undefined) delete process.env.OPENAI_API_KEY
+      else process.env.OPENAI_API_KEY = prev
+    }
+  })
+
+  test("excludes main-agent instructions for child subagent sessions while preserving agent prompts", async () => {
+    const prev = process.env.OPENAI_API_KEY
+    process.env.OPENAI_API_KEY = "test-openai-key"
+
+    try {
+      await using tmp = await tmpdir({
+        git: true,
+        config: {
+          instructions: ["primary-instructions.md"],
+          agent: {
+            build: {
+              model: "openai/gpt-5.2",
+            },
+            helper: {
+              mode: "all",
+              model: "openai/gpt-5.2",
+              prompt: "Helper agent prompt",
+            },
+          },
+        },
+        init: async (dir) => {
+          await Bun.write(path.join(dir, "AGENTS.md"), "# Root Instructions")
+          await Bun.write(path.join(dir, "primary-instructions.md"), "# Extra Instructions")
+        },
+      })
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const parent = await Session.create({ title: "parent-session" })
+          const session = await Session.create({ title: "child-session", parentID: parent.id })
+          let capturedSystem: string[] | undefined
+          let capturedAgentPrompt: string | undefined
+
+          const createSpy = spyOn(SessionProcessor, "create").mockImplementation((input) => {
+            return {
+              message: input.assistantMessage,
+              partFromToolCall() {
+                return undefined
+              },
+              async process(streamInput: LLM.StreamInput) {
+                capturedSystem = streamInput.system
+                capturedAgentPrompt = streamInput.agent.prompt
+                input.assistantMessage.finish = "stop"
+                return "stop"
+              },
+            } as any
+          })
+
+          try {
+            await SessionPrompt.prompt({
+              sessionID: session.id,
+              agent: "helper",
+              parts: [{ type: "text", text: "hello" }],
+            })
+          } finally {
+            createSpy.mockRestore()
+          }
+
+          expect(capturedSystem).toBeDefined()
+          const system = capturedSystem!.join("\n")
+          expect(system).not.toContain(`Instructions from: ${path.join(tmp.path, "AGENTS.md")}`)
+          expect(system).not.toContain(`Instructions from: ${path.join(tmp.path, "primary-instructions.md")}`)
+          expect(capturedAgentPrompt).toBe("Helper agent prompt")
+
+          await Session.remove(session.id)
+          await Session.remove(parent.id)
         },
       })
     } finally {

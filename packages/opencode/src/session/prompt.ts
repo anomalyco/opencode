@@ -271,6 +271,12 @@ export namespace SessionPrompt {
     return
   }
 
+  function shouldLoadMainInstructions(session: Session.Info, agent: Agent.Info) {
+    if (session.parentID) return false
+    if (agent.mode === "subagent") return false
+    return true
+  }
+
   export const LoopInput = z.object({
     sessionID: SessionID.zod,
     resume_existing: z.boolean().optional(),
@@ -654,10 +660,11 @@ export namespace SessionPrompt {
 
       // Build system prompt, adding structured output instruction if needed
       const skills = await SystemPrompt.skills(agent)
+      const instructions = shouldLoadMainInstructions(session, agent) ? await InstructionPrompt.system() : []
       const system = [
         ...(await SystemPrompt.environment(model)),
         ...(skills ? [skills] : []),
-        ...(await InstructionPrompt.system()),
+        ...instructions,
       ]
       const format = lastUser.format ?? { type: "text" }
       if (format.type === "json_schema") {
