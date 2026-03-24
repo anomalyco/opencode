@@ -1670,6 +1670,10 @@ export type WorktreeResetInput = {
   directory: string
 }
 
+export type WorktreeMergeInput = {
+  sourceDirectory: string
+  targetDirectory: string
+}
 export type ProjectSummary = {
   id: string
   name?: string
@@ -2723,6 +2727,32 @@ export type WorktreeResetResponses = {
 
 export type WorktreeResetResponse = WorktreeResetResponses[keyof WorktreeResetResponses]
 
+export type WorktreeMergeData = {
+  body?: WorktreeMergeInput
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/experimental/worktree/merge"
+}
+
+export type WorktreeMergeErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type WorktreeMergeError = WorktreeMergeErrors[keyof WorktreeMergeErrors]
+
+export type WorktreeMergeResponses = {
+  /**
+   * Worktree merged
+   */
+  200: boolean
+}
+
+export type WorktreeMergeResponse = WorktreeMergeResponses[keyof WorktreeMergeResponses]
 export type ExperimentalSessionListData = {
   body?: never
   path?: never
