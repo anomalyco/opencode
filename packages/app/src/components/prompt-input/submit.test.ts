@@ -17,6 +17,7 @@ const optimistic: Array<{
 }> = []
 const optimisticSeeded: boolean[] = []
 const storedSessions: Record<string, Array<{ id: string; title?: string }>> = {}
+const promoted: Array<{ directory: string; sessionID: string }> = []
 const sentShell: string[] = []
 const syncedDirectories: string[] = []
 
@@ -85,6 +86,11 @@ beforeAll(async () => {
       },
       agent: {
         current: () => ({ name: "agent" }),
+      },
+      session: {
+        promote(directory: string, sessionID: string) {
+          promoted.push({ directory, sessionID })
+        },
       },
     }),
   }))
@@ -201,6 +207,7 @@ beforeEach(() => {
   enabledAutoAccept.length = 0
   optimistic.length = 0
   optimisticSeeded.length = 0
+  promoted.length = 0
   params = {}
   sentShell.length = 0
   syncedDirectories.length = 0
@@ -239,6 +246,11 @@ describe("prompt submit worktree selection", () => {
     expect(createdClients).toEqual(["/repo/worktree-a", "/repo/worktree-b"])
     expect(createdSessions).toEqual(["/repo/worktree-a", "/repo/worktree-b"])
     expect(sentShell).toEqual(["/repo/worktree-a", "/repo/worktree-b"])
+    expect(syncedDirectories).toEqual(["/repo/worktree-a", "/repo/worktree-a", "/repo/worktree-b", "/repo/worktree-b"])
+    expect(promoted).toEqual([
+      { directory: "/repo/worktree-a", sessionID: "session-1" },
+      { directory: "/repo/worktree-b", sessionID: "session-2" },
+    ])
     expect(syncedDirectories).toEqual(["/repo/worktree-a", "/repo/worktree-a", "/repo/worktree-b", "/repo/worktree-b"])
   })
 

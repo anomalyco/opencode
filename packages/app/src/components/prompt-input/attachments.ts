@@ -5,8 +5,7 @@ import { useLanguage } from "@/context/language"
 import { uuid } from "@/utils/uuid"
 import { getCursorPosition } from "./editor-dom"
 import { attachmentMime } from "./files"
-const LARGE_PASTE_CHARS = 8000
-const LARGE_PASTE_BREAKS = 120
+import { normalizePaste, pasteMode } from "./paste"
 
 function dataUrl(file: File, mime: string) {
   return new Promise<string>((resolve) => {
@@ -25,20 +24,8 @@ function dataUrl(file: File, mime: string) {
   })
 }
 
-function largePaste(text: string) {
-  if (text.length >= LARGE_PASTE_CHARS) return true
-  let breaks = 0
-  for (const char of text) {
-    if (char !== "\n") continue
-    breaks += 1
-    if (breaks >= LARGE_PASTE_BREAKS) return true
-  }
-  return false
-}
-
 type PromptAttachmentsInput = {
   editor: () => HTMLDivElement | undefined
-  isFocused: () => boolean
   isDialogActive: () => boolean
   setDraggingType: (type: "image" | "@mention" | null) => void
   focusEditor: () => void
@@ -84,6 +71,18 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
 
   const addAttachment = (file: File) => add(file)
 
+  const addAttachments = async (files: File[], toast = true) => {
+    let found = false
+
+    for (const file of files) {
+      const ok = await add(file, false)
+      if (ok) found = true
+    }
+
+    if (!found && files.length > 0 && toast) warn()
+    return found
+  }
+
   const removeAttachment = (id: string) => {
     const current = prompt.current()
     const next = current.filter((part) => part.type !== "image" || part.id !== id)
@@ -91,25 +90,20 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
   }
 
   const handlePaste = async (event: ClipboardEvent) => {
-    if (!input.isFocused()) return
     const clipboardData = event.clipboardData
     if (!clipboardData) return
 
     event.preventDefault()
     event.stopPropagation()
 
-    const items = Array.from(clipboardData.items)
-    const fileItems = items.filter((item) => item.kind === "file")
+    const files = Array.from(clipboardData.items).flatMap((item) => {
+      if (item.kind !== "file") return []
+      const file = item.getAsFile()
+      return file ? [file] : []
+    })
 
-    if (fileItems.length > 0) {
-      let found = false
-      for (const item of fileItems) {
-        const file = item.getAsFile()
-        if (!file) continue
-        const ok = await add(file, false)
-        if (ok) found = true
-      }
-      if (!found) warn()
+    if (files.length > 0) {
+      await addAttachments(files)
       return
     }
 
@@ -126,16 +120,23 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
 
     if (!plainText) return
 
-    if (largePaste(plainText)) {
-      if (input.addPart({ type: "text", content: plainText, start: 0, end: 0 })) return
+    const text = normalizePaste(plainText)
+
+    const put = () => {
+      if (input.addPart({ type: "text", content: text, start: 0, end: 0 })) return true
       input.focusEditor()
-      if (input.addPart({ type: "text", content: plainText, start: 0, end: 0 })) return
+      return input.addPart({ type: "text", content: text, start: 0, end: 0 })
     }
 
-    const inserted = typeof document.execCommand === "function" && document.execCommand("insertText", false, plainText)
+    if (pasteMode(text) === "manual") {
+      put()
+      return
+    }
+
+    const inserted = typeof document.execCommand === "function" && document.execCommand("insertText", false, text)
     if (inserted) return
 
-    input.addPart({ type: "text", content: plainText, start: 0, end: 0 })
+    put()
   }
 
   const handleGlobalDragOver = (event: DragEvent) => {
@@ -176,12 +177,7 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
     const dropped = event.dataTransfer?.files
     if (!dropped) return
 
-    let found = false
-    for (const file of Array.from(dropped)) {
-      const ok = await add(file, false)
-      if (ok) found = true
-    }
-    if (!found && dropped.length > 0) warn()
+    await addAttachments(Array.from(dropped))
   }
 
   onMount(() => {
@@ -198,6 +194,7 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
 
   return {
     addAttachment,
+    addAttachments,
     removeAttachment,
     handlePaste,
   }

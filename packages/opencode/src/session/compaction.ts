@@ -200,6 +200,8 @@ When constructing the summary, try to stick to this template:
 ---`
 
     const promptText = compacting.prompt ?? [defaultPrompt, ...compacting.context].join("\n\n")
+    const msgs = structuredClone(messages)
+    await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
     const result = await processor.process({
       user: userMessage,
       agent,
@@ -208,7 +210,7 @@ When constructing the summary, try to stick to this template:
       tools: {},
       system: [],
       messages: [
-        ...MessageV2.toModelMessages(messages, model, { stripMedia: true }),
+        ...MessageV2.toModelMessages(msgs, model, { stripMedia: true }),
         {
           role: "user",
           content: [

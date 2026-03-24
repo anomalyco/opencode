@@ -226,6 +226,15 @@ export function createChildStoreManager(input: {
     return childStore
   }
 
+  function peek(directory: string, options: ChildOptions = {}) {
+    const childStore = ensureChild(directory)
+    const shouldBootstrap = options.bootstrap ?? true
+    if (shouldBootstrap && childStore[0].status === "loading") {
+      input.onBootstrap(directory)
+    }
+    return childStore
+  }
+
   function projectMeta(directory: string, patch: ProjectMeta) {
     const [store, setStore] = ensureChild(directory)
     const cached = metaCache.get(directory)
@@ -256,6 +265,7 @@ export function createChildStoreManager(input: {
     children,
     ensureChild,
     child,
+    peek,
     projectMeta,
     projectIcon,
     mark,

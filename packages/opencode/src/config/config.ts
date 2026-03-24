@@ -177,7 +177,7 @@ export namespace Config {
       log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
     }
 
-    const active = Account.active()
+    const active = await Account.active()
     if (active?.active_org_id) {
       try {
         const [config, token] = await Promise.all([
@@ -1052,7 +1052,12 @@ export namespace Config {
         })
         .optional(),
       plugin: z.string().array().optional(),
-      snapshot: z.boolean().optional(),
+      snapshot: z
+        .boolean()
+        .optional()
+        .describe(
+          "Enable or disable snapshot tracking. When false, filesystem snapshots are not recorded and undoing or reverting will not undo/redo file changes. Defaults to true.",
+        ),
       share: z
         .enum(["manual", "auto", "disabled"])
         .optional()

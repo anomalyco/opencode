@@ -424,6 +424,23 @@ Customize keybinds in `tui.json`.
 
 ---
 
+### Snapshot
+
+OpenCode uses snapshots to track file changes during agent operations, enabling you to undo and revert changes within a session. Snapshots are enabled by default.
+
+For large repositories or projects with many submodules, the snapshot system can cause slow indexing and significant disk usage as it tracks all changes using an internal git repository. You can disable snapshots using the `snapshot` option.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "snapshot": false
+}
+```
+
+Note that disabling snapshots means changes made by the agent cannot be rolled back through the UI.
+
+---
+
 ### Autoupdate
 
 OpenCode will automatically download any new updates when it starts up. You can disable this with the `autoupdate` option.
