@@ -12,7 +12,7 @@ import {
   jsonSchema,
 } from "ai"
 import { mergeDeep, pipe } from "remeda"
-import { GitLabWorkflowLanguageModel } from "gitlab-ai-provider"
+import { GitLabWorkflowLanguageModel, type AdditionalContext } from "gitlab-ai-provider"
 import { ProviderTransform } from "@/provider/transform"
 import { Config } from "@/config/config"
 import { Instance } from "@/project/instance"
@@ -28,6 +28,36 @@ export namespace LLM {
   const log = Log.create({ service: "llm" })
   export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
 
+  function isWorkflow(model: Provider.Model) {
+    return model.providerID === "gitlab" && model.api.id.startsWith("duo-workflow-")
+  }
+
+  function workflowOptions(input: StreamInput, system: string[]) {
+    const prompt = system.join("\n").trim()
+    return {
+      additionalContext: (input.context ?? [])
+        .filter((item) => item.content?.trim())
+        .map((item, i) => ({
+          ...item,
+          id: item.id ?? `${input.user.id}:${item.category}:${i}`,
+        })),
+      ...(prompt
+        ? {
+            flowConfig: {
+              prompts: [
+                {
+                  prompt_template: {
+                    system: prompt,
+                  },
+                },
+              ],
+            },
+            flowConfigSchemaVersion: "v1",
+          }
+        : {}),
+    }
+  }
+
   export type StreamInput = {
     user: MessageV2.User
     sessionID: string
@@ -35,6 +65,7 @@ export namespace LLM {
     agent: Agent.Info
     permission?: Permission.Ruleset
     system: string[]
+    context?: AdditionalContext[]
     abort: AbortSignal
     messages: ModelMessage[]
     small?: boolean
@@ -58,8 +89,7 @@ export namespace LLM {
       modelID: input.model.id,
       providerID: input.model.providerID,
     })
-    const [language, cfg, provider, auth] = await Promise.all([
-      Provider.getLanguage(input.model),
+    const [cfg, provider, auth] = await Promise.all([
       Config.get(),
       Provider.getProvider(input.model.providerID),
       Auth.get(input.model.providerID),
@@ -94,6 +124,17 @@ export namespace LLM {
       system.push(header, rest.join("\n"))
     }
 
+    const workflow = isWorkflow(input.model)
+    const language = await Provider.getLanguage(
+      input.model,
+      workflow
+        ? {
+            sessionID: input.sessionID,
+            workflow: workflowOptions(input, system),
+          }
+        : undefined,
+    )
+
     const variant =
       !input.small && input.model.variants && input.user.variant ? input.model.variants[input.user.variant] : {}
     const base = input.small
@@ -115,15 +156,17 @@ export namespace LLM {
 
     const messages = isOpenaiOauth
       ? input.messages
-      : [
-          ...system.map(
-            (x): ModelMessage => ({
-              role: "system",
-              content: x,
-            }),
-          ),
-          ...input.messages,
-        ]
+      : workflow
+        ? input.messages
+        : [
+            ...system.map(
+              (x): ModelMessage => ({
+                role: "system",
+                content: x,
+              }),
+            ),
+            ...input.messages,
+          ]
 
     const params = await Plugin.trigger(
       "chat.params",

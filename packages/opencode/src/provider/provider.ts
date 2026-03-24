@@ -45,6 +45,8 @@ import {
   VERSION as GITLAB_PROVIDER_VERSION,
   isWorkflowModel,
   discoverWorkflowModels,
+  GitLabWorkflowLanguageModel,
+  type AdditionalContext,
 } from "gitlab-ai-provider"
 import { fromNodeProviderChain } from "@aws-sdk/credential-providers"
 import { GoogleAuth } from "google-auth-library"
@@ -54,6 +56,22 @@ import { ModelID, ProviderID } from "./schema"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
+  type WorkflowInput = {
+    additionalContext?: AdditionalContext[]
+    flowConfig?: unknown
+    flowConfigSchemaVersion?: string
+  }
+
+  function isWorkflow(model: Model) {
+    return model.providerID === "gitlab" && model.api.id.startsWith("duo-workflow-")
+  }
+
+  function applyWorkflow(model: GitLabWorkflowLanguageModel, input?: WorkflowInput) {
+    const opts = (model as unknown as { workflowOptions: WorkflowInput }).workflowOptions
+    opts.additionalContext = input?.additionalContext
+    opts.flowConfig = input?.flowConfig
+    opts.flowConfigSchemaVersion = input?.flowConfigSchemaVersion
+  }
 
   function shouldUseCopilotResponsesApi(modelID: string): boolean {
     const match = /^gpt-(\d+)/.exec(modelID)
@@ -557,10 +575,19 @@ export namespace Provider {
         async getModel(sdk: ReturnType<typeof createGitLab>, modelID: string, options?: Record<string, any>) {
           if (modelID.startsWith("duo-workflow-")) {
             const workflowRef = options?.workflowRef as string | undefined
+            const additionalContext = Array.isArray(options?.additionalContext)
+              ? (options.additionalContext as AdditionalContext[])
+              : undefined
+            const flowConfig = options?.flowConfig
+            const flowConfigSchemaVersion =
+              typeof options?.flowConfigSchemaVersion === "string" ? options.flowConfigSchemaVersion : undefined
             // Use the static mapping if it exists, otherwise use duo-workflow with selectedModelRef
             const sdkModelID = isWorkflowModel(modelID) ? modelID : "duo-workflow"
             const model = sdk.workflowChat(sdkModelID, {
               featureFlags,
+              ...(additionalContext ? { additionalContext } : {}),
+              ...(flowConfig ? { flowConfig } : {}),
+              ...(flowConfigSchemaVersion ? { flowConfigSchemaVersion } : {}),
             })
             if (workflowRef) {
               model.selectedModelRef = workflowRef
@@ -1340,17 +1367,35 @@ export namespace Provider {
     return info
   }
 
-  export async function getLanguage(model: Model): Promise<LanguageModelV2> {
+  export async function getLanguage(
+    model: Model,
+    input?: {
+      sessionID?: string
+      workflow?: WorkflowInput
+    },
+  ): Promise<LanguageModelV2> {
     const s = await state()
-    const key = `${model.providerID}/${model.id}`
-    if (s.models.has(key)) return s.models.get(key)!
+    const workflow = isWorkflow(model)
+    const key =
+      workflow && input?.sessionID ? `${model.providerID}/${model.id}/${input.sessionID}` : `${model.providerID}/${model.id}`
+    if (s.models.has(key)) {
+      const language = s.models.get(key)!
+      if (workflow && input?.workflow && language instanceof GitLabWorkflowLanguageModel) {
+        applyWorkflow(language, input.workflow)
+      }
+      return language
+    }
 
     const provider = s.providers[model.providerID]
     const sdk = await getSDK(model)
 
     try {
       const language = s.modelLoaders[model.providerID]
-        ? await s.modelLoaders[model.providerID](sdk, model.api.id, { ...provider.options, ...model.options })
+        ? await s.modelLoaders[model.providerID](sdk, model.api.id, {
+            ...provider.options,
+            ...model.options,
+            ...(workflow && input?.workflow ? input.workflow : {}),
+          })
         : sdk.languageModel(model.api.id)
       s.models.set(key, language)
       return language
