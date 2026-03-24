@@ -349,7 +349,9 @@ describe("Project.update", () => {
     const { project } = await Project.fromDirectory(tmp.path)
 
     let eventPayload: any = null
-    const on = (data: any) => { eventPayload = data }
+    const on = (data: any) => {
+      eventPayload = data
+    }
     GlobalBus.on("event", on)
 
     try {

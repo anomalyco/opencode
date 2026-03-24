@@ -399,7 +399,11 @@ export namespace Project {
         const data = fromRow(row)
         return yield* Effect.forEach(
           data.sandboxes,
-          (dir) => fsys.isDir(dir).pipe(Effect.orDie, Effect.map((ok) => (ok ? dir : undefined))),
+          (dir) =>
+            fsys.isDir(dir).pipe(
+              Effect.orDie,
+              Effect.map((ok) => (ok ? dir : undefined)),
+            ),
           { concurrency: "unbounded" },
         ).pipe(Effect.map((arr) => arr.filter((x): x is string => x !== undefined)))
       })
