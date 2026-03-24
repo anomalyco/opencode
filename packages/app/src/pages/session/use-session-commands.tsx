@@ -122,6 +122,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const contextCommand = withCategory(language.t("command.category.context"))
   const viewCommand = withCategory(language.t("command.category.view"))
   const terminalCommand = withCategory(language.t("command.category.terminal"))
+  const browserCommand = withCategory(language.t("command.category.browser"))
   const modelCommand = withCategory(language.t("command.category.model"))
   const mcpCommand = withCategory(language.t("command.category.mcp"))
   const agentCommand = withCategory(language.t("command.category.agent"))
@@ -335,6 +336,21 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
           if (terminal.all().length > 0) terminal.new()
           view().terminal.open()
         },
+      }),
+      browserCommand({
+        id: "browser.toggle",
+        title: language.t("command.browser.toggle"),
+        description: language.t("command.browser.toggle.description"),
+        keybind: "ctrl+alt+b",
+        slash: "browser",
+        onSelect: () => view().browser.toggle(),
+      }),
+      browserCommand({
+        id: "browser.dock.toggle",
+        title: "Toggle browser dock side",
+        description: "Switch browser between bottom and right dock",
+        slash: "browser-dock",
+        onSelect: () => layout.browser.toggleDock(),
       }),
       sessionCommand({
         id: "message.previous",

@@ -10,6 +10,7 @@ export const dict = {
   "command.category.file": "File",
   "command.category.context": "Context",
   "command.category.terminal": "Terminal",
+  "command.category.browser": "Browser",
   "command.category.model": "Model",
   "command.category.mcp": "MCP",
   "command.category.agent": "Agent",
@@ -55,6 +56,8 @@ export const dict = {
   "command.review.toggle": "Toggle review",
   "command.terminal.new": "New terminal",
   "command.terminal.new.description": "Create a new terminal tab",
+  "command.browser.toggle": "Toggle browser",
+  "command.browser.toggle.description": "Open or close the embedded browser panel",
   "command.steps.toggle": "Toggle steps",
   "command.steps.toggle.description": "Show or hide steps for the current message",
   "command.message.previous": "Previous message",
@@ -629,6 +632,16 @@ export const dict = {
   "terminal.connectionLost.abnormalClose": "WebSocket closed abnormally: {{code}}",
   "terminal.connectionLost.description":
     "The terminal connection was interrupted. This can happen when the server restarts.",
+
+  "browser.title": "Browser",
+  "browser.placeholder": "Enter URL or port (e.g. localhost:3000)",
+  "browser.empty": "Enter a URL to view a web page",
+  "browser.back": "Go back",
+  "browser.forward": "Go forward",
+  "browser.refresh": "Refresh",
+  "browser.dockBottom": "Dock browser to bottom",
+  "browser.dockRight": "Dock browser to right",
+  "browser.openExternal": "Open in external browser",
 
   "common.closeTab": "Close tab",
   "common.dismiss": "Dismiss",

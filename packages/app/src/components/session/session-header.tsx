@@ -434,6 +434,22 @@ export function SessionHeader() {
                   </Button>
                 </TooltipKeybind>
 
+                <TooltipKeybind
+                  title={language.t("command.browser.toggle")}
+                  keybind={command.keybind("browser.toggle")}
+                >
+                  <Button
+                    variant="ghost"
+                    class="group/browser-toggle titlebar-icon w-8 h-6 p-0 box-border shrink-0"
+                    onClick={() => view().browser.toggle()}
+                    aria-label={language.t("command.browser.toggle")}
+                    aria-expanded={view().browser.opened()}
+                    aria-controls="browser-panel"
+                  >
+                    <Icon size="small" name={view().browser.opened() ? "globe-active" : "globe"} />
+                  </Button>
+                </TooltipKeybind>
+
                 <div class="hidden md:flex items-center gap-1 shrink-0">
                   <TooltipKeybind
                     title={language.t("command.review.toggle")}

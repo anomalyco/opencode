@@ -12,6 +12,7 @@ export const dict = {
   "desktop.menu.file.openProject": "Open Project...",
   "desktop.menu.view.toggleSidebar": "Toggle Sidebar",
   "desktop.menu.view.toggleTerminal": "Toggle Terminal",
+  "desktop.menu.view.toggleBrowser": "Toggle Browser",
   "desktop.menu.view.toggleFileTree": "Toggle File Tree",
   "desktop.menu.view.back": "Back",
   "desktop.menu.view.forward": "Forward",

@@ -17,7 +17,10 @@ const DEFAULT_PANEL_WIDTH = 344
 const DEFAULT_SESSION_WIDTH = 600
 const DEFAULT_TERMINAL_HEIGHT = 280
 const DEFAULT_TERMINAL_WIDTH = 420
+const DEFAULT_BROWSER_HEIGHT = 280
+const DEFAULT_BROWSER_WIDTH = 420
 type TerminalDock = "bottom" | "right"
+type BrowserDock = "bottom" | "right"
 export type AvatarColorKey = (typeof AVATAR_COLOR_KEYS)[number]
 
 export function getAvatarColors(key?: string) {
@@ -263,6 +266,13 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           width: DEFAULT_TERMINAL_WIDTH,
           dock: "bottom" as TerminalDock,
           opened: false,
+        },
+        browser: {
+          height: DEFAULT_BROWSER_HEIGHT,
+          width: DEFAULT_BROWSER_WIDTH,
+          dock: "bottom" as BrowserDock,
+          opened: false,
+          url: undefined as string | undefined,
         },
         review: {
           diffStyle: "split" as ReviewDiffStyle,
@@ -653,6 +663,27 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setStore("terminal", "dock", (dock) => (dock === "right" ? "bottom" : "right"))
         },
       },
+      browser: {
+        height: createMemo(() => store.browser.height),
+        width: createMemo(() => store.browser.width),
+        dock: createMemo(() => store.browser.dock ?? "bottom"),
+        url: createMemo(() => store.browser.url),
+        resize(height: number) {
+          setStore("browser", "height", height)
+        },
+        resizeWidth(width: number) {
+          setStore("browser", "width", width)
+        },
+        setDock(dock: BrowserDock) {
+          setStore("browser", "dock", dock)
+        },
+        toggleDock() {
+          setStore("browser", "dock", (dock) => (dock === "right" ? "bottom" : "right"))
+        },
+        setUrl(url: string | undefined) {
+          setStore("browser", "url", url)
+        },
+      },
       review: {
         diffStyle: createMemo(() => store.review?.diffStyle ?? "split"),
         setDiffStyle(diffStyle: ReviewDiffStyle) {
@@ -772,6 +803,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         const key = createSessionKeyReader(sessionKey, ensureKey)
         const s = createMemo(() => store.sessionView[key()] ?? { scroll: {} })
         const terminalOpened = createMemo(() => store.terminal?.opened ?? false)
+        const browserOpened = createMemo(() => store.browser?.opened ?? false)
         const reviewPanelOpened = createMemo(() => store.review?.panelOpened ?? true)
 
         function setTerminalOpened(next: boolean) {
@@ -784,6 +816,18 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           const value = current.opened ?? false
           if (value === next) return
           setStore("terminal", "opened", next)
+        }
+
+        function setBrowserOpened(next: boolean) {
+          const current = store.browser
+          if (!current) {
+            setStore("browser", { height: DEFAULT_BROWSER_HEIGHT, opened: next })
+            return
+          }
+
+          const value = current.opened ?? false
+          if (value === next) return
+          setStore("browser", "opened", next)
         }
 
         function setReviewPanelOpened(next: boolean) {
@@ -815,6 +859,18 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             },
             toggle() {
               setTerminalOpened(!terminalOpened())
+            },
+          },
+          browser: {
+            opened: browserOpened,
+            open() {
+              setBrowserOpened(true)
+            },
+            close() {
+              setBrowserOpened(false)
+            },
+            toggle() {
+              setBrowserOpened(!browserOpened())
             },
           },
           reviewPanel: {
