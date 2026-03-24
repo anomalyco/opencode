@@ -1,10 +1,12 @@
-import { afterEach, describe, test, expect } from "bun:test"
+import { afterEach, describe, test, expect, spyOn } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
 import { WriteTool } from "../../src/tool/write"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import { SessionID, MessageID } from "../../src/session/schema"
+import { LSP } from "../../src/lsp"
+import { Filesystem } from "../../src/util/filesystem"
 
 const ctx = {
   sessionID: SessionID.make("ses_test-write-session"),
@@ -324,6 +326,65 @@ describe("tool.write", () => {
           ).rejects.toThrow()
         },
       })
+    })
+  })
+
+  describe("diagnostics output", () => {
+    test("only reports diagnostics for the file that was written", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "README.md")
+      const otherFilepath = path.join(tmp.path, "src", "broken.py")
+      const normalizedFilepath = Filesystem.normalizePath(filepath)
+      const normalizedOtherFilepath = Filesystem.normalizePath(otherFilepath)
+
+      const touchFileSpy = spyOn(LSP, "touchFile").mockResolvedValue()
+      const diagnosticsSpy = spyOn(LSP, "diagnostics").mockResolvedValue({
+        [normalizedFilepath]: [
+          {
+            severity: 1,
+            message: "Markdown issue",
+            range: {
+              start: { line: 0, character: 0 },
+              end: { line: 0, character: 1 },
+            },
+          },
+        ],
+        [normalizedOtherFilepath]: [
+          {
+            severity: 1,
+            message: "Unrelated pyright error",
+            range: {
+              start: { line: 2, character: 4 },
+              end: { line: 2, character: 10 },
+            },
+          },
+        ],
+      } as Awaited<ReturnType<typeof LSP.diagnostics>>)
+
+      try {
+        await Instance.provide({
+          directory: tmp.path,
+          fn: async () => {
+            const write = await WriteTool.init()
+            const result = await write.execute(
+              {
+                filePath: filepath,
+                content: "# Hello\n",
+              },
+              ctx,
+            )
+
+            expect(touchFileSpy).toHaveBeenCalledWith(filepath, true)
+            expect(result.output).toContain("Markdown issue")
+            expect(result.output).not.toContain("LSP errors detected in other files")
+            expect(result.output).not.toContain("Unrelated pyright error")
+            expect(result.output).not.toContain(otherFilepath)
+          },
+        })
+      } finally {
+        touchFileSpy.mockRestore()
+        diagnosticsSpy.mockRestore()
+      }
     })
   })
 
