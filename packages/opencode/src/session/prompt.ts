@@ -49,6 +49,7 @@ import { Shell } from "@/shell/shell"
 import { Truncate } from "@/tool/truncate"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
+import type { AdditionalContext } from "gitlab-ai-provider"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -662,14 +663,19 @@ export namespace SessionPrompt {
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
       // Build system prompt, adding structured output instruction if needed
+      const env = await SystemPrompt.environment(model)
       const skills = await SystemPrompt.skills(agent)
-      const system = [
-        ...(await SystemPrompt.environment(model)),
-        ...(skills ? [skills] : []),
-        ...(await InstructionPrompt.system()),
-        ...reminder.system,
-        ...extra,
-      ]
+      const rules = await InstructionPrompt.system()
+      const system = workflow ? [] : [...env, ...(skills ? [skills] : []), ...rules, ...reminder.system, ...extra]
+      const context: AdditionalContext[] = workflow
+        ? [
+            ...env.map((content) => ({ category: "os_information", content })),
+            ...(skills ? [{ category: "agent_context", content: skills }] : []),
+            ...rules.map((content) => ({ category: "user_rule", content })),
+            ...reminder.system.map((content) => ({ category: "agent_context", content })),
+            ...extra.map((content) => ({ category: "agent_context", content })),
+          ]
+        : []
       const format = lastUser.format ?? { type: "text" }
       if (format.type === "json_schema") {
         system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
@@ -682,6 +688,7 @@ export namespace SessionPrompt {
         abort,
         sessionID,
         system,
+        context,
         messages: [
           ...MessageV2.toModelMessages(msgs, model),
           ...(isLastStep

@@ -42,6 +42,24 @@ function text(msg: ModelMessage) {
   return msg.content.filter((part) => part.type === "text").map((part) => part.text).join("\n")
 }
 
+function options(model: unknown) {
+  return (model as unknown as {
+    workflowOptions: {
+      additionalContext?: Array<{ category: string; id?: string; content?: string }>
+      flowConfig?: {
+        prompts?: Array<{
+          prompt_template?: {
+            system?: string
+          }
+        }>
+      }
+      flowConfigSchemaVersion?: string
+    }
+  }).workflowOptions
+}
+
+type WorkflowOptions = ReturnType<typeof options>
+
 describe("session.llm gitlab workflow", () => {
   test("routes opencode system text through workflow context", async () => {
     await using tmp = await tmpdir({
@@ -107,8 +125,13 @@ describe("session.llm gitlab workflow", () => {
         } satisfies MessageV2.User
 
         let prompt: ModelMessage[] = []
-        spyOn(GitLabWorkflowLanguageModel.prototype, "doStream").mockImplementation(async (opts) => {
+        let cfg: WorkflowOptions | undefined
+        spyOn(GitLabWorkflowLanguageModel.prototype, "doStream").mockImplementation(async function (
+          this: GitLabWorkflowLanguageModel,
+          opts,
+        ) {
           prompt = opts.prompt
+          cfg = options(this)
           return {
             stream: stream(),
           }
@@ -129,8 +152,10 @@ describe("session.llm gitlab workflow", () => {
         }
 
         expect(prompt.some((msg) => msg.role === "system")).toBe(false)
-        expect(prompt.some((msg) => msg.role === "assistant" && text(msg).includes("workflow note"))).toBe(true)
+        expect(prompt.some((msg) => msg.role === "assistant" && text(msg).includes("workflow note"))).toBe(false)
         expect(prompt.some((msg) => msg.role === "user" && text(msg) === "Hello")).toBe(true)
+        expect(cfg?.flowConfig?.prompts?.[0]?.prompt_template?.system).toContain("workflow note")
+        expect(cfg?.flowConfigSchemaVersion).toBe("v1")
       },
     })
   })
@@ -181,8 +206,13 @@ describe("session.llm gitlab workflow", () => {
         }
 
         let prompt: ModelMessage[] = []
-        spyOn(GitLabWorkflowLanguageModel.prototype, "doStream").mockImplementation(async (opts) => {
+        let cfg: WorkflowOptions | undefined
+        spyOn(GitLabWorkflowLanguageModel.prototype, "doStream").mockImplementation(async function (
+          this: GitLabWorkflowLanguageModel,
+          opts,
+        ) {
           prompt = opts.prompt
+          cfg = options(this)
           return {
             stream: stream(),
           }
@@ -200,11 +230,11 @@ describe("session.llm gitlab workflow", () => {
         })
 
         const user = prompt.filter((msg) => msg.role === "user").map(text).join("\n")
-        const assistant = prompt.filter((msg) => msg.role === "assistant").map(text).join("\n")
         const note = "The user indicated that they do not want you to execute yet"
 
         expect(user.includes(note)).toBe(false)
-        expect(assistant.includes(note)).toBe(true)
+        expect(cfg?.additionalContext?.some((item) => item.content?.includes(note))).toBe(true)
+        expect(cfg?.additionalContext?.every((item) => item.id)).toBe(true)
       },
     })
   })
