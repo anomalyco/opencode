@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test"
 import { runTerminal, waitTerminalReady } from "../actions"
 import { test, expect } from "../fixtures"
-import { terminalSelector } from "../selectors"
+import { dropdownMenuContentSelector, terminalSelector } from "../selectors"
 import { terminalToggleKey, workspacePersistKey } from "../utils"
 
 type State = {
@@ -128,5 +128,41 @@ test("closing the active terminal tab falls back to the previous tab", async ({ 
         { timeout: 15_000 },
       )
       .toEqual({ count: 1, first: true })
+  })
+})
+
+test("terminal tab can be renamed from the context menu", async ({ page, withProject }) => {
+  await withProject(async ({ directory, gotoSession }) => {
+    const key = workspacePersistKey(directory, "terminal")
+    const rename = `E2E term ${Date.now()}`
+    const tab = page.locator('#terminal-panel [data-slot="tabs-trigger"]').first()
+
+    await gotoSession()
+    await open(page)
+
+    await expect(tab).toContainText(/Terminal 1/)
+    await tab.click({ button: "right" })
+
+    const menu = page.locator(dropdownMenuContentSelector).first()
+    await expect(menu).toBeVisible()
+    await menu.getByRole("menuitem", { name: /^Rename$/i }).click()
+    await expect(menu).toHaveCount(0)
+
+    const input = page.locator('#terminal-panel input[type="text"]').first()
+    await expect(input).toBeVisible()
+    await input.fill(rename)
+    await input.press("Enter")
+
+    await expect(input).toHaveCount(0)
+    await expect(tab).toContainText(rename)
+    await expect
+      .poll(
+        async () => {
+          const state = await store(page, key)
+          return state?.all[0]?.title
+        },
+        { timeout: 5_000 },
+      )
+      .toBe(rename)
   })
 })

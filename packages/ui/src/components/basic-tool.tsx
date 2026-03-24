@@ -174,7 +174,9 @@ export function BasicTool(props: BasicToolProps) {
                           </Show>
                         </Show>
                       </div>
-                      <Show when={!pending() && trigger().action}>{trigger().action}</Show>
+                      <Show when={!pending() && trigger().action}>
+                        <span data-slot="basic-tool-tool-action">{trigger().action}</span>
+                      </Show>
                     </div>
                   )}
                 </Match>
