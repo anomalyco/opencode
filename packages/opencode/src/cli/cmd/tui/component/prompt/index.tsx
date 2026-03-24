@@ -133,6 +133,7 @@ export function Prompt(props: PromptProps) {
       active: boolean
       state: "idle" | "recording" | "transcribing"
       elapsed: number
+      partial: string
       handle: Voice.RecordHandle | null
       deps: VoiceCheck.Result | null
       timer: ReturnType<typeof setInterval> | null
@@ -150,6 +151,7 @@ export function Prompt(props: PromptProps) {
       active: false,
       state: "idle",
       elapsed: 0,
+      partial: "",
       handle: null,
       deps: null,
       timer: null,
@@ -720,7 +722,9 @@ export function Prompt(props: PromptProps) {
       return
     }
 
-    const handle = Voice.record(cfg ?? undefined)
+    const handle = Voice.record(deps, cfg ?? undefined, (_seq, text) => {
+      setStore("voice", "partial", (prev) => prev ? prev + " " + text : text)
+    })
     const timer = setInterval(() => {
       setStore("voice", "elapsed", store.voice.elapsed + 1)
       if (store.voice.elapsed >= (cfg?.max_duration ?? 60)) {
@@ -732,6 +736,7 @@ export function Prompt(props: PromptProps) {
       active: true,
       state: "recording",
       elapsed: 0,
+      partial: "",
       handle,
       deps,
       timer,
@@ -739,15 +744,13 @@ export function Prompt(props: PromptProps) {
   }
 
   async function stopRecording() {
-    const { handle, timer, deps } = store.voice
+    const { handle, timer } = store.voice
     if (timer) clearInterval(timer)
 
     setStore("voice", "state", "transcribing")
 
     try {
-      const file = await handle!.stop()
-      const cfg = sync.data.config.voice
-      const text = await Voice.transcribe(file, deps!, cfg ?? undefined)
+      const text = await handle!.stop()
 
       if (text.trim()) {
         input.insertText(text.trim())
@@ -764,6 +767,7 @@ export function Prompt(props: PromptProps) {
       active: false,
       state: "idle",
       elapsed: 0,
+      partial: "",
       handle: null,
       deps: null,
       timer: null,
@@ -779,6 +783,7 @@ export function Prompt(props: PromptProps) {
       active: false,
       state: "idle",
       elapsed: 0,
+      partial: "",
       handle: null,
       deps: null,
       timer: null,
@@ -1002,6 +1007,11 @@ export function Prompt(props: PromptProps) {
                     <text fg={theme.textMuted}>Transcribing...</text>
                   </Show>
                 </box>
+                <Show when={store.voice.partial}>
+                  <box paddingTop={1}>
+                    <text fg={theme.textMuted}>"{store.voice.partial}"</text>
+                  </box>
+                </Show>
                 <Show when={store.voice.state === "recording"}>
                   <box paddingTop={1}>
                     <text fg={theme.textMuted}>Enter to stop · Escape to cancel</text>

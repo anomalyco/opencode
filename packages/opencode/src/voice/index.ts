@@ -12,13 +12,22 @@ export namespace Voice {
     return VoiceCheck.run(cfg)
   }
 
-  export function record(cfg?: VoiceCheck.Cfg) {
+  export function record(
+    deps: VoiceCheck.Result,
+    cfg?: VoiceCheck.Cfg,
+    onChunk?: (seq: number, text: string) => void,
+  ) {
     return Recorder.start({
       sox: cfg?.sox_path ?? "rec",
       max: cfg?.max_duration ?? 60,
+      whisper: deps.whisper!,
+      model: deps.model!,
+      language: cfg?.language,
+      onChunk,
     })
   }
 
+  /** Transcribe a complete recording file (used for OpenAI backend fallback) */
   export async function transcribe(file: string, deps: VoiceCheck.Result, cfg?: VoiceCheck.Cfg) {
     if (cfg?.backend === "openai") {
       const key = cfg.openai_api_key ?? process.env.OPENAI_API_KEY
