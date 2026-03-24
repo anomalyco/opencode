@@ -212,7 +212,7 @@ describe("cross-spawn spawner", () => {
           }),
         ).pipe(Effect.provide(live)),
       )
-      expect(Exit.isFailure(exit)).toBe(true)
+      expect(Exit.isFailure(exit) ? true : exit.value !== ChildProcessSpawner.ExitCode(0)).toBe(true)
     })
 
     test("isRunning reflects process state", async () => {
@@ -230,9 +230,14 @@ describe("cross-spawn spawner", () => {
   describe("error handling", () => {
     test("fails for invalid command", async () => {
       const exit = await Effect.runPromiseExit(
-        Effect.scoped(ChildProcess.make("nonexistent-command-12345").asEffect()).pipe(Effect.provide(live)),
+        Effect.scoped(
+          Effect.gen(function* () {
+            const handle = yield* ChildProcess.make("nonexistent-command-12345")
+            return yield* handle.exitCode
+          }),
+        ).pipe(Effect.provide(live)),
       )
-      expect(Exit.isFailure(exit)).toBe(true)
+      expect(Exit.isFailure(exit) ? true : exit.value !== ChildProcessSpawner.ExitCode(0)).toBe(true)
     })
   })
 

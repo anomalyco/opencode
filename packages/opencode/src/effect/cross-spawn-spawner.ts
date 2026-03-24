@@ -184,6 +184,7 @@ export const make = Effect.gen(function* () {
             sink = NodeSink.fromWritable({
               evaluate: () => node,
               onError: (err) => toPlatformError(`fromWritable(fd${x.fd})`, toError(err), command),
+              endOnDone: true,
             })
           }
           if (x.config.stream) yield* Effect.forkScoped(Stream.run(x.config.stream, sink))
