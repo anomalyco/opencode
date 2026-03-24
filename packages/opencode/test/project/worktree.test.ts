@@ -112,6 +112,7 @@ describe("Worktree", () => {
       expect(props.branch).toBe(info.branch)
 
       // Cleanup
+      await withInstance(info.directory, () => Instance.dispose())
       await Bun.sleep(100)
       await withInstance(tmp.path, () => Worktree.remove({ directory: info.directory }))
     })
@@ -127,6 +128,7 @@ describe("Worktree", () => {
 
       // Cleanup
       await ready
+      await withInstance(info.directory, () => Instance.dispose())
       await Bun.sleep(100)
       await withInstance(tmp.path, () => Worktree.remove({ directory: info.directory }))
     })
