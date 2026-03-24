@@ -7,7 +7,7 @@ test("ShareNext.request uses legacy share API without active org account", async
   const originalActive = Account.active
   const originalConfigGet = Config.get
 
-  Account.active = mock(() => undefined)
+  Account.active = mock(async () => undefined)
   Config.get = mock(async () => ({ enterprise: { url: "https://legacy-share.example.com" } }))
 
   try {
@@ -29,7 +29,7 @@ test("ShareNext.request uses org share API with auth headers when account is act
   const originalActive = Account.active
   const originalToken = Account.token
 
-  Account.active = mock(() => ({
+  Account.active = mock(async () => ({
     id: AccountID.make("account-1"),
     email: "user@example.com",
     url: "https://control.example.com",
@@ -59,7 +59,7 @@ test("ShareNext.request fails when org account has no token", async () => {
   const originalActive = Account.active
   const originalToken = Account.token
 
-  Account.active = mock(() => ({
+  Account.active = mock(async () => ({
     id: AccountID.make("account-1"),
     email: "user@example.com",
     url: "https://control.example.com",
