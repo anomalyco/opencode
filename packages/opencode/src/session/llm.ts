@@ -28,6 +28,18 @@ export namespace LLM {
   const log = Log.create({ service: "llm" })
   export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
 
+  function workflowMessages(system: string[], messages: ModelMessage[]) {
+    return [
+      ...system.map(
+        (text): ModelMessage => ({
+          role: "assistant",
+          content: [{ type: "text", text }],
+        }),
+      ),
+      ...messages,
+    ]
+  }
+
   export type StreamInput = {
     user: MessageV2.User
     sessionID: string
@@ -115,15 +127,17 @@ export namespace LLM {
 
     const messages = isOpenaiOauth
       ? input.messages
-      : [
-          ...system.map(
-            (x): ModelMessage => ({
-              role: "system",
-              content: x,
-            }),
-          ),
-          ...input.messages,
-        ]
+      : language instanceof GitLabWorkflowLanguageModel
+        ? workflowMessages(system, input.messages)
+        : [
+            ...system.map(
+              (x): ModelMessage => ({
+                role: "system",
+                content: x,
+              }),
+            ),
+            ...input.messages,
+          ]
 
     const params = await Plugin.trigger(
       "chat.params",

@@ -562,11 +562,14 @@ export namespace SessionPrompt {
       const agent = await Agent.get(lastUser.agent)
       const maxSteps = agent.steps ?? Infinity
       const isLastStep = step >= maxSteps
-      msgs = await insertReminders({
+      const workflow = isWorkflow(model)
+      const reminder = await insertReminders({
         messages: msgs,
         agent,
         session,
+        workflow,
       })
+      msgs = reminder.messages
 
       const processor = SessionProcessor.create({
         assistantMessage: (await Session.updateMessage({
@@ -632,13 +635,14 @@ export namespace SessionPrompt {
       }
 
       // Ephemerally wrap queued user messages with a reminder to stay on track
+      const extra: string[] = []
       if (step > 1 && lastFinished) {
         for (const msg of msgs) {
           if (msg.info.role !== "user" || msg.info.id <= lastFinished.id) continue
           for (const part of msg.parts) {
             if (part.type !== "text" || part.ignored || part.synthetic) continue
             if (!part.text.trim()) continue
-            part.text = [
+            const text = [
               "<system-reminder>",
               "The user sent the following message:",
               part.text,
@@ -646,6 +650,11 @@ export namespace SessionPrompt {
               "Please address this message and continue with your tasks.",
               "</system-reminder>",
             ].join("\n")
+            if (workflow) {
+              extra.push(text)
+              continue
+            }
+            part.text = text
           }
         }
       }
@@ -658,6 +667,8 @@ export namespace SessionPrompt {
         ...(await SystemPrompt.environment(model)),
         ...(skills ? [skills] : []),
         ...(await InstructionPrompt.system()),
+        ...reminder.system,
+        ...extra,
       ]
       const format = lastUser.format ?? { type: "text" }
       if (format.type === "json_schema") {
@@ -1355,34 +1366,52 @@ export namespace SessionPrompt {
     }
   }
 
-  async function insertReminders(input: { messages: MessageV2.WithParts[]; agent: Agent.Info; session: Session.Info }) {
+  function isWorkflow(model: Provider.Model) {
+    return model.providerID === "gitlab" && model.api.id.startsWith("duo-workflow-")
+  }
+
+  async function insertReminders(input: {
+    messages: MessageV2.WithParts[]
+    agent: Agent.Info
+    session: Session.Info
+    workflow: boolean
+  }) {
     const userMessage = input.messages.findLast((msg) => msg.info.role === "user")
-    if (!userMessage) return input.messages
+    const system: string[] = []
+    if (!userMessage) return { messages: input.messages, system }
 
     // Original logic when experimental plan mode is disabled
     if (!Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE) {
       if (input.agent.name === "plan") {
-        userMessage.parts.push({
-          id: PartID.ascending(),
-          messageID: userMessage.info.id,
-          sessionID: userMessage.info.sessionID,
-          type: "text",
-          text: PROMPT_PLAN,
-          synthetic: true,
-        })
+        if (input.workflow) {
+          system.push(PROMPT_PLAN)
+        } else {
+          userMessage.parts.push({
+            id: PartID.ascending(),
+            messageID: userMessage.info.id,
+            sessionID: userMessage.info.sessionID,
+            type: "text",
+            text: PROMPT_PLAN,
+            synthetic: true,
+          })
+        }
       }
       const wasPlan = input.messages.some((msg) => msg.info.role === "assistant" && msg.info.agent === "plan")
       if (wasPlan && input.agent.name === "build") {
-        userMessage.parts.push({
-          id: PartID.ascending(),
-          messageID: userMessage.info.id,
-          sessionID: userMessage.info.sessionID,
-          type: "text",
-          text: BUILD_SWITCH,
-          synthetic: true,
-        })
+        if (input.workflow) {
+          system.push(BUILD_SWITCH)
+        } else {
+          userMessage.parts.push({
+            id: PartID.ascending(),
+            messageID: userMessage.info.id,
+            sessionID: userMessage.info.sessionID,
+            type: "text",
+            text: BUILD_SWITCH,
+            synthetic: true,
+          })
+        }
       }
-      return input.messages
+      return { messages: input.messages, system }
     }
 
     // New plan mode logic when flag is enabled
@@ -1393,18 +1422,22 @@ export namespace SessionPrompt {
       const plan = Session.plan(input.session)
       const exists = await Filesystem.exists(plan)
       if (exists) {
-        const part = await Session.updatePart({
-          id: PartID.ascending(),
-          messageID: userMessage.info.id,
-          sessionID: userMessage.info.sessionID,
-          type: "text",
-          text:
-            BUILD_SWITCH + "\n\n" + `A plan file exists at ${plan}. You should execute on the plan defined within it`,
-          synthetic: true,
-        })
-        userMessage.parts.push(part)
+        const text = BUILD_SWITCH + "\n\n" + `A plan file exists at ${plan}. You should execute on the plan defined within it`
+        if (input.workflow) {
+          system.push(text)
+        } else {
+          const part = await Session.updatePart({
+            id: PartID.ascending(),
+            messageID: userMessage.info.id,
+            sessionID: userMessage.info.sessionID,
+            type: "text",
+            text,
+            synthetic: true,
+          })
+          userMessage.parts.push(part)
+        }
       }
-      return input.messages
+      return { messages: input.messages, system }
     }
 
     // Entering plan mode
@@ -1412,12 +1445,7 @@ export namespace SessionPrompt {
       const plan = Session.plan(input.session)
       const exists = await Filesystem.exists(plan)
       if (!exists) await fs.mkdir(path.dirname(plan), { recursive: true })
-      const part = await Session.updatePart({
-        id: PartID.ascending(),
-        messageID: userMessage.info.id,
-        sessionID: userMessage.info.sessionID,
-        type: "text",
-        text: `<system-reminder>
+      const text = `<system-reminder>
 Plan mode is active. The user indicated that they do not want you to execute yet -- you MUST NOT make any edits (with the exception of the plan file mentioned below), run any non-readonly tools (including changing configs or making commits), or otherwise make any changes to the system. This supersedes any other instructions you have received.
 
 ## Plan File Info:
@@ -1486,13 +1514,23 @@ This is critical - your turn should only end with either asking the user a quest
 **Important:** Use question tool to clarify requirements/approach, use plan_exit to request plan approval. Do NOT use question tool to ask "Is this plan okay?" - that's what plan_exit does.
 
 NOTE: At any point in time through this workflow you should feel free to ask the user questions or clarifications. Don't make large assumptions about user intent. The goal is to present a well researched plan to the user, and tie any loose ends before implementation begins.
-</system-reminder>`,
-        synthetic: true,
-      })
-      userMessage.parts.push(part)
-      return input.messages
+</system-reminder>`
+      if (input.workflow) {
+        system.push(text)
+      } else {
+        const part = await Session.updatePart({
+          id: PartID.ascending(),
+          messageID: userMessage.info.id,
+          sessionID: userMessage.info.sessionID,
+          type: "text",
+          text,
+          synthetic: true,
+        })
+        userMessage.parts.push(part)
+      }
+      return { messages: input.messages, system }
     }
-    return input.messages
+    return { messages: input.messages, system }
   }
 
   export const ShellInput = z.object({
