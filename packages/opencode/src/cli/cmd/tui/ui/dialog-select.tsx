@@ -130,7 +130,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   })
 
   const dimensions = useTerminalDimensions()
-  const height = createMemo(() => Math.min(rows(), Math.floor(dimensions().height / 2) - 6))
+  const height = createMemo(() => Math.max(1, Math.min(rows(), Math.floor(dimensions().height / 2) - 6)))
 
   const selected = createMemo(() => flat()[store.selected])
 
@@ -162,14 +162,20 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     const option = selected()
     if (option) props.onMove?.(option)
     if (!scroll) return
-    const target = scroll.getChildren().find((child) => {
-      return child.id === JSON.stringify(selected()?.value)
-    })
-    if (!target) return
+    const id = JSON.stringify(selected()?.value)
+    const target = scroll.getChildren().find((child) => child.id === id)
+    if (!target) {
+      scroll.scrollChildIntoView(id)
+      return
+    }
     const y = target.y - scroll.y
     if (center) {
-      const centerOffset = Math.floor(scroll.height / 2)
-      scroll.scrollBy(y - centerOffset)
+      if (scroll.height > 0) {
+        const offset = Math.floor(scroll.height / 2)
+        scroll.scrollBy(y - offset)
+      } else {
+        scroll.scrollChildIntoView(id)
+      }
     } else {
       if (y >= scroll.height) {
         scroll.scrollBy(y - scroll.height + 1)
