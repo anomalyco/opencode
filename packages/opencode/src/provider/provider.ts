@@ -310,6 +310,12 @@ export namespace Provider {
 
         // Wrap credential provider with auto-refresh if configured
         providerOptions.credentialProvider = wrapCredentialProviderWithRefresh(baseProvider, awsAuthRefresh)
+      } else if (awsAuthRefresh && auth?.type === "api") {
+        // For bearer tokens from auth.json, log a warning that refresh won't work automatically
+        // Users need to re-run `opencode auth amazon-bedrock` to refresh bearer tokens
+        log.info(
+          "bearer token detected with awsAuthRefresh configured - bearer tokens from auth.json require manual refresh via 'opencode auth amazon-bedrock'",
+        )
       }
 
       // Add custom endpoint if specified (endpoint takes precedence over baseURL)
