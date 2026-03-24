@@ -78,6 +78,7 @@ export namespace Agent {
       build: {
         name: "build",
         description: "The default agent. Executes tools based on configured permissions.",
+        color: "primary",
         options: {},
         permission: Permission.merge(
           defaults,
@@ -93,6 +94,7 @@ export namespace Agent {
       plan: {
         name: "plan",
         description: "Plan mode. Disallows all edit tools.",
+        color: "accent",
         options: {},
         permission: Permission.merge(
           defaults,
@@ -116,7 +118,8 @@ export namespace Agent {
       general: {
         name: "general",
         description: `General-purpose agent for researching complex questions and executing multi-step tasks. Use this agent to execute multiple units of work in parallel.`,
-        permission: Permission.merge(
+        color: "secondary",
+        permission: PermissionNext.merge(
           defaults,
           Permission.fromConfig({
             todoread: "deny",
@@ -130,7 +133,8 @@ export namespace Agent {
       },
       explore: {
         name: "explore",
-        permission: Permission.merge(
+        color: "info",
+        permission: PermissionNext.merge(
           defaults,
           Permission.fromConfig({
             "*": "deny",
