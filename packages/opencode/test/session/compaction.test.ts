@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import path from "path"
 import { SessionCompaction } from "../../src/session/compaction"
 import { Token } from "../../src/util/token"
@@ -6,9 +6,29 @@ import { Instance } from "../../src/project/instance"
 import { Log } from "../../src/util/log"
 import { tmpdir } from "../fixture/fixture"
 import { Session } from "../../src/session"
-import type { Provider } from "../../src/provider/provider"
+import { Provider } from "../../src/provider/provider"
+import { ModelID, ProviderID } from "../../src/provider/schema"
+import { MessageV2 } from "../../src/session/message-v2"
+import { MessageID, PartID, SessionID } from "../../src/session/schema"
+import { SessionProcessor } from "../../src/session/processor"
 
 Log.init({ print: false })
+
+afterEach(() => {
+  mock.restore()
+})
+
+const ref = {
+  providerID: ProviderID.make("openai"),
+  modelID: ModelID.make("gpt-5.2"),
+}
+
+const zero = {
+  output: 0,
+  input: 0,
+  reasoning: 0,
+  cache: { read: 0, write: 0 },
+}
 
 function createModel(opts: {
   context: number
@@ -38,6 +58,119 @@ function createModel(opts: {
     api: { npm: opts.npm ?? "@ai-sdk/anthropic" },
     options: {},
   } as Provider.Model
+}
+
+async function user(input: {
+  sessionID: SessionID
+  text?: string
+  file?: {
+    mime: string
+    url: string
+    filename?: string
+  }
+}) {
+  const msg = await Session.updateMessage({
+    id: MessageID.ascending(),
+    role: "user",
+    sessionID: input.sessionID,
+    agent: "build",
+    model: ref,
+    time: {
+      created: Date.now(),
+    },
+  })
+  if (input.text) {
+    await Session.updatePart({
+      id: PartID.ascending(),
+      messageID: msg.id,
+      sessionID: input.sessionID,
+      type: "text",
+      text: input.text,
+    })
+  }
+  if (input.file) {
+    await Session.updatePart({
+      id: PartID.ascending(),
+      messageID: msg.id,
+      sessionID: input.sessionID,
+      type: "file",
+      mime: input.file.mime,
+      url: input.file.url,
+      filename: input.file.filename,
+    })
+  }
+  return msg
+}
+
+async function assistant(input: {
+  sessionID: SessionID
+  parentID: MessageID
+  dir: string
+  finish?: string
+}) {
+  const msg: MessageV2.Assistant = {
+    id: MessageID.ascending(),
+    role: "assistant",
+    sessionID: input.sessionID,
+    mode: "build",
+    agent: "build",
+    path: {
+      cwd: input.dir,
+      root: input.dir,
+    },
+    cost: 0,
+    tokens: zero,
+    modelID: ref.modelID,
+    providerID: ref.providerID,
+    parentID: input.parentID,
+    time: {
+      created: Date.now(),
+      ...(input.finish ? { completed: Date.now() } : {}),
+    },
+    ...(input.finish ? { finish: input.finish } : {}),
+  }
+  await Session.updateMessage(msg)
+  return msg
+}
+
+async function compact(input: { sessionID: SessionID; overflow?: boolean }) {
+  await SessionCompaction.create({
+    sessionID: input.sessionID,
+    agent: "build",
+    model: ref,
+    auto: true,
+    overflow: input.overflow,
+  })
+  return (await Session.messages({ sessionID: input.sessionID })).at(-1)!
+}
+
+function stub(model: Provider.Model) {
+  spyOn(Provider, "getModel").mockResolvedValue(model)
+  spyOn(SessionProcessor, "create").mockImplementation(
+    (input) =>
+      ({
+        message: input.assistantMessage,
+        partFromToolCall() {
+          throw new Error("not used")
+        },
+        async process() {
+          input.assistantMessage.finish = "stop"
+          input.assistantMessage.time.completed = Date.now()
+          await Session.updateMessage(input.assistantMessage)
+          return "continue"
+        },
+      }) satisfies SessionProcessor.Info,
+  )
+}
+
+function texts(msg: MessageV2.WithParts) {
+  return msg.parts.filter((part) => part.type === "text").map((part) => part.text)
+}
+
+function synthetic(msgs: MessageV2.WithParts[]) {
+  return msgs.findLast((msg) =>
+    msg.parts.some((part) => part.type === "text" && part.synthetic && part.text.includes("Continue if you have next steps")),
+  )
 }
 
 describe("session.compaction.isOverflow", () => {
@@ -420,4 +553,137 @@ describe("session.getUsage", () => {
       expect(result.tokens.total).toBe(2000)
     },
   )
+})
+
+describe("session.compaction.process", () => {
+  test("does not inject a synthetic continue message after a natural stop", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const model = createModel({ context: 100_000, output: 32_000 })
+        stub(model)
+
+        const session = await Session.create({})
+        const first = await user({ sessionID: session.id, text: "hello" })
+        await assistant({
+          sessionID: session.id,
+          parentID: first.id,
+          dir: tmp.path,
+          finish: "stop",
+        })
+        const task = await compact({ sessionID: session.id })
+
+        if (task.info.role !== "user") throw new Error("expected compaction user message")
+
+        await SessionCompaction.process({
+          parentID: task.info.id,
+          messages: await Session.messages({ sessionID: session.id }),
+          sessionID: session.id,
+          abort: new AbortController().signal,
+          auto: true,
+        })
+
+        const msgs = await Session.messages({ sessionID: session.id })
+        expect(synthetic(msgs)).toBeUndefined()
+        expect(msgs.at(-1)?.info.role).toBe("assistant")
+      },
+    })
+  })
+
+  test("replays the interrupted user message when overflow compaction has replay context", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const model = createModel({ context: 100_000, output: 32_000 })
+        stub(model)
+
+        const session = await Session.create({})
+        const first = await user({ sessionID: session.id, text: "keep this context" })
+        await assistant({
+          sessionID: session.id,
+          parentID: first.id,
+          dir: tmp.path,
+          finish: "stop",
+        })
+        const replay = await user({
+          sessionID: session.id,
+          text: "please continue",
+          file: {
+            mime: "image/png",
+            url: "data:image/png;base64,AA==",
+            filename: "shot.png",
+          },
+        })
+        await assistant({
+          sessionID: session.id,
+          parentID: replay.id,
+          dir: tmp.path,
+        })
+        const task = await compact({ sessionID: session.id, overflow: true })
+
+        if (task.info.role !== "user") throw new Error("expected compaction user message")
+
+        await SessionCompaction.process({
+          parentID: task.info.id,
+          messages: await Session.messages({ sessionID: session.id }),
+          sessionID: session.id,
+          abort: new AbortController().signal,
+          auto: true,
+          overflow: true,
+        })
+
+        const msgs = await Session.messages({ sessionID: session.id })
+        const last = msgs.at(-1)
+        if (!last || last.info.role !== "user") throw new Error("expected replay user message")
+        expect(texts(last)).toEqual(["please continue", "[Attached image/png: shot.png]"])
+        expect(synthetic(msgs)).toBeUndefined()
+      },
+    })
+  })
+
+  test("keeps the overflow synthetic continue when replay is unavailable", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const model = createModel({ context: 100_000, output: 32_000 })
+        stub(model)
+
+        const session = await Session.create({})
+        const first = await user({
+          sessionID: session.id,
+          text: "look at this image",
+          file: {
+            mime: "image/png",
+            url: "data:image/png;base64,AA==",
+            filename: "big.png",
+          },
+        })
+        await assistant({
+          sessionID: session.id,
+          parentID: first.id,
+          dir: tmp.path,
+        })
+        const task = await compact({ sessionID: session.id, overflow: true })
+
+        if (task.info.role !== "user") throw new Error("expected compaction user message")
+
+        await SessionCompaction.process({
+          parentID: task.info.id,
+          messages: await Session.messages({ sessionID: session.id }),
+          sessionID: session.id,
+          abort: new AbortController().signal,
+          auto: true,
+          overflow: true,
+        })
+
+        const msgs = await Session.messages({ sessionID: session.id })
+        const last = synthetic(msgs)
+        if (!last || last.info.role !== "user") throw new Error("expected synthetic continue user message")
+        expect(texts(last)[0]).toContain("The previous request exceeded the provider's size limit")
+      },
+    })
+  })
 })
