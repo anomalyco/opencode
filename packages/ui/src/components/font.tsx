@@ -1,121 +1,139 @@
+import { Link, Style } from "@solidjs/meta"
 import { Show } from "solid-js"
-import { Style, Link } from "@solidjs/meta"
 import inter from "../assets/fonts/inter.woff2"
-import ibmPlexMonoRegular from "../assets/fonts/ibm-plex-mono.woff2"
-import ibmPlexMonoMedium from "../assets/fonts/ibm-plex-mono-medium.woff2"
 import ibmPlexMonoBold from "../assets/fonts/ibm-plex-mono-bold.woff2"
-
-import cascadiaCode from "../assets/fonts/cascadia-code-nerd-font.woff2"
-import cascadiaCodeBold from "../assets/fonts/cascadia-code-nerd-font-bold.woff2"
-import firaCode from "../assets/fonts/fira-code-nerd-font.woff2"
-import firaCodeBold from "../assets/fonts/fira-code-nerd-font-bold.woff2"
-import hack from "../assets/fonts/hack-nerd-font.woff2"
-import hackBold from "../assets/fonts/hack-nerd-font-bold.woff2"
-import inconsolata from "../assets/fonts/inconsolata-nerd-font.woff2"
-import inconsolataBold from "../assets/fonts/inconsolata-nerd-font-bold.woff2"
-import intelOneMono from "../assets/fonts/intel-one-mono-nerd-font.woff2"
-import intelOneMonoBold from "../assets/fonts/intel-one-mono-nerd-font-bold.woff2"
-import jetbrainsMono from "../assets/fonts/jetbrains-mono-nerd-font.woff2"
-import jetbrainsMonoBold from "../assets/fonts/jetbrains-mono-nerd-font-bold.woff2"
-import mesloLgs from "../assets/fonts/meslo-lgs-nerd-font.woff2"
-import mesloLgsBold from "../assets/fonts/meslo-lgs-nerd-font-bold.woff2"
-import robotoMono from "../assets/fonts/roboto-mono-nerd-font.woff2"
-import robotoMonoBold from "../assets/fonts/roboto-mono-nerd-font-bold.woff2"
-import sourceCodePro from "../assets/fonts/source-code-pro-nerd-font.woff2"
-import sourceCodeProBold from "../assets/fonts/source-code-pro-nerd-font-bold.woff2"
-import ubuntuMono from "../assets/fonts/ubuntu-mono-nerd-font.woff2"
-import ubuntuMonoBold from "../assets/fonts/ubuntu-mono-nerd-font-bold.woff2"
-import iosevka from "../assets/fonts/iosevka-nerd-font.woff2"
-import iosevkaBold from "../assets/fonts/iosevka-nerd-font-bold.woff2"
-import geistMono from "../assets/fonts/GeistMonoNerdFontMono-Regular.woff2"
-import geistMonoBold from "../assets/fonts/GeistMonoNerdFontMono-Bold.woff2"
+import ibmPlexMonoMedium from "../assets/fonts/ibm-plex-mono-medium.woff2"
+import ibmPlexMonoRegular from "../assets/fonts/ibm-plex-mono.woff2"
 
 type MonoFont = {
+  id: string
   family: string
   regular: string
   bold: string
 }
 
+const files = import.meta.glob("../assets/fonts/*.woff2", { import: "default" }) as Record<
+  string,
+  () => Promise<string>
+>
+
 export const MONO_NERD_FONTS = [
   {
+    id: "jetbrains-mono",
     family: "JetBrains Mono Nerd Font",
-    regular: jetbrainsMono,
-    bold: jetbrainsMonoBold,
+    regular: "../assets/fonts/jetbrains-mono-nerd-font.woff2",
+    bold: "../assets/fonts/jetbrains-mono-nerd-font-bold.woff2",
   },
   {
+    id: "fira-code",
     family: "Fira Code Nerd Font",
-    regular: firaCode,
-    bold: firaCodeBold,
+    regular: "../assets/fonts/fira-code-nerd-font.woff2",
+    bold: "../assets/fonts/fira-code-nerd-font-bold.woff2",
   },
   {
+    id: "cascadia-code",
     family: "Cascadia Code Nerd Font",
-    regular: cascadiaCode,
-    bold: cascadiaCodeBold,
+    regular: "../assets/fonts/cascadia-code-nerd-font.woff2",
+    bold: "../assets/fonts/cascadia-code-nerd-font-bold.woff2",
   },
   {
+    id: "hack",
     family: "Hack Nerd Font",
-    regular: hack,
-    bold: hackBold,
+    regular: "../assets/fonts/hack-nerd-font.woff2",
+    bold: "../assets/fonts/hack-nerd-font-bold.woff2",
   },
   {
+    id: "source-code-pro",
     family: "Source Code Pro Nerd Font",
-    regular: sourceCodePro,
-    bold: sourceCodeProBold,
+    regular: "../assets/fonts/source-code-pro-nerd-font.woff2",
+    bold: "../assets/fonts/source-code-pro-nerd-font-bold.woff2",
   },
   {
+    id: "inconsolata",
     family: "Inconsolata Nerd Font",
-    regular: inconsolata,
-    bold: inconsolataBold,
+    regular: "../assets/fonts/inconsolata-nerd-font.woff2",
+    bold: "../assets/fonts/inconsolata-nerd-font-bold.woff2",
   },
   {
+    id: "roboto-mono",
     family: "Roboto Mono Nerd Font",
-    regular: robotoMono,
-    bold: robotoMonoBold,
+    regular: "../assets/fonts/roboto-mono-nerd-font.woff2",
+    bold: "../assets/fonts/roboto-mono-nerd-font-bold.woff2",
   },
   {
+    id: "ubuntu-mono",
     family: "Ubuntu Mono Nerd Font",
-    regular: ubuntuMono,
-    bold: ubuntuMonoBold,
+    regular: "../assets/fonts/ubuntu-mono-nerd-font.woff2",
+    bold: "../assets/fonts/ubuntu-mono-nerd-font-bold.woff2",
   },
   {
+    id: "intel-one-mono",
     family: "Intel One Mono Nerd Font",
-    regular: intelOneMono,
-    bold: intelOneMonoBold,
+    regular: "../assets/fonts/intel-one-mono-nerd-font.woff2",
+    bold: "../assets/fonts/intel-one-mono-nerd-font-bold.woff2",
   },
   {
+    id: "meslo-lgs",
     family: "Meslo LGS Nerd Font",
-    regular: mesloLgs,
-    bold: mesloLgsBold,
+    regular: "../assets/fonts/meslo-lgs-nerd-font.woff2",
+    bold: "../assets/fonts/meslo-lgs-nerd-font-bold.woff2",
   },
   {
+    id: "iosevka",
     family: "Iosevka Nerd Font",
-    regular: iosevka,
-    bold: iosevkaBold,
+    regular: "../assets/fonts/iosevka-nerd-font.woff2",
+    bold: "../assets/fonts/iosevka-nerd-font-bold.woff2",
   },
   {
+    id: "geist-mono",
     family: "GeistMono Nerd Font",
-    regular: geistMono,
-    bold: geistMonoBold,
+    regular: "../assets/fonts/GeistMonoNerdFontMono-Regular.woff2",
+    bold: "../assets/fonts/GeistMonoNerdFontMono-Bold.woff2",
   },
 ] satisfies MonoFont[]
 
-const monoNerdCss = MONO_NERD_FONTS.map(
-  (font) => `
-        @font-face {
-          font-family: "${font.family}";
-          src: url("${font.regular}") format("woff2");
-          font-display: swap;
-          font-style: normal;
-          font-weight: 400;
-        }
-        @font-face {
-          font-family: "${font.family}";
-          src: url("${font.bold}") format("woff2");
-          font-display: swap;
-          font-style: normal;
-          font-weight: 700;
-        }`,
-).join("")
+const mono = Object.fromEntries(MONO_NERD_FONTS.map((font) => [font.id, font])) as Record<string, MonoFont>
+const loads = new Map<string, Promise<void>>()
+
+function css(font: { family: string; regular: string; bold: string }) {
+  return `
+    @font-face {
+      font-family: "${font.family}";
+      src: url("${font.regular}") format("woff2");
+      font-display: swap;
+      font-style: normal;
+      font-weight: 400;
+    }
+    @font-face {
+      font-family: "${font.family}";
+      src: url("${font.bold}") format("woff2");
+      font-display: swap;
+      font-style: normal;
+      font-weight: 700;
+    }
+  `
+}
+
+export function ensureMonoFont(id: string | undefined) {
+  if (!id || id === "ibm-plex-mono") return Promise.resolve()
+  if (typeof document !== "object") return Promise.resolve()
+  const font = mono[id]
+  if (!font) return Promise.resolve()
+  const styleId = `oc-font-${font.id}`
+  if (document.getElementById(styleId)) return Promise.resolve()
+  const hit = loads.get(font.id)
+  if (hit) return hit
+  const load = Promise.all([files[font.regular]?.(), files[font.bold]?.()]).then(([regular, bold]) => {
+    if (!regular || !bold) return
+    if (document.getElementById(styleId)) return
+    const style = document.createElement("style")
+    style.id = styleId
+    style.textContent = css({ family: font.family, regular, bold })
+    document.head.appendChild(style)
+  })
+  loads.set(font.id, load)
+  return load
+}
 
 export const Font = () => {
   return (
@@ -165,7 +183,6 @@ export const Font = () => {
           descent-override: 25%;
           line-gap-override: 1%;
         }
-${monoNerdCss}
       `}</Style>
       <Show when={typeof location === "undefined" || location.protocol !== "file:"}>
         <Link rel="preload" href={inter} as="font" type="font/woff2" crossorigin="anonymous" />

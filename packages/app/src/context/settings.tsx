@@ -1,6 +1,7 @@
 import { createStore, reconcile } from "solid-js/store"
 import { createEffect, createMemo } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
+import { ensureMonoFont } from "@opencode-ai/ui/font"
 import { persisted } from "@/utils/persist"
 
 export interface NotificationSettings {
@@ -111,6 +112,7 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
 
     createEffect(() => {
       if (typeof document === "undefined") return
+      void ensureMonoFont(store.appearance?.font)
       document.documentElement.style.setProperty("--font-family-mono", monoFontFamily(store.appearance?.font))
     })
 

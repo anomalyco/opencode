@@ -129,6 +129,10 @@ function loadDict(locale: Locale) {
   })
 }
 
+export function loadLocaleDict(locale: Locale) {
+  return loadDict(locale).then(() => undefined)
+}
+
 const localeMatchers: Array<{ locale: Locale; match: (language: string) => boolean }> = [
   { locale: "en", match: (language) => language.startsWith("en") },
   { locale: "zht", match: (language) => language.startsWith("zh") && language.includes("hant") },
@@ -166,7 +170,7 @@ function detectLocale(): Locale {
   return "en"
 }
 
-function normalizeLocale(value: string): Locale {
+export function normalizeLocale(value: string): Locale {
   return LOCALES.includes(value as Locale) ? (value as Locale) : "en"
 }
 
@@ -188,11 +192,12 @@ if (warm !== "en") void loadDict(warm)
 
 export const { use: useLanguage, provider: LanguageProvider } = createSimpleContext({
   name: "Language",
-  init: () => {
+  init: (props: { locale?: Locale }) => {
+    const initial = props.locale ?? readStoredLocale() ?? detectLocale()
     const [store, setStore, _, ready] = persisted(
       Persist.global("language", ["language.v1"]),
       createStore({
-        locale: detectLocale() as Locale,
+        locale: initial,
       }),
     )
 
@@ -200,7 +205,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
     const intl = createMemo(() => INTL[locale()])
 
     const [dict] = createResource(locale, loadDict, {
-      initialValue: base,
+      initialValue: dicts.get(initial) ?? base,
     })
 
     const t = i18n.translator(() => dict() ?? base, i18n.resolveTemplate) as (
