@@ -93,7 +93,7 @@ export namespace InstructionPrompt {
     }
 
     const rules = await Glob.scan(".opencode/rules/*.{md,mdc}", {
-      cwd: Instance.worktree,
+      cwd: Instance.directory,
       absolute: true,
       include: "file",
     }).catch(() => [])
