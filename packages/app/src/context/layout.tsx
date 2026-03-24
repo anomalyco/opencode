@@ -17,10 +17,8 @@ const DEFAULT_PANEL_WIDTH = 344
 const DEFAULT_SESSION_WIDTH = 600
 const DEFAULT_TERMINAL_HEIGHT = 280
 const DEFAULT_TERMINAL_WIDTH = 420
-const DEFAULT_BROWSER_HEIGHT = 280
 const DEFAULT_BROWSER_WIDTH = 420
 type TerminalDock = "bottom" | "right"
-type BrowserDock = "bottom" | "right"
 export type AvatarColorKey = (typeof AVATAR_COLOR_KEYS)[number]
 
 export function getAvatarColors(key?: string) {
@@ -223,7 +221,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             if (current.all.length !== tabs.all.length) changed = true
             if (!same(current.all, normalized.all) || current.active !== normalized.active) changed = true
             if (tabs.active !== undefined && typeof tabs.active !== "string") changed = true
-            return [key, normalized]
+            return [key, tabs]
           }),
         )
 
@@ -231,12 +229,21 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         return next
       })()
 
+      const browser = value.browser
+      const migratedBrowser = (() => {
+        if (!isRecord(browser)) return browser
+        if (browser.dock === undefined && browser.height === undefined) return browser
+        const { dock: _, height: __, ...rest } = browser
+        return rest
+      })()
+
       if (
         migratedSidebar === sidebar &&
         migratedReview === review &&
         migratedFileTree === fileTree &&
         migratedTerminal === terminal &&
-        migratedSessionTabs === sessionTabs
+        migratedSessionTabs === sessionTabs &&
+        migratedBrowser === browser
       ) {
         return value
       }
@@ -248,10 +255,11 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         fileTree: migratedFileTree,
         terminal: migratedTerminal,
         sessionTabs: migratedSessionTabs,
+        browser: migratedBrowser,
       }
     }
 
-    const target = Persist.global("layout", ["layout.v7"])
+    const target = Persist.global("layout", ["layout.v7", "layout.v8", "layout.v9"])
     const [store, setStore, _, ready] = persisted(
       { ...target, migrate },
       createStore({
@@ -268,9 +276,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           opened: false,
         },
         browser: {
-          height: DEFAULT_BROWSER_HEIGHT,
           width: DEFAULT_BROWSER_WIDTH,
-          dock: "bottom" as BrowserDock,
           opened: false,
           url: undefined as string | undefined,
         },
@@ -664,21 +670,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
       },
       browser: {
-        height: createMemo(() => store.browser.height),
         width: createMemo(() => store.browser.width),
-        dock: createMemo(() => store.browser.dock ?? "bottom"),
         url: createMemo(() => store.browser.url),
-        resize(height: number) {
-          setStore("browser", "height", height)
-        },
         resizeWidth(width: number) {
           setStore("browser", "width", width)
-        },
-        setDock(dock: BrowserDock) {
-          setStore("browser", "dock", dock)
-        },
-        toggleDock() {
-          setStore("browser", "dock", (dock) => (dock === "right" ? "bottom" : "right"))
         },
         setUrl(url: string | undefined) {
           setStore("browser", "url", url)
@@ -821,7 +816,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         function setBrowserOpened(next: boolean) {
           const current = store.browser
           if (!current) {
-            setStore("browser", { height: DEFAULT_BROWSER_HEIGHT, opened: next })
+            setStore("browser", { opened: next })
             return
           }
 

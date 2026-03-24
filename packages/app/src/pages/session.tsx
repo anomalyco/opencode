@@ -385,7 +385,6 @@ export default function Page() {
   const desktopFileTreeOpen = createMemo(() => isDesktop() && layout.fileTree.opened())
   const desktopSidePanelOpen = createMemo(() => desktopReviewOpen() || desktopFileTreeOpen())
   const terminalRight = createMemo(() => isDesktop() && layout.terminal.dock() === "right")
-  const browserRight = createMemo(() => isDesktop() && layout.browser.dock() === "right")
   const sessionPanelWidth = createMemo(() => {
     if (!desktopSidePanelOpen()) return "100%"
     if (desktopReviewOpen()) return `${layout.session.width()}px`
@@ -1837,16 +1836,11 @@ export default function Page() {
         <Show when={terminalRight()}>
           <TerminalPanel />
         </Show>
-        <Show when={browserRight()}>
-          <BrowserPanel />
-        </Show>
+        <BrowserPanel />
       </div>
 
       <Show when={!terminalRight()}>
         <TerminalPanel />
-      </Show>
-      <Show when={!browserRight()}>
-        <BrowserPanel />
       </Show>
     </div>
   )

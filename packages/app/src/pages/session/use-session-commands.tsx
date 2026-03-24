@@ -345,13 +345,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         slash: "browser",
         onSelect: () => view().browser.toggle(),
       }),
-      browserCommand({
-        id: "browser.dock.toggle",
-        title: "Toggle browser dock side",
-        description: "Switch browser between bottom and right dock",
-        slash: "browser-dock",
-        onSelect: () => layout.browser.toggleDock(),
-      }),
       sessionCommand({
         id: "message.previous",
         title: language.t("command.message.previous"),

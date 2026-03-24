@@ -639,8 +639,6 @@ export const dict = {
   "browser.back": "Go back",
   "browser.forward": "Go forward",
   "browser.refresh": "Refresh",
-  "browser.dockBottom": "Dock browser to bottom",
-  "browser.dockRight": "Dock browser to right",
   "browser.openExternal": "Open in external browser",
 
   "common.closeTab": "Close tab",

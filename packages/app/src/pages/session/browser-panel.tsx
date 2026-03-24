@@ -1,10 +1,8 @@
 import { Show, batch, createEffect, createMemo, on, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
-import { Icon } from "@opencode-ai/ui/icon"
-import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { createSizing } from "@/pages/session/helpers"
@@ -13,65 +11,45 @@ import { useSessionLayout } from "@/pages/session/session-layout"
 export function BrowserPanel() {
   const layout = useLayout()
   const language = useLanguage()
-  const command = useCommand()
   const { view } = useSessionLayout()
 
   const opened = createMemo(() => view().browser.opened())
   const size = createSizing()
-  const height = createMemo(() => layout.browser.height())
   const width = createMemo(() => layout.browser.width())
-  const dock = createMemo(() => layout.browser.dock())
   const url = createMemo(() => layout.browser.url())
-  const right = createMemo(() => dock() === "right")
-  const dockKeybind = createMemo(() => command.keybind("browser.dock.toggle"))
   const close = () => view().browser.close()
   let root: HTMLDivElement | undefined
   let iframe: HTMLIFrameElement | undefined
 
   const [store, setStore] = createStore({
-    h: typeof window === "undefined" ? 1000 : (window.visualViewport?.height ?? window.innerHeight),
     w: typeof window === "undefined" ? 1000 : window.innerWidth,
     inputUrl: "",
     currentUrl: "",
     loading: false,
   })
 
-  const side = createMemo(() => right() && store.w >= 768)
-  const max = () => (side() ? store.w : store.h) * 0.6
-  const pane = () => Math.min(side() ? width() : height(), max())
+  const max = () => store.w * 0.6
+  const pane = () => Math.min(width(), max())
 
   onMount(() => {
     if (typeof window === "undefined") return
 
-    const sync = () =>
-      batch(() => {
-        setStore("h", window.visualViewport?.height ?? window.innerHeight)
-        setStore("w", window.innerWidth)
-      })
-    const port = window.visualViewport
-
+    const sync = () => setStore("w", window.innerWidth)
     sync()
     window.addEventListener("resize", sync)
-    port?.addEventListener("resize", sync)
-    onCleanup(() => {
-      window.removeEventListener("resize", sync)
-      port?.removeEventListener("resize", sync)
-    })
+    onCleanup(() => window.removeEventListener("resize", sync))
   })
 
   createEffect(
-    on(
-      () => [opened(), side()] as const,
-      ([open]) => {
-        if (!open) return
-        if (typeof window === "undefined") return
+    on(opened, (open) => {
+      if (!open) return
+      if (typeof window === "undefined") return
 
-        const timers = [0, 90, 180, 320].map((ms) =>
-          window.setTimeout(() => window.dispatchEvent(new Event("resize")), ms),
-        )
-        onCleanup(() => timers.forEach((timer) => window.clearTimeout(timer)))
-      },
-    ),
+      const timers = [0, 90, 180, 320].map((ms) =>
+        window.setTimeout(() => window.dispatchEvent(new Event("resize")), ms),
+      )
+      onCleanup(() => timers.forEach((timer) => window.clearTimeout(timer)))
+    }),
   )
 
   createEffect(() => {
@@ -145,26 +123,14 @@ export function BrowserPanel() {
       aria-label={language.t("browser.title")}
       aria-hidden={!opened()}
       inert={!opened()}
-      class="relative shrink-0 overflow-hidden bg-background-stronger"
+      class="relative shrink-0 overflow-hidden bg-background-stronger h-full border-l border-border-weak-base"
       classList={{
-        "w-full": !side(),
-        "h-full": side(),
-        "border-t border-border-weak-base": opened() && !side(),
-        "border-l border-border-weak-base": opened() && side(),
-        "transition-[height] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[height] motion-reduce:transition-none":
-          !size.active() && !side(),
         "transition-[width] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
-          !size.active() && side(),
+          !size.active(),
       }}
-      style={
-        side()
-          ? {
-              width: opened() ? `${pane()}px` : "0px",
-            }
-          : {
-              height: opened() ? `${pane()}px` : "0px",
-            }
-      }
+      style={{
+        width: opened() ? `${pane()}px` : "0px",
+      }}
     >
       <div
         class="absolute inset-0 flex flex-col"
@@ -172,39 +138,21 @@ export function BrowserPanel() {
           "pointer-events-none": !opened(),
         }}
       >
-        <Show when={!side()}>
-          <div class="hidden md:block" onPointerDown={() => size.start()}>
-            <ResizeHandle
-              direction="vertical"
-              size={pane()}
-              min={100}
-              max={max()}
-              collapseThreshold={50}
-              onResize={(next) => {
-                size.touch()
-                layout.browser.resize(next)
-              }}
-              onCollapse={close}
-            />
-          </div>
-        </Show>
-        <Show when={side()}>
-          <div class="hidden md:block" onPointerDown={() => size.start()}>
-            <ResizeHandle
-              direction="horizontal"
-              edge="start"
-              size={pane()}
-              min={280}
-              max={max()}
-              collapseThreshold={140}
-              onResize={(next) => {
-                size.touch()
-                layout.browser.resizeWidth(next)
-              }}
-              onCollapse={close}
-            />
-          </div>
-        </Show>
+        <div class="hidden md:block" onPointerDown={() => size.start()}>
+          <ResizeHandle
+            direction="horizontal"
+            edge="start"
+            size={pane()}
+            min={280}
+            max={max()}
+            collapseThreshold={140}
+            onResize={(next) => {
+              size.touch()
+              layout.browser.resizeWidth(next)
+            }}
+            onCollapse={close}
+          />
+        </div>
 
         <div class="flex flex-col h-full">
           <div class="h-10 flex items-center gap-2 px-2 border-b border-border-weaker-base bg-background-stronger overflow-hidden">
@@ -246,41 +194,6 @@ export function BrowserPanel() {
                 <div class="absolute right-2 top-1/2 -translate-y-1/2">
                   <div class="w-4 h-4 border-2 border-text-weak border-t-transparent rounded-full animate-spin" />
                 </div>
-              </Show>
-            </div>
-            <div class="h-full flex items-center justify-center">
-              <Show
-                when={dockKeybind()}
-                fallback={
-                  <Tooltip
-                    value={right() ? language.t("browser.dockBottom") : language.t("browser.dockRight")}
-                    class="flex items-center"
-                  >
-                    <IconButton
-                      icon={right() ? "layout-bottom" : "layout-right"}
-                      variant="ghost"
-                      iconSize="large"
-                      onClick={() => layout.browser.toggleDock()}
-                      aria-label={right() ? language.t("browser.dockBottom") : language.t("browser.dockRight")}
-                    />
-                  </Tooltip>
-                }
-              >
-                {(keybind) => (
-                  <TooltipKeybind
-                    title={right() ? language.t("browser.dockBottom") : language.t("browser.dockRight")}
-                    keybind={keybind()}
-                    class="flex items-center"
-                  >
-                    <IconButton
-                      icon={right() ? "layout-bottom" : "layout-right"}
-                      variant="ghost"
-                      iconSize="large"
-                      onClick={() => layout.browser.toggleDock()}
-                      aria-label={right() ? language.t("browser.dockBottom") : language.t("browser.dockRight")}
-                    />
-                  </TooltipKeybind>
-                )}
               </Show>
             </div>
             <div class="h-full flex items-center justify-center">
