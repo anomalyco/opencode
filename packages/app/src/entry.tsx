@@ -130,6 +130,10 @@ const platform: Platform = {
   setDefaultServer: writeDefaultServerUrl,
 }
 
+if (!import.meta.env.DEV && "serviceWorker" in navigator) {
+  void navigator.serviceWorker.register("/sw.js")
+}
+
 if (root instanceof HTMLElement) {
   const server: ServerConnection.Http = { type: "http", http: { url: getCurrentUrl() } }
   render(
