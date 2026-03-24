@@ -2,12 +2,49 @@ import { describe, expect, test } from "bun:test"
 import { Project } from "../../src/project/project"
 import { Log } from "../../src/util/log"
 import { $ } from "bun"
+import fs from "fs/promises"
 import path from "path"
 import { tmpdir } from "../fixture/fixture"
 import { GlobalBus } from "../../src/bus/global"
 import { ProjectID } from "../../src/project/schema"
 
 Log.init({ print: false })
+
+/**
+ * Creates a git shim that intercepts specific subcommands and makes them fail,
+ * while passing all other commands through to real git.
+ */
+async function withGitShim(
+  tmp: { path: string },
+  failCmd: string,
+  fn: () => Promise<void>,
+) {
+  const realGit = (await $`which git`.quiet().text()).trim()
+  const bin = path.join(tmp.path, "shim-bin")
+  const shim = path.join(bin, "git")
+  await fs.mkdir(bin, { recursive: true })
+  await Bun.write(
+    shim,
+    [
+      "#!/bin/bash",
+      `REAL_GIT=${JSON.stringify(realGit)}`,
+      `if echo "$*" | grep -q "${failCmd}"; then`,
+      '  echo "fatal: simulated failure" >&2',
+      "  exit 128",
+      "fi",
+      'exec "$REAL_GIT" "$@"',
+    ].join("\n"),
+  )
+  await fs.chmod(shim, 0o755)
+
+  const prev = process.env.PATH ?? ""
+  process.env.PATH = `${bin}${path.delimiter}${prev}`
+  try {
+    await fn()
+  } finally {
+    process.env.PATH = prev
+  }
+}
 
 describe("Project.fromDirectory", () => {
   test("should handle git repository with no commits", async () => {
@@ -50,6 +87,39 @@ describe("Project.fromDirectory", () => {
     const { project: a } = await Project.fromDirectory(tmp.path)
     const { project: b } = await Project.fromDirectory(tmp.path)
     expect(b.id).toBe(a.id)
+  })
+})
+
+describe("Project.fromDirectory git failure paths", () => {
+  test("keeps vcs when rev-list exits non-zero (no commits)", async () => {
+    await using tmp = await tmpdir()
+    await $`git init`.cwd(tmp.path).quiet()
+
+    // rev-list fails because HEAD doesn't exist yet — this is the natural scenario
+    const { project } = await Project.fromDirectory(tmp.path)
+    expect(project.vcs).toBe("git")
+    expect(project.id).toBe(ProjectID.global)
+    expect(project.worktree).toBe(tmp.path)
+  })
+
+  test("handles show-toplevel failure gracefully", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    await withGitShim(tmp, "--show-toplevel", async () => {
+      const { project, sandbox } = await Project.fromDirectory(tmp.path)
+      expect(project.worktree).toBe(tmp.path)
+      expect(sandbox).toBe(tmp.path)
+    })
+  })
+
+  test("handles git-common-dir failure gracefully", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    await withGitShim(tmp, "--git-common-dir", async () => {
+      const { project, sandbox } = await Project.fromDirectory(tmp.path)
+      expect(project.worktree).toBe(tmp.path)
+      expect(sandbox).toBe(tmp.path)
+    })
   })
 })
 
