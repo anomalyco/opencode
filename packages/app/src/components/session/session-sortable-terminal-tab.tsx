@@ -127,9 +127,10 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () =>
           onClick={focus}
           onMouseDown={(e) => e.preventDefault()}
           onContextMenu={menu}
-          class="!shadow-none"
+          class="!shadow-none min-w-0 max-w-[140px] shrink basis-0"
           classes={{
-            button: "border-0 outline-none focus:outline-none focus-visible:outline-none !shadow-none !ring-0",
+            button:
+              "w-full justify-start border-0 outline-none focus:outline-none focus-visible:outline-none !shadow-none !ring-0",
           }}
           closeButton={
             <IconButton
@@ -143,7 +144,7 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () =>
             />
           }
         >
-          <span onDblClick={edit} classList={{ invisible: store.editing }}>
+          <span onDblClick={edit} class="block min-w-0 truncate" classList={{ invisible: store.editing }}>
             {label()}
           </span>
         </Tabs.Trigger>

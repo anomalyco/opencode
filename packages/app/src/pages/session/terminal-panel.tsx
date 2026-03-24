@@ -313,7 +313,7 @@ export function TerminalPanel() {
                 onChange={(id) => terminal.open(id)}
                 class="!h-auto !flex-none"
               >
-                <Tabs.List class="h-10 border-b border-border-weaker-base">
+                <Tabs.List class="h-10 min-w-0 border-b border-border-weaker-base">
                   <SortableProvider ids={ids()}>
                     <For each={all()}>{(pty) => <SortableTerminalTab terminal={pty} onClose={close} />}</For>
                   </SortableProvider>

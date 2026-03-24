@@ -332,7 +332,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         description: language.t("command.terminal.new.description"),
         keybind: "ctrl+alt+t",
         onSelect: () => {
-          if (terminal.all().length > 0) terminal.new()
+          terminal.new()
           view().terminal.open()
         },
       }),
