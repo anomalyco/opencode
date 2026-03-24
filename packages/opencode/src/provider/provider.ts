@@ -1076,6 +1076,12 @@ export namespace Provider {
       if (!auth) continue
       if (!plugin.auth.loader) continue
 
+      // Skip OAuth plugin loader when a direct API key is already configured
+      // (from environment variable or explicit config). This prevents stale
+      // OAuth auth from hijacking the direct key path.
+      const existingSource = providers[providerID]?.source
+      if (existingSource === "env" || existingSource === "api") continue
+
       if (auth) {
         const options = await plugin.auth.loader(() => Auth.get(providerID) as any, database[plugin.auth.provider])
         const opts = options ?? {}
