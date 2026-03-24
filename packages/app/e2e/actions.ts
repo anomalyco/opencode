@@ -34,6 +34,33 @@ export function healthPhase(page: Page) {
   return phase.get(page) ?? "test"
 }
 
+export async function enableE2E(page: Page) {
+  await page.addInitScript(() => {
+    const win = window as E2EWindow
+    win.__opencode_e2e = {
+      ...win.__opencode_e2e,
+      model: {
+        enabled: true,
+      },
+      prompt: {
+        enabled: true,
+      },
+      terminal: {
+        enabled: true,
+        terminals: {},
+      },
+    }
+    localStorage.setItem(
+      "opencode.global.dat:model",
+      JSON.stringify({
+        recent: [{ providerID: "opencode", modelID: "big-pickle" }],
+        user: [],
+        variant: {},
+      }),
+    )
+  })
+}
+
 export async function defocus(page: Page) {
   await page
     .evaluate(() => {

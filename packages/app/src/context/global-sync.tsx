@@ -40,6 +40,7 @@ import { formatServerError } from "@/utils/server-errors"
 
 type GlobalStore = {
   ready: boolean
+  sidebar_status: "idle" | "loading" | "ready" | "error"
   error?: InitError
   path: Path
   project: Project[]
@@ -71,6 +72,7 @@ function createGlobalSync() {
 
   const [globalStore, setGlobalStore] = createStore<GlobalStore>({
     ready: false,
+    sidebar_status: "idle",
     path: { state: "", config: "", worktree: "", directory: "", home: "" },
     project: projectCache.value,
     sidebar: [],
@@ -329,6 +331,7 @@ function createGlobalSync() {
   })
 
   async function bootstrap() {
+    setGlobalStore("sidebar_status", "loading")
     await bootstrapGlobal({
       globalSDK: globalSDK.client,
       connectErrorTitle: language.t("dialog.server.add.error"),

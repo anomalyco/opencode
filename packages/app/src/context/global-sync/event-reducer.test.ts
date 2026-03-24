@@ -4,6 +4,8 @@ import { createStore } from "solid-js/store"
 import type { State } from "./types"
 import { applyDirectoryEvent, applyGlobalEvent, cleanupDroppedSessionCaches } from "./event-reducer"
 
+const sidebarItem = (worktree: string, sort_order: number) => ({ worktree, sort_order })
+
 const rootSession = (input: { id: string; parentID?: string; archived?: number }) =>
   ({
     id: input.id,
@@ -132,6 +134,35 @@ describe("applyGlobalEvent", () => {
     })
 
     expect(refreshCount).toBe(1)
+  })
+
+  test("replaces sidebar items on project.sidebar.updated", () => {
+    const sidebar = [sidebarItem("/tmp/a", 0)]
+    const project = [{ id: "a" }] as Project[]
+    let refreshCount = 0
+    let nextSidebar = sidebar
+    let nextProject = project
+
+    applyGlobalEvent({
+      event: {
+        type: "project.sidebar.updated",
+        properties: { items: [sidebarItem("/tmp/b", 0), sidebarItem("/tmp/a", 1)] },
+      },
+      project,
+      refresh: () => {
+        refreshCount += 1
+      },
+      setSidebar(items) {
+        nextSidebar = items
+      },
+      setGlobalProject(next) {
+        nextProject = typeof next === "function" ? (next(project), project) : next
+      },
+    })
+
+    expect(nextSidebar).toEqual([sidebarItem("/tmp/b", 0), sidebarItem("/tmp/a", 1)])
+    expect(nextProject).toBe(project)
+    expect(refreshCount).toBe(0)
   })
 })
 

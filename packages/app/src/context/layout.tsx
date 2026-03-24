@@ -13,6 +13,7 @@ import { decode64 } from "@/utils/base64"
 import { same } from "@/utils/same"
 import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
 import { createPathHelpers } from "./file/path"
+import { workspaceKey } from "@/pages/layout/helpers"
 
 const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const
 const DEFAULT_PANEL_WIDTH = 344
@@ -469,7 +470,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     const enriched = createMemo(() =>
       sidebarWorktrees().map((worktree) => {
-        const local = server.projects.list().find((x) => x.worktree === worktree)
+        const key = workspaceKey(worktree)
+        const local = server.projects.list().find((x) => workspaceKey(x.worktree) === key)
         return enrich({ worktree, expanded: local?.expanded ?? true })
       }),
     )
@@ -537,11 +539,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       }
     })
 
-    // One-time migration: seed server sidebar from legacy local rail.
-    // Gated on globalSync.ready so bootstrap has completed and sidebar data is accurate.
     let migrated = false
     createEffect(() => {
       if (!globalSync.ready) return
+      if (globalSync.data.sidebar_status !== "ready") return
       if (migrated) return
       migrated = true
 

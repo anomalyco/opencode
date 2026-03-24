@@ -21,6 +21,7 @@ import { formatServerError } from "@/utils/server-errors"
 
 type GlobalStore = {
   ready: boolean
+  sidebar_status: "idle" | "loading" | "ready" | "error"
   path: Path
   project: Project[]
   sidebar: SidebarItem[]
@@ -52,9 +53,17 @@ export async function bootstrapGlobal(input: {
       title: input.connectErrorTitle,
       description: input.connectErrorDescription,
     })
+    input.setGlobalStore("sidebar_status", "error")
     input.setGlobalStore("ready", true)
     return
   }
+
+  const sidebar = retry(() =>
+    input.globalSDK.project.sidebar.list().then((x) => {
+      input.setGlobalStore("sidebar", x.data ?? [])
+      input.setGlobalStore("sidebar_status", "ready")
+    }),
+  )
 
   const tasks = [
     retry(() =>
@@ -87,16 +96,14 @@ export async function bootstrapGlobal(input: {
         input.setGlobalStore("provider_auth", x.data ?? {})
       }),
     ),
-    retry(() =>
-      input.globalSDK.project.sidebar.list().then((x) => {
-        input.setGlobalStore("sidebar", x.data ?? [])
-      }),
-    ),
+    sidebar,
   ]
 
   const results = await Promise.allSettled(tasks)
   const errors = results.filter((r): r is PromiseRejectedResult => r.status === "rejected").map((r) => r.reason)
   if (errors.length) {
+    const sidebarFailed = results[tasks.indexOf(sidebar)]?.status === "rejected"
+    if (sidebarFailed) input.setGlobalStore("sidebar_status", "error")
     const message = formatServerError(errors[0], input.translate)
     const more = errors.length > 1 ? input.formatMoreCount(errors.length - 1) : ""
     showToast({

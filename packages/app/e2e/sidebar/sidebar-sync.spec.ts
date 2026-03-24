@@ -1,95 +1,198 @@
+import type { Browser, Page } from "@playwright/test"
 import { test, expect } from "../fixtures"
-import { createTestProject, cleanupTestProject } from "../actions"
-import { createSdk, dirSlug } from "../utils"
+import { cleanupTestProject, clickMenuItem, createTestProject, enableE2E, openProjectMenu, openSidebar, seedProjects, waitSession } from "../actions"
+import { projectSwitchSelector, sidebarNavSelector } from "../selectors"
+import { createSdk, dirSlug, sessionPath } from "../utils"
+
+async function openFresh(browser: Browser, directory: string) {
+  const context = await browser.newContext()
+  const page = await context.newPage()
+  await enableE2E(page)
+  await page.setViewportSize({ width: 1400, height: 800 })
+  await page.goto(sessionPath(directory))
+  await waitSession(page, { directory })
+  await openSidebar(page)
+  return { context, page }
+}
+
+async function listProjects(page: Page) {
+  return page.locator(`${sidebarNavSelector} [data-action="project-switch"]`).evaluateAll((els) => {
+    return els.map((el) => el.getAttribute("data-project") ?? "").filter((x) => x.length > 0)
+  })
+}
+
+async function clearRail(sdk: ReturnType<typeof createSdk>) {
+  const items = await sdk.project.sidebar.list().then((x) => x.data ?? [])
+  if (items.length === 0) return
+  await sdk.project.sidebar.reorder({ worktrees: [] })
+}
 
 test.describe("sidebar sync", () => {
-  test("project opened via API is visible from a fresh page load", async ({ page, withProject }) => {
-    await withProject(async ({ directory }) => {
+  test("project opened syncs to a fresh client UI", async ({ browser }) => {
+    let directory = ""
+    try {
+      directory = await createTestProject()
       const sdk = createSdk(directory)
+      const slug = dirSlug(directory)
+      await clearRail(sdk)
+
       await sdk.project.sidebar.open({ worktree: directory })
 
-      // Fresh navigation triggers bootstrap which fetches sidebar
-      await page.goto(`/${dirSlug(directory)}/session`)
-
-      // Verify the server-side state is correct
-      const res = await sdk.project.sidebar.list()
-      expect(res.data!).toHaveLength(1)
-      expect(res.data![0].worktree).toBe(directory)
-    })
+      const fresh = await openFresh(browser, directory)
+      try {
+        await expect(fresh.page.locator(projectSwitchSelector(slug)).first()).toBeVisible()
+      } finally {
+        await fresh.context.close()
+      }
+    } finally {
+      if (directory) await cleanupTestProject(directory)
+    }
   })
 
-  test("project closed via API is absent from server sidebar", async ({ withProject }) => {
-    await withProject(async ({ directory }) => {
+  test("project closed syncs to a fresh client UI", async ({ browser }) => {
+    let directory = ""
+    let other = ""
+    try {
+      directory = await createTestProject()
+      other = await createTestProject()
       const sdk = createSdk(directory)
-      await sdk.project.sidebar.open({ worktree: directory })
-      await sdk.project.sidebar.close({ worktree: directory })
+      const slug = dirSlug(directory)
+      const otherSlug = dirSlug(other)
+      await clearRail(sdk)
+      await sdk.project.sidebar.reorder({ worktrees: [directory, other] })
 
-      const res = await sdk.project.sidebar.list()
-      expect(res.data!.every((item: { worktree: string }) => item.worktree !== directory)).toBe(true)
-    })
+      const pageA = await openFresh(browser, directory)
+      try {
+        const menu = await openProjectMenu(pageA.page, slug)
+        await clickMenuItem(menu, /^Close$/i, { force: true })
+
+        const pageB = await openFresh(browser, other)
+        try {
+          await expect(pageB.page.locator(projectSwitchSelector(otherSlug)).first()).toBeVisible()
+          await expect.poll(() => pageB.page.locator(projectSwitchSelector(slug)).count()).toBe(0)
+        } finally {
+          await pageB.context.close()
+        }
+      } finally {
+        await pageA.context.close()
+      }
+    } finally {
+      if (directory) await cleanupTestProject(directory)
+      if (other) await cleanupTestProject(other)
+    }
   })
 
-  test("reorder via API persists order for fresh clients", async ({ withProject }) => {
+  test("reorder syncs to a fresh client UI", async ({ browser }) => {
+    let directory = ""
     let dir2 = ""
-    await withProject(async ({ directory }) => {
+    let dir3 = ""
+    try {
+      directory = await createTestProject()
       dir2 = await createTestProject()
+      dir3 = await createTestProject()
       const sdk = createSdk(directory)
-      await sdk.project.sidebar.reorder({ worktrees: [dir2, directory] })
+      const worktrees = [dir3, directory, dir2]
+      await clearRail(sdk)
 
-      const res = await sdk.project.sidebar.list()
-      const worktrees = res.data!.map((x: { worktree: string }) => x.worktree)
-      expect(worktrees).toEqual([dir2, directory])
-    })
-    if (dir2) await cleanupTestProject(dir2)
+      await sdk.project.sidebar.reorder({ worktrees })
+
+      const fresh = await openFresh(browser, directory)
+      try {
+        await expect.poll(() => listProjects(fresh.page)).toEqual(worktrees.map(dirSlug))
+      } finally {
+        await fresh.context.close()
+      }
+    } finally {
+      if (directory) await cleanupTestProject(directory)
+      if (dir2) await cleanupTestProject(dir2)
+      if (dir3) await cleanupTestProject(dir3)
+    }
   })
 
-  test("migration seeds server from legacy local rail when server is empty", async ({ page, withProject }) => {
-    await withProject(async ({ directory }) => {
-      const sdk = createSdk(directory)
+  test("migration seeds empty server rail from legacy local rail", async ({ browser, page }) => {
+    await page.setViewportSize({ width: 1400, height: 800 })
 
-      // Verify server sidebar is empty before navigation
+    let directory = ""
+    try {
+      directory = await createTestProject()
+      const sdk = createSdk(directory)
+      const slug = dirSlug(directory)
+      await clearRail(sdk)
       const before = await sdk.project.sidebar.list()
       expect(before.data!).toHaveLength(0)
 
-      // seedProjects already seeds localStorage with this directory via seedStorage,
-      // navigating triggers the one-time migration effect
-      await page.goto(`/${dirSlug(directory)}/session`)
+      await seedProjects(page, { directory })
+      await enableE2E(page)
+      await page.goto(sessionPath(directory))
+      await waitSession(page, { directory })
+      await openSidebar(page)
+      await expect(page.locator(projectSwitchSelector(slug)).first()).toBeVisible()
 
-      // Poll until migration populates server
-      await expect
-        .poll(
-          async () => {
-            const res = await sdk.project.sidebar.list()
-            return res.data!.length
-          },
-          { timeout: 15_000 },
-        )
-        .toBeGreaterThan(0)
-
-      const after = await sdk.project.sidebar.list()
-      expect(after.data!.some((x: { worktree: string }) => x.worktree === directory)).toBe(true)
-    })
+      const fresh = await openFresh(browser, directory)
+      try {
+        await expect(fresh.page.locator(projectSwitchSelector(slug)).first()).toBeVisible()
+      } finally {
+        await fresh.context.close()
+      }
+    } finally {
+      if (directory) await cleanupTestProject(directory)
+    }
   })
 
-  test("existing server sidebar is not overwritten by legacy local state", async ({ page, withProject }) => {
-    let dir2 = ""
-    await withProject(async ({ directory }) => {
-      dir2 = await createTestProject()
+  test("existing server rail is not overwritten by legacy local state", async ({ browser, page }) => {
+    await page.setViewportSize({ width: 1400, height: 800 })
+
+    let directory = ""
+    let other = ""
+    try {
+      directory = await createTestProject()
+      other = await createTestProject()
+      const slug = dirSlug(directory)
+      const otherSlug = dirSlug(other)
       const sdk = createSdk(directory)
+      await clearRail(sdk)
 
-      // Pre-populate server with dir2
-      await sdk.project.sidebar.reorder({ worktrees: [dir2] })
+      await sdk.project.sidebar.reorder({ worktrees: [other] })
 
-      // localStorage has `directory` from seedProjects, but server already has dir2
-      // Migration must not overwrite server rail
-      await page.goto(`/${dirSlug(directory)}/session`)
-      await page.waitForTimeout(3000)
+      await seedProjects(page, { directory })
+      await enableE2E(page)
+      await page.goto(sessionPath(directory))
+      await waitSession(page, { directory })
+      await openSidebar(page)
+      await expect(page.locator(projectSwitchSelector(otherSlug)).first()).toBeVisible()
+      await expect.poll(() => page.locator(projectSwitchSelector(slug)).count()).toBe(0)
 
-      const res = await sdk.project.sidebar.list()
-      const worktrees = res.data!.map((x: { worktree: string }) => x.worktree)
-      expect(worktrees).toContain(dir2)
-      expect(worktrees).not.toContain(directory)
-    })
-    if (dir2) await cleanupTestProject(dir2)
+      const fresh = await openFresh(browser, other)
+      try {
+        await expect(fresh.page.locator(projectSwitchSelector(otherSlug)).first()).toBeVisible()
+        await expect.poll(() => fresh.page.locator(projectSwitchSelector(slug)).count()).toBe(0)
+      } finally {
+        await fresh.context.close()
+      }
+    } finally {
+      if (directory) await cleanupTestProject(directory)
+      if (other) await cleanupTestProject(other)
+    }
+  })
+
+  test("path variants do not duplicate sidebar items", async ({ browser }) => {
+    let directory = ""
+    try {
+      directory = await createTestProject()
+      const sdk = createSdk(directory)
+      const slug = dirSlug(directory)
+      await clearRail(sdk)
+
+      await sdk.project.sidebar.reorder({ worktrees: [directory, `${directory}/`] })
+
+      const fresh = await openFresh(browser, directory)
+      try {
+        await expect(fresh.page.locator(projectSwitchSelector(slug))).toHaveCount(1)
+      } finally {
+        await fresh.context.close()
+      }
+    } finally {
+      if (directory) await cleanupTestProject(directory)
+    }
   })
 })
