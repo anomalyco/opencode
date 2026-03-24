@@ -12,6 +12,30 @@ function withInstance(directory: string, fn: () => Promise<any>) {
   return Instance.provide({ directory, fn })
 }
 
+function normalize(input: string) {
+  return input.replace(/\\/g, "/").toLowerCase()
+}
+
+async function waitReady() {
+  const { GlobalBus } = await import("../../src/bus/global")
+
+  return await new Promise<{ name: string; branch: string }>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      GlobalBus.off("event", on)
+      reject(new Error("timed out waiting for worktree.ready"))
+    }, 10_000)
+
+    function on(evt: { directory?: string; payload: { type: string; properties: { name: string; branch: string } } }) {
+      if (evt.payload.type !== Worktree.Event.Ready.type) return
+      clearTimeout(timer)
+      GlobalBus.off("event", on)
+      resolve(evt.payload.properties)
+    }
+
+    GlobalBus.on("event", on)
+  })
+}
+
 describe("Worktree", () => {
   afterEach(() => Instance.disposeAll())
 
@@ -70,23 +94,7 @@ describe("Worktree", () => {
 
     test("create returns after setup and fires Event.Ready after bootstrap", async () => {
       await using tmp = await tmpdir({ git: true })
-      const { GlobalBus } = await import("../../src/bus/global")
-
-      const ready = new Promise<{ name: string; branch: string }>((resolve, reject) => {
-        const timer = setTimeout(() => {
-          GlobalBus.off("event", on)
-          reject(new Error("timed out waiting for worktree.ready"))
-        }, 10_000)
-
-        function on(evt: { directory?: string; payload: { type: string; properties: any } }) {
-          if (evt.payload.type !== Worktree.Event.Ready.type) return
-          clearTimeout(timer)
-          GlobalBus.off("event", on)
-          resolve(evt.payload.properties)
-        }
-
-        GlobalBus.on("event", on)
-      })
+      const ready = waitReady()
 
       const info = await withInstance(tmp.path, () => Worktree.create())
 
@@ -95,8 +103,8 @@ describe("Worktree", () => {
       expect(info.branch).toStartWith("opencode/")
 
       const text = await $`git worktree list --porcelain`.cwd(tmp.path).quiet().text()
-      const dir = info.directory.replace(/\\/g, "/")
-      expect(text.replace(/\\/g, "/")).toContain(dir)
+      const dir = await fs.realpath(info.directory).catch(() => info.directory)
+      expect(normalize(text)).toContain(normalize(dir))
 
       // Event.Ready fires after bootstrap finishes in the background
       const props = await ready
@@ -110,6 +118,7 @@ describe("Worktree", () => {
 
     test("create with custom name", async () => {
       await using tmp = await tmpdir({ git: true })
+      const ready = waitReady()
 
       const info = await withInstance(tmp.path, () => Worktree.create({ name: "test-workspace" }))
 
@@ -117,6 +126,8 @@ describe("Worktree", () => {
       expect(info.branch).toBe("opencode/test-workspace")
 
       // Cleanup
+      await ready
+      await Bun.sleep(100)
       await withInstance(tmp.path, () => Worktree.remove({ directory: info.directory }))
     })
   })
