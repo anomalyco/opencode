@@ -53,10 +53,17 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
     if (!last) return
     const total =
       last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
+    const totalInput = last.tokens.input + last.tokens.cache.read + last.tokens.cache.write
     const model = sync.data.provider.find((x) => x.id === last.providerID)?.models[last.modelID]
     return {
       tokens: total.toLocaleString(),
       percentage: model?.limit.context ? Math.round((total / model.limit.context) * 100) : null,
+      cacheHitPercent: totalInput > 0 ? ((last.tokens.cache.read / totalInput) * 100).toFixed(3) : null,
+      cacheRead: last.tokens.cache.read,
+      cacheWrite: last.tokens.cache.write,
+      cacheNew: last.tokens.input,
+      cacheInput: totalInput,
+      cacheOutput: last.tokens.output,
     }
   })
 
@@ -106,6 +113,19 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
               <text fg={theme.textMuted}>{context()?.percentage ?? 0}% used</text>
               <text fg={theme.textMuted}>{cost()} spent</text>
             </box>
+            <Show when={process.env["OPENCODE_CACHE_AUDIT"] && context()?.cacheHitPercent != null}>
+              <box>
+                <text fg={theme.text}>
+                  <b>Cache Audit</b>
+                </text>
+                <text fg={theme.textMuted}>{context()!.cacheInput.toLocaleString()} input tokens</text>
+                <text fg={theme.textMuted}>  {context()!.cacheNew.toLocaleString()} new</text>
+                <text fg={theme.textMuted}>  {context()!.cacheRead.toLocaleString()} cache read</text>
+                <text fg={theme.textMuted}>  {context()!.cacheWrite.toLocaleString()} cache write</text>
+                <text fg={theme.textMuted}>{context()!.cacheHitPercent}% hit rate</text>
+                <text fg={theme.textMuted}>{context()!.cacheOutput.toLocaleString()} output tokens</text>
+              </box>
+            </Show>
             <Show when={mcpEntries().length > 0}>
               <box>
                 <box

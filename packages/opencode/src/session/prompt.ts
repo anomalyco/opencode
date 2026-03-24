@@ -652,13 +652,17 @@ export namespace SessionPrompt {
 
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
-      // Build system prompt, adding structured output instruction if needed
+      // Build system prompt: global instructions + global skills first (stable), then env + project (dynamic)
+      const instructions = await InstructionPrompt.system()
       const skills = await SystemPrompt.skills(agent)
       const system = [
+        ...instructions.global,
+        ...(skills.global ? [skills.global] : []),
         ...(await SystemPrompt.environment(model)),
-        ...(skills ? [skills] : []),
-        ...(await InstructionPrompt.system()),
+        ...(skills.project ? [skills.project] : []),
+        ...instructions.project,
       ]
+      const systemSplit = instructions.global.length + (skills.global ? 1 : 0)
       const format = lastUser.format ?? { type: "text" }
       if (format.type === "json_schema") {
         system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
@@ -671,6 +675,7 @@ export namespace SessionPrompt {
         abort,
         sessionID,
         system,
+        systemSplit,
         messages: [
           ...MessageV2.toModelMessages(msgs, model),
           ...(isLastStep

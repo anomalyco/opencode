@@ -71,14 +71,15 @@ export namespace InstructionPrompt {
 
   export async function systemPaths() {
     const config = await Config.get()
-    const paths = new Set<string>()
+    const global = new Set<string>()
+    const project = new Set<string>()
 
     if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
       for (const file of FILES) {
         const matches = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
         if (matches.length > 0) {
           matches.forEach((p) => {
-            paths.add(path.resolve(p))
+            project.add(path.resolve(p))
           })
           break
         }
@@ -87,7 +88,7 @@ export namespace InstructionPrompt {
 
     for (const file of globalFiles()) {
       if (await Filesystem.exists(file)) {
-        paths.add(path.resolve(file))
+        global.add(path.resolve(file))
         break
       }
     }
@@ -106,22 +107,29 @@ export namespace InstructionPrompt {
             }).catch(() => [])
           : await resolveRelative(instruction)
         matches.forEach((p) => {
-          paths.add(path.resolve(p))
+          project.add(path.resolve(p))
         })
       }
     }
 
-    return paths
+    return { global, project }
   }
 
-  export async function system() {
-    const config = await Config.get()
-    const paths = await systemPaths()
+  export type SystemInstructions = { global: string[]; project: string[] }
 
-    const files = Array.from(paths).map(async (p) => {
-      const content = await Filesystem.readText(p).catch(() => "")
-      return content ? "Instructions from: " + p + "\n" + content : ""
-    })
+  let cached: SystemInstructions | undefined
+
+  export async function system(): Promise<SystemInstructions> {
+    if (Flag.OPENCODE_EXPERIMENTAL_CACHE_STABILIZATION && cached) return cached
+
+    const paths = await systemPaths()
+    const config = await Config.get()
+
+    const readPaths = (set: Set<string>) =>
+      Array.from(set).map(async (p) => {
+        const content = await Filesystem.readText(p).catch(() => "")
+        return content ? "Instructions from: " + p + "\n" + content : ""
+      })
 
     const urls: string[] = []
     if (config.instructions) {
@@ -138,7 +146,14 @@ export namespace InstructionPrompt {
         .then((x) => (x ? "Instructions from: " + url + "\n" + x : "")),
     )
 
-    return Promise.all([...files, ...fetches]).then((result) => result.filter(Boolean))
+    const [global, project] = await Promise.all([
+      Promise.all(readPaths(paths.global)).then((r) => r.filter(Boolean)),
+      Promise.all([...readPaths(paths.project), ...fetches]).then((r) => r.filter(Boolean)),
+    ])
+
+    const result = { global, project }
+    if (Flag.OPENCODE_EXPERIMENTAL_CACHE_STABILIZATION) cached = result
+    return result
   }
 
   export function loaded(messages: MessageV2.WithParts[]) {
@@ -166,7 +181,8 @@ export namespace InstructionPrompt {
   }
 
   export async function resolve(messages: MessageV2.WithParts[], filepath: string, messageID: string) {
-    const system = await systemPaths()
+    const paths = await systemPaths()
+    const system = new Set([...paths.global, ...paths.project])
     const already = loaded(messages)
     const results: { filepath: string; content: string }[] = []
 
