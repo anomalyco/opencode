@@ -16,6 +16,8 @@ const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] a
 const DEFAULT_PANEL_WIDTH = 344
 const DEFAULT_SESSION_WIDTH = 600
 const DEFAULT_TERMINAL_HEIGHT = 280
+const DEFAULT_TERMINAL_WIDTH = 420
+type TerminalDock = "bottom" | "right"
 export type AvatarColorKey = (typeof AVATAR_COLOR_KEYS)[number]
 
 export function getAvatarColors(key?: string) {
@@ -181,6 +183,26 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         }
       })()
 
+      const terminal = value.terminal
+      const migratedTerminal = (() => {
+        if (!isRecord(terminal)) return terminal
+
+        const height = typeof terminal.height === "number" ? terminal.height : DEFAULT_TERMINAL_HEIGHT
+        const width = typeof terminal.width === "number" ? terminal.width : DEFAULT_TERMINAL_WIDTH
+        const dock: TerminalDock = terminal.dock === "right" ? "right" : "bottom"
+
+        if (height === terminal.height && width === terminal.width && dock === terminal.dock) {
+          return terminal
+        }
+
+        return {
+          ...terminal,
+          height,
+          width,
+          dock,
+        }
+      })()
+
       const sessionTabs = value.sessionTabs
       const migratedSessionTabs = (() => {
         if (!isRecord(sessionTabs)) return sessionTabs
@@ -210,6 +232,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         migratedSidebar === sidebar &&
         migratedReview === review &&
         migratedFileTree === fileTree &&
+        migratedTerminal === terminal &&
         migratedSessionTabs === sessionTabs
       ) {
         return value
@@ -220,11 +243,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         sidebar: migratedSidebar,
         review: migratedReview,
         fileTree: migratedFileTree,
+        terminal: migratedTerminal,
         sessionTabs: migratedSessionTabs,
       }
     }
 
-    const target = Persist.global("layout", ["layout.v6"])
+    const target = Persist.global("layout", ["layout.v7"])
     const [store, setStore, _, ready] = persisted(
       { ...target, migrate },
       createStore({
@@ -236,6 +260,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         terminal: {
           height: DEFAULT_TERMINAL_HEIGHT,
+          width: DEFAULT_TERMINAL_WIDTH,
+          dock: "bottom" as TerminalDock,
           opened: false,
         },
         review: {
@@ -612,8 +638,19 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       },
       terminal: {
         height: createMemo(() => store.terminal.height),
+        width: createMemo(() => store.terminal.width),
+        dock: createMemo(() => store.terminal.dock ?? "bottom"),
         resize(height: number) {
           setStore("terminal", "height", height)
+        },
+        resizeWidth(width: number) {
+          setStore("terminal", "width", width)
+        },
+        setDock(dock: TerminalDock) {
+          setStore("terminal", "dock", dock)
+        },
+        toggleDock() {
+          setStore("terminal", "dock", (dock) => (dock === "right" ? "bottom" : "right"))
         },
       },
       review: {

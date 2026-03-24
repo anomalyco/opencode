@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, on, onCleanup, onMount } from "solid-js"
+import { For, Show, batch, createEffect, createMemo, on, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
@@ -31,22 +31,31 @@ export function TerminalPanel() {
   const opened = createMemo(() => view().terminal.opened())
   const size = createSizing()
   const height = createMemo(() => layout.terminal.height())
+  const width = createMemo(() => layout.terminal.width())
+  const dock = createMemo(() => layout.terminal.dock())
+  const right = createMemo(() => dock() === "right")
   const close = () => view().terminal.close()
   let root: HTMLDivElement | undefined
 
   const [store, setStore] = createStore({
     autoCreated: false,
     activeDraggable: undefined as string | undefined,
-    view: typeof window === "undefined" ? 1000 : (window.visualViewport?.height ?? window.innerHeight),
+    h: typeof window === "undefined" ? 1000 : (window.visualViewport?.height ?? window.innerHeight),
+    w: typeof window === "undefined" ? 1000 : window.innerWidth,
   })
 
-  const max = () => store.view * 0.6
-  const pane = () => Math.min(height(), max())
+  const side = createMemo(() => right() && store.w >= 768)
+  const max = () => (side() ? store.w : store.h) * 0.6
+  const pane = () => Math.min(side() ? width() : height(), max())
 
   onMount(() => {
     if (typeof window === "undefined") return
 
-    const sync = () => setStore("view", window.visualViewport?.height ?? window.innerHeight)
+    const sync = () =>
+      batch(() => {
+        setStore("h", window.visualViewport?.height ?? window.innerHeight)
+        setStore("w", window.innerWidth)
+      })
     const port = window.visualViewport
 
     sync()
@@ -191,35 +200,66 @@ export function TerminalPanel() {
       aria-label={language.t("terminal.title")}
       aria-hidden={!opened()}
       inert={!opened()}
-      class="relative w-full shrink-0 overflow-hidden bg-background-stronger"
+      class="relative shrink-0 overflow-hidden bg-background-stronger"
       classList={{
-        "border-t border-border-weak-base": opened(),
+        "w-full": !side(),
+        "h-full": side(),
+        "border-t border-border-weak-base": opened() && !side(),
+        "border-l border-border-weak-base": opened() && side(),
         "transition-[height] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[height] motion-reduce:transition-none":
-          !size.active(),
+          !size.active() && !side(),
+        "transition-[width] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
+          !size.active() && side(),
       }}
-      style={{ height: opened() ? `${pane()}px` : "0px" }}
+      style={
+        side()
+          ? {
+              width: opened() ? `${pane()}px` : "0px",
+            }
+          : {
+              height: opened() ? `${pane()}px` : "0px",
+            }
+      }
     >
       <div
-        class="absolute inset-x-0 top-0 flex flex-col"
+        class="absolute inset-0 flex flex-col"
         classList={{
           "pointer-events-none": !opened(),
         }}
-        style={{ height: `${pane()}px` }}
       >
-        <div class="hidden md:block" onPointerDown={() => size.start()}>
-          <ResizeHandle
-            direction="vertical"
-            size={pane()}
-            min={100}
-            max={max()}
-            collapseThreshold={50}
-            onResize={(next) => {
-              size.touch()
-              layout.terminal.resize(next)
-            }}
-            onCollapse={close}
-          />
-        </div>
+        <Show when={!side()}>
+          <div class="hidden md:block" onPointerDown={() => size.start()}>
+            <ResizeHandle
+              direction="vertical"
+              size={pane()}
+              min={100}
+              max={max()}
+              collapseThreshold={50}
+              onResize={(next) => {
+                size.touch()
+                layout.terminal.resize(next)
+              }}
+              onCollapse={close}
+            />
+          </div>
+        </Show>
+        <Show when={side()}>
+          <div class="hidden md:block" onPointerDown={() => size.start()}>
+            <ResizeHandle
+              direction="horizontal"
+              edge="start"
+              size={pane()}
+              min={280}
+              max={max()}
+              collapseThreshold={140}
+              onResize={(next) => {
+                size.touch()
+                layout.terminal.resizeWidth(next)
+              }}
+              onCollapse={close}
+            />
+          </div>
+        </Show>
         <Show
           when={terminal.ready()}
           fallback={
@@ -275,6 +315,17 @@ export function TerminalPanel() {
                         aria-label={language.t("command.terminal.new")}
                       />
                     </TooltipKeybind>
+                  </div>
+                  <div class="h-full pr-2 flex items-center justify-center">
+                    <button
+                      type="button"
+                      class="h-7 px-2 rounded-md text-12-medium text-text-weak hover:text-text-base hover:bg-surface-base transition-colors"
+                      onClick={() => layout.terminal.toggleDock()}
+                      title={right() ? "Dock terminal to bottom" : "Dock terminal to right"}
+                      aria-label={right() ? "Dock terminal to bottom" : "Dock terminal to right"}
+                    >
+                      {right() ? "Dock bottom" : "Dock right"}
+                    </button>
                   </div>
                 </Tabs.List>
               </Tabs>

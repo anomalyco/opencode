@@ -302,6 +302,13 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         onSelect: () => view().terminal.toggle(),
       }),
       viewCommand({
+        id: "terminal.dock.toggle",
+        title: "Toggle terminal dock side",
+        description: "Switch terminal between bottom and right dock",
+        slash: "terminal-dock",
+        onSelect: () => layout.terminal.toggleDock(),
+      }),
+      viewCommand({
         id: "review.toggle",
         title: language.t("command.review.toggle"),
         keybind: "mod+shift+r",
