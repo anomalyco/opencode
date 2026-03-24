@@ -20,6 +20,7 @@ import { Global } from "@/global"
 import path from "path"
 import { Plugin } from "@/plugin"
 import { Skill } from "../skill"
+import { Wildcard } from "@/util/wildcard"
 
 export namespace Agent {
   export const Info = z
@@ -203,20 +204,22 @@ export namespace Agent {
       },
     }
 
-    for (const [key, value] of Object.entries(cfg.agent ?? {})) {
+    const entries = Object.entries(cfg.agent ?? {})
+    const wild = (key: string) => key.includes("*") || key.includes("?")
+    const make = (key: string) => ({
+      name: key,
+      mode: "all" as const,
+      permission: Permission.merge(defaults, user),
+      options: {},
+      native: false,
+    })
+    const apply = (key: string, value: (typeof entries)[number][1], base?: Record<string, Info>) => {
       if (value.disable) {
         delete result[key]
-        continue
+        return
       }
       let item = result[key]
-      if (!item)
-        item = result[key] = {
-          name: key,
-          mode: "all",
-          permission: Permission.merge(defaults, user),
-          options: {},
-          native: false,
-        }
+      if (!item) item = result[key] = base?.[key] ? structuredClone(base[key]) : make(key)
       if (value.model) item.model = Provider.parseModel(value.model)
       item.variant = value.variant ?? item.variant
       item.prompt = value.prompt ?? item.prompt
@@ -230,6 +233,22 @@ export namespace Agent {
       item.steps = value.steps ?? item.steps
       item.options = mergeDeep(item.options, value.options ?? {})
       item.permission = Permission.merge(item.permission, Permission.fromConfig(value.permission ?? {}))
+    }
+    const exact = entries.filter(([key]) => !wild(key))
+    const glob = entries.filter(([key]) => wild(key))
+
+    for (const [key, value] of exact) apply(key, value)
+
+    if (glob.length) {
+      const base = Object.fromEntries(Object.entries(result).map(([key, value]) => [key, structuredClone(value)]))
+      const names = Object.keys(base)
+      for (const [key, value] of glob) {
+        for (const name of names) {
+          if (!Wildcard.match(name, key)) continue
+          apply(name, value, base)
+        }
+      }
+      for (const [key, value] of exact) apply(key, value, base)
     }
 
     // Ensure Truncate.GLOB is allowed unless explicitly configured

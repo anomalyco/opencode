@@ -1,5 +1,6 @@
 import { afterEach, test, expect } from "bun:test"
 import path from "path"
+import fs from "fs/promises"
 import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Agent } from "../../src/agent/agent"
@@ -9,6 +10,18 @@ import { Permission } from "../../src/permission"
 function evalPerm(agent: Agent.Info | undefined, permission: string): Permission.Action | undefined {
   if (!agent) return undefined
   return Permission.evaluate(permission, "*", agent.permission).action
+}
+
+async function seed(dir: string, name: string) {
+  const file = path.join(dir, ".opencode", "agents", `${name}.md`)
+  await fs.mkdir(path.dirname(file), { recursive: true })
+  await Bun.write(
+    file,
+    `---
+mode: subagent
+---
+${name} prompt`,
+  )
 }
 
 afterEach(async () => {
@@ -176,6 +189,210 @@ test("custom agent config overrides native agent properties", async () => {
       expect(build?.temperature).toBe(0.7)
       expect(build?.color).toBe("#FF0000")
       expect(build?.native).toBe(true)
+    },
+  })
+})
+
+test("wildcard agent config matches nested agents without creating literal wildcard agents", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      agent: {
+        "researcher/*": {
+          model: "anthropic/claude-opus-4.6",
+          description: "Wildcard researcher",
+          options: {
+            scope: {
+              remote: true,
+            },
+          },
+          permission: {
+            bash: "deny",
+          },
+        },
+      },
+    },
+    init: async (dir) => {
+      await seed(dir, "researcher/agent-a")
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const item = await Agent.get("researcher/agent-a")
+      expect(item).toBeDefined()
+      expect(String(item?.model?.providerID)).toBe("anthropic")
+      expect(String(item?.model?.modelID)).toBe("claude-opus-4.6")
+      expect(item?.description).toBe("Wildcard researcher")
+      expect(item?.options.scope).toEqual({ remote: true })
+      expect(evalPerm(item, "bash")).toBe("deny")
+      expect(await Agent.get("researcher/*")).toBeUndefined()
+      expect((await Agent.list()).map((item) => item.name)).not.toContain("researcher/*")
+    },
+  })
+})
+
+test("exact agent config overrides wildcard fields for nested agents", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      agent: {
+        "researcher/agent-a": {
+          model: "openai/gpt-4",
+          options: {
+            scope: {
+              local: true,
+            },
+          },
+        },
+        "researcher/*": {
+          model: "anthropic/claude-opus-4.6",
+          description: "Wildcard researcher",
+          options: {
+            scope: {
+              remote: true,
+            },
+          },
+          permission: {
+            bash: "deny",
+          },
+        },
+      },
+    },
+    init: async (dir) => {
+      await seed(dir, "researcher/agent-a")
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const item = await Agent.get("researcher/agent-a")
+      expect(item).toBeDefined()
+      expect(String(item?.model?.providerID)).toBe("openai")
+      expect(String(item?.model?.modelID)).toBe("gpt-4")
+      expect(item?.description).toBe("Wildcard researcher")
+      expect(item?.options.scope).toEqual({
+        local: true,
+        remote: true,
+      })
+      expect(evalPerm(item, "bash")).toBe("deny")
+    },
+  })
+})
+
+test("later wildcard agent config overrides earlier wildcard matches", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      agent: {
+        "*": {
+          description: "All agents",
+          color: "#111111",
+          options: {
+            rank: 1,
+          },
+        },
+        "researcher/*": {
+          description: "Research agents",
+          color: "#222222",
+          options: {
+            rank: 2,
+          },
+        },
+      },
+    },
+    init: async (dir) => {
+      await seed(dir, "researcher/agent-a")
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const item = await Agent.get("researcher/agent-a")
+      expect(item?.description).toBe("Research agents")
+      expect(item?.color).toBe("#222222")
+      expect(item?.options.rank).toBe(2)
+    },
+  })
+})
+
+test("later wildcard agent config can override earlier wildcard disable", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      agent: {
+        "*": {
+          disable: true,
+        },
+        "researcher/*": {
+          description: "Research agents",
+        },
+      },
+    },
+    init: async (dir) => {
+      await seed(dir, "researcher/agent-a")
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const item = await Agent.get("researcher/agent-a")
+      expect(item).toBeDefined()
+      expect(item?.description).toBe("Research agents")
+      expect(item?.mode).toBe("subagent")
+      expect(item?.prompt).toBe("researcher/agent-a prompt")
+    },
+  })
+})
+
+test("exact agent config overrides wildcard disable without losing native properties", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      agent: {
+        build: {
+          description: "Custom build agent",
+        },
+        "*": {
+          disable: true,
+        },
+      },
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const build = await Agent.get("build")
+      expect(build).toBeDefined()
+      expect(build?.description).toBe("Custom build agent")
+      expect(build?.native).toBe(true)
+      expect(build?.mode).toBe("primary")
+      expect(evalPerm(build, "edit")).toBe("allow")
+    },
+  })
+})
+
+test("nested exact agent config behaves unchanged without wildcards", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      agent: {
+        "researcher/agent-a": {
+          model: "openai/gpt-4",
+          description: "Exact researcher",
+          permission: {
+            bash: "deny",
+          },
+        },
+      },
+    },
+    init: async (dir) => {
+      await seed(dir, "researcher/agent-a")
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const item = await Agent.get("researcher/agent-a")
+      expect(item).toBeDefined()
+      expect(String(item?.model?.providerID)).toBe("openai")
+      expect(String(item?.model?.modelID)).toBe("gpt-4")
+      expect(item?.description).toBe("Exact researcher")
+      expect(evalPerm(item, "bash")).toBe("deny")
     },
   })
 })
