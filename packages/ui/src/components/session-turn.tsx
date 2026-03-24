@@ -142,6 +142,7 @@ export function SessionTurn(
   props: ParentProps<{
     sessionID: string
     messageID: string
+    messages?: MessageType[]
     actions?: UserActions
     showReasoningSummaries?: boolean
     shellToolDefaultOpen?: boolean
@@ -166,7 +167,7 @@ export function SessionTurn(
   const emptyDiffs: FileDiff[] = []
   const idle = { type: "idle" as const }
 
-  const allMessages = createMemo(() => list(data.store.message?.[props.sessionID], emptyMessages))
+  const allMessages = createMemo(() => props.messages ?? list(data.store.message?.[props.sessionID], emptyMessages))
 
   const messageIndex = createMemo(() => {
     const messages = allMessages() ?? emptyMessages
