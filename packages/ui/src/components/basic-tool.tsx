@@ -14,6 +14,7 @@ const BUILTIN_TOOLS = new Set([
   "batch",
   "codesearch",
   "edit",
+  "exec",
   "glob",
   "grep",
   "invalid",

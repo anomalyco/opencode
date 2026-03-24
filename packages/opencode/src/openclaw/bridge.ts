@@ -277,6 +277,8 @@ function payload(input: unknown) {
   const item = record(input)
   if (!item) return []
   if (Array.isArray(item.content)) return item.content
+  if (record(item.content)) return [item.content]
+  if (typeof item.type === "string") return [item]
   return []
 }
 
@@ -368,9 +370,15 @@ function toolCalls(item: GwMessage, messageID: string, sessionID: string, time: 
     const part = record(block)
     if (!part) continue
     const type = typeof part.type === "string" ? part.type : ""
-    if (type !== "tool_use" && type !== "function_call") continue
+    if (type !== "tool_use" && type !== "function_call" && type !== "toolCall") continue
     const callID =
-      typeof part.id === "string" ? part.id : typeof part.call_id === "string" ? part.call_id : `${messageID}-call-${n}`
+      typeof part.id === "string"
+        ? part.id
+        : typeof part.call_id === "string"
+          ? part.call_id
+          : typeof part.callID === "string"
+            ? part.callID
+            : `${messageID}-call-${n}`
     const tool =
       typeof part.name === "string"
         ? part.name
@@ -380,9 +388,11 @@ function toolCalls(item: GwMessage, messageID: string, sessionID: string, time: 
     const args =
       "input" in part
         ? parseArgs(part.input)
-        : record(part.function) && "arguments" in (record(part.function) ?? {})
-          ? parseArgs(record(part.function)?.arguments)
-          : {}
+        : "arguments" in part
+          ? parseArgs(part.arguments)
+          : record(part.function) && "arguments" in (record(part.function) ?? {})
+            ? parseArgs(record(part.function)?.arguments)
+            : {}
     log.info("openclaw parsed tool call", {
       sessionID,
       messageID,
@@ -424,27 +434,51 @@ function toolCalls(item: GwMessage, messageID: string, sessionID: string, time: 
 
 function toolResults(item: GwMessage) {
   const root = record(item) ?? {}
-  const blocks = [...payload(item.content), ...list(root.content)]
+  const body = payload(item.content)
+  const rootCall =
+    typeof root.tool_use_id === "string" ||
+    typeof root.toolUseId === "string" ||
+    typeof root.call_id === "string" ||
+    typeof root.callId === "string" ||
+    typeof root.toolCallId === "string"
+  const blocks = [...(rootCall ? [root] : []), ...(body.length > 0 ? body : list(root.content))]
   const result = blocks
     .map((block) => {
       const part = record(block)
       if (!part) return
-      const type = typeof part.type === "string" ? part.type : ""
-      if (type !== "tool_result" && type !== "function_call_output") return
+      const type =
+        typeof part.type === "string" ? part.type : part === root && item.role === "toolResult" ? "toolResult" : ""
+      if (
+        type !== "tool_result" &&
+        type !== "function_call_output" &&
+        type !== "toolResult" &&
+        type !== "functionCallOutput"
+      )
+        return
       const callID =
         typeof part.tool_use_id === "string"
           ? part.tool_use_id
-          : typeof part.call_id === "string"
-            ? part.call_id
-            : typeof part.toolCallId === "string"
-              ? part.toolCallId
-              : undefined
+          : typeof part.toolUseId === "string"
+            ? part.toolUseId
+            : typeof part.call_id === "string"
+              ? part.call_id
+              : typeof part.callId === "string"
+                ? part.callId
+                : typeof part.toolCallId === "string"
+                  ? part.toolCallId
+                  : undefined
       if (!callID) return
-      const body = type === "tool_result" ? stringify(part.content) : stringify(part.output)
+      const body =
+        type === "tool_result" || type === "toolResult"
+          ? stringify("content" in part ? part.content : "output" in part ? part.output : part.result)
+          : stringify("output" in part ? part.output : part.result)
       const failed =
         part.is_error === true ||
+        part.isError === true ||
         part.error === true ||
-        (typeof part.status === "string" && ["error", "failed"].includes(part.status))
+        (typeof part.status === "string" && ["error", "failed"].includes(part.status)) ||
+        (typeof record(part.details)?.status === "string" &&
+          ["error", "failed"].includes(String(record(part.details)?.status)))
       log.info("openclaw parsed tool result", {
         role: item.role,
         callID,
@@ -554,8 +588,42 @@ function applyToolResult(message: Message, result: ReturnType<typeof toolResults
   return hit
 }
 
+function applyResults(
+  messages: Message[],
+  sessionID: string,
+  results: ReturnType<typeof toolResults>,
+  time: number,
+  preferred?: Message,
+) {
+  for (const result of results) {
+    let applied = false
+    if (preferred?.info.role === "assistant") {
+      applied = applyToolResult(preferred, result, time)
+    }
+    if (!applied) {
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const msg = messages[i]
+        if (!msg || msg === preferred) continue
+        if (msg.info.role !== "assistant") continue
+        if (applyToolResult(msg, result, time)) {
+          applied = true
+          break
+        }
+      }
+    }
+    if (applied) continue
+    log.warn("openclaw tool result unmatched", {
+      sessionID,
+      callID: result.callID,
+      output: preview(result.output),
+    })
+  }
+}
+
 function historyMessages(sessionID: string, input: GwMessage[]) {
   const messages: Message[] = []
+  const ids: string[] = []
+  let parentID: string | undefined
 
   for (const item of input) {
     log.debug("openclaw history item", {
@@ -569,38 +637,21 @@ function historyMessages(sessionID: string, input: GwMessage[]) {
         ? "assistant"
         : item.role === "user"
           ? "user"
-          : item.role === "tool"
+          : item.role === "tool" || item.role === "toolResult"
             ? "tool"
             : undefined
     if (!role) continue
     const created = now(item.timestamp ?? item.ts)
-    const results = role === "assistant" ? [] : toolResults(item)
+    const results = toolResults(item)
     if (results.length > 0) {
-      for (const result of results) {
-        let applied = false
-        for (let i = messages.length - 1; i >= 0; i--) {
-          const msg = messages[i]
-          if (msg.info.role !== "assistant") continue
-          if (applyToolResult(msg, result, created)) {
-            applied = true
-            break
-          }
-        }
-        if (!applied) {
-          log.warn("openclaw tool result unmatched", {
-            sessionID,
-            callID: result.callID,
-            output: preview(result.output),
-          })
-        }
-      }
+      if (role !== "assistant") applyResults(messages, sessionID, results, created)
     }
     if (role === "tool") continue
-    const messageID = `${sessionID}-m${messages.length}`
+    const messageID = msgID(sessionID, created, messages.length)
     if (role === "user") {
       const parts = userParts(item, messageID, sessionID)
       if (parts.length === 0) continue
-      messages.push({
+      const next: Message = {
         info: {
           id: messageID,
           sessionID,
@@ -611,18 +662,21 @@ function historyMessages(sessionID: string, input: GwMessage[]) {
             item.provider && item.model ? { providerID: item.provider, modelID: item.model } : { providerID, modelID },
         },
         parts,
-      })
+      }
+      messages.push(next)
+      ids.push(next.info.id)
+      parentID = next.info.id
       continue
     }
     const parts = assistantParts(item, messageID, sessionID)
     if (parts.length === 0) continue
-    messages.push({
+    const next = {
       info: {
         id: messageID,
         sessionID,
         role,
         time: { created, completed: created },
-        parentID: messages.at(-1)?.info.id ?? `${sessionID}-m${Math.max(0, messages.length - 1)}`,
+        parentID: parentID ?? ids[Math.max(0, messages.length - 1)],
         providerID: item.provider || providerID,
         modelID: item.model || modelID,
         mode: "default",
@@ -632,10 +686,85 @@ function historyMessages(sessionID: string, input: GwMessage[]) {
         tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
       },
       parts,
-    })
+    } satisfies Message
+    messages.push(next)
+    ids.push(next.info.id)
+    if (results.length > 0) applyResults(messages, sessionID, results, created, next)
   }
 
   return messages
+}
+
+function partID(messageID: string, callID: string) {
+  return `${messageID}-tool-${callID.replace(/[^a-zA-Z0-9_-]/g, "_")}`
+}
+
+function streamParts(
+  messageID: string,
+  sessionID: string,
+  input: unknown,
+  time: number,
+  tools?: Map<string, ToolPart>,
+) {
+  const item = record(input) as GwMessage | undefined
+  if (!item) return { calls: [] as ToolPart[], results: [] as ReturnType<typeof toolResults>, parts: [] as ToolPart[] }
+  const calls = toolCalls(item, messageID, sessionID, time)
+  const results = toolResults(item)
+  const part = new Map<string, ToolPart>()
+
+  for (const call of calls) {
+    const next = {
+      ...call,
+      id: tools?.get(call.callID)?.id ?? partID(messageID, call.callID),
+      messageID,
+      sessionID,
+    } satisfies ToolPart
+    part.set(call.callID, next)
+  }
+
+  for (const result of results) {
+    const current = part.get(result.callID) ?? tools?.get(result.callID)
+    const start = current ? started(current, time) : time
+    const next = result.failed
+      ? {
+          id: current?.id ?? partID(messageID, result.callID),
+          sessionID,
+          messageID,
+          type: "tool" as const,
+          callID: result.callID,
+          tool: current?.tool ?? "tool",
+          state: {
+            status: "error" as const,
+            input: current?.state.input ?? {},
+            error: result.output || "Tool call failed",
+            ...(result.metadata ? { metadata: result.metadata } : {}),
+            time: { start, end: time },
+          },
+        }
+      : {
+          id: current?.id ?? partID(messageID, result.callID),
+          sessionID,
+          messageID,
+          type: "tool" as const,
+          callID: result.callID,
+          tool: current?.tool ?? "tool",
+          state: {
+            status: "completed" as const,
+            input: current?.state.input ?? {},
+            output: result.output,
+            title: current ? title(current) : "Tool",
+            metadata: result.metadata ?? {},
+            time: { start, end: time },
+          },
+        }
+    part.set(result.callID, next)
+  }
+
+  return {
+    calls,
+    results,
+    parts: [...part.values()],
+  }
 }
 
 function prompt(input: unknown) {
@@ -706,6 +835,14 @@ function mergeHistory(history: Message[], optimistic: Message[]) {
 
 function cmp(a: string, b: string) {
   return a < b ? -1 : a > b ? 1 : 0
+}
+
+function ord(value: number, width: number) {
+  return Math.max(0, Math.trunc(value)).toString().padStart(width, "0")
+}
+
+function msgID(sessionID: string, created: number, index: number) {
+  return `${sessionID}-m${ord(created, 13)}-${ord(index, 4)}`
 }
 
 function session(input: GwSession): Session {
@@ -1084,11 +1221,18 @@ async function history(client: GwClient, sessionID: string) {
   return mapped
 }
 
-async function waitHistory(client: GwClient, sessionID: string, started: number) {
+async function waitHistory(
+  client: GwClient,
+  sessionID: string,
+  started: number,
+  hit?: { parentID: string; messageID: string; partID: string; tools: Map<string, ToolPart>; prompt?: string },
+) {
   for (let i = 0; i < 90; i++) {
     await new Promise((resolve) => setTimeout(resolve, 500))
     const list = await history(client, sessionID).catch(() => [])
-    const item = [...list].reverse().find((item) => item.info.role === "assistant" && item.info.time.created >= started)
+    const item = hit
+      ? current(list, hit, started)
+      : [...list].reverse().find((item) => item.info.role === "assistant" && item.info.time.created >= started)
     log.debug("openclaw waitHistory poll", {
       sessionID,
       started,
@@ -1096,14 +1240,123 @@ async function waitHistory(client: GwClient, sessionID: string, started: number)
       total: list.length,
       hit: item ? { id: item.info.id, created: item.info.time.created } : undefined,
     })
-    if (item) return item
+    if (item) return hit ? replay(item, hit) : item
   }
   log.warn("openclaw waitHistory exhausted", { sessionID, started })
 }
 
+function current(list: Message[], hit: { parentID: string; messageID?: string }, started: number) {
+  const anchor = source(list, hit, started)
+  return [...list].reverse().find((item) => {
+    if (item.info.role !== "assistant") return false
+    if (item.info.id === hit.messageID) return true
+    if (item.info.parentID === hit.parentID) return true
+    if (anchor && item.info.parentID === anchor) return true
+    return item.info.time.created >= started
+  })
+}
+
+function source(list: Message[], hit: { parentID: string; prompt?: string }, started: number) {
+  if (!hit.prompt) return
+  return list
+    .filter((item) => item.info.role === "user")
+    .filter((item) => inputText(item.parts) === hit.prompt)
+    .sort(
+      (a, b) =>
+        Math.abs(a.info.time.created - started) - Math.abs(b.info.time.created - started) || cmp(a.info.id, b.info.id),
+    )[0]?.info.id
+}
+
+function replay(
+  item: Message,
+  hit: { parentID: string; messageID: string; partID: string; tools: Map<string, ToolPart> },
+) {
+  const parts = item.parts.map((part) => {
+    if (part.type === "text") {
+      return {
+        ...part,
+        id: hit.partID,
+        messageID: hit.messageID,
+      }
+    }
+    return {
+      ...part,
+      id: hit.tools.get(part.callID)?.id ?? partID(hit.messageID, part.callID),
+      messageID: hit.messageID,
+    }
+  })
+
+  return {
+    ...item,
+    info: {
+      ...item.info,
+      id: hit.messageID,
+      parentID: hit.parentID,
+    },
+    parts,
+  } satisfies Message
+}
+
+async function pumpHistory(
+  client: GwClient,
+  sessionID: string,
+  started: number,
+  hit: { parentID: string; messageID: string; partID: string; tools: Map<string, ToolPart>; prompt?: string },
+  seen: Set<string>,
+  onItem: (item: Message) => void,
+) {
+  const list = await history(client, sessionID).catch(() => [])
+  const anchor = source(list, hit, started)
+  const next = list
+    .filter((item) => item.info.role === "assistant")
+    .filter(
+      (item) =>
+        item.info.id === hit.messageID ||
+        item.info.parentID === hit.parentID ||
+        item.info.parentID === anchor ||
+        item.info.time.created >= started,
+    )
+    .filter((item) => !seen.has(item.info.id))
+    .sort((a, b) => a.info.time.created - b.info.time.created || cmp(a.info.id, b.info.id))
+  for (const item of next) {
+    seen.add(item.info.id)
+    onItem(replay(item, hit))
+  }
+  return next
+}
+
+function emitHistory(events: Events, item: Message) {
+  events.emit({
+    directory,
+    payload: {
+      type: "message.updated",
+      properties: { info: item.info },
+    },
+  })
+  for (const part of item.parts) {
+    log.debug("openclaw emit message.part.updated", {
+      sessionID: part.sessionID,
+      messageID: part.messageID,
+      partID: part.id,
+      type: part.type,
+      ...(part.type === "text" ? { text: part.text } : { tool: part.tool, status: part.state.status }),
+    })
+    events.emit({
+      directory,
+      payload: {
+        type: "message.part.updated",
+        properties: { part },
+      },
+    })
+  }
+}
+
 export namespace OpenClawBridge {
   export const internal = {
+    current,
     historyMessages,
+    source,
+    streamParts,
   }
 
   export function createApp(opts: Opts) {
@@ -1112,11 +1365,70 @@ export namespace OpenClawBridge {
     const events = new Events()
     const runs = new Map<
       string,
-      { sessionID: string; messageID: string; partID: string; parentID: string; text: string }
+      {
+        sessionID: string
+        messageID: string
+        partID: string
+        parentID: string
+        started: number
+        text: string
+        created: boolean
+        tools: Map<string, ToolPart>
+      }
+    >()
+    const active = new Map<
+      string,
+      {
+        parentID: string
+        messageID: string
+        partID: string
+        tools: Map<string, ToolPart>
+      }
     >()
     // Cache the just-submitted user turn until gateway history catches up, so
     // OpenCode can render the turn immediately in a new OpenClaw conversation.
     const sentMap = new Map<string, Message[]>()
+
+    const info = (
+      hit: {
+        sessionID: string
+        messageID: string
+        parentID: string
+      },
+      message?: Record<string, unknown>,
+      completed?: number,
+    ) => ({
+      id: hit.messageID,
+      sessionID: hit.sessionID,
+      role: "assistant" as const,
+      time: completed ? { created: Date.now(), completed } : { created: Date.now() },
+      parentID: hit.parentID,
+      providerID: String(message?.provider || providerID),
+      modelID: String(message?.model || modelID),
+      mode: "default",
+      agent: "claw",
+      path: { cwd: `${directory}/${hit.sessionID}`, root: directory },
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    })
+
+    const ensure = (
+      hit: {
+        sessionID: string
+        messageID: string
+        parentID: string
+        created: boolean
+      },
+      message?: Record<string, unknown>,
+      completed?: number,
+    ) => {
+      if (hit.created) return
+      hit.created = true
+      events.emit({
+        directory,
+        payload: { type: "message.updated", properties: { info: info(hit, message, completed) } },
+      })
+    }
 
     const emitStatus = (sessionID: string, type: "busy" | "idle") => {
       events.emit({
@@ -1135,23 +1447,26 @@ export namespace OpenClawBridge {
         payload.message && typeof payload.message === "object"
           ? (payload.message as Record<string, unknown>)
           : undefined
+      const stream = streamParts(hit.messageID, hit.sessionID, payload.message, Date.now(), hit.tools)
+      const calls = stream.calls
+      const results = stream.results
+      if (calls.length > 0 || results.length > 0) ensure(hit, message)
+      for (const part of stream.parts) {
+        hit.tools.set(part.callID, part)
+        log.debug("openclaw emit tool result", {
+          runID,
+          sessionID: hit.sessionID,
+          messageID: hit.messageID,
+          partID: part.id,
+          tool: part.tool,
+          status: part.state.status,
+        })
+        events.emit({ directory, payload: { type: "message.part.updated", properties: { part } } })
+      }
       const body = text(message?.content)
       if (!body) return
       if (!hit.text) {
-        const info = {
-          id: hit.messageID,
-          sessionID: hit.sessionID,
-          role: "assistant",
-          time: { created: Date.now() },
-          parentID: hit.parentID,
-          providerID: String(message?.provider || providerID),
-          modelID: String(message?.model || modelID),
-          mode: "default",
-          agent: "claw",
-          path: { cwd: `${directory}/${hit.sessionID}`, root: directory },
-          cost: 0,
-          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-        }
+        ensure(hit, message)
         const part = {
           id: hit.partID,
           sessionID: hit.sessionID,
@@ -1159,7 +1474,6 @@ export namespace OpenClawBridge {
           type: "text",
           text: "",
         }
-        events.emit({ directory, payload: { type: "message.updated", properties: { info } } })
         events.emit({ directory, payload: { type: "message.part.updated", properties: { part } } })
       }
       const delta = body.startsWith(hit.text) ? body.slice(hit.text.length) : body
@@ -1211,6 +1525,24 @@ export namespace OpenClawBridge {
           },
         })
       }
+      if (state === "final" && hit.created) {
+        events.emit({
+          directory,
+          payload: {
+            type: "message.updated",
+            properties: { info: info(hit, undefined, Date.now()) },
+          },
+        })
+      }
+      if (state === "final" && !hit.text) {
+        const item = await waitHistory(gw, hit.sessionID, hit.started, {
+          parentID: hit.parentID,
+          messageID: hit.messageID,
+          partID: hit.partID,
+          tools: hit.tools,
+        }).catch(() => undefined)
+        if (item) emitHistory(events, item)
+      }
       if (state === "final" || (state === "aborted" && hit.text)) {
         const list = await sessions(gw).catch(() => [])
         const info = list.find((item: Session) => item.id === hit.sessionID)
@@ -1230,6 +1562,10 @@ export namespace OpenClawBridge {
         (sentMap.get(hit.sessionID) ?? []).filter((item) => item.info.id !== hit.parentID),
       )
       emitStatus(hit.sessionID, "idle")
+      const current = active.get(hit.sessionID)
+      if (current?.parentID === hit.parentID && current.messageID === hit.messageID) {
+        active.delete(hit.sessionID)
+      }
       runs.delete(runID)
     }
 
@@ -1445,16 +1781,46 @@ export namespace OpenClawBridge {
               typeof (res as Record<string, unknown>)?.runId === "string"
                 ? String((res as Record<string, unknown>).runId)
                 : crypto.randomUUID()
+            const current = active.get(sessionID)
+            const messageID =
+              current?.parentID === optimistic.info.id ? current.messageID : Identifier.ascending("message")
+            const partID = current?.parentID === optimistic.info.id ? current.partID : Identifier.ascending("part")
+            const tools = current?.parentID === optimistic.info.id ? current.tools : new Map<string, ToolPart>()
             runs.set(runID, {
               sessionID,
-              messageID: Identifier.ascending("message"),
-              partID: Identifier.ascending("part"),
+              messageID,
+              partID,
               parentID: optimistic.info.id,
+              started,
               text: "",
+              created: false,
+              tools,
             })
+            active.set(sessionID, { parentID: optimistic.info.id, messageID, partID, tools })
             log.debug("openclaw prompt_async accepted", { sessionID, runID })
             emitStatus(sessionID, "busy")
-            void waitHistory(gw, sessionID, started)
+            const seen = new Set<string>()
+            void (async () => {
+              for (let i = 0; i < 90; i++) {
+                await new Promise((resolve) => setTimeout(resolve, 500))
+                if (!runs.has(runID)) break
+                await pumpHistory(
+                  gw,
+                  sessionID,
+                  started,
+                  { parentID: optimistic.info.id, messageID, partID, tools, prompt: message },
+                  seen,
+                  (item) => emitHistory(events, item),
+                )
+              }
+            })()
+            void waitHistory(gw, sessionID, started, {
+              parentID: optimistic.info.id,
+              messageID,
+              partID,
+              tools,
+              prompt: message,
+            })
               .then((item) => {
                 if (!item) return
                 log.debug("openclaw prompt_async history hit", {
@@ -1462,29 +1828,7 @@ export namespace OpenClawBridge {
                   messageID: item.info.id,
                   created: item.info.time.created,
                 })
-                events.emit({
-                  directory,
-                  payload: {
-                    type: "message.updated",
-                    properties: { info: item.info },
-                  },
-                })
-                for (const part of item.parts) {
-                  log.debug("openclaw emit message.part.updated", {
-                    sessionID,
-                    messageID: part.messageID,
-                    partID: part.id,
-                    type: part.type,
-                    ...(part.type === "text" ? { text: part.text } : { tool: part.tool, status: part.state.status }),
-                  })
-                  events.emit({
-                    directory,
-                    payload: {
-                      type: "message.part.updated",
-                      properties: { part },
-                    },
-                  })
-                }
+                emitHistory(events, item)
                 emitStatus(sessionID, "idle")
               })
               .catch(() => emitStatus(sessionID, "idle"))
@@ -1523,19 +1867,47 @@ export namespace OpenClawBridge {
           typeof (res as Record<string, unknown>)?.runId === "string"
             ? String((res as Record<string, unknown>).runId)
             : crypto.randomUUID()
+        const current = active.get(sessionID)
+        const messageID = current?.parentID === optimistic.info.id ? current.messageID : Identifier.ascending("message")
+        const partID = current?.parentID === optimistic.info.id ? current.partID : Identifier.ascending("part")
+        const tools = current?.parentID === optimistic.info.id ? current.tools : new Map<string, ToolPart>()
         runs.set(runID, {
           sessionID,
-          messageID: Identifier.ascending("message"),
-          partID: Identifier.ascending("part"),
+          messageID,
+          partID,
           parentID: optimistic.info.id,
+          started,
           text: "",
+          created: false,
+          tools,
         })
+        active.set(sessionID, { parentID: optimistic.info.id, messageID, partID, tools })
         log.debug("openclaw message accepted", { sessionID, runID })
         emitStatus(sessionID, "busy")
         c.status(200)
         c.header("Content-Type", "application/json")
         return stream(c, async (stream) => {
-          const item = await waitHistory(gw, sessionID, started)
+          const seen = new Set<string>()
+          for (let i = 0; i < 20; i++) {
+            await new Promise((resolve) => setTimeout(resolve, 300))
+            const items = await pumpHistory(
+              gw,
+              sessionID,
+              started,
+              { parentID: optimistic.info.id, messageID, partID, tools, prompt: message },
+              seen,
+              (item) => emitHistory(events, item),
+            )
+            if (items.length > 0) break
+            if (!runs.has(runID)) break
+          }
+          const item = await waitHistory(gw, sessionID, started, {
+            parentID: optimistic.info.id,
+            messageID,
+            partID,
+            tools,
+            prompt: message,
+          })
           if (!item) log.warn("openclaw message completed without assistant reply", { sessionID })
           if (item) {
             log.debug("openclaw message stream response", {
