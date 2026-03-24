@@ -12,8 +12,9 @@ import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { Effect, FileSystem, Layer, Path, Scope, ServiceMap, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
-import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node"
+import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { makeRunPromise } from "@/effect/run-service"
+import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 
 export namespace Worktree {
   const log = Log.create({ service: "worktree" })
@@ -250,7 +251,9 @@ export namespace Worktree {
 
       const git = Effect.fnUntraced(
         function* (args: string[], opts?: { cwd?: string }) {
-          const handle = yield* spawner.spawn(ChildProcess.make("git", args, { cwd: opts?.cwd, extendEnv: true }))
+          const handle = yield* spawner.spawn(
+            ChildProcess.make("git", args, { cwd: opts?.cwd, extendEnv: true, stdin: "ignore" }),
+          )
           const [text, stderr] = yield* Effect.all(
             [Stream.mkString(Stream.decodeText(handle.stdout)), Stream.mkString(Stream.decodeText(handle.stderr))],
             { concurrency: 2 },
@@ -259,7 +262,9 @@ export namespace Worktree {
           return { code, text, stderr } satisfies GitResult
         },
         Effect.scoped,
-        Effect.catch(() => Effect.succeed({ code: 1, text: "", stderr: "" } satisfies GitResult)),
+        Effect.catch((e) =>
+          Effect.succeed({ code: 1, text: "", stderr: e instanceof Error ? e.message : String(e) } satisfies GitResult),
+        ),
       )
 
       const candidate = Effect.fn("Worktree.candidate")(function* (root: string, base?: string) {
@@ -471,7 +476,9 @@ export namespace Worktree {
       const runStartCommand = Effect.fnUntraced(
         function* (directory: string, cmd: string) {
           const [shell, args] = process.platform === "win32" ? ["cmd", ["/c", cmd]] : ["bash", ["-lc", cmd]]
-          const handle = yield* spawner.spawn(ChildProcess.make(shell, args, { cwd: directory, extendEnv: true }))
+          const handle = yield* spawner.spawn(
+            ChildProcess.make(shell, args, { cwd: directory, extendEnv: true, stdin: "ignore" }),
+          )
           const code = yield* handle.exitCode
           return code
         },
@@ -651,7 +658,7 @@ export namespace Worktree {
   )
 
   const defaultLayer = layer.pipe(
-    Layer.provide(NodeChildProcessSpawner.layer),
+    Layer.provide(CrossSpawnSpawner.layer),
     Layer.provide(NodeFileSystem.layer),
     Layer.provide(NodePath.layer),
   )
