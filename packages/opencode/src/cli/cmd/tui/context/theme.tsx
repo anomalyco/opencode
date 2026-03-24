@@ -1,6 +1,6 @@
-import { SyntaxStyle, RGBA, type TerminalColors } from "@opentui/core"
+import { CliRenderEvents, SyntaxStyle, RGBA, type TerminalColors } from "@opentui/core"
 import path from "path"
-import { createEffect, createMemo, onMount } from "solid-js"
+import { createEffect, createMemo, onCleanup, onMount } from "solid-js"
 import { createSimpleContext } from "./helper"
 import { Glob } from "../../../../util/glob"
 import aura from "./theme/aura.json" with { type: "json" }
@@ -280,6 +280,7 @@ function ansiToRgba(code: number): RGBA {
 export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   name: "Theme",
   init: (props: { mode: "dark" | "light" }) => {
+    const renderer = useRenderer()
     const config = useTuiConfig()
     const kv = useKV()
     const [store, setStore] = createStore({
@@ -295,7 +296,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     })
 
     function init() {
-      resolveSystemTheme()
+      resolveSystemTheme(store.mode)
       getCustomThemes()
         .then((custom) => {
           setStore(
@@ -316,14 +317,12 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
 
     onMount(init)
 
-    function resolveSystemTheme() {
-      console.log("resolveSystemTheme")
+    function resolveSystemTheme(mode: "dark" | "light" = store.mode) {
       renderer
         .getPalette({
           size: 16,
         })
         .then((colors) => {
-          console.log(colors.palette)
           if (!colors.palette[0]) {
             if (store.active === "system") {
               setStore(
@@ -337,7 +336,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
           }
           setStore(
             produce((draft) => {
-              draft.themes.system = generateSystem(colors, store.mode)
+              draft.themes.system = generateSystem(colors, mode)
               if (store.active === "system") {
                 draft.ready = true
               }
@@ -346,14 +345,28 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
         })
     }
 
-    const renderer = useRenderer()
-    process.on("SIGUSR2", async () => {
+    function update(mode: "dark" | "light") {
+      if (store.mode === mode) return
+      setStore("mode", mode)
+      kv.set("theme_mode", mode)
       renderer.clearPaletteCache()
-      init()
+      resolveSystemTheme(mode)
+    }
+
+    const handle = (mode: "dark" | "light") => {
+      update(mode)
+    }
+    renderer.on(CliRenderEvents.THEME_MODE, handle)
+    onCleanup(() => {
+      renderer.off(CliRenderEvents.THEME_MODE, handle)
     })
 
     const values = createMemo(() => {
       return resolveTheme(store.themes[store.active] ?? store.themes.opencode, store.mode)
+    })
+
+    createEffect(() => {
+      renderer.setBackgroundColor(values().background)
     })
 
     const syntax = createMemo(() => generateSyntax(values()))
@@ -378,8 +391,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
         return store.mode
       },
       setMode(mode: "dark" | "light") {
-        setStore("mode", mode)
-        kv.set("theme_mode", mode)
+        update(mode)
       },
       set(theme: string) {
         setStore("active", theme)
