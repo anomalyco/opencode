@@ -467,6 +467,8 @@ export const dict = {
 
   "toast.file.loadFailed.title": "Failed to load file",
   "toast.file.listFailed.title": "Failed to list files",
+  "toast.file.listFailed.openclaw":
+    "OpenClaw does not expose the project file tree yet. You can keep chatting here, but browse files from a normal project.",
 
   "toast.context.noLineSelection.title": "No line selection",
   "toast.context.noLineSelection.description": "Select a line range in a file tab first.",
@@ -486,6 +488,7 @@ export const dict = {
   "toast.session.generateTitle.failed.title": "Failed to generate title",
 
   "toast.session.listFailed.title": "Failed to load sessions for {{project}}",
+  "toast.session.listFailed.openclaw.title": "Failed to load OpenClaw sessions",
   "toast.project.reloadFailed.title": "Failed to reload {{project}}",
 
   "toast.update.title": "Update available",
@@ -509,6 +512,17 @@ export const dict = {
     "Root element not found. Did you forget to add it to your index.html? Or maybe the id attribute got misspelled?",
 
   "error.globalSync.connectFailed": "Could not connect to server. Is there a server running at `{{url}}`?",
+  "error.openclaw.fileUnsupported":
+    "OpenClaw does not expose a project filesystem yet. You can keep chatting in OpenClaw, but file browsing or opening should be done from a normal project.",
+  "error.openclaw.fileUnsupported.hint":
+    "If you want OpenClaw to manage a project, the better long-term UX is an in-project assistant panel rather than reusing the project file tree.",
+  "error.openclaw.gatewayUnavailable":
+    "The OpenClaw gateway is currently unavailable, so sessions or history could not be loaded.",
+  "error.openclaw.gatewayUnavailable.hint":
+    "Check that the Gateway URL in desktop settings is correct, then make sure the gateway process is still online. After a reboot, you may need to restart or reconnect the gateway.",
+  "error.openclaw.gatewayAuth": "OpenClaw gateway authentication may have failed.",
+  "error.openclaw.gatewayAuth.hint":
+    "Check whether the Gateway Token in desktop settings is still valid, and confirm this device/account is allowed to connect.",
   "error.globalSDK.noServerAvailable": "No server available",
   "error.globalSDK.serverNotAvailable": "Server not available",
   "error.childStore.persistedCacheCreateFailed": "Failed to create persisted cache",

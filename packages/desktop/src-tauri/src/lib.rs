@@ -15,9 +15,7 @@ use crate::cli::CommandChild;
 use futures::{FutureExt, TryFutureExt};
 use serde_json::json;
 use std::{
-    collections::VecDeque,
-    env,
-    fs,
+    env, fs,
     future::Future,
     net::TcpListener,
     path::PathBuf,
@@ -114,13 +112,11 @@ struct ServerState {
 struct OpenclawState {
     child: Arc<Mutex<Option<CommandChild>>>,
     data: Arc<Mutex<Option<ServerReadyData>>>,
+    config: Arc<Mutex<Option<server::OpenclawConfig>>>,
 }
 
 /// Resolves with sidecar credentials as soon as the sidecar is spawned (before health check).
 struct SidecarReady(futures::future::Shared<oneshot::Receiver<ServerReadyData>>);
-
-#[derive(Clone)]
-struct LogState(Arc<Mutex<VecDeque<String>>>);
 
 #[derive(Clone, Default)]
 struct InitialPathState(Arc<Mutex<Option<String>>>);
@@ -139,7 +135,14 @@ fn config_root() -> Option<PathBuf> {
         .map(|dir| PathBuf::from(dir).join(".config").join("opencode"))
 }
 
-fn push_config_file(list: &mut Vec<ConfigFile>, id: &str, label: &str, path: PathBuf, scope: &str, kind: &str) {
+fn push_config_file(
+    list: &mut Vec<ConfigFile>,
+    id: &str,
+    label: &str,
+    path: PathBuf,
+    scope: &str,
+    kind: &str,
+) {
     let exists = path.is_file();
     list.push(ConfigFile {
         id: id.to_string(),
@@ -216,10 +219,18 @@ fn get_config_workspace() -> ConfigWorkspace {
 
     ConfigWorkspace {
         config_root: root.as_ref().map(|dir| dir.to_string_lossy().to_string()),
-        agents_root: agents_root.as_ref().map(|dir| dir.to_string_lossy().to_string()),
-        skills_root: skills_root.as_ref().map(|dir| dir.to_string_lossy().to_string()),
-        plugins_root: plugins_root.as_ref().map(|dir| dir.to_string_lossy().to_string()),
-        agents_md_path: agents_md_path.as_ref().map(|file| file.to_string_lossy().to_string()),
+        agents_root: agents_root
+            .as_ref()
+            .map(|dir| dir.to_string_lossy().to_string()),
+        skills_root: skills_root
+            .as_ref()
+            .map(|dir| dir.to_string_lossy().to_string()),
+        plugins_root: plugins_root
+            .as_ref()
+            .map(|dir| dir.to_string_lossy().to_string()),
+        agents_md_path: agents_md_path
+            .as_ref()
+            .map(|file| file.to_string_lossy().to_string()),
         agents: agents_root
             .as_ref()
             .map(|dir| list_workspace_files(dir, &["md"], "agent"))
@@ -343,7 +354,8 @@ fn write_config_file(path: String, content: String) -> Result<(), String> {
         return Err("Failed to resolve parent directory".to_string());
     };
 
-    fs::create_dir_all(&parent).map_err(|err| format!("Failed to create parent directory: {err}"))?;
+    fs::create_dir_all(&parent)
+        .map_err(|err| format!("Failed to create parent directory: {err}"))?;
     fs::write(path, content).map_err(|err| format!("Failed to write file: {err}"))
 }
 
@@ -359,7 +371,8 @@ fn create_config_file(path: String, content: String) -> Result<(), String> {
         return Err("File already exists".to_string());
     }
 
-    fs::create_dir_all(&parent).map_err(|err| format!("Failed to create parent directory: {err}"))?;
+    fs::create_dir_all(&parent)
+        .map_err(|err| format!("Failed to create parent directory: {err}"))?;
     fs::write(file, content).map_err(|err| format!("Failed to write file: {err}"))
 }
 
@@ -368,14 +381,14 @@ fn resolve_path_from_args(args: &[String], cwd: &str) -> Option<String> {
     if path_arg.starts_with('-') {
         return None;
     }
-    
+
     let path = PathBuf::from(path_arg);
     let absolute = if path.is_absolute() {
         path
     } else {
         PathBuf::from(cwd).join(path)
     };
-    
+
     if absolute.is_dir() {
         absolute.canonicalize().ok()?.to_str().map(String::from)
     } else {
@@ -432,10 +445,33 @@ fn clear_bridge(app: &AppHandle) {
     }
 }
 
+fn kill_openclaw(app: &AppHandle) {
+    let Some(state) = app.try_state::<OpenclawState>() else {
+        tracing::info!("OpenClaw adapter not running");
+        return;
+    };
+
+    if let Ok(mut child) = state.child.lock()
+        && let Some(child) = child.take()
+    {
+        let _ = child.kill();
+        tracing::info!("Killed OpenClaw adapter");
+    }
+
+    if let Ok(mut data) = state.data.lock() {
+        *data = None;
+    }
+
+    if let Ok(mut cfg) = state.config.lock() {
+        *cfg = None;
+    }
+}
 
 #[tauri::command]
 #[specta::specta]
 fn kill_sidecar(app: AppHandle) {
+    kill_openclaw(&app);
+
     let Some(server_state) = app.try_state::<ServerState>() else {
         tracing::info!("Server not running");
         return;
@@ -455,6 +491,130 @@ fn kill_sidecar(app: AppHandle) {
     clear_bridge(&app);
 
     tracing::info!("Killed server");
+}
+
+#[tauri::command]
+#[specta::specta]
+async fn sync_openclaw_server(app: AppHandle) -> Result<Option<ServerReadyData>, String> {
+    let cfg = server::get_openclaw_config(app.clone())?;
+    let Some(state) = app.try_state::<OpenclawState>() else {
+        return Ok(None);
+    };
+
+    if !cfg.enabled || cfg.url.as_deref().is_none_or(|x| x.trim().is_empty()) {
+        tracing::info!(
+            enabled = cfg.enabled,
+            has_url = cfg.url.is_some(),
+            "stopping OpenClaw adapter"
+        );
+        kill_openclaw(&app);
+        return Ok(None);
+    }
+
+    let current_cfg = state
+        .config
+        .lock()
+        .map_err(|_| "Failed to acquire openclaw config state".to_string())?
+        .clone();
+    let current = state
+        .data
+        .lock()
+        .map_err(|_| "Failed to acquire openclaw state".to_string())?
+        .clone();
+    let running = state
+        .child
+        .lock()
+        .map_err(|_| "Failed to acquire openclaw child state".to_string())?
+        .is_some();
+
+    if current_cfg.as_ref() == Some(&cfg) && running {
+        tracing::info!(url = ?current.as_ref().map(|x| x.url.clone()), "reusing OpenClaw adapter");
+        return Ok(current);
+    }
+
+    tracing::info!(cfg = ?cfg, "syncing OpenClaw adapter");
+    kill_openclaw(&app);
+
+    let url = cfg
+        .url
+        .clone()
+        .filter(|x| !x.trim().is_empty())
+        .ok_or_else(|| "OpenClaw gateway URL is required".to_string())?;
+    let port = get_openclaw_port();
+    let hostname = "127.0.0.1".to_string();
+    let password = uuid::Uuid::new_v4().to_string();
+    let http = format!("http://{hostname}:{port}");
+
+    let (child, health_check) =
+        crate::cli::serve_openclaw(&app, &hostname, port, &password, &url, cfg.token.as_deref());
+
+    let data = ServerReadyData {
+        url: http,
+        username: Some("opencode".to_string()),
+        password: Some(password),
+    };
+
+    {
+        let mut handle = state
+            .child
+            .lock()
+            .map_err(|_| "Failed to acquire openclaw child state".to_string())?;
+        *handle = Some(child);
+    }
+
+    {
+        let mut current = state
+            .data
+            .lock()
+            .map_err(|_| "Failed to acquire openclaw state".to_string())?;
+        *current = Some(data.clone());
+    }
+
+    {
+        let mut current = state
+            .config
+            .lock()
+            .map_err(|_| "Failed to acquire openclaw config state".to_string())?;
+        *current = Some(cfg);
+    }
+
+    let handle = app.clone();
+    let url = data.url.clone();
+    tauri::async_runtime::spawn(async move {
+        match health_check.await {
+            Ok(payload) => {
+                tracing::warn!(payload = ?payload, url, "OpenClaw adapter exited");
+            }
+            Err(err) => {
+                tracing::warn!(error = %err, url, "OpenClaw adapter exit watch failed");
+            }
+        }
+
+        let Some(state) = handle.try_state::<OpenclawState>() else {
+            return;
+        };
+        let same = state
+            .data
+            .lock()
+            .ok()
+            .and_then(|current| current.clone())
+            .is_some_and(|current| current.url == url);
+        if !same {
+            return;
+        }
+
+        if let Ok(mut child) = state.child.lock() {
+            *child = None;
+        }
+        if let Ok(mut data) = state.data.lock() {
+            *data = None;
+        }
+        if let Ok(mut cfg) = state.config.lock() {
+            *cfg = None;
+        }
+    });
+
+    Ok(Some(data))
 }
 
 #[tauri::command]
@@ -510,60 +670,7 @@ async fn reload_sidecar(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 #[specta::specta]
 async fn get_openclaw_server(app: AppHandle) -> Result<Option<ServerReadyData>, String> {
-    let cfg = server::get_openclaw_config(app.clone())?;
-    if !cfg.enabled {
-        return Ok(None);
-    }
-
-    if let Some(state) = app.try_state::<OpenclawState>() {
-        let data = state
-            .data
-            .lock()
-            .map_err(|_| "Failed to acquire openclaw state".to_string())?
-            .clone();
-        if data.is_some() {
-            return Ok(data);
-        }
-    }
-
-    let Some(url) = cfg.url.clone() else {
-        return Ok(None);
-    };
-
-    let port = get_sidecar_port();
-    let hostname = "127.0.0.1".to_string();
-    let password = uuid::Uuid::new_v4().to_string();
-    let http = format!("http://{hostname}:{port}");
-
-    let (child, health_check) = crate::cli::serve_openclaw(
-        &app,
-        &hostname,
-        port,
-        &password,
-        &url,
-        cfg.token.as_deref(),
-    );
-
-    let data = ServerReadyData {
-        url: http,
-        username: Some("opencode".to_string()),
-        password: Some(password),
-    };
-
-    if let Some(state) = app.try_state::<OpenclawState>() {
-        if let Ok(mut handle) = state.child.lock() {
-            *handle = Some(child);
-        }
-        if let Ok(mut current) = state.data.lock() {
-            *current = Some(data.clone());
-        }
-    }
-
-    tauri::async_runtime::spawn(async move {
-        let _ = timeout(Duration::from_secs(30), health_check).await;
-    });
-
-    Ok(Some(data))
+    sync_openclaw_server(app).await
 }
 
 #[tauri::command]
@@ -924,10 +1031,16 @@ async fn set_custom_editor_path(app: AppHandle, path: Option<String>) -> Result<
         .store(SETTINGS_STORE)
         .map_err(|e| format!("Failed to open settings store: {}", e))?;
     match path {
-        Some(p) => { store.set(CUSTOM_EDITOR_PATH_KEY, serde_json::Value::String(p)); }
-        None => { store.delete(CUSTOM_EDITOR_PATH_KEY); }
+        Some(p) => {
+            store.set(CUSTOM_EDITOR_PATH_KEY, serde_json::Value::String(p));
+        }
+        None => {
+            store.delete(CUSTOM_EDITOR_PATH_KEY);
+        }
     }
-    store.save().map_err(|e| format!("Failed to save settings: {}", e))?;
+    store
+        .save()
+        .map_err(|e| format!("Failed to save settings: {}", e))?;
     Ok(())
 }
 
@@ -952,10 +1065,16 @@ async fn set_default_editor(app: AppHandle, editor: Option<String>) -> Result<()
         .store(SETTINGS_STORE)
         .map_err(|e| format!("Failed to open settings store: {}", e))?;
     match editor {
-        Some(e) => { store.set(DEFAULT_EDITOR_KEY, serde_json::Value::String(e)); }
-        None => { store.delete(DEFAULT_EDITOR_KEY); }
+        Some(e) => {
+            store.set(DEFAULT_EDITOR_KEY, serde_json::Value::String(e));
+        }
+        None => {
+            store.delete(DEFAULT_EDITOR_KEY);
+        }
     }
-    store.save().map_err(|e| format!("Failed to save settings: {}", e))?;
+    store
+        .save()
+        .map_err(|e| format!("Failed to save settings: {}", e))?;
     Ok(())
 }
 
@@ -1062,7 +1181,6 @@ pub fn run() {
             // ensuring all buffered logs are flushed on shutdown.
             handle.manage(logging::init(&log_dir));
 
-
             builder.mount_events(&handle);
             tauri::async_runtime::spawn(initialize(handle));
 
@@ -1091,6 +1209,7 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         .commands(tauri_specta::collect_commands![
             kill_sidecar,
             reload_sidecar,
+            sync_openclaw_server,
             cli::install_cli,
             await_initialization,
             server::get_default_server_url,
@@ -1302,6 +1421,7 @@ fn setup_app(app: &tauri::AppHandle, init_rx: watch::Receiver<InitStep>) {
     app.manage(OpenclawState {
         child: Arc::new(Mutex::new(None)),
         data: Arc::new(Mutex::new(None)),
+        config: Arc::new(Mutex::new(None)),
     });
 }
 
@@ -1313,7 +1433,6 @@ fn spawn_cli_sync_task(app: AppHandle) {
     });
 }
 
-
 fn get_sidecar_port() -> u32 {
     option_env!("OPENCODE_PORT")
         .map(|s| s.to_string())
@@ -1324,6 +1443,20 @@ fn get_sidecar_port() -> u32 {
                 .expect("Failed to bind to find free port")
                 .local_addr()
                 .expect("Failed to get local address")
+                .port()
+        }) as u32
+}
+
+fn get_openclaw_port() -> u32 {
+    option_env!("OPENCODE_OPENCLAW_PORT")
+        .map(|s| s.to_string())
+        .or_else(|| std::env::var("OPENCODE_OPENCLAW_PORT").ok())
+        .and_then(|port_str| port_str.parse().ok())
+        .unwrap_or_else(|| {
+            TcpListener::bind("127.0.0.1:0")
+                .expect("Failed to bind to find free OpenClaw port")
+                .local_addr()
+                .expect("Failed to get local OpenClaw address")
                 .port()
         }) as u32
 }

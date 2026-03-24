@@ -1,4 +1,4 @@
-use futures::{FutureExt, Stream, StreamExt, future};
+use futures::{Stream, StreamExt, future};
 use process_wrap::tokio::CommandWrap;
 #[cfg(unix)]
 use process_wrap::tokio::ProcessGroup;
@@ -44,17 +44,6 @@ const CLI_INSTALL_DIR: &str = ".opencode/bin";
 const CLI_BINARY_NAME: &str = "opencode";
 const SHELL_ENV_TIMEOUT: Duration = Duration::from_secs(5);
 
-#[derive(serde::Deserialize, Debug)]
-pub struct ServerConfig {
-    pub hostname: Option<String>,
-    pub port: Option<u32>,
-}
-
-#[derive(serde::Deserialize, Debug)]
-pub struct Config {
-    pub server: Option<ServerConfig>,
-}
-
 #[derive(Clone, Debug)]
 pub enum CommandEvent {
     Stdout(String),
@@ -79,37 +68,6 @@ impl CommandChild {
         self.kill
             .try_send(())
             .map_err(|e| std::io::Error::other(e.to_string()))
-    }
-}
-
-pub async fn get_config(app: &AppHandle) -> Option<Config> {
-    let (events, child) = spawn_command(app, "debug config", &[]).ok()?;
-
-    let result = tokio::time::timeout(Duration::from_secs(15), async {
-        events
-            .fold(String::new(), async |mut config_str, event| {
-                if let CommandEvent::Stdout(s) = &event {
-                    config_str += s.as_str()
-                }
-                if let CommandEvent::Stderr(s) = &event {
-                    config_str += s.as_str()
-                }
-
-                config_str
-            })
-            .map(|v| serde_json::from_str::<Config>(&v))
-            .await
-            .ok()
-    })
-    .await;
-
-    match result {
-        Ok(config) => config,
-        Err(_) => {
-            tracing::warn!("get_config timed out after 15s");
-            let _ = child.kill();
-            None
-        }
     }
 }
 
@@ -140,7 +98,10 @@ pub fn get_sidecar_path(app: &tauri::AppHandle) -> std::path::PathBuf {
             if perms.mode() & 0o111 == 0 {
                 perms.set_mode(0o755);
                 if let Err(e) = std::fs::set_permissions(&sidecar, perms) {
-                    eprintln!("Warning: Failed to set executable permission on sidecar: {}", e);
+                    eprintln!(
+                        "Warning: Failed to set executable permission on sidecar: {}",
+                        e
+                    );
                 }
             }
         }
@@ -664,11 +625,19 @@ pub fn serve_openclaw(
         envs.push(("OPENCLAW_GATEWAY_TOKEN", token.to_string()));
     }
 
+    let level = std::env::var("OPENCODE_OPENCLAW_LOG_LEVEL")
+        .ok()
+        .filter(|x| !x.trim().is_empty())
+        .unwrap_or_else(|| "INFO".to_string());
+
+    tracing::info!(%level, "Using OpenClaw adapter log level");
+
     let cmd = format!(
-        "--print-logs --log-level WARN openclaw-serve --hostname {hostname} --port {port} --gateway-url {gateway_url}"
+        "--print-logs --log-level {level} openclaw-serve --hostname {hostname} --port {port} --gateway-url {gateway_url}"
     );
 
-    let (events, child) = spawn_command(app, &cmd, &envs).expect("Failed to spawn openclaw adapter");
+    let (events, child) =
+        spawn_command(app, &cmd, &envs).expect("Failed to spawn openclaw adapter");
 
     let mut exit_tx = Some(exit_tx);
     tokio::spawn(

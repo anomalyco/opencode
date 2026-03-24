@@ -12,11 +12,11 @@ import { getFilename } from "@opencode-ai/util/path"
 import {
   createContext,
   getOwner,
-  Match,
+  createEffect,
+  createSignal,
   onCleanup,
-  onMount,
+  on,
   type ParentProps,
-  Switch,
   untrack,
   useContext,
 } from "solid-js"
@@ -36,6 +36,7 @@ import type { ProjectMeta } from "./global-sync/types"
 import { SESSION_RECENT_LIMIT } from "./global-sync/types"
 import { sanitizeProject } from "./global-sync/utils"
 import { formatServerError } from "@/utils/server-errors"
+import { useServer } from "./server"
 
 type GlobalStore = {
   ready: boolean
@@ -54,8 +55,10 @@ type GlobalStore = {
 function createGlobalSync() {
   const globalSDK = useGlobalSDK()
   const language = useLanguage()
+  const server = useServer()
   const owner = getOwner()
   if (!owner) throw new Error("GlobalSync must be created within owner")
+  const [version, setVersion] = createSignal(0)
 
   const sdkCache = new Map<string, OpencodeClient>()
   const booting = new Map<string, Promise<void>>()
@@ -230,9 +233,13 @@ function createGlobalSync() {
       .catch((err) => {
         console.error("Failed to load sessions", err)
         const project = getFilename(directory)
+        const title =
+          server.current?.integration === "openclaw"
+            ? language.t("toast.session.listFailed.openclaw.title")
+            : language.t("toast.session.listFailed.title", { project })
         showToast({
           variant: "error",
-          title: language.t("toast.session.listFailed.title", { project }),
+          title,
           description: formatServerError(err, language.t),
         })
       })
@@ -338,9 +345,28 @@ function createGlobalSync() {
     })
   }
 
-  onMount(() => {
-    void bootstrap()
-  })
+  createEffect(
+    on(
+      () => globalSDK.version,
+      () => {
+        for (const key of Array.from(booting.keys())) booting.delete(key)
+        for (const key of Array.from(sessionLoads.keys())) sessionLoads.delete(key)
+        sessionMeta.clear()
+        for (const directory of Object.keys(children.children)) {
+          // Mounted views can keep references to child stores across a server switch.
+          // Reset the store in place and drop cached clients so the next bootstrap/load
+          // repopulates it from the newly active backend instead of stale OpenClaw data.
+          queue.clear(directory)
+          sdkCache.delete(directory)
+          clearSessionPrefetchDirectory(directory)
+          children.resetDirectory(directory)
+        }
+        setGlobalStore("reload", undefined)
+        setVersion((x) => x + 1)
+        void bootstrap()
+      },
+    ),
+  )
 
   const projectApi = {
     loadSessions,
@@ -374,6 +400,9 @@ function createGlobalSync() {
     get ready() {
       return globalStore.ready
     },
+    get version() {
+      return version()
+    },
     get error() {
       return globalStore.error
     },
@@ -391,13 +420,7 @@ const GlobalSyncContext = createContext<ReturnType<typeof createGlobalSync>>()
 
 export function GlobalSyncProvider(props: ParentProps) {
   const value = createGlobalSync()
-  return (
-    <Switch>
-      <Match when={value.ready}>
-        <GlobalSyncContext.Provider value={value}>{props.children}</GlobalSyncContext.Provider>
-      </Match>
-    </Switch>
-  )
+  return <GlobalSyncContext.Provider value={value}>{props.children}</GlobalSyncContext.Provider>
 }
 
 export function useGlobalSync() {

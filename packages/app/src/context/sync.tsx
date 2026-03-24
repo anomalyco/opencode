@@ -111,9 +111,14 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     type Child = ReturnType<(typeof globalSync)["child"]>
     type Setter = Child[1]
 
-    const current = createMemo(() => globalSync.child(sdk.directory))
+    const current = createMemo(() => {
+      // Rebind the current directory store whenever GlobalSync hot-resets for a server switch.
+      globalSync.version
+      return globalSync.child(sdk.directory)
+    })
     const target = (directory?: string) => {
       if (!directory || directory === sdk.directory) return current()
+      globalSync.version
       return globalSync.child(directory)
     }
     const absolute = (path: string) => (current()[0].path.directory + "/" + path).replace("//", "/")

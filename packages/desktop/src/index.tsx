@@ -44,11 +44,16 @@ void initI18n()
 
 let update: Update | null = null
 const [busy, setBusy] = createSignal(false)
+const [openclawTick, setOpenclawTick] = createSignal(0)
 
 const reload = async () => {
   if (busy()) return
   setBusy(true)
   await commands.reloadSidecar().finally(() => setBusy(false))
+}
+
+const syncOpenclaw = async () => {
+  return commands.syncOpenclawServer().catch(() => null)
 }
 
 const deepLinkEvent = "opencode:deep-link"
@@ -510,6 +515,8 @@ const createPlatform = (): Platform => {
         url: config.url ?? null,
         token: config.token ?? null,
       })
+      await syncOpenclaw()
+      setOpenclawTick((x) => x + 1)
     },
 
     getDefaultServer: async () => {
@@ -581,7 +588,7 @@ render(() => {
 
   // Fetch sidecar credentials from Rust (available immediately, before health check)
   const [sidecar] = createResource(() => commands.awaitInitialization(new Channel<InitStep>() as any))
-  const [openclaw] = createResource(() => commands.getOpenclawServer())
+  const [openclaw] = createResource(openclawTick, syncOpenclaw)
 
   const [defaultServer] = createResource(() =>
     platform.getDefaultServer?.().then((url) => {

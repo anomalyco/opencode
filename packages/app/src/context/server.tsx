@@ -133,6 +133,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
 
     const [state, setState] = createStore({
       active: props.defaultServer,
+      lastNonOpenclaw: props.defaultServer,
       healthy: undefined as boolean | undefined,
     })
 
@@ -213,6 +214,10 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       const current_ = current()
       if (!current_) return
 
+      if (current_.integration !== "openclaw") {
+        setState("lastNonOpenclaw", ServerConnection.key(current_))
+      }
+
       setState("healthy", undefined)
       onCleanup(startHealthPolling(current_))
     })
@@ -225,6 +230,11 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       return projectsKey(state.active)
     })
     const projectsList = createMemo(() => store.projects[origin()] ?? [])
+    const projectsFor = (input?: ServerConnection.Key) => {
+      const key = input ? originFor(input) : origin()
+      if (!key) return [] as StoredProject[]
+      return store.projects[key] ?? []
+    }
     const isLocal = createMemo(() => {
       const c = current()
       return (c?.type === "sidecar" && c.variant === "base") || (c?.type === "http" && isLocalHost(c.http.url))
@@ -246,22 +256,50 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       get current() {
         return current()
       },
+      get lastNonOpenclaw() {
+        const key = state.lastNonOpenclaw
+        const conn = allServers().find((item) => ServerConnection.key(item) === key)
+        if (conn?.integration !== "openclaw") return key
+        const fallback = allServers().find((item) => item.integration !== "openclaw")
+        if (!fallback) return
+        return ServerConnection.key(fallback)
+      },
       setActive,
       add,
       remove,
       projects: {
         list: projectsList,
+        listFor(input?: ServerConnection.Key) {
+          return projectsFor(input)
+        },
         open(directory: string) {
           const key = origin()
           if (!key) return
-          const current = store.projects[key] ?? []
+          const current = projectsFor()
+          if (current.find((x) => x.worktree === directory)) return
+          setStore("projects", key, [{ worktree: directory, expanded: true }, ...current])
+        },
+        openFor(input: ServerConnection.Key | undefined, directory: string) {
+          const key = input ? originFor(input) : origin()
+          if (!key) return
+          const current = projectsFor(input)
           if (current.find((x) => x.worktree === directory)) return
           setStore("projects", key, [{ worktree: directory, expanded: true }, ...current])
         },
         close(directory: string) {
           const key = origin()
           if (!key) return
-          const current = store.projects[key] ?? []
+          const current = projectsFor()
+          setStore(
+            "projects",
+            key,
+            current.filter((x) => x.worktree !== directory),
+          )
+        },
+        closeFor(input: ServerConnection.Key | undefined, directory: string) {
+          const key = input ? originFor(input) : origin()
+          if (!key) return
+          const current = projectsFor(input)
           setStore(
             "projects",
             key,
@@ -271,21 +309,46 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
         expand(directory: string) {
           const key = origin()
           if (!key) return
-          const current = store.projects[key] ?? []
+          const current = projectsFor()
+          const index = current.findIndex((x) => x.worktree === directory)
+          if (index !== -1) setStore("projects", key, index, "expanded", true)
+        },
+        expandFor(input: ServerConnection.Key | undefined, directory: string) {
+          const key = input ? originFor(input) : origin()
+          if (!key) return
+          const current = projectsFor(input)
           const index = current.findIndex((x) => x.worktree === directory)
           if (index !== -1) setStore("projects", key, index, "expanded", true)
         },
         collapse(directory: string) {
           const key = origin()
           if (!key) return
-          const current = store.projects[key] ?? []
+          const current = projectsFor()
+          const index = current.findIndex((x) => x.worktree === directory)
+          if (index !== -1) setStore("projects", key, index, "expanded", false)
+        },
+        collapseFor(input: ServerConnection.Key | undefined, directory: string) {
+          const key = input ? originFor(input) : origin()
+          if (!key) return
+          const current = projectsFor(input)
           const index = current.findIndex((x) => x.worktree === directory)
           if (index !== -1) setStore("projects", key, index, "expanded", false)
         },
         move(directory: string, toIndex: number) {
           const key = origin()
           if (!key) return
-          const current = store.projects[key] ?? []
+          const current = projectsFor()
+          const fromIndex = current.findIndex((x) => x.worktree === directory)
+          if (fromIndex === -1 || fromIndex === toIndex) return
+          const result = [...current]
+          const [item] = result.splice(fromIndex, 1)
+          result.splice(toIndex, 0, item)
+          setStore("projects", key, result)
+        },
+        moveFor(input: ServerConnection.Key | undefined, directory: string, toIndex: number) {
+          const key = input ? originFor(input) : origin()
+          if (!key) return
+          const current = projectsFor(input)
           const fromIndex = current.findIndex((x) => x.worktree === directory)
           if (fromIndex === -1 || fromIndex === toIndex) return
           const result = [...current]
@@ -305,6 +368,11 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
         },
         touch(directory: string) {
           const key = origin()
+          if (!key) return
+          setStore("lastProject", key, directory)
+        },
+        touchFor(input: ServerConnection.Key | undefined, directory: string) {
+          const key = input ? originFor(input) : origin()
           if (!key) return
           setStore("lastProject", key, directory)
         },

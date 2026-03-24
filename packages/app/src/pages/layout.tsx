@@ -726,6 +726,7 @@ export default function Layout(props: ParentProps) {
   })
 
   const currentSessions = createMemo(() => {
+    globalSync.version
     const now = Date.now()
     const dirs = visibleSessionDirs()
     if (dirs.length === 0) return [] as Session[]
@@ -1403,7 +1404,6 @@ export default function Layout(props: ParentProps) {
       return
     }
     server.setActive(ServerConnection.key(conn))
-    layout.projects.open(openclawDir)
     navigateWithSidebarReset(`/${openclawSlug}/session`)
   }
 
@@ -1470,9 +1470,19 @@ export default function Layout(props: ParentProps) {
       navigateWithSidebarReset(`/${openclawSlug}/session`)
       return
     }
+
+    if (server.current?.integration === "openclaw") {
+      const key = server.lastNonOpenclaw
+      if (key) server.setActive(key)
+      navigateWithSidebarReset(`/${base64Encode(directory)}/session`)
+      return
+    }
+
     const root = projectRoot(directory)
     server.projects.touch(root)
-    const project = layout.projects.list().find((item) => item.worktree === root)
+    const project =
+      layout.projects.visible().find((item) => item.worktree === root) ??
+      layout.projects.list().find((item) => item.worktree === root)
     let dirs = project
       ? effectiveWorkspaceOrder(root, [root, ...(project.sandboxes ?? [])], store.workspaceOrder[root])
       : [root]
@@ -2683,7 +2693,7 @@ export default function Layout(props: ParentProps) {
     )
   }
 
-  const projects = () => layout.projects.list()
+  const projects = () => layout.projects.visible()
   const projectOverlay = () => <ProjectDragOverlay projects={projects} activeProject={() => store.activeProject} />
   const sidebarContent = (mobile?: boolean) => (
     <SidebarContent

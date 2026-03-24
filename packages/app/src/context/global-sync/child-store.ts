@@ -1,5 +1,5 @@
 import { createRoot, getOwner, onCleanup, runWithOwner, type Owner } from "solid-js"
-import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
+import { createStore, reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
 import type { VcsInfo } from "@opencode-ai/sdk/v2/client"
 import {
@@ -23,6 +23,31 @@ export function createChildStoreManager(input: {
   onDispose: (directory: string) => void
   translate: (key: string, vars?: Record<string, string | number>) => string
 }) {
+  const seed = (input: { meta: ProjectMeta | undefined; icon: string | undefined; vcs: VcsInfo | undefined }) => ({
+    project: "",
+    projectMeta: input.meta,
+    icon: input.icon,
+    provider: { all: [], connected: [], default: {} },
+    config: {},
+    path: { state: "", config: "", worktree: "", directory: "", home: "" },
+    status: "loading" as const,
+    agent: [],
+    command: [],
+    session: [],
+    sessionTotal: 0,
+    session_status: {},
+    session_diff: {},
+    todo: {},
+    permission: {},
+    question: {},
+    mcp: {},
+    lsp: [],
+    vcs: input.vcs,
+    limit: 5,
+    message: {},
+    part: {},
+  })
+
   const children: Record<string, [Store<State>, SetStoreFunction<State>]> = {}
   const vcsCache = new Map<string, VcsCache>()
   const metaCache = new Map<string, MetaCache>()
@@ -156,30 +181,7 @@ export function createChildStoreManager(input: {
         createRoot((dispose) => {
           const initialMeta = meta[0].value
           const initialIcon = icon[0].value
-          const child = createStore<State>({
-            project: "",
-            projectMeta: initialMeta,
-            icon: initialIcon,
-            provider: { all: [], connected: [], default: {} },
-            config: {},
-            path: { state: "", config: "", worktree: "", directory: "", home: "" },
-            status: "loading" as const,
-            agent: [],
-            command: [],
-            session: [],
-            sessionTotal: 0,
-            session_status: {},
-            session_diff: {},
-            todo: {},
-            permission: {},
-            question: {},
-            mcp: {},
-            lsp: [],
-            vcs: vcsStore.value,
-            limit: 5,
-            message: {},
-            part: {},
-          })
+          const child = createStore<State>(seed({ meta: initialMeta, icon: initialIcon, vcs: vcsStore.value }))
           children[directory] = child
           disposers.set(directory, dispose)
 
@@ -252,6 +254,16 @@ export function createChildStoreManager(input: {
     setStore("icon", value)
   }
 
+  function resetDirectory(directory: string) {
+    const child = children[directory]
+    if (!child) return
+    const vcs = vcsCache.get(directory)?.store.value
+    const meta = metaCache.get(directory)?.store.value
+    const icon = iconCache.get(directory)?.store.value
+    // Preserve local persisted project metadata while wiping server-derived state.
+    child[1](reconcile(seed({ meta, icon, vcs })))
+  }
+
   return {
     children,
     ensureChild,
@@ -263,6 +275,7 @@ export function createChildStoreManager(input: {
     unpin,
     pinned,
     disposeDirectory,
+    resetDirectory,
     runEviction,
     vcsCache,
     metaCache,

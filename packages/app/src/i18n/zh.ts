@@ -82,6 +82,10 @@ export const dict = {
 
   "command.terminal.new": "新建终端",
   "command.terminal.new.description": "创建新的终端标签页",
+  "command.terminal.openGhostty": "在 Ghostty 中打开",
+  "command.terminal.openGhostty.description": "在 Ghostty 中打开当前项目目录",
+  "command.terminal.openWezTerm": "在 WezTerm 中打开",
+  "command.terminal.openWezTerm.description": "在 WezTerm 中打开当前项目目录",
 
   "command.steps.toggle": "切换步骤",
   "command.steps.toggle.description": "显示或隐藏当前消息的步骤",
@@ -451,6 +455,7 @@ export const dict = {
   "toast.model.none.description": "请先连接提供商以总结此会话",
   "toast.file.loadFailed.title": "加载文件失败",
   "toast.file.listFailed.title": "列出文件失败",
+  "toast.file.listFailed.openclaw": "OpenClaw 目前不提供项目文件树。你可以继续对话，但浏览文件请切回普通项目。",
   "toast.context.noLineSelection.title": "未选择行",
   "toast.context.noLineSelection.description": "请先在文件标签中选择行范围。",
   "toast.session.share.copyFailed.title": "无法复制链接到剪贴板",
@@ -463,6 +468,7 @@ export const dict = {
   "toast.session.unshare.failed.title": "取消分享失败",
   "toast.session.unshare.failed.description": "取消分享会话时发生错误",
   "toast.session.listFailed.title": "无法加载 {{project}} 的会话",
+  "toast.session.listFailed.openclaw.title": "无法加载 OpenClaw 会话",
   "toast.update.title": "有可用更新",
   "toast.update.description": "OpenCode 有新版本 ({{version}}) 可安装。",
   "toast.update.action.installRestart": "安装并重启",
@@ -480,6 +486,16 @@ export const dict = {
   "error.page.version": "版本：{{version}}",
   "error.dev.rootNotFound": "未找到根元素。你是不是忘了把它添加到 index.html？或者 id 属性拼写错了？",
   "error.globalSync.connectFailed": "无法连接到服务器。是否有服务器正在 `{{url}}` 运行？",
+  "error.openclaw.fileUnsupported":
+    "OpenClaw 目前还不提供项目文件系统。你可以继续在 OpenClaw 中对话，但浏览或打开文件请切回普通项目。",
+  "error.openclaw.fileUnsupported.hint":
+    "如果你希望 OpenClaw 管理某个项目，长期更合适的交互是做成项目内助手面板，而不是直接复用项目文件树。",
+  "error.openclaw.gatewayUnavailable": "OpenClaw gateway 当前不可用，因此会话列表或历史消息无法加载。",
+  "error.openclaw.gatewayUnavailable.hint":
+    "请检查桌面设置中的 Gateway URL 是否正确，并确认 gateway 进程仍在线；如果刚重启电脑，通常需要重新启动或重新连接 gateway。",
+  "error.openclaw.gatewayAuth": "OpenClaw gateway 可能鉴权失败了。",
+  "error.openclaw.gatewayAuth.hint":
+    "请检查桌面设置中的 Gateway Token 是否仍然有效，并确认当前设备/账号有权限连接这个 gateway。",
 
   "directory.error.invalidUrl": "URL 中的目录无效。",
 

@@ -22,6 +22,14 @@ type Opts = {
   }
 }
 
+const fileUnsupported =
+  "OpenClaw does not expose a project filesystem yet. Use a normal project to browse files, or keep chatting in OpenClaw without the file tree."
+
+function gatewayError(error: unknown, action: string) {
+  const message = error instanceof Error ? error.message : String(error)
+  return new Error(`OpenClaw gateway ${action} failed: ${message}`)
+}
+
 type GwSession = {
   key?: string
   id?: string
@@ -116,14 +124,64 @@ type Message = {
       }
     }
   }
-  parts: Array<{
-    id: string
-    sessionID: string
-    messageID: string
-    type: "text"
-    text: string
-  }>
+  parts: Part[]
 }
+
+type TextPart = {
+  id: string
+  sessionID: string
+  messageID: string
+  type: "text"
+  text: string
+}
+
+type ToolPart = {
+  id: string
+  sessionID: string
+  messageID: string
+  type: "tool"
+  callID: string
+  tool: string
+  state:
+    | {
+        status: "pending"
+        input: Record<string, unknown>
+        raw: string
+      }
+    | {
+        status: "running"
+        input: Record<string, unknown>
+        title?: string
+        metadata?: Record<string, unknown>
+        time: {
+          start: number
+        }
+      }
+    | {
+        status: "completed"
+        input: Record<string, unknown>
+        output: string
+        title: string
+        metadata: Record<string, unknown>
+        time: {
+          start: number
+          end: number
+          compacted?: number
+        }
+      }
+    | {
+        status: "error"
+        input: Record<string, unknown>
+        error: string
+        metadata?: Record<string, unknown>
+        time: {
+          start: number
+          end: number
+        }
+      }
+}
+
+type Part = TextPart | ToolPart
 
 type Event = {
   directory: string
@@ -161,6 +219,423 @@ function text(input: unknown): string {
   if ("text" in input && typeof input.text === "string") return input.text
   if ("content" in input) return text(input.content)
   return ""
+}
+
+function record(input: unknown) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return
+  return input as Record<string, unknown>
+}
+
+function list(input: unknown) {
+  return Array.isArray(input) ? input : []
+}
+
+function stringify(input: unknown): string {
+  const body = text(input)
+  if (body) return body
+  if (typeof input === "string") return input
+  if (input === undefined || input === null) return ""
+  try {
+    return JSON.stringify(input, null, 2)
+  } catch {
+    return String(input)
+  }
+}
+
+function preview(input: unknown, size = 240) {
+  const body = stringify(input).replace(/\s+/g, " ").trim()
+  if (body.length <= size) return body
+  return body.slice(0, size) + "..."
+}
+
+function shape(input: unknown) {
+  if (Array.isArray(input)) {
+    return input.map((item) => {
+      const part = record(item)
+      if (!part) return typeof item
+      return {
+        type: typeof part.type === "string" ? part.type : undefined,
+        id: typeof part.id === "string" ? part.id : undefined,
+        call_id: typeof part.call_id === "string" ? part.call_id : undefined,
+        tool_use_id: typeof part.tool_use_id === "string" ? part.tool_use_id : undefined,
+        name: typeof part.name === "string" ? part.name : undefined,
+        keys: Object.keys(part),
+      }
+    })
+  }
+  const part = record(input)
+  if (!part) return typeof input
+  return {
+    keys: Object.keys(part),
+    role: typeof part.role === "string" ? part.role : undefined,
+    type: typeof part.type === "string" ? part.type : undefined,
+  }
+}
+
+function payload(input: unknown) {
+  if (Array.isArray(input)) return input
+  const item = record(input)
+  if (!item) return []
+  if (Array.isArray(item.content)) return item.content
+  return []
+}
+
+function parseArgs(input: unknown) {
+  if (!input) return {}
+  if (typeof input === "string") {
+    try {
+      const parsed = JSON.parse(input)
+      return record(parsed) ?? { value: parsed }
+    } catch {
+      return { value: input }
+    }
+  }
+  return record(input) ?? { value: input }
+}
+
+function textPart(sessionID: string, messageID: string, id: string, body: string): TextPart {
+  return {
+    id,
+    sessionID,
+    messageID,
+    type: "text",
+    text: body,
+  }
+}
+
+function toolTitle(tool: string) {
+  return tool
+    .split(/[_-]/g)
+    .filter(Boolean)
+    .map((item) => item[0]?.toUpperCase() + item.slice(1))
+    .join(" ")
+}
+
+function inputText(parts: Part[]) {
+  return parts
+    .filter((part): part is TextPart => part.type === "text")
+    .map((part) => part.text)
+    .join("\n")
+}
+
+function started(part: ToolPart, time: number) {
+  if (part.state.status === "running") return part.state.time.start
+  if (part.state.status === "completed") return part.state.time.start
+  if (part.state.status === "error") return part.state.time.start
+  return time
+}
+
+function title(part: ToolPart) {
+  if (part.state.status === "running" && part.state.title) return part.state.title
+  if (part.state.status === "completed") return part.state.title
+  return toolTitle(part.tool)
+}
+
+function toolCalls(item: GwMessage, messageID: string, sessionID: string, time: number) {
+  const root = record(item) ?? {}
+  const blocks = payload(item.content)
+  const direct = list(root.tool_calls)
+  const result: ToolPart[] = []
+  let n = 0
+
+  log.debug("openclaw inspect tool calls", {
+    sessionID,
+    messageID,
+    role: item.role,
+    contentShape: shape(item.content),
+    directToolCalls: shape(direct),
+  })
+
+  const push = (callID: string, tool: string, input: Record<string, unknown>, metadata?: Record<string, unknown>) => {
+    result.push({
+      id: `${messageID}-p${n++}`,
+      sessionID,
+      messageID,
+      type: "tool",
+      callID,
+      tool,
+      state: {
+        status: "running",
+        input,
+        title: toolTitle(tool),
+        ...(metadata ? { metadata } : {}),
+        time: { start: time },
+      },
+    })
+  }
+
+  for (const block of blocks) {
+    const part = record(block)
+    if (!part) continue
+    const type = typeof part.type === "string" ? part.type : ""
+    if (type !== "tool_use" && type !== "function_call") continue
+    const callID =
+      typeof part.id === "string" ? part.id : typeof part.call_id === "string" ? part.call_id : `${messageID}-call-${n}`
+    const tool =
+      typeof part.name === "string"
+        ? part.name
+        : record(part.function) && typeof record(part.function)?.name === "string"
+          ? String(record(part.function)?.name)
+          : "tool"
+    const args =
+      "input" in part
+        ? parseArgs(part.input)
+        : record(part.function) && "arguments" in (record(part.function) ?? {})
+          ? parseArgs(record(part.function)?.arguments)
+          : {}
+    log.info("openclaw parsed tool call", {
+      sessionID,
+      messageID,
+      type,
+      callID,
+      tool,
+      input: preview(args),
+    })
+    push(callID, tool, args, record(part.metadata))
+  }
+
+  for (const block of direct) {
+    const part = record(block)
+    if (!part) continue
+    const fn = record(part.function)
+    if (typeof fn?.name !== "string") continue
+    const callID = typeof part.id === "string" ? part.id : `${messageID}-call-${n}`
+    log.info("openclaw parsed direct tool call", {
+      sessionID,
+      messageID,
+      callID,
+      tool: fn.name,
+      input: preview(fn.arguments),
+    })
+    push(callID, fn.name, parseArgs(fn.arguments), record(part.metadata))
+  }
+
+  if (result.length === 0 && (blocks.length > 0 || direct.length > 0)) {
+    log.warn("openclaw tool call parse miss", {
+      sessionID,
+      messageID,
+      contentShape: shape(item.content),
+      directToolCalls: shape(direct),
+    })
+  }
+
+  return result
+}
+
+function toolResults(item: GwMessage) {
+  const root = record(item) ?? {}
+  const blocks = [...payload(item.content), ...list(root.content)]
+  const result = blocks
+    .map((block) => {
+      const part = record(block)
+      if (!part) return
+      const type = typeof part.type === "string" ? part.type : ""
+      if (type !== "tool_result" && type !== "function_call_output") return
+      const callID =
+        typeof part.tool_use_id === "string"
+          ? part.tool_use_id
+          : typeof part.call_id === "string"
+            ? part.call_id
+            : typeof part.toolCallId === "string"
+              ? part.toolCallId
+              : undefined
+      if (!callID) return
+      const body = type === "tool_result" ? stringify(part.content) : stringify(part.output)
+      const failed =
+        part.is_error === true ||
+        part.error === true ||
+        (typeof part.status === "string" && ["error", "failed"].includes(part.status))
+      log.info("openclaw parsed tool result", {
+        role: item.role,
+        callID,
+        failed,
+        output: preview(body),
+        block: shape(part),
+      })
+      return {
+        callID,
+        output: body,
+        failed,
+        metadata: record(part.metadata),
+      }
+    })
+    .filter((item): item is NonNullable<typeof item> => !!item)
+  if (result.length === 0 && blocks.length > 0) {
+    log.debug("openclaw no tool results parsed", {
+      role: item.role,
+      contentShape: shape(item.content),
+      rootContentShape: shape(root.content),
+    })
+  }
+  return result
+}
+
+function assistantParts(item: GwMessage, messageID: string, sessionID: string) {
+  const blocks = payload(item.content)
+  const parts: Part[] = []
+  let n = 0
+
+  for (const block of blocks) {
+    const part = record(block)
+    if (!part) continue
+    if (part.type === "text" && typeof part.text === "string" && part.text) {
+      parts.push(textPart(sessionID, messageID, `${messageID}-p${n++}`, part.text))
+    }
+  }
+
+  const calls = toolCalls(item, messageID, sessionID, now(item.timestamp ?? item.ts))
+  for (const call of calls) {
+    parts.push({
+      ...call,
+      id: `${messageID}-p${n++}`,
+    })
+  }
+
+  if (parts.length > 0) return parts
+  const body = text(item.content)
+  if (!body) return []
+  return [textPart(sessionID, messageID, `${messageID}-p0`, body)]
+}
+
+function userParts(item: GwMessage, messageID: string, sessionID: string) {
+  const blocks = payload(item.content)
+  const parts: TextPart[] = []
+  let n = 0
+  for (const block of blocks) {
+    const part = record(block)
+    if (!part) continue
+    if (typeof part.type === "string" && part.type !== "text") continue
+    if (typeof part.text !== "string" || !part.text) continue
+    parts.push(textPart(sessionID, messageID, `${messageID}-p${n++}`, part.text))
+  }
+  if (parts.length > 0) return parts
+  if (blocks.length > 0) return []
+  const body = text(item.content)
+  if (!body) return []
+  return [textPart(sessionID, messageID, `${messageID}-p0`, body)]
+}
+
+function applyToolResult(message: Message, result: ReturnType<typeof toolResults>[number], time: number) {
+  let hit = false
+  message.parts = message.parts.map((part) => {
+    if (part.type !== "tool") return part
+    if (part.callID !== result.callID) return part
+    hit = true
+    if (result.failed) {
+      return {
+        ...part,
+        state: {
+          status: "error",
+          input: part.state.input,
+          error: result.output || "Tool call failed",
+          ...(result.metadata ? { metadata: result.metadata } : {}),
+          time: {
+            start: started(part, time),
+            end: time,
+          },
+        },
+      }
+    }
+    return {
+      ...part,
+      state: {
+        status: "completed",
+        input: part.state.input,
+        output: result.output,
+        title: title(part),
+        metadata: result.metadata ?? {},
+        time: {
+          start: started(part, time),
+          end: time,
+        },
+      },
+    }
+  })
+  return hit
+}
+
+function historyMessages(sessionID: string, input: GwMessage[]) {
+  const messages: Message[] = []
+
+  for (const item of input) {
+    log.debug("openclaw history item", {
+      sessionID,
+      role: item.role,
+      contentShape: shape(item.content),
+      preview: preview(item.content),
+    })
+    const role =
+      item.role === "assistant"
+        ? "assistant"
+        : item.role === "user"
+          ? "user"
+          : item.role === "tool"
+            ? "tool"
+            : undefined
+    if (!role) continue
+    const created = now(item.timestamp ?? item.ts)
+    const results = role === "assistant" ? [] : toolResults(item)
+    if (results.length > 0) {
+      for (const result of results) {
+        let applied = false
+        for (let i = messages.length - 1; i >= 0; i--) {
+          const msg = messages[i]
+          if (msg.info.role !== "assistant") continue
+          if (applyToolResult(msg, result, created)) {
+            applied = true
+            break
+          }
+        }
+        if (!applied) {
+          log.warn("openclaw tool result unmatched", {
+            sessionID,
+            callID: result.callID,
+            output: preview(result.output),
+          })
+        }
+      }
+    }
+    if (role === "tool") continue
+    const messageID = `${sessionID}-m${messages.length}`
+    if (role === "user") {
+      const parts = userParts(item, messageID, sessionID)
+      if (parts.length === 0) continue
+      messages.push({
+        info: {
+          id: messageID,
+          sessionID,
+          role,
+          time: { created },
+          agent: "claw",
+          model:
+            item.provider && item.model ? { providerID: item.provider, modelID: item.model } : { providerID, modelID },
+        },
+        parts,
+      })
+      continue
+    }
+    const parts = assistantParts(item, messageID, sessionID)
+    if (parts.length === 0) continue
+    messages.push({
+      info: {
+        id: messageID,
+        sessionID,
+        role,
+        time: { created, completed: created },
+        parentID: messages.at(-1)?.info.id ?? `${sessionID}-m${Math.max(0, messages.length - 1)}`,
+        providerID: item.provider || providerID,
+        modelID: item.model || modelID,
+        mode: "default",
+        agent: "claw",
+        path: { cwd: `${directory}/${sessionID}`, root: directory },
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      },
+      parts,
+    })
+  }
+
+  return messages
 }
 
 function prompt(input: unknown) {
@@ -208,10 +683,10 @@ function mergeHistory(history: Message[], optimistic: Message[]) {
   const rest = [...optimistic]
   const matched = history.map((item) => {
     if (item.info.role !== "user") return item
-    const text = item.parts.map((part) => part.text).join("\n")
+    const text = inputText(item.parts)
     const hit = rest.findIndex((candidate) => {
       if (candidate.info.role !== "user") return false
-      const body = candidate.parts.map((part) => part.text).join("\n")
+      const body = inputText(candidate.parts)
       if (body !== text) return false
       return Math.abs(candidate.info.time.created - item.info.time.created) < 60_000
     })
@@ -571,72 +1046,40 @@ class Events {
   }
 }
 
-function msg(sessionID: string, item: GwMessage, index: number): Message | undefined {
-  const role = item.role === "assistant" ? "assistant" : item.role === "user" ? "user" : undefined
-  if (!role) return
-  const messageID = `${sessionID}-m${index}`
-  const body = text(item.content)
-  return {
-    info:
-      role === "user"
-        ? {
-            id: messageID,
-            sessionID,
-            role,
-            time: { created: now(item.timestamp ?? item.ts) },
-            agent: "claw",
-            model:
-              item.provider && item.model
-                ? { providerID: item.provider, modelID: item.model }
-                : { providerID, modelID },
-          }
-        : {
-            id: messageID,
-            sessionID,
-            role,
-            time: { created: now(item.timestamp ?? item.ts), completed: now(item.timestamp ?? item.ts) },
-            parentID: `${sessionID}-m${Math.max(0, index - 1)}`,
-            providerID: item.provider || providerID,
-            modelID: item.model || modelID,
-            mode: "default",
-            agent: "claw",
-            path: { cwd: `${directory}/${sessionID}`, root: directory },
-            cost: 0,
-            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-          },
-    parts: [
-      {
-        id: `${messageID}-p0`,
-        sessionID,
-        messageID,
-        type: "text",
-        text: body,
-      },
-    ],
-  }
-}
-
 async function sessions(client: GwClient) {
-  const res = (await client.request("sessions.list", {
-    limit: 50,
-    includeDerivedTitles: true,
-    includeLastMessage: true,
-  })) as { sessions?: unknown[] } | unknown[]
+  const res = (await client
+    .request("sessions.list", {
+      limit: 50,
+      includeDerivedTitles: true,
+      includeLastMessage: true,
+    })
+    .catch((err) => {
+      throw gatewayError(err, "session listing")
+    })) as { sessions?: unknown[] } | unknown[]
   const list = Array.isArray(res) ? res : Array.isArray(res.sessions) ? res.sessions : []
   log.debug("openclaw sessions loaded", { count: list.length })
   return list.map((item: unknown) => session(item as GwSession))
 }
 
 async function history(client: GwClient, sessionID: string) {
-  const res = (await client.request("chat.history", { sessionKey: sessionID, limit: 200 })) as GwHistory | unknown[]
+  const res = (await client.request("chat.history", { sessionKey: sessionID, limit: 200 }).catch((err) => {
+    throw gatewayError(err, `history loading for session ${sessionID}`)
+  })) as GwHistory | unknown[]
   const list = Array.isArray(res) ? res : Array.isArray(res.messages) ? res.messages : []
-  const mapped = list
-    .map((item: unknown, index: number) => msg(sessionID, item as GwMessage, index))
-    .filter((item: Message | undefined): item is Message => !!item)
+  const mapped = historyMessages(sessionID, list as GwMessage[])
   log.debug("openclaw history loaded", {
     sessionID,
     count: list.length,
-    mapped: mapped.map((item) => ({ id: item.info.id, role: item.info.role, created: item.info.time.created })),
+    mapped: mapped.map((item) => ({
+      id: item.info.id,
+      role: item.info.role,
+      created: item.info.time.created,
+      parts: item.parts.map((part) =>
+        part.type === "tool"
+          ? { id: part.id, type: part.type, tool: part.tool, status: part.state.status }
+          : { id: part.id, type: part.type },
+      ),
+    })),
   })
   return mapped
 }
@@ -659,6 +1102,10 @@ async function waitHistory(client: GwClient, sessionID: string, started: number)
 }
 
 export namespace OpenClawBridge {
+  export const internal = {
+    historyMessages,
+  }
+
   export function createApp(opts: Opts) {
     const app = new Hono()
     const gw = new GwClient(opts.gateway.url, opts.gateway.token)
@@ -792,7 +1239,13 @@ export namespace OpenClawBridge {
       const runID = typeof payload.runId === "string" ? payload.runId : undefined
       if (!runID) return
       const state = typeof payload.state === "string" ? payload.state : undefined
-      log.debug("openclaw gw chat event", { runID, state, payload })
+      log.info("openclaw gw chat event", {
+        runID,
+        state,
+        keys: Object.keys(payload),
+        messageShape: shape(payload.message),
+        preview: preview(payload.message),
+      })
       if (state === "delta") {
         emitPart(runID, payload)
         return
@@ -918,6 +1371,13 @@ export namespace OpenClawBridge {
       .get("/mcp", (c) => c.json({}))
       .get("/lsp", (c) => c.json([]))
       .get("/vcs", (c) => c.json({ branch: "openclaw" }))
+      .get("/file", () => {
+        throw new Error(fileUnsupported)
+      })
+      .get("/file/content", () => {
+        throw new Error(fileUnsupported)
+      })
+      .get("/file/status", (c) => c.json([]))
       .get("/permission", (c) => c.json([]))
       .get("/question", (c) => c.json([]))
       .get("/session/status", (c) => c.json({}))
@@ -1014,7 +1474,8 @@ export namespace OpenClawBridge {
                     sessionID,
                     messageID: part.messageID,
                     partID: part.id,
-                    text: part.text,
+                    type: part.type,
+                    ...(part.type === "text" ? { text: part.text } : { tool: part.tool, status: part.state.status }),
                   })
                   events.emit({
                     directory,
@@ -1081,7 +1542,11 @@ export namespace OpenClawBridge {
               sessionID,
               messageID: item.info.id,
               role: item.info.role,
-              parts: item.parts.map((part) => ({ id: part.id, text: part.text })),
+              parts: item.parts.map((part) =>
+                part.type === "text"
+                  ? { id: part.id, type: part.type, text: part.text }
+                  : { id: part.id, type: part.type, tool: part.tool, status: part.state.status },
+              ),
             })
           }
           for (let i = 0; i < 45; i++) {

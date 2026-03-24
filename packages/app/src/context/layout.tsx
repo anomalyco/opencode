@@ -53,6 +53,11 @@ export type LocalProject = Partial<Project> & { worktree: string; expanded: bool
 
 export type ReviewDiffStyle = "unified" | "split"
 
+// The project rail should survive OpenClaw toggles even when server-backed contexts hot-swap.
+const [rail, setRail] = createStore({
+  projects: [] as LocalProject[],
+})
+
 export function ensureSessionKey(key: string, touch: (key: string) => void, seed: (key: string) => void) {
   touch(key)
   seed(key)
@@ -137,7 +142,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     const globalSync = useGlobalSync()
     const server = useServer()
     const platform = usePlatform()
-
     const isRecord = (value: unknown): value is Record<string, unknown> =>
       typeof value === "object" && value !== null && !Array.isArray(value)
 
@@ -482,12 +486,21 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     const enriched = createMemo(() => server.projects.list().map(enrich))
     const list = createMemo(() => {
       const projects = enriched()
-      return projects.map((project) => {
-        const color = project.icon?.color ?? colors[project.worktree]
-        if (!color) return project
-        const icon = project.icon ? { ...project.icon, color } : { color }
-        return { ...project, icon }
-      })
+      return projects
+        .filter((project) => project.worktree !== "/openclaw")
+        .map((project) => {
+          const color = project.icon?.color ?? colors[project.worktree]
+          if (!color) return project
+          const icon = project.icon ? { ...project.icon, color } : { color }
+          return { ...project, icon }
+        })
+    })
+
+    createEffect(() => {
+      const current = server.current
+      const projects = list()
+      if (!current || current.integration === "openclaw") return
+      setRail("projects", projects)
     })
 
     createEffect(() => {
@@ -566,6 +579,24 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       },
       projects: {
         list,
+        visible: createMemo(() => {
+          const current = server.current
+          const next = list()
+          const cached = rail.projects
+          if (!current || current.integration !== "openclaw") {
+            // Reuse the cached order when returning from OpenClaw so icons do not jitter
+            // while fresh project metadata streams back in from the local server.
+            const live = new Map(next.map((project) => [project.worktree, project] as const))
+            const merged = cached.flatMap((project) => {
+              const hit = live.get(project.worktree)
+              if (!hit) return []
+              live.delete(project.worktree)
+              return [hit]
+            })
+            return [...merged, ...live.values()]
+          }
+          return cached
+        }),
         open(directory: string) {
           const root = rootFor(directory)
           if (server.projects.list().find((x) => x.worktree === root)) return

@@ -18,7 +18,9 @@ pub struct WslConfig {
     pub enabled: bool,
 }
 
-#[derive(Clone, serde::Serialize, serde::Deserialize, specta::Type, Debug, Default)]
+#[derive(
+    Clone, serde::Serialize, serde::Deserialize, specta::Type, Debug, Default, PartialEq, Eq,
+)]
 pub struct OpenclawConfig {
     pub enabled: bool,
     pub url: Option<String>,
@@ -122,7 +124,10 @@ pub fn set_openclaw_config(app: AppHandle, config: OpenclawConfig) -> Result<(),
         .store(SETTINGS_STORE)
         .map_err(|e| format!("Failed to open settings store: {}", e))?;
 
-    store.set(OPENCLAW_ENABLED_KEY, serde_json::Value::Bool(config.enabled));
+    store.set(
+        OPENCLAW_ENABLED_KEY,
+        serde_json::Value::Bool(config.enabled),
+    );
 
     match config.url {
         Some(u) => {
@@ -200,15 +205,12 @@ async fn check_health(url: &str, password: Option<&str>) -> bool {
 
     let mut builder = reqwest::Client::builder().timeout(Duration::from_secs(7));
 
-    if url
-        .host_str()
-        .is_some_and(|host| {
-            host.eq_ignore_ascii_case("localhost")
-                || host
-                    .parse::<std::net::IpAddr>()
-                    .is_ok_and(|ip| ip.is_loopback())
-        })
-    {
+    if url.host_str().is_some_and(|host| {
+        host.eq_ignore_ascii_case("localhost")
+            || host
+                .parse::<std::net::IpAddr>()
+                .is_ok_and(|ip| ip.is_loopback())
+    }) {
         // Some environments set proxy variables (HTTP_PROXY/HTTPS_PROXY/ALL_PROXY) without
         // excluding loopback. reqwest respects these by default, which can prevent the desktop
         // app from reaching its own local sidecar server.
