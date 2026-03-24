@@ -20,6 +20,7 @@ import { pathToFileURL } from "url"
 import { Global } from "../../src/global"
 import { ProjectID } from "../../src/project/schema"
 import { Filesystem } from "../../src/util/filesystem"
+import * as Network from "../../src/util/network"
 import { BunProc } from "../../src/bun"
 
 const emptyAccount = Layer.mock(Account.Service)({
@@ -765,6 +766,20 @@ test("installs dependencies in writable OPENCODE_CONFIG_DIR", async () => {
 
   const prev = process.env.OPENCODE_CONFIG_DIR
   process.env.OPENCODE_CONFIG_DIR = tmp.extra
+  const online = spyOn(Network, "online").mockReturnValue(false)
+  const run = spyOn(BunProc, "run").mockImplementation(async (_cmd, opts) => {
+    const mod = path.join(opts?.cwd ?? "", "node_modules", "@opencode-ai", "plugin")
+    await fs.mkdir(mod, { recursive: true })
+    await Filesystem.write(
+      path.join(mod, "package.json"),
+      JSON.stringify({ name: "@opencode-ai/plugin", version: "1.0.0" }),
+    )
+    return {
+      code: 0,
+      stdout: Buffer.alloc(0),
+      stderr: Buffer.alloc(0),
+    }
+  })
 
   try {
     await Instance.provide({
@@ -778,25 +793,43 @@ test("installs dependencies in writable OPENCODE_CONFIG_DIR", async () => {
     expect(await Filesystem.exists(path.join(tmp.extra, "package.json"))).toBe(true)
     expect(await Filesystem.exists(path.join(tmp.extra, ".gitignore"))).toBe(true)
   } finally {
+    online.mockRestore()
+    run.mockRestore()
     if (prev === undefined) delete process.env.OPENCODE_CONFIG_DIR
     else process.env.OPENCODE_CONFIG_DIR = prev
   }
 })
 
-test("serializes concurrent config dependency installs", async () => {
+test("dedupes concurrent config dependency installs for the same dir", async () => {
   await using tmp = await tmpdir()
-  const dirs = [path.join(tmp.path, "a"), path.join(tmp.path, "b")]
-  await Promise.all(dirs.map((dir) => fs.mkdir(dir, { recursive: true })))
+  const dir = path.join(tmp.path, "a")
+  await fs.mkdir(dir, { recursive: true })
 
-  const seen: string[] = []
-  let active = 0
-  let max = 0
+  const ticks: number[] = []
+  let calls = 0
+  let start = () => {}
+  let done = () => {}
+  let blocked = () => {}
+  const ready = new Promise<void>((resolve) => {
+    start = resolve
+  })
+  const gate = new Promise<void>((resolve) => {
+    done = resolve
+  })
+  const waiting = new Promise<void>((resolve) => {
+    blocked = resolve
+  })
+  const online = spyOn(Network, "online").mockReturnValue(false)
   const run = spyOn(BunProc, "run").mockImplementation(async (_cmd, opts) => {
-    active++
-    max = Math.max(max, active)
-    seen.push(opts?.cwd ?? "")
-    await new Promise((resolve) => setTimeout(resolve, 25))
-    active--
+    calls += 1
+    start()
+    await gate
+    const mod = path.join(opts?.cwd ?? "", "node_modules", "@opencode-ai", "plugin")
+    await fs.mkdir(mod, { recursive: true })
+    await Filesystem.write(
+      path.join(mod, "package.json"),
+      JSON.stringify({ name: "@opencode-ai/plugin", version: "1.0.0" }),
+    )
     return {
       code: 0,
       stdout: Buffer.alloc(0),
@@ -805,15 +838,26 @@ test("serializes concurrent config dependency installs", async () => {
   })
 
   try {
-    await Promise.all(dirs.map((dir) => Config.installDependencies(dir)))
+    const first = Config.installDependencies(dir)
+    await ready
+    const second = Config.installDependencies(dir, {
+      waitTick: (tick) => {
+        ticks.push(tick.attempt)
+        blocked()
+        blocked = () => {}
+      },
+    })
+    await waiting
+    done()
+    await Promise.all([first, second])
   } finally {
+    online.mockRestore()
     run.mockRestore()
   }
 
-  expect(max).toBe(1)
-  expect(seen.toSorted()).toEqual(dirs.toSorted())
-  expect(await Filesystem.exists(path.join(dirs[0], "package.json"))).toBe(true)
-  expect(await Filesystem.exists(path.join(dirs[1], "package.json"))).toBe(true)
+  expect(calls).toBe(1)
+  expect(ticks.length).toBeGreaterThan(0)
+  expect(await Filesystem.exists(path.join(dir, "package.json"))).toBe(true)
 })
 
 test("resolves scoped npm plugins in config", async () => {
@@ -1792,7 +1836,7 @@ describe("deduplicatePlugins", () => {
 
         const myPlugins = plugins.filter((p) => Config.getPluginName(p) === "my-plugin")
         expect(myPlugins.length).toBe(1)
-        expect(myPlugins[0].startsWith("file://")).toBe(true)
+        expect(Config.pluginSpecifier(myPlugins[0]).startsWith("file://")).toBe(true)
       },
     })
   })

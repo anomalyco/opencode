@@ -1,0 +1,19 @@
+{
+  "$schema": "https://opencode.ai/tui.json",
+  "theme": "smoke-theme",
+  "plugin": [
+    [
+      "./plugins/tui-smoke.tsx",
+      {
+        "enabled": true,
+        "label": "workspace",
+        "keybinds": {
+          "modal": "ctrl+alt+m",
+          "screen": "ctrl+alt+o",
+          "home": "escape,ctrl+shift+h",
+          "dialog_close": "escape,q"
+        }
+      }
+    ]
+  ]
+}

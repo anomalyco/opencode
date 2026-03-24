@@ -15,6 +15,7 @@ import { Installation } from "@/installation"
 import { useKV } from "../context/kv"
 import { useCommandDialog } from "../component/dialog-command"
 import { useLocal } from "../context/local"
+import { TuiPluginRuntime } from "../plugin"
 
 // TODO: what is the best way to do this?
 let once = false
@@ -57,8 +58,8 @@ export function Home() {
   ])
 
   const Hint = (
-    <Show when={connectedMcpCount() > 0}>
-      <box flexShrink={0} flexDirection="row" gap={1}>
+    <box flexShrink={0} flexDirection="row" gap={1}>
+      <Show when={connectedMcpCount() > 0}>
         <text fg={theme.text}>
           <Switch>
             <Match when={mcpError()}>
@@ -71,8 +72,8 @@ export function Home() {
             </Match>
           </Switch>
         </text>
-      </box>
-    </Show>
+      </Show>
+    </box>
   )
 
   let prompt: PromptRef
@@ -111,7 +112,9 @@ export function Home() {
         <box flexGrow={1} minHeight={0} />
         <box height={4} minHeight={0} flexShrink={1} />
         <box flexShrink={0}>
-          <Logo />
+          <TuiPluginRuntime.Slot name="home_logo" mode="replace">
+            <Logo />
+          </TuiPluginRuntime.Slot>
         </box>
         <box height={1} minHeight={0} flexShrink={1} />
         <box width="100%" maxWidth={75} zIndex={1000} paddingTop={1} flexShrink={0}>
@@ -124,11 +127,25 @@ export function Home() {
             workspaceID={route.workspaceID}
           />
         </box>
-        <box height={4} minHeight={0} width="100%" maxWidth={75} alignItems="center" paddingTop={3} flexShrink={1}>
-          <Show when={showTips()}>
-            <Tips />
-          </Show>
-        </box>
+        <TuiPluginRuntime.Slot
+          name="home_tips"
+          mode="replace"
+          show_tips={showTips()}
+          tips_hidden={tipsHidden()}
+          first_time_user={isFirstTimeUser()}
+        >
+          <box height={4} minHeight={0} width="100%" maxWidth={75} alignItems="center" paddingTop={3} flexShrink={1}>
+            <Show when={showTips()}>
+              <Tips />
+            </Show>
+          </box>
+        </TuiPluginRuntime.Slot>
+        <TuiPluginRuntime.Slot
+          name="home_below_tips"
+          show_tips={showTips()}
+          tips_hidden={tipsHidden()}
+          first_time_user={isFirstTimeUser()}
+        />
         <box flexGrow={1} minHeight={0} />
         <Toast />
       </box>
