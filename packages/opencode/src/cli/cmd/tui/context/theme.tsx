@@ -43,66 +43,12 @@ import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
 import { useTuiConfig } from "./tui-config"
 import { isRecord } from "@/util/record"
+import type { TuiThemeCurrent } from "@opencode-ai/plugin/tui"
 
-type ThemeColors = {
-  primary: RGBA
-  secondary: RGBA
-  accent: RGBA
-  error: RGBA
-  warning: RGBA
-  success: RGBA
-  info: RGBA
-  text: RGBA
-  textMuted: RGBA
-  selectedListItemText: RGBA
-  background: RGBA
-  backgroundPanel: RGBA
-  backgroundElement: RGBA
-  backgroundMenu: RGBA
-  border: RGBA
-  borderActive: RGBA
-  borderSubtle: RGBA
-  diffAdded: RGBA
-  diffRemoved: RGBA
-  diffContext: RGBA
-  diffHunkHeader: RGBA
-  diffHighlightAdded: RGBA
-  diffHighlightRemoved: RGBA
-  diffAddedBg: RGBA
-  diffRemovedBg: RGBA
-  diffContextBg: RGBA
-  diffLineNumber: RGBA
-  diffAddedLineNumberBg: RGBA
-  diffRemovedLineNumberBg: RGBA
-  markdownText: RGBA
-  markdownHeading: RGBA
-  markdownLink: RGBA
-  markdownLinkText: RGBA
-  markdownCode: RGBA
-  markdownBlockQuote: RGBA
-  markdownEmph: RGBA
-  markdownStrong: RGBA
-  markdownHorizontalRule: RGBA
-  markdownListItem: RGBA
-  markdownListEnumeration: RGBA
-  markdownImage: RGBA
-  markdownImageText: RGBA
-  markdownCodeBlock: RGBA
-  syntaxComment: RGBA
-  syntaxKeyword: RGBA
-  syntaxFunction: RGBA
-  syntaxVariable: RGBA
-  syntaxString: RGBA
-  syntaxNumber: RGBA
-  syntaxType: RGBA
-  syntaxOperator: RGBA
-  syntaxPunctuation: RGBA
-}
-
-type Theme = ThemeColors & {
+type Theme = TuiThemeCurrent & {
   _hasSelectedListItemText: boolean
-  thinkingOpacity: number
 }
+type ThemeColor = Exclude<keyof TuiThemeCurrent, "thinkingOpacity">
 
 export function selectedForeground(theme: Theme, bg?: RGBA): RGBA {
   // If theme explicitly defines selectedListItemText, use it
@@ -132,7 +78,7 @@ type ColorValue = HexColor | RefName | Variant | RGBA
 export type ThemeJson = {
   $schema?: string
   defs?: Record<string, HexColor | RefName>
-  theme: Omit<Record<keyof ThemeColors, ColorValue>, "selectedListItemText" | "backgroundMenu"> & {
+  theme: Omit<Record<ThemeColor, ColorValue>, "selectedListItemText" | "backgroundMenu"> & {
     selectedListItemText?: ColorValue
     backgroundMenu?: ColorValue
     thinkingOpacity?: number
@@ -250,7 +196,7 @@ export function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
         throw new Error(`Circular color reference: ${[...chain, c].join(" -> ")}`)
       }
 
-      const next = defs[c] ?? theme.theme[c as keyof ThemeColors]
+      const next = defs[c] ?? theme.theme[c as ThemeColor]
       if (next === undefined) {
         throw new Error(`Color reference "${c}" not found in defs or theme`)
       }
@@ -268,7 +214,7 @@ export function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
       .map(([key, value]) => {
         return [key, resolveColor(value as ColorValue)]
       }),
-  ) as Partial<ThemeColors>
+  ) as Partial<Record<ThemeColor, RGBA>>
 
   // Handle selectedListItemText separately since it's optional
   const hasSelectedListItemText = theme.theme.selectedListItemText !== undefined

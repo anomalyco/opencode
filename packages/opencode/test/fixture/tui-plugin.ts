@@ -1,5 +1,5 @@
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
-import type { CliRenderer } from "@opentui/core"
+import { RGBA, type CliRenderer } from "@opentui/core"
 import { createPluginKeybind } from "../../src/cli/cmd/tui/context/plugin-keybinds"
 import type { HostPluginApi } from "../../src/cli/cmd/tui/plugin/slots"
 
@@ -10,6 +10,74 @@ type Count = {
   route_drop: number
   command_add: number
   command_drop: number
+}
+
+function themeCurrent(): HostPluginApi["theme"]["current"] {
+  const a = RGBA.fromInts(0, 120, 240)
+  const b = RGBA.fromInts(120, 120, 120)
+  const c = RGBA.fromInts(230, 230, 230)
+  const d = RGBA.fromInts(120, 30, 30)
+  const e = RGBA.fromInts(140, 100, 40)
+  const f = RGBA.fromInts(20, 140, 80)
+  const g = RGBA.fromInts(20, 80, 160)
+  const h = RGBA.fromInts(40, 40, 40)
+  const i = RGBA.fromInts(60, 60, 60)
+  const j = RGBA.fromInts(80, 80, 80)
+  return {
+    primary: a,
+    secondary: b,
+    accent: a,
+    error: d,
+    warning: e,
+    success: f,
+    info: g,
+    text: c,
+    textMuted: b,
+    selectedListItemText: h,
+    background: h,
+    backgroundPanel: h,
+    backgroundElement: i,
+    backgroundMenu: i,
+    border: j,
+    borderActive: c,
+    borderSubtle: i,
+    diffAdded: f,
+    diffRemoved: d,
+    diffContext: b,
+    diffHunkHeader: b,
+    diffHighlightAdded: f,
+    diffHighlightRemoved: d,
+    diffAddedBg: h,
+    diffRemovedBg: h,
+    diffContextBg: h,
+    diffLineNumber: b,
+    diffAddedLineNumberBg: h,
+    diffRemovedLineNumberBg: h,
+    markdownText: c,
+    markdownHeading: c,
+    markdownLink: a,
+    markdownLinkText: g,
+    markdownCode: f,
+    markdownBlockQuote: e,
+    markdownEmph: e,
+    markdownStrong: c,
+    markdownHorizontalRule: b,
+    markdownListItem: a,
+    markdownListEnumeration: g,
+    markdownImage: a,
+    markdownImageText: g,
+    markdownCodeBlock: c,
+    syntaxComment: b,
+    syntaxKeyword: a,
+    syntaxFunction: g,
+    syntaxVariable: c,
+    syntaxString: f,
+    syntaxNumber: e,
+    syntaxType: a,
+    syntaxOperator: a,
+    syntaxPunctuation: c,
+    thinkingOpacity: 0.6,
+  }
 }
 
 type Opts = {
@@ -185,18 +253,7 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
     },
     theme: {
       get current() {
-        return (
-          opts.theme?.current ?? {
-            text: "#ffffff",
-            textMuted: "#999999",
-            success: "#00ff00",
-            error: "#ff0000",
-            warning: "#ffff00",
-            backgroundElement: "#111111",
-            diffAdded: "#00ff00",
-            diffRemoved: "#ff0000",
-          }
-        )
+        return opts.theme?.current ?? themeCurrent()
       },
       get selected() {
         return selected
