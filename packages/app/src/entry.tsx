@@ -103,7 +103,8 @@ const getCurrentUrl = () => {
   if (location.hostname.includes("opencode.ai")) return "http://localhost:5000"
   if (import.meta.env.DEV)
     return `http://${import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "localhost"}:${import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "5000"}`
-  return location.origin
+  // 生产环境：使用同 hostname 的 5000 端口
+  return `http://${location.hostname}:5000`
 }
 
 const getDefaultUrl = () => {
