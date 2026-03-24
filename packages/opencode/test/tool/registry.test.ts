@@ -10,6 +10,19 @@ afterEach(async () => {
 })
 
 describe("tool.registry", () => {
+  test("includes builtin ast tools", async () => {
+    await using tmp = await tmpdir()
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const ids = await ToolRegistry.ids()
+        expect(ids).toContain("ast_grep")
+        expect(ids).toContain("ast_edit")
+      },
+    })
+  })
+
   test("loads tools from .opencode/tool (singular)", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {

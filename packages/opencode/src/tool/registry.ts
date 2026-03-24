@@ -4,6 +4,8 @@ import { BashTool } from "./bash"
 import { EditTool } from "./edit"
 import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
+import { AstGrepTool } from "./ast_grep"
+import { AstEditTool } from "./ast_edit"
 import { BatchTool } from "./batch"
 import { ReadTool } from "./read"
 import { TaskTool } from "./task"
@@ -120,7 +122,9 @@ export namespace ToolRegistry {
           ReadTool,
           GlobTool,
           GrepTool,
+          AstGrepTool,
           EditTool,
+          AstEditTool,
           WriteTool,
           TaskTool,
           WebFetchTool,

@@ -1,0 +1,8 @@
+Structural code search tool powered by AST matching.
+
+Usage:
+- Search code structure using ast-grep patterns instead of regular expressions.
+- Supports `typescript`, `tsx`, `javascript`, and `jsx`.
+- Use metavariables like `$A` or `$$$ARGS` when you need wildcard structural matches.
+- `path` can point to a file or directory. It defaults to the current working directory.
+- Results include file paths, line numbers, and the matched code snippet.

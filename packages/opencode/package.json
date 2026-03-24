@@ -87,6 +87,7 @@
     "@ai-sdk/togetherai": "1.0.34",
     "@ai-sdk/vercel": "1.0.33",
     "@ai-sdk/xai": "2.0.51",
+    "@ast-grep/napi": "0.42.0",
     "@aws-sdk/credential-providers": "3.993.0",
     "@clack/prompts": "1.0.0-alpha.1",
     "@effect/platform-node": "catalog:",

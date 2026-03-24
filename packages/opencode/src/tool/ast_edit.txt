@@ -1,0 +1,8 @@
+Structural code rewrite tool powered by AST matching.
+
+Usage:
+- Rewrite code using ast-grep patterns and rewrite templates instead of exact string matching.
+- Supports `typescript`, `tsx`, `javascript`, and `jsx`.
+- `pattern` finds the AST nodes to rewrite. `rewrite` is the replacement template and can reference metavariables from the pattern.
+- `path` can point to a file or directory. It defaults to the current working directory.
+- Use this tool for safe codemod-style edits where plain text replacement is too brittle.
