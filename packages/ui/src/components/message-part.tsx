@@ -49,12 +49,111 @@ import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/util/pa
 import { checksum } from "@opencode-ai/util/encode"
 import { Tooltip } from "./tooltip"
 import { IconButton } from "./icon-button"
+import { DropdownMenu } from "./dropdown-menu"
+import { marked } from "marked"
+import DOMPurify from "dompurify"
 import { TextShimmer } from "./text-shimmer"
 import { AnimatedCountList } from "./tool-count-summary"
 import { ToolStatusTitle } from "./tool-status-title"
 import { animate } from "motion"
 import { useLocation } from "@solidjs/router"
 import { attached, inline, kind } from "./message-file"
+
+// DOMPurify config matching Markdown.tsx -- sanitize before any DOM manipulation
+const purifyConfig = {
+  USE_PROFILES: { html: true, mathMl: true },
+  SANITIZE_NAMED_PROPS: true,
+  FORBID_TAGS: ["style", "img", "video", "audio", "iframe", "script"],
+  FORBID_CONTENTS: ["style", "script"],
+}
+
+/**
+ * Convert markdown to sanitized HTML suitable for email clients.
+ * Sanitizes via DOMPurify first (prevents XSS and network loads),
+ * then strips all classes/styles and inlines email-safe CSS.
+ */
+async function markdownToEmailHtml(markdown: string): Promise<string> {
+  const rawHtml = await marked.parse(markdown)
+  const safeHtml = DOMPurify.sanitize(rawHtml, purifyConfig)
+  const div = document.createElement("div")
+  div.innerHTML = safeHtml
+
+  // Strip all class and style attributes
+  div.querySelectorAll("*").forEach((el) => {
+    ;(el as HTMLElement).removeAttribute("class")
+    ;(el as HTMLElement).removeAttribute("style")
+  })
+
+  // Ensure safe anchor attributes
+  div.querySelectorAll("a").forEach((a) => {
+    a.setAttribute("style", "color: #1a73e8; text-decoration: underline;")
+    if (a.target === "_blank") {
+      a.setAttribute("rel", "noopener noreferrer")
+    }
+  })
+  div.querySelectorAll("code").forEach((code) => {
+    if (code.parentElement?.tagName !== "PRE") {
+      code.setAttribute(
+        "style",
+        "background: #f1f3f4; padding: 1px 4px; border-radius: 3px; font-family: monospace; font-size: 0.9em;",
+      )
+    }
+  })
+  div.querySelectorAll("pre").forEach((pre) => {
+    pre.setAttribute(
+      "style",
+      "background: #f8f9fa; padding: 12px; border-radius: 4px; overflow-x: auto; font-family: monospace; font-size: 0.85em;",
+    )
+  })
+  div.querySelectorAll("blockquote").forEach((bq) => {
+    bq.setAttribute("style", "border-left: 3px solid #dadce0; padding-left: 12px; margin-left: 0; color: #5f6368;")
+  })
+  div.querySelectorAll("table").forEach((table) => {
+    table.setAttribute("style", "border-collapse: collapse; margin: 8px 0;")
+  })
+  div.querySelectorAll("th, td").forEach((cell) => {
+    cell.setAttribute("style", "border: 1px solid #dadce0; padding: 6px 10px; text-align: left;")
+  })
+  div.querySelectorAll("th").forEach((th) => {
+    const s = th.getAttribute("style") || ""
+    th.setAttribute("style", s + " background: #f8f9fa; font-weight: 600;")
+  })
+
+  return `<div style="font-family: Arial, Helvetica, sans-serif; font-size: 14px; line-height: 1.5; color: #202124;">${div.innerHTML}</div>`
+}
+
+/**
+ * Write content to clipboard with format support and fallbacks.
+ * Tries ClipboardItem API first (for HTML), falls back to writeText.
+ */
+async function writeClipboard(options: { html?: string; text: string }): Promise<void> {
+  if (options.html && typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
+    try {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          "text/html": new Blob([options.html], { type: "text/html" }),
+          "text/plain": new Blob([options.text], { type: "text/plain" }),
+        }),
+      ])
+      return
+    } catch {
+      // ClipboardItem failed, fall through to writeText
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(options.text)
+  } catch {
+    // Last resort: textarea fallback
+    const textarea = document.createElement("textarea")
+    textarea.value = options.text
+    textarea.style.position = "fixed"
+    textarea.style.opacity = "0"
+    document.body.appendChild(textarea)
+    textarea.select()
+    document.execCommand("copy")
+    document.body.removeChild(textarea)
+  }
+}
 
 function ShellSubmessage(props: { text: string; animate?: boolean }) {
   let widthRef: HTMLSpanElement | undefined
@@ -1370,13 +1469,39 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     return isLastTextPart()
   })
   const [copied, setCopied] = createSignal(false)
+  const [copiedLabel, setCopiedLabel] = createSignal("")
 
-  const handleCopy = async () => {
+  const flashCopied = (label: string) => {
+    setCopied(true)
+    setCopiedLabel(label)
+    setTimeout(() => {
+      setCopied(false)
+      setCopiedLabel("")
+    }, 2000)
+  }
+
+  const handleCopyText = async () => {
     const content = displayText()
     if (!content) return
-    await navigator.clipboard.writeText(content)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    await writeClipboard({ text: content })
+    flashCopied(i18n.t("ui.message.copied"))
+  }
+
+  const handleCopyMarkdown = async () => {
+    const content = displayText()
+    if (!content) return
+    const rawHtml = await marked.parse(content)
+    const safeHtml = DOMPurify.sanitize(rawHtml, purifyConfig)
+    await writeClipboard({ html: safeHtml, text: content })
+    flashCopied(i18n.t("ui.message.copied"))
+  }
+
+  const handleCopyEmail = async () => {
+    const content = displayText()
+    if (!content) return
+    const emailHtml = await markdownToEmailHtml(content)
+    await writeClipboard({ html: emailHtml, text: content })
+    flashCopied(i18n.t("ui.message.copied"))
   }
 
   return (
@@ -1387,20 +1512,29 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
         </div>
         <Show when={showCopy()}>
           <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
-            <Tooltip
-              value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
-              placement="top"
-              gutter={4}
-            >
-              <IconButton
+            <DropdownMenu gutter={4} placement="top-end">
+              <DropdownMenu.Trigger
+                as={IconButton}
                 icon={copied() ? "check" : "copy"}
                 size="normal"
                 variant="ghost"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={handleCopy}
-                aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
+                onMouseDown={(e: MouseEvent) => e.preventDefault()}
+                aria-label={copied() ? copiedLabel() : i18n.t("ui.message.copyResponse")}
               />
-            </Tooltip>
+              <DropdownMenu.Portal>
+                <DropdownMenu.Content>
+                  <DropdownMenu.Item onSelect={handleCopyText}>
+                    <DropdownMenu.ItemLabel>{i18n.t("ui.message.copyResponse")}</DropdownMenu.ItemLabel>
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Item onSelect={handleCopyMarkdown}>
+                    <DropdownMenu.ItemLabel>{i18n.t("ui.message.copyMarkdown")}</DropdownMenu.ItemLabel>
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Item onSelect={handleCopyEmail}>
+                    <DropdownMenu.ItemLabel>{i18n.t("ui.message.copyEmail")}</DropdownMenu.ItemLabel>
+                  </DropdownMenu.Item>
+                </DropdownMenu.Content>
+              </DropdownMenu.Portal>
+            </DropdownMenu>
             <Show when={meta()}>
               <span data-slot="text-part-meta" class="text-12-regular text-text-weak cursor-default">
                 {meta()}

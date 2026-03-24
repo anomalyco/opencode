@@ -141,6 +141,8 @@ export const dict: Record<string, string> = {
   "ui.message.forkMessage": "Fork to new session",
   "ui.message.revertMessage": "Revert message",
   "ui.message.copyResponse": "Copy response",
+  "ui.message.copyMarkdown": "Copy as Markdown",
+  "ui.message.copyEmail": "Copy for Email",
   "ui.message.copied": "Copied",
   "ui.message.duration.seconds": "{{count}}s",
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
