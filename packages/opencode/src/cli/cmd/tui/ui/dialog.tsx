@@ -165,7 +165,7 @@ export function DialogProvider(props: ParentProps) {
       >
         <Show when={value.stack.length}>
           <Dialog onClose={() => value.clear()} size={value.size}>
-            {value.stack.at(-1)!.element}
+            {value.stack.at(-1)?.element}
           </Dialog>
         </Show>
       </box>

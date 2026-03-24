@@ -1152,7 +1152,11 @@ export namespace ACP {
       const model = await defaultModel(this.config, directory)
       const sessionId = params.sessionId
 
-      const providers = await this.sdk.config.providers({ directory }).then((x) => x.data!.providers)
+      const response = await this.sdk.config.providers({ directory })
+      if (!response.data) {
+        throw new Error("Failed to load providers: no data in response")
+      }
+      const providers = response.data.providers
       const entries = sortProvidersByName(providers)
       const availableVariants = modelVariantsFromProviders(entries, model)
       const currentVariant = this.sessionManager.getVariant(sessionId)
@@ -1423,9 +1427,8 @@ export namespace ACP {
         }
       }
 
-      const command = await this.config.sdk.command
-        .list({ directory }, { throwOnError: true })
-        .then((x) => x.data!.find((c) => c.name === cmd.name))
+      const response = await this.config.sdk.command.list({ directory }, { throwOnError: true })
+      const command = response.data?.find((c) => c.name === cmd.name)
       if (command) {
         const response = await this.sdk.session.command({
           sessionID,
