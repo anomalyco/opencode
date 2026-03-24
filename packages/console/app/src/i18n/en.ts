@@ -646,6 +646,8 @@ export const dict = {
     "The plan is designed primarily for international users, with models hosted in the US, EU, and Singapore for stable global access. Pricing and usage limits may change as we learn from early usage and feedback.",
   "workspace.lite.promo.subscribe": "Subscribe to Go",
   "workspace.lite.promo.subscribing": "Redirecting...",
+  "workspace.lite.promo.otherMethods": "Other payment methods",
+  "workspace.lite.promo.selectMethod": "Select payment method",
 
   "download.title": "OpenCode | Download",
   "download.meta.description": "Download OpenCode for macOS, Windows, and Linux",

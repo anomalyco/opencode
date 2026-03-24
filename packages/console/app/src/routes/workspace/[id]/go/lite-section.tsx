@@ -1,6 +1,7 @@
 import { action, useParams, useAction, useSubmission, json, query, createAsync } from "@solidjs/router"
 import { createStore } from "solid-js/store"
 import { createMemo, For, Show } from "solid-js"
+import { Modal } from "~/component/modal"
 import { Billing } from "@opencode-ai/console-core/billing.js"
 import { Database, eq, and, isNull } from "@opencode-ai/console-core/drizzle/index.js"
 import { BillingTable, LiteTable } from "@opencode-ai/console-core/schema/billing.sql.js"
@@ -13,6 +14,8 @@ import styles from "./lite-section.module.css"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import { formError } from "~/lib/form-error"
+
+import { IconAlipay, IconUpi } from "~/component/icon"
 
 const queryLiteSubscription = query(async (workspaceID: string) => {
   "use server"
@@ -78,22 +81,25 @@ function formatResetTime(seconds: number, i18n: ReturnType<typeof useI18n>) {
   return `${minutes} ${minutes === 1 ? i18n.t("workspace.lite.time.minute") : i18n.t("workspace.lite.time.minutes")}`
 }
 
-const createLiteCheckoutUrl = action(async (workspaceID: string, successUrl: string, cancelUrl: string) => {
-  "use server"
-  return json(
-    await withActor(
-      () =>
-        Billing.generateLiteCheckoutUrl({ successUrl, cancelUrl })
-          .then((data) => ({ error: undefined, data }))
-          .catch((e) => ({
-            error: e.message as string,
-            data: undefined,
-          })),
-      workspaceID,
-    ),
-    { revalidate: [queryBillingInfo.key, queryLiteSubscription.key] },
-  )
-}, "liteCheckoutUrl")
+const createLiteCheckoutUrl = action(
+  async (workspaceID: string, successUrl: string, cancelUrl: string, method?: "alipay" | "upi") => {
+    "use server"
+    return json(
+      await withActor(
+        () =>
+          Billing.generateLiteCheckoutUrl({ successUrl, cancelUrl, method })
+            .then((data) => ({ error: undefined, data }))
+            .catch((e) => ({
+              error: e.message as string,
+              data: undefined,
+            })),
+        workspaceID,
+      ),
+      { revalidate: [queryBillingInfo.key, queryLiteSubscription.key] },
+    )
+  },
+  "liteCheckoutUrl",
+)
 
 const createSessionUrl = action(async (workspaceID: string, returnUrl: string) => {
   "use server"
@@ -147,23 +153,30 @@ export function LiteSection() {
   const checkoutSubmission = useSubmission(createLiteCheckoutUrl)
   const useBalanceSubmission = useSubmission(setLiteUseBalance)
   const [store, setStore] = createStore({
-    redirecting: false,
+    loading: undefined as undefined | "session" | "checkout" | "alipay" | "upi",
+    showModal: false,
   })
 
+  const busy = createMemo(() => !!store.loading)
+
   async function onClickSession() {
+    setStore("loading", "session")
     const result = await sessionAction(params.id!, window.location.href)
     if (result.data) {
-      setStore("redirecting", true)
       window.location.href = result.data
+      return
     }
+    setStore("loading", undefined)
   }
 
-  async function onClickSubscribe() {
-    const result = await checkoutAction(params.id!, window.location.href, window.location.href)
+  async function onClickSubscribe(method?: "alipay" | "upi") {
+    setStore("loading", method ?? "checkout")
+    const result = await checkoutAction(params.id!, window.location.href, window.location.href, method)
     if (result.data) {
-      setStore("redirecting", true)
       window.location.href = result.data
+      return
     }
+    setStore("loading", undefined)
   }
 
   return (
@@ -179,12 +192,8 @@ export function LiteSection() {
             <div data-slot="section-title">
               <div data-slot="title-row">
                 <p>{i18n.t("workspace.lite.subscription.message")}</p>
-                <button
-                  data-color="primary"
-                  disabled={sessionSubmission.pending || store.redirecting}
-                  onClick={onClickSession}
-                >
-                  {sessionSubmission.pending || store.redirecting
+                <button data-color="primary" disabled={sessionSubmission.pending || busy()} onClick={onClickSession}>
+                  {store.loading === "session"
                     ? i18n.t("workspace.lite.loading")
                     : i18n.t("workspace.lite.subscription.manage")}
                 </button>
@@ -282,16 +291,64 @@ export function LiteSection() {
             <li>MiniMax M2.7</li>
           </ul>
           <p data-slot="promo-description">{i18n.t("workspace.lite.promo.footer")}</p>
-          <button
-            data-slot="subscribe-button"
-            data-color="primary"
-            disabled={checkoutSubmission.pending || store.redirecting}
-            onClick={onClickSubscribe}
+          <div data-slot="subscribe-actions">
+            <button
+              data-slot="subscribe-button"
+              data-color="primary"
+              disabled={checkoutSubmission.pending || busy()}
+              onClick={() => onClickSubscribe()}
+            >
+              {store.loading === "checkout"
+                ? i18n.t("workspace.lite.promo.subscribing")
+                : i18n.t("workspace.lite.promo.subscribe")}
+            </button>
+            <button
+              type="button"
+              data-slot="other-methods"
+              data-color="ghost"
+              onClick={() => setStore("showModal", true)}
+            >
+              <span>{i18n.t("workspace.lite.promo.otherMethods")}</span>
+              <span data-slot="other-methods-icons">
+                <span> </span>
+                <IconAlipay style={{ width: "16px", height: "16px" }} />
+                <span> </span>
+                <IconUpi style={{ width: "auto", height: "10px" }} />
+              </span>
+            </button>
+          </div>
+          <Modal
+            open={store.showModal}
+            onClose={() => setStore("showModal", false)}
+            title={i18n.t("workspace.lite.promo.selectMethod")}
           >
-            {checkoutSubmission.pending || store.redirecting
-              ? i18n.t("workspace.lite.promo.subscribing")
-              : i18n.t("workspace.lite.promo.subscribe")}
-          </button>
+            <div data-slot="modal-actions">
+              <button
+                type="button"
+                data-slot="method-button"
+                data-color="ghost"
+                disabled={checkoutSubmission.pending || busy()}
+                onClick={() => onClickSubscribe("alipay")}
+              >
+                <Show when={store.loading !== "alipay"}>
+                  <IconAlipay style={{ width: "24px", height: "24px" }} />
+                </Show>
+                {store.loading === "alipay" ? i18n.t("workspace.lite.promo.subscribing") : "Alipay"}
+              </button>
+              <button
+                type="button"
+                data-slot="method-button"
+                data-color="ghost"
+                disabled={checkoutSubmission.pending || busy()}
+                onClick={() => onClickSubscribe("upi")}
+              >
+                <Show when={store.loading !== "upi"}>
+                  <IconUpi style={{ width: "auto", height: "16px" }} />
+                </Show>
+                {store.loading === "upi" ? i18n.t("workspace.lite.promo.subscribing") : "UPI"}
+              </button>
+            </div>
+          </Modal>
         </section>
       </Show>
     </>

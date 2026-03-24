@@ -7,7 +7,9 @@ import { SessionID } from "../../src/session/schema"
 import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
 
-afterEach(() => Instance.disposeAll())
+afterEach(async () => {
+  await Instance.disposeAll()
+})
 
 async function touch(file: string, time: number) {
   const date = new Date(time)
@@ -81,6 +83,28 @@ describe("file/time", () => {
           const second = await FileTime.get(sessionID, filepath)
 
           expect(second!.getTime()).toBeGreaterThanOrEqual(first!.getTime())
+        },
+      })
+    })
+
+    test("isolates reads by directory", async () => {
+      await using one = await tmpdir()
+      await using two = await tmpdir()
+      await using shared = await tmpdir()
+      const filepath = path.join(shared.path, "file.txt")
+      await fs.writeFile(filepath, "content", "utf-8")
+
+      await Instance.provide({
+        directory: one.path,
+        fn: async () => {
+          await FileTime.read(sessionID, filepath)
+        },
+      })
+
+      await Instance.provide({
+        directory: two.path,
+        fn: async () => {
+          expect(await FileTime.get(sessionID, filepath)).toBeUndefined()
         },
       })
     })

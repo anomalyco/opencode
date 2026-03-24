@@ -3,7 +3,7 @@ import { createMemo, Match, Show, Switch, createEffect } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Billing } from "@opencode-ai/console-core/billing.js"
 import { withActor } from "~/context/auth.withActor"
-import { IconAlipay, IconCreditCard, IconStripe, IconWechat } from "~/component/icon"
+import { IconAlipay, IconCreditCard, IconStripe, IconUpi, IconWechat } from "~/component/icon"
 import styles from "./billing-section.module.css"
 import { createCheckoutUrl, formatBalance, queryBillingInfo } from "../../common"
 import { useI18n } from "~/context/i18n"
@@ -210,6 +210,9 @@ export function BillingSection() {
                     </Match>
                     <Match when={billingInfo()?.paymentMethodType === "wechat_pay"}>
                       <IconWechat style={{ width: "24px", height: "24px" }} />
+                    </Match>
+                    <Match when={billingInfo()?.paymentMethodType === "upi"}>
+                      <IconUpi style={{ width: "auto", height: "16px" }} />
                     </Match>
                   </Switch>
                 </div>

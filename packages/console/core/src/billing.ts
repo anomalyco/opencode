@@ -239,10 +239,11 @@ export namespace Billing {
     z.object({
       successUrl: z.string(),
       cancelUrl: z.string(),
+      method: z.enum(["alipay", "upi"]).optional(),
     }),
     async (input) => {
       const user = Actor.assert("user")
-      const { successUrl, cancelUrl } = input
+      const { successUrl, cancelUrl, method } = input
 
       const email = await User.getAuthEmail(user.properties.userID)
       const billing = await Billing.get()
@@ -250,38 +251,102 @@ export namespace Billing {
       if (billing.subscriptionID) throw new Error("Already subscribed to Black")
       if (billing.liteSubscriptionID) throw new Error("Already subscribed to Lite")
 
-      const session = await Billing.stripe().checkout.sessions.create({
-        mode: "subscription",
-        billing_address_collection: "required",
-        line_items: [{ price: LiteData.priceID(), quantity: 1 }],
-        discounts: [{ coupon: LiteData.firstMonth50Coupon() }],
-        ...(billing.customerID
-          ? {
-              customer: billing.customerID,
-              customer_update: {
-                name: "auto",
-                address: "auto",
-              },
+      const createSession = () =>
+        Billing.stripe().checkout.sessions.create({
+          mode: "subscription",
+          discounts: [{ coupon: LiteData.firstMonth50Coupon() }],
+          ...(billing.customerID
+            ? {
+                customer: billing.customerID,
+                customer_update: {
+                  name: "auto",
+                  address: "auto",
+                },
+              }
+            : {
+                customer_email: email!,
+              }),
+          ...(() => {
+            if (method === "alipay") {
+              return {
+                line_items: [{ price: LiteData.priceID(), quantity: 1 }],
+                payment_method_types: ["alipay"],
+                adaptive_pricing: {
+                  enabled: false,
+                },
+              }
             }
-          : {
-              customer_email: email!,
-            }),
-        currency: "usd",
-        tax_id_collection: {
-          enabled: true,
-        },
-        success_url: successUrl,
-        cancel_url: cancelUrl,
-        subscription_data: {
-          metadata: {
-            workspaceID: Actor.workspace(),
-            userID: user.properties.userID,
-            type: "lite",
+            if (method === "upi") {
+              return {
+                line_items: [
+                  {
+                    price_data: {
+                      currency: "inr",
+                      product: LiteData.productID(),
+                      recurring: {
+                        interval: "month",
+                        interval_count: 1,
+                      },
+                      unit_amount: LiteData.priceInr(),
+                    },
+                    quantity: 1,
+                  },
+                ],
+                payment_method_types: ["upi"] as any,
+                adaptive_pricing: {
+                  enabled: false,
+                },
+              }
+            }
+            return {
+              line_items: [{ price: LiteData.priceID(), quantity: 1 }],
+              billing_address_collection: "required",
+            }
+          })(),
+          tax_id_collection: {
+            enabled: true,
           },
-        },
-      })
+          success_url: successUrl,
+          cancel_url: cancelUrl,
+          subscription_data: {
+            metadata: {
+              workspaceID: Actor.workspace(),
+              userID: user.properties.userID,
+              type: "lite",
+            },
+          },
+        })
 
-      return session.url
+      try {
+        const session = await createSession()
+        return session.url
+      } catch (e: any) {
+        if (
+          e.type !== "StripeInvalidRequestError" ||
+          !e.message.includes("You cannot combine currencies on a single customer")
+        )
+          throw e
+
+        // get pending payment intent
+        const intents = await Billing.stripe().paymentIntents.search({
+          query: `-status:'canceled' AND -status:'processing' AND -status:'succeeded' AND customer:'${billing.customerID}'`,
+        })
+        if (intents.data.length === 0) throw e
+
+        for (const intent of intents.data) {
+          // get checkout session
+          const sessions = await Billing.stripe().checkout.sessions.list({
+            customer: billing.customerID!,
+            payment_intent: intent.id,
+          })
+
+          // delete pending payment intent
+          await Billing.stripe().checkout.sessions.expire(sessions.data[0].id)
+        }
+
+        const session = await createSession()
+        return session.url
+      }
     },
   )
 

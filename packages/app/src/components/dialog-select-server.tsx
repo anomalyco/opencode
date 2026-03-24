@@ -6,6 +6,7 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { List } from "@opencode-ai/ui/list"
 import { TextField } from "@opencode-ai/ui/text-field"
+import { useMutation } from "@tanstack/solid-query"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useNavigate } from "@solidjs/router"
 import { createEffect, createMemo, createResource, onCleanup, Show } from "solid-js"
@@ -186,7 +187,6 @@ export function DialogSelectServer() {
       name: "",
       username: DEFAULT_USERNAME,
       password: "",
-      adding: false,
       error: "",
       showForm: false,
       status: undefined as boolean | undefined,
@@ -198,7 +198,6 @@ export function DialogSelectServer() {
       username: "",
       password: "",
       error: "",
-      busy: false,
       status: undefined as boolean | undefined,
     },
   })
@@ -209,7 +208,6 @@ export function DialogSelectServer() {
       name: "",
       username: DEFAULT_USERNAME,
       password: "",
-      adding: false,
       error: "",
       showForm: false,
       status: undefined,
@@ -224,9 +222,77 @@ export function DialogSelectServer() {
       password: "",
       error: "",
       status: undefined,
-      busy: false,
     })
   }
+
+  const addMutation = useMutation(() => ({
+    mutationFn: async (value: string) => {
+      const normalized = normalizeServerUrl(value)
+      if (!normalized) {
+        resetAdd()
+        return
+      }
+
+      const conn: ServerConnection.Http = {
+        type: "http",
+        http: { url: normalized },
+      }
+      if (store.addServer.name.trim()) conn.displayName = store.addServer.name.trim()
+      if (store.addServer.password) conn.http.password = store.addServer.password
+      if (store.addServer.password && store.addServer.username) conn.http.username = store.addServer.username
+      const result = await checkServerHealth(conn.http)
+      if (!result.healthy) {
+        setStore("addServer", { error: language.t("dialog.server.add.error") })
+        return
+      }
+
+      resetAdd()
+      await select(conn, true)
+    },
+  }))
+
+  const editMutation = useMutation(() => ({
+    mutationFn: async (input: { original: ServerConnection.Any; value: string }) => {
+      if (input.original.type !== "http") return
+      const normalized = normalizeServerUrl(input.value)
+      if (!normalized) {
+        resetEdit()
+        return
+      }
+
+      const name = store.editServer.name.trim() || undefined
+      const username = store.editServer.username || undefined
+      const password = store.editServer.password || undefined
+      const existingName = input.original.displayName
+      if (
+        normalized === input.original.http.url &&
+        name === existingName &&
+        username === input.original.http.username &&
+        password === input.original.http.password
+      ) {
+        resetEdit()
+        return
+      }
+
+      const conn: ServerConnection.Http = {
+        type: "http",
+        displayName: name,
+        http: { url: normalized, username, password },
+      }
+      const result = await checkServerHealth(conn.http)
+      if (!result.healthy) {
+        setStore("editServer", { error: language.t("dialog.server.add.error") })
+        return
+      }
+      if (normalized === input.original.http.url) {
+        server.add(conn)
+      } else {
+        replaceServer(input.original, conn)
+      }
+
+      resetEdit()
+    },
+  }))
 
   const replaceServer = (original: ServerConnection.Http, next: ServerConnection.Http) => {
     const active = server.key
@@ -291,12 +357,12 @@ export function DialogSelectServer() {
       navigate("/")
       return
     }
-    server.setActive(ServerConnection.key(conn))
     navigate("/")
+    queueMicrotask(() => server.setActive(ServerConnection.key(conn)))
   }
 
   const handleAddChange = (value: string) => {
-    if (store.addServer.adding) return
+    if (addMutation.isPending) return
     setStore("addServer", { url: value, error: "" })
     void previewStatus(value, store.addServer.username, store.addServer.password, (next) =>
       setStore("addServer", { status: next }),
@@ -304,12 +370,12 @@ export function DialogSelectServer() {
   }
 
   const handleAddNameChange = (value: string) => {
-    if (store.addServer.adding) return
+    if (addMutation.isPending) return
     setStore("addServer", { name: value, error: "" })
   }
 
   const handleAddUsernameChange = (value: string) => {
-    if (store.addServer.adding) return
+    if (addMutation.isPending) return
     setStore("addServer", { username: value, error: "" })
     void previewStatus(store.addServer.url, value, store.addServer.password, (next) =>
       setStore("addServer", { status: next }),
@@ -317,7 +383,7 @@ export function DialogSelectServer() {
   }
 
   const handleAddPasswordChange = (value: string) => {
-    if (store.addServer.adding) return
+    if (addMutation.isPending) return
     setStore("addServer", { password: value, error: "" })
     void previewStatus(store.addServer.url, store.addServer.username, value, (next) =>
       setStore("addServer", { status: next }),
@@ -325,7 +391,7 @@ export function DialogSelectServer() {
   }
 
   const handleEditChange = (value: string) => {
-    if (store.editServer.busy) return
+    if (editMutation.isPending) return
     setStore("editServer", { value, error: "" })
     void previewStatus(value, store.editServer.username, store.editServer.password, (next) =>
       setStore("editServer", { status: next }),
@@ -333,12 +399,12 @@ export function DialogSelectServer() {
   }
 
   const handleEditNameChange = (value: string) => {
-    if (store.editServer.busy) return
+    if (editMutation.isPending) return
     setStore("editServer", { name: value, error: "" })
   }
 
   const handleEditUsernameChange = (value: string) => {
-    if (store.editServer.busy) return
+    if (editMutation.isPending) return
     setStore("editServer", { username: value, error: "" })
     void previewStatus(store.editServer.value, value, store.editServer.password, (next) =>
       setStore("editServer", { status: next }),
@@ -346,83 +412,11 @@ export function DialogSelectServer() {
   }
 
   const handleEditPasswordChange = (value: string) => {
-    if (store.editServer.busy) return
+    if (editMutation.isPending) return
     setStore("editServer", { password: value, error: "" })
     void previewStatus(store.editServer.value, store.editServer.username, value, (next) =>
       setStore("editServer", { status: next }),
     )
-  }
-
-  async function handleAdd(value: string) {
-    if (store.addServer.adding) return
-    const normalized = normalizeServerUrl(value)
-    if (!normalized) {
-      resetAdd()
-      return
-    }
-
-    setStore("addServer", { adding: true, error: "" })
-
-    const conn: ServerConnection.Http = {
-      type: "http",
-      http: { url: normalized },
-    }
-    if (store.addServer.name.trim()) conn.displayName = store.addServer.name.trim()
-    if (store.addServer.password) conn.http.password = store.addServer.password
-    if (store.addServer.password && store.addServer.username) conn.http.username = store.addServer.username
-    const result = await checkServerHealth(conn.http)
-    setStore("addServer", { adding: false })
-    if (!result.healthy) {
-      setStore("addServer", { error: language.t("dialog.server.add.error") })
-      return
-    }
-
-    resetAdd()
-    await select(conn, true)
-  }
-
-  async function handleEdit(original: ServerConnection.Any, value: string) {
-    if (store.editServer.busy || original.type !== "http") return
-    const normalized = normalizeServerUrl(value)
-    if (!normalized) {
-      resetEdit()
-      return
-    }
-
-    const name = store.editServer.name.trim() || undefined
-    const username = store.editServer.username || undefined
-    const password = store.editServer.password || undefined
-    const existingName = original.displayName
-    if (
-      normalized === original.http.url &&
-      name === existingName &&
-      username === original.http.username &&
-      password === original.http.password
-    ) {
-      resetEdit()
-      return
-    }
-
-    setStore("editServer", { busy: true, error: "" })
-
-    const conn: ServerConnection.Http = {
-      type: "http",
-      displayName: name,
-      http: { url: normalized, username, password },
-    }
-    const result = await checkServerHealth(conn.http)
-    setStore("editServer", { busy: false })
-    if (!result.healthy) {
-      setStore("editServer", { error: language.t("dialog.server.add.error") })
-      return
-    }
-    if (normalized === original.http.url) {
-      server.add(conn)
-    } else {
-      replaceServer(original, conn)
-    }
-
-    resetEdit()
   }
 
   const mode = createMemo<"list" | "add" | "edit">(() => {
@@ -464,23 +458,26 @@ export function DialogSelectServer() {
       password: conn.http.password ?? "",
       error: "",
       status: store.status[ServerConnection.key(conn)]?.healthy,
-      busy: false,
     })
   }
 
   const submitForm = () => {
     if (mode() === "add") {
-      void handleAdd(store.addServer.url)
+      if (addMutation.isPending) return
+      setStore("addServer", { error: "" })
+      addMutation.mutate(store.addServer.url)
       return
     }
     const original = editing()
     if (!original) return
-    void handleEdit(original, store.editServer.value)
+    if (editMutation.isPending) return
+    setStore("editServer", { error: "" })
+    editMutation.mutate({ original, value: store.editServer.value })
   }
 
   const isFormMode = createMemo(() => mode() !== "list")
   const isAddMode = createMemo(() => mode() === "add")
-  const formBusy = createMemo(() => (isAddMode() ? store.addServer.adding : store.editServer.busy))
+  const formBusy = createMemo(() => (isAddMode() ? addMutation.isPending : editMutation.isPending))
 
   const formTitle = createMemo(() => {
     if (!isFormMode()) return language.t("dialog.server.title")

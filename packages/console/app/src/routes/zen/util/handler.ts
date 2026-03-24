@@ -24,7 +24,13 @@ import {
   FreeUsageLimitError,
   SubscriptionUsageLimitError,
 } from "./error"
-import { createBodyConverter, createStreamPartConverter, createResponseConverter, UsageInfo } from "./provider/provider"
+import {
+  buildCostChunk,
+  createBodyConverter,
+  createStreamPartConverter,
+  createResponseConverter,
+  UsageInfo,
+} from "./provider/provider"
 import { anthropicHelper } from "./provider/anthropic"
 import { googleHelper } from "./provider/google"
 import { openaiHelper } from "./provider/openai"
@@ -90,7 +96,7 @@ export async function handler(
     const projectId = input.request.headers.get("x-opencode-project") ?? ""
     const ocClient = input.request.headers.get("x-opencode-client") ?? ""
     logger.metric({
-      is_tream: isStream,
+      is_stream: isStream,
       session: sessionId,
       request: requestId,
       client: ocClient,
@@ -230,7 +236,7 @@ export async function handler(
       const body = JSON.stringify(
         responseConverter({
           ...json,
-          cost: calculateOccuredCost(billingSource, costInfo),
+          cost: calculateOccurredCost(billingSource, costInfo),
         }),
       )
       logger.metric({ response_length: body.length })
@@ -274,8 +280,8 @@ export async function handler(
                   await trialLimiter?.track(usageInfo)
                   await trackUsage(sessionId, billingSource, authInfo, modelInfo, providerInfo, usageInfo, costInfo)
                   await reload(billingSource, authInfo, costInfo)
-                  const cost = calculateOccuredCost(billingSource, costInfo)
-                  c.enqueue(encoder.encode(usageParser.buidlCostChunk(cost)))
+                  const cost = calculateOccurredCost(billingSource, costInfo)
+                  c.enqueue(encoder.encode(buildCostChunk(opts.format, cost)))
                 }
                 c.close()
                 return
@@ -334,6 +340,13 @@ export async function handler(
       "error.message": error.message,
       "error.cause": error.cause?.toString(),
     })
+    if (error.message.startsWith("Failed query")) {
+      try {
+        logger.metric({
+          "error.cause2": JSON.stringify(error.cause),
+        })
+      } catch (e) {}
+    }
 
     // Note: both top level "type" and "error.type" fields are used by the @ai-sdk/anthropic client to render the error message.
     if (
@@ -455,12 +468,17 @@ export async function handler(
       ...modelProvider,
       ...zenData.providers[modelProvider.id],
       ...(() => {
-        const format = zenData.providers[modelProvider.id].format
+        const providerProps = zenData.providers[modelProvider.id]
+        const format = providerProps.format
         const providerModel = modelProvider.model
         if (format === "anthropic") return anthropicHelper({ reqModel, providerModel })
         if (format === "google") return googleHelper({ reqModel, providerModel })
         if (format === "openai") return openaiHelper({ reqModel, providerModel })
-        return oaCompatHelper({ reqModel, providerModel })
+        return oaCompatHelper({
+          reqModel,
+          providerModel,
+          adjustCacheUsage: providerProps.adjustCacheUsage,
+        })
       })(),
     }
   }
@@ -818,7 +836,7 @@ export async function handler(
     }
   }
 
-  function calculateOccuredCost(billingSource: BillingSource, costInfo: CostInfo) {
+  function calculateOccurredCost(billingSource: BillingSource, costInfo: CostInfo) {
     return billingSource === "balance" ? (costInfo.totalCostInCent / 100).toFixed(8) : "0"
   }
 
