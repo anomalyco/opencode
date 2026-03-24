@@ -16,6 +16,8 @@ import { Permission } from "@/permission"
 import { Question } from "@/question"
 import { PartID } from "./schema"
 import type { SessionID, MessageID } from "./schema"
+import { FileTime } from "@/file/time"
+import { Filesystem } from "@/util/filesystem"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -205,12 +207,28 @@ export namespace SessionProcessor {
                 case "tool-error": {
                   const match = toolcalls[value.toolCallId]
                   if (match && match.state.status === "running") {
+                    let errorStr = value.error instanceof Error ? value.error.message : String(value.error)
+                    const staleFileMatch =
+                      errorStr.match(/File (.+) has been modified since it was last read/) ??
+                      errorStr.match(/You must read file (.+) before overwriting it/)
+                    if (staleFileMatch) {
+                      const staleFilePath = staleFileMatch[1].trim()
+                      try {
+                        const freshContent = await Filesystem.readText(staleFilePath)
+                        FileTime.read(input.sessionID, staleFilePath)
+                        errorStr += `\n\nThe file has been auto-re-read. Here is the current content:\n<file path="${staleFilePath}">\n${freshContent}\n</file>`
+                        log.info("stale file auto-re-read", { file: staleFilePath, sessionID: input.sessionID })
+                      } catch (readErr) {
+                        log.warn("failed to auto-re-read stale file", { file: staleFilePath, error: readErr })
+                      }
+                    }
+
                     await Session.updatePart({
                       ...match,
                       state: {
                         status: "error",
                         input: value.input ?? match.state.input,
-                        error: value.error instanceof Error ? value.error.message : String(value.error),
+                        error: errorStr,
                         time: {
                           start: match.state.time.start,
                           end: Date.now(),
