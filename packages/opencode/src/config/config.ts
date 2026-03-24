@@ -453,7 +453,8 @@ export namespace Config {
         result[config.name] = parsed.data
         continue
       }
-      throw new InvalidError({ path: item, issues: parsed.error.issues }, { cause: parsed.error })
+      log.warn("skipping agent with invalid config", { path: item, issues: parsed.error.issues })
+      continue
     }
     return result
   }

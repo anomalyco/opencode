@@ -587,6 +587,60 @@ Nested agent prompt`,
   })
 })
 
+test("skips invalid agent markdown configs instead of throwing", async () => {
+  await using globalTmp = await tmpdir()
+  await using projectTmp = await tmpdir()
+
+  const prev = Global.Path.config
+  ;(Global.Path as { config: string }).config = globalTmp.path
+  Config.global.reset()
+
+  try {
+    const agentsDir = path.join(globalTmp.path, "agents")
+    await fs.mkdir(agentsDir, { recursive: true })
+
+    await Filesystem.write(
+      path.join(agentsDir, "good.md"),
+      `---
+mode: subagent
+tools:
+  bash: true
+color: "#123456"
+---
+Good agent prompt`,
+    )
+
+    await Filesystem.write(
+      path.join(agentsDir, "bad.md"),
+      `---
+tools:
+  - Bash
+color: purple
+---
+Bad agent prompt`,
+    )
+
+    await Instance.provide({
+      directory: projectTmp.path,
+      fn: async () => {
+        const config = await Config.get()
+
+        expect(config.agent?.["good"]).toMatchObject({
+          name: "good",
+          mode: "subagent",
+          color: "#123456",
+          prompt: "Good agent prompt",
+        })
+        expect(config.agent?.["bad"]).toBeUndefined()
+      },
+    })
+  } finally {
+    await Instance.disposeAll()
+    ;(Global.Path as { config: string }).config = prev
+    Config.global.reset()
+  }
+})
+
 test("loads commands from .opencode/command (singular)", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
