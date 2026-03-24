@@ -8,8 +8,8 @@ use windows_sys::Win32::{
     Foundation::ERROR_SUCCESS,
     System::{
         Registry::{
-            RegGetValueW, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, REG_EXPAND_SZ, REG_SZ,
-            RRF_RT_REG_EXPAND_SZ, RRF_RT_REG_SZ,
+            HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, REG_EXPAND_SZ, REG_SZ, RRF_RT_REG_EXPAND_SZ,
+            RRF_RT_REG_SZ, RegGetValueW,
         },
         Threading::{CREATE_NEW_CONSOLE, CREATE_NO_WINDOW},
     },

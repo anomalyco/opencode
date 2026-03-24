@@ -299,8 +299,6 @@ function ServerScopedApp(props: ParentProps<{ disableHealthCheck?: boolean; rout
   return (
     <Show when={server.current}>
       <ConnectionGate disableHealthCheck={props.disableHealthCheck}>
-        {/* Keep the route tree mounted across server switches. GlobalSDK/GlobalSync
-            hot-swap their backing state so OpenClaw toggles do not remount the UI. */}
         <GlobalSDKProvider>
           <GlobalSyncProvider>
             <Dynamic

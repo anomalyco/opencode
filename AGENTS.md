@@ -55,8 +55,10 @@ const journal = await Bun.file(journalPath).json()
 
 ### Debugging (CRITICAL)
 
-- Whenever possible, add `log`s to help debug.
+- Whenever possible, add `log`s to help debug. 
+- Whenver possible, LOOK AT THE DATA STRUCTURES.
 - **Forbidden**: guessing what the error comes from
+- **Forbidden**: guessing the data structure from any api
 
 ### Destructuring
 

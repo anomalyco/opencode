@@ -3,7 +3,9 @@ use crate::{
     server::get_wsl_config,
 };
 use std::{ops::Deref, time::Duration};
-use tauri::{AppHandle, Emitter, Manager, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{
+    AppHandle, Emitter, Manager, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
+};
 use tauri_plugin_window_state::AppHandleExt;
 use tokio::sync::mpsc;
 
@@ -36,7 +38,10 @@ impl Deref for MainWindow {
 impl MainWindow {
     pub const LABEL: &str = "main";
 
-    pub fn create_with_path(app: &AppHandle, initial_path: Option<&str>) -> Result<Self, tauri::Error> {
+    pub fn create_with_path(
+        app: &AppHandle,
+        initial_path: Option<&str>,
+    ) -> Result<Self, tauri::Error> {
         if let Some(window) = app.get_webview_window(Self::LABEL) {
             let _ = window.set_focus();
             let _ = window.unminimize();
