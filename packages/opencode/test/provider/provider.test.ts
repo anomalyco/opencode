@@ -1,4 +1,4 @@
-import { test, expect } from "bun:test"
+import { test, expect, mock } from "bun:test"
 import path from "path"
 
 import { tmpdir } from "../fixture/fixture"
@@ -2281,4 +2281,78 @@ test("cloudflare-ai-gateway forwards config metadata options", async () => {
       })
     },
   })
+})
+
+test("ollama local provider does not send stream_options to ollama", async () => {
+  // Local Ollama does not support stream_options: { include_usage: true }.
+  // Sending it causes errors. A user-configured @ai-sdk/openai-compatible
+  // provider must not have includeUsage forced on.
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            ollama: {
+              name: "Ollama",
+              npm: "@ai-sdk/openai-compatible",
+              env: [],
+              models: {
+                "llama3.2": {
+                  name: "Llama 3.2",
+                  limit: { context: 4096, output: 2048 },
+                },
+              },
+              options: {
+                baseURL: "http://localhost:11434/v1",
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+
+  let body: Record<string, unknown> | undefined
+
+  const orig = globalThis.fetch
+  globalThis.fetch = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
+    body = JSON.parse((init?.body as string) ?? "{}")
+    const stream = new ReadableStream({
+      start(c) {
+        c.enqueue(
+          new TextEncoder().encode(
+            `data: {"id":"1","object":"chat.completion.chunk","created":1,"model":"llama3.2","choices":[{"index":0,"delta":{"role":"assistant","content":"hi"},"finish_reason":null}]}\n\n`,
+          ),
+        )
+        c.enqueue(new TextEncoder().encode("data: [DONE]\n\n"))
+        c.close()
+      },
+    })
+    return new Response(stream, { status: 200, headers: { "Content-Type": "text/event-stream" } })
+  }) as typeof fetch
+
+  try {
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const model = await Provider.getModel(ProviderID.make("ollama"), ModelID.make("llama3.2"))
+        const lang = await Provider.getLanguage(model)
+        const { stream } = await lang.doStream({
+          prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+          includeRawChunks: false,
+        })
+        // drain the stream
+        const reader = stream.getReader()
+        while (!(await reader.read()).done) {}
+      },
+    })
+  } finally {
+    globalThis.fetch = orig
+  }
+
+  expect(body).toBeDefined()
+  // stream_options must not be present — local Ollama rejects it
+  expect(body!["stream_options"]).toBeUndefined()
 })

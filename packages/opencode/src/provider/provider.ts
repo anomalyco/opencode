@@ -1196,7 +1196,11 @@ export namespace Provider {
         delete options.fetch
       }
 
-      if (model.api.npm.includes("@ai-sdk/openai-compatible") && options["includeUsage"] !== false) {
+      if (
+        model.api.npm.includes("@ai-sdk/openai-compatible") &&
+        options["includeUsage"] === undefined &&
+        provider.source !== "config"
+      ) {
         options["includeUsage"] = true
       }
 
