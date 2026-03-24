@@ -220,64 +220,16 @@ export type TuiSlotMap = {
     tips_hidden: boolean
     first_time_user: boolean
   }
-  sidebar_top: {
-    session_id: string
-  }
   sidebar_title: {
     session_id: string
     title: string
     share_url?: string
   }
-  sidebar_context: {
+  sidebar_content: {
     session_id: string
-    tokens: number
-    percentage: number | null
-    cost: number
   }
-  sidebar_mcp: {
+  sidebar_footer: {
     session_id: string
-    items: TuiSidebarMcpItem[]
-    connected: number
-    errors: number
-  }
-  sidebar_lsp: {
-    session_id: string
-    items: TuiSidebarLspItem[]
-    disabled: boolean
-  }
-  sidebar_todo: {
-    session_id: string
-    items: TuiSidebarTodoItem[]
-  }
-  sidebar_files: {
-    session_id: string
-    items: TuiSidebarFileItem[]
-  }
-  sidebar_getting_started: {
-    session_id: string
-    show_getting_started: boolean
-    has_providers: boolean
-    dismissed: boolean
-  }
-  sidebar_directory: {
-    session_id: string
-    directory: string
-    directory_parent: string
-    directory_name: string
-  }
-  sidebar_version: {
-    session_id: string
-    version: string
-  }
-  sidebar_bottom: {
-    session_id: string
-    directory: string
-    directory_parent: string
-    directory_name: string
-    version: string
-    show_getting_started: boolean
-    has_providers: boolean
-    dismissed: boolean
   }
 }
 

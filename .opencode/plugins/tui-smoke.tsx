@@ -89,11 +89,6 @@ const ui = {
 
 type Color = RGBA | string
 
-const cash = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-})
-
 const ink = (map: Record<string, unknown>, name: string, fallback: string): Color => {
   const value = map[name]
   if (typeof value === "string") return value
@@ -607,7 +602,7 @@ const Modal = (props: { api: TuiApi; input: Cfg; route: Route; keys: Keys; param
   )
 }
 
-const slot = (input: Cfg): TuiSlotPlugin => ({
+const home = (input: Cfg): TuiSlotPlugin => ({
   slots: {
     home_logo(ctx) {
       const map = ctx.theme.current
@@ -680,7 +675,13 @@ const slot = (input: Cfg): TuiSlotPlugin => ({
         </box>
       )
     },
-    sidebar_top(ctx, value) {
+  },
+})
+
+const block = (input: Cfg, order: number, title: string, text: string): TuiSlotPlugin => ({
+  order,
+  slots: {
+    sidebar_content(ctx, value) {
       const skin = look(ctx.theme.current)
 
       return (
@@ -696,131 +697,24 @@ const slot = (input: Cfg): TuiSlotPlugin => ({
           gap={1}
         >
           <text fg={skin.accent}>
-            <b>{input.label}</b>
+            <b>{title}</b>
           </text>
-          <text fg={skin.text}>sidebar slot active</text>
-          <text fg={skin.muted}>session {value.session_id.slice(0, 8)}</text>
-        </box>
-      )
-    },
-    sidebar_title(ctx, value) {
-      const skin = look(ctx.theme.current)
-
-      return (
-        <box paddingRight={1} flexDirection="column" gap={1}>
-          <box flexDirection="row" justifyContent="space-between">
-            <text fg={skin.text}>
-              <b>{value.title}</b>
-            </text>
-            <text fg={skin.accent}>plugin</text>
-          </box>
-          <text fg={skin.muted}>session {value.session_id.slice(0, 8)}</text>
-          {value.share_url ? <text fg={skin.muted}>{value.share_url}</text> : null}
-        </box>
-      )
-    },
-    sidebar_context(ctx, value) {
-      const skin = look(ctx.theme.current)
-      const used = value.percentage === null ? "n/a" : `${value.percentage}%`
-      const bar =
-        value.percentage === null ? "" : "■".repeat(Math.max(1, Math.min(10, Math.round(value.percentage / 10))))
-
-      return (
-        <box
-          border
-          borderColor={skin.border}
-          backgroundColor={skin.panel}
-          paddingTop={1}
-          paddingBottom={1}
-          paddingLeft={2}
-          paddingRight={2}
-          flexDirection="column"
-          gap={1}
-        >
-          <box flexDirection="row" justifyContent="space-between">
-            <text fg={skin.text}>
-              <b>Context</b>
-            </text>
-            <text fg={skin.accent}>slot</text>
-          </box>
-          <text fg={skin.text}>{value.tokens.toLocaleString()} tokens</text>
-          <text fg={skin.muted}>{bar ? `${used} · ${bar}` : used}</text>
-          <text fg={skin.muted}>{cash.format(value.cost)} spent</text>
-        </box>
-      )
-    },
-    sidebar_files(ctx, value) {
-      if (!value.items.length) return null
-      const map = ctx.theme.current
-      const skin = look(map)
-      const add = ink(map, "diffAdded", "#7bd389")
-      const del = ink(map, "diffRemoved", "#ff8e8e")
-      const list = value.items.slice(0, 3)
-
-      return (
-        <box
-          border
-          borderColor={skin.border}
-          backgroundColor={skin.panel}
-          paddingTop={1}
-          paddingBottom={1}
-          paddingLeft={2}
-          paddingRight={2}
-          flexDirection="column"
-          gap={1}
-        >
-          <box flexDirection="row" justifyContent="space-between">
-            <text fg={skin.text}>
-              <b>Working Tree</b>
-            </text>
-            <text fg={skin.accent}>{value.items.length}</text>
-          </box>
-          {list.map((item) => (
-            <box flexDirection="row" gap={1} justifyContent="space-between">
-              <text fg={skin.muted} wrapMode="none">
-                {item.file}
-              </text>
-              <text fg={skin.text}>
-                {item.additions ? <span style={{ fg: add }}>+{item.additions}</span> : null}
-                {item.deletions ? <span style={{ fg: del }}> -{item.deletions}</span> : null}
-              </text>
-            </box>
-          ))}
-          {value.items.length > list.length ? (
-            <text fg={skin.muted}>+{value.items.length - list.length} more file(s)</text>
-          ) : null}
-        </box>
-      )
-    },
-    sidebar_bottom(ctx, value) {
-      const skin = look(ctx.theme.current)
-
-      return (
-        <box
-          border
-          borderColor={skin.border}
-          backgroundColor={skin.panel}
-          paddingTop={1}
-          paddingBottom={1}
-          paddingLeft={2}
-          paddingRight={2}
-          flexDirection="column"
-          gap={1}
-        >
-          <text fg={skin.accent}>
-            <b>{input.label} footer slot</b>
-          </text>
+          <text fg={skin.text}>{text}</text>
           <text fg={skin.muted}>
-            append demo after {value.show_getting_started ? "welcome card" : "default footer"}
-          </text>
-          <text fg={skin.text}>
-            {value.directory_name} · {value.version}
+            {input.label} order {order} · session {value.session_id.slice(0, 8)}
           </text>
         </box>
       )
     },
   },
 })
+
+const slot = (input: Cfg): TuiSlotPlugin[] => [
+  home(input),
+  block(input, 50, "Smoke above", "renders above internal sidebar blocks"),
+  block(input, 250, "Smoke between", "renders between internal sidebar blocks"),
+  block(input, 650, "Smoke below", "renders below internal sidebar blocks"),
+]
 
 const reg = (api: TuiApi, input: Cfg, keys: Keys) => {
   const route = names(input)
@@ -957,7 +851,9 @@ const tui = async (api: TuiPluginApi, options: Record<string, unknown> | null, m
   ])
 
   reg(api, value, keys)
-  api.slots.register(slot(value))
+  for (const item of slot(value)) {
+    api.slots.register(item)
+  }
 }
 
 export default {
