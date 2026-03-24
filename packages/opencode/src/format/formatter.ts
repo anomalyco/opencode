@@ -394,3 +394,12 @@ export const dfmt: Info = {
     return which("dfmt") !== null
   },
 }
+
+export const csharpier: Info = {
+  name: "csharpier",
+  command: ["dotnet", "csharpier", "$FILE"],
+  extensions: [".cs"],
+  async enabled() {
+    return which("dotnet") !== null
+  },
+}
