@@ -1,7 +1,42 @@
 import { RGBA } from "@opentui/core"
 
 export namespace Terminal {
+  const ESC = "\u001b"
+  const BEL = "\u0007"
+
   export type Colors = Awaited<ReturnType<typeof colors>>
+
+  function wrap(sequence: string) {
+    if (!process.env["TMUX"] && !process.env["STY"]) return sequence
+    return `${ESC}Ptmux;${sequence.replaceAll(ESC, `${ESC}${ESC}`)}${ESC}\\`
+  }
+
+  function clean(value: string) {
+    return value.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim()
+  }
+
+  export function notify(title: string, body = "") {
+    if (!process.stdout.isTTY) return false
+
+    const kind = (() => {
+      if (process.env["TERM_PROGRAM"] === "ghostty" || process.env["GHOSTTY_RESOURCES_DIR"]) return "ghostty"
+      if (process.env["TERM_PROGRAM"] === "iTerm.app") return "osc9"
+      if (process.env["KITTY_PID"] || process.env["TERM"]?.includes("kitty")) return "osc9"
+      return
+    })()
+
+    if (!kind) return false
+
+    const x = clean(title)
+    const y = clean(body)
+    const seq = kind === "ghostty"
+      ? wrap(`${ESC}]777;notify;${x};${y}${BEL}`)
+      : wrap(`${ESC}]9;${clean([x, y].filter(Boolean).join(": "))}${BEL}`)
+
+    process.stdout.write(seq)
+    return true
+  }
+
   /**
    * Query terminal colors including background, foreground, and palette (0-15).
    * Uses OSC escape sequences to retrieve actual terminal color values.
