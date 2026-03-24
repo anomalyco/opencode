@@ -16,7 +16,6 @@ import { useSDK } from "@/context/sdk"
 import { normalizeServerUrl, ServerConnection, useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
 import { useCheckServerHealth, type ServerHealth } from "@/utils/server-health"
-import { DialogSelectServer } from "./dialog-select-server"
 
 const pollMs = 10_000
 
@@ -54,11 +53,15 @@ const listServersByHealth = (
   })
 }
 
-const useServerHealth = (servers: Accessor<ServerConnection.Any[]>) => {
+const useServerHealth = (servers: Accessor<ServerConnection.Any[]>, enabled: Accessor<boolean>) => {
   const checkServerHealth = useCheckServerHealth()
   const [status, setStatus] = createStore({} as Record<ServerConnection.Key, ServerHealth | undefined>)
 
   createEffect(() => {
+    if (!enabled()) {
+      setStatus(reconcile({}))
+      return
+    }
     const list = servers()
     let dead = false
 
@@ -162,6 +165,12 @@ export function StatusPopover() {
   const navigate = useNavigate()
 
   const [shown, setShown] = createSignal(false)
+  let dialogRun = 0
+  let dialogDead = false
+  onCleanup(() => {
+    dialogDead = true
+    dialogRun += 1
+  })
   const servers = createMemo(() => {
     const current = server.current
     const list = server.list
@@ -169,7 +178,7 @@ export function StatusPopover() {
     if (list.every((item) => ServerConnection.key(item) !== ServerConnection.key(current))) return [current, ...list]
     return [current, ...list.filter((item) => ServerConnection.key(item) !== ServerConnection.key(current))]
   })
-  const health = useServerHealth(servers)
+  const health = useServerHealth(servers, shown)
   const sortedServers = createMemo(() => listServersByHealth(servers(), server.key, health))
   const toggleMcp = useMcpToggleMutation()
   const defaultServer = useDefaultServerKey(platform.getDefaultServer)
@@ -300,7 +309,13 @@ export function StatusPopover() {
                 <Button
                   variant="secondary"
                   class="mt-3 self-start h-8 px-3 py-1.5"
-                  onClick={() => dialog.show(() => <DialogSelectServer />, defaultServer.refresh)}
+                  onClick={() => {
+                    const run = ++dialogRun
+                    void import("./dialog-select-server").then((x) => {
+                      if (dialogDead || dialogRun !== run) return
+                      dialog.show(() => <x.DialogSelectServer />, defaultServer.refresh)
+                    })
+                  }}
                 >
                   {language.t("status.popover.action.manageServers")}
                 </Button>
