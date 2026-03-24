@@ -40,4 +40,11 @@ describe("command keybind helpers", () => {
     expect(display.includes("Alt") || display.includes("⌥")).toBe(true)
     expect(formatKeybind("none")).toBe("")
   })
+
+  test("formatKeybind prefers the first combo", () => {
+    const display = formatKeybind("mod+k,mod+p")
+
+    expect(display.includes("K") || display.includes("k")).toBe(true)
+    expect(display.includes("P") || display.includes("p")).toBe(false)
+  })
 })
