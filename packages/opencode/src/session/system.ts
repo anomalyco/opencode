@@ -11,7 +11,7 @@ import PROMPT_CODEX from "./prompt/codex.txt"
 import PROMPT_TRINITY from "./prompt/trinity.txt"
 import type { Provider } from "@/provider/provider"
 import type { Agent } from "@/agent/agent"
-import { Permission as PermissionNext } from "@/permission/service"
+import { Permission } from "@/permission"
 import { Skill } from "@/skill"
 
 export namespace SystemPrompt {
@@ -53,7 +53,7 @@ export namespace SystemPrompt {
   }
 
   export async function skills(agent: Agent.Info) {
-    if (PermissionNext.disabled(["skill"], agent.permission).has("skill")) return
+    if (Permission.disabled(["skill"], agent.permission).has("skill")) return
 
     const list = await Skill.available(agent)
 

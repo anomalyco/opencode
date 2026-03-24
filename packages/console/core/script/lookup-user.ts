@@ -1,7 +1,14 @@
 import { Database, and, eq, sql } from "../src/drizzle/index.js"
 import { AuthTable } from "../src/schema/auth.sql.js"
 import { UserTable } from "../src/schema/user.sql.js"
-import { BillingTable, PaymentTable, SubscriptionTable, BlackPlans, UsageTable } from "../src/schema/billing.sql.js"
+import {
+  BillingTable,
+  PaymentTable,
+  SubscriptionTable,
+  BlackPlans,
+  UsageTable,
+  LiteTable,
+} from "../src/schema/billing.sql.js"
 import { WorkspaceTable } from "../src/schema/workspace.sql.js"
 import { KeyTable } from "../src/schema/key.sql.js"
 import { BlackData } from "../src/black.js"
@@ -72,11 +79,13 @@ else {
         workspaceID: UserTable.workspaceID,
         workspaceName: WorkspaceTable.name,
         role: UserTable.role,
-        subscribed: SubscriptionTable.timeCreated,
+        black: SubscriptionTable.timeCreated,
+        lite: LiteTable.timeCreated,
       })
       .from(UserTable)
       .rightJoin(WorkspaceTable, eq(WorkspaceTable.id, UserTable.workspaceID))
       .leftJoin(SubscriptionTable, eq(SubscriptionTable.userID, UserTable.id))
+      .leftJoin(LiteTable, eq(LiteTable.userID, UserTable.id))
       .where(eq(UserTable.accountID, accountID))
       .then((rows) =>
         rows.map((row) => ({
@@ -84,7 +93,8 @@ else {
           workspaceID: row.workspaceID,
           workspaceName: row.workspaceName,
           role: row.role,
-          subscribed: formatDate(row.subscribed),
+          black: formatDate(row.black),
+          lite: formatDate(row.lite),
         })),
       ),
   )
@@ -151,13 +161,14 @@ async function printWorkspace(workspaceID: string) {
         balance: BillingTable.balance,
         customerID: BillingTable.customerID,
         reload: BillingTable.reload,
-        subscriptionID: BillingTable.subscriptionID,
-        subscription: {
+        blackSubscriptionID: BillingTable.subscriptionID,
+        blackSubscription: {
           plan: BillingTable.subscriptionPlan,
           booked: BillingTable.timeSubscriptionBooked,
           enrichment: BillingTable.subscription,
         },
-        timeSubscriptionSelected: BillingTable.timeSubscriptionSelected,
+        timeBlackSubscriptionSelected: BillingTable.timeSubscriptionSelected,
+        liteSubscriptionID: BillingTable.liteSubscriptionID,
       })
       .from(BillingTable)
       .where(eq(BillingTable.workspaceID, workspace.id))
@@ -167,16 +178,21 @@ async function printWorkspace(workspaceID: string) {
             balance: `$${(row.balance / 100000000).toFixed(2)}`,
             reload: row.reload ? "yes" : "no",
             customerID: row.customerID,
-            subscriptionID: row.subscriptionID,
-            subscription: row.subscriptionID
+            liteSubscriptionID: row.liteSubscriptionID,
+            blackSubscriptionID: row.blackSubscriptionID,
+            blackSubscription: row.blackSubscriptionID
               ? [
-                  `Black ${row.subscription.enrichment!.plan}`,
-                  row.subscription.enrichment!.seats > 1 ? `X ${row.subscription.enrichment!.seats} seats` : "",
-                  row.subscription.enrichment!.coupon ? `(coupon: ${row.subscription.enrichment!.coupon})` : "",
-                  `(ref: ${row.subscriptionID})`,
+                  `Black ${row.blackSubscription.enrichment!.plan}`,
+                  row.blackSubscription.enrichment!.seats > 1
+                    ? `X ${row.blackSubscription.enrichment!.seats} seats`
+                    : "",
+                  row.blackSubscription.enrichment!.coupon
+                    ? `(coupon: ${row.blackSubscription.enrichment!.coupon})`
+                    : "",
+                  `(ref: ${row.blackSubscriptionID})`,
                 ].join(" ")
-              : row.subscription.booked
-                ? `Waitlist ${row.subscription.plan} plan${row.timeSubscriptionSelected ? " (selected)" : ""}`
+              : row.blackSubscription.booked
+                ? `Waitlist ${row.blackSubscription.plan} plan${row.timeBlackSubscriptionSelected ? " (selected)" : ""}`
                 : undefined,
           }))[0],
       ),
