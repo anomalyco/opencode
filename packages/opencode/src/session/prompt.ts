@@ -412,7 +412,7 @@ export namespace SessionPrompt {
           {
             tool: "task",
             sessionID,
-            callID: part.id,
+            callID: part.callID,
           },
           { args: taskArgs },
         )
@@ -460,7 +460,7 @@ export namespace SessionPrompt {
           {
             tool: "task",
             sessionID,
-            callID: part.id,
+            callID: part.callID,
             args: taskArgs,
           },
           result,
@@ -1773,6 +1773,26 @@ NOTE: At any point in time through this workflow you should feel free to ask the
   const argsRegex = /(?:\[Image\s+\d+\]|"[^"]*"|'[^']*'|[^\s"']+)/gi
   const placeholderRegex = /\$(\d+)/g
   const quoteTrimRegex = /^["']|["']$/g
+  function normalizeCommandParts(
+    parts: Array<
+      PromptInput["parts"][number] & {
+        id?: string
+        sessionID?: SessionID
+        messageID?: MessageID
+      }
+    >,
+    input: {
+      sessionID: SessionID
+      messageID: MessageID
+    },
+  ) {
+    return parts.map((part) => ({
+      ...part,
+      id: part.id ? PartID.make(part.id) : PartID.ascending(),
+      sessionID: input.sessionID,
+      messageID: input.messageID,
+    }))
+  }
   /**
    * Regular expression to match @ file references in text
    * Matches @ followed by file paths, excluding commas, periods at end of sentences, and backticks
@@ -1871,6 +1891,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
     const templateParts = await resolvePromptParts(template)
     const isSubtask = (agent.mode === "subagent" && command.subtask !== false) || command.subtask === true
+    const messageID = input.messageID ?? MessageID.ascending()
     const parts = isSubtask
       ? [
           {
@@ -1887,6 +1908,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           },
         ]
       : [...templateParts, ...(input.parts ?? [])]
+    const hookParts = normalizeCommandParts(parts, {
+      sessionID: input.sessionID,
+      messageID,
+    })
 
     const userAgent = isSubtask ? (input.agent ?? (await Agent.defaultAgent())) : agentName
     const userModel = isSubtask
@@ -1902,15 +1927,18 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         sessionID: input.sessionID,
         arguments: input.arguments,
       },
-      { parts },
+      { parts: hookParts },
     )
 
     const result = (await prompt({
       sessionID: input.sessionID,
-      messageID: input.messageID,
+      messageID,
       model: userModel,
       agent: userAgent,
-      parts,
+      parts: normalizeCommandParts(hookParts, {
+        sessionID: input.sessionID,
+        messageID,
+      }),
       variant: input.variant,
     })) as MessageV2.WithParts
 
