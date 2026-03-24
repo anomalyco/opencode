@@ -212,7 +212,7 @@ function App() {
   const command = useCommandDialog()
   const sdk = useSDK()
   const toast = useToast()
-  const { theme, mode, setMode } = useTheme()
+  const { theme, mode, setMode, locked, lock, unlock } = useTheme()
   const sync = useSync()
   const exit = useExit()
   const promptRef = usePromptRef()
@@ -557,10 +557,20 @@ function App() {
       category: "System",
     },
     {
-      title: "Toggle appearance",
+      title: "Toggle Theme Mode",
       value: "theme.switch_mode",
       onSelect: (dialog) => {
         setMode(mode() === "dark" ? "light" : "dark")
+        dialog.clear()
+      },
+      category: "System",
+    },
+    {
+      title: locked() ? "Unlock Theme Mode" : "Lock Theme Mode",
+      value: "theme.mode.lock",
+      onSelect: (dialog) => {
+        if (locked()) unlock()
+        else lock()
         dialog.clear()
       },
       category: "System",
