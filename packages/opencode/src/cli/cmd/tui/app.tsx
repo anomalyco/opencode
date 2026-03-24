@@ -119,6 +119,11 @@ export function tui(input: {
   return new Promise<void>(async (resolve) => {
     const unguard = win32InstallCtrlCGuard()
     win32DisableProcessedInput()
+    // If a previous process was killed externally (TerminateProcess on Windows,
+    // SIGKILL on POSIX), mouse tracking can be left enabled. Reset it before
+    // the renderer configures its own mouse state.
+    if (process.stdout.isTTY)
+      process.stdout.write("\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l")
 
     const mode = await getTerminalBackgroundColor()
 
