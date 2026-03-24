@@ -83,29 +83,29 @@ Damit lassen sich Themes einfach erstellen und anpassen.
 
 ### Hierarchie
 
-Themes are loaded from multiple directories in the following order where later directories override earlier ones:
+Themes werden aus mehreren Verzeichnissen in folgender Reihenfolge geladen, wobei spaetere Verzeichnisse fruehere ueberschreiben:
 
-1. **Built-in themes** - These are embedded in the binary
-2. **User config directory** - Defined in `~/.config/opencode/themes/*.json` or `$XDG_CONFIG_HOME/opencode/themes/*.json`
-3. **Project root directory** - Defined in the `<project-root>/.opencode/themes/*.json`
-4. **Current working directory** - Defined in `./.opencode/themes/*.json`
+1. **Eingebaute Themes** - Diese sind im Binary eingebettet
+2. **Benutzer-Config-Verzeichnis** - Definiert in `~/.config/opencode/themes/*.json` oder `$XDG_CONFIG_HOME/opencode/themes/*.json`
+3. **Projekt-Root-Verzeichnis** - Definiert in `<project-root>/.opencode/themes/*.json`
+4. **Aktuelles Arbeitsverzeichnis** - Definiert in `./.opencode/themes/*.json`
 
-If multiple directories contain a theme with the same name, the theme from the directory with higher priority will be used.
+Wenn mehrere Verzeichnisse ein Theme mit demselben Namen enthalten, wird das Theme aus dem Verzeichnis mit der hoeheren Prioritaet verwendet.
 
 ---
 
 ### Theme erstellen
 
-To create a custom theme, create a JSON file in one of the theme directories.
+Um ein eigenes Theme zu erstellen, lege eine JSON-Datei in einem der Theme-Verzeichnisse an.
 
-For user-wide themes:
+Fuer benutzerweite Themes:
 
 ```bash no-frame
 mkdir -p ~/.config/opencode/themes
 vim ~/.config/opencode/themes/my-theme.json
 ```
 
-And for project-specific themes.
+Und fuer projektspezifische Themes:
 
 ```bash no-frame
 mkdir -p .opencode/themes
@@ -116,34 +116,34 @@ vim .opencode/themes/my-theme.json
 
 ### JSON-Format
 
-Themes use a flexible JSON format with support for:
+Themes nutzen ein flexibles JSON-Format mit Unterstuetzung fuer:
 
-- **Hex colors**: `"#ffffff"`
-- **ANSI colors**: `3` (0-255)
-- **Color references**: `"primary"` or custom definitions
-- **Dark/light variants**: `{"dark": "#000", "light": "#fff"}`
-- **No color**: `"none"` - Uses the terminal's default color or transparent
+- **Hex-Farben**: `"#ffffff"`
+- **ANSI-Farben**: `3` (0-255)
+- **Farbreferenzen**: `"primary"` oder eigene Definitionen
+- **Dunkel/Hell-Varianten**: `{"dark": "#000", "light": "#fff"}`
+- **Keine Farbe**: `"none"` - Nutzt die Standardfarbe des Terminals oder transparent
 
 ---
 
 ### Farbdefinitionen
 
-The `defs` section is optional and it allows you to define reusable colors that can be referenced in the theme.
+Der `defs`-Abschnitt ist optional und erlaubt es dir, wiederverwendbare Farben zu definieren, die im Theme referenziert werden koennen.
 
 ---
 
 ### Terminal-Standardwerte
 
-The special value `"none"` can be used for any color to inherit the terminal's default color. This is particularly useful for creating themes that blend seamlessly with your terminal's color scheme:
+Der spezielle Wert `"none"` kann fuer jede Farbe verwendet werden, um die Standardfarbe des Terminals zu erben. Das ist besonders nuetzlich, um Themes zu erstellen, die nahtlos mit deinem Terminal-Farbschema verschmelzen:
 
-- `"text": "none"` - Uses terminal's default foreground color
-- `"background": "none"` - Uses terminal's default background color
+- `"text": "none"` - Nutzt die Standard-Vordergrundfarbe des Terminals
+- `"background": "none"` - Nutzt die Standard-Hintergrundfarbe des Terminals
 
 ---
 
 ### Beispiel
 
-Here's an example of a custom theme:
+Hier ist ein Beispiel fuer ein eigenes Theme:
 
 ```json title="my-theme.json"
 {

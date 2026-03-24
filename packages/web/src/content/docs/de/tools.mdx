@@ -109,7 +109,7 @@ Das Tool `write` wird ueber die Berechtigung `edit` gesteuert.
 
 ### read
 
-Read file contents from your codebase.
+Liest Dateiinhalte aus deiner Codebasis.
 
 ```json title="opencode.json" {4}
 {
@@ -120,13 +120,13 @@ Read file contents from your codebase.
 }
 ```
 
-This tool reads files and returns their contents. It supports reading specific line ranges for large files.
+Dieses Tool liest Dateien und gibt deren Inhalt zurueck. Es unterstuetzt das Lesen spezifischer Zeilenbereiche bei grossen Dateien.
 
 ---
 
 ### grep
 
-Search file contents using regular expressions.
+Durchsucht Dateiinhalte mit regulaeren Ausdruecken.
 
 ```json title="opencode.json" {4}
 {
@@ -137,13 +137,13 @@ Search file contents using regular expressions.
 }
 ```
 
-Fast content search across your codebase. Supports full regex syntax and file pattern filtering.
+Schnelle Inhaltssuche in deiner Codebasis. Unterstuetzt volle Regex-Syntax und Filterung nach Dateimustern.
 
 ---
 
 ### glob
 
-Find files by pattern matching.
+Findet Dateien per Musterabgleich.
 
 ```json title="opencode.json" {4}
 {
@@ -154,13 +154,13 @@ Find files by pattern matching.
 }
 ```
 
-Search for files using glob patterns like `**/*.js` or `src/**/*.ts`. Returns matching file paths sorted by modification time.
+Sucht nach Dateien mit Glob-Mustern wie `**/*.js` oder `src/**/*.ts`. Gibt passende Dateipfade sortiert nach Aenderungsdatum zurueck.
 
 ---
 
 ### list
 
-List files and directories in a given path.
+Listet Dateien und Verzeichnisse in einem Pfad auf.
 
 ```json title="opencode.json" {4}
 {
@@ -171,16 +171,16 @@ List files and directories in a given path.
 }
 ```
 
-This tool lists directory contents. It accepts glob patterns to filter results.
+Dieses Tool listet Verzeichnisinhalte auf. Es akzeptiert Glob-Muster zum Filtern der Ergebnisse.
 
 ---
 
-### lsp (experimental)
+### lsp (experimentell)
 
-Interact with your configured LSP servers to get code intelligence features like definitions, references, hover info, and call hierarchy.
+Interagiere mit deinen konfigurierten LSP-Servern fuer Code-Intelligence-Features wie Definitionen, Referenzen, Hover-Infos und Call-Hierarchien.
 
 :::note
-This tool is only available when `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (or `OPENCODE_EXPERIMENTAL=true`).
+Dieses Tool ist nur verfuegbar, wenn `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (oder `OPENCODE_EXPERIMENTAL=true`) gesetzt ist.
 :::
 
 ```json title="opencode.json" {4}
@@ -192,15 +192,15 @@ This tool is only available when `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (or `OPEN
 }
 ```
 
-Supported operations include `goToDefinition`, `findReferences`, `hover`, `documentSymbol`, `workspaceSymbol`, `goToImplementation`, `prepareCallHierarchy`, `incomingCalls`, and `outgoingCalls`.
+Unterstuetzte Operationen sind `goToDefinition`, `findReferences`, `hover`, `documentSymbol`, `workspaceSymbol`, `goToImplementation`, `prepareCallHierarchy`, `incomingCalls` und `outgoingCalls`.
 
-To configure which LSP servers are available for your project, see [LSP Servers](/docs/lsp).
+Um verfuegbare LSP-Server fuer dein Projekt zu konfigurieren, siehe [LSP-Server](/docs/lsp).
 
 ---
 
 ### patch
 
-Apply patches to files.
+Wendet Patches auf Dateien an.
 
 ```json title="opencode.json" {4}
 {
@@ -211,17 +211,17 @@ Apply patches to files.
 }
 ```
 
-This tool applies patch files to your codebase. Useful for applying diffs and patches from various sources.
+Dieses Tool wendet Patch-Dateien auf deine Codebasis an. Nuetzlich fuer Diffs und Patches aus verschiedenen Quellen.
 
 :::note
-The `patch` tool is controlled by the `edit` permission, which covers all file modifications (`edit`, `write`, `patch`, `multiedit`).
+Das Tool `patch` wird ueber die Berechtigung `edit` gesteuert, welche alle Datei-Aenderungen abdeckt (`edit`, `write`, `patch`, `multiedit`).
 :::
 
 ---
 
 ### skill
 
-Load a [skill](/docs/skills) (a `SKILL.md` file) and return its content in the conversation.
+Laedt einen [Skill](/docs/skills) (eine `SKILL.md`-Datei) und gibt dessen Inhalt in der Unterhaltung zurueck.
 
 ```json title="opencode.json" {4}
 {
@@ -236,7 +236,7 @@ Load a [skill](/docs/skills) (a `SKILL.md` file) and return its content in the c
 
 ### todowrite
 
-Manage todo lists during coding sessions.
+Verwaltet Todo-Listen waehrend Coding-Sessions.
 
 ```json title="opencode.json" {4}
 {
@@ -247,17 +247,17 @@ Manage todo lists during coding sessions.
 }
 ```
 
-Creates and updates task lists to track progress during complex operations. The LLM uses this to organize multi-step tasks.
+Erstellt und aktualisiert Aufgabenlisten, um den Fortschritt bei komplexen Operationen zu verfolgen. Das LLM nutzt dies, um mehrstufige Aufgaben zu organisieren.
 
 :::note
-This tool is disabled for subagents by default, but you can enable it manually. [Learn more](/docs/agents/#permissions)
+Dieses Tool ist fuer Sub-Agenten standardmaessig deaktiviert, kann aber manuell aktiviert werden. [Mehr dazu](/docs/agents/#permissions)
 :::
 
 ---
 
 ### todoread
 
-Read existing todo lists.
+Liest existierende Todo-Listen.
 
 ```json title="opencode.json" {4}
 {
@@ -268,17 +268,17 @@ Read existing todo lists.
 }
 ```
 
-Reads the current todo list state. Used by the LLM to track what tasks are pending or completed.
+Liest den aktuellen Status der Todo-Liste. Wird vom LLM genutzt, um offene oder erledigte Aufgaben zu verfolgen.
 
 :::note
-This tool is disabled for subagents by default, but you can enable it manually. [Learn more](/docs/agents/#permissions)
+Dieses Tool ist fuer Sub-Agenten standardmaessig deaktiviert, kann aber manuell aktiviert werden. [Mehr dazu](/docs/agents/#permissions)
 :::
 
 ---
 
 ### webfetch
 
-Fetch web content.
+Ruft Webinhalte ab.
 
 ```json title="opencode.json" {4}
 {
@@ -289,18 +289,18 @@ Fetch web content.
 }
 ```
 
-Allows the LLM to fetch and read web pages. Useful for looking up documentation or researching online resources.
+Erlaubt dem LLM, Webseiten abzurufen und zu lesen. Nuetzlich zum Nachschlagen von Dokumentation oder fuer Online-Recherche.
 
 ---
 
 ### websearch
 
-Search the web for information.
+Durchsucht das Web nach Informationen.
 
 :::note
-This tool is only available when using the OpenCode provider or when the `OPENCODE_ENABLE_EXA` environment variable is set to any truthy value (e.g., `true` or `1`).
+Dieses Tool ist nur verfuegbar, wenn der OpenCode-Provider genutzt wird oder die Umgebungsvariable `OPENCODE_ENABLE_EXA` auf einen 'truthy' Wert (z. B. `true` oder `1`) gesetzt ist.
 
-To enable when launching OpenCode:
+Zum Aktivieren beim Start von OpenCode:
 
 ```bash
 OPENCODE_ENABLE_EXA=1 opencode
@@ -317,19 +317,19 @@ OPENCODE_ENABLE_EXA=1 opencode
 }
 ```
 
-Performs web searches using Exa AI to find relevant information online. Useful for researching topics, finding current events, or gathering information beyond the training data cutoff.
+Fuehrt Websuchen mit Exa AI durch, um relevante Informationen online zu finden. Nuetzlich fuer Recherche, aktuelle Ereignisse oder Informationen jenseits des Trainingsdatums.
 
-No API key is required — the tool connects directly to Exa AI's hosted MCP service without authentication.
+Kein API-Key erforderlich — das Tool verbindet sich direkt mit dem gehosteten MCP-Service von Exa AI ohne Authentifizierung.
 
 :::tip
-Use `websearch` when you need to find information (discovery), and `webfetch` when you need to retrieve content from a specific URL (retrieval).
+Nutze `websearch` zum Finden von Informationen (Discovery) und `webfetch` zum Abrufen von Inhalten einer spezifischen URL (Retrieval).
 :::
 
 ---
 
 ### question
 
-Ask the user questions during execution.
+Stellt dem Benutzer waehrend der Ausfuehrung Fragen.
 
 ```json title="opencode.json" {4}
 {
@@ -340,14 +340,14 @@ Ask the user questions during execution.
 }
 ```
 
-This tool allows the LLM to ask the user questions during a task. It's useful for:
+Dieses Tool erlaubt dem LLM, dem Benutzer waehrend einer Aufgabe Fragen zu stellen. Nuetzlich fuer:
 
-- Gathering user preferences or requirements
-- Clarifying ambiguous instructions
-- Getting decisions on implementation choices
-- Offering choices about what direction to take
+- Sammeln von Benutzerpraeferenzen oder Anforderungen
+- Klaerung mehrdeutiger Anweisungen
+- Entscheidungen bei Implementierungsoptionen einholen
+- Auswahlmoeglichkeiten fuer das weitere Vorgehen anbieten
 
-Each question includes a header, the question text, and a list of options. Users can select from the provided options or type a custom answer. When there are multiple questions, users can navigate between them before submitting all answers.
+Jede Frage enthaelt eine Ueberschrift, den Fragetext und eine Liste von Optionen. Benutzer koennen aus den Optionen waehlen oder eine eigene Antwort eingeben. Bei mehreren Fragen koennen Benutzer zwischen ihnen navigieren, bevor sie alle Antworten absenden.
 
 ---
 

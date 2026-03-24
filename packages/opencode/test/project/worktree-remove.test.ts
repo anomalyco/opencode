@@ -7,6 +7,8 @@ import { Worktree } from "../../src/worktree"
 import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
 
+const wintest = process.platform === "win32" ? test : test.skip
+
 describe("Worktree.remove", () => {
   test("continues when git remove exits non-zero after detaching", async () => {
     await using tmp = await tmpdir({ git: true })
@@ -58,6 +60,35 @@ describe("Worktree.remove", () => {
 
     const list = await $`git worktree list --porcelain`.cwd(root).quiet().text()
     expect(list).not.toContain(`worktree ${dir}`)
+
+    const ref = await $`git show-ref --verify --quiet refs/heads/${branch}`.cwd(root).quiet().nothrow()
+    expect(ref.exitCode).not.toBe(0)
+  })
+
+  wintest("stops fsmonitor before removing a worktree", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const root = tmp.path
+    const name = `remove-fsmonitor-${Date.now().toString(36)}`
+    const branch = `opencode/${name}`
+    const dir = path.join(root, "..", name)
+
+    await $`git worktree add --no-checkout -b ${branch} ${dir}`.cwd(root).quiet()
+    await $`git reset --hard`.cwd(dir).quiet()
+    await $`git config core.fsmonitor true`.cwd(dir).quiet()
+    await $`git fsmonitor--daemon stop`.cwd(dir).quiet().nothrow()
+    await Bun.write(path.join(dir, "tracked.txt"), "next\n")
+    await $`git diff`.cwd(dir).quiet()
+
+    const before = await $`git fsmonitor--daemon status`.cwd(dir).quiet().nothrow()
+    expect(before.exitCode).toBe(0)
+
+    const ok = await Instance.provide({
+      directory: root,
+      fn: () => Worktree.remove({ directory: dir }),
+    })
+
+    expect(ok).toBe(true)
+    expect(await Filesystem.exists(dir)).toBe(false)
 
     const ref = await $`git show-ref --verify --quiet refs/heads/${branch}`.cwd(root).quiet().nothrow()
     expect(ref.exitCode).not.toBe(0)

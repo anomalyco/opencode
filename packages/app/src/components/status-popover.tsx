@@ -4,18 +4,18 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { Popover } from "@opencode-ai/ui/popover"
 import { Switch } from "@opencode-ai/ui/switch"
 import { Tabs } from "@opencode-ai/ui/tabs"
+import { useMutation } from "@tanstack/solid-query"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useNavigate } from "@solidjs/router"
 import { type Accessor, createEffect, createMemo, createSignal, For, type JSXElement, onCleanup, Show } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
-import { ServerRow } from "@/components/server/server-row"
+import { ServerHealthIndicator, ServerRow } from "@/components/server/server-row"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
 import { normalizeServerUrl, ServerConnection, useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
-import { checkServerHealth, type ServerHealth } from "@/utils/server-health"
-import { DialogSelectServer } from "./dialog-select-server"
+import { useCheckServerHealth, type ServerHealth } from "@/utils/server-health"
 
 const pollMs = 10_000
 
@@ -53,10 +53,15 @@ const listServersByHealth = (
   })
 }
 
-const useServerHealth = (servers: Accessor<ServerConnection.Any[]>, fetcher: typeof fetch) => {
+const useServerHealth = (servers: Accessor<ServerConnection.Any[]>, enabled: Accessor<boolean>) => {
+  const checkServerHealth = useCheckServerHealth()
   const [status, setStatus] = createStore({} as Record<ServerConnection.Key, ServerHealth | undefined>)
 
   createEffect(() => {
+    if (!enabled()) {
+      setStatus(reconcile({}))
+      return
+    }
     const list = servers()
     let dead = false
 
@@ -64,7 +69,7 @@ const useServerHealth = (servers: Accessor<ServerConnection.Any[]>, fetcher: typ
       const results: Record<string, ServerHealth> = {}
       await Promise.all(
         list.map(async (conn) => {
-          results[ServerConnection.key(conn)] = await checkServerHealth(conn.http, fetcher)
+          results[ServerConnection.key(conn)] = await checkServerHealth(conn.http)
         }),
       )
       if (dead) return
@@ -85,15 +90,17 @@ const useServerHealth = (servers: Accessor<ServerConnection.Any[]>, fetcher: typ
 const useDefaultServerKey = (
   get: (() => string | Promise<string | null | undefined> | null | undefined) | undefined,
 ) => {
-  const [url, setUrl] = createSignal<string | undefined>()
-  const [tick, setTick] = createSignal(0)
+  const [state, setState] = createStore({
+    url: undefined as string | undefined,
+    tick: 0,
+  })
 
   createEffect(() => {
-    tick()
+    state.tick
     let dead = false
     const result = get?.()
     if (!result) {
-      setUrl(undefined)
+      setState("url", undefined)
       onCleanup(() => {
         dead = true
       })
@@ -103,7 +110,7 @@ const useDefaultServerKey = (
     if (result instanceof Promise) {
       void result.then((next) => {
         if (dead) return
-        setUrl(next ? normalizeServerUrl(next) : undefined)
+        setState("url", next ? normalizeServerUrl(next) : undefined)
       })
       onCleanup(() => {
         dead = true
@@ -111,7 +118,7 @@ const useDefaultServerKey = (
       return
     }
 
-    setUrl(normalizeServerUrl(result))
+    setState("url", normalizeServerUrl(result))
     onCleanup(() => {
       dead = true
     })
@@ -119,56 +126,51 @@ const useDefaultServerKey = (
 
   return {
     key: () => {
-      const u = url()
+      const u = state.url
       if (!u) return
       return ServerConnection.key({ type: "http", http: { url: u } })
     },
-    refresh: () => setTick((value) => value + 1),
+    refresh: () => setState("tick", (value) => value + 1),
   }
 }
 
-const useMcpToggle = (input: {
-  sync: ReturnType<typeof useSync>
-  sdk: ReturnType<typeof useSDK>
-  language: ReturnType<typeof useLanguage>
-}) => {
-  const [loading, setLoading] = createSignal<string | null>(null)
+const useMcpToggleMutation = () => {
+  const sync = useSync()
+  const sdk = useSDK()
+  const language = useLanguage()
 
-  const toggle = async (name: string) => {
-    if (loading()) return
-    setLoading(name)
-
-    try {
-      const status = input.sync.data.mcp[name]
-      await (status?.status === "connected"
-        ? input.sdk.client.mcp.disconnect({ name })
-        : input.sdk.client.mcp.connect({ name }))
-      const result = await input.sdk.client.mcp.status()
-      if (result.data) input.sync.set("mcp", result.data)
-    } catch (err) {
+  return useMutation(() => ({
+    mutationFn: async (name: string) => {
+      const status = sync.data.mcp[name]
+      await (status?.status === "connected" ? sdk.client.mcp.disconnect({ name }) : sdk.client.mcp.connect({ name }))
+      const result = await sdk.client.mcp.status()
+      if (result.data) sync.set("mcp", result.data)
+    },
+    onError: (err) => {
       showToast({
         variant: "error",
-        title: input.language.t("common.requestFailed"),
+        title: language.t("common.requestFailed"),
         description: err instanceof Error ? err.message : String(err),
       })
-    } finally {
-      setLoading(null)
-    }
-  }
-
-  return { loading, toggle }
+    },
+  }))
 }
 
 export function StatusPopover() {
   const sync = useSync()
-  const sdk = useSDK()
   const server = useServer()
   const platform = usePlatform()
   const dialog = useDialog()
   const language = useLanguage()
   const navigate = useNavigate()
 
-  const fetcher = platform.fetch ?? globalThis.fetch
+  const [shown, setShown] = createSignal(false)
+  let dialogRun = 0
+  let dialogDead = false
+  onCleanup(() => {
+    dialogDead = true
+    dialogRun += 1
+  })
   const servers = createMemo(() => {
     const current = server.current
     const list = server.list
@@ -176,10 +178,10 @@ export function StatusPopover() {
     if (list.every((item) => ServerConnection.key(item) !== ServerConnection.key(current))) return [current, ...list]
     return [current, ...list.filter((item) => ServerConnection.key(item) !== ServerConnection.key(current))]
   })
-  const health = useServerHealth(servers, fetcher)
+  const health = useServerHealth(servers, shown)
   const sortedServers = createMemo(() => listServersByHealth(servers(), server.key, health))
-  const mcp = useMcpToggle({ sync, sdk, language })
-  const defaultServer = useDefaultServerKey(platform.getDefaultServerUrl)
+  const toggleMcp = useMcpToggleMutation()
+  const defaultServer = useDefaultServerKey(platform.getDefaultServer)
   const mcpNames = createMemo(() => Object.keys(sync.data.mcp ?? {}).sort((a, b) => a.localeCompare(b)))
   const mcpStatus = (name: string) => sync.data.mcp?.[name]?.status
   const mcpConnected = createMemo(() => mcpNames().filter((name) => mcpStatus(name) === "connected").length)
@@ -199,32 +201,34 @@ export function StatusPopover() {
 
   return (
     <Popover
+      open={shown()}
+      onOpenChange={setShown}
       triggerAs={Button}
       triggerProps={{
         variant: "ghost",
-        class:
-          "rounded-md h-[24px] pr-3 pl-0.5 gap-2 border border-border-weak-base bg-surface-panel shadow-none data-[expanded]:bg-surface-base-active",
+        class: "titlebar-icon w-8 h-6 p-0 box-border",
+        "aria-label": language.t("status.popover.trigger"),
         style: { scale: 1 },
       }}
       trigger={
-        <div class="flex items-center gap-0.5">
-          <div class="size-4 flex items-center justify-center">
-            <div
-              classList={{
-                "size-1.5 rounded-full": true,
-                "bg-icon-success-base": overallHealthy(),
-                "bg-icon-critical-base": !overallHealthy() && server.healthy() !== undefined,
-                "bg-border-weak-base": server.healthy() === undefined,
-              }}
-            />
+        <div class="relative size-4">
+          <div class="badge-mask-tight size-4 flex items-center justify-center">
+            <Icon name={shown() ? "status-active" : "status"} size="small" />
           </div>
-          <span class="text-12-regular text-text-strong">{language.t("status.popover.trigger")}</span>
+          <div
+            classList={{
+              "absolute -top-px -right-px size-1.5 rounded-full": true,
+              "bg-icon-success-base": overallHealthy(),
+              "bg-icon-critical-base": !overallHealthy() && server.healthy() !== undefined,
+              "bg-border-weak-base": server.healthy() === undefined,
+            }}
+          />
         </div>
       }
       class="[&_[data-slot=popover-body]]:p-0 w-[360px] max-w-[calc(100vw-40px)] bg-transparent border-0 shadow-none rounded-xl"
       gutter={4}
       placement="bottom-end"
-      shift={-136}
+      shift={-168}
     >
       <div class="flex items-center gap-1 w-[360px] rounded-xl shadow-[var(--shadow-lg-border-base)]">
         <Tabs
@@ -272,14 +276,15 @@ export function StatusPopover() {
                         aria-disabled={isBlocked()}
                         onClick={() => {
                           if (isBlocked()) return
-                          server.setActive(key)
                           navigate("/")
+                          queueMicrotask(() => server.setActive(key))
                         }}
                       >
+                        <ServerHealthIndicator health={health[key]} />
                         <ServerRow
                           conn={s}
-                          status={health[key]}
                           dimmed={isBlocked()}
+                          status={health[key]}
                           class="flex items-center gap-2 w-full min-w-0"
                           nameClass="text-14-regular text-text-base truncate"
                           versionClass="text-12-regular text-text-weak truncate"
@@ -304,7 +309,13 @@ export function StatusPopover() {
                 <Button
                   variant="secondary"
                   class="mt-3 self-start h-8 px-3 py-1.5"
-                  onClick={() => dialog.show(() => <DialogSelectServer />, defaultServer.refresh)}
+                  onClick={() => {
+                    const run = ++dialogRun
+                    void import("./dialog-select-server").then((x) => {
+                      if (dialogDead || dialogRun !== run) return
+                      dialog.show(() => <x.DialogSelectServer />, defaultServer.refresh)
+                    })
+                  }}
                 >
                   {language.t("status.popover.action.manageServers")}
                 </Button>
@@ -331,8 +342,11 @@ export function StatusPopover() {
                         <button
                           type="button"
                           class="flex items-center gap-2 w-full h-8 pl-3 pr-2 py-1 rounded-md hover:bg-surface-raised-base-hover transition-colors text-left"
-                          onClick={() => mcp.toggle(name)}
-                          disabled={mcp.loading() === name}
+                          onClick={() => {
+                            if (toggleMcp.isPending) return
+                            toggleMcp.mutate(name)
+                          }}
+                          disabled={toggleMcp.isPending && toggleMcp.variables === name}
                         >
                           <div
                             classList={{
@@ -348,8 +362,11 @@ export function StatusPopover() {
                           <div onClick={(event) => event.stopPropagation()}>
                             <Switch
                               checked={enabled()}
-                              disabled={mcp.loading() === name}
-                              onChange={() => mcp.toggle(name)}
+                              disabled={toggleMcp.isPending && toggleMcp.variables === name}
+                              onChange={() => {
+                                if (toggleMcp.isPending) return
+                                toggleMcp.mutate(name)
+                              }}
                             />
                           </div>
                         </button>

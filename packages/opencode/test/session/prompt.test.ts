@@ -1,7 +1,9 @@
 import path from "path"
 import { describe, expect, test } from "bun:test"
+import { NamedError } from "@opencode-ai/util/error"
 import { fileURLToPath } from "url"
 import { Instance } from "../../src/project/instance"
+import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Session } from "../../src/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { SessionPrompt } from "../../src/session/prompt"
@@ -173,7 +175,7 @@ describe("session.prompt agent variant", () => {
           const other = await SessionPrompt.prompt({
             sessionID: session.id,
             agent: "build",
-            model: { providerID: "opencode", modelID: "kimi-k2.5-free" },
+            model: { providerID: ProviderID.make("opencode"), modelID: ModelID.make("kimi-k2.5-free") },
             noReply: true,
             parts: [{ type: "text", text: "hello" }],
           })
@@ -187,7 +189,7 @@ describe("session.prompt agent variant", () => {
             parts: [{ type: "text", text: "hello again" }],
           })
           if (match.info.role !== "user") throw new Error("expected user message")
-          expect(match.info.model).toEqual({ providerID: "openai", modelID: "gpt-5.2" })
+          expect(match.info.model).toEqual({ providerID: ProviderID.make("openai"), modelID: ModelID.make("gpt-5.2") })
           expect(match.info.variant).toBe("xhigh")
 
           const override = await SessionPrompt.prompt({
@@ -208,4 +210,79 @@ describe("session.prompt agent variant", () => {
       else process.env.OPENAI_API_KEY = prev
     }
   })
+})
+
+describe("session.agent-resolution", () => {
+  test("unknown agent throws typed error", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const err = await SessionPrompt.prompt({
+          sessionID: session.id,
+          agent: "nonexistent-agent-xyz",
+          noReply: true,
+          parts: [{ type: "text", text: "hello" }],
+        }).then(
+          () => undefined,
+          (e) => e,
+        )
+        expect(err).toBeDefined()
+        expect(err).not.toBeInstanceOf(TypeError)
+        expect(NamedError.Unknown.isInstance(err)).toBe(true)
+        if (NamedError.Unknown.isInstance(err)) {
+          expect(err.data.message).toContain('Agent not found: "nonexistent-agent-xyz"')
+        }
+      },
+    })
+  }, 30000)
+
+  test("unknown agent error includes available agent names", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const err = await SessionPrompt.prompt({
+          sessionID: session.id,
+          agent: "nonexistent-agent-xyz",
+          noReply: true,
+          parts: [{ type: "text", text: "hello" }],
+        }).then(
+          () => undefined,
+          (e) => e,
+        )
+        expect(NamedError.Unknown.isInstance(err)).toBe(true)
+        if (NamedError.Unknown.isInstance(err)) {
+          expect(err.data.message).toContain("build")
+        }
+      },
+    })
+  }, 30000)
+
+  test("unknown command throws typed error with available names", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const err = await SessionPrompt.command({
+          sessionID: session.id,
+          command: "nonexistent-command-xyz",
+          arguments: "",
+        }).then(
+          () => undefined,
+          (e) => e,
+        )
+        expect(err).toBeDefined()
+        expect(err).not.toBeInstanceOf(TypeError)
+        expect(NamedError.Unknown.isInstance(err)).toBe(true)
+        if (NamedError.Unknown.isInstance(err)) {
+          expect(err.data.message).toContain('Command not found: "nonexistent-command-xyz"')
+          expect(err.data.message).toContain("init")
+        }
+      },
+    })
+  }, 30000)
 })

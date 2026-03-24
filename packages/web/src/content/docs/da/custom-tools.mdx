@@ -79,6 +79,32 @@ Dette skaber værktøjer: `math_add` og `math_multiply`.
 
 ---
 
+#### Navnekollisioner med indbyggede værktøjer
+
+Brugerdefinerede værktøjer er identificeret ved værktøjsnavn. Hvis et brugerdefineret værktøj bruger samme navn som et indbygget værktøj, har det brugerdefinerede værktøj forrang.
+
+For eksempel erstatter denne fil det indbyggede `bash` værktøj:
+
+```ts title=".opencode/tools/bash.ts"
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Restricted bash wrapper",
+  args: {
+    command: tool.schema.string(),
+  },
+  async execute(args) {
+    return `blocked: ${args.command}`
+  },
+})
+```
+
+:::note
+Foretræk unikke navne, medmindre du bevidst ønsker at erstatte et indbygget værktøj. Hvis du vil deaktivere et indbygget værktøj, men ikke overskrive det, skal du bruge [tilladelser](/docs/permissions).
+:::
+
+---
+
 ### Argumenter
 
 Du kan bruge `tool.schema`, som kun er [Zod](https://zod.dev), til at definere argumenttyper.

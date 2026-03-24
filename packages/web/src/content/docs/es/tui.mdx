@@ -355,24 +355,34 @@ Algunos editores necesitan argumentos de línea de comandos para ejecutarse en m
 
 ## Configurar
 
-Puede personalizar el comportamiento de TUI a través de su archivo de configuración OpenCode.
+Puede personalizar el comportamiento de TUI a través de `tui.json` (o `tui.jsonc`).
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "tui": {
-    "scroll_speed": 3,
-    "scroll_acceleration": {
-      "enabled": true
-    }
-  }
+  "$schema": "https://opencode.ai/tui.json",
+  "theme": "opencode",
+  "keybinds": {
+    "leader": "ctrl+x"
+  },
+  "scroll_speed": 3,
+  "scroll_acceleration": {
+    "enabled": true
+  },
+  "diff_style": "auto"
 }
 ```
 
+Esto es independiente de `opencode.json`, que configura el comportamiento del servidor/tiempo de ejecución.
+
 ### Opciones
 
-- `scroll_acceleration`: habilite la aceleración de desplazamiento estilo macOS para un desplazamiento suave y natural. Cuando está habilitado, la velocidad de desplazamiento aumenta con gestos de desplazamiento rápido y se mantiene precisa para movimientos más lentos. **Esta configuración tiene prioridad sobre `scroll_speed` y la anula cuando está habilitada.**
-- `scroll_speed`: controla la rapidez con la que se desplaza el TUI cuando se utilizan comandos de desplazamiento (mínimo: `1`). El valor predeterminado es `3`. **Nota: Esto se ignora si `scroll_acceleration.enabled` está configurado en `true`.**
+- `theme`: establece su tema de interfaz de usuario. [Más información](/docs/themes).
+- `keybinds`: personaliza los atajos de teclado. [Más información](/docs/keybinds).
+- `scroll_acceleration.enabled`: habilite la aceleración de desplazamiento estilo macOS para un desplazamiento suave y natural. Cuando está habilitado, la velocidad de desplazamiento aumenta con gestos de desplazamiento rápido y se mantiene precisa para movimientos más lentos. **Esta configuración tiene prioridad sobre `scroll_speed` y la anula cuando está habilitada.**
+- `scroll_speed`: controla la rapidez con la que se desplaza el TUI cuando se utilizan comandos de desplazamiento (mínimo: `0.001`, admite valores decimales). El valor predeterminado es `3`. **Nota: Esto se ignora si `scroll_acceleration.enabled` está configurado en `true`.**
+- `diff_style`: controla la representación de diferencias. `"auto"` se adapta al ancho del terminal, `"stacked"` siempre muestra un diseño de una sola columna.
+
+Utilice `OPENCODE_TUI_CONFIG` para cargar una ruta de configuración de TUI personalizada.
 
 ---
 

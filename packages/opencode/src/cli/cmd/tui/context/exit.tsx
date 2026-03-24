@@ -15,6 +15,7 @@ export const { use: useExit, provider: ExitProvider } = createSimpleContext({
   init: (input: { onExit?: () => Promise<void> }) => {
     const renderer = useRenderer()
     let message: string | undefined
+    let task: Promise<void> | undefined
     const store = {
       set: (value?: string) => {
         const prev = message
@@ -29,20 +30,24 @@ export const { use: useExit, provider: ExitProvider } = createSimpleContext({
       get: () => message,
     }
     const exit: Exit = Object.assign(
-      async (reason?: unknown) => {
-        // Reset window title before destroying renderer
-        renderer.setTerminalTitle("")
-        renderer.destroy()
-        win32FlushInputBuffer()
-        if (reason) {
-          const formatted = FormatError(reason) ?? FormatUnknownError(reason)
-          if (formatted) {
-            process.stderr.write(formatted + "\n")
+      (reason?: unknown) => {
+        if (task) return task
+        task = (async () => {
+          // Reset window title before destroying renderer
+          renderer.setTerminalTitle("")
+          renderer.destroy()
+          win32FlushInputBuffer()
+          if (reason) {
+            const formatted = FormatError(reason) ?? FormatUnknownError(reason)
+            if (formatted) {
+              process.stderr.write(formatted + "\n")
+            }
           }
-        }
-        const text = store.get()
-        if (text) process.stdout.write(text + "\n")
-        await input.onExit?.()
+          const text = store.get()
+          if (text) process.stdout.write(text + "\n")
+          await input.onExit?.()
+        })()
+        return task
       },
       {
         message: store,
