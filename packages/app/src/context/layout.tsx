@@ -793,20 +793,67 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             },
           },
           review: {
-            open: createMemo(() => s().reviewOpen),
+            open: createMemo(() => s().reviewOpen ?? []),
             setOpen(open: string[]) {
+              const session = key()
+              const next = Array.from(new Set(open))
+              const current = store.sessionView[session]
+              if (!current) {
+                setStore("sessionView", session, {
+                  scroll: {},
+                  reviewOpen: next,
+                })
+                return
+              }
+
+              if (same(current.reviewOpen, next)) return
+              setStore("sessionView", session, "reviewOpen", next)
+            },
+            openPath(path: string) {
               const session = key()
               const current = store.sessionView[session]
               if (!current) {
                 setStore("sessionView", session, {
                   scroll: {},
-                  reviewOpen: open,
+                  reviewOpen: [path],
                 })
                 return
               }
 
-              if (same(current.reviewOpen, open)) return
-              setStore("sessionView", session, "reviewOpen", open)
+              if (!current.reviewOpen) {
+                setStore("sessionView", session, "reviewOpen", [path])
+                return
+              }
+
+              if (current.reviewOpen.includes(path)) return
+              setStore("sessionView", session, "reviewOpen", current.reviewOpen.length, path)
+            },
+            closePath(path: string) {
+              const session = key()
+              const current = store.sessionView[session]?.reviewOpen
+              if (!current) return
+
+              const index = current.indexOf(path)
+              if (index === -1) return
+              setStore(
+                "sessionView",
+                session,
+                "reviewOpen",
+                produce((draft) => {
+                  if (!draft) return
+                  draft.splice(index, 1)
+                }),
+              )
+            },
+            togglePath(path: string) {
+              const session = key()
+              const current = store.sessionView[session]?.reviewOpen
+              if (!current || !current.includes(path)) {
+                this.openPath(path)
+                return
+              }
+
+              this.closePath(path)
             },
           },
         }

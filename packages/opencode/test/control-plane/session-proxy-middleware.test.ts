@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test"
-import { Identifier } from "../../src/id/id"
+import { WorkspaceID } from "../../src/control-plane/schema"
 import { Hono } from "hono"
 import { tmpdir } from "../fixture/fixture"
 import { Project } from "../../src/project/project"
@@ -10,10 +10,20 @@ import { Database } from "../../src/storage/db"
 import { resetDatabase } from "../fixture/db"
 import * as adaptors from "../../src/control-plane/adaptors"
 import type { Adaptor } from "../../src/control-plane/types"
+import { Flag } from "../../src/flag/flag"
 
 afterEach(async () => {
   mock.restore()
   await resetDatabase()
+})
+
+const original = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
+// @ts-expect-error don't do this normally, but it works
+Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
+
+afterEach(() => {
+  // @ts-expect-error don't do this normally, but it works
+  Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = original
 })
 
 type State = {
@@ -54,8 +64,8 @@ async function setup(state: State) {
   await using tmp = await tmpdir({ git: true })
   const { project } = await Project.fromDirectory(tmp.path)
 
-  const id1 = Identifier.descending("workspace")
-  const id2 = Identifier.descending("workspace")
+  const id1 = WorkspaceID.ascending()
+  const id2 = WorkspaceID.ascending()
 
   Database.use((db) =>
     db

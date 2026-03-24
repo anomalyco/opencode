@@ -1,3 +1,4 @@
+import { Show } from "solid-js"
 import { Style, Link } from "@solidjs/meta"
 import inter from "../assets/fonts/inter.woff2"
 import ibmPlexMonoRegular from "../assets/fonts/ibm-plex-mono.woff2"
@@ -166,8 +167,10 @@ export const Font = () => {
         }
 ${monoNerdCss}
       `}</Style>
-      <Link rel="preload" href={inter} as="font" type="font/woff2" crossorigin="anonymous" />
-      <Link rel="preload" href={ibmPlexMonoRegular} as="font" type="font/woff2" crossorigin="anonymous" />
+      <Show when={typeof location === "undefined" || location.protocol !== "file:"}>
+        <Link rel="preload" href={inter} as="font" type="font/woff2" crossorigin="anonymous" />
+        <Link rel="preload" href={ibmPlexMonoRegular} as="font" type="font/woff2" crossorigin="anonymous" />
+      </Show>
     </>
   )
 }

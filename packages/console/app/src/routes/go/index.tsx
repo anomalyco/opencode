@@ -1,7 +1,7 @@
 import "./index.css"
 import { createAsync, query, redirect } from "@solidjs/router"
 import { Title, Meta } from "@solidjs/meta"
-import { For, createSignal, onCleanup, onMount } from "solid-js"
+import { For, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 //import { HttpHeader } from "@solidjs/start"
 import goLogoLight from "../../asset/go-ornate-light.svg"
 import goLogoDark from "../../asset/go-ornate-dark.svg"
@@ -19,8 +19,7 @@ import { LocaleLinks } from "~/component/locale-links"
 
 const checkLoggedIn = query(async () => {
   "use server"
-  const workspaceID = await getLastSeenWorkspaceID().catch(() => {})
-  if (workspaceID) throw redirect(`/workspace/${workspaceID}`)
+  return await getLastSeenWorkspaceID().catch(() => undefined)
 }, "checkLoggedIn.get")
 
 function LimitsGraph(props: { href: string }) {
@@ -48,7 +47,8 @@ function LimitsGraph(props: { href: string }) {
   const models = [
     { id: "glm", name: "GLM-5", req: 1150, d: "120ms" },
     { id: "kimi", name: "Kimi K2.5", req: 1850, d: "240ms" },
-    { id: "minimax", name: "MiniMax M2.5", req: 20000, d: "360ms" },
+    { id: "minimax-m2.7", name: "MiniMax M2.7", req: 14000, d: "330ms" },
+    { id: "minimax-m2.5", name: "MiniMax M2.5", req: 20000, d: "360ms" },
   ]
 
   const w = 720
@@ -63,7 +63,7 @@ function LimitsGraph(props: { href: string }) {
   const rmax = Math.max(1, ...models.map((m) => ratio(m.req)))
   const log = (n: number) => Math.log10(Math.max(n, 1))
   const base = 24
-  const p = 2.2
+  const p = 1.8
   const x = (r: number) => left + base + Math.pow(log(r) / log(rmax), p) * (plot - base)
   const start = (x(1) / w) * 100
 
@@ -205,7 +205,8 @@ function LimitsGraph(props: { href: string }) {
 }
 
 export default function Home() {
-  const loggedin = createAsync(() => checkLoggedIn())
+  const workspaceID = createAsync(() => checkLoggedIn())
+  const subscribeUrl = createMemo(() => (workspaceID() ? `/workspace/${workspaceID()}/go` : "/auth"))
   const i18n = useI18n()
   const language = useLanguage()
   return (
@@ -223,7 +224,7 @@ export default function Home() {
       <Meta name="twitter:title" content={i18n.t("go.title")} />
       <Meta name="twitter:description" content={i18n.t("go.meta.description")} />
       <Meta name="twitter:image" content="/social-share-black.png" />
-      <Meta name="opencode:auth" content={loggedin() ? "true" : "false"} />
+      <Meta name="opencode:auth" content={workspaceID() ? "true" : "false"} />
 
       <div data-component="container">
         <Header go hideGetStarted />
@@ -310,7 +311,7 @@ export default function Home() {
                 </div>
                 */}
               </div>
-              <a href="/auth">
+              <a href={subscribeUrl()}>
                 <span>
                   <For
                     each={i18n
@@ -320,7 +321,14 @@ export default function Home() {
                   >
                     {(part) => {
                       if (part === "{{text}}") return <span>{i18n.t("go.cta.text")}</span>
-                      if (part === "{{price}}") return <span data-slot="cta-price">{i18n.t("go.cta.price")}</span>
+                      if (part === "{{price}}") {
+                        return (
+                          <span data-slot="cta-price">
+                            <span data-slot="cta-price-old">{i18n.t("go.cta.price")}</span>
+                            <span data-slot="cta-price-new">{i18n.t("go.cta.promo")}</span>
+                          </span>
+                        )
+                      }
                       return part
                     }}
                   </For>
@@ -420,7 +428,7 @@ export default function Home() {
                   {i18n.t("go.faq.a4.p1.beforePricing")}{" "}
                   <a href={language.route("/docs/go/#pricing")}>{i18n.t("go.faq.a4.p1.pricingLink")}</a>{" "}
                   {i18n.t("go.faq.a4.p1.afterPricing")} {i18n.t("go.faq.a4.p2.beforeAccount")}{" "}
-                  <a href="/auth">{i18n.t("go.faq.a4.p2.accountLink")}</a>. {i18n.t("go.faq.a4.p3")}
+                  <a href={subscribeUrl()}>{i18n.t("go.faq.a4.p2.accountLink")}</a>. {i18n.t("go.faq.a4.p3")}
                 </Faq>
               </li>
               <li>

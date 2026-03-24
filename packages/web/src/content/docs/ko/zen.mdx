@@ -55,6 +55,7 @@ OpenCode Zen은 OpenCode의 다른 제공자와 동일한 방식으로 작동합
 
 | 모델               | 모델 ID            | 엔드포인트                                         | AI SDK 패키지               |
 | ------------------ | ------------------ | -------------------------------------------------- | --------------------------- |
+| GPT 5.4            | gpt-5.4            | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5.3 Codex      | gpt-5.3-codex      | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5.2            | gpt-5.2            | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5.2 Codex      | gpt-5.2-codex      | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
@@ -111,12 +112,12 @@ https://opencode.ai/zen/v1/models
 | --------------------------------- | ------ | ------ | --------- | --------- |
 | Big Pickle                        | Free   | Free   | Free      | -         |
 | MiniMax M2.5 Free                 | Free   | Free   | Free      | -         |
-| MiniMax M2.5                      | $0.30  | $1.20  | $0.06     | -         |
+| MiniMax M2.5                      | $0.30  | $1.20  | $0.06     | $0.375    |
 | MiniMax M2.1                      | $0.30  | $1.20  | $0.10     | -         |
 | GLM 5                             | $1.00  | $3.20  | $0.20     | -         |
 | GLM 4.7                           | $0.60  | $2.20  | $0.10     | -         |
 | GLM 4.6                           | $0.60  | $2.20  | $0.10     | -         |
-| Kimi K2.5                         | $0.60  | $3.00  | $0.08     | -         |
+| Kimi K2.5                         | $0.60  | $3.00  | $0.10     | -         |
 | Kimi K2 Thinking                  | $0.40  | $2.50  | -         | -         |
 | Kimi K2                           | $0.40  | $2.50  | -         | -         |
 | Qwen3 Coder 480B                  | $0.45  | $1.50  | -         | -         |
@@ -137,6 +138,7 @@ https://opencode.ai/zen/v1/models
 | Gemini 3 Pro (≤ 200K tokens)      | $2.00  | $12.00 | $0.20     | -         |
 | Gemini 3 Pro (> 200K tokens)      | $4.00  | $18.00 | $0.40     | -         |
 | Gemini 3 Flash                    | $0.50  | $3.00  | $0.05     | -         |
+| GPT 5.4                           | $2.50  | $15.00 | $0.25     | -         |
 | GPT 5.3 Codex                     | $1.75  | $14.00 | $0.175    | -         |
 | GPT 5.2                           | $1.75  | $14.00 | $0.175    | -         |
 | GPT 5.2 Codex                     | $1.75  | $14.00 | $0.175    | -         |
@@ -177,6 +179,19 @@ https://opencode.ai/zen/v1/models
 
 예를 들어 월간 사용 한도를 $20로 설정한 경우, Zen은 한 달 동안 $20을 초과하여 사용하지 않습니다.
 다만 자동 충전이 활성화되어 있는 경우, 잔액이 $5 미만으로 내려가면 자동으로 충전이 이루어질 수 있으므로 실제 청구 금액이 $20을 초과할 수 있습니다.
+
+---
+
+### 지원 중단 모델
+
+| 모델             | 지원 중단일     |
+| ---------------- | --------------- |
+| Qwen3 Coder 480B | 2026년 2월 6일  |
+| Kimi K2 Thinking | 2026년 3월 6일  |
+| Kimi K2          | 2026년 3월 6일  |
+| MiniMax M2.1     | 2026년 3월 15일 |
+| GLM 4.7          | 2026년 3월 15일 |
+| GLM 4.6          | 2026년 3월 15일 |
 
 ---
 

@@ -1,3 +1,4 @@
+import { createConnection } from "net"
 import { Log } from "../util/log"
 import { OAUTH_CALLBACK_PORT, OAUTH_CALLBACK_PATH } from "./oauth-provider"
 
@@ -160,21 +161,12 @@ export namespace McpOAuthCallback {
 
   export async function isPortInUse(): Promise<boolean> {
     return new Promise((resolve) => {
-      Bun.connect({
-        hostname: "127.0.0.1",
-        port: OAUTH_CALLBACK_PORT,
-        socket: {
-          open(socket) {
-            socket.end()
-            resolve(true)
-          },
-          error() {
-            resolve(false)
-          },
-          data() {},
-          close() {},
-        },
-      }).catch(() => {
+      const socket = createConnection(OAUTH_CALLBACK_PORT, "127.0.0.1")
+      socket.on("connect", () => {
+        socket.destroy()
+        resolve(true)
+      })
+      socket.on("error", () => {
         resolve(false)
       })
     })
