@@ -12,9 +12,8 @@ import { Format } from "../format"
 import { TuiRoutes } from "./routes/tui"
 import { Instance } from "../project/instance"
 import { Vcs } from "../project/vcs"
-import { runPromiseInstance } from "@/effect/runtime"
 import { Agent } from "../agent/agent"
-import { Skill } from "../skill/skill"
+import { Skill } from "../skill"
 import { Auth } from "../auth"
 import { Flag } from "../flag/flag"
 import { Command } from "../command"
@@ -152,7 +151,7 @@ export namespace Server {
             providerID: ProviderID.zod,
           }),
         ),
-        validator("json", Auth.Info),
+        validator("json", Auth.Info.zod),
         async (c) => {
           const providerID = c.req.valid("param").providerID
           const info = c.req.valid("json")
@@ -331,7 +330,7 @@ export namespace Server {
           },
         }),
         async (c) => {
-          const branch = await runPromiseInstance(Vcs.Service.use((s) => s.branch()))
+          const branch = await Vcs.branch()
           return c.json({
             branch,
           })
