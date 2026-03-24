@@ -225,14 +225,14 @@ test("evaluate - glob pattern match", () => {
 })
 
 test("evaluate - url pattern match", () => {
-  const result = PermissionNext.evaluate("webfetch", "example.com/path", [
+  const result = Permission.evaluate("webfetch", "example.com/path", [
     { permission: "webfetch", pattern: "example.com/*", action: "allow" },
   ])
   expect(result.action).toBe("allow")
 })
 
 test("evaluate - protocol specific wins when ordered last", () => {
-  const result = PermissionNext.evaluate("webfetch", "https://example.com/path", [
+  const result = Permission.evaluate("webfetch", "https://example.com/path", [
     { permission: "webfetch", pattern: "example.com/*", action: "allow" },
     { permission: "webfetch", pattern: "https://example.com/*", action: "deny" },
   ])
@@ -240,18 +240,18 @@ test("evaluate - protocol specific wins when ordered last", () => {
 })
 
 test("evaluate - webfetch deny all except specific host", () => {
-  const ruleset: PermissionNext.Ruleset = [
+  const ruleset: Permission.Ruleset = [
     { permission: "webfetch", pattern: "*", action: "deny" },
     { permission: "webfetch", pattern: "*://github.com*", action: "allow" },
   ]
   // github.com should be allowed (full URLs)
-  expect(PermissionNext.evaluate("webfetch", "https://github.com", ruleset).action).toBe("allow")
-  expect(PermissionNext.evaluate("webfetch", "https://github.com/", ruleset).action).toBe("allow")
-  expect(PermissionNext.evaluate("webfetch", "https://github.com/user/repo", ruleset).action).toBe("allow")
-  expect(PermissionNext.evaluate("webfetch", "http://github.com/foo", ruleset).action).toBe("allow")
+  expect(Permission.evaluate("webfetch", "https://github.com", ruleset).action).toBe("allow")
+  expect(Permission.evaluate("webfetch", "https://github.com/", ruleset).action).toBe("allow")
+  expect(Permission.evaluate("webfetch", "https://github.com/user/repo", ruleset).action).toBe("allow")
+  expect(Permission.evaluate("webfetch", "http://github.com/foo", ruleset).action).toBe("allow")
   // other hosts should be denied
-  expect(PermissionNext.evaluate("webfetch", "https://example.com", ruleset).action).toBe("deny")
-  expect(PermissionNext.evaluate("webfetch", "https://api.github.com/user", ruleset).action).toBe("deny")
+  expect(Permission.evaluate("webfetch", "https://example.com", ruleset).action).toBe("deny")
+  expect(Permission.evaluate("webfetch", "https://api.github.com/user", ruleset).action).toBe("deny")
 })
 
 test("evaluate - last matching glob wins", () => {

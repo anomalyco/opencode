@@ -664,7 +664,7 @@ export namespace SessionPrompt {
         system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
       }
 
-      const ruleset = PermissionNext.merge(agent.permission, session.permission ?? [])
+      const ruleset = Permission.merge(agent.permission, session.permission ?? [])
       const webfetch = formatWebfetchRules(ruleset)
 
       const result = await processor.process({
@@ -1999,7 +1999,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     }
   }
 
-  export function formatWebfetchRules(ruleset: PermissionNext.Ruleset): string | undefined {
+  export function formatWebfetchRules(ruleset: Permission.Ruleset): string | undefined {
     const rules = ruleset.filter((r) => r.permission === "webfetch")
     if (!rules.length) return
     if (rules.length === 1 && rules[0].pattern === "*" && rules[0].action === "allow") return
