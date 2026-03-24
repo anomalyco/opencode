@@ -5,14 +5,7 @@ import { Session } from "@/session"
 import { SessionTable } from "@/session/session.sql"
 import { Database, eq } from "@/storage/db"
 
-let initialized = false
-
 export function initProjectors() {
-  if (initialized) {
-    return
-  }
-  initialized = true
-
   SyncEvent.init({
     projectors: sessionProjectors,
     convertEvent: (type, data) => {

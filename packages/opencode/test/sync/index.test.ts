@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach, afterEach } from "bun:test"
+import { describe, test, expect, beforeEach, afterEach, afterAll } from "bun:test"
 import { tmpdir } from "../fixture/fixture"
 import z from "zod"
 import { Bus } from "../../src/bus"
@@ -8,6 +8,7 @@ import { Database } from "../../src/storage/db"
 import { EventTable } from "../../src/sync/event.sql"
 import { Identifier } from "../../src/id/id"
 import { Flag } from "../../src/flag/flag"
+import { initProjectors } from "../../src/server/projectors"
 
 const original = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
 
@@ -37,29 +38,39 @@ function withInstance(fn: () => void | Promise<void>) {
 }
 
 describe("SyncEvent", () => {
-  SyncEvent.reset()
+  function setup() {
+    SyncEvent.reset()
 
-  const Created = SyncEvent.define({
-    type: "item.created",
-    version: 1,
-    aggregate: "id",
-    schema: z.object({ id: z.string(), name: z.string() }),
-  })
-  const Sent = SyncEvent.define({
-    type: "item.sent",
-    version: 1,
-    aggregate: "item_id",
-    schema: z.object({ item_id: z.string(), to: z.string() }),
-  })
+    const Created = SyncEvent.define({
+      type: "item.created",
+      version: 1,
+      aggregate: "id",
+      schema: z.object({ id: z.string(), name: z.string() }),
+    })
+    const Sent = SyncEvent.define({
+      type: "item.sent",
+      version: 1,
+      aggregate: "item_id",
+      schema: z.object({ item_id: z.string(), to: z.string() }),
+    })
 
-  SyncEvent.init({
-    projectors: [SyncEvent.project(Created, () => {}), SyncEvent.project(Sent, () => {})],
+    SyncEvent.init({
+      projectors: [SyncEvent.project(Created, () => {}), SyncEvent.project(Sent, () => {})],
+    })
+
+    return { Created, Sent }
+  }
+
+  afterAll(() => {
+    SyncEvent.reset()
+    initProjectors()
   })
 
   describe("run", () => {
     test(
       "inserts event row",
       withInstance(() => {
+        const { Created } = setup()
         SyncEvent.run(Created, { id: "evt_1", name: "first" })
         const rows = Database.use((db) => db.select().from(EventTable).all())
         expect(rows).toHaveLength(1)
@@ -71,6 +82,7 @@ describe("SyncEvent", () => {
     test(
       "increments seq per aggregate",
       withInstance(() => {
+        const { Created } = setup()
         SyncEvent.run(Created, { id: "evt_1", name: "first" })
         SyncEvent.run(Created, { id: "evt_1", name: "second" })
         const rows = Database.use((db) => db.select().from(EventTable).all())
@@ -82,6 +94,7 @@ describe("SyncEvent", () => {
     test(
       "uses custom aggregate field from agg()",
       withInstance(() => {
+        const { Sent } = setup()
         SyncEvent.run(Sent, { item_id: "evt_1", to: "james" })
         const rows = Database.use((db) => db.select().from(EventTable).all())
         expect(rows).toHaveLength(1)
@@ -92,6 +105,7 @@ describe("SyncEvent", () => {
     test(
       "emits events",
       withInstance(async () => {
+        const { Created } = setup()
         const events: Array<{
           type: string
           properties: { id: string; name: string }
