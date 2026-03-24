@@ -23,6 +23,9 @@ export interface Settings {
     autoSave: boolean
     releaseNotes: boolean
     followup: "queue" | "steer"
+    showFileTree: boolean
+    showStatus: boolean
+    showTerminal: boolean
     showReasoningSummaries: boolean
     shellToolPartsExpanded: boolean
     editToolPartsExpanded: boolean
@@ -89,6 +92,9 @@ const defaultSettings: Settings = {
     autoSave: true,
     releaseNotes: true,
     followup: "steer",
+    showFileTree: false,
+    showStatus: false,
+    showTerminal: false,
     showReasoningSummaries: false,
     shellToolPartsExpanded: false,
     editToolPartsExpanded: false,
@@ -161,6 +167,18 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         ),
         setFollowup(value: "queue" | "steer") {
           setStore("general", "followup", value === "queue" ? "steer" : value)
+        },
+        showFileTree: withFallback(() => store.general?.showFileTree, defaultSettings.general.showFileTree),
+        setShowFileTree(value: boolean) {
+          setStore("general", "showFileTree", value)
+        },
+        showStatus: withFallback(() => store.general?.showStatus, defaultSettings.general.showStatus),
+        setShowStatus(value: boolean) {
+          setStore("general", "showStatus", value)
+        },
+        showTerminal: withFallback(() => store.general?.showTerminal, defaultSettings.general.showTerminal),
+        setShowTerminal(value: boolean) {
+          setStore("general", "showTerminal", value)
         },
         showReasoningSummaries: withFallback(
           () => store.general?.showReasoningSummaries,
