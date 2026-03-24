@@ -45,7 +45,7 @@ export namespace ShareNext {
   }> {
     const headers: Record<string, string> = {}
 
-    const active = Account.active()
+    const active = await Account.active()
     if (!active?.active_org_id) {
       const baseUrl = await Config.get().then((x) => x.enterprise?.url ?? "https://opncd.ai")
       return { headers, api: legacyApi, baseUrl }
