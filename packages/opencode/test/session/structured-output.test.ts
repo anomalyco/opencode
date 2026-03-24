@@ -157,6 +157,14 @@ describe("structured-output.AssistantMessage", () => {
 })
 
 describe("structured-output.createStructuredOutputTool", () => {
+  const geminiModel = {
+    providerID: "google",
+    api: {
+      id: "gemini-3.1-pro",
+      npm: "@ai-sdk/google",
+    },
+  } as any
+
   test("creates tool with correct id", () => {
     const tool = SessionPrompt.createStructuredOutputTool({
       schema: { type: "object", properties: { name: { type: "string" } } },
@@ -213,6 +221,45 @@ describe("structured-output.createStructuredOutputTool", () => {
     // AI SDK wraps schema in { jsonSchema: {...} }
     const inputSchema = tool.inputSchema as any
     expect(inputSchema.jsonSchema?.$schema).toBeUndefined()
+  })
+
+  test("sanitizes gemini structured-output schemas recursively", () => {
+    const schema = {
+      $schema: "http://json-schema.org/draft-07/schema#",
+      type: "object",
+      additionalProperties: false,
+      $defs: {
+        Result: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            status: { type: "string" },
+          },
+          required: ["status"],
+        },
+      },
+      properties: {
+        result: {
+          $ref: "#/$defs/Result",
+        },
+      },
+      required: ["result"],
+    }
+
+    const tool = SessionPrompt.createStructuredOutputTool({
+      model: geminiModel,
+      schema,
+      onSuccess: () => {},
+    })
+
+    const inputSchema = tool.inputSchema as any
+    expect(inputSchema.jsonSchema?.$schema).toBeUndefined()
+    expect(inputSchema.jsonSchema?.additionalProperties).toBeUndefined()
+    expect(inputSchema.jsonSchema?.$defs).toBeUndefined()
+    expect(inputSchema.jsonSchema?.properties?.result?.$ref).toBeUndefined()
+    expect(inputSchema.jsonSchema?.properties?.result?.type).toBe("object")
+    expect(inputSchema.jsonSchema?.properties?.result?.additionalProperties).toBeUndefined()
+    expect(inputSchema.jsonSchema?.properties?.result?.properties?.status?.type).toBe("string")
   })
 
   test("execute calls onSuccess with valid args", async () => {

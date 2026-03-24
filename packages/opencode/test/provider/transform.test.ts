@@ -173,14 +173,23 @@ describe("ProviderTransform.options - google thinkingConfig gating", () => {
 describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
   const sessionID = "test-session-123"
 
-  const createGpt5Model = (apiId: string) =>
+  const createGpt5Model = (
+    apiId: string,
+    overrides?: {
+      providerID?: string
+      api?: {
+        url?: string
+        npm?: string
+      }
+    },
+  ) =>
     ({
-      id: `openai/${apiId}`,
-      providerID: "openai",
+      id: `${overrides?.providerID ?? "openai"}/${apiId}`,
+      providerID: overrides?.providerID ?? "openai",
       api: {
         id: apiId,
-        url: "https://api.openai.com",
-        npm: "@ai-sdk/openai",
+        url: overrides?.api?.url ?? "https://api.openai.com",
+        npm: overrides?.api?.npm ?? "@ai-sdk/openai",
       },
       name: apiId,
       capabilities: {
@@ -239,6 +248,40 @@ describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
     const model = createGpt5Model("gpt-5.2-codex")
     const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
     expect(result.textVerbosity).toBeUndefined()
+  })
+
+  test("generic openai-compatible gpt-5.4 should not inject openai-only defaults", () => {
+    const model = createGpt5Model("gpt-5.4", {
+      providerID: "custom-provider",
+      api: {
+        url: "https://proxy.example.com/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    })
+
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+
+    expect(result.reasoningEffort).toBeUndefined()
+    expect(result.reasoningSummary).toBeUndefined()
+    expect(result.textVerbosity).toBeUndefined()
+    expect(result.include).toBeUndefined()
+  })
+
+  test("opencode gpt-5.4 should keep supported reasoning defaults", () => {
+    const model = createGpt5Model("gpt-5.4", {
+      providerID: "opencode-proxy",
+      api: {
+        url: "https://api.opencode.ai/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    })
+
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+
+    expect(result.reasoningEffort).toBe("medium")
+    expect(result.reasoningSummary).toBe("auto")
+    expect(result.textVerbosity).toBe("low")
+    expect(result.include).toEqual(["reasoning.encrypted_content"])
   })
 })
 
@@ -761,6 +804,77 @@ describe("ProviderTransform.schema - gemini non-object properties removal", () =
     expect(result.properties.data.type).toBe("object")
     expect(result.properties.data.properties).toBeDefined()
     expect(result.properties.data.required).toEqual(["name"])
+  })
+
+  test("recursively strips unsupported gemini schema keywords and inlines local refs", () => {
+    const schema = {
+      $schema: "http://json-schema.org/draft-07/schema#",
+      type: "object",
+      additionalProperties: false,
+      $defs: {
+        Shared: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            label: { type: "string" },
+          },
+          required: ["label"],
+        },
+      },
+      definitions: {
+        Legacy: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            count: {
+              type: "integer",
+              enum: [1, 2],
+            },
+          },
+          required: ["count"],
+        },
+      },
+      properties: {
+        shared: {
+          $ref: "#/$defs/Shared",
+        },
+        legacy: {
+          ref: "#/definitions/Legacy",
+        },
+        nested: {
+          type: "object",
+          $schema: "http://json-schema.org/draft-07/schema#",
+          additionalProperties: false,
+          properties: {
+            name: { type: "string" },
+          },
+          required: ["name"],
+        },
+      },
+      required: ["shared", "legacy", "nested"],
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.$schema).toBeUndefined()
+    expect(result.additionalProperties).toBeUndefined()
+    expect(result.$defs).toBeUndefined()
+    expect(result.definitions).toBeUndefined()
+
+    expect(result.properties.shared.$ref).toBeUndefined()
+    expect(result.properties.shared.type).toBe("object")
+    expect(result.properties.shared.additionalProperties).toBeUndefined()
+    expect(result.properties.shared.properties.label.type).toBe("string")
+
+    expect(result.properties.legacy.ref).toBeUndefined()
+    expect(result.properties.legacy.type).toBe("object")
+    expect(result.properties.legacy.additionalProperties).toBeUndefined()
+    expect(result.properties.legacy.properties.count.type).toBe("string")
+    expect(result.properties.legacy.properties.count.enum).toEqual(["1", "2"])
+
+    expect(result.properties.nested.$schema).toBeUndefined()
+    expect(result.properties.nested.additionalProperties).toBeUndefined()
+    expect(result.properties.nested.properties.name.type).toBe("string")
   })
 
   test("does not affect non-gemini providers", () => {

@@ -617,6 +617,7 @@ export namespace SessionPrompt {
       // Inject StructuredOutput tool if JSON schema mode enabled
       if (lastUser.format?.type === "json_schema") {
         tools["StructuredOutput"] = createStructuredOutputTool({
+          model,
           schema: lastUser.format.schema,
           onSuccess(output) {
             structuredOutput = output
@@ -935,16 +936,18 @@ export namespace SessionPrompt {
 
   /** @internal Exported for testing */
   export function createStructuredOutputTool(input: {
+    model?: Provider.Model
     schema: Record<string, any>
     onSuccess: (output: unknown) => void
   }): AITool {
     // Remove $schema property if present (not needed for tool input)
     const { $schema, ...toolSchema } = input.schema
+    const inputSchema = input.model ? ProviderTransform.schema(input.model, toolSchema as any) : toolSchema
 
     return tool({
       id: "StructuredOutput" as any,
       description: STRUCTURED_OUTPUT_DESCRIPTION,
-      inputSchema: jsonSchema(toolSchema as any),
+      inputSchema: jsonSchema(inputSchema as any),
       async execute(args) {
         // AI SDK validates args against inputSchema before calling execute()
         input.onSuccess(args)

@@ -328,6 +328,21 @@ export namespace ProviderTransform {
 
   const WIDELY_SUPPORTED_EFFORTS = ["low", "medium", "high"]
   const OPENAI_EFFORTS = ["none", "minimal", ...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
+  const GPT5_DEFAULT_OPTION_NPMS = new Set(["@ai-sdk/openai", "@ai-sdk/azure", "@ai-sdk/github-copilot"])
+  const GEMINI_SCHEMA_NPMS = new Set(["@ai-sdk/google", "@ai-sdk/google-vertex"])
+
+  function supportsGpt5DefaultOptions(model: Provider.Model) {
+    return GPT5_DEFAULT_OPTION_NPMS.has(model.api.npm) || model.providerID.startsWith("opencode")
+  }
+
+  function usesGeminiSchemaTransport(model: Provider.Model) {
+    if (GEMINI_SCHEMA_NPMS.has(model.api.npm)) return true
+    if (model.providerID === "google" || model.providerID === "google-vertex") return true
+    if (model.api.npm === "@ai-sdk/gateway") {
+      return model.api.id.startsWith("google/") || model.api.id.startsWith("google-vertex/")
+    }
+    return false
+  }
 
   export function variants(model: Provider.Model): Record<string, Record<string, any>> {
     if (!model.capabilities.reasoning) return {}
@@ -791,7 +806,11 @@ export namespace ProviderTransform {
       result["enable_thinking"] = true
     }
 
-    if (input.model.api.id.includes("gpt-5") && !input.model.api.id.includes("gpt-5-chat")) {
+    if (
+      supportsGpt5DefaultOptions(input.model) &&
+      input.model.api.id.includes("gpt-5") &&
+      !input.model.api.id.includes("gpt-5-chat")
+    ) {
       if (!input.model.api.id.includes("gpt-5-pro")) {
         result["reasoningEffort"] = "medium"
         result["reasoningSummary"] = "auto"
@@ -931,7 +950,7 @@ export namespace ProviderTransform {
     */
 
     // Convert integer enums to string enums for Google/Gemini
-    if (model.providerID === "google" || model.api.id.includes("gemini")) {
+    if (usesGeminiSchemaTransport(model)) {
       const isPlainObject = (node: unknown): node is Record<string, any> =>
         typeof node === "object" && node !== null && !Array.isArray(node)
       const hasCombiner = (node: unknown) =>
@@ -947,6 +966,9 @@ export namespace ProviderTransform {
           "enum",
           "const",
           "$ref",
+          "ref",
+          "$defs",
+          "definitions",
           "additionalProperties",
           "patternProperties",
           "required",
@@ -955,6 +977,61 @@ export namespace ProviderTransform {
           "then",
           "else",
         ].some((key) => key in node)
+      }
+
+      const resolvePointer = (root: unknown, pointer: string) => {
+        if (!pointer.startsWith("#/")) return undefined
+        let current: unknown = root
+        for (const segment of pointer
+          .slice(2)
+          .split("/")
+          .map((part) => part.replaceAll("~1", "/").replaceAll("~0", "~"))) {
+          if (Array.isArray(current)) {
+            const index = Number(segment)
+            if (!Number.isInteger(index)) return undefined
+            current = current[index]
+          } else if (isPlainObject(current)) {
+            current = current[segment]
+          } else {
+            return undefined
+          }
+          if (current === undefined) return undefined
+        }
+        return current
+      }
+
+      const inlineRefs = (node: any, root: any, seen = new Set<string>()): any => {
+        if (node === null || typeof node !== "object") {
+          return node
+        }
+
+        if (Array.isArray(node)) {
+          return node.map((item) => inlineRefs(item, root, seen))
+        }
+
+        const refKey =
+          typeof node.$ref === "string" ? "$ref" : typeof node.ref === "string" ? "ref" : undefined
+        if (refKey) {
+          const ref = node[refKey]
+          const siblings = Object.fromEntries(Object.entries(node).filter(([key]) => key !== "$ref" && key !== "ref"))
+          const target = typeof ref === "string" ? resolvePointer(root, ref) : undefined
+          if (target && !seen.has(ref)) {
+            const nextSeen = new Set(seen)
+            nextSeen.add(ref)
+            const resolvedTarget = inlineRefs(target, root, nextSeen)
+            const resolvedSiblings = inlineRefs(siblings, root, seen)
+            if (isPlainObject(resolvedTarget) && isPlainObject(resolvedSiblings)) {
+              return {
+                ...resolvedTarget,
+                ...resolvedSiblings,
+              }
+            }
+            return resolvedTarget
+          }
+          return inlineRefs(siblings, root, seen)
+        }
+
+        return Object.fromEntries(Object.entries(node).map(([key, value]) => [key, inlineRefs(value, root, seen)]))
       }
 
       const sanitizeGemini = (obj: any): any => {
@@ -968,18 +1045,21 @@ export namespace ProviderTransform {
 
         const result: any = {}
         for (const [key, value] of Object.entries(obj)) {
+          if (["$schema", "$ref", "ref", "$defs", "definitions", "additionalProperties"].includes(key)) {
+            continue
+          }
           if (key === "enum" && Array.isArray(value)) {
             // Convert all enum values to strings
             result[key] = value.map((v) => String(v))
-            // If we have integer type with enum, change type to string
-            if (result.type === "integer" || result.type === "number") {
-              result.type = "string"
-            }
           } else if (typeof value === "object" && value !== null) {
             result[key] = sanitizeGemini(value)
           } else {
             result[key] = value
           }
+        }
+
+        if (Array.isArray(result.enum) && (result.type === "integer" || result.type === "number")) {
+          result.type = "string"
         }
 
         // Filter required array to only include fields that exist in properties
@@ -1006,7 +1086,7 @@ export namespace ProviderTransform {
         return result
       }
 
-      schema = sanitizeGemini(schema)
+      schema = sanitizeGemini(inlineRefs(schema, schema))
     }
 
     return schema as JSONSchema7
