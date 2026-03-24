@@ -21,7 +21,7 @@ import type { MessageV2 } from "./message-v2"
 import { Plugin } from "@/plugin"
 import { SystemPrompt } from "./system"
 import { Flag } from "@/flag/flag"
-import { Permission as PermissionNext } from "@/permission/service"
+import { Permission } from "@/permission"
 import { Auth } from "@/auth"
 
 export namespace LLM {
@@ -33,7 +33,7 @@ export namespace LLM {
     sessionID: string
     model: Provider.Model
     agent: Agent.Info
-    permission?: PermissionNext.Ruleset
+    permission?: Permission.Ruleset
     system: string[]
     abort: AbortSignal
     messages: ModelMessage[]
@@ -250,12 +250,16 @@ export namespace LLM {
       maxOutputTokens,
       abortSignal: input.abort,
       headers: {
-        ...(input.model.providerID.startsWith("opencode") && {
-          "x-opencode-project": Instance.project.id,
-          "x-opencode-session": input.sessionID,
-          "x-opencode-request": input.user.id,
-          "x-opencode-client": Flag.OPENCODE_CLIENT,
-        }),
+        ...(input.model.providerID.startsWith("opencode")
+          ? {
+              "x-opencode-project": Instance.project.id,
+              "x-opencode-session": input.sessionID,
+              "x-opencode-request": input.user.id,
+              "x-opencode-client": Flag.OPENCODE_CLIENT,
+            }
+          : {
+              "User-Agent": `opencode/${Installation.VERSION}`,
+            }),
         ...input.model.headers,
         ...headers,
       },
@@ -286,9 +290,9 @@ export namespace LLM {
   }
 
   async function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "permission" | "user">) {
-    const disabled = PermissionNext.disabled(
+    const disabled = Permission.disabled(
       Object.keys(input.tools),
-      PermissionNext.merge(input.agent.permission, input.permission ?? []),
+      Permission.merge(input.agent.permission, input.permission ?? []),
     )
     for (const tool of Object.keys(input.tools)) {
       if (input.user.tools?.[tool] === false || disabled.has(tool)) {
