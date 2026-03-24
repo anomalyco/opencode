@@ -1,7 +1,7 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
 import path from "path"
 import { pathToFileURL } from "url"
-import type { PermissionNext } from "../../src/permission"
+import type { Permission } from "../../src/permission"
 import type { Tool } from "../../src/tool/tool"
 import { Instance } from "../../src/project/instance"
 import { SkillTool } from "../../src/tool/skill"
@@ -17,6 +17,10 @@ const baseCtx: Omit<Tool.Context, "ask"> = {
   messages: [],
   metadata: () => {},
 }
+
+afterEach(async () => {
+  await Instance.disposeAll()
+})
 
 describe("tool.skill", () => {
   test("description lists skill location URL", async () => {
@@ -133,7 +137,7 @@ Use this skill.
         directory: tmp.path,
         fn: async () => {
           const tool = await SkillTool.init()
-          const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+          const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
           const ctx: Tool.Context = {
             ...baseCtx,
             ask: async (req) => {
