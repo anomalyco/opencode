@@ -1,7 +1,6 @@
 import path from "path"
 import os from "os"
 import fs from "fs/promises"
-import type { Config } from "../config/config"
 
 export namespace VoiceCheck {
   export interface Result {
@@ -11,7 +10,16 @@ export namespace VoiceCheck {
     errors: string[]
   }
 
-  type VoiceCfg = NonNullable<Config.Info["voice"]>
+  export interface Cfg {
+    backend?: "local" | "openai"
+    whisper_path?: string
+    model?: string
+    model_path?: string
+    language?: string
+    sox_path?: string
+    max_duration?: number
+    openai_api_key?: string
+  }
 
   async function exists(p: string) {
     return fs.access(p).then(
@@ -29,7 +37,7 @@ export namespace VoiceCheck {
     return found ?? undefined
   }
 
-  async function model(cfg: VoiceCfg, whisper?: string): Promise<string | undefined> {
+  async function model(cfg: Cfg, whisper?: string): Promise<string | undefined> {
     if (cfg.model_path) {
       if (await exists(cfg.model_path)) return cfg.model_path
       return undefined
@@ -72,7 +80,7 @@ export namespace VoiceCheck {
     }
   }
 
-  export async function run(cfg?: VoiceCfg): Promise<Result> {
+  export async function run(cfg?: Cfg): Promise<Result> {
     const resolved = cfg ?? { backend: "local" as const, model: "base.en", language: "en", max_duration: 60 }
     const errors: string[] = []
     const inst = instructions()

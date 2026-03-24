@@ -49,7 +49,7 @@ export namespace Transcribe {
     language?: string
   }): Promise<Result> {
     const data = await fs.readFile(opts.file)
-    const blob = new Blob([data], { type: "audio/wav" })
+    const blob = new Blob([new Uint8Array(data)], { type: "audio/wav" })
 
     const form = new FormData()
     form.append("file", blob, "recording.wav")
