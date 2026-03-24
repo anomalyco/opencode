@@ -1,4 +1,4 @@
-import { test, expect } from "bun:test"
+import { afterEach, test, expect } from "bun:test"
 import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
@@ -11,6 +11,10 @@ import { tmpdir } from "../fixture/fixture"
 // with path.join (which produces \ on Windows) then normalizes back to /.
 // This helper does the same for expected values so assertions match cross-platform.
 const fwd = (...parts: string[]) => path.join(...parts).replaceAll("\\", "/")
+
+afterEach(async () => {
+  await Instance.disposeAll()
+})
 
 async function bootstrap() {
   return tmpdir({
