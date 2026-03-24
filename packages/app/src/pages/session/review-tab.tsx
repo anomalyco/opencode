@@ -4,6 +4,7 @@ import { SessionReview } from "@opencode-ai/ui/session-review"
 import type {
   SessionReviewCommentActions,
   SessionReviewCommentDelete,
+  SessionReviewGitHubComment,
   SessionReviewCommentUpdate,
 } from "@opencode-ai/ui/session-review"
 import type { SelectedLineRange } from "@/context/file"
@@ -26,6 +27,7 @@ export interface SessionReviewTabProps {
   onLineCommentDelete?: (comment: SessionReviewCommentDelete) => void
   lineCommentActions?: SessionReviewCommentActions
   comments?: LineComment[]
+  githubComments?: SessionReviewGitHubComment[]
   focusedComment?: { file: string; id: string } | null
   onFocusedCommentChange?: (focus: { file: string; id: string } | null) => void
   focusedFile?: string
@@ -163,6 +165,7 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
       onLineCommentDelete={props.onLineCommentDelete}
       lineCommentActions={props.lineCommentActions}
       comments={props.comments}
+      githubComments={props.githubComments}
       focusedComment={props.focusedComment}
       onFocusedCommentChange={props.onFocusedCommentChange}
     />

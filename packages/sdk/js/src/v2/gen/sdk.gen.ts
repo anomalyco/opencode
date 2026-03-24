@@ -175,6 +175,7 @@ import type {
   TuiShowToastResponses,
   TuiSubmitPromptResponses,
   VcsGetResponses,
+  VcsReviewCommentsResponses,
   WorktreeCreateErrors,
   WorktreeCreateInput,
   WorktreeCreateResponses,
@@ -3715,6 +3716,36 @@ export class Vcs extends HeyApiClient {
     )
     return (options?.client ?? this.client).get<VcsGetResponses, unknown, ThrowOnError>({
       url: "/vcs",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get GitHub review comments
+   *
+   * Retrieve GitHub pull request review comments for the current branch when available.
+   */
+  public reviewComments<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<VcsReviewCommentsResponses, unknown, ThrowOnError>({
+      url: "/vcs/review_comments",
       ...options,
       ...params,
     })

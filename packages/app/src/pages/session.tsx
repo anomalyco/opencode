@@ -10,6 +10,7 @@ import {
   createMemo,
   createEffect,
   createComputed,
+  createResource,
   on,
   onMount,
   untrack,
@@ -550,6 +551,19 @@ export default function Page() {
 
   const turnDiffs = createMemo(() => lastUserMessage()?.summary?.diffs ?? [])
   const reviewDiffs = createMemo(() => (store.changes === "session" ? diffs() : turnDiffs()))
+  const ghKey = createMemo(() => {
+    if (!params.dir) return
+    if (!sync.data.vcs?.branch) return
+    if (reviewDiffs().length === 0) return
+    return `${params.dir}\n${sync.data.vcs.branch}`
+  })
+  const [ghComments] = createResource(
+    ghKey,
+    async () => sdk.client.vcs.reviewComments().then((x) => x.data ?? []).catch(() => []),
+    {
+      initialValue: [] as NonNullable<SessionReviewTabProps["githubComments"]>,
+    },
+  )
 
   const newSessionWorktree = createMemo(() => {
     if (store.newSessionWorktree === "create") return "create"
@@ -1001,6 +1015,7 @@ export default function Page() {
         onLineCommentDelete={removeCommentFromContext}
         lineCommentActions={reviewCommentActions()}
         comments={comments.all()}
+        githubComments={ghKey() ? ghComments() : []}
         focusedComment={comments.focus()}
         onFocusedCommentChange={comments.setFocus}
         onViewFile={openReviewFile}

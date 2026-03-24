@@ -1892,6 +1892,20 @@ export type VcsInfo = {
   branch: string
 }
 
+export type VcsReviewComment = {
+  id: string
+  file: string
+  selection: {
+    start: number
+    end: number
+    side?: "additions" | "deletions"
+    endSide?: "additions" | "deletions"
+  }
+  comment: string
+  reviewer: string
+  time: number
+}
+
 export type Command = {
   name: string
   description?: string
@@ -4886,6 +4900,25 @@ export type VcsGetResponses = {
 }
 
 export type VcsGetResponse = VcsGetResponses[keyof VcsGetResponses]
+
+export type VcsReviewCommentsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/vcs/review_comments"
+}
+
+export type VcsReviewCommentsResponses = {
+  /**
+   * GitHub review comments
+   */
+  200: Array<VcsReviewComment>
+}
+
+export type VcsReviewCommentsResponse = VcsReviewCommentsResponses[keyof VcsReviewCommentsResponses]
 
 export type CommandListData = {
   body?: never

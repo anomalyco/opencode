@@ -13,16 +13,21 @@ import { useFileComponent } from "../context/file"
 import { useI18n } from "../context/i18n"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
-import { createEffect, createMemo, For, Match, Show, Switch, untrack, type JSX } from "solid-js"
+import { batch, createEffect, createMemo, For, Match, Show, Switch, untrack, type JSX } from "solid-js"
 import { onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { type FileContent, type FileDiff } from "@opencode-ai/sdk/v2"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
-import { type SelectedLineRange } from "@pierre/diffs"
+import { type DiffLineAnnotation, type SelectedLineRange } from "@pierre/diffs"
 import { Dynamic } from "solid-js/web"
 import { mediaKindFromPath } from "../pierre/media"
-import { cloneSelectedLineRange, previewSelectedLines } from "../pierre/selection-bridge"
-import { createLineCommentController } from "./line-comment-annotations"
+import { cloneSelectedLineRange, formatSelectedLineLabel, previewSelectedLines } from "../pierre/selection-bridge"
+import {
+  createLineCommentAnnotations,
+  createLineCommentController,
+  createManagedLineCommentAnnotationRenderer,
+  type LineCommentAnnotationMeta,
+} from "./line-comment-annotations"
 
 const MAX_DIFF_CHANGED_LINES = 500
 
@@ -40,6 +45,15 @@ export type SessionReviewLineComment = {
   selection: SelectedLineRange
   comment: string
   preview?: string
+}
+
+export type SessionReviewGitHubComment = {
+  id: string
+  file: string
+  selection: SelectedLineRange
+  comment: string
+  reviewer: string
+  time: number
 }
 
 export type SessionReviewCommentUpdate = SessionReviewLineComment & {
@@ -74,6 +88,7 @@ export interface SessionReviewProps {
   onLineCommentDelete?: (comment: SessionReviewCommentDelete) => void
   lineCommentActions?: SessionReviewCommentActions
   comments?: SessionReviewComment[]
+  githubComments?: SessionReviewGitHubComment[]
   focusedComment?: SessionReviewFocus | null
   onFocusedCommentChange?: (focus: SessionReviewFocus | null) => void
   focusedFile?: string
@@ -154,6 +169,7 @@ export const SessionReview = (props: SessionReviewProps) => {
   const diffs = createMemo(() => new Map(props.diffs.map((diff) => [diff.file, diff] as const)))
   const diffStyle = () => props.diffStyle ?? (props.split ? "split" : "unified")
   const hasDiffs = () => files().length > 0
+  const timefmt = createMemo(() => new Intl.DateTimeFormat(i18n.locale(), { dateStyle: "medium", timeStyle: "short" }))
 
   const handleChange = (open: string[]) => {
     props.onOpenChange?.(open)
@@ -292,7 +308,11 @@ export const SessionReview = (props: SessionReviewProps) => {
                     const force = () => !!store.force[file]
 
                     const comments = createMemo(() => (props.comments ?? []).filter((c) => c.file === file))
-                    const commentedLines = createMemo(() => comments().map((c) => c.selection))
+                    const gh = createMemo(() => (props.githubComments ?? []).filter((c) => c.file === file))
+                    const commentedLines = createMemo(() => [
+                      ...comments().map((c) => c.selection),
+                      ...gh().map((c) => c.selection),
+                    ])
 
                     const beforeText = () => (typeof item().before === "string" ? item().before : "")
                     const afterText = () => (typeof item().after === "string" ? item().after : "")
@@ -389,6 +409,75 @@ export const SessionReview = (props: SessionReviewProps) => {
                       if (!props.onLineComment) return
                       commentsUi.onLineSelectionEnd(range)
                     }
+
+                    const ghKey = (id: string) => `gh:${id}`
+
+                    const openGh = (comment: SessionReviewGitHubComment) => {
+                      const id = ghKey(comment.id)
+                      batch(() => {
+                        setStore("commenting", null)
+                        setStore("selection", { file, range: cloneSelectedLineRange(comment.selection) })
+                        setStore("opened", (current) =>
+                          current?.file === file && current.id === id
+                            ? null
+                            : {
+                                file,
+                                id,
+                              },
+                        )
+                      })
+                    }
+
+                    const hoverGh = (comment: SessionReviewGitHubComment) => {
+                      setStore("selection", { file, range: cloneSelectedLineRange(comment.selection) })
+                    }
+
+                    const ghAnnotations = createLineCommentAnnotations<SessionReviewGitHubComment>({
+                      comments: gh,
+                      draftRange: () => null,
+                      draftKey: () => file,
+                      getCommentId: (comment) => ghKey(comment.id),
+                      getCommentSelection: (comment) => comment.selection,
+                      getSide: selectionSide,
+                    })
+
+                    type LocalAnnotation = DiffLineAnnotation<LineCommentAnnotationMeta<SessionReviewComment>>
+                    type GhAnnotation = DiffLineAnnotation<LineCommentAnnotationMeta<SessionReviewGitHubComment>>
+                    type Annotation = LocalAnnotation | GhAnnotation
+
+                    const ghUi = createManagedLineCommentAnnotationRenderer<SessionReviewGitHubComment>({
+                      annotations: ghAnnotations,
+                      renderComment: (comment) => ({
+                        id: ghKey(comment.id),
+                        open: opened()?.file === file && opened()?.id === ghKey(comment.id),
+                        comment: (
+                          <div class="flex flex-col gap-1">
+                            <div class="flex items-center gap-2 text-11-medium text-text-weak">
+                              <span class="text-text-strong">{comment.reviewer}</span>
+                              <span>{timefmt().format(comment.time)}</span>
+                            </div>
+                            <div class="whitespace-pre-wrap break-words">{comment.comment}</div>
+                          </div>
+                        ),
+                        selection: formatSelectedLineLabel(comment.selection, i18n.t),
+                        onMouseEnter: () => hoverGh(comment),
+                        onClick: () => openGh(comment),
+                      }),
+                      renderDraft: (range) => ({
+                        value: "",
+                        selection: formatSelectedLineLabel(range, i18n.t),
+                        onInput: () => undefined,
+                        onCancel: () => undefined,
+                        onSubmit: () => undefined,
+                      }),
+                    })
+
+                    const annotations = createMemo<Annotation[]>(() => [...commentsUi.annotations(), ...ghAnnotations()])
+
+                    const renderAnnotation = (annotation: Annotation) =>
+                      annotation.metadata.key.startsWith("comment:gh:")
+                        ? ghUi.renderAnnotation(annotation as GhAnnotation)
+                        : commentsUi.renderAnnotation(annotation as LocalAnnotation)
 
                     return (
                       <Accordion.Item
@@ -502,8 +591,8 @@ export const SessionReview = (props: SessionReviewProps) => {
                                     onLineSelected={handleLineSelected}
                                     onLineSelectionEnd={handleLineSelectionEnd}
                                     onLineNumberSelectionEnd={commentsUi.onLineNumberSelectionEnd}
-                                    annotations={commentsUi.annotations()}
-                                    renderAnnotation={commentsUi.renderAnnotation}
+                                    annotations={annotations()}
+                                    renderAnnotation={renderAnnotation}
                                     renderHoverUtility={props.onLineComment ? commentsUi.renderHoverUtility : undefined}
                                     selectedLines={selectedLines()}
                                     commentedLines={commentedLines()}

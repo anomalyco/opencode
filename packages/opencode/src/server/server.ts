@@ -337,6 +337,28 @@ export namespace Server {
         },
       )
       .get(
+        "/vcs/review_comments",
+        describeRoute({
+          summary: "Get GitHub review comments",
+          description: "Retrieve GitHub pull request review comments for the current branch when available.",
+          operationId: "vcs.reviewComments",
+          responses: {
+            200: {
+              description: "GitHub review comments",
+              content: {
+                "application/json": {
+                  schema: resolver(Vcs.ReviewComment.array()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          const comments = await Vcs.reviewComments().catch(() => [])
+          return c.json(comments)
+        },
+      )
+      .get(
         "/command",
         describeRoute({
           summary: "List commands",
