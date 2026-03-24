@@ -42,6 +42,7 @@ import { createStore, produce } from "solid-js/store"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
 import { useTuiConfig } from "./tui-config"
+import { parseTheme } from "./theme-parse"
 
 type ThemeColors = {
   primary: RGBA
@@ -127,10 +128,10 @@ type Variant = {
   dark: HexColor | RefName
   light: HexColor | RefName
 }
-type ColorValue = HexColor | RefName | Variant | RGBA
+type ColorValue = HexColor | RefName | Variant | RGBA | number
 type ThemeJson = {
   $schema?: string
-  defs?: Record<string, HexColor | RefName>
+  defs?: Record<string, HexColor | RefName | number>
   theme: Omit<Record<keyof ThemeColors, ColorValue>, "selectedListItemText" | "backgroundMenu"> & {
     selectedListItemText?: ColorValue
     backgroundMenu?: ColorValue
@@ -424,7 +425,9 @@ async function getCustomThemes() {
       symlink: true,
     })) {
       const name = path.basename(item, ".json")
-      result[name] = await Filesystem.readJson(item)
+      const theme = parseTheme(await Filesystem.readJson(item).catch(() => undefined))
+      if (!theme) continue
+      result[name] = theme as ThemeJson
     }
   }
   return result
