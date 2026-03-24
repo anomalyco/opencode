@@ -46,6 +46,7 @@ import {
   createSessionTabs,
   createSizing,
   focusTerminalById,
+  shouldQueueFollowup,
   shouldFocusTerminalOnKeyDown,
 } from "@/pages/session/helpers"
 import { MessageTimeline } from "@/pages/session/message-timeline"
@@ -63,6 +64,7 @@ import { formatServerError } from "@/utils/server-errors"
 
 const emptyUserMessages: UserMessage[] = []
 const emptyFollowups: (FollowupDraft & { id: string })[] = []
+const idle = { type: "idle" as const }
 
 type SessionHistoryWindowInput = {
   sessionID: () => string | undefined
@@ -1362,12 +1364,12 @@ export default function Page() {
       return out
     })
 
-  const busy = (sessionID: string) => {
-    if ((sync.data.session_status[sessionID] ?? { type: "idle" as const }).type !== "idle") return true
-    return (sync.data.message[sessionID] ?? []).some(
-      (item) => item.role === "assistant" && typeof item.time.completed !== "number",
-    )
-  }
+  const status = (sessionID: string) => sync.data.session_status[sessionID] ?? idle
+
+  const pending = (sessionID: string) =>
+    (sync.data.message[sessionID] ?? []).some((item) => item.role === "assistant" && typeof item.time.completed !== "number")
+
+  const busy = (sessionID: string) => status(sessionID).type !== "idle" || pending(sessionID)
 
   const queuedFollowups = createMemo(() => {
     const id = params.id
@@ -1420,7 +1422,12 @@ export default function Page() {
   const queueEnabled = createMemo(() => {
     const id = params.id
     if (!id) return false
-    return settings.general.followup() === "queue" && busy(id) && !composer.blocked()
+    return shouldQueueFollowup({
+      followup: settings.general.followup(),
+      blocked: composer.blocked(),
+      pending: pending(id),
+      status: status(id),
+    })
   })
 
   const followupText = (item: FollowupDraft) => {

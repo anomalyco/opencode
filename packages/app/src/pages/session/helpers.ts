@@ -1,3 +1,4 @@
+import type { SessionStatus } from "@opencode-ai/sdk/v2/client"
 import { batch, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import { same } from "@/utils/same"
@@ -98,6 +99,20 @@ const skip = new Set(["Alt", "Control", "Meta", "Shift"])
 export const shouldFocusTerminalOnKeyDown = (event: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "altKey">) => {
   if (skip.has(event.key)) return false
   return !(event.ctrlKey || event.metaKey || event.altKey)
+}
+
+export const shouldQueueFollowup = (input: {
+  followup: "queue" | "steer"
+  blocked: boolean
+  pending: boolean
+  status: SessionStatus
+}) => {
+  if (input.followup !== "queue") return false
+  if (input.blocked) return false
+  if (input.status.type !== "idle") return true
+  // Message completion can lag briefly after the session already reports idle.
+  if (input.pending) return false
+  return false
 }
 
 export const createOpenReviewFile = (input: {

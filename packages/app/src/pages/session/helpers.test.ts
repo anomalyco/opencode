@@ -7,6 +7,7 @@ import {
   createSessionTabs,
   focusTerminalById,
   getTabReorderIndex,
+  shouldQueueFollowup,
   shouldFocusTerminalOnKeyDown,
 } from "./helpers"
 
@@ -104,6 +105,38 @@ describe("shouldFocusTerminalOnKeyDown", () => {
   test("keeps plain typing focused on terminal", () => {
     expect(shouldFocusTerminalOnKeyDown(new KeyboardEvent("keydown", { key: "a" }))).toBe(true)
     expect(shouldFocusTerminalOnKeyDown(new KeyboardEvent("keydown", { key: "A", shiftKey: true }))).toBe(true)
+  })
+})
+
+describe("shouldQueueFollowup", () => {
+  test("does not queue once the session status is idle, even if assistant completion still looks pending", () => {
+    expect(
+      shouldQueueFollowup({
+        followup: "queue",
+        blocked: false,
+        pending: true,
+        status: { type: "idle" },
+      }),
+    ).toBe(false)
+  })
+
+  test("keeps queue mode active while the session status is still live", () => {
+    expect(
+      shouldQueueFollowup({
+        followup: "queue",
+        blocked: false,
+        pending: false,
+        status: { type: "busy" },
+      }),
+    ).toBe(true)
+    expect(
+      shouldQueueFollowup({
+        followup: "queue",
+        blocked: false,
+        pending: true,
+        status: { type: "retry", attempt: 1, message: "retrying", next: 1 },
+      }),
+    ).toBe(true)
   })
 })
 
