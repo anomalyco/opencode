@@ -153,6 +153,7 @@ export function SessionHeader() {
   })
   const hotkey = createMemo(() => command.keybind("file.open"))
   const os = createMemo(() => detectOS(platform))
+  const search = createMemo(() => platform.platform !== "desktop" || settings.general.showSearch())
   const tree = createMemo(() => platform.platform !== "desktop" || settings.general.showFileTree())
   const term = createMemo(() => platform.platform !== "desktop" || settings.general.showTerminal())
   const status = createMemo(() => platform.platform !== "desktop" || settings.general.showStatus())
@@ -272,7 +273,7 @@ export function SessionHeader() {
 
   return (
     <>
-      <Show when={centerMount()}>
+      <Show when={search() && centerMount()}>
         {(mount) => (
           <Portal mount={mount()}>
             <Button

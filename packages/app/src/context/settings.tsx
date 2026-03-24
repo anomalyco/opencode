@@ -24,6 +24,8 @@ export interface Settings {
     releaseNotes: boolean
     followup: "queue" | "steer"
     showFileTree: boolean
+    showNavigation: boolean
+    showSearch: boolean
     showStatus: boolean
     showTerminal: boolean
     showReasoningSummaries: boolean
@@ -93,6 +95,8 @@ const defaultSettings: Settings = {
     releaseNotes: true,
     followup: "steer",
     showFileTree: false,
+    showNavigation: false,
+    showSearch: false,
     showStatus: false,
     showTerminal: false,
     showReasoningSummaries: false,
@@ -171,6 +175,14 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         showFileTree: withFallback(() => store.general?.showFileTree, defaultSettings.general.showFileTree),
         setShowFileTree(value: boolean) {
           setStore("general", "showFileTree", value)
+        },
+        showNavigation: withFallback(() => store.general?.showNavigation, defaultSettings.general.showNavigation),
+        setShowNavigation(value: boolean) {
+          setStore("general", "showNavigation", value)
+        },
+        showSearch: withFallback(() => store.general?.showSearch, defaultSettings.general.showSearch),
+        setShowSearch(value: boolean) {
+          setStore("general", "showSearch", value)
         },
         showStatus: withFallback(() => store.general?.showStatus, defaultSettings.general.showStatus),
         setShowStatus(value: boolean) {

@@ -385,7 +385,7 @@ export function SessionSidePanel(props: {
                   </Tabs.List>
                   <Tabs.Content value="changes" class="bg-background-stronger px-3 py-0">
                     <Switch>
-                      <Match when={props.hasReview()}>
+                      <Match when={props.hasReview() || !props.diffsReady()}>
                         <Show
                           when={props.diffsReady()}
                           fallback={
@@ -405,11 +405,6 @@ export function SessionSidePanel(props: {
                             onFileClick={(node) => props.focusReviewDiff(node.path)}
                           />
                         </Show>
-                      </Match>
-                      <Match when={true}>
-                        {empty(
-                          language.t(sync.project && !sync.project.vcs ? "session.review.noChanges" : reviewEmptyKey()),
-                        )}
                       </Match>
                     </Switch>
                   </Tabs.Content>
