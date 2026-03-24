@@ -15,7 +15,11 @@ import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@
 import { terminalWriter } from "@/utils/terminal-writer"
 
 const TOGGLE_TERMINAL_ID = "terminal.toggle"
-const DEFAULT_TOGGLE_TERMINAL_KEYBIND = "ctrl+`"
+const DEFAULT_TOGGLE_TERMINAL_KEYBIND = "mod+j,ctrl+`"
+const MIN_COL = 20
+const MIN_ROW = 4
+const MIN_W = 240
+const MIN_H = 120
 export interface TerminalProps extends ComponentProps<"div"> {
   pty: LocalPTY
   autoFocus?: boolean
@@ -268,6 +272,7 @@ export const Terminal = (props: TerminalProps) => {
 
   const scheduleSize = (cols: number, rows: number) => {
     if (disposed) return
+    if (cols < MIN_COL || rows < MIN_ROW) return
     if (lastSize?.cols === cols && lastSize?.rows === rows) return
 
     pendingSize = { cols, rows }
@@ -437,10 +442,21 @@ export const Terminal = (props: TerminalProps) => {
       cleanups.push(() => disposeIfDisposable(onKey))
 
       const startResize = () => {
-        fit.observeResize()
-        handleResize = scheduleFit
+        handleResize = () => {
+          if (container.clientWidth < MIN_W || container.clientHeight < MIN_H) return
+          scheduleFit()
+        }
         window.addEventListener("resize", handleResize)
         cleanups.push(() => window.removeEventListener("resize", handleResize))
+
+        if (typeof ResizeObserver === "function") {
+          const observer = new ResizeObserver(handleResize)
+          observer.observe(container)
+          cleanups.push(() => observer.disconnect())
+        }
+
+        const timers = [80, 180, 320].map((ms) => setTimeout(scheduleFit, ms))
+        cleanups.push(() => timers.forEach((timer) => clearTimeout(timer)))
       }
 
       const write = (data: string) =>

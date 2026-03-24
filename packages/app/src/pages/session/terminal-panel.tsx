@@ -3,7 +3,7 @@ import { createStore } from "solid-js/store"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { IconButton } from "@opencode-ai/ui/icon-button"
-import { TooltipKeybind } from "@opencode-ai/ui/tooltip"
+import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
@@ -34,6 +34,7 @@ export function TerminalPanel() {
   const width = createMemo(() => layout.terminal.width())
   const dock = createMemo(() => layout.terminal.dock())
   const right = createMemo(() => dock() === "right")
+  const dockKeybind = createMemo(() => command.keybind("terminal.dock.toggle"))
   const close = () => view().terminal.close()
   let root: HTMLDivElement | undefined
 
@@ -66,6 +67,21 @@ export function TerminalPanel() {
       port?.removeEventListener("resize", sync)
     })
   })
+
+  createEffect(
+    on(
+      () => [opened(), side()] as const,
+      ([open]) => {
+        if (!open) return
+        if (typeof window === "undefined") return
+
+        const timers = [0, 90, 180, 320].map((ms) =>
+          window.setTimeout(() => window.dispatchEvent(new Event("resize")), ms),
+        )
+        onCleanup(() => timers.forEach((timer) => window.clearTimeout(timer)))
+      },
+    ),
+  )
 
   createEffect(() => {
     if (!opened()) {
@@ -317,15 +333,39 @@ export function TerminalPanel() {
                     </TooltipKeybind>
                   </div>
                   <div class="h-full pr-2 flex items-center justify-center">
-                    <button
-                      type="button"
-                      class="h-7 px-2 rounded-md text-12-medium text-text-weak hover:text-text-base hover:bg-surface-base transition-colors"
-                      onClick={() => layout.terminal.toggleDock()}
-                      title={right() ? "Dock terminal to bottom" : "Dock terminal to right"}
-                      aria-label={right() ? "Dock terminal to bottom" : "Dock terminal to right"}
+                    <Show
+                      when={dockKeybind()}
+                      fallback={
+                        <Tooltip
+                          value={right() ? "Dock terminal to bottom" : "Dock terminal to right"}
+                          class="flex items-center"
+                        >
+                          <IconButton
+                            icon={right() ? "layout-bottom" : "layout-right"}
+                            variant="ghost"
+                            iconSize="large"
+                            onClick={() => layout.terminal.toggleDock()}
+                            aria-label={right() ? "Dock terminal to bottom" : "Dock terminal to right"}
+                          />
+                        </Tooltip>
+                      }
                     >
-                      {right() ? "Dock bottom" : "Dock right"}
-                    </button>
+                      {(keybind) => (
+                        <TooltipKeybind
+                          title={right() ? "Dock terminal to bottom" : "Dock terminal to right"}
+                          keybind={keybind()}
+                          class="flex items-center"
+                        >
+                          <IconButton
+                            icon={right() ? "layout-bottom" : "layout-right"}
+                            variant="ghost"
+                            iconSize="large"
+                            onClick={() => layout.terminal.toggleDock()}
+                            aria-label={right() ? "Dock terminal to bottom" : "Dock terminal to right"}
+                          />
+                        </TooltipKeybind>
+                      )}
+                    </Show>
                   </div>
                 </Tabs.List>
               </Tabs>
