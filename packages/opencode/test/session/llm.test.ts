@@ -654,6 +654,95 @@ describe("session.llm.stream", () => {
     })
   })
 
+  test("repairs raw JSON tool call from local openai-compatible provider", async () => {
+    const server = state.server
+    if (!server) throw new Error("Server not initialized")
+
+    // Simulate qwen2.5-coder style: finish_reason=stop, no tool_calls, content is raw JSON
+    const rawJson = JSON.stringify({ name: "read_file", arguments: { path: "foo.txt" } })
+    const chunks = [
+      { id: "chatcmpl-1", object: "chat.completion.chunk", choices: [{ delta: { role: "assistant" } }] },
+      { id: "chatcmpl-1", object: "chat.completion.chunk", choices: [{ delta: { content: rawJson } }] },
+      { id: "chatcmpl-1", object: "chat.completion.chunk", choices: [{ delta: {}, finish_reason: "stop" }] },
+      "[DONE]",
+    ]
+
+    waitRequest("/chat/completions", createEventResponse(chunks))
+
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            provider: {
+              "local-ollama": {
+                npm: "@ai-sdk/openai-compatible",
+                name: "Local Ollama",
+                options: { baseURL: `${server.url.origin}/v1`, apiKey: "ollama" },
+                models: {
+                  "qwen2.5-coder:7b": { name: "Qwen2.5 Coder 7B" },
+                },
+              },
+            },
+            model: "local-ollama/qwen2.5-coder:7b",
+          }),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const resolved = await Provider.getModel(
+          ProviderID.make("local-ollama"),
+          ModelID.make("qwen2.5-coder:7b"),
+        )
+        const sessionID = SessionID.make("session-raw-json-repair")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+
+        const user = {
+          id: MessageID.make("user-raw-json"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: ProviderID.make("local-ollama"), modelID: resolved.id },
+        } satisfies MessageV2.User
+
+        const read_file = tool({
+          description: "Read a file",
+          inputSchema: z.object({ path: z.string() }),
+          execute: async () => ({ output: "file contents" }),
+        })
+
+        const stream = await LLM.stream({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          abort: new AbortController().signal,
+          messages: [{ role: "user", content: "Read foo.txt" }],
+          tools: { read_file },
+        })
+
+        const parts: string[] = []
+        for await (const chunk of stream.fullStream) {
+          parts.push(chunk.type)
+        }
+
+        expect(parts).toContain("tool-call")
+        expect(parts).not.toContain("text")
+      },
+    })
+  })
+
   test("sends Google API payload for Gemini models", async () => {
     const server = state.server
     if (!server) {

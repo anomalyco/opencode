@@ -281,6 +281,43 @@ export namespace LLM {
               return args.params
             },
           },
+          ...(provider.source === "config"
+            ? [
+                {
+                  async wrapStream({ doStream }: { doStream: () => ReturnType<import("@ai-sdk/provider").LanguageModelV2["doStream"]> }) {
+                    const result = await doStream()
+                    let text = ""
+                    let hasToolCall = false
+                    const transformed = result.stream.pipeThrough(
+                      new TransformStream<import("@ai-sdk/provider").LanguageModelV2StreamPart, import("@ai-sdk/provider").LanguageModelV2StreamPart>({
+                        transform(chunk, ctrl) {
+                          if (chunk.type === "tool-call" || chunk.type === "tool-input-start") hasToolCall = true
+                          if (chunk.type === "text-delta") text += chunk.delta
+                          if (chunk.type === "finish" && chunk.finishReason === "stop" && !hasToolCall && text.trim()) {
+                            try {
+                              const parsed = JSON.parse(text.trim()) as { name?: string; arguments?: unknown }
+                              if (typeof parsed.name === "string" && parsed.name in tools) {
+                                l.info("repairing raw JSON tool call", { tool: parsed.name })
+                                ctrl.enqueue({
+                                  type: "tool-call",
+                                  toolCallId: `raw-${Date.now()}`,
+                                  toolName: parsed.name,
+                                  input: JSON.stringify(parsed.arguments ?? {}),
+                                })
+                                ctrl.enqueue({ ...chunk, finishReason: "tool-calls" })
+                                return
+                              }
+                            } catch {}
+                          }
+                          ctrl.enqueue(chunk)
+                        },
+                      }),
+                    )
+                    return { ...result, stream: transformed }
+                  },
+                },
+              ]
+            : []),
         ],
       }),
       experimental_telemetry: {
