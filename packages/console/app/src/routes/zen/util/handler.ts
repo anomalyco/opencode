@@ -461,12 +461,17 @@ export async function handler(
       ...modelProvider,
       ...zenData.providers[modelProvider.id],
       ...(() => {
-        const format = zenData.providers[modelProvider.id].format
+        const providerProps = zenData.providers[modelProvider.id]
+        const format = providerProps.format
         const providerModel = modelProvider.model
         if (format === "anthropic") return anthropicHelper({ reqModel, providerModel })
         if (format === "google") return googleHelper({ reqModel, providerModel })
         if (format === "openai") return openaiHelper({ reqModel, providerModel })
-        return oaCompatHelper({ reqModel, providerModel })
+        return oaCompatHelper({
+          reqModel,
+          providerModel,
+          adjustCacheUsage: providerProps.adjustCacheUsage,
+        })
       })(),
     }
   }
