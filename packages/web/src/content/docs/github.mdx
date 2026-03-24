@@ -97,6 +97,15 @@ Or you can set it up manually.
     issues: write
   ```
 
+  :::note
+  `token` and `GITHUB_TOKEN` here only authenticate GitHub operations such as
+  comments, commits, and pull requests. They do not configure a model provider.
+
+  The `opencode github install` flow does not currently offer
+  `github-copilot` in its provider list, so set up the GitHub agent with a
+  provider that has its own API credentials available to the runner.
+  :::
+
   You can also use a [personal access tokens](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)(PAT) if preferred.
 
 ---
