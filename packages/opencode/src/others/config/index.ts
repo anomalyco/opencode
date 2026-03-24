@@ -15,6 +15,8 @@ const log = Log.create({ service: "others-config" })
 export const UIElementConfig = z.object({
   // 终端切换按钮
   terminalToggle: z.boolean().default(true),
+  // 打开项目按钮
+  openProjectButton: z.boolean().default(true),
 })
 
 export type UIElementConfig = z.infer<typeof UIElementConfig>
@@ -22,6 +24,7 @@ export type UIElementConfig = z.infer<typeof UIElementConfig>
 // 默认 UI 配置
 const defaultUIConfig: UIElementConfig = {
   terminalToggle: true,
+  openProjectButton: true,
 }
 
 // Others 配置 Schema
@@ -57,10 +60,7 @@ export namespace OthersConfigService {
    * 读取 others.json 配置
    */
   export async function get(): Promise<OthersConfig> {
-    if (cachedConfig) {
-      return cachedConfig
-    }
-
+    // 不使用缓存，每次都读取最新配置
     const filePath = configPath()
 
     try {

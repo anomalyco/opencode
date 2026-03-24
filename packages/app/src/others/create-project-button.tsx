@@ -1,7 +1,7 @@
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { DialogCreateProject } from "@/components/dialog-create-project"
+import { DialogProjectManager } from "./components/dialog-project-manager"
 import { useLayout } from "@/context/layout"
 import { useServer } from "@/context/server"
 
@@ -18,8 +18,8 @@ export function CreateProjectButton(props: CreateProjectButtonProps) {
   function handleClick() {
     dialog.show(
       () => (
-        <DialogCreateProject
-          onSuccess={(projectPath) => {
+        <DialogProjectManager
+          onSuccess={(projectPath: string) => {
             // 添加到项目列表
             layout.projects.open(projectPath)
             server.projects.touch(projectPath)
@@ -31,13 +31,13 @@ export function CreateProjectButton(props: CreateProjectButtonProps) {
   }
 
   return (
-    <Tooltip placement={props.placement || "right"} value="创建项目">
+    <Tooltip placement={props.placement || "right"} value="打开项目">
       <IconButton
         icon="folder-add-left"
         variant="ghost"
         size="large"
         onClick={handleClick}
-        aria-label="创建项目"
+        aria-label="打开项目"
       />
     </Tooltip>
   )

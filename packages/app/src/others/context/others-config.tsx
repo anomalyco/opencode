@@ -8,6 +8,7 @@ import type { ServerConnection } from "@/context/server"
  */
 export interface UIElementConfig {
   terminalToggle: boolean
+  openProjectButton: boolean
 }
 
 /**
@@ -29,6 +30,7 @@ export interface OthersConfigState {
 // 默认 UI 配置
 const defaultUIConfig: UIElementConfig = {
   terminalToggle: true,
+  openProjectButton: true,
 }
 
 // 默认配置

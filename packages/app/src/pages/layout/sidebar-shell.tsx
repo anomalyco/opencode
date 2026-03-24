@@ -1,4 +1,4 @@
-import { createEffect, createMemo, For, Show, type Accessor, type JSX } from "solid-js"
+import { createEffect, createMemo, For, type Accessor, type JSX } from "solid-js"
 import {
   DragDropProvider,
   DragDropSensors,
@@ -11,7 +11,7 @@ import { ConstrainDragXAxis } from "@/utils/solid-dnd"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { type LocalProject } from "@/context/layout"
-import { UserMenu, CreateProjectButton, FileManagerButton } from "@/others"
+import { UserMenu, CreateProjectButton, FileManagerButton, OpenProjectButton } from "@/others"
 
 export const SidebarContent = (props: {
   mobile?: boolean
@@ -67,25 +67,12 @@ export const SidebarContent = (props: {
               <SortableProvider ids={props.projects().map((p) => p.worktree)}>
                 <For each={props.projects()}>{(project) => props.renderProject(project)}</For>
               </SortableProvider>
-              <Tooltip
+              <OpenProjectButton
                 placement={placement()}
-                value={
-                  <div class="flex items-center gap-2">
-                    <span>{props.openProjectLabel}</span>
-                    <Show when={!props.mobile && !!props.openProjectKeybind()}>
-                      <span class="text-icon-base text-12-medium">{props.openProjectKeybind()}</span>
-                    </Show>
-                  </div>
-                }
-              >
-                <IconButton
-                  icon="plus"
-                  variant="ghost"
-                  size="large"
-                  onClick={props.onOpenProject}
-                  aria-label={typeof props.openProjectLabel === "string" ? props.openProjectLabel : undefined}
-                />
-              </Tooltip>
+                label={props.openProjectLabel}
+                keybind={!props.mobile ? props.openProjectKeybind() : undefined}
+                onClick={props.onOpenProject}
+              />
               <CreateProjectButton placement={placement()} />
             </div>
             <DragOverlay>{props.renderProjectOverlay()}</DragOverlay>

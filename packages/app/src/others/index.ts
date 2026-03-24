@@ -15,5 +15,7 @@ export { LoginPage } from "./pages/login"
 // 组件
 export { UserMenu } from "./components/user-menu"
 export { FileManagerButton } from "./components/file-manager-button"
+export { OpenProjectButton } from "./components/open-project-button"
 export { CreateProjectButton } from "./create-project-button"
 export { DialogCreateProject } from "@/components/dialog-create-project"
+export { DialogProjectManager } from "./components/dialog-project-manager"
