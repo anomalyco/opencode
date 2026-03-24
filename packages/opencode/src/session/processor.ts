@@ -8,7 +8,7 @@ import { Bus } from "@/bus"
 import { SessionRetry } from "./retry"
 import { SessionStatus } from "./status"
 import { Plugin } from "@/plugin"
-import type { Provider } from "@/provider/provider"
+import { Provider } from "@/provider/provider"
 import { LLM } from "./llm"
 import { Config } from "@/config/config"
 import { SessionCompaction } from "./compaction"
@@ -280,11 +280,34 @@ export namespace SessionProcessor {
                     sessionID: input.sessionID,
                     messageID: input.assistantMessage.parentID,
                   })
-                  if (
-                    !input.assistantMessage.summary &&
-                    (await SessionCompaction.isOverflow({ tokens: usage.tokens, model: input.model }))
-                  ) {
-                    needsCompaction = true
+                  if (!input.assistantMessage.summary) {
+                    const previousFinished = (await Session.messages({ sessionID: input.sessionID })).findLast(
+                      (msg) =>
+                        msg.info.role === "assistant" &&
+                        msg.info.id !== input.assistantMessage.id &&
+                        msg.info.finish &&
+                        msg.info.summary !== true,
+                    )?.info as MessageV2.Assistant | undefined
+                    const previousModel = previousFinished
+                      ? await Provider.getModel(previousFinished.providerID, previousFinished.modelID).catch(
+                          () => undefined,
+                        )
+                      : undefined
+                    if (
+                      (await SessionCompaction.isOverflow({ tokens: usage.tokens, model: input.model })) ||
+                      (await SessionCompaction.shouldAutoCompact({
+                        tokens: usage.tokens,
+                        model: input.model,
+                        previous: previousFinished
+                          ? {
+                              tokens: previousFinished.tokens,
+                              model: previousModel,
+                            }
+                          : undefined,
+                      }))
+                    ) {
+                      needsCompaction = true
+                    }
                   }
                   break
 

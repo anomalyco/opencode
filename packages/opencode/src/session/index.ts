@@ -513,6 +513,30 @@ export namespace Session {
     },
   )
 
+  export const setCompacting = fn(
+    z.object({
+      sessionID: SessionID.zod,
+      time: z.number().optional(),
+    }),
+    async (input) => {
+      return Database.use((db) => {
+        const row = db
+          .update(SessionTable)
+          .set({
+            time_compacting: input.time ?? null,
+            time_updated: Date.now(),
+          })
+          .where(eq(SessionTable.id, input.sessionID))
+          .returning()
+          .get()
+        if (!row) throw new NotFoundError({ message: `Session not found: ${input.sessionID}` })
+        const info = fromRow(row)
+        Database.effect(() => Bus.publish(Event.Updated, { info }))
+        return info
+      })
+    },
+  )
+
   export const diff = fn(SessionID.zod, async (sessionID) => {
     try {
       return await Storage.read<Snapshot.FileDiff[]>(["session_diff", sessionID])

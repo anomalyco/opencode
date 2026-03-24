@@ -544,18 +544,40 @@ export namespace SessionPrompt {
       }
 
       // context overflow, needs compaction
-      if (
-        lastFinished &&
-        lastFinished.summary !== true &&
-        (await SessionCompaction.isOverflow({ tokens: lastFinished.tokens, model }))
-      ) {
-        await SessionCompaction.create({
-          sessionID,
-          agent: lastUser.agent,
-          model: lastUser.model,
-          auto: true,
-        })
-        continue
+      if (lastFinished && lastFinished.summary !== true) {
+        const previousFinished = msgs.findLast(
+          (msg) =>
+            msg.info.role === "assistant" &&
+            msg.info.id < lastFinished.id &&
+            msg.info.finish &&
+            msg.info.summary !== true,
+        )?.info as MessageV2.Assistant | undefined
+        const previousModel = previousFinished
+          ? await Provider.getModel(previousFinished.providerID, previousFinished.modelID).catch(() => undefined)
+          : undefined
+        const shouldCompact =
+          (await SessionCompaction.isOverflow({ tokens: lastFinished.tokens, model })) ||
+          (await SessionCompaction.shouldAutoCompact({
+            tokens: lastFinished.tokens,
+            model,
+            previous: previousFinished
+              ? {
+                  tokens: previousFinished.tokens,
+                  model: previousModel,
+                }
+              : undefined,
+          }))
+        if (
+          shouldCompact &&
+          (await SessionCompaction.create({
+            sessionID,
+            agent: lastUser.agent,
+            model: lastUser.model,
+            auto: true,
+          }))
+        ) {
+          continue
+        }
       }
 
       // normal processing

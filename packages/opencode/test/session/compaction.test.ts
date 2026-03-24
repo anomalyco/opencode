@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, spyOn, test } from "bun:test"
 import path from "path"
 import { SessionCompaction } from "../../src/session/compaction"
 import { Token } from "../../src/util/token"
@@ -6,7 +6,12 @@ import { Instance } from "../../src/project/instance"
 import { Log } from "../../src/util/log"
 import { tmpdir } from "../fixture/fixture"
 import { Session } from "../../src/session"
-import type { Provider } from "../../src/provider/provider"
+import { Provider } from "../../src/provider/provider"
+import { ModelID, ProviderID } from "../../src/provider/schema"
+import { SessionProcessor } from "../../src/session/processor"
+import { SessionSummary } from "../../src/session/summary"
+import { LLM } from "../../src/session/llm"
+import { MessageID } from "../../src/session/schema"
 
 Log.init({ print: false })
 
@@ -38,6 +43,17 @@ function createModel(opts: {
     api: { npm: opts.npm ?? "@ai-sdk/anthropic" },
     options: {},
   } as Provider.Model
+}
+
+function createAgent() {
+  return {
+    name: "build",
+    mode: "primary" as const,
+    description: "test agent",
+    prompt: "",
+    permission: [],
+    options: {},
+  }
 }
 
 describe("session.compaction.isOverflow", () => {
@@ -222,6 +238,317 @@ describe("session.compaction.isOverflow", () => {
         const model = createModel({ context: 100_000, output: 32_000 })
         const tokens = { input: 75_000, output: 5_000, reasoning: 0, cache: { read: 0, write: 0 } }
         expect(await SessionCompaction.isOverflow({ tokens, model })).toBe(false)
+      },
+    })
+  })
+})
+
+describe("session.compaction.shouldAutoCompact", () => {
+  test("returns true when usage crosses the 80 percent threshold", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const model = createModel({ context: 100_000, output: 8_000 })
+        expect(
+          await SessionCompaction.shouldAutoCompact({
+            tokens: { input: 70_000, output: 10_000, reasoning: 0, cache: { read: 0, write: 0 } },
+            model,
+            previous: {
+              tokens: { input: 60_000, output: 10_000, reasoning: 0, cache: { read: 0, write: 0 } },
+              model,
+            },
+          }),
+        ).toBe(true)
+      },
+    })
+  })
+
+  test("returns false when usage stays above the threshold", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const model = createModel({ context: 100_000, output: 8_000 })
+        expect(
+          await SessionCompaction.shouldAutoCompact({
+            tokens: { input: 72_000, output: 10_000, reasoning: 0, cache: { read: 0, write: 0 } },
+            model,
+            previous: {
+              tokens: { input: 71_000, output: 10_000, reasoning: 0, cache: { read: 0, write: 0 } },
+              model,
+            },
+          }),
+        ).toBe(false)
+      },
+    })
+  })
+
+  test("returns false when model context limit is unavailable", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        expect(
+          await SessionCompaction.shouldAutoCompact({
+            tokens: { input: 72_000, output: 10_000, reasoning: 0, cache: { read: 0, write: 0 } },
+          }),
+        ).toBe(false)
+      },
+    })
+  })
+
+  test("respects configured threshold", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            compaction: { threshold: 0.1 },
+          }),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const model = createModel({ context: 100_000, output: 8_000 })
+        expect(
+          await SessionCompaction.shouldAutoCompact({
+            tokens: { input: 12_000, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            model,
+            previous: {
+              tokens: { input: 9_000, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+              model,
+            },
+          }),
+        ).toBe(true)
+      },
+    })
+  })
+})
+
+describe("session.compaction.create", () => {
+  test("does not queue duplicate compactions while one is already active", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const input = {
+          sessionID: session.id,
+          agent: "default",
+          model: {
+            providerID: ProviderID.make("openai"),
+            modelID: ModelID.make("gpt-4"),
+          },
+          auto: true,
+        }
+
+        expect(await SessionCompaction.create(input)).toBe(true)
+        expect(await SessionCompaction.create(input)).toBe(false)
+
+        const updated = await Session.get(session.id)
+        expect(updated.time.compacting).toBeDefined()
+
+        const messages = await Session.messages({ sessionID: session.id })
+        const compactions = messages.flatMap((msg) => msg.parts.filter((part) => part.type === "compaction"))
+        expect(compactions).toHaveLength(1)
+      },
+    })
+  })
+})
+
+describe("session.processor auto-compaction", () => {
+  test("returns compact immediately after a turn crosses the threshold", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      config: {
+        compaction: {
+          threshold: 0.05,
+          auto: true,
+        },
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const model = createModel({ context: 100_000, output: 1_000 })
+        const session = await Session.create({})
+        const user = (await Session.updateMessage({
+          id: MessageID.ascending(),
+          role: "user",
+          sessionID: session.id,
+          agent: "build",
+          model: { providerID: ProviderID.make("test"), modelID: ModelID.make("test-model") },
+          time: { created: Date.now() },
+        })) as Extract<Awaited<ReturnType<typeof Session.updateMessage>>, { role: "user" }>
+        const assistant = (await Session.updateMessage({
+          id: MessageID.ascending(),
+          role: "assistant",
+          parentID: user.id,
+          agent: "build",
+          mode: "build",
+          modelID: ModelID.make("test-model"),
+          providerID: ProviderID.make("test"),
+          sessionID: session.id,
+          time: { created: Date.now() },
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          cost: 0,
+          path: {
+            cwd: tmp.path,
+            root: tmp.path,
+          },
+        })) as Extract<Awaited<ReturnType<typeof Session.updateMessage>>, { role: "assistant" }>
+
+        const summarySpy = spyOn(SessionSummary, "summarize")
+        summarySpy.mockImplementation((async () => {}) as any)
+        const modelSpy = spyOn(Provider, "getModel")
+        modelSpy.mockResolvedValue(model as any)
+        spyOn(LLM, "stream").mockResolvedValue({
+          fullStream: (async function* () {
+            yield { type: "start" }
+            yield {
+              type: "finish-step",
+              finishReason: "stop",
+              usage: { inputTokens: 4_500, outputTokens: 1_500, totalTokens: 6_000 },
+              providerMetadata: undefined,
+            }
+            yield { type: "finish" }
+          })(),
+        } as unknown as Awaited<ReturnType<typeof LLM.stream>>)
+
+        const processor = SessionProcessor.create({
+          assistantMessage: assistant,
+          sessionID: session.id,
+          model,
+          abort: new AbortController().signal,
+        })
+
+        const result = await processor.process({
+          user: user,
+          sessionID: session.id,
+          agent: createAgent(),
+          model,
+          abort: new AbortController().signal,
+          system: [],
+          messages: [],
+          tools: {},
+        })
+
+        expect(result).toBe("compact")
+        modelSpy.mockRestore()
+        summarySpy.mockRestore()
+      },
+    })
+  })
+
+  test("does not re-trigger when the previous turn was already above threshold", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      config: {
+        compaction: {
+          threshold: 0.05,
+          auto: true,
+        },
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const model = createModel({ context: 100_000, output: 1_000 })
+        const session = await Session.create({})
+        const user1 = (await Session.updateMessage({
+          id: MessageID.ascending(),
+          role: "user",
+          sessionID: session.id,
+          agent: "build",
+          model: { providerID: ProviderID.make("test"), modelID: ModelID.make("test-model") },
+          time: { created: Date.now() - 10_000 },
+        })) as Extract<Awaited<ReturnType<typeof Session.updateMessage>>, { role: "user" }>
+        await Session.updateMessage({
+          id: MessageID.ascending(),
+          role: "assistant",
+          parentID: user1.id,
+          agent: "build",
+          mode: "build",
+          modelID: ModelID.make("test-model"),
+          providerID: ProviderID.make("test"),
+          sessionID: session.id,
+          time: { created: Date.now() - 9_000, completed: Date.now() - 9_000 },
+          tokens: { total: 7_000, input: 5_000, output: 2_000, reasoning: 0, cache: { read: 0, write: 0 } },
+          cost: 0,
+          finish: "stop",
+          path: {
+            cwd: tmp.path,
+            root: tmp.path,
+          },
+        })
+
+        const user2 = (await Session.updateMessage({
+          id: MessageID.ascending(),
+          role: "user",
+          sessionID: session.id,
+          agent: "build",
+          model: { providerID: ProviderID.make("test"), modelID: ModelID.make("test-model") },
+          time: { created: Date.now() },
+        })) as Extract<Awaited<ReturnType<typeof Session.updateMessage>>, { role: "user" }>
+        const assistant = (await Session.updateMessage({
+          id: MessageID.ascending(),
+          role: "assistant",
+          parentID: user2.id,
+          agent: "build",
+          mode: "build",
+          modelID: ModelID.make("test-model"),
+          providerID: ProviderID.make("test"),
+          sessionID: session.id,
+          time: { created: Date.now() },
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          cost: 0,
+          path: {
+            cwd: tmp.path,
+            root: tmp.path,
+          },
+        })) as Extract<Awaited<ReturnType<typeof Session.updateMessage>>, { role: "assistant" }>
+
+        const summarySpy = spyOn(SessionSummary, "summarize")
+        summarySpy.mockImplementation((async () => {}) as any)
+        const modelSpy = spyOn(Provider, "getModel")
+        modelSpy.mockResolvedValue(model as any)
+        spyOn(LLM, "stream").mockResolvedValue({
+          fullStream: (async function* () {
+            yield { type: "start" }
+            yield {
+              type: "finish-step",
+              finishReason: "stop",
+              usage: { inputTokens: 4_800, outputTokens: 2_200, totalTokens: 7_000 },
+              providerMetadata: undefined,
+            }
+            yield { type: "finish" }
+          })(),
+        } as unknown as Awaited<ReturnType<typeof LLM.stream>>)
+
+        const processor = SessionProcessor.create({
+          assistantMessage: assistant,
+          sessionID: session.id,
+          model,
+          abort: new AbortController().signal,
+        })
+
+        const result = await processor.process({
+          user: user2,
+          sessionID: session.id,
+          agent: createAgent(),
+          model,
+          abort: new AbortController().signal,
+          system: [],
+          messages: [],
+          tools: {},
+        })
+
+        expect(result).toBe("continue")
+        modelSpy.mockRestore()
+        summarySpy.mockRestore()
       },
     })
   })

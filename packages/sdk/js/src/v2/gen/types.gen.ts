@@ -1473,6 +1473,10 @@ export type Config = {
      */
     auto?: boolean
     /**
+     * Usage ratio for proactive auto-compaction before overflow (default: 0.8). Example: 0.1 triggers at 10% of context.
+     */
+    threshold?: number
+    /**
      * Enable pruning of old tool outputs (default: true)
      */
     prune?: boolean

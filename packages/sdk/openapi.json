@@ -10777,6 +10777,12 @@
                 "description": "Enable automatic compaction when context is full (default: true)",
                 "type": "boolean"
               },
+              "threshold": {
+                "description": "Usage ratio for proactive auto-compaction before overflow (default: 0.8). Example: 0.1 triggers at 10% of context.",
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
               "prune": {
                 "description": "Enable pruning of old tool outputs (default: true)",
                 "type": "boolean"

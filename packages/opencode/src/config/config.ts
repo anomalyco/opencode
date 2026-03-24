@@ -1197,6 +1197,14 @@ export namespace Config {
       compaction: z
         .object({
           auto: z.boolean().optional().describe("Enable automatic compaction when context is full (default: true)"),
+          threshold: z
+            .number()
+            .min(0)
+            .max(1)
+            .optional()
+            .describe(
+              "Usage ratio for proactive auto-compaction before overflow (default: 0.8). Example: 0.1 triggers at 10% of context.",
+            ),
           prune: z.boolean().optional().describe("Enable pruning of old tool outputs (default: true)"),
           reserved: z
             .number()

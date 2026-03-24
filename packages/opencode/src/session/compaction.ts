@@ -18,6 +18,7 @@ import { ModelID, ProviderID } from "@/provider/schema"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
+  const DEFAULT_AUTO_COMPACTION_THRESHOLD = 0.8
 
   export const Event = {
     Compacted: BusEvent.define(
@@ -29,6 +30,36 @@ export namespace SessionCompaction {
   }
 
   const COMPACTION_BUFFER = 20_000
+
+  function tokenTotal(tokens: MessageV2.Assistant["tokens"]) {
+    return tokens.total || tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write
+  }
+
+  function contextUsage(tokens: MessageV2.Assistant["tokens"], model?: Provider.Model) {
+    const limit = model?.limit.context
+    if (!limit) return
+    return tokenTotal(tokens) / limit
+  }
+
+  export async function shouldAutoCompact(input: {
+    tokens: MessageV2.Assistant["tokens"]
+    model?: Provider.Model
+    previous?: {
+      tokens: MessageV2.Assistant["tokens"]
+      model?: Provider.Model
+    }
+  }) {
+    const config = await Config.get()
+    if (config.compaction?.auto === false) return false
+    const threshold = config.compaction?.threshold ?? DEFAULT_AUTO_COMPACTION_THRESHOLD
+
+    const current = contextUsage(input.tokens, input.model)
+    if (current === undefined) return false
+    if (current < threshold) return false
+
+    const previous = input.previous ? contextUsage(input.previous.tokens, input.previous.model) : undefined
+    return previous === undefined || previous < threshold
+  }
 
   export async function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: Provider.Model }) {
     const config = await Config.get()
@@ -107,71 +138,72 @@ export namespace SessionCompaction {
     auto: boolean
     overflow?: boolean
   }) {
-    const userMessage = input.messages.findLast((m) => m.info.id === input.parentID)!.info as MessageV2.User
+    try {
+      const userMessage = input.messages.findLast((m) => m.info.id === input.parentID)!.info as MessageV2.User
 
-    let messages = input.messages
-    let replay: MessageV2.WithParts | undefined
-    if (input.overflow) {
-      const idx = input.messages.findIndex((m) => m.info.id === input.parentID)
-      for (let i = idx - 1; i >= 0; i--) {
-        const msg = input.messages[i]
-        if (msg.info.role === "user" && !msg.parts.some((p) => p.type === "compaction")) {
-          replay = msg
-          messages = input.messages.slice(0, i)
-          break
+      let messages = input.messages
+      let replay: MessageV2.WithParts | undefined
+      if (input.overflow) {
+        const idx = input.messages.findIndex((m) => m.info.id === input.parentID)
+        for (let i = idx - 1; i >= 0; i--) {
+          const msg = input.messages[i]
+          if (msg.info.role === "user" && !msg.parts.some((p) => p.type === "compaction")) {
+            replay = msg
+            messages = input.messages.slice(0, i)
+            break
+          }
+        }
+        const hasContent =
+          replay && messages.some((m) => m.info.role === "user" && !m.parts.some((p) => p.type === "compaction"))
+        if (!hasContent) {
+          replay = undefined
+          messages = input.messages
         }
       }
-      const hasContent =
-        replay && messages.some((m) => m.info.role === "user" && !m.parts.some((p) => p.type === "compaction"))
-      if (!hasContent) {
-        replay = undefined
-        messages = input.messages
-      }
-    }
 
-    const agent = await Agent.get("compaction")
-    const model = agent.model
-      ? await Provider.getModel(agent.model.providerID, agent.model.modelID)
-      : await Provider.getModel(userMessage.model.providerID, userMessage.model.modelID)
-    const msg = (await Session.updateMessage({
-      id: MessageID.ascending(),
-      role: "assistant",
-      parentID: input.parentID,
-      sessionID: input.sessionID,
-      mode: "compaction",
-      agent: "compaction",
-      variant: userMessage.variant,
-      summary: true,
-      path: {
-        cwd: Instance.directory,
-        root: Instance.worktree,
-      },
-      cost: 0,
-      tokens: {
-        output: 0,
-        input: 0,
-        reasoning: 0,
-        cache: { read: 0, write: 0 },
-      },
-      modelID: model.id,
-      providerID: model.providerID,
-      time: {
-        created: Date.now(),
-      },
-    })) as MessageV2.Assistant
-    const processor = SessionProcessor.create({
-      assistantMessage: msg,
-      sessionID: input.sessionID,
-      model,
-      abort: input.abort,
-    })
-    // Allow plugins to inject context or replace compaction prompt
-    const compacting = await Plugin.trigger(
-      "experimental.session.compacting",
-      { sessionID: input.sessionID },
-      { context: [], prompt: undefined },
-    )
-    const defaultPrompt = `Provide a detailed prompt for continuing our conversation above.
+      const agent = await Agent.get("compaction")
+      const model = agent.model
+        ? await Provider.getModel(agent.model.providerID, agent.model.modelID)
+        : await Provider.getModel(userMessage.model.providerID, userMessage.model.modelID)
+      const msg = (await Session.updateMessage({
+        id: MessageID.ascending(),
+        role: "assistant",
+        parentID: input.parentID,
+        sessionID: input.sessionID,
+        mode: "compaction",
+        agent: "compaction",
+        variant: userMessage.variant,
+        summary: true,
+        path: {
+          cwd: Instance.directory,
+          root: Instance.worktree,
+        },
+        cost: 0,
+        tokens: {
+          output: 0,
+          input: 0,
+          reasoning: 0,
+          cache: { read: 0, write: 0 },
+        },
+        modelID: model.id,
+        providerID: model.providerID,
+        time: {
+          created: Date.now(),
+        },
+      })) as MessageV2.Assistant
+      const processor = SessionProcessor.create({
+        assistantMessage: msg,
+        sessionID: input.sessionID,
+        model,
+        abort: input.abort,
+      })
+      // Allow plugins to inject context or replace compaction prompt
+      const compacting = await Plugin.trigger(
+        "experimental.session.compacting",
+        { sessionID: input.sessionID },
+        { context: [], prompt: undefined },
+      )
+      const defaultPrompt = `Provide a detailed prompt for continuing our conversation above.
 Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next.
 The summary that you construct will be used so that another agent can read it and continue the work.
 
@@ -199,101 +231,104 @@ When constructing the summary, try to stick to this template:
 [Construct a structured list of relevant files that have been read, edited, or created that pertain to the task at hand. If all the files in a directory are relevant, include the path to the directory.]
 ---`
 
-    const promptText = compacting.prompt ?? [defaultPrompt, ...compacting.context].join("\n\n")
-    const msgs = structuredClone(messages)
-    await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
-    const result = await processor.process({
-      user: userMessage,
-      agent,
-      abort: input.abort,
-      sessionID: input.sessionID,
-      tools: {},
-      system: [],
-      messages: [
-        ...MessageV2.toModelMessages(msgs, model, { stripMedia: true }),
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: promptText,
-            },
-          ],
-        },
-      ],
-      model,
-    })
+      const promptText = compacting.prompt ?? [defaultPrompt, ...compacting.context].join("\n\n")
+      const msgs = structuredClone(messages)
+      await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
+      const result = await processor.process({
+        user: userMessage,
+        agent,
+        abort: input.abort,
+        sessionID: input.sessionID,
+        tools: {},
+        system: [],
+        messages: [
+          ...MessageV2.toModelMessages(msgs, model, { stripMedia: true }),
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: promptText,
+              },
+            ],
+          },
+        ],
+        model,
+      })
 
-    if (result === "compact") {
-      processor.message.error = new MessageV2.ContextOverflowError({
-        message: replay
-          ? "Conversation history too large to compact - exceeds model context limit"
-          : "Session too large to compact - context exceeds model limit even after stripping media",
-      }).toObject()
-      processor.message.finish = "error"
-      await Session.updateMessage(processor.message)
-      return "stop"
-    }
+      if (result === "compact") {
+        processor.message.error = new MessageV2.ContextOverflowError({
+          message: replay
+            ? "Conversation history too large to compact - exceeds model context limit"
+            : "Session too large to compact - context exceeds model limit even after stripping media",
+        }).toObject()
+        processor.message.finish = "error"
+        await Session.updateMessage(processor.message)
+        return "stop"
+      }
 
-    if (result === "continue" && input.auto) {
-      if (replay) {
-        const original = replay.info as MessageV2.User
-        const replayMsg = await Session.updateMessage({
-          id: MessageID.ascending(),
-          role: "user",
-          sessionID: input.sessionID,
-          time: { created: Date.now() },
-          agent: original.agent,
-          model: original.model,
-          format: original.format,
-          tools: original.tools,
-          system: original.system,
-          variant: original.variant,
-        })
-        for (const part of replay.parts) {
-          if (part.type === "compaction") continue
-          const replayPart =
-            part.type === "file" && MessageV2.isMedia(part.mime)
-              ? { type: "text" as const, text: `[Attached ${part.mime}: ${part.filename ?? "file"}]` }
-              : part
-          await Session.updatePart({
-            ...replayPart,
-            id: PartID.ascending(),
-            messageID: replayMsg.id,
+      if (result === "continue" && input.auto) {
+        if (replay) {
+          const original = replay.info as MessageV2.User
+          const replayMsg = await Session.updateMessage({
+            id: MessageID.ascending(),
+            role: "user",
             sessionID: input.sessionID,
+            time: { created: Date.now() },
+            agent: original.agent,
+            model: original.model,
+            format: original.format,
+            tools: original.tools,
+            system: original.system,
+            variant: original.variant,
+          })
+          for (const part of replay.parts) {
+            if (part.type === "compaction") continue
+            const replayPart =
+              part.type === "file" && MessageV2.isMedia(part.mime)
+                ? { type: "text" as const, text: `[Attached ${part.mime}: ${part.filename ?? "file"}]` }
+                : part
+            await Session.updatePart({
+              ...replayPart,
+              id: PartID.ascending(),
+              messageID: replayMsg.id,
+              sessionID: input.sessionID,
+            })
+          }
+        } else {
+          const continueMsg = await Session.updateMessage({
+            id: MessageID.ascending(),
+            role: "user",
+            sessionID: input.sessionID,
+            time: { created: Date.now() },
+            agent: userMessage.agent,
+            model: userMessage.model,
+          })
+          const text =
+            (input.overflow
+              ? "The previous request exceeded the provider's size limit due to large media attachments. The conversation was compacted and media files were removed from context. If the user was asking about attached images or files, explain that the attachments were too large to process and suggest they try again with smaller or fewer files.\n\n"
+              : "") +
+            "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed."
+          await Session.updatePart({
+            id: PartID.ascending(),
+            messageID: continueMsg.id,
+            sessionID: input.sessionID,
+            type: "text",
+            synthetic: true,
+            text,
+            time: {
+              start: Date.now(),
+              end: Date.now(),
+            },
           })
         }
-      } else {
-        const continueMsg = await Session.updateMessage({
-          id: MessageID.ascending(),
-          role: "user",
-          sessionID: input.sessionID,
-          time: { created: Date.now() },
-          agent: userMessage.agent,
-          model: userMessage.model,
-        })
-        const text =
-          (input.overflow
-            ? "The previous request exceeded the provider's size limit due to large media attachments. The conversation was compacted and media files were removed from context. If the user was asking about attached images or files, explain that the attachments were too large to process and suggest they try again with smaller or fewer files.\n\n"
-            : "") +
-          "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed."
-        await Session.updatePart({
-          id: PartID.ascending(),
-          messageID: continueMsg.id,
-          sessionID: input.sessionID,
-          type: "text",
-          synthetic: true,
-          text,
-          time: {
-            start: Date.now(),
-            end: Date.now(),
-          },
-        })
       }
+      if (processor.message.error) return "stop"
+      Bus.publish(Event.Compacted, { sessionID: input.sessionID })
+      return "continue"
+    } finally {
+      await Session.setCompacting({ sessionID: input.sessionID, time: undefined }).catch(() => {})
     }
-    if (processor.message.error) return "stop"
-    Bus.publish(Event.Compacted, { sessionID: input.sessionID })
-    return "continue"
   }
 
   export const create = fn(
@@ -308,24 +343,35 @@ When constructing the summary, try to stick to this template:
       overflow: z.boolean().optional(),
     }),
     async (input) => {
-      const msg = await Session.updateMessage({
-        id: MessageID.ascending(),
-        role: "user",
-        model: input.model,
-        sessionID: input.sessionID,
-        agent: input.agent,
-        time: {
-          created: Date.now(),
-        },
-      })
-      await Session.updatePart({
-        id: PartID.ascending(),
-        messageID: msg.id,
-        sessionID: msg.sessionID,
-        type: "compaction",
-        auto: input.auto,
-        overflow: input.overflow,
-      })
+      const session = await Session.get(input.sessionID)
+      if (session.time.compacting) return false
+
+      await Session.setCompacting({ sessionID: input.sessionID, time: Date.now() })
+
+      try {
+        const msg = await Session.updateMessage({
+          id: MessageID.ascending(),
+          role: "user",
+          model: input.model,
+          sessionID: input.sessionID,
+          agent: input.agent,
+          time: {
+            created: Date.now(),
+          },
+        })
+        await Session.updatePart({
+          id: PartID.ascending(),
+          messageID: msg.id,
+          sessionID: msg.sessionID,
+          type: "compaction",
+          auto: input.auto,
+          overflow: input.overflow,
+        })
+        return true
+      } catch (error) {
+        await Session.setCompacting({ sessionID: input.sessionID, time: undefined }).catch(() => {})
+        throw error
+      }
     },
   )
 }
