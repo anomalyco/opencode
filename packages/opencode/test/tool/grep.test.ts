@@ -1,4 +1,5 @@
 import { describe, expect } from "bun:test"
+import fs from "fs/promises"
 import path from "path"
 import { Effect, Layer } from "effect"
 import { GrepTool } from "../../src/tool/grep"
@@ -18,6 +19,11 @@ const it = testEffect(
     Agent.defaultLayer,
   ),
 )
+
+async function write(file: string, body: string) {
+  await fs.mkdir(path.dirname(file), { recursive: true })
+  await fs.writeFile(file, body)
+}
 
 const ctx = {
   sessionID: SessionID.make("ses_test"),
@@ -55,7 +61,7 @@ describe("tool.grep", () => {
   it.live("no matches returns correct output", () =>
     provideTmpdirInstance((dir) =>
       Effect.gen(function* () {
-        yield* Effect.promise(() => Bun.write(path.join(dir, "test.txt"), "hello world"))
+        yield* Effect.promise(() => write(path.join(dir, "test.txt"), "hello world"))
         const info = yield* GrepTool
         const grep = yield* info.init()
         const result = yield* grep.execute(
@@ -74,7 +80,7 @@ describe("tool.grep", () => {
   it.live("finds matches in tmp instance", () =>
     provideTmpdirInstance((dir) =>
       Effect.gen(function* () {
-        yield* Effect.promise(() => Bun.write(path.join(dir, "test.txt"), "line1\nline2\nline3"))
+        yield* Effect.promise(() => write(path.join(dir, "test.txt"), "line1\nline2\nline3"))
         const info = yield* GrepTool
         const grep = yield* info.init()
         const result = yield* grep.execute(
@@ -92,7 +98,7 @@ describe("tool.grep", () => {
   it.live("broadens multi-word query when exact has no match", () =>
     provideTmpdirInstance((dir) =>
       Effect.gen(function* () {
-        yield* Effect.promise(() => Bun.write(path.join(dir, "test.txt"), "upload completed\n"))
+        yield* Effect.promise(() => write(path.join(dir, "test.txt"), "upload completed\n"))
         const info = yield* GrepTool
         const grep = yield* info.init()
         const result = yield* grep.execute(
@@ -112,7 +118,7 @@ describe("tool.grep", () => {
     provideTmpdirInstance((dir) =>
       Effect.gen(function* () {
         yield* Effect.promise(() =>
-          Bun.write(path.join(dir, "src", "server", "auth.ts"), "export const token = 1\n"),
+          write(path.join(dir, "src", "server", "auth.ts"), "export const token = 1\n"),
         )
         const info = yield* GrepTool
         const grep = yield* info.init()

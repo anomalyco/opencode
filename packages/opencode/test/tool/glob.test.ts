@@ -1,4 +1,5 @@
 import { describe, expect } from "bun:test"
+import fs from "fs/promises"
 import path from "path"
 import { Cause, Effect, Exit, Layer } from "effect"
 import { GlobTool } from "../../src/tool/glob"
@@ -19,6 +20,11 @@ const it = testEffect(
   ),
 )
 
+async function write(file: string, body: string) {
+  await fs.mkdir(path.dirname(file), { recursive: true })
+  await fs.writeFile(file, body)
+}
+
 const ctx = {
   sessionID: SessionID.make("ses_test"),
   messageID: MessageID.make(""),
@@ -34,8 +40,8 @@ describe("tool.glob", () => {
   it.live("matches files from a directory path", () =>
     provideTmpdirInstance((dir) =>
       Effect.gen(function* () {
-        yield* Effect.promise(() => Bun.write(path.join(dir, "a.ts"), "export const a = 1\n"))
-        yield* Effect.promise(() => Bun.write(path.join(dir, "b.txt"), "hello\n"))
+        yield* Effect.promise(() => write(path.join(dir, "a.ts"), "export const a = 1\n"))
+        yield* Effect.promise(() => write(path.join(dir, "b.txt"), "hello\n"))
         const info = yield* GlobTool
         const glob = yield* info.init()
         const result = yield* glob.execute(
@@ -56,7 +62,7 @@ describe("tool.glob", () => {
     provideTmpdirInstance((dir) =>
       Effect.gen(function* () {
         const file = path.join(dir, "a.ts")
-        yield* Effect.promise(() => Bun.write(file, "export const a = 1\n"))
+        yield* Effect.promise(() => write(file, "export const a = 1\n"))
         const info = yield* GlobTool
         const glob = yield* info.init()
         const exit = yield* glob
