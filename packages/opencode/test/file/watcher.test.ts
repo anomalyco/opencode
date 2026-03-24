@@ -177,13 +177,17 @@ describeWatcher("FileWatcher", () => {
     await withWatcher(tmp.path, Effect.void)
 
     // Now write a file — no watcher should be listening
-    await Effect.runPromise(
-      noUpdate(
-        tmp.path,
-        (e) => e.file === file,
-        Effect.promise(() => fs.writeFile(file, "gone")),
-      ),
-    )
+    await Instance.provide({
+      directory: tmp.path,
+      fn: () =>
+        Effect.runPromise(
+          noUpdate(
+            tmp.path,
+            (e) => e.file === file,
+            Effect.promise(() => fs.writeFile(file, "gone")),
+          ),
+        ),
+    })
   })
 
   test("ignores .git/index changes", async () => {
