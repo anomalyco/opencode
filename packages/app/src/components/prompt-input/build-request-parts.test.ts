@@ -49,6 +49,32 @@ describe("buildRequestParts", () => {
     expect(result.optimisticParts.every((part) => part.sessionID === "ses_1" && part.messageID === "msg_1")).toBe(true)
   })
 
+  test("keeps multiple uploaded attachments in order", () => {
+    const result = buildRequestParts({
+      prompt: [{ type: "text", content: "check these", start: 0, end: 11 }],
+      context: [],
+      images: [
+        { type: "image", id: "img_1", filename: "a.png", mime: "image/png", dataUrl: "data:image/png;base64,AAA" },
+        {
+          type: "image",
+          id: "img_2",
+          filename: "b.pdf",
+          mime: "application/pdf",
+          dataUrl: "data:application/pdf;base64,BBB",
+        },
+      ],
+      text: "check these",
+      messageID: "msg_multi",
+      sessionID: "ses_multi",
+      sessionDirectory: "/repo",
+    })
+
+    const files = result.requestParts.filter((part) => part.type === "file" && part.url.startsWith("data:"))
+
+    expect(files).toHaveLength(2)
+    expect(files.map((part) => (part.type === "file" ? part.filename : ""))).toEqual(["a.png", "b.pdf"])
+  })
+
   test("deduplicates context files when prompt already includes same path", () => {
     const prompt: Prompt = [{ type: "file", path: "src/foo.ts", content: "@src/foo.ts", start: 0, end: 11 }]
 
