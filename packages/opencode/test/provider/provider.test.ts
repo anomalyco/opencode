@@ -2,6 +2,7 @@ import { test, expect } from "bun:test"
 import path from "path"
 
 import { tmpdir } from "../fixture/fixture"
+import { Auth } from "../../src/auth"
 import { Instance } from "../../src/project/instance"
 import { Provider } from "../../src/provider/provider"
 import { ProviderID, ModelID } from "../../src/provider/schema"
@@ -1015,6 +1016,89 @@ test("multiple providers can be configured simultaneously", async () => {
       expect(providers[ProviderID.openai].options.timeout).toBe(60000)
     },
   })
+})
+
+test("openai env key takes precedence over oauth auth", async () => {
+  await Auth.remove("openai")
+  await Auth.set("openai", {
+    type: "oauth",
+    access: "test-access",
+    refresh: "test-refresh",
+    expires: Date.now() + 60_000,
+  })
+
+  try {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+          }),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      init: async () => {
+        Env.set("OPENAI_API_KEY", "test-openai-key")
+      },
+      fn: async () => {
+        const providers = await Provider.list()
+        const openai = providers[ProviderID.openai]
+        expect(openai).toBeDefined()
+        expect(openai.key).toBe("test-openai-key")
+        expect(openai.options.apiKey).toBeUndefined()
+        expect(openai.options.fetch).toBeUndefined()
+      },
+    })
+  } finally {
+    await Auth.remove("openai")
+  }
+})
+
+test("openai config apiKey takes precedence over oauth auth", async () => {
+  await Auth.remove("openai")
+  await Auth.set("openai", {
+    type: "oauth",
+    access: "test-access",
+    refresh: "test-refresh",
+    expires: Date.now() + 60_000,
+  })
+
+  try {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            provider: {
+              openai: {
+                options: {
+                  apiKey: "config-openai-key",
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const providers = await Provider.list()
+        const openai = providers[ProviderID.openai]
+        expect(openai).toBeDefined()
+        expect(openai.options.apiKey).toBe("config-openai-key")
+        expect(openai.options.fetch).toBeUndefined()
+      },
+    })
+  } finally {
+    await Auth.remove("openai")
+  }
 })
 
 test("provider with custom npm package", async () => {

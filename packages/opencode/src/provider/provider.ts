@@ -1074,9 +1074,12 @@ export namespace Provider {
 
       const auth = await Auth.get(providerID)
       if (!auth) continue
+      const cfgKey = config.provider?.[providerID]?.options?.apiKey
+      const hasKey = Boolean(providers[providerID]?.key || cfgKey)
       if (!plugin.auth.loader) continue
 
       if (auth) {
+        if (auth.type === "oauth" && hasKey) continue
         const options = await plugin.auth.loader(() => Auth.get(providerID) as any, database[plugin.auth.provider])
         const opts = options ?? {}
         const patch: Partial<Info> = providers[providerID] ? { options: opts } : { source: "custom", options: opts }
