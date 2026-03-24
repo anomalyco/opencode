@@ -224,7 +224,7 @@ export namespace Worktree {
         return yield* candidate(root, base || undefined)
       })
 
-      const createFromInfo = Effect.fn("Worktree.createFromInfo")(function* (info: Info, startCommand?: string) {
+      const setup = Effect.fnUntraced(function* (info: Info) {
         const created = yield* git(["worktree", "add", "--no-checkout", "-b", info.branch, info.directory], {
           cwd: Instance.worktree,
         })
@@ -233,7 +233,9 @@ export namespace Worktree {
         }
 
         yield* Effect.promise(() => Project.addSandbox(Instance.project.id, info.directory).catch(() => undefined))
+      })
 
+      const boot = Effect.fnUntraced(function* (info: Info, startCommand?: string) {
         const projectID = Instance.project.id
         const extra = startCommand?.trim()
 
@@ -278,9 +280,15 @@ export namespace Worktree {
         yield* runStartScripts(info.directory, { projectID, extra })
       })
 
+      const createFromInfo = Effect.fn("Worktree.createFromInfo")(function* (info: Info, startCommand?: string) {
+        yield* setup(info)
+        yield* boot(info, startCommand)
+      })
+
       const create = Effect.fn("Worktree.create")(function* (input?: CreateInput) {
         const info = yield* makeWorktreeInfo(input?.name)
-        yield* createFromInfo(info, input?.startCommand).pipe(
+        yield* setup(info)
+        yield* boot(info, input?.startCommand).pipe(
           Effect.catchCause((cause) => Effect.sync(() => log.error("worktree bootstrap failed", { cause }))),
           Effect.forkIn(scope),
         )

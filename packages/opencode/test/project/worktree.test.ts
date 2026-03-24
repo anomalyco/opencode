@@ -47,9 +47,7 @@ describe("Worktree", () => {
     test("throws NotGitError for non-git directories", async () => {
       await using tmp = await tmpdir()
 
-      await expect(
-        withInstance(tmp.path, () => Worktree.makeWorktreeInfo()),
-      ).rejects.toThrow("WorktreeNotGitError")
+      await expect(withInstance(tmp.path, () => Worktree.makeWorktreeInfo())).rejects.toThrow("WorktreeNotGitError")
     })
   })
 
@@ -70,7 +68,7 @@ describe("Worktree", () => {
       expect(ok).toBe(true)
     })
 
-    test("create returns info immediately and fires Event.Ready after bootstrap", async () => {
+    test("create returns after setup and fires Event.Ready after bootstrap", async () => {
       await using tmp = await tmpdir({ git: true })
       const { GlobalBus } = await import("../../src/bus/global")
 
@@ -92,9 +90,13 @@ describe("Worktree", () => {
 
       const info = await withInstance(tmp.path, () => Worktree.create())
 
-      // create returns immediately — info is available before bootstrap completes
+      // create returns before bootstrap completes, but the worktree already exists
       expect(info.name).toBeDefined()
       expect(info.branch).toStartWith("opencode/")
+
+      const text = await $`git worktree list --porcelain`.cwd(tmp.path).quiet().text()
+      const dir = info.directory.replace(/\\/g, "/")
+      expect(text.replace(/\\/g, "/")).toContain(dir)
 
       // Event.Ready fires after bootstrap finishes in the background
       const props = await ready
@@ -150,9 +152,9 @@ describe("Worktree", () => {
     test("throws NotGitError for non-git directories", async () => {
       await using tmp = await tmpdir()
 
-      await expect(
-        withInstance(tmp.path, () => Worktree.remove({ directory: "/tmp/fake" })),
-      ).rejects.toThrow("WorktreeNotGitError")
+      await expect(withInstance(tmp.path, () => Worktree.remove({ directory: "/tmp/fake" }))).rejects.toThrow(
+        "WorktreeNotGitError",
+      )
     })
   })
 })
