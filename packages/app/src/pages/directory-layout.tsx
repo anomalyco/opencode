@@ -3,10 +3,12 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { createEffect, createMemo, type ParentProps, Show } from "solid-js"
+import { useLayout } from "@/context/layout"
 import { useLanguage } from "@/context/language"
 import { LocalProvider } from "@/context/local"
 import { SDKProvider } from "@/context/sdk"
 import { SyncProvider, useSync } from "@/context/sync"
+import { syncProject } from "@/pages/directory-layout-sync"
 import { decode64 } from "@/utils/base64"
 
 function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
@@ -44,6 +46,7 @@ function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
 export default function Layout(props: ParentProps) {
   const params = useParams()
   const language = useLanguage()
+  const layout = useLayout()
   const navigate = useNavigate()
   let invalid = ""
 
@@ -67,6 +70,10 @@ export default function Layout(props: ParentProps) {
       description: language.t("directory.error.invalidUrl"),
     })
     navigate("/", { replace: true })
+  })
+
+  createEffect(() => {
+    syncProject(resolved(), layout.projects.open)
   })
 
   return (
