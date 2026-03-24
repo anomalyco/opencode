@@ -173,6 +173,6 @@ Still open and likely worth migrating:
 - [ ] `SessionPrompt`
 - [ ] `SessionCompaction`
 - [ ] `Provider`
-- [ ] `Project`
+- [x] `Project`
 - [ ] `LSP`
 - [ ] `MCP`
