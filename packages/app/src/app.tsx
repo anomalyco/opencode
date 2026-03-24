@@ -6,7 +6,7 @@ import { MarkedProvider } from "@opencode-ai/ui/context/marked"
 import { File } from "@opencode-ai/ui/file"
 import { Font } from "@opencode-ai/ui/font"
 import { Splash } from "@opencode-ai/ui/logo"
-import { ThemeProvider } from "@opencode-ai/ui/theme/context"
+import { ThemeProvider } from "@opencode-ai/ui/theme"
 import { MetaProvider } from "@solidjs/meta"
 import { type BaseRouterProps, Navigate, Route, Router } from "@solidjs/router"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
@@ -32,7 +32,7 @@ import { FileProvider } from "@/context/file"
 import { GlobalSDKProvider } from "@/context/global-sdk"
 import { GlobalSyncProvider } from "@/context/global-sync"
 import { HighlightsProvider } from "@/context/highlights"
-import { LanguageProvider, type Locale, useLanguage } from "@/context/language"
+import { LanguageProvider, useLanguage } from "@/context/language"
 import { LayoutProvider } from "@/context/layout"
 import { ModelsProvider } from "@/context/models"
 import { NotificationProvider } from "@/context/notification"
@@ -130,7 +130,7 @@ function RouterRoot(props: ParentProps<{ appChildren?: JSX.Element }>) {
   )
 }
 
-export function AppBaseProviders(props: ParentProps<{ locale?: Locale }>) {
+export function AppBaseProviders(props: ParentProps) {
   return (
     <MetaProvider>
       <Font />
@@ -139,7 +139,7 @@ export function AppBaseProviders(props: ParentProps<{ locale?: Locale }>) {
           void window.api?.setTitlebar?.({ mode })
         }}
       >
-        <LanguageProvider locale={props.locale}>
+        <LanguageProvider>
           <UiI18nBridge>
             <ErrorBoundary fallback={(error) => <ErrorPage error={error} />}>
               <QueryProvider>
