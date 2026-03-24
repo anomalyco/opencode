@@ -416,7 +416,10 @@ describe("cross-spawn spawner", () => {
     fx.effect(
       "returns empty stream for unconfigured fd",
       Effect.gen(function* () {
-        const handle = yield* js('process.stdout.write("test")')
+        const handle =
+          process.platform === "win32"
+            ? yield* js('process.stdout.write("test")')
+            : yield* ChildProcess.make("echo", ["test"])
         const out = yield* decodeByteStream(handle.getOutputFd(3))
         yield* handle.exitCode
         expect(out).toBe("")
