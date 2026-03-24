@@ -116,14 +116,7 @@ function scopeDir(pluginMeta: TuiConfig.PluginMeta) {
   return path.join(Global.Path.config, "themes")
 }
 
-function pluginRoot(spec: string, target: string) {
-  if (spec.startsWith("file://")) return path.dirname(fileURLToPath(spec))
-  if (target.startsWith("file://")) return path.dirname(fileURLToPath(target))
-  return target
-}
-
-function rootDir(root?: string) {
-  if (!root) return process.cwd()
+function resolveDir(root: string) {
   if (root.startsWith("file://")) {
     const file = fileURLToPath(root)
     if (root.endsWith("/")) return file
@@ -131,6 +124,16 @@ function rootDir(root?: string) {
   }
   if (path.isAbsolute(root)) return root
   return path.resolve(process.cwd(), root)
+}
+
+function externalPluginDir(spec: string, target: string) {
+  if (spec.startsWith("file://")) return resolveDir(spec)
+  return resolveDir(target)
+}
+
+function internalPluginDir(root?: string) {
+  if (!root) return process.cwd()
+  return resolveDir(root)
 }
 
 function resolveThemePath(root: string, file: string) {
@@ -202,7 +205,7 @@ async function prepPlugin(config: TuiConfig.Info, item: Config.PluginSpec, retry
   })
   if (!target) return
 
-  const root = pluginRoot(spec, target)
+  const root = externalPluginDir(spec, target)
   const pluginMeta = getPluginMeta(config, item)
   if (!pluginMeta) {
     log.warn("missing tui plugin metadata", {
@@ -262,7 +265,7 @@ function createMeta(
 function prepInternalPlugin(item: InternalTuiPlugin): Loaded {
   const spec = `internal:${item.name}`
   const target = item.root ?? spec
-  const root = rootDir(item.root)
+  const root = internalPluginDir(item.root)
 
   return {
     spec,
