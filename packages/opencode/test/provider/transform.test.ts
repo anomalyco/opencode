@@ -104,6 +104,72 @@ describe("ProviderTransform.options - setCacheKey", () => {
   })
 })
 
+describe("ProviderTransform.options - google thinkingConfig gating", () => {
+  const sessionID = "test-session-123"
+
+  const createGoogleModel = (reasoning: boolean, npm: "@ai-sdk/google" | "@ai-sdk/google-vertex") =>
+    ({
+      id: `${npm === "@ai-sdk/google" ? "google" : "google-vertex"}/gemini-2.0-flash`,
+      providerID: npm === "@ai-sdk/google" ? "google" : "google-vertex",
+      api: {
+        id: "gemini-2.0-flash",
+        url: npm === "@ai-sdk/google" ? "https://generativelanguage.googleapis.com" : "https://vertexai.googleapis.com",
+        npm,
+      },
+      name: "Gemini 2.0 Flash",
+      capabilities: {
+        temperature: true,
+        reasoning,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: true },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: {
+        input: 0.001,
+        output: 0.002,
+        cache: { read: 0.0001, write: 0.0002 },
+      },
+      limit: {
+        context: 1_000_000,
+        output: 8192,
+      },
+      status: "active",
+      options: {},
+      headers: {},
+    }) as any
+
+  test("does not set thinkingConfig for google models without reasoning capability", () => {
+    const result = ProviderTransform.options({
+      model: createGoogleModel(false, "@ai-sdk/google"),
+      sessionID,
+      providerOptions: {},
+    })
+    expect(result.thinkingConfig).toBeUndefined()
+  })
+
+  test("sets thinkingConfig for google models with reasoning capability", () => {
+    const result = ProviderTransform.options({
+      model: createGoogleModel(true, "@ai-sdk/google"),
+      sessionID,
+      providerOptions: {},
+    })
+    expect(result.thinkingConfig).toEqual({
+      includeThoughts: true,
+    })
+  })
+
+  test("does not set thinkingConfig for vertex models without reasoning capability", () => {
+    const result = ProviderTransform.options({
+      model: createGoogleModel(false, "@ai-sdk/google-vertex"),
+      sessionID,
+      providerOptions: {},
+    })
+    expect(result.thinkingConfig).toBeUndefined()
+  })
+})
+
 describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
   const sessionID = "test-session-123"
 
@@ -1560,6 +1626,43 @@ describe("ProviderTransform.message - claude w/bedrock custom inference profile"
         },
       }),
     )
+  })
+})
+
+describe("ProviderTransform.message - bedrock caching with non-bedrock providerID", () => {
+  test("applies cache options at message level when npm package is amazon-bedrock", () => {
+    const model = {
+      id: "aws/us.anthropic.claude-opus-4-6-v1",
+      providerID: "aws",
+      api: {
+        id: "us.anthropic.claude-opus-4-6-v1",
+        url: "https://bedrock-runtime.us-east-1.amazonaws.com",
+        npm: "@ai-sdk/amazon-bedrock",
+      },
+      name: "Claude Opus 4.6",
+      capabilities: {},
+      options: {},
+      headers: {},
+    } as any
+
+    const msgs = [
+      {
+        role: "system",
+        content: [{ type: "text", text: "You are a helpful assistant" }],
+      },
+      {
+        role: "user",
+        content: [{ type: "text", text: "Hello" }],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {}) as any[]
+
+    // Cache should be at the message level and not the content-part level
+    expect(result[0].providerOptions?.bedrock).toEqual({
+      cachePoint: { type: "default" },
+    })
+    expect(result[0].content[0].providerOptions?.bedrock).toBeUndefined()
   })
 })
 
