@@ -54,23 +54,6 @@ export function toPartialRow(info: DeepPartial<Session.Info>) {
 
 export default [
   SyncEvent.project(Session.Event.Created, (db, data) => {
-    const existing = db
-      .select({ id: ProjectTable.id })
-      .from(ProjectTable)
-      .where(eq(ProjectTable.id, data.info.projectID))
-      .get()
-    if (!existing) {
-      // Create a (temporary) project to make this work. In the future
-      // we should separate sessions and projects
-      db.insert(ProjectTable)
-        .values({
-          id: data.info.projectID,
-          worktree: data.info.directory,
-          sandboxes: [],
-        })
-        .run()
-    }
-
     db.insert(SessionTable).values(Session.toRow(data.info)).run()
   }),
 
