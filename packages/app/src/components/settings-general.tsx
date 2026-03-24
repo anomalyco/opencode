@@ -1,41 +1,27 @@
-import { Component, Show, createMemo, createResource, onMount, type JSX } from "solid-js"
+import { Component, Show, createMemo, createResource, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Select } from "@opencode-ai/ui/select"
 import { Switch } from "@opencode-ai/ui/switch"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
+import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useSettings, monoFontFamily } from "@/context/settings"
-import { playSoundById, SOUND_OPTIONS } from "@/utils/sound"
+import { playSound, SOUND_OPTIONS } from "@/utils/sound"
 import { Link } from "./link"
 import { SettingsList } from "./settings-list"
 
 let demoSoundState = {
   cleanup: undefined as (() => void) | undefined,
   timeout: undefined as NodeJS.Timeout | undefined,
-  run: 0,
-}
-
-type ThemeOption = {
-  id: string
-  name: string
-}
-
-let font: Promise<typeof import("@opencode-ai/ui/font-loader")> | undefined
-
-function loadFont() {
-  font ??= import("@opencode-ai/ui/font-loader")
-  return font
 }
 
 // To prevent audio from overlapping/playing very quickly when navigating the settings menus,
 // delay the playback by 100ms during quick selection changes and pause existing sounds.
 const stopDemoSound = () => {
-  demoSoundState.run += 1
   if (demoSoundState.cleanup) {
     demoSoundState.cleanup()
   }
@@ -43,19 +29,12 @@ const stopDemoSound = () => {
   demoSoundState.cleanup = undefined
 }
 
-const playDemoSound = (id: string | undefined) => {
+const playDemoSound = (src: string | undefined) => {
   stopDemoSound()
-  if (!id) return
+  if (!src) return
 
-  const run = ++demoSoundState.run
   demoSoundState.timeout = setTimeout(() => {
-    void playSoundById(id).then((cleanup) => {
-      if (demoSoundState.run !== run) {
-        cleanup?.()
-        return
-      }
-      demoSoundState.cleanup = cleanup
-    })
+    demoSoundState.cleanup = playSound(src)
   }, 100)
 }
 
@@ -64,10 +43,6 @@ export const SettingsGeneral: Component = () => {
   const language = useLanguage()
   const platform = usePlatform()
   const settings = useSettings()
-
-  onMount(() => {
-    void theme.loadThemes()
-  })
 
   const [store, setStore] = createStore({
     checking: false,
@@ -129,7 +104,9 @@ export const SettingsGeneral: Component = () => {
       .finally(() => setStore("checking", false))
   }
 
-  const themeOptions = createMemo<ThemeOption[]>(() => theme.ids().map((id) => ({ id, name: theme.name(id) })))
+  const themeOptions = createMemo(() =>
+    Object.entries(theme.themes()).map(([id, def]) => ({ id, name: def.name ?? id })),
+  )
 
   const colorSchemeOptions = createMemo((): { value: ColorScheme; label: string }[] => [
     { value: "system", label: language.t("theme.scheme.system") },
@@ -166,7 +143,7 @@ export const SettingsGeneral: Component = () => {
   ] as const
   const fontOptionsList = [...fontOptions]
 
-  const noneSound = { id: "none", label: "sound.option.none" } as const
+  const noneSound = { id: "none", label: "sound.option.none", src: undefined } as const
   const soundOptions = [noneSound, ...SOUND_OPTIONS]
 
   const soundSelectProps = (
@@ -181,7 +158,7 @@ export const SettingsGeneral: Component = () => {
     label: (o: (typeof soundOptions)[number]) => language.t(o.label),
     onHighlight: (option: (typeof soundOptions)[number] | undefined) => {
       if (!option) return
-      playDemoSound(option.id === "none" ? undefined : option.id)
+      playDemoSound(option.src)
     },
     onSelect: (option: (typeof soundOptions)[number] | undefined) => {
       if (!option) return
@@ -192,7 +169,7 @@ export const SettingsGeneral: Component = () => {
       }
       setEnabled(true)
       set(option.id)
-      playDemoSound(option.id)
+      playDemoSound(option.src)
     },
     variant: "secondary" as const,
     size: "small" as const,
@@ -344,9 +321,6 @@ export const SettingsGeneral: Component = () => {
             current={fontOptionsList.find((o) => o.value === settings.appearance.font())}
             value={(o) => o.value}
             label={(o) => language.t(o.label)}
-            onHighlight={(option) => {
-              void loadFont().then((x) => x.ensureMonoFont(option?.value))
-            }}
             onSelect={(option) => option && settings.appearance.setFont(option.value)}
             variant="secondary"
             size="small"
