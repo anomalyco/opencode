@@ -364,6 +364,7 @@ export const make = Effect.gen(function* () {
               stdio: stdios(sin, sout, serr, extra),
               detached: command.options.detached ?? process.platform !== "win32",
               shell: command.options.shell,
+              windowsHide: process.platform === "win32",
             }),
             Effect.fnUntraced(function* ([proc, signal]) {
               const done = yield* Deferred.isDone(signal)
