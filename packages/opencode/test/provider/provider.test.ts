@@ -982,6 +982,59 @@ test("provider.sort prioritizes preferred models", () => {
   expect(sorted[sorted.length - 1].id).not.toContain("sonnet-4")
 })
 
+test("models.dev fallback sets xai tool cap", () => {
+  const info = Provider.fromModelsDevProvider({
+    id: "xai",
+    name: "xAI",
+    env: [],
+    models: {
+      grok: {
+        id: "grok",
+        name: "Grok",
+        release_date: "2026-01-01",
+        attachment: false,
+        reasoning: false,
+        temperature: true,
+        tool_call: true,
+        limit: {
+          context: 128000,
+          output: 4096,
+        },
+        options: {},
+      },
+    },
+  })
+
+  expect(info.models.grok.limit.tools).toBe(200)
+})
+
+test("models.dev tool cap keeps explicit zero", () => {
+  const info = Provider.fromModelsDevProvider({
+    id: "xai",
+    name: "xAI",
+    env: [],
+    models: {
+      grok: {
+        id: "grok",
+        name: "Grok",
+        release_date: "2026-01-01",
+        attachment: false,
+        reasoning: false,
+        temperature: true,
+        tool_call: true,
+        limit: {
+          context: 128000,
+          output: 4096,
+          tools: 0,
+        },
+        options: {},
+      },
+    },
+  })
+
+  expect(info.models.grok.limit.tools).toBe(0)
+})
+
 test("multiple providers can be configured simultaneously", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

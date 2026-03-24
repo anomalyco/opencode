@@ -23,6 +23,8 @@ import { SystemPrompt } from "./system"
 import { Flag } from "@/flag/flag"
 import { Permission } from "@/permission"
 import { Auth } from "@/auth"
+import { Bus } from "@/bus"
+import { TuiEvent } from "@/cli/cmd/tui/event"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -188,12 +190,18 @@ export namespace LLM {
     const all = Object.keys(tools).filter((x) => x !== "invalid")
     const cap = input.model.limit.tools
     let active = all
-    if (cap && all.length > cap) {
+    if (cap != null && all.length > cap) {
       l.warn("capping tools", {
         total: all.length,
         limit: cap,
         dropped: all.length - cap,
       })
+      void Bus.publish(TuiEvent.ToastShow, {
+        title: "Tool limit applied",
+        message: `${input.model.providerID}/${input.model.id} allows ${cap} tools per turn. ${all.length - cap} tool(s) were hidden.`,
+        variant: "warning",
+        duration: 5000,
+      }).catch((err) => l.debug("failed to show tool cap toast", { error: err }))
       active = all.slice(0, cap)
     }
 

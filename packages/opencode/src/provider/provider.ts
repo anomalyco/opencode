@@ -837,6 +837,8 @@ export namespace Provider {
     })
   export type Info = z.infer<typeof Info>
 
+  // Fallback caps for SDKs that reject large tool lists unless the model metadata
+  // overrides them explicitly.
   const TOOL_LIMITS: Record<string, number> = {
     xai: 200,
   }
@@ -904,7 +906,7 @@ export namespace Provider {
       variants: {},
     }
 
-    if (!m.limit.tools) {
+    if (m.limit.tools == null) {
       const cap = TOOL_LIMITS[provider.id]
       if (cap) m.limit.tools = cap
     }
