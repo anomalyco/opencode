@@ -23,6 +23,7 @@ export namespace ProviderError {
     /request entity too large/i, // HTTP 413
     /context length is only \d+ tokens/i, // vLLM
     /input length.*exceeds.*context length/i, // vLLM
+    /extra usage is required for long context/i, // Anthropic billing_error for 200K+ overflow
   ]
 
   function isOpenAiErrorRetryable(e: APICallError) {
