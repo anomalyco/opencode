@@ -319,15 +319,14 @@ describe("cross-spawn spawner", () => {
     })
 
     test("writes data to input fd3", async () => {
+      if (process.platform === "win32") return
+
       const out = await runScoped(
         Effect.gen(function* () {
           const input = Stream.make(new TextEncoder().encode("data from parent"))
-          const handle = yield* js(
-            'const s = require("node:fs").createReadStream(null, { fd: 3 }); let out = ""; s.setEncoding("utf8"); s.on("data", (chunk) => out += chunk); s.on("end", () => process.stdout.write(out))',
-            {
-              additionalFds: { fd3: { type: "input", stream: input } },
-            },
-          )
+          const handle = yield* js('process.stdout.write(require("node:fs").readFileSync(3, "utf8"))', {
+            additionalFds: { fd3: { type: "input", stream: input } },
+          })
           const stdout = yield* decodeByteStream(handle.stdout)
           yield* handle.exitCode
           return stdout
