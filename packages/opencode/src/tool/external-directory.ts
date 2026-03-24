@@ -18,7 +18,7 @@ export async function assertExternalDirectory(ctx: Tool.Context, target?: string
 
   const kind = options?.kind ?? "file"
   const parentDir = kind === "directory" ? target : path.dirname(target)
-  const glob = path.join(parentDir, "*")
+  const glob = path.join(parentDir, "*").replaceAll("\\", "/")
 
   await ctx.ask({
     permission: "external_directory",

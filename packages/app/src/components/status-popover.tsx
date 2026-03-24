@@ -1,21 +1,22 @@
-import { createEffect, createMemo, createSignal, For, onCleanup, Show, type Accessor, type JSXElement } from "solid-js"
-import { createStore, reconcile } from "solid-js/store"
-import { useNavigate } from "@solidjs/router"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { Popover } from "@opencode-ai/ui/popover"
-import { Tabs } from "@opencode-ai/ui/tabs"
 import { Button } from "@opencode-ai/ui/button"
-import { Switch } from "@opencode-ai/ui/switch"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Icon } from "@opencode-ai/ui/icon"
+import { Popover } from "@opencode-ai/ui/popover"
+import { Switch } from "@opencode-ai/ui/switch"
+import { Tabs } from "@opencode-ai/ui/tabs"
+import { useMutation } from "@tanstack/solid-query"
 import { showToast } from "@opencode-ai/ui/toast"
-import { useSync } from "@/context/sync"
-import { useSDK } from "@/context/sdk"
-import { normalizeServerUrl, useServer } from "@/context/server"
-import { usePlatform } from "@/context/platform"
+import { useNavigate } from "@solidjs/router"
+import { type Accessor, createEffect, createMemo, createSignal, For, type JSXElement, onCleanup, Show } from "solid-js"
+import { createStore, reconcile } from "solid-js/store"
+import { ServerHealthIndicator, ServerRow } from "@/components/server/server-row"
 import { useLanguage } from "@/context/language"
+import { usePlatform } from "@/context/platform"
+import { useSDK } from "@/context/sdk"
+import { normalizeServerUrl, ServerConnection, useServer } from "@/context/server"
+import { useSync } from "@/context/sync"
+import { useCheckServerHealth, type ServerHealth } from "@/utils/server-health"
 import { DialogSelectServer } from "./dialog-select-server"
-import { ServerRow } from "@/components/server/server-row"
-import { checkServerHealth, type ServerHealth } from "@/utils/server-health"
 
 const pollMs = 10_000
 
@@ -32,9 +33,9 @@ const pluginEmptyMessage = (value: string, file: string): JSXElement => {
 }
 
 const listServersByHealth = (
-  list: string[],
-  active: string | undefined,
-  status: Record<string, ServerHealth | undefined>,
+  list: ServerConnection.Any[],
+  active: ServerConnection.Key | undefined,
+  status: Record<ServerConnection.Key, ServerHealth | undefined>,
 ) => {
   if (!list.length) return list
   const order = new Map(list.map((url, index) => [url, index] as const))
@@ -45,16 +46,17 @@ const listServersByHealth = (
   }
 
   return list.slice().sort((a, b) => {
-    if (a === active) return -1
-    if (b === active) return 1
-    const diff = rank(status[a]) - rank(status[b])
+    if (ServerConnection.key(a) === active) return -1
+    if (ServerConnection.key(b) === active) return 1
+    const diff = rank(status[ServerConnection.key(a)]) - rank(status[ServerConnection.key(b)])
     if (diff !== 0) return diff
     return (order.get(a) ?? 0) - (order.get(b) ?? 0)
   })
 }
 
-const useServerHealth = (servers: Accessor<string[]>, fetcher: typeof fetch) => {
-  const [status, setStatus] = createStore({} as Record<string, ServerHealth | undefined>)
+const useServerHealth = (servers: Accessor<ServerConnection.Any[]>) => {
+  const checkServerHealth = useCheckServerHealth()
+  const [status, setStatus] = createStore({} as Record<ServerConnection.Key, ServerHealth | undefined>)
 
   createEffect(() => {
     const list = servers()
@@ -63,8 +65,8 @@ const useServerHealth = (servers: Accessor<string[]>, fetcher: typeof fetch) => 
     const refresh = async () => {
       const results: Record<string, ServerHealth> = {}
       await Promise.all(
-        list.map(async (url) => {
-          results[url] = await checkServerHealth(url, fetcher)
+        list.map(async (conn) => {
+          results[ServerConnection.key(conn)] = await checkServerHealth(conn.http)
         }),
       )
       if (dead) return
@@ -82,18 +84,20 @@ const useServerHealth = (servers: Accessor<string[]>, fetcher: typeof fetch) => 
   return status
 }
 
-const useDefaultServerUrl = (
+const useDefaultServerKey = (
   get: (() => string | Promise<string | null | undefined> | null | undefined) | undefined,
 ) => {
-  const [url, setUrl] = createSignal<string | undefined>()
-  const [tick, setTick] = createSignal(0)
+  const [state, setState] = createStore({
+    url: undefined as string | undefined,
+    tick: 0,
+  })
 
   createEffect(() => {
-    tick()
+    state.tick
     let dead = false
     const result = get?.()
     if (!result) {
-      setUrl(undefined)
+      setState("url", undefined)
       onCleanup(() => {
         dead = true
       })
@@ -103,7 +107,7 @@ const useDefaultServerUrl = (
     if (result instanceof Promise) {
       void result.then((next) => {
         if (dead) return
-        setUrl(next ? normalizeServerUrl(next) : undefined)
+        setState("url", next ? normalizeServerUrl(next) : undefined)
       })
       onCleanup(() => {
         dead = true
@@ -111,68 +115,64 @@ const useDefaultServerUrl = (
       return
     }
 
-    setUrl(normalizeServerUrl(result))
+    setState("url", normalizeServerUrl(result))
     onCleanup(() => {
       dead = true
     })
   })
 
-  return { url, refresh: () => setTick((value) => value + 1) }
+  return {
+    key: () => {
+      const u = state.url
+      if (!u) return
+      return ServerConnection.key({ type: "http", http: { url: u } })
+    },
+    refresh: () => setState("tick", (value) => value + 1),
+  }
 }
 
-const useMcpToggle = (input: {
-  sync: ReturnType<typeof useSync>
-  sdk: ReturnType<typeof useSDK>
-  language: ReturnType<typeof useLanguage>
-}) => {
-  const [loading, setLoading] = createSignal<string | null>(null)
+const useMcpToggleMutation = () => {
+  const sync = useSync()
+  const sdk = useSDK()
+  const language = useLanguage()
 
-  const toggle = async (name: string) => {
-    if (loading()) return
-    setLoading(name)
-
-    try {
-      const status = input.sync.data.mcp[name]
-      await (status?.status === "connected"
-        ? input.sdk.client.mcp.disconnect({ name })
-        : input.sdk.client.mcp.connect({ name }))
-      const result = await input.sdk.client.mcp.status()
-      if (result.data) input.sync.set("mcp", result.data)
-    } catch (err) {
+  return useMutation(() => ({
+    mutationFn: async (name: string) => {
+      const status = sync.data.mcp[name]
+      await (status?.status === "connected" ? sdk.client.mcp.disconnect({ name }) : sdk.client.mcp.connect({ name }))
+      const result = await sdk.client.mcp.status()
+      if (result.data) sync.set("mcp", result.data)
+    },
+    onError: (err) => {
       showToast({
         variant: "error",
-        title: input.language.t("common.requestFailed"),
+        title: language.t("common.requestFailed"),
         description: err instanceof Error ? err.message : String(err),
       })
-    } finally {
-      setLoading(null)
-    }
-  }
-
-  return { loading, toggle }
+    },
+  }))
 }
 
 export function StatusPopover() {
   const sync = useSync()
-  const sdk = useSDK()
   const server = useServer()
   const platform = usePlatform()
   const dialog = useDialog()
   const language = useLanguage()
   const navigate = useNavigate()
 
-  const fetcher = platform.fetch ?? globalThis.fetch
+  const [shown, setShown] = createSignal(false)
   const servers = createMemo(() => {
-    const current = server.url
+    const current = server.current
     const list = server.list
     if (!current) return list
-    if (!list.includes(current)) return [current, ...list]
-    return [current, ...list.filter((item) => item !== current)]
+    if (list.every((item) => ServerConnection.key(item) !== ServerConnection.key(current))) return [current, ...list]
+    return [current, ...list.filter((item) => ServerConnection.key(item) !== ServerConnection.key(current))]
   })
-  const health = useServerHealth(servers, fetcher)
-  const sortedServers = createMemo(() => listServersByHealth(servers(), server.url, health))
-  const mcp = useMcpToggle({ sync, sdk, language })
-  const defaultServer = useDefaultServerUrl(platform.getDefaultServerUrl)
+  const health = useServerHealth(servers)
+  const sortedServers = createMemo(() => listServersByHealth(servers(), server.key, health))
+  const toggleMcp = useMcpToggleMutation()
+  const defaultServer = useDefaultServerKey(platform.getDefaultServer)
   const mcpNames = createMemo(() => Object.keys(sync.data.mcp ?? {}).sort((a, b) => a.localeCompare(b)))
   const mcpStatus = (name: string) => sync.data.mcp?.[name]?.status
   const mcpConnected = createMemo(() => mcpNames().filter((name) => mcpStatus(name) === "connected").length)
@@ -192,30 +192,34 @@ export function StatusPopover() {
 
   return (
     <Popover
+      open={shown()}
+      onOpenChange={setShown}
       triggerAs={Button}
       triggerProps={{
         variant: "ghost",
-        class:
-          "rounded-md h-[24px] px-3 gap-2 border border-border-base bg-surface-panel shadow-none data-[expanded]:bg-surface-raised-base-active",
+        class: "titlebar-icon w-8 h-6 p-0 box-border",
+        "aria-label": language.t("status.popover.trigger"),
         style: { scale: 1 },
       }}
       trigger={
-        <div class="flex items-center gap-1.5">
+        <div class="relative size-4">
+          <div class="badge-mask-tight size-4 flex items-center justify-center">
+            <Icon name={shown() ? "status-active" : "status"} size="small" />
+          </div>
           <div
             classList={{
-              "size-1.5 rounded-full": true,
+              "absolute -top-px -right-px size-1.5 rounded-full": true,
               "bg-icon-success-base": overallHealthy(),
               "bg-icon-critical-base": !overallHealthy() && server.healthy() !== undefined,
               "bg-border-weak-base": server.healthy() === undefined,
             }}
           />
-          <span class="text-12-regular text-text-strong">{language.t("status.popover.trigger")}</span>
         </div>
       }
       class="[&_[data-slot=popover-body]]:p-0 w-[360px] max-w-[calc(100vw-40px)] bg-transparent border-0 shadow-none rounded-xl"
-      gutter={6}
+      gutter={4}
       placement="bottom-end"
-      shift={-136}
+      shift={-168}
     >
       <div class="flex items-center gap-1 w-[360px] rounded-xl shadow-[var(--shadow-lg-border-base)]">
         <Tabs
@@ -249,8 +253,9 @@ export function StatusPopover() {
             <div class="flex flex-col px-2 pb-2">
               <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
                 <For each={sortedServers()}>
-                  {(url) => {
-                    const isBlocked = () => health[url]?.healthy === false
+                  {(s) => {
+                    const key = ServerConnection.key(s)
+                    const isBlocked = () => health[key]?.healthy === false
                     return (
                       <button
                         type="button"
@@ -262,19 +267,20 @@ export function StatusPopover() {
                         aria-disabled={isBlocked()}
                         onClick={() => {
                           if (isBlocked()) return
-                          server.setActive(url)
                           navigate("/")
+                          queueMicrotask(() => server.setActive(key))
                         }}
                       >
+                        <ServerHealthIndicator health={health[key]} />
                         <ServerRow
-                          url={url}
-                          status={health[url]}
+                          conn={s}
                           dimmed={isBlocked()}
+                          status={health[key]}
                           class="flex items-center gap-2 w-full min-w-0"
                           nameClass="text-14-regular text-text-base truncate"
                           versionClass="text-12-regular text-text-weak truncate"
                           badge={
-                            <Show when={url === defaultServer.url()}>
+                            <Show when={key === defaultServer.key()}>
                               <span class="text-11-regular text-text-base bg-surface-base px-1.5 py-0.5 rounded-md">
                                 {language.t("common.default")}
                               </span>
@@ -282,7 +288,7 @@ export function StatusPopover() {
                           }
                         >
                           <div class="flex-1" />
-                          <Show when={url === server.url}>
+                          <Show when={server.current && key === ServerConnection.key(server.current)}>
                             <Icon name="check" size="small" class="text-icon-weak shrink-0" />
                           </Show>
                         </ServerRow>
@@ -321,8 +327,11 @@ export function StatusPopover() {
                         <button
                           type="button"
                           class="flex items-center gap-2 w-full h-8 pl-3 pr-2 py-1 rounded-md hover:bg-surface-raised-base-hover transition-colors text-left"
-                          onClick={() => mcp.toggle(name)}
-                          disabled={mcp.loading() === name}
+                          onClick={() => {
+                            if (toggleMcp.isPending) return
+                            toggleMcp.mutate(name)
+                          }}
+                          disabled={toggleMcp.isPending && toggleMcp.variables === name}
                         >
                           <div
                             classList={{
@@ -338,8 +347,11 @@ export function StatusPopover() {
                           <div onClick={(event) => event.stopPropagation()}>
                             <Switch
                               checked={enabled()}
-                              disabled={mcp.loading() === name}
-                              onChange={() => mcp.toggle(name)}
+                              disabled={toggleMcp.isPending && toggleMcp.variables === name}
+                              onChange={() => {
+                                if (toggleMcp.isPending) return
+                                toggleMcp.mutate(name)
+                              }}
                             />
                           </div>
                         </button>

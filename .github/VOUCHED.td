@@ -8,13 +8,19 @@
 #   - Denounce with minus prefix: -username or -platform:username.
 #   - Optional details after a space following the handle.
 adamdotdevin
+-agusbasari29 AI PR slop
 ariane-emory
+-atharvau AI review spamming literally every PR
+-danieljoshuanazareth
+-danieljoshuanazareth
+edemaine
 -florianleibert
 fwang
 iamdavidhill
 jayair
 kitlangton
 kommander
+-opencode2026
 r44vc0rp
 rekram1-node
 -spider-yamet clawdbot/llm psychosis, spam pinging the team

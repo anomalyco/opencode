@@ -1,5 +1,4 @@
-import { Database as BunDatabase } from "bun:sqlite"
-import { drizzle, type SQLiteBunDatabase } from "drizzle-orm/bun-sqlite"
+import { type SQLiteBunDatabase } from "drizzle-orm/bun-sqlite"
 import { migrate } from "drizzle-orm/bun-sqlite/migrator"
 import { type SQLiteTransaction } from "drizzle-orm/sqlite-core"
 export * from "drizzle-orm"
@@ -10,10 +9,13 @@ import { Log } from "../util/log"
 import { NamedError } from "@opencode-ai/util/error"
 import z from "zod"
 import path from "path"
-import { readFileSync, readdirSync } from "fs"
-import * as schema from "./schema"
+import { readFileSync, readdirSync, existsSync } from "fs"
+import { Installation } from "../installation"
+import { Flag } from "../flag/flag"
+import { iife } from "@/util/iife"
+import { init } from "#db"
 
-declare const OPENCODE_MIGRATIONS: { sql: string; timestamp: number }[] | undefined
+declare const OPENCODE_MIGRATIONS: { sql: string; timestamp: number; name: string }[] | undefined
 
 export const NotFoundError = NamedError.create(
   "NotFoundError",
@@ -25,12 +27,23 @@ export const NotFoundError = NamedError.create(
 const log = Log.create({ service: "db" })
 
 export namespace Database {
-  type Schema = typeof schema
-  export type Transaction = SQLiteTransaction<"sync", void, Schema>
+  export const Path = iife(() => {
+    if (Flag.OPENCODE_DB) {
+      if (path.isAbsolute(Flag.OPENCODE_DB)) return Flag.OPENCODE_DB
+      return path.join(Global.Path.data, Flag.OPENCODE_DB)
+    }
+    const channel = Installation.CHANNEL
+    if (["latest", "beta"].includes(channel) || Flag.OPENCODE_DISABLE_CHANNEL_DB)
+      return path.join(Global.Path.data, "opencode.db")
+    const safe = channel.replace(/[^a-zA-Z0-9._-]/g, "-")
+    return path.join(Global.Path.data, `opencode-${safe}.db`)
+  })
 
-  type Client = SQLiteBunDatabase<Schema>
+  export type Transaction = SQLiteTransaction<"sync", void>
 
-  type Journal = { sql: string; timestamp: number }[]
+  type Client = SQLiteBunDatabase
+
+  type Journal = { sql: string; timestamp: number; name: string }[]
 
   function time(tag: string) {
     const match = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/.exec(tag)
@@ -53,10 +66,11 @@ export namespace Database {
     const sql = dirs
       .map((name) => {
         const file = path.join(dir, name, "migration.sql")
-        if (!Bun.file(file).size) return
+        if (!existsSync(file)) return
         return {
           sql: readFileSync(file, "utf-8"),
           timestamp: time(name),
+          name,
         }
       })
       .filter(Boolean) as Journal
@@ -65,18 +79,16 @@ export namespace Database {
   }
 
   export const Client = lazy(() => {
-    log.info("opening database", { path: path.join(Global.Path.data, "opencode.db") })
+    log.info("opening database", { path: Path })
 
-    const sqlite = new BunDatabase(path.join(Global.Path.data, "opencode.db"), { create: true })
+    const db = init(Path)
 
-    sqlite.run("PRAGMA journal_mode = WAL")
-    sqlite.run("PRAGMA synchronous = NORMAL")
-    sqlite.run("PRAGMA busy_timeout = 5000")
-    sqlite.run("PRAGMA cache_size = -64000")
-    sqlite.run("PRAGMA foreign_keys = ON")
-    sqlite.run("PRAGMA wal_checkpoint(PASSIVE)")
-
-    const db = drizzle({ client: sqlite, schema })
+    db.run("PRAGMA journal_mode = WAL")
+    db.run("PRAGMA synchronous = NORMAL")
+    db.run("PRAGMA busy_timeout = 5000")
+    db.run("PRAGMA cache_size = -64000")
+    db.run("PRAGMA foreign_keys = ON")
+    db.run("PRAGMA wal_checkpoint(PASSIVE)")
 
     // Apply schema migrations
     const entries =
@@ -88,11 +100,21 @@ export namespace Database {
         count: entries.length,
         mode: typeof OPENCODE_MIGRATIONS !== "undefined" ? "bundled" : "dev",
       })
+      if (Flag.OPENCODE_SKIP_MIGRATIONS) {
+        for (const item of entries) {
+          item.sql = "select 1;"
+        }
+      }
       migrate(db, entries)
     }
 
     return db
   })
+
+  export function close() {
+    Client().$client.close()
+    Client.reset()
+  }
 
   export type TxOrDb = Transaction | Client
 
@@ -129,7 +151,7 @@ export namespace Database {
     } catch (err) {
       if (err instanceof Context.NotFound) {
         const effects: (() => void | Promise<void>)[] = []
-        const result = Client().transaction((tx) => {
+        const result = (Client().transaction as any)((tx: TxOrDb) => {
           return ctx.provide({ tx, effects }, () => callback(tx))
         })
         for (const effect of effects) effect()

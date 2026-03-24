@@ -235,8 +235,84 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
 macOS 上で AppleScript を実行するために `osascript` を使用しています。ここでは通知を送信するために使用しています。
 
 :::note
-OpenCode デスクトップアプリを使用している場合は、応答の準備ができたとき、またはセッションエラーが発生したときにシステム通知を自動的に送信できます。
+組み込みツールと同じ名前のプラグインツールを使用すると、プラグインツールが優先されます。
 :::
+
+---
+
+### ロギング
+
+構造化ログには `console.log` の代わりに `client.app.log()` を使用します。
+
+```ts title=".opencode/plugins/my-plugin.ts"
+export const MyPlugin = async ({ client }) => {
+  await client.app.log({
+    body: {
+      service: "my-plugin",
+      level: "info",
+      message: "Plugin initialized",
+      extra: { foo: "bar" },
+    },
+  })
+}
+```
+
+レベル: `debug`、`info`、`warn`、`error`。詳細については、[SDK ドキュメント](https://opencode.ai/docs/sdk) を参照してください。
+
+---
+
+### 圧縮フック
+
+セッションが圧縮されたときに含まれるコンテキストをカスタマイズします。
+
+```ts title=".opencode/plugins/compaction.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const CompactionPlugin: Plugin = async (ctx) => {
+  return {
+    "experimental.session.compacting": async (input, output) => {
+      // Inject additional context into the compaction prompt
+      output.context.push(`
+## Custom Context
+
+Include any state that should persist across compaction:
+- Current task status
+- Important decisions made
+- Files being actively worked on
+`)
+    },
+  }
+}
+```
+
+`experimental.session.compacting` フックは、LLM が継続概要を生成する前に起動します。これを使用して、デフォルトの圧縮プロンプトでは見逃されるドメイン固有のコンテキストを挿入します。
+
+`output.prompt` を設定することで、圧縮プロンプトを完全に置き換えることもできます。
+
+```ts title=".opencode/plugins/custom-compaction.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const CustomCompactionPlugin: Plugin = async (ctx) => {
+  return {
+    "experimental.session.compacting": async (input, output) => {
+      // Replace the entire compaction prompt
+      output.prompt = `
+You are generating a continuation prompt for a multi-agent swarm session.
+
+Summarize:
+1. The current task and its status
+2. Which files are being modified and by whom
+3. Any blockers or dependencies between agents
+4. The next steps to complete the work
+
+Format as a structured prompt that a new agent can use to resume work.
+`
+    },
+  }
+}
+```
+
+`output.prompt` を設定すると、デフォルトの圧縮プロンプトが完全に置き換えられます。この場合、`output.context` 配列は無視されます。
 
 ---
 

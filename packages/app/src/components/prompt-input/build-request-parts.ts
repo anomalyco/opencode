@@ -4,6 +4,7 @@ import type { FileSelection } from "@/context/file"
 import { encodeFilePath } from "@/context/file/path"
 import type { AgentPart, FileAttachmentPart, ImageAttachmentPart, Prompt } from "@/context/prompt"
 import { Identifier } from "@/utils/id"
+import { createCommentMetadata, formatCommentNote } from "@/utils/comment-note"
 
 type PromptRequestPart = (TextPartInput | FilePartInput | AgentPartInput) & { id: string }
 
@@ -40,18 +41,6 @@ const fileQuery = (selection: FileSelection | undefined) =>
 
 const isFileAttachment = (part: Prompt[number]): part is FileAttachmentPart => part.type === "file"
 const isAgentAttachment = (part: Prompt[number]): part is AgentPart => part.type === "agent"
-
-const commentNote = (path: string, selection: FileSelection | undefined, comment: string) => {
-  const start = selection ? Math.min(selection.startLine, selection.endLine) : undefined
-  const end = selection ? Math.max(selection.startLine, selection.endLine) : undefined
-  const range =
-    start === undefined || end === undefined
-      ? "this file"
-      : start === end
-        ? `line ${start}`
-        : `lines ${start} through ${end}`
-  return `The user made the following comment regarding ${range} of ${path}: ${comment}`
-}
 
 const toOptimisticPart = (part: PromptRequestPart, sessionID: string, messageID: string): Part => {
   if (part.type === "text") {
@@ -153,8 +142,15 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
       {
         id: Identifier.ascending("part"),
         type: "text",
-        text: commentNote(item.path, item.selection, comment),
+        text: formatCommentNote({ path: item.path, selection: item.selection, comment }),
         synthetic: true,
+        metadata: createCommentMetadata({
+          path: item.path,
+          selection: item.selection,
+          comment,
+          preview: item.preview,
+          origin: item.commentOrigin,
+        }),
       } satisfies PromptRequestPart,
       filePart,
     ]

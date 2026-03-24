@@ -22,6 +22,10 @@ export interface Settings {
   general: {
     autoSave: boolean
     releaseNotes: boolean
+    followup: "queue" | "steer"
+    showReasoningSummaries: boolean
+    shellToolPartsExpanded: boolean
+    editToolPartsExpanded: boolean
   }
   updates: {
     startup: boolean
@@ -42,6 +46,10 @@ const defaultSettings: Settings = {
   general: {
     autoSave: true,
     releaseNotes: true,
+    followup: "steer",
+    showReasoningSummaries: false,
+    shellToolPartsExpanded: true,
+    editToolPartsExpanded: false,
   },
   updates: {
     startup: true,
@@ -85,6 +93,7 @@ const monoFonts: Record<string, string> = {
   "roboto-mono": `"Roboto Mono Nerd Font", "RobotoMono Nerd Font", "RobotoMono Nerd Font Mono", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
   "source-code-pro": `"Source Code Pro Nerd Font", "SauceCodePro Nerd Font", "SauceCodePro Nerd Font Mono", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
   "ubuntu-mono": `"Ubuntu Mono Nerd Font", "UbuntuMono Nerd Font", "UbuntuMono Nerd Font Mono", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
+  "geist-mono": `"GeistMono Nerd Font", "GeistMono Nerd Font Mono", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
 }
 
 export function monoFontFamily(font: string | undefined) {
@@ -118,6 +127,31 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         releaseNotes: withFallback(() => store.general?.releaseNotes, defaultSettings.general.releaseNotes),
         setReleaseNotes(value: boolean) {
           setStore("general", "releaseNotes", value)
+        },
+        followup: withFallback(() => store.general?.followup, defaultSettings.general.followup),
+        setFollowup(value: "queue" | "steer") {
+          setStore("general", "followup", value)
+        },
+        showReasoningSummaries: withFallback(
+          () => store.general?.showReasoningSummaries,
+          defaultSettings.general.showReasoningSummaries,
+        ),
+        setShowReasoningSummaries(value: boolean) {
+          setStore("general", "showReasoningSummaries", value)
+        },
+        shellToolPartsExpanded: withFallback(
+          () => store.general?.shellToolPartsExpanded,
+          defaultSettings.general.shellToolPartsExpanded,
+        ),
+        setShellToolPartsExpanded(value: boolean) {
+          setStore("general", "shellToolPartsExpanded", value)
+        },
+        editToolPartsExpanded: withFallback(
+          () => store.general?.editToolPartsExpanded,
+          defaultSettings.general.editToolPartsExpanded,
+        ),
+        setEditToolPartsExpanded(value: boolean) {
+          setStore("general", "editToolPartsExpanded", value)
         },
       },
       updates: {

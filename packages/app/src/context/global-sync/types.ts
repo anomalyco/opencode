@@ -119,7 +119,6 @@ export type RootLoadArgs = {
   directory: string
   limit: number
   list: (query: { directory: string; roots: true; limit?: number }) => Promise<{ data?: Session[] }>
-  onFallback: () => void
 }
 
 export type RootLoadResult = {
