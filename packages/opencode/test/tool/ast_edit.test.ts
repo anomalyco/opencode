@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import path from "path"
+import fs from "fs/promises"
 import { Permission } from "../../src/permission"
 import { Instance } from "../../src/project/instance"
 import { MessageID, SessionID } from "../../src/session/schema"
@@ -161,7 +162,11 @@ describe("tool.ast_edit", () => {
         const testCtx = {
           ...ctx,
           ask: async () => {
+            await new Promise((resolve) => setTimeout(resolve, 20))
             await Bun.write(file, `console.log(bar)\n`)
+            const time = new Date(Date.now() + 2_000)
+            await fs.utimes(file, time, time)
+            await new Promise((resolve) => setTimeout(resolve, 20))
           },
         }
 
