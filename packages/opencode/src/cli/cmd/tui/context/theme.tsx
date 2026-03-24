@@ -283,9 +283,15 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     const renderer = useRenderer()
     const config = useTuiConfig()
     const kv = useKV()
+    const pick = (value: unknown) => {
+      if (value === "dark" || value === "light") return value
+      return
+    }
+    const lock = pick(kv.get("theme_mode_lock"))
     const [store, setStore] = createStore({
       themes: DEFAULT_THEMES,
-      mode: kv.get("theme_mode", props.mode),
+      mode: lock ?? pick(kv.get("theme_mode", props.mode)) ?? props.mode,
+      lock,
       active: (config.theme ?? kv.get("theme", "opencode")) as string,
       ready: false,
     })
@@ -345,16 +351,30 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
         })
     }
 
-    function update(mode: "dark" | "light") {
+    function apply(mode: "dark" | "light") {
+      kv.set("theme_mode", mode)
       if (store.mode === mode) return
       setStore("mode", mode)
-      kv.set("theme_mode", mode)
       renderer.clearPaletteCache()
       resolveSystemTheme(mode)
     }
 
+    function pin(mode: "dark" | "light" = store.mode) {
+      setStore("lock", mode)
+      kv.set("theme_mode_lock", mode)
+      apply(mode)
+    }
+
+    function free() {
+      setStore("lock", undefined)
+      kv.set("theme_mode_lock", undefined)
+      const mode = renderer.themeMode
+      if (mode) apply(mode)
+    }
+
     const handle = (mode: "dark" | "light") => {
-      update(mode)
+      if (store.lock) return
+      apply(mode)
     }
     renderer.on(CliRenderEvents.THEME_MODE, handle)
     onCleanup(() => {
@@ -390,8 +410,17 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       mode() {
         return store.mode
       },
+      locked() {
+        return store.lock !== undefined
+      },
+      lock() {
+        pin(store.mode)
+      },
+      unlock() {
+        free()
+      },
       setMode(mode: "dark" | "light") {
-        update(mode)
+        pin(mode)
       },
       set(theme: string) {
         setStore("active", theme)
