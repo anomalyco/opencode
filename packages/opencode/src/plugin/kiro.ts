@@ -1,6 +1,7 @@
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
 import * as path from "path"
 import * as os from "os"
+import * as crypto from "crypto"
 
 interface KiroToken {
   access_token: string
@@ -73,6 +74,27 @@ async function getKiroDeviceRegistration(): Promise<KiroDeviceRegistration | nul
 
     if (!row) return null
     return JSON.parse(row.value) as KiroDeviceRegistration
+  } catch {
+    return null
+  }
+}
+
+async function getKiroProfileArn(): Promise<string | null> {
+  const dbPath = getKiroDbPath()
+  const file = Bun.file(dbPath)
+  if (!(await file.exists())) return null
+
+  try {
+    const { Database } = await import("bun:sqlite")
+    const db = new Database(dbPath, { readonly: true })
+    const row = db
+      .query<{ value: string }, [string]>("SELECT value FROM state WHERE key = ?")
+      .get("api.codewhisperer.profile")
+    db.close()
+
+    if (!row) return null
+    const parsed = JSON.parse(row.value)
+    return parsed.arn || null
   } catch {
     return null
   }
@@ -180,6 +202,12 @@ async function runKiroLogin(): Promise<boolean> {
   }
 }
 
+function regionFromArn(arn: string): string | null {
+  const parts = arn.split(":")
+  if (parts.length < 6 || parts[0] !== "arn") return null
+  return parts[3] || null
+}
+
 export async function KiroAuthPlugin(_input: PluginInput): Promise<Hooks> {
   return {
     auth: {
@@ -192,9 +220,10 @@ export async function KiroAuthPlugin(_input: PluginInput): Promise<Hooks> {
         const token = await getKiroToken()
         if (!token) return {}
 
-        // Kiro API endpoint is currently only available in us-east-1
-        const region = "us-east-1"
-        const baseURL = `https://codewhisperer.${region}.amazonaws.com`
+        // Determine API endpoint: SSO users use q.{region} with region from profileArn
+        const arn = await getKiroProfileArn()
+        const region = (arn && regionFromArn(arn)) || "us-east-1"
+        const baseURL = `https://q.${region}.amazonaws.com`
 
         // Set cost to 0 for subscription models
         if (provider?.models) {
@@ -222,13 +251,30 @@ export async function KiroAuthPlugin(_input: PluginInput): Promise<Hooks> {
             const headers = new Headers(init?.headers)
             headers.set("Authorization", `Bearer ${currentToken.access_token}`)
             headers.set("x-amzn-codewhisperer-optout", "false")
+            headers.set("x-amzn-kiro-agent-mode", "vibe")
+            headers.set("amz-sdk-invocation-id", crypto.randomUUID())
+            headers.set("amz-sdk-request", "attempt=1; max=1")
 
             // Remove any existing API key headers
             headers.delete("x-api-key")
 
+            // Inject profileArn for IAM Identity Center (SSO) users
+            let body = init?.body
+            if (arn && body) {
+              try {
+                const raw = typeof body === "string" ? body : new TextDecoder().decode(body as ArrayBuffer)
+                const parsed = JSON.parse(raw)
+                parsed.profileArn = arn
+                body = JSON.stringify(parsed)
+              } catch {
+                // If body isn't JSON, leave it unchanged
+              }
+            }
+
             return fetch(request, {
               ...init,
               headers,
+              body,
             })
           },
         }

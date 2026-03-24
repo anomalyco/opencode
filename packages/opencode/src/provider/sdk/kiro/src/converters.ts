@@ -110,8 +110,16 @@ function sanitizeJsonSchema(schema: Record<string, unknown> | undefined): Record
       continue
     }
 
-    // Skip $schema - Kiro API doesn't support JSON Schema meta fields
-    if (key === "$schema" || key === "$defs" || key === "definitions" || key === "examples" || key === "default") {
+    // Skip JSON Schema meta fields the Kiro API doesn't support
+    if (
+      key === "$schema" ||
+      key === "$defs" ||
+      key === "$ref" ||
+      key === "ref" ||
+      key === "definitions" ||
+      key === "examples" ||
+      key === "default"
+    ) {
       continue
     }
 
@@ -305,7 +313,7 @@ export function convertToKiroPayload(
       userInputMessage: {
         content: `--- SYSTEM INSTRUCTIONS BEGIN ---\n${contextContent}\n--- SYSTEM INSTRUCTIONS END ---`,
         modelId,
-        origin: "KIRO_CLI",
+        origin: "AI_EDITOR",
         userInputMessageContext: {
           envState: getEnvState(),
         },
@@ -378,7 +386,7 @@ export function convertToKiroPayload(
             userInputMessage: {
               content: currentUserContent,
               modelId,
-              origin: "KIRO_CLI",
+              origin: "AI_EDITOR",
               userInputMessageContext: {
                 ...(currentToolResults.length > 0 && { toolResults: currentToolResults }),
                 ...(tools && { tools: convertTools(tools) }),
@@ -549,7 +557,7 @@ export function convertToKiroPayload(
   } = {
     content: finalUserContent, // Use minimal content to avoid triggering AI to "continue"
     modelId,
-    origin: "KIRO_CLI",
+    origin: "AI_EDITOR",
   }
 
   // Only add userInputMessageContext if it has content
