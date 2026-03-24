@@ -56,7 +56,7 @@ jobs:
           nix build ".#packages.${SYSTEM}.node_modules_updater" --no-link 2>&1 | tee "$BUILD_LOG" || true
 
           # Extract hash from build log with portability
-          HASH="$(grep -oE 'sha256-[A-Za-z0-9+/=]+' "$BUILD_LOG" | tail -n1 || true)"
+          HASH="$(grep -oE 'got:\s*sha256-[A-Za-z0-9+/=]+' "$BUILD_LOG" | tail -n1 || true)"
 
           if [ -z "$HASH" ]; then
             echo "::error::Failed to compute hash for ${SYSTEM}"
