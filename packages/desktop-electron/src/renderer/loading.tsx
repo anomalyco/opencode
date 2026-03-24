@@ -1,5 +1,5 @@
-import { render } from "solid-js/web"
 import { MetaProvider } from "@solidjs/meta"
+import { render } from "solid-js/web"
 import "@opencode-ai/app/index.css"
 import { Font } from "@opencode-ai/ui/font"
 import { Splash } from "@opencode-ai/ui/logo"
@@ -34,7 +34,10 @@ render(() => {
 
     const listener = window.api.onSqliteMigrationProgress((progress: SqliteMigrationProgress) => {
       if (progress.type === "InProgress") setPercent(Math.max(0, Math.min(100, progress.value)))
-      if (progress.type === "Done") setPercent(100)
+      if (progress.type === "Done") {
+        setPercent(100)
+        setStep({ phase: "done" })
+      }
     })
 
     onCleanup(() => {

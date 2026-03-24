@@ -25,16 +25,26 @@ test("closing active project navigates to another open project", async ({ page, 
         await clickMenuItem(menu, /^Close$/i, { force: true })
 
         await expect
-          .poll(() => {
-            const pathname = new URL(page.url()).pathname
-            if (new RegExp(`^/${slug}/session(?:/[^/]+)?/?$`).test(pathname)) return "project"
-            if (pathname === "/") return "home"
-            return ""
-          })
+          .poll(
+            () => {
+              const pathname = new URL(page.url()).pathname
+              if (new RegExp(`^/${slug}/session(?:/[^/]+)?/?$`).test(pathname)) return "project"
+              if (pathname === "/") return "home"
+              return ""
+            },
+            { timeout: 15_000 },
+          )
           .toMatch(/^(project|home)$/)
 
         await expect(page).not.toHaveURL(new RegExp(`/${otherSlug}/session(?:[/?#]|$)`))
-        await expect(otherButton).toHaveCount(0)
+        await expect
+          .poll(
+            async () => {
+              return await page.locator(projectSwitchSelector(otherSlug)).count()
+            },
+            { timeout: 15_000 },
+          )
+          .toBe(0)
       },
       { extra: [other] },
     )

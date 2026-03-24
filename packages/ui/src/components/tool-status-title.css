@@ -18,8 +18,9 @@
   [data-slot="tool-status-swap"],
   [data-slot="tool-status-tail"] {
     display: inline-grid;
-    overflow: clip;
+    overflow: hidden;
     justify-items: start;
+    transition: width var(--tool-motion-spring-ms, 480ms) var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1));
   }
 
   [data-slot="tool-status-active"],
@@ -30,8 +31,8 @@
     text-align: start;
     transition-property: opacity, filter, transform;
     transition-duration:
-      var(--tool-motion-fade-ms, 400ms), calc(var(--tool-motion-fade-ms, 400ms) * 0.8),
-      calc(var(--tool-motion-fade-ms, 400ms) * 0.8);
+      var(--tool-motion-fade-ms, 240ms), calc(var(--tool-motion-fade-ms, 240ms) * 0.8),
+      calc(var(--tool-motion-fade-ms, 240ms) * 0.8);
     transition-timing-function: ease-out, ease-out, ease-out;
   }
 

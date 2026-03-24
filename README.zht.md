@@ -137,4 +137,4 @@ OpenCode 內建了兩種 Agent，您可以使用 `Tab` 鍵快速切換。
 
 ---
 
-**加入我們的社群** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+**加入我們的社群** [飞书](https://applink.feishu.cn/client/chat/chatter/add_by_link?link_token=de8k6664-1b5e-43f2-8efd-21d6772647b5&qr_code=true) | [X.com](https://x.com/opencode)

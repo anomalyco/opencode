@@ -1,13 +1,23 @@
 [data-component="shell-submessage"] {
   min-width: 0;
   max-width: 100%;
-  display: inline-block;
+  display: inline-flex;
+  align-items: baseline;
   vertical-align: baseline;
+}
+
+[data-component="shell-submessage"] [data-slot="shell-submessage-width"] {
+  min-width: 0;
+  max-width: 100%;
+  display: inline-flex;
+  align-items: baseline;
+  overflow: hidden;
 }
 
 [data-component="shell-submessage"] [data-slot="shell-submessage-value"] {
   display: inline-block;
   vertical-align: baseline;
   min-width: 0;
+  line-height: inherit;
   white-space: nowrap;
 }

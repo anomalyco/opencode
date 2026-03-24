@@ -12,10 +12,10 @@ import type {
   Config,
 } from "@opencode-ai/sdk"
 
-import type { BunShell } from "./shell"
-import { type ToolDefinition } from "./tool"
+import type { BunShell } from "./shell.js"
+import { type ToolDefinition } from "./tool.js"
 
-export * from "./tool"
+export * from "./tool.js"
 
 export type ProviderContext = {
   source: "env" | "config" | "custom" | "api"
@@ -34,6 +34,12 @@ export type PluginInput = {
 
 export type Plugin = (input: PluginInput) => Promise<Hooks>
 
+type Rule = {
+  key: string
+  op: "eq" | "neq"
+  value: string
+}
+
 export type AuthHook = {
   provider: string
   loader?: (auth: () => Promise<Auth>, provider: Provider) => Promise<Record<string, any>>
@@ -48,7 +54,9 @@ export type AuthHook = {
               message: string
               placeholder?: string
               validate?: (value: string) => string | undefined
+              /** @deprecated Use `when` instead */
               condition?: (inputs: Record<string, string>) => boolean
+              when?: Rule
             }
           | {
               type: "select"
@@ -59,7 +67,9 @@ export type AuthHook = {
                 value: string
                 hint?: string
               }>
+              /** @deprecated Use `when` instead */
               condition?: (inputs: Record<string, string>) => boolean
+              when?: Rule
             }
         >
         authorize(inputs?: Record<string, string>): Promise<AuthOuathResult>
@@ -74,7 +84,9 @@ export type AuthHook = {
               message: string
               placeholder?: string
               validate?: (value: string) => string | undefined
+              /** @deprecated Use `when` instead */
               condition?: (inputs: Record<string, string>) => boolean
+              when?: Rule
             }
           | {
               type: "select"
@@ -85,7 +97,9 @@ export type AuthHook = {
                 value: string
                 hint?: string
               }>
+              /** @deprecated Use `when` instead */
               condition?: (inputs: Record<string, string>) => boolean
+              when?: Rule
             }
         >
         authorize?(inputs?: Record<string, string>): Promise<

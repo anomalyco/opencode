@@ -37,14 +37,6 @@ export interface SessionReviewTabProps {
   }
 }
 
-export function StickyAddButton(props: { children: JSX.Element }) {
-  return (
-    <div class="bg-background-stronger h-full shrink-0 sticky right-0 z-10 flex items-center justify-center pr-3">
-      {props.children}
-    </div>
-  )
-}
-
 export function SessionReviewTab(props: SessionReviewTabProps) {
   let scroll: HTMLDivElement | undefined
   let restoreFrame: number | undefined

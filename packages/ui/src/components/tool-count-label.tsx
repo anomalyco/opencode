@@ -1,6 +1,5 @@
 import { createMemo } from "solid-js"
 import { AnimatedNumber } from "./animated-number"
-import { commonPrefix } from "./text-utils"
 
 function split(text: string) {
   const match = /{{\s*count\s*}}/.exec(text)
@@ -12,23 +11,35 @@ function split(text: string) {
   }
 }
 
+function common(one: string, other: string) {
+  const a = Array.from(one)
+  const b = Array.from(other)
+  let i = 0
+  while (i < a.length && i < b.length && a[i] === b[i]) i++
+  return {
+    stem: a.slice(0, i).join(""),
+    one: a.slice(i).join(""),
+    other: b.slice(i).join(""),
+  }
+}
+
 export function AnimatedCountLabel(props: { count: number; one: string; other: string; class?: string }) {
   const one = createMemo(() => split(props.one))
   const other = createMemo(() => split(props.other))
   const singular = createMemo(() => Math.round(props.count) === 1)
   const active = createMemo(() => (singular() ? one() : other()))
-  const suffix = createMemo(() => commonPrefix(one().after, other().after))
+  const suffix = createMemo(() => common(one().after, other().after))
   const splitSuffix = createMemo(
     () =>
       one().before === other().before &&
       (one().after.startsWith(other().after) || other().after.startsWith(one().after)),
   )
   const before = createMemo(() => (splitSuffix() ? one().before : active().before))
-  const stem = createMemo(() => (splitSuffix() ? suffix().prefix : active().after))
+  const stem = createMemo(() => (splitSuffix() ? suffix().stem : active().after))
   const tail = createMemo(() => {
     if (!splitSuffix()) return ""
-    if (singular()) return suffix().aSuffix
-    return suffix().bSuffix
+    if (singular()) return suffix().one
+    return suffix().other
   })
   const showTail = createMemo(() => splitSuffix() && tail().length > 0)
 

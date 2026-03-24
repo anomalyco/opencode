@@ -368,7 +368,18 @@ body {
       text-decoration: none;
 
       [data-slot="cta-price"] {
-        opacity: 0.6;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      [data-slot="cta-price-old"] {
+        opacity: 0.45;
+        text-decoration: line-through;
+      }
+
+      [data-slot="cta-price-new"] {
+        opacity: 1;
       }
 
       svg {

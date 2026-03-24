@@ -1,210 +1,322 @@
-import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
+import { BusEvent } from "@/bus/bus-event"
+import { Config } from "@/config/config"
+import { InstanceState } from "@/effect/instance-state"
+import { makeRunPromise } from "@/effect/run-service"
+import { ProjectID } from "@/project/schema"
+import { Instance } from "@/project/instance"
+import { MessageID, SessionID } from "@/session/schema"
+import { PermissionTable } from "@/session/session.sql"
+import { Database, eq } from "@/storage/db"
+import { Log } from "@/util/log"
+import { Wildcard } from "@/util/wildcard"
+import { Deferred, Effect, Layer, Schema, ServiceMap } from "effect"
+import os from "os"
 import z from "zod"
-import { Log } from "../util/log"
-import { Identifier } from "../id/id"
-import { Plugin } from "../plugin"
-import { Instance } from "../project/instance"
-import { Wildcard } from "../util/wildcard"
+import { evaluate as evalRule } from "./evaluate"
+import { PermissionID } from "./schema"
 
 export namespace Permission {
   const log = Log.create({ service: "permission" })
 
-  function toKeys(pattern: Info["pattern"], type: string): string[] {
-    return pattern === undefined ? [type] : Array.isArray(pattern) ? pattern : [pattern]
-  }
+  export const Action = z.enum(["allow", "deny", "ask"]).meta({
+    ref: "PermissionAction",
+  })
+  export type Action = z.infer<typeof Action>
 
-  function covered(keys: string[], approved: Record<string, boolean>): boolean {
-    const pats = Object.keys(approved)
-    return keys.every((k) => pats.some((p) => Wildcard.match(k, p)))
-  }
-
-  export const Info = z
+  export const Rule = z
     .object({
-      id: z.string(),
-      type: z.string(),
-      pattern: z.union([z.string(), z.array(z.string())]).optional(),
-      sessionID: z.string(),
-      messageID: z.string(),
-      callID: z.string().optional(),
-      message: z.string(),
-      metadata: z.record(z.string(), z.any()),
-      time: z.object({
-        created: z.number(),
-      }),
+      permission: z.string(),
+      pattern: z.string(),
+      action: Action,
     })
     .meta({
-      ref: "Permission",
+      ref: "PermissionRule",
     })
-  export type Info = z.infer<typeof Info>
+  export type Rule = z.infer<typeof Rule>
+
+  export const Ruleset = Rule.array().meta({
+    ref: "PermissionRuleset",
+  })
+  export type Ruleset = z.infer<typeof Ruleset>
+
+  export const Request = z
+    .object({
+      id: PermissionID.zod,
+      sessionID: SessionID.zod,
+      permission: z.string(),
+      patterns: z.string().array(),
+      metadata: z.record(z.string(), z.any()),
+      always: z.string().array(),
+      tool: z
+        .object({
+          messageID: MessageID.zod,
+          callID: z.string(),
+        })
+        .optional(),
+    })
+    .meta({
+      ref: "PermissionRequest",
+    })
+  export type Request = z.infer<typeof Request>
+
+  export const Reply = z.enum(["once", "always", "reject"])
+  export type Reply = z.infer<typeof Reply>
+
+  export const Approval = z.object({
+    projectID: ProjectID.zod,
+    patterns: z.string().array(),
+  })
 
   export const Event = {
-    Updated: BusEvent.define("permission.updated", Info),
+    Asked: BusEvent.define("permission.asked", Request),
     Replied: BusEvent.define(
       "permission.replied",
       z.object({
-        sessionID: z.string(),
-        permissionID: z.string(),
-        response: z.string(),
+        sessionID: SessionID.zod,
+        requestID: PermissionID.zod,
+        reply: Reply,
       }),
     ),
   }
 
-  const state = Instance.state(
-    () => {
-      const pending: {
-        [sessionID: string]: {
-          [permissionID: string]: {
-            info: Info
-            resolve: () => void
-            reject: (e: any) => void
-          }
-        }
-      } = {}
-
-      const approved: {
-        [sessionID: string]: {
-          [permissionID: string]: boolean
-        }
-      } = {}
-
-      return {
-        pending,
-        approved,
-      }
-    },
-    async (state) => {
-      for (const pending of Object.values(state.pending)) {
-        for (const item of Object.values(pending)) {
-          item.reject(new RejectedError(item.info.sessionID, item.info.id, item.info.callID, item.info.metadata))
-        }
-      }
-    },
-  )
-
-  export function pending() {
-    return state().pending
-  }
-
-  export function list() {
-    const { pending } = state()
-    const result: Info[] = []
-    for (const items of Object.values(pending)) {
-      for (const item of Object.values(items)) {
-        result.push(item.info)
-      }
+  export class RejectedError extends Schema.TaggedErrorClass<RejectedError>()("PermissionRejectedError", {}) {
+    override get message() {
+      return "The user rejected permission to use this specific tool call."
     }
-    return result.sort((a, b) => a.id.localeCompare(b.id))
   }
 
-  export async function ask(input: {
-    type: Info["type"]
-    message: Info["message"]
-    pattern?: Info["pattern"]
-    callID?: Info["callID"]
-    sessionID: Info["sessionID"]
-    messageID: Info["messageID"]
-    metadata: Info["metadata"]
+  export class CorrectedError extends Schema.TaggedErrorClass<CorrectedError>()("PermissionCorrectedError", {
+    feedback: Schema.String,
   }) {
-    const { pending, approved } = state()
-    log.info("asking", {
-      sessionID: input.sessionID,
-      messageID: input.messageID,
-      toolCallID: input.callID,
-      pattern: input.pattern,
-    })
-    const approvedForSession = approved[input.sessionID] || {}
-    const keys = toKeys(input.pattern, input.type)
-    if (covered(keys, approvedForSession)) return
-    const info: Info = {
-      id: Identifier.ascending("permission"),
-      type: input.type,
-      pattern: input.pattern,
-      sessionID: input.sessionID,
-      messageID: input.messageID,
-      callID: input.callID,
-      message: input.message,
-      metadata: input.metadata,
-      time: {
-        created: Date.now(),
-      },
+    override get message() {
+      return `The user rejected permission to use this specific tool call with the following feedback: ${this.feedback}`
     }
-
-    switch (
-      await Plugin.trigger("permission.ask", info, {
-        status: "ask",
-      }).then((x) => x.status)
-    ) {
-      case "deny":
-        throw new RejectedError(info.sessionID, info.id, info.callID, info.metadata)
-      case "allow":
-        return
-    }
-
-    pending[input.sessionID] = pending[input.sessionID] || {}
-    return new Promise<void>((resolve, reject) => {
-      pending[input.sessionID][info.id] = {
-        info,
-        resolve,
-        reject,
-      }
-      Bus.publish(Event.Updated, info)
-    })
   }
 
-  export const Response = z.enum(["once", "always", "reject"])
-  export type Response = z.infer<typeof Response>
-
-  export function respond(input: { sessionID: Info["sessionID"]; permissionID: Info["id"]; response: Response }) {
-    log.info("response", input)
-    const { pending, approved } = state()
-    const match = pending[input.sessionID]?.[input.permissionID]
-    if (!match) return
-    delete pending[input.sessionID][input.permissionID]
-    Bus.publish(Event.Replied, {
-      sessionID: input.sessionID,
-      permissionID: input.permissionID,
-      response: input.response,
-    })
-    if (input.response === "reject") {
-      match.reject(new RejectedError(input.sessionID, input.permissionID, match.info.callID, match.info.metadata))
-      return
+  export class DeniedError extends Schema.TaggedErrorClass<DeniedError>()("PermissionDeniedError", {
+    ruleset: Schema.Any,
+  }) {
+    override get message() {
+      return `The user has specified a rule which prevents you from using this specific tool call. Here are some of the relevant rules ${JSON.stringify(this.ruleset)}`
     }
-    match.resolve()
-    if (input.response === "always") {
-      approved[input.sessionID] = approved[input.sessionID] || {}
-      const approveKeys = toKeys(match.info.pattern, match.info.type)
-      for (const k of approveKeys) {
-        approved[input.sessionID][k] = true
-      }
-      const items = pending[input.sessionID]
-      if (!items) return
-      for (const item of Object.values(items)) {
-        const itemKeys = toKeys(item.info.pattern, item.info.type)
-        if (covered(itemKeys, approved[input.sessionID])) {
-          respond({
-            sessionID: item.info.sessionID,
-            permissionID: item.info.id,
-            response: input.response,
+  }
+
+  export type Error = DeniedError | RejectedError | CorrectedError
+
+  export const AskInput = Request.partial({ id: true }).extend({
+    ruleset: Ruleset,
+  })
+
+  export const ReplyInput = z.object({
+    requestID: PermissionID.zod,
+    reply: Reply,
+    message: z.string().optional(),
+  })
+
+  export interface Interface {
+    readonly ask: (input: z.infer<typeof AskInput>) => Effect.Effect<void, Error>
+    readonly reply: (input: z.infer<typeof ReplyInput>) => Effect.Effect<void>
+    readonly list: () => Effect.Effect<Request[]>
+  }
+
+  interface PendingEntry {
+    info: Request
+    deferred: Deferred.Deferred<void, RejectedError | CorrectedError>
+  }
+
+  interface State {
+    pending: Map<PermissionID, PendingEntry>
+    approved: Ruleset
+  }
+
+  export function evaluate(permission: string, pattern: string, ...rulesets: Ruleset[]): Rule {
+    log.info("evaluate", { permission, pattern, ruleset: rulesets.flat() })
+    return evalRule(permission, pattern, ...rulesets)
+  }
+
+  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Permission") {}
+
+  export const layer = Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      const state = yield* InstanceState.make<State>(
+        Effect.fn("Permission.state")(function* (ctx) {
+          const row = Database.use((db) =>
+            db.select().from(PermissionTable).where(eq(PermissionTable.project_id, ctx.project.id)).get(),
+          )
+          const state = {
+            pending: new Map<PermissionID, PendingEntry>(),
+            approved: row?.data ?? [],
+          }
+
+          yield* Effect.addFinalizer(() =>
+            Effect.gen(function* () {
+              for (const item of state.pending.values()) {
+                yield* Deferred.fail(item.deferred, new RejectedError())
+              }
+              state.pending.clear()
+            }),
+          )
+
+          return state
+        }),
+      )
+
+      const ask = Effect.fn("Permission.ask")(function* (input: z.infer<typeof AskInput>) {
+        const { approved, pending } = yield* InstanceState.get(state)
+        const { ruleset, ...request } = input
+        let needsAsk = false
+
+        for (const pattern of request.patterns) {
+          const rule = evaluate(request.permission, pattern, ruleset, approved)
+          log.info("evaluated", { permission: request.permission, pattern, action: rule })
+          if (rule.action === "deny") {
+            return yield* new DeniedError({
+              ruleset: ruleset.filter((rule) => Wildcard.match(request.permission, rule.permission)),
+            })
+          }
+          if (rule.action === "allow") continue
+          needsAsk = true
+        }
+
+        if (!needsAsk) return
+
+        const id = request.id ?? PermissionID.ascending()
+        const info: Request = {
+          id,
+          ...request,
+        }
+        log.info("asking", { id, permission: info.permission, patterns: info.patterns })
+
+        const deferred = yield* Deferred.make<void, RejectedError | CorrectedError>()
+        pending.set(id, { info, deferred })
+        void Bus.publish(Event.Asked, info)
+        return yield* Effect.ensuring(
+          Deferred.await(deferred),
+          Effect.sync(() => {
+            pending.delete(id)
+          }),
+        )
+      })
+
+      const reply = Effect.fn("Permission.reply")(function* (input: z.infer<typeof ReplyInput>) {
+        const { approved, pending } = yield* InstanceState.get(state)
+        const existing = pending.get(input.requestID)
+        if (!existing) return
+
+        pending.delete(input.requestID)
+        void Bus.publish(Event.Replied, {
+          sessionID: existing.info.sessionID,
+          requestID: existing.info.id,
+          reply: input.reply,
+        })
+
+        if (input.reply === "reject") {
+          yield* Deferred.fail(
+            existing.deferred,
+            input.message ? new CorrectedError({ feedback: input.message }) : new RejectedError(),
+          )
+
+          for (const [id, item] of pending.entries()) {
+            if (item.info.sessionID !== existing.info.sessionID) continue
+            pending.delete(id)
+            void Bus.publish(Event.Replied, {
+              sessionID: item.info.sessionID,
+              requestID: item.info.id,
+              reply: "reject",
+            })
+            yield* Deferred.fail(item.deferred, new RejectedError())
+          }
+          return
+        }
+
+        yield* Deferred.succeed(existing.deferred, undefined)
+        if (input.reply === "once") return
+
+        for (const pattern of existing.info.always) {
+          approved.push({
+            permission: existing.info.permission,
+            pattern,
+            action: "allow",
           })
         }
-      }
-    }
+
+        for (const [id, item] of pending.entries()) {
+          if (item.info.sessionID !== existing.info.sessionID) continue
+          const ok = item.info.patterns.every(
+            (pattern) => evaluate(item.info.permission, pattern, approved).action === "allow",
+          )
+          if (!ok) continue
+          pending.delete(id)
+          void Bus.publish(Event.Replied, {
+            sessionID: item.info.sessionID,
+            requestID: item.info.id,
+            reply: "always",
+          })
+          yield* Deferred.succeed(item.deferred, undefined)
+        }
+      })
+
+      const list = Effect.fn("Permission.list")(function* () {
+        const pending = (yield* InstanceState.get(state)).pending
+        return Array.from(pending.values(), (item) => item.info)
+      })
+
+      return Service.of({ ask, reply, list })
+    }),
+  )
+
+  function expand(pattern: string): string {
+    if (pattern.startsWith("~/")) return os.homedir() + pattern.slice(1)
+    if (pattern === "~") return os.homedir()
+    if (pattern.startsWith("$HOME/")) return os.homedir() + pattern.slice(5)
+    if (pattern.startsWith("$HOME")) return os.homedir() + pattern.slice(5)
+    return pattern
   }
 
-  export class RejectedError extends Error {
-    constructor(
-      public readonly sessionID: string,
-      public readonly permissionID: string,
-      public readonly toolCallID?: string,
-      public readonly metadata?: Record<string, any>,
-      public readonly reason?: string,
-    ) {
-      super(
-        reason !== undefined
-          ? reason
-          : `The user rejected permission to use this specific tool call. You may try again with different parameters.`,
+  export function fromConfig(permission: Config.Permission) {
+    const ruleset: Ruleset = []
+    for (const [key, value] of Object.entries(permission)) {
+      if (typeof value === "string") {
+        ruleset.push({ permission: key, action: value, pattern: "*" })
+        continue
+      }
+      ruleset.push(
+        ...Object.entries(value).map(([pattern, action]) => ({ permission: key, pattern: expand(pattern), action })),
       )
     }
+    return ruleset
+  }
+
+  export function merge(...rulesets: Ruleset[]): Ruleset {
+    return rulesets.flat()
+  }
+
+  const EDIT_TOOLS = ["edit", "write", "apply_patch", "multiedit"]
+
+  export function disabled(tools: string[], ruleset: Ruleset): Set<string> {
+    const result = new Set<string>()
+    for (const tool of tools) {
+      const permission = EDIT_TOOLS.includes(tool) ? "edit" : tool
+      const rule = ruleset.findLast((rule) => Wildcard.match(permission, rule.permission))
+      if (!rule) continue
+      if (rule.pattern === "*" && rule.action === "deny") result.add(tool)
+    }
+    return result
+  }
+
+  export const runPromise = makeRunPromise(Service, layer)
+
+  export async function ask(input: z.infer<typeof AskInput>) {
+    return runPromise((s) => s.ask(input))
+  }
+
+  export async function reply(input: z.infer<typeof ReplyInput>) {
+    return runPromise((s) => s.reply(input))
+  }
+
+  export async function list() {
+    return runPromise((s) => s.list())
   }
 }

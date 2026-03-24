@@ -1,11 +1,11 @@
 [data-component="text-shimmer"] {
   --text-shimmer-step: 45ms;
-  --text-shimmer-duration: 2000ms;
+  --text-shimmer-duration: 1200ms;
   --text-shimmer-swap: 220ms;
   --text-shimmer-index: 0;
   --text-shimmer-angle: 90deg;
   --text-shimmer-spread: 5.2ch;
-  --text-shimmer-size: 600%;
+  --text-shimmer-size: 360%;
   --text-shimmer-base-color: var(--text-weak);
   --text-shimmer-peak-color: var(--text-strong);
   --text-shimmer-sweep: linear-gradient(
@@ -16,17 +16,15 @@
   );
   --text-shimmer-base: linear-gradient(var(--text-shimmer-base-color), var(--text-shimmer-base-color));
 
-  display: inline-block;
-  vertical-align: baseline;
+  display: inline-flex;
+  align-items: baseline;
   font: inherit;
   letter-spacing: inherit;
   line-height: inherit;
 }
 
 [data-component="text-shimmer"] [data-slot="text-shimmer-char"] {
-  display: inline-block;
-  position: relative;
-  vertical-align: baseline;
+  display: inline-grid;
   white-space: pre;
   font: inherit;
   letter-spacing: inherit;
@@ -35,7 +33,7 @@
 
 [data-component="text-shimmer"] [data-slot="text-shimmer-char-base"],
 [data-component="text-shimmer"] [data-slot="text-shimmer-char-shimmer"] {
-  display: inline-block;
+  grid-area: 1 / 1;
   white-space: pre;
   transition: opacity var(--text-shimmer-swap) ease-out;
   font: inherit;
@@ -44,14 +42,11 @@
 }
 
 [data-component="text-shimmer"] [data-slot="text-shimmer-char-base"] {
-  position: relative;
   color: inherit;
   opacity: 1;
 }
 
 [data-component="text-shimmer"] [data-slot="text-shimmer-char-shimmer"] {
-  position: absolute;
-  inset: 0;
   color: var(--text-weaker);
   opacity: 0;
 }

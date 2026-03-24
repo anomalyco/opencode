@@ -1,13 +1,14 @@
-import { describe, test, expect } from "bun:test"
+import { afterEach, describe, test, expect } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
 import { WriteTool } from "../../src/tool/write"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
+import { SessionID, MessageID } from "../../src/session/schema"
 
 const ctx = {
-  sessionID: "test-write-session",
-  messageID: "",
+  sessionID: SessionID.make("ses_test-write-session"),
+  messageID: MessageID.make(""),
   callID: "",
   agent: "build",
   abort: AbortSignal.any([]),
@@ -15,6 +16,10 @@ const ctx = {
   metadata: () => {},
   ask: async () => {},
 }
+
+afterEach(async () => {
+  await Instance.disposeAll()
+})
 
 describe("tool.write", () => {
   describe("new file creation", () => {
@@ -98,7 +103,7 @@ describe("tool.write", () => {
         directory: tmp.path,
         fn: async () => {
           const { FileTime } = await import("../../src/file/time")
-          FileTime.read(ctx.sessionID, filepath)
+          await FileTime.read(ctx.sessionID, filepath)
 
           const write = await WriteTool.init()
           const result = await write.execute(
@@ -127,7 +132,7 @@ describe("tool.write", () => {
         directory: tmp.path,
         fn: async () => {
           const { FileTime } = await import("../../src/file/time")
-          FileTime.read(ctx.sessionID, filepath)
+          await FileTime.read(ctx.sessionID, filepath)
 
           const write = await WriteTool.init()
           const result = await write.execute(
@@ -305,7 +310,7 @@ describe("tool.write", () => {
         directory: tmp.path,
         fn: async () => {
           const { FileTime } = await import("../../src/file/time")
-          FileTime.read(ctx.sessionID, readonlyPath)
+          await FileTime.read(ctx.sessionID, readonlyPath)
 
           const write = await WriteTool.init()
           await expect(
