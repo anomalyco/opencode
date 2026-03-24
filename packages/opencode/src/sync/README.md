@@ -1,3 +1,31 @@
+
+
+tl;dr All of these APIs work, are properly type-checked, and are sync events are backwards compatible with `Bus`:
+
+```ts
+// The schema from `Updated` typechecks the object correctly
+SyncEvent.run(Updated, { sessionID: id, info: { title: "foo"} })
+
+// `subscribeAll` passes a generic sync event
+SyncEvent.subscribeAll(event => {
+  // These will be type-checked correctly
+  event.id
+  event.seq
+  // This will be unknown because we are listening for all events,
+  // and this API is only used to record them
+  event.data
+})
+
+// This works, but you shouldn't publish sync event like this (should fail in the future)
+Bus.publish(Updated, { sessionID: id, info: { title: "foo"} })
+
+// Update event is fully type-checked 
+Bus.subscribe(Updated, event => event.properties.info.title)
+
+// Update event is fully type-checked 
+client.subscribe("session.updated", evt => evt.properties.info.title)
+```
+
 # Goal
 
 ## Syncing with only one writer
@@ -60,13 +88,15 @@ You do this to run an event, which is kind of like `Bus.publish` except that it 
 SyncEvent.run(Created, { ... })
 ```
 
+The data passed as the second argument is properly type-checked based on the schema defined in `Created`.
+
 Importantly, **sync events automatically re-publish as bus events**. This makes them backwards compatible, and allows the `Bus` to still be the single abstraction that the system uses to listen for individual events.
 
 **We have upgraded many of the session events to be sync events** (all of the ones that mutate the db). Sync and bus events are largely compatible. Here are the differences:
 
 ### Event shape
 
-- The shape of the events are slightly different. A sync event has the `type`, `id`, `seq`, `aggregateID`, and `data` fields. A bus event has the `type` and `properties` fields. `data` and `properties` are largely the same thing. This conversation is automatically handled when the sync system re-published the event throught the bus.
+- The shape of the events are slightly different. A sync event has the `type`, `id`, `seq`, `aggregateID`, and `data` fields. A bus event has the `type` and `properties` fields. `data` and `properties` are largely the same thing. This conversion is automatically handled when the sync system re-published the event throught the bus.
 
 The reason for this is because sync events need to track more information. I chose not to copy the `properties` naming to more clearly disambiguate the event types.
 
@@ -76,17 +106,76 @@ There is no way to subscribe to individual sync events in `SyncEvent`. You can u
 
 To listen for individual events, use `Bus.subscribe`. You can pass in a sync event definition to it: `Bus.subscribe(Created, handler)`. This is fully supported.
 
-You should never "publish" a sync event however: `Bus.publish(Created, ...)`. This will throw a type error on purpose; sync events must always be run through the sync system directly.
+You should never "publish" a sync event however: `Bus.publish(Created, ...)`. I would like to force this to be a type error in the future. You should never be touching the db directly, and should not be manually handling these events.
 
 ### Backwards compatibility
 
-The system install projectors in `server/projectors.js`. It calls `SyncEvent.init` to do this. It also installs two different hooks for providing backwards compatibility:
+The system install projectors in `server/projectors.js`. It calls `SyncEvent.init` to do this. It also installs a hook for dynamically converting an event at runtime (`convertEvent`).
 
-- `convertDefinition`: a function that convert a zod definition for an event schema
-- `convertEvent`: a function that converts an individual event's data
+This allows you to "reshape" an event from the sync system before it's published to the bus. This should be avoided, but might be necessary for temporary backwards compat.
 
-These hooks allow for arbitrary conversions at runtime, allowing for us to provide a backwards compatible interface to clients.
+The only time we use this is the `session.updated` event. Previously this event contained the entire session object. The sync even only contains the fields updated. We convert the event to contain to full object for backwards compatibility (but ideally we'd remove this).
 
-For example, the sync system changed the `session.updated` event to only include the fields that were changed, compared to before where it returned the full session object. We install converters to load the full session object and return it to clients.
+It's very important that types are correct when working with events. Event definitions have a `schema` which carries the defintiion of the event shape (provided by a zod schema, inferred into a TypeScript type). Examples:
 
-**Important**:
+```ts
+// The schema from `Updated` typechecks the object correctly
+SyncEvent.run(Updated, { sessionID: id, info: { title: "foo"} })
+
+// `subscribeAll` passes a generic sync event
+SyncEvent.subscribeAll(event => {
+  // These will be type-checked correctly
+  event.id
+  event.seq
+  // This will be unknown because we are listening for all events,
+  // and this API is only used to record them
+  event.data
+})
+
+// This works, but you shouldn't publish sync event like this (should fail in the future)
+Bus.publish(Updated, { sessionID: id, info: { title: "foo"} })
+
+// Update event is fully type-checked 
+Bus.subscribe(Updated, event => event.properties.info.title)
+
+// Update event is fully type-checked 
+client.subscribe("session.updated", evt => evt.properties.info.title)
+```
+
+The last two examples look similar to `SyncEvent.run`, but they were the cause of a lot of grief. Those are existing APIs that we can't break, but we are passing in the new sync event definitions to these APIs, which sometimes have a different event shape.
+
+I previously mentioned the runtime conversion of events, but we still need to the types to work! To do that, the `define` API supports an optional `busSchema` prop to give it the schema for backwards compatibility. For example this is the full definition of `Session.Update`:
+
+```ts
+const Update = SyncEvent.define({
+  type: "session.updated",
+  version: 1,
+  aggregate: "sessionID",
+  schema: z.object({
+    sessionID: SessionID.zod,
+    info: partialSchema(Info)
+  }),
+  busSchema: z.object({
+    sessionID: SessionID.zod,
+    info: Info,
+  }),
+})
+```
+
+*Important*: the conversion done in `convertEvent` is not automatically type-checked with `busSchema`. It's very important they match, but because we need this at type-checking time this needs to live here.
+
+Internally, the way this works is `busSchema` is stored on a `properties` field which is what the bus system expects. Doing this made everything with `Bus` "just work". This is why you can pass a sync event to the bus APIs.
+
+*Alternatives*
+
+These are some other paths I explored:
+
+* Providing a way to subscribe to individual sync events, and change all the instances of `Bus.subscribe` in our code to it. Then you are directly only working with sync events always.
+  * Two big problems. First, `Bus` is instance-scoped, and we'd need to make the sync event system instance-scoped too for backwards compat. If we didn't, those listeners would get calls for events they weren't expecting.
+  * Second, we can't change consumers of our SDK. So they still have to use the old events, and we might as well stick with them for consistency
+* Directly add sync event support to bus system
+  * I explored adding sync events to the bus, but due to backwards compat, it only made it more complicated (still need to support both shapes)
+* I explored a `convertSchema` function to convert the event schema at runtime so we didn't need `busSchema`
+  * Fatal flaw: we need type-checking done earlier. We can't do this at run-time. This worked for consumers of our SDK (because it gets generated TS types from the converted schema) but breaks for our internal usage of `Bus.subscribe` calls
+
+I explored many other permutations of the above solutions. What we have today I think is the best balance of backwards compatibility while opening a path forward for the new events.
