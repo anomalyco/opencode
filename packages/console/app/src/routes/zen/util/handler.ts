@@ -340,6 +340,13 @@ export async function handler(
       "error.message": error.message,
       "error.cause": error.cause?.toString(),
     })
+    if (error.message.startsWith("Failed query")) {
+      try {
+        logger.metric({
+          "error.cause2": JSON.stringify(error.cause),
+        })
+      } catch (e) {}
+    }
 
     // Note: both top level "type" and "error.type" fields are used by the @ai-sdk/anthropic client to render the error message.
     if (
