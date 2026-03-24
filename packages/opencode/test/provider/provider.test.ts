@@ -2331,7 +2331,7 @@ test("ollama local provider does not send stream_options to ollama", async () =>
       },
     })
     return new Response(stream, { status: 200, headers: { "Content-Type": "text/event-stream" } })
-  }) as typeof fetch
+  }) as unknown as typeof fetch
 
   try {
     await Instance.provide({
