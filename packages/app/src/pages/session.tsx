@@ -246,14 +246,19 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
 
     if (added <= 0) return
     if (growth <= 0) return
+
+    if (opts?.prefetch) {
+      const current = turnStart()
+      preserveScroll(() => setTurnStart(current + growth))
+      return
+    }
+
     if (turnStart() !== start) return
 
-    const reveal = !opts?.prefetch
     const currentRendered = renderedUserMessages().length
     const base = Math.max(beforeRendered, currentRendered)
-    const target = reveal ? Math.min(afterVisible, base + turnBatch) : base
-    const nextStart = Math.max(0, afterVisible - target)
-    preserveScroll(() => setTurnStart(nextStart))
+    const target = Math.min(afterVisible, base + turnBatch)
+    preserveScroll(() => setTurnStart(Math.max(0, afterVisible - target)))
   }
 
   const onScrollerScroll = () => {
