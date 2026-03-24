@@ -350,9 +350,7 @@ describe("cross-spawn spawner", () => {
         expect(out).toContain("stderr")
       }),
     )
-
   })
-
 
   describe("Windows-specific", () => {
     fx.effect(
