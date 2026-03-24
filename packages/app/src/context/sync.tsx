@@ -14,6 +14,8 @@ import { useSDK } from "./sdk"
 import type { Message, Part } from "@opencode-ai/sdk/v2/client"
 import { SESSION_CACHE_LIMIT, dropSessionCaches, pickSessionCacheEvictions } from "./global-sync/session-cache"
 
+const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
+
 function sortParts(parts: Part[]) {
   return parts.filter((part) => !!part?.id).sort((a, b) => cmp(a.id, b.id))
 }
@@ -336,7 +338,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           batch(() => {
             input.setStore("message", input.sessionID, reconcile(message, { key: "id" }))
             for (const p of next.part) {
-              input.setStore("part", p.id, p.part)
+              const filtered = p.part.filter((x) => !SKIP_PARTS.has(x.type))
+              if (filtered.length) input.setStore("part", p.id, filtered)
             }
             setMeta("limit", key, message.length)
             setMeta("cursor", key, next.cursor)

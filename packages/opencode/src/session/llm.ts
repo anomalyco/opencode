@@ -113,17 +113,20 @@ export namespace LLM {
       options.instructions = system.join("\n")
     }
 
+    const isWorkflow = language instanceof GitLabWorkflowLanguageModel
     const messages = isOpenaiOauth
       ? input.messages
-      : [
-          ...system.map(
-            (x): ModelMessage => ({
-              role: "system",
-              content: x,
-            }),
-          ),
-          ...input.messages,
-        ]
+      : isWorkflow
+        ? input.messages
+        : [
+            ...system.map(
+              (x): ModelMessage => ({
+                role: "system",
+                content: x,
+              }),
+            ),
+            ...input.messages,
+          ]
 
     const params = await Plugin.trigger(
       "chat.params",
@@ -190,6 +193,7 @@ export namespace LLM {
     // and results sent back over the WebSocket.
     if (language instanceof GitLabWorkflowLanguageModel) {
       const workflowModel = language
+      workflowModel.systemPrompt = system.join("\n")
       workflowModel.toolExecutor = async (toolName, argsJson, _requestID) => {
         const t = tools[toolName]
         if (!t || !t.execute) {
