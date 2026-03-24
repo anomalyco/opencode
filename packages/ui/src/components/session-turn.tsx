@@ -93,6 +93,7 @@ const builtin = new Set([
   "batch",
   "codesearch",
   "edit",
+  "exec",
   "glob",
   "grep",
   "invalid",
@@ -375,16 +376,15 @@ export function SessionTurn(
     emptyAssistant,
     { equals: same },
   )
+  const assistantList = () => assistantMessages() ?? emptyAssistant
 
-  const interrupted = createMemo(() => assistantMessages().some((m) => m.error?.name === "MessageAbortedError"))
+  const interrupted = createMemo(() => assistantList().some((m) => m.error?.name === "MessageAbortedError"))
   const divider = createMemo(() => {
     if (compaction()) return i18n.t("ui.messagePart.compaction")
     if (interrupted()) return i18n.t("ui.message.interrupted")
     return ""
   })
-  const error = createMemo(
-    () => assistantMessages().find((m) => m.error && m.error.name !== "MessageAbortedError")?.error,
-  )
+  const error = createMemo(() => assistantList().find((m) => m.error && m.error.name !== "MessageAbortedError")?.error)
   const errorText = createMemo(() => {
     const msg = error()?.data?.message
     if (typeof msg === "string") return unwrap(msg)
@@ -431,7 +431,7 @@ export function SessionTurn(
     let headingText: string | undefined
     let end: number | undefined
 
-    for (const message of assistantMessages()) {
+    for (const message of assistantList()) {
       const completed = message.time.completed
       if (typeof completed === "number") end = end === undefined ? completed : Math.max(end, completed)
 
@@ -450,16 +450,17 @@ export function SessionTurn(
 
     return { copy, visible, headingText, end }
   })
+  const summary = () => assistantSummary() ?? { copy: undefined, visible: 0, headingText: undefined, end: undefined }
 
   const assistantCopyPartID = createMemo(() => {
     if (working()) return null
-    return assistantSummary().copy ?? null
+    return summary().copy ?? null
   })
   const turnDurationMs = createMemo(() => {
     const start = message()?.time.created
     if (typeof start !== "number") return undefined
 
-    const end = assistantSummary().end
+    const end = summary().end
 
     if (typeof end !== "number") return undefined
     if (end < start) return undefined
@@ -468,7 +469,8 @@ export function SessionTurn(
   const showThinking = createMemo(() => {
     if (!working() || !!error()) return false
     if (status().type === "retry") return false
-    if (showReasoningSummaries()) return assistantSummary().visible === 0
+    if (summary().visible > 0) return false
+    if (showReasoningSummaries()) return summary().visible === 0
     return true
   })
 
@@ -518,10 +520,10 @@ export function SessionTurn(
                     </div>
                   )}
                 </Show>
-                <Show when={assistantMessages().length > 0}>
-                  <div data-slot="session-turn-assistant-content" aria-hidden={working()}>
+                <Show when={assistantList().length > 0}>
+                  <div data-slot="session-turn-assistant-content">
                     <AssistantParts
-                      messages={assistantMessages()}
+                      messages={assistantList()}
                       showAssistantCopyPartID={assistantCopyPartID()}
                       turnDurationMs={turnDurationMs()}
                       working={working()}
@@ -646,7 +648,7 @@ export function SessionTurn(
                     <TextShimmer text={i18n.t("ui.sessionTurn.status.thinking")} />
                     <Show when={!showReasoningSummaries()}>
                       <TextReveal
-                        text={assistantSummary().headingText}
+                        text={summary().headingText}
                         class="session-turn-thinking-heading"
                         travel={25}
                         duration={700}

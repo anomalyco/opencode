@@ -210,6 +210,14 @@ function text(value: unknown) {
   return next
 }
 
+function file(input: Record<string, unknown>) {
+  return text(input.filePath) ?? text(input.file_path) ?? text(input.path)
+}
+
+function cmd(input: Record<string, unknown>, metadata?: Record<string, unknown>) {
+  return text(input.command) ?? text(input.cmd) ?? text(metadata?.command) ?? text(metadata?.cmd)
+}
+
 function hookName(input: Record<string, any>, metadata: Record<string, any>) {
   const keys = ["hook", "hook_name", "hookName", "event", "name"]
   for (const src of [metadata, input]) {
@@ -268,7 +276,7 @@ export function getToolInfo(tool: string, input: any = {}, metadata: any = {}): 
       return {
         icon: "glasses",
         title: i18n.t("ui.tool.read"),
-        subtitle: input.filePath ? getFilename(input.filePath) : undefined,
+        subtitle: file(input) ? getFilename(file(input)!) : undefined,
       }
     case "list":
       return {
@@ -319,12 +327,13 @@ export function getToolInfo(tool: string, input: any = {}, metadata: any = {}): 
     }
     case "bash":
     case "hook":
+    case "exec":
       const hook = hookName(input, metadata)
       const type = hookType(input, metadata)
       return {
         icon: "console",
-        title: hook ?? i18n.t("ui.tool.shell"),
-        subtitle: hook ? type : (input.description ?? metadata.description),
+        title: hook ?? (tool === "exec" ? "Exec" : i18n.t("ui.tool.shell")),
+        subtitle: hook ? type : (text(input.description) ?? text(metadata.description) ?? cmd(input, metadata)),
       }
     case "edit":
       return {
@@ -404,6 +413,7 @@ const BUILTIN_TOOLS = new Set([
   "batch",
   "codesearch",
   "edit",
+  "exec",
   "glob",
   "grep",
   "invalid",
@@ -678,9 +688,10 @@ function contextToolDetail(part: ToolPart): string | undefined {
 }
 
 function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
+  const data = useData()
   const input = (part.state.input ?? {}) as Record<string, unknown>
   const path = typeof input.path === "string" ? input.path : "/"
-  const filePath = typeof input.filePath === "string" ? input.filePath : undefined
+  const filePath = file(input)
   const pattern = typeof input.pattern === "string" ? input.pattern : undefined
   const include = typeof input.include === "string" ? input.include : undefined
   const offset = typeof input.offset === "number" ? input.offset : undefined
@@ -691,9 +702,10 @@ function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
       const args: string[] = []
       if (offset !== undefined) args.push("offset=" + offset)
       if (limit !== undefined) args.push("limit=" + limit)
+      const subtitle = filePath ? relativizeProjectPath(filePath, data.directory) || filePath : ""
       return {
         title: i18n.t("ui.tool.read"),
-        subtitle: filePath ? getFilename(filePath) : "",
+        subtitle,
         args,
       }
     }
@@ -1568,6 +1580,11 @@ ToolRegistry.register({
       if (!value || !Array.isArray(value)) return []
       return value.filter((p): p is string => typeof p === "string")
     })
+    const path = createMemo(() => {
+      const value = file(props.input) ?? ""
+      if (!value) return ""
+      return relativizeProjectPath(value, data.directory) || value
+    })
     return (
       <>
         <BasicTool
@@ -1576,7 +1593,7 @@ ToolRegistry.register({
           trigger={{
             title: i18n.t("ui.tool.read"),
             titleClass: "tool-read",
-            subtitle: props.input.filePath ? getFilename(props.input.filePath) : "",
+            subtitle: path(),
             args,
           }}
         />
@@ -1594,6 +1611,65 @@ ToolRegistry.register({
     )
   },
 })
+
+function ShellTool(props: ToolProps & { title: string }) {
+  const i18n = useI18n()
+  const hook = createMemo(() => hookName(props.input ?? {}, props.metadata ?? {}))
+  const type = createMemo(() => hookType(props.input ?? {}, props.metadata ?? {}))
+  const line = createMemo(() => cmd(props.input ?? {}, props.metadata ?? {}) ?? "")
+  const body = createMemo(() => {
+    const out = stripAnsi(props.output || props.metadata.output || "")
+    return line() ? `$ ${line()}${out ? "\n\n" + out : ""}` : out
+  })
+  const [copied, setCopied] = createSignal(false)
+
+  const handleCopy = async () => {
+    const value = body()
+    if (!value) return
+    await navigator.clipboard.writeText(value)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <BasicTool
+      {...props}
+      icon="console"
+      trigger={{
+        title: hook() ?? props.title,
+        titleClass: hook() ? "hook-name" : "tool-exec",
+        subtitle: hook() ? type() : (text(props.input.description) ?? text(props.metadata.description) ?? line()),
+        subtitleClass: hook() ? "hook-type" : undefined,
+      }}
+    >
+      <Show when={body()}>
+        <div data-component="bash-output">
+          <div data-slot="bash-copy">
+            <Tooltip
+              value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
+              placement="top"
+              gutter={4}
+            >
+              <IconButton
+                icon={copied() ? "check" : "copy"}
+                size="small"
+                variant="secondary"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={handleCopy}
+                aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
+              />
+            </Tooltip>
+          </div>
+          <div data-slot="bash-scroll" data-scrollable>
+            <pre data-slot="bash-pre">
+              <code>{body()}</code>
+            </pre>
+          </div>
+        </div>
+      </Show>
+    </BasicTool>
+  )
+}
 
 ToolRegistry.register({
   name: "list",
@@ -1845,59 +1921,14 @@ ToolRegistry.register({
   name: "bash",
   render(props) {
     const i18n = useI18n()
-    const hook = createMemo(() => hookName(props.input ?? {}, props.metadata ?? {}))
-    const type = createMemo(() => hookType(props.input ?? {}, props.metadata ?? {}))
-    const text = createMemo(() => {
-      const cmd = props.input.command ?? props.metadata.command ?? ""
-      const out = stripAnsi(props.output || props.metadata.output || "")
-      return `$ ${cmd}${out ? "\n\n" + out : ""}`
-    })
-    const [copied, setCopied] = createSignal(false)
+    return <ShellTool {...props} title={i18n.t("ui.tool.shell")} />
+  },
+})
 
-    const handleCopy = async () => {
-      const content = text()
-      if (!content) return
-      await navigator.clipboard.writeText(content)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    }
-
-    return (
-      <BasicTool
-        {...props}
-        icon="console"
-        trigger={{
-          title: hook() ?? i18n.t("ui.tool.shell"),
-          titleClass: hook() ? "hook-name" : "tool-exec",
-          subtitle: hook() ? type() : (props.input.description ?? props.metadata.description),
-          subtitleClass: hook() ? "hook-type" : undefined,
-        }}
-      >
-        <div data-component="bash-output">
-          <div data-slot="bash-copy">
-            <Tooltip
-              value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
-              placement="top"
-              gutter={4}
-            >
-              <IconButton
-                icon={copied() ? "check" : "copy"}
-                size="small"
-                variant="secondary"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={handleCopy}
-                aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
-              />
-            </Tooltip>
-          </div>
-          <div data-slot="bash-scroll" data-scrollable>
-            <pre data-slot="bash-pre">
-              <code>{text()}</code>
-            </pre>
-          </div>
-        </div>
-      </BasicTool>
-    )
+ToolRegistry.register({
+  name: "exec",
+  render(props) {
+    return <ShellTool {...props} title="Exec" />
   },
 })
 
