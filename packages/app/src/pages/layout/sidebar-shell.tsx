@@ -98,7 +98,7 @@ export const SidebarContent = (props: {
           <Show when={props.openclawLabel && props.onOpenOpenclaw}>
             <Tooltip placement={placement()} value={props.openclawLabel?.() ?? ""}>
               <IconButton
-                icon="models"
+                icon="openclaw"
                 variant="ghost"
                 size="large"
                 classList={{ "bg-surface-base-active": !!props.openclawActive?.() }}
