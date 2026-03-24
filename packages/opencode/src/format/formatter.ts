@@ -394,3 +394,12 @@ export const dfmt: Info = {
     return which("dfmt") !== null
   },
 }
+
+export const stylua: Info = {
+  name: "stylua",
+  command: ["stylua", "$FILE"],
+  extensions: [".lua", ".luau"],
+  async enabled() {
+    return which("stylua") !== null
+  },
+}
