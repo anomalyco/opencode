@@ -8,6 +8,7 @@ import { Database, eq } from "../storage/db"
 import { ProjectTable } from "../project/project.sql"
 import type { ProjectID } from "../project/schema"
 import { Log } from "../util/log"
+import { Slug } from "@opencode-ai/util/slug"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { Effect, FileSystem, Layer, Path, Scope, ServiceMap, Stream } from "effect"
@@ -123,87 +124,13 @@ export namespace Worktree {
     }),
   )
 
-  const ADJECTIVES = [
-    "brave",
-    "calm",
-    "clever",
-    "cosmic",
-    "crisp",
-    "curious",
-    "eager",
-    "gentle",
-    "glowing",
-    "happy",
-    "hidden",
-    "jolly",
-    "kind",
-    "lucky",
-    "mighty",
-    "misty",
-    "neon",
-    "nimble",
-    "playful",
-    "proud",
-    "quick",
-    "quiet",
-    "shiny",
-    "silent",
-    "stellar",
-    "sunny",
-    "swift",
-    "tidy",
-    "witty",
-  ] as const
-
-  const NOUNS = [
-    "cabin",
-    "cactus",
-    "canyon",
-    "circuit",
-    "comet",
-    "eagle",
-    "engine",
-    "falcon",
-    "forest",
-    "garden",
-    "harbor",
-    "island",
-    "knight",
-    "lagoon",
-    "meadow",
-    "moon",
-    "mountain",
-    "nebula",
-    "orchid",
-    "otter",
-    "panda",
-    "pixel",
-    "planet",
-    "river",
-    "rocket",
-    "sailor",
-    "squid",
-    "star",
-    "tiger",
-    "wizard",
-    "wolf",
-  ] as const
-
-  function pick<const T extends readonly string[]>(list: T) {
-    return list[Math.floor(Math.random() * list.length)]
-  }
-
-  function slug(input: string) {
+  function slugify(input: string) {
     return input
       .trim()
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+/, "")
       .replace(/-+$/, "")
-  }
-
-  function randomName() {
-    return `${pick(ADJECTIVES)}-${pick(NOUNS)}`
   }
 
   function failedRemoves(...chunks: string[]) {
@@ -267,9 +194,10 @@ export namespace Worktree {
         ),
       )
 
+      const MAX_NAME_ATTEMPTS = 26
       const candidate = Effect.fn("Worktree.candidate")(function* (root: string, base?: string) {
-        for (const attempt of Array.from({ length: 26 }, (_, i) => i)) {
-          const name = base ? (attempt === 0 ? base : `${base}-${randomName()}`) : randomName()
+        for (const attempt of Array.from({ length: MAX_NAME_ATTEMPTS }, (_, i) => i)) {
+          const name = base ? (attempt === 0 ? base : `${base}-${Slug.create()}`) : Slug.create()
           const branch = `opencode/${name}`
           const directory = pathSvc.join(root, name)
 
@@ -292,7 +220,7 @@ export namespace Worktree {
         const root = pathSvc.join(Global.Path.data, "worktree", Instance.project.id)
         yield* fsys.makeDirectory(root, { recursive: true }).pipe(Effect.orDie)
 
-        const base = name ? slug(name) : ""
+        const base = name ? slugify(name) : ""
         return yield* candidate(root, base || undefined)
       })
 
@@ -479,6 +407,11 @@ export namespace Worktree {
           const handle = yield* spawner.spawn(
             ChildProcess.make(shell, args, { cwd: directory, extendEnv: true, stdin: "ignore" }),
           )
+          // Drain stdout/stderr to prevent pipe buffer deadlock on chatty scripts
+          yield* Effect.all(
+            [Stream.runDrain(handle.stdout), Stream.runDrain(handle.stderr)],
+            { concurrency: 2 },
+          ).pipe(Effect.ignore)
           const code = yield* handle.exitCode
           return code
         },
