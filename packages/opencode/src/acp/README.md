@@ -12,12 +12,9 @@ The implementation follows a clean separation of concerns:
   - Handles initialization and capability negotiation
   - Manages session lifecycle (`session/new`, `session/load`)
   - Processes prompts and returns responses
+  - Handles permission requests via connection
+  - Subscribes to internal events for real-time updates
   - Properly implements ACP protocol v1
-
-- **`client.ts`** - Implements the `Client` interface for client-side capabilities
-  - File operations (`readTextFile`, `writeTextFile`)
-  - Permission requests (auto-approves for now)
-  - Terminal support (stub implementation)
 
 - **`session.ts`** - Session state management
   - Creates and tracks ACP sessions
@@ -25,12 +22,14 @@ The implementation follows a clean separation of concerns:
   - Maintains working directory context
   - Handles MCP server configurations
 
-- **`server.ts`** - ACP server startup and lifecycle
-  - Sets up JSON-RPC over stdio using the official library
-  - Manages graceful shutdown on SIGTERM/SIGINT
-  - Provides Instance context for the agent
-
 - **`types.ts`** - Type definitions for internal use
+
+### Server Startup
+
+The ACP server startup logic is located in `cli/cmd/acp.ts`:
+- Sets up JSON-RPC over stdio using `@agentclientprotocol/sdk`
+- Creates internal HTTP server for SDK communication
+- Manages graceful shutdown on stdin close
 
 ## Usage
 
@@ -53,14 +52,6 @@ OPENCODE_ENABLE_QUESTION_TOOL=1 opencode acp
 ```
 
 Enable this only for ACP clients that support interactive question prompts.
-
-### Programmatic
-
-```typescript
-import { ACPServer } from "./acp/server"
-
-await ACPServer.start()
-```
 
 ### Integration with Zed
 
@@ -100,11 +91,10 @@ This implementation follows the ACP specification v1:
 - Content block handling (text, resources)
 - Response with stop reasons
 
-✅ **Client Capabilities**
+✅ **Permission Handling**
 
-- File read/write operations
-- Permission requests
-- Terminal support (stub for future)
+- Real-time permission requests via `requestPermission`
+- Support for allow once, allow always, and reject options
 
 ## Current Limitations
 
@@ -114,7 +104,7 @@ This implementation follows the ACP specification v1:
 2. **Tool Call Reporting** - Doesn't report tool execution progress
 3. **Session Modes** - No mode switching support yet
 4. **Authentication** - No actual auth implementation
-5. **Terminal Support** - Placeholder only
+5. **Terminal Support** - Not implemented
 6. **Session Persistence** - `session/load` doesn't restore actual conversation history
 
 ### Future Enhancements
@@ -152,9 +142,8 @@ We use `@agentclientprotocol/sdk` instead of implementing JSON-RPC ourselves bec
 Each component has a single responsibility:
 
 - **Agent** = Protocol interface
-- **Client** = Client-side operations
 - **Session** = State management
-- **Server** = Lifecycle and I/O
+- **Server Startup** (in `cli/cmd/acp.ts`) = Lifecycle and I/O
 
 This makes the codebase maintainable and testable.
 
@@ -166,6 +155,7 @@ ACP sessions map cleanly to opencode's internal session model:
 - ACP `session/prompt` → uses SessionPrompt.prompt()
 - Working directory context preserved per-session
 - Tool execution uses existing ToolRegistry
+- Permission requests flow through event subscription
 
 ## References
 
