@@ -195,12 +195,7 @@ export namespace Project {
           }
 
           const commonDir = yield* git(["rev-parse", "--git-common-dir"], { cwd: sandbox })
-          const worktree = (() => {
-            const common = resolveGitPath(sandbox, commonDir.text.trim())
-            return common === sandbox ? sandbox : pathSvc.dirname(common)
-          })()
-
-          if (!worktree) {
+          if (commonDir.code !== 0) {
             return {
               id: id ?? ProjectID.global,
               worktree: sandbox,
@@ -208,6 +203,10 @@ export namespace Project {
               vcs: fakeVcs,
             }
           }
+          const worktree = (() => {
+            const common = resolveGitPath(sandbox, commonDir.text.trim())
+            return common === sandbox ? sandbox : pathSvc.dirname(common)
+          })()
 
           if (id == null) {
             id = yield* readCachedProjectId(pathSvc.join(worktree, ".git"))
@@ -221,15 +220,6 @@ export namespace Project {
               .map((x) => x.trim())
               .toSorted()
 
-            if (!roots) {
-              return {
-                id: ProjectID.global,
-                worktree: sandbox,
-                sandbox,
-                vcs: fakeVcs,
-              }
-            }
-
             id = roots[0] ? ProjectID.make(roots[0]) : undefined
             if (id) {
               yield* fsys.writeFileString(pathSvc.join(worktree, ".git", "opencode"), id).pipe(Effect.ignore)
@@ -241,6 +231,14 @@ export namespace Project {
           }
 
           const topLevel = yield* git(["rev-parse", "--show-toplevel"], { cwd: sandbox })
+          if (topLevel.code !== 0) {
+            return {
+              id,
+              worktree: sandbox,
+              sandbox,
+              vcs: fakeVcs,
+            }
+          }
           sandbox = resolveGitPath(sandbox, topLevel.text.trim())
 
           return { id, sandbox, worktree, vcs: "git" as const }
