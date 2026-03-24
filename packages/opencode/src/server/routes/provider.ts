@@ -52,13 +52,45 @@ export const ProviderRoutes = lazy(() =>
         }
 
         const connected = await Provider.list()
-        const providers = Object.assign(
+        let providers = Object.assign(
           mapValues(filteredProviders, (x) => Provider.fromModelsDevProvider(x)),
           connected,
         )
+
+        // Apply model-level filtering
+        const disabledModels = config.disabled_models ?? {}
+        const enabledModels = config.enabled_models ?? {}
+
+        if (Object.keys(disabledModels).length > 0 || Object.keys(enabledModels).length > 0) {
+          providers = mapValues(providers, (provider) => {
+            const providerDisabled = disabledModels[provider.id] ?? []
+            const providerEnabled = enabledModels[provider.id]
+
+            if (providerDisabled.length === 0 && !providerEnabled) {
+              return provider
+            }
+
+            const disabledSet = new Set(providerDisabled)
+            const enabledSet = providerEnabled ? new Set(providerEnabled) : null
+
+            const filteredModels = Object.fromEntries(
+              Object.entries(provider.models).filter(([modelId]) => {
+                if (enabledSet && !enabledSet.has(modelId)) return false
+                if (disabledSet.has(modelId)) return false
+                return true
+              })
+            )
+
+            return {
+              ...provider,
+              models: filteredModels,
+            }
+          })
+        }
+
         return c.json({
           all: Object.values(providers),
-          default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),
+          default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0]?.id),
           connected: Object.keys(connected),
         })
       },

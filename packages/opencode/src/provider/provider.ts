@@ -1113,6 +1113,10 @@ export namespace Provider {
       mergeProvider(providerID, partial)
     }
 
+    // Prepare global model filtering
+    const disabledModels = config.disabled_models ?? {}
+    const enabledModels = config.enabled_models ?? {}
+
     for (const [id, provider] of Object.entries(providers)) {
       const providerID = ProviderID.make(id)
       if (!isProviderAllowed(providerID)) {
@@ -1121,6 +1125,8 @@ export namespace Provider {
       }
 
       const configProvider = config.provider?.[providerID]
+      const globalDisabledModels = new Set(disabledModels[providerID] ?? [])
+      const globalEnabledModels = enabledModels[providerID] ? new Set(enabledModels[providerID]) : null
 
       for (const [modelID, model] of Object.entries(provider.models)) {
         model.api.id = model.api.id ?? model.id ?? modelID
@@ -1136,6 +1142,9 @@ export namespace Provider {
           (configProvider?.whitelist && !configProvider.whitelist.includes(modelID))
         )
           delete provider.models[modelID]
+        // Apply global model filtering
+        if (globalEnabledModels && !globalEnabledModels.has(modelID)) delete provider.models[modelID]
+        if (globalDisabledModels.has(modelID)) delete provider.models[modelID]
 
         model.variants = mapValues(ProviderTransform.variants(model), (v) => v)
 
