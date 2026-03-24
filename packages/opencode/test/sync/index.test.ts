@@ -9,13 +9,14 @@ import { EventTable } from "../../src/sync/event.sql"
 import { Identifier } from "../../src/id/id"
 import { Flag } from "../../src/flag/flag"
 
+const original = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
+
 beforeEach(() => {
   Database.close()
-})
 
-const original = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
-// @ts-expect-error don't do this normally, but it works
-Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
+  // @ts-expect-error don't do this normally, but it works
+  Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
+})
 
 afterEach(() => {
   // @ts-expect-error don't do this normally, but it works

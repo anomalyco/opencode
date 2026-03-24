@@ -29,7 +29,7 @@ const log = Log.create({ service: "db" })
 export namespace Database {
   export const Path = iife(() => {
     if (Flag.OPENCODE_DB) {
-      if (path.isAbsolute(Flag.OPENCODE_DB)) return Flag.OPENCODE_DB
+      if (Flag.OPENCODE_DB === ":memory:" || path.isAbsolute(Flag.OPENCODE_DB)) return Flag.OPENCODE_DB
       return path.join(Global.Path.data, Flag.OPENCODE_DB)
     }
     const channel = Installation.CHANNEL
