@@ -72,11 +72,11 @@ export namespace Agent {
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
+      const config = () => Effect.promise(() => Config.get())
+      const auth = yield* Auth.Service
+
       const state = yield* InstanceState.make<State>(
         Effect.fn("Agent.state")(function* (ctx) {
-          const config = Effect.fnUntraced(function* () {
-            return yield* Effect.promise(() => Config.get())
-          })
           const cfg = yield* config()
           const skillDirs = yield* Effect.promise(() => Skill.dirs())
           const whitelistedDirs = [Truncate.GLOB, ...skillDirs.map((dir) => path.join(dir, "*"))]
@@ -329,7 +329,7 @@ export namespace Agent {
           description: string
           model?: { providerID: ProviderID; modelID: ModelID }
         }) {
-          const cfg = yield* Effect.promise(() => Config.get())
+          const cfg = yield* config()
           const model = input.model ?? (yield* Effect.promise(() => Provider.defaultModel()))
           const resolved = yield* Effect.promise(() => Provider.getModel(model.providerID, model.modelID))
           const language = yield* Effect.promise(() => Provider.getLanguage(resolved))
@@ -369,8 +369,8 @@ export namespace Agent {
           } satisfies Parameters<typeof generateObject>[0]
 
           // TODO: clean this up so provider specific logic doesnt bleed over
-          const auth = yield* Effect.promise(() => Auth.get(model.providerID))
-          if (model.providerID === "openai" && auth?.type === "oauth") {
+          const authInfo = yield* auth.get(model.providerID).pipe(Effect.orDie)
+          if (model.providerID === "openai" && authInfo?.type === "oauth") {
             return yield* Effect.promise(async () => {
               const result = streamObject({
                 ...params,
@@ -392,7 +392,7 @@ export namespace Agent {
     }),
   )
 
-  export const defaultLayer = layer
+  export const defaultLayer = layer.pipe(Layer.provide(Auth.layer))
 
   const runPromise = makeRunPromise(Service, defaultLayer)
 
