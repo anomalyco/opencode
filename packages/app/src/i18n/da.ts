@@ -219,6 +219,7 @@ export const dict = {
   "common.cancel": "Annuller",
   "common.connect": "Forbind",
   "common.disconnect": "Frakobl",
+  "common.continue": "Indsend",
   "common.submit": "Indsend",
   "common.save": "Gem",
   "common.saving": "Gemmer...",

@@ -11,6 +11,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js"
 import { Config } from "../config/config"
 import { Log } from "../util/log"
+import { Process } from "../util/process"
 import { NamedError } from "@opencode-ai/util/error"
 import z from "zod/v4"
 import { Instance } from "../project/instance"
@@ -166,14 +167,10 @@ export namespace MCP {
     const queue = [pid]
     while (queue.length > 0) {
       const current = queue.shift()!
-      const proc = Bun.spawn(["pgrep", "-P", String(current)], { stdout: "pipe", stderr: "pipe" })
-      const [code, out] = await Promise.all([proc.exited, new Response(proc.stdout).text()]).catch(
-        () => [-1, ""] as const,
-      )
-      if (code !== 0) continue
-      for (const tok of out.trim().split(/\s+/)) {
+      const lines = await Process.lines(["pgrep", "-P", String(current)], { nothrow: true })
+      for (const tok of lines) {
         const cpid = parseInt(tok, 10)
-        if (!isNaN(cpid) && pids.indexOf(cpid) === -1) {
+        if (!isNaN(cpid) && !pids.includes(cpid)) {
           pids.push(cpid)
           queue.push(cpid)
         }

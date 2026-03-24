@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test"
+import fs from "fs/promises"
+import path from "path"
 import { Process } from "../../src/util/process"
 import { tmpdir } from "../fixture/fixture"
 
@@ -73,5 +75,54 @@ describe("util.process", () => {
       },
     })
     expect(out.stdout.toString()).toBe("set")
+  })
+
+  test("uses shell in run on Windows", async () => {
+    if (process.platform !== "win32") return
+
+    const out = await Process.run(["set", "OPENCODE_TEST_SHELL"], {
+      shell: true,
+      env: {
+        OPENCODE_TEST_SHELL: "ok",
+      },
+    })
+
+    expect(out.code).toBe(0)
+    expect(out.stdout.toString()).toContain("OPENCODE_TEST_SHELL=ok")
+  })
+
+  test("runs cmd scripts with spaces on Windows without shell", async () => {
+    if (process.platform !== "win32") return
+
+    await using tmp = await tmpdir()
+    const dir = path.join(tmp.path, "with space")
+    const file = path.join(dir, "echo cmd.cmd")
+
+    await fs.mkdir(dir, { recursive: true })
+    await Bun.write(file, "@echo off\r\nif %~1==--stdio exit /b 0\r\nexit /b 7\r\n")
+
+    const proc = Process.spawn([file, "--stdio"], {
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+
+    expect(await proc.exited).toBe(0)
+  })
+
+  test("rejects missing commands without leaking unhandled errors", async () => {
+    await using tmp = await tmpdir()
+    const cmd = path.join(tmp.path, "missing" + (process.platform === "win32" ? ".cmd" : ""))
+    const err = await Process.spawn([cmd], {
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
+    }).exited.catch((err) => err)
+
+    expect(err).toBeInstanceOf(Error)
+    if (!(err instanceof Error)) throw err
+    expect(err).toMatchObject({
+      code: "ENOENT",
+    })
   })
 })
