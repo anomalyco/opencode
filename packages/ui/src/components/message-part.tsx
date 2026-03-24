@@ -210,10 +210,12 @@ function text(value: unknown) {
   return next
 }
 
+// OpenClaw tool payloads commonly use path/file_path while built-in tools use filePath.
 function file(input: Record<string, unknown>) {
   return text(input.filePath) ?? text(input.file_path) ?? text(input.path)
 }
 
+// OpenClaw exec payloads commonly use cmd while built-in bash uses command.
 function cmd(input: Record<string, unknown>, metadata?: Record<string, unknown>) {
   return text(input.command) ?? text(input.cmd) ?? text(metadata?.command) ?? text(metadata?.cmd)
 }

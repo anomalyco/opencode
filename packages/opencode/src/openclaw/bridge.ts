@@ -1203,22 +1203,7 @@ async function history(client: GwClient, sessionID: string) {
     throw gatewayError(err, `history loading for session ${sessionID}`)
   })) as GwHistory | unknown[]
   const list = Array.isArray(res) ? res : Array.isArray(res.messages) ? res.messages : []
-  const mapped = historyMessages(sessionID, list as GwMessage[])
-  log.debug("openclaw history loaded", {
-    sessionID,
-    count: list.length,
-    mapped: mapped.map((item) => ({
-      id: item.info.id,
-      role: item.info.role,
-      created: item.info.time.created,
-      parts: item.parts.map((part) =>
-        part.type === "tool"
-          ? { id: part.id, type: part.type, tool: part.tool, status: part.state.status }
-          : { id: part.id, type: part.type },
-      ),
-    })),
-  })
-  return mapped
+  return historyMessages(sessionID, list as GwMessage[])
 }
 
 async function waitHistory(
@@ -1233,13 +1218,6 @@ async function waitHistory(
     const item = hit
       ? current(list, hit, started)
       : [...list].reverse().find((item) => item.info.role === "assistant" && item.info.time.created >= started)
-    log.debug("openclaw waitHistory poll", {
-      sessionID,
-      started,
-      attempt: i + 1,
-      total: list.length,
-      hit: item ? { id: item.info.id, created: item.info.time.created } : undefined,
-    })
     if (item) return hit ? replay(item, hit) : item
   }
   log.warn("openclaw waitHistory exhausted", { sessionID, started })
@@ -1271,6 +1249,9 @@ function replay(
   item: Message,
   hit: { parentID: string; messageID: string; partID: string; tools: Map<string, ToolPart> },
 ) {
+  // Keep streamed history updates on the optimistic ids the current UI is
+  // already rendering. Without this remap, tool-only assistant messages can
+  // appear briefly and then disappear until the whole session reloads.
   const parts = item.parts.map((part) => {
     if (part.type === "text") {
       return {
@@ -1334,13 +1315,6 @@ function emitHistory(events: Events, item: Message) {
     },
   })
   for (const part of item.parts) {
-    log.debug("openclaw emit message.part.updated", {
-      sessionID: part.sessionID,
-      messageID: part.messageID,
-      partID: part.id,
-      type: part.type,
-      ...(part.type === "text" ? { text: part.text } : { tool: part.tool, status: part.state.status }),
-    })
     events.emit({
       directory,
       payload: {
@@ -1453,14 +1427,6 @@ export namespace OpenClawBridge {
       if (calls.length > 0 || results.length > 0) ensure(hit, message)
       for (const part of stream.parts) {
         hit.tools.set(part.callID, part)
-        log.debug("openclaw emit tool result", {
-          runID,
-          sessionID: hit.sessionID,
-          messageID: hit.messageID,
-          partID: part.id,
-          tool: part.tool,
-          status: part.state.status,
-        })
         events.emit({ directory, payload: { type: "message.part.updated", properties: { part } } })
       }
       const body = text(message?.content)
@@ -1753,13 +1719,7 @@ export namespace OpenClawBridge {
       .get("/session/:sessionID/children", (c) => c.json([]))
       .get("/session/:sessionID/message", async (c) => {
         const sessionID = c.req.param("sessionID")
-        const merged = mergeHistory(await history(gw, sessionID), sentMap.get(sessionID) ?? [])
-        log.debug("openclaw session messages response", {
-          sessionID,
-          count: merged.length,
-          items: merged.map((item) => ({ id: item.info.id, role: item.info.role, created: item.info.time.created })),
-        })
-        return c.json(merged)
+        return c.json(mergeHistory(await history(gw, sessionID), sentMap.get(sessionID) ?? []))
       })
       .post("/session/:sessionID/prompt_async", async (c) => {
         const sessionID = c.req.param("sessionID")
@@ -1909,18 +1869,6 @@ export namespace OpenClawBridge {
             prompt: message,
           })
           if (!item) log.warn("openclaw message completed without assistant reply", { sessionID })
-          if (item) {
-            log.debug("openclaw message stream response", {
-              sessionID,
-              messageID: item.info.id,
-              role: item.info.role,
-              parts: item.parts.map((part) =>
-                part.type === "text"
-                  ? { id: part.id, type: part.type, text: part.text }
-                  : { id: part.id, type: part.type, tool: part.tool, status: part.state.status },
-              ),
-            })
-          }
           for (let i = 0; i < 45; i++) {
             await new Promise((resolve) => setTimeout(resolve, 200))
             if (runs.has(runID)) continue
