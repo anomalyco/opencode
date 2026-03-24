@@ -13,6 +13,7 @@ import { type BaseRouterProps, Navigate, Route, Router } from "@solidjs/router"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import { Effect } from "effect"
 import {
+  type Accessor,
   type Component,
   createMemo,
   createResource,
@@ -26,6 +27,7 @@ import {
   Show,
   Suspense,
 } from "solid-js"
+import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { CommandProvider } from "@/context/command"
 import { CommentsProvider } from "@/context/comments"
@@ -174,6 +176,9 @@ export function AppBaseProviders(props: ParentProps<{ locale?: Locale }>) {
 function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean }>) {
   const server = useServer()
   const checkServerHealth = useCheckServerHealth()
+  const [store, setStore] = createStore({
+    message: "",
+  })
 
   const [checkMode, setCheckMode] = createSignal<"blocking" | "background">("blocking")
 
@@ -188,6 +193,7 @@ function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean }>) {
 
           while (true) {
             const res = yield* Effect.promise(() => checkServerHealth(http))
+            setStore("message", res.message ?? "")
             if (res.healthy) return true
             if (checkMode() === "background" || type === "http") return false
           }
@@ -219,6 +225,7 @@ function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean }>) {
         when={startupHealthCheck()}
         fallback={
           <ConnectionError
+            message={() => store.message}
             onRetry={() => {
               if (checkMode() === "background") void healthCheckActions.refetch()
             }}
@@ -237,7 +244,11 @@ function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean }>) {
   )
 }
 
-function ConnectionError(props: { onRetry?: () => void; onServerSelected?: (key: ServerConnection.Key) => void }) {
+function ConnectionError(props: {
+  message?: Accessor<string>
+  onRetry?: () => void
+  onServerSelected?: (key: ServerConnection.Key) => void
+}) {
   const language = useLanguage()
   const server = useServer()
   const others = () => server.list.filter((s) => ServerConnection.key(s) !== server.key)
@@ -258,6 +269,9 @@ function ConnectionError(props: { onRetry?: () => void; onServerSelected?: (key:
           {unreachable()[1]}
         </p>
         <p class="mt-1 text-12-regular text-text-weak">{language.t("app.server.retrying")}</p>
+        <Show when={props.message?.()}>
+          <p class="mt-2 text-12-regular text-text-danger break-words">{props.message?.()}</p>
+        </Show>
       </div>
       <Show when={others().length > 0}>
         <div class="flex flex-col gap-2 w-full max-w-sm">
@@ -284,11 +298,29 @@ function ConnectionError(props: { onRetry?: () => void; onServerSelected?: (key:
   )
 }
 
-function ServerKey(props: ParentProps) {
+function ServerScopedApp(props: ParentProps<{ disableHealthCheck?: boolean; router?: Component<BaseRouterProps> }>) {
   const server = useServer()
   return (
-    <Show when={server.key} keyed>
-      {props.children}
+    <Show when={server.current} keyed>
+      {(_) => (
+        <ConnectionGate disableHealthCheck={props.disableHealthCheck}>
+          <GlobalSDKProvider>
+            <GlobalSyncProvider>
+              <Dynamic
+                component={props.router ?? Router}
+                root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
+              >
+                <Route path="/" component={HomeRoute} />
+                <Route path="/:dir" component={DirectoryLayout}>
+                  <Route path="/" component={SessionIndexRoute} />
+                  <Route path="/session/:id?" component={SessionRoute} />
+                  <Route path="/config" component={ConfigRoute} />
+                </Route>
+              </Dynamic>
+            </GlobalSyncProvider>
+          </GlobalSDKProvider>
+        </ConnectionGate>
+      )}
     </Show>
   )
 }
@@ -301,28 +333,10 @@ export function AppInterface(props: {
   disableHealthCheck?: boolean
 }) {
   return (
-    <ServerProvider
-      defaultServer={props.defaultServer}
-      disableHealthCheck={props.disableHealthCheck}
-      servers={props.servers}
-    >
-      <ConnectionGate disableHealthCheck={props.disableHealthCheck}>
-        <GlobalSDKProvider>
-          <GlobalSyncProvider>
-            <Dynamic
-              component={props.router ?? Router}
-              root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
-            >
-              <Route path="/" component={HomeRoute} />
-              <Route path="/:dir" component={DirectoryLayout}>
-                <Route path="/" component={SessionIndexRoute} />
-                <Route path="/session/:id?" component={SessionRoute} />
-                <Route path="/config" component={ConfigRoute} />
-              </Route>
-            </Dynamic>
-          </GlobalSyncProvider>
-        </GlobalSDKProvider>
-      </ConnectionGate>
+    <ServerProvider defaultServer={props.defaultServer} servers={props.servers}>
+      <ServerScopedApp disableHealthCheck={props.disableHealthCheck} router={props.router}>
+        {props.children}
+      </ServerScopedApp>
     </ServerProvider>
   )
 }

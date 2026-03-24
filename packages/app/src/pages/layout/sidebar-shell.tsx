@@ -25,6 +25,9 @@ export const SidebarContent = (props: {
   openProjectKeybind: Accessor<string | undefined>
   onOpenProject: () => void
   renderProjectOverlay: () => JSX.Element
+  openclawLabel?: Accessor<string>
+  openclawActive?: Accessor<boolean>
+  onOpenOpenclaw?: () => void
   configLabel: Accessor<string>
   onOpenConfig: () => void
   settingsLabel: Accessor<string>
@@ -92,6 +95,18 @@ export const SidebarContent = (props: {
           </DragDropProvider>
         </div>
         <div class="shrink-0 w-full pt-3 pb-6 flex flex-col items-center gap-2">
+          <Show when={props.openclawLabel && props.onOpenOpenclaw}>
+            <Tooltip placement={placement()} value={props.openclawLabel?.() ?? ""}>
+              <IconButton
+                icon="models"
+                variant="ghost"
+                size="large"
+                classList={{ "bg-surface-base-active": !!props.openclawActive?.() }}
+                onClick={props.onOpenOpenclaw}
+                aria-label={props.openclawLabel?.()}
+              />
+            </Tooltip>
+          </Show>
           <Tooltip placement={placement()} value={props.configLabel()}>
             <IconButton
               icon="sliders"

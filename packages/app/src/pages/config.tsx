@@ -81,6 +81,7 @@ type CustomState = FormState & {
 }
 
 const CUSTOM_NEW = "provider:_new_custom"
+const SKILL_NEW = "skill:_new_custom"
 
 type PluginItem = {
   id: string
@@ -730,6 +731,14 @@ function MarkdownField(props: {
   )
 }
 
+function SaveButton(props: { label: string; disabled?: boolean; onClick: () => void }) {
+  return (
+    <Button size="small" variant="secondary" icon="check-small" onClick={props.onClick} disabled={props.disabled}>
+      {props.label}
+    </Button>
+  )
+}
+
 function Editor(props: {
   item?: DocItem
   text: string
@@ -744,6 +753,7 @@ function Editor(props: {
   onSave: () => void
   onReload: () => void
   onOpenFolder?: () => void
+  onCopyPath?: () => void
   extra?: JSX.Element
   warn?: string
   empty: string
@@ -775,7 +785,19 @@ function Editor(props: {
               </span>
             </Show>
           </div>
-          <div class="mt-1 break-all font-mono text-[12px] leading-5 text-text-weak">{props.item?.path ?? ""}</div>
+          <div class="mt-1 break-all font-mono text-[12px] leading-5 text-text-weak">
+            {props.item?.path ?? ""}
+            <Show when={props.onCopyPath && props.item?.path}>
+              <IconButton
+                icon="copy"
+                variant="ghost"
+                size="small"
+                class="ml-1 inline-flex translate-y-[1px] align-middle text-text-weak hover:bg-surface-base-hover hover:text-text-base active:bg-surface-base-active"
+                aria-label={language.t("session.header.open.copyPath")}
+                onClick={props.onCopyPath}
+              />
+            </Show>
+          </div>
           <Show when={props.item?.note}>
             <div class="mt-2 text-12-regular text-text-weak">{props.item?.note}</div>
           </Show>
@@ -1053,15 +1075,11 @@ function CustomEditor(props: {
                 {language.t("command.server.reloadBackend")}
               </Button>
             </Show>
-            <Button
-              size="small"
-              variant="secondary"
-              icon="check-small"
+            <SaveButton
+              label={language.t("config.custom.saveProvider")}
               onClick={props.onSave}
               disabled={props.busy || props.form.saving || props.form.deleting}
-            >
-              {language.t("config.custom.saveProvider")}
-            </Button>
+            />
           </div>
         </div>
 
@@ -1242,6 +1260,12 @@ export default function ConfigPage() {
     customID: "",
     customApiDirty: false,
     custom: providerCfg(undefined),
+    skillTitle: "",
+    skillErr: "",
+    skillPath: "",
+    skillNote: "",
+    skillWarn: "",
+    skillSaving: false,
     treeClosed: {} as Record<string, boolean>,
     busy: false,
     tick: 0,
@@ -1384,6 +1408,14 @@ export default function ConfigPage() {
     },
   )
 
+  const [diskOpenCode] = createResource(
+    () => [state.tick, space()?.skillsRoot] as const,
+    async ([, root]) => {
+      if (!root) return [] as SkillItem[]
+      return scan(root, { source: "opencode", group: "opencode", origin: ".opencode" })
+    },
+  )
+
   const [diskProject] = createResource(
     () => [state.tick, opened()] as const,
     async ([, list]) => {
@@ -1434,7 +1466,7 @@ export default function ConfigPage() {
 
   const skillDocs = createMemo<DocItem[]>(() => {
     const seen = new Set<string>()
-    return [...skills(), ...(diskClaude() ?? []), ...(diskProject() ?? [])]
+    return [...skills(), ...(diskOpenCode() ?? []), ...(diskClaude() ?? []), ...(diskProject() ?? [])]
       .filter((item) => {
         const key = norm(item.location)
         if (seen.has(key)) return false
@@ -1597,7 +1629,21 @@ export default function ConfigPage() {
     return map
   })
 
-  const selectedDoc = createMemo(() => docs().get(state.pick))
+  const selectedDoc = createMemo(() => {
+    const item = docs().get(state.pick)
+    if (item) return item
+    if (state.pick !== state.skillPath || !state.skillPath) return
+    return {
+      id: `skill:${state.skillPath}`,
+      label: state.skillTitle.trim() || name(dir(state.skillPath)),
+      path: state.skillPath,
+      editable: true,
+      source: "opencode",
+      note: state.skillNote || undefined,
+      warn: state.skillWarn || undefined,
+      group: "opencode" as const,
+    }
+  })
   const selectedProvider = createMemo(() =>
     providers().find((item) => item.id === state.pick.replace(/^provider:/, "")),
   )
@@ -1658,7 +1704,10 @@ export default function ConfigPage() {
       return list.length > 0 ? list : [CUSTOM_NEW]
     }
     if (section === "agents") return agents().map((item) => item.id)
-    if (section === "skills") return skillDocs().map((item) => item.id)
+    if (section === "skills") {
+      const list = skillDocs().map((item) => item.id)
+      return state.pick === SKILL_NEW ? [SKILL_NEW, ...list] : list
+    }
     return plugins().map((item) => item.id)
   }
 
@@ -1761,6 +1810,27 @@ export default function ConfigPage() {
     void platform.openInFinder(dir(item.path))
   }
 
+  function copyPath() {
+    const item = selectedDoc()
+    if (!item?.path) return
+    void navigator.clipboard.writeText(item.path).then(
+      () => {
+        showToast({
+          variant: "success",
+          icon: "circle-check",
+          title: t("session.share.copy.copied"),
+          description: item.path,
+        })
+      },
+      (err: unknown) => {
+        showToast({
+          title: language.t("common.requestFailed"),
+          description: err instanceof Error ? err.message : String(err),
+        })
+      },
+    )
+  }
+
   const setConfig = (next: Config) => globalSync.set("config", next)
 
   async function patchConfig(patch: Partial<Config>) {
@@ -1818,6 +1888,84 @@ export default function ConfigPage() {
     setState("customID", "")
     setState("customApiDirty", false)
     setState("custom", providerCfg(undefined))
+  }
+
+  function createSkill() {
+    const text = skillTemplate("")
+    setState("pick", SKILL_NEW)
+    setState("doc", SKILL_NEW)
+    setState("text", text)
+    setState("saved", text)
+    setState("busy", false)
+    setState("skillTitle", "")
+    setState("skillErr", "")
+    setState("skillPath", "")
+    setState("skillNote", "")
+    setState("skillWarn", "")
+    setState("skillSaving", false)
+  }
+
+  function setSkillTitle(value: string) {
+    const prev = state.skillTitle
+    setState("skillTitle", value)
+    setState("skillErr", "")
+    if (state.text !== skillTemplate(prev)) return
+    const text = skillTemplate(value)
+    setState("text", text)
+    setState("saved", text)
+  }
+
+  function validateSkillTitle() {
+    const title = state.skillTitle.trim()
+    if (!title) return t("config.skills.create.error.required")
+    if (title === "." || title === "..") return t("config.skills.create.error.reserved")
+    if (/[/\\]/.test(title)) return t("config.skills.create.error.slash")
+    return ""
+  }
+
+  async function saveSkill() {
+    const root = space()?.skillsRoot
+    if (!root || !platform.createConfigFile) {
+      setState("skillErr", t("config.error.globalConfigUnavailable"))
+      return
+    }
+    const err = validateSkillTitle()
+    if (err) {
+      setState("skillErr", err)
+      return
+    }
+    const title = state.skillTitle.trim()
+    const path = join(root, title, "SKILL.md")
+    const text = state.text
+    setState("skillSaving", true)
+    await platform
+      .createConfigFile(path, text)
+      .then(async () => {
+        const meta = skillMeta(text, path)
+        setState("skillPath", path)
+        setState("skillNote", meta.description)
+        setState("skillWarn", meta.warn ?? "")
+        setState("tick", (value) => value + 1)
+        showToast({ variant: "success", title: t("common.save"), description: title })
+        await open({
+          id: `skill:${path}`,
+          label: meta.name,
+          path,
+          editable: true,
+          source: "opencode",
+          note: meta.description,
+          warn: meta.warn,
+          group: "opencode",
+        })
+      })
+      .catch((err: unknown) => {
+        setState("skillErr", err instanceof Error ? err.message : String(err))
+        showToast({
+          title: language.t("common.requestFailed"),
+          description: err instanceof Error ? err.message : String(err),
+        })
+      })
+      .finally(() => setState("skillSaving", false))
   }
 
   function toggleCustomSecret() {
@@ -2071,6 +2219,18 @@ export default function ConfigPage() {
                   <Match when={state.section === "skills"}>
                     <div class="text-15-medium text-text-strong">{t("config.skills.title")}</div>
                     <div class="mt-1 text-12-regular text-text-weak">{t("config.skills.header")}</div>
+                    <div class="mt-3">
+                      <Button
+                        size="small"
+                        variant="ghost"
+                        icon="folder-add-left"
+                        class="h-8 rounded-lg border border-border-weak-base bg-background-base px-2.5 pr-3 text-12-medium text-text-base shadow-none transition-colors hover:border-border-strong hover:bg-surface-base-hover active:border-border-base active:bg-surface-base-active focus-visible:border-border-strong focus-visible:bg-surface-base-hover disabled:border-border-weak-base disabled:bg-background-base disabled:text-text-weaker"
+                        onClick={createSkill}
+                        disabled={!space()?.skillsRoot || !platform.createConfigFile}
+                      >
+                        {t("config.skills.create.action")}
+                      </Button>
+                    </div>
                   </Match>
                   <Match when={state.section === "plugins"}>
                     <div class="text-15-medium text-text-strong">{t("config.plugins.title")}</div>
@@ -2235,7 +2395,6 @@ export default function ConfigPage() {
                                 <ListButton
                                   active={state.pick === item.id}
                                   title={item.label}
-                                  note={item.note}
                                   meta={short(item.path, space()?.skillsRoot)}
                                   warn={!!item.warn}
                                   tone={item.warn ? "danger" : undefined}
@@ -2268,7 +2427,6 @@ export default function ConfigPage() {
                                 <ListButton
                                   active={state.pick === item.id}
                                   title={item.label}
-                                  note={item.note}
                                   meta={item.path}
                                   warn={!!item.warn}
                                   tone={item.warn ? "danger" : undefined}
@@ -2301,7 +2459,6 @@ export default function ConfigPage() {
                                 <ListButton
                                   active={state.pick === item.id}
                                   title={item.label}
-                                  note={item.note}
                                   meta={item.origin ? `${item.origin} · ${item.path}` : item.path}
                                   warn={!!item.warn}
                                   tone={item.warn ? "danger" : undefined}
@@ -2366,7 +2523,6 @@ export default function ConfigPage() {
                                           <ListButton
                                             active={state.pick === item.id}
                                             title={item.label}
-                                            note={item.note}
                                             meta={item.origin ? `${item.origin} · ${item.path}` : item.path}
                                             warn={!!item.warn}
                                             tone={item.warn ? "danger" : undefined}
@@ -2510,24 +2666,41 @@ export default function ConfigPage() {
               </Match>
 
               <Match when={state.section === "skills"}>
-                <Editor
-                  item={selectedDoc()}
-                  text={state.text}
-                  dirty={dirty()}
-                  busy={state.busy}
-                  tree={tree()}
-                  treeRoot={currentSkillRoot()}
-                  treeBusy={tree.loading}
-                  treeOpen={treeOpen}
-                  onTreeToggle={toggleTree}
-                  onInput={(value) => setState("text", value)}
-                  onSave={() => void save()}
-                  onReload={() => void reload()}
-                  onOpenFolder={selectedDoc() ? openFolder : undefined}
-                  warn={selectedDoc()?.warn}
-                  empty={t("config.skills.empty")}
-                  markdown
-                />
+                <Show
+                  when={state.pick === SKILL_NEW}
+                  fallback={
+                    <Editor
+                      item={selectedDoc()}
+                      text={state.text}
+                      dirty={dirty()}
+                      busy={state.busy}
+                      tree={tree()}
+                      treeRoot={currentSkillRoot()}
+                      treeBusy={tree.loading}
+                      treeOpen={treeOpen}
+                      onTreeToggle={toggleTree}
+                      onInput={(value) => setState("text", value)}
+                      onSave={() => void save()}
+                      onReload={() => void reload()}
+                      onOpenFolder={selectedDoc() ? openFolder : undefined}
+                      onCopyPath={selectedDoc() ? copyPath : undefined}
+                      warn={selectedDoc()?.warn}
+                      empty={t("config.skills.empty")}
+                      markdown
+                    />
+                  }
+                >
+                  <SkillCreator
+                    root={space()?.skillsRoot}
+                    title={state.skillTitle}
+                    text={state.text}
+                    busy={state.skillSaving}
+                    err={state.skillErr || undefined}
+                    onTitle={setSkillTitle}
+                    onInput={(value) => setState("text", value)}
+                    onSave={() => void saveSkill()}
+                  />
+                </Show>
               </Match>
 
               <Match when={state.section === "agents"}>
@@ -2568,6 +2741,87 @@ export default function ConfigPage() {
               </Match>
             </Switch>
           </main>
+        </div>
+      </div>
+    </div>
+  )
+}
+const yaml = (value: string) => JSON.stringify(value.trim())
+
+function skillTemplate(title: string) {
+  const name = title.trim()
+  return [
+    "---",
+    `name: ${yaml(name)}`,
+    'description: "Describe when to use this skill."',
+    "---",
+    "",
+    name ? `# ${name}` : "# New Skill",
+    "",
+    "Add instructions, workflows, and examples here.",
+    "",
+  ].join("\n")
+}
+
+function SkillCreator(props: {
+  root?: string
+  title: string
+  text: string
+  busy: boolean
+  err?: string
+  onTitle: (value: string) => void
+  onInput: (value: string) => void
+  onSave: () => void
+}) {
+  const language = useLanguage()
+
+  return (
+    <div class="flex h-full min-h-0 flex-col">
+      <div class="border-b border-border-weak-base px-5 py-4">
+        <div class="min-w-0">
+          <div class="flex items-center gap-2">
+            <div class="truncate text-15-medium text-text-strong">{language.t("config.skills.create.title")}</div>
+            <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
+              {language.t("config.editor.badge.editable")}
+            </span>
+          </div>
+          <div class="mt-1 text-12-regular text-text-weak">{language.t("config.skills.create.description")}</div>
+          <div class="mt-3 flex flex-wrap items-center gap-2">
+            <SaveButton
+              label={language.t("common.save")}
+              onClick={props.onSave}
+              disabled={props.busy || !props.title.trim()}
+            />
+          </div>
+        </div>
+      </div>
+      <div class="grid min-h-0 flex-1 auto-rows-fr gap-4 px-5 py-4 xl:grid-cols-[minmax(0,1fr)_280px]">
+        <div class="flex min-h-0 flex-col gap-4">
+          <div class="rounded-xl border border-border-weak-base bg-background-base p-4">
+            <TextField
+              label={language.t("config.skills.create.field")}
+              placeholder={language.t("config.skills.create.placeholder")}
+              value={props.title}
+              onChange={props.onTitle}
+              validationState={props.err ? "invalid" : undefined}
+              error={props.err}
+            />
+            <div class="mt-3 rounded-lg border border-border-weak-base bg-surface-secondary px-3 py-2 text-12-regular text-text-weak">
+              {language.t("config.skills.create.preview", {
+                root: props.root ?? "~/.config/opencode/skills",
+                folder: props.title.trim() || language.t("config.skills.create.previewPending"),
+              })}
+            </div>
+          </div>
+          <div class="min-h-0 flex-1">
+            <MarkdownField text={props.text} busy={props.busy} editable={true} onInput={props.onInput} paint={paint} />
+          </div>
+        </div>
+        <div class="flex h-full min-h-0 flex-col rounded-xl border border-border-weak-base bg-background-base p-3">
+          <div class="mb-3 text-11-medium uppercase tracking-[0.08em] text-text-weak">
+            {language.t("config.editor.structure")}
+          </div>
+          <div class="text-12-regular text-text-weak">{language.t("config.skills.create.structure")}</div>
         </div>
       </div>
     </div>
