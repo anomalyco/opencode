@@ -304,6 +304,23 @@ describe("tool.read truncation", () => {
     })
   })
 
+  test("throws when offset is negative", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "short.txt"), "line1\nline2")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        await expect(read.execute({ filePath: path.join(tmp.path, "short.txt"), offset: -2 }, ctx)).rejects.toThrow(
+          "offset must be greater than or equal to 1",
+        )
+      },
+    })
+  })
+
   test("allows reading empty file at default offset", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
