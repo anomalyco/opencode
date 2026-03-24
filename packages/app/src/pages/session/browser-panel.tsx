@@ -5,12 +5,14 @@ import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
+import { usePlatform } from "@/context/platform"
 import { createSizing } from "@/pages/session/helpers"
 import { useSessionLayout } from "@/pages/session/session-layout"
 
 export function BrowserPanel() {
   const layout = useLayout()
   const language = useLanguage()
+  const platform = usePlatform()
   const { view } = useSessionLayout()
 
   const opened = createMemo(() => view().browser.opened())
@@ -204,7 +206,7 @@ export function BrowserPanel() {
                   iconSize="large"
                   onClick={() => {
                     if (store.currentUrl) {
-                      window.open(store.currentUrl, "_blank", "noopener,noreferrer")
+                      platform.openLink(store.currentUrl)
                     }
                   }}
                   aria-label={language.t("browser.openExternal")}
