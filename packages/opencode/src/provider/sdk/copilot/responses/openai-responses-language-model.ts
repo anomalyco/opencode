@@ -1277,6 +1277,22 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
               }
             } else if (isErrorChunk(value)) {
               controller.enqueue({ type: "error", error: value })
+            } else if (isWrappedErrorChunk(value)) {
+              // Normalise wrapped error shape { error: { type, message } } into
+              // a provider error. Rate-limit errors are retryable.
+              const wrappedError = value.error
+              const isRetryable = RETRYABLE_WRAPPED_ERROR_TYPES.has(wrappedError.type)
+              controller.enqueue({
+                type: "error",
+                error: new APICallError({
+                  message: wrappedError.message,
+                  url: "",
+                  requestBodyValues: {},
+                  statusCode: isRetryable ? 429 : 400,
+                  responseBody: JSON.stringify(value),
+                  isRetryable,
+                }),
+              })
             }
           },
 
@@ -1336,6 +1352,20 @@ const errorChunkSchema = z.object({
   message: z.string(),
   param: z.string().nullish(),
   sequence_number: z.number(),
+})
+
+// Some Responses API paths (e.g. rate limit errors) return a wrapped error
+// shape without a top-level `type` field:
+//   { "error": { "type": "rate_limit_error", "message": "..." } }
+// This schema captures that shape so it can be normalised into a retryable
+// provider error instead of failing Zod union validation.
+const wrappedErrorChunkSchema = z.object({
+  error: z.object({
+    type: z.string(),
+    message: z.string(),
+    code: z.string().nullish(),
+    param: z.string().nullish(),
+  }),
 })
 
 const responseFinishedChunkSchema = z.object({
@@ -1528,6 +1558,7 @@ const openaiResponsesChunkSchema = z.union([
   responseReasoningSummaryPartAddedSchema,
   responseReasoningSummaryTextDeltaSchema,
   errorChunkSchema,
+  wrappedErrorChunkSchema,
   z.object({ type: z.string() }).loose(), // fallback for unknown chunks
 ])
 
@@ -1623,6 +1654,19 @@ function isResponseReasoningSummaryTextDeltaChunk(
 function isErrorChunk(chunk: z.infer<typeof openaiResponsesChunkSchema>): chunk is z.infer<typeof errorChunkSchema> {
   return chunk.type === "error"
 }
+
+function isWrappedErrorChunk(
+  chunk: z.infer<typeof openaiResponsesChunkSchema>,
+): chunk is z.infer<typeof wrappedErrorChunkSchema> {
+  return (
+    "error" in chunk &&
+    typeof (chunk as any).error === "object" &&
+    (chunk as any).error !== null &&
+    typeof (chunk as any).error.type === "string"
+  )
+}
+
+const RETRYABLE_WRAPPED_ERROR_TYPES = new Set(["rate_limit_error", "concurrency_limit_exceeded"])
 
 type ResponsesModelConfig = {
   isReasoningModel: boolean
