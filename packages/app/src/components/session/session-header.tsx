@@ -21,6 +21,7 @@ import { focusTerminalById } from "@/pages/session/helpers"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { decode64 } from "@/utils/base64"
 import { Persist, persisted } from "@/utils/persist"
+import { dict as enDict } from "@/i18n/en"
 import { StatusPopover } from "../status-popover"
 
 const OPEN_APPS = [
@@ -164,6 +165,8 @@ export function SessionHeader() {
   const language = useLanguage()
   const terminal = useTerminal()
   const { params, view } = useSessionLayout()
+  type DictKey = keyof typeof enDict
+  const kw = (...keys: DictKey[]) => (language.locale() === "en" ? undefined : keys.map((k) => enDict[k]).join(" "))
 
   const projectDirectory = createMemo(() => decode64(params.dir) ?? "")
   const project = createMemo(() => {
@@ -268,6 +271,31 @@ export function SessionHeader() {
         setOpenRequest("app", undefined)
       })
   }
+
+  command.register("session-header.open", () => {
+    if (!canOpen()) return []
+
+    return [
+      {
+        id: "terminal.openGhostty",
+        title: language.t("command.terminal.openGhostty"),
+        description: language.t("command.terminal.openGhostty.description"),
+        keywords: kw("command.terminal.openGhostty", "command.terminal.openGhostty.description"),
+        category: language.t("command.category.terminal"),
+        disabled: !options().some((item) => item.id === "ghostty"),
+        onSelect: () => openDir("ghostty"),
+      },
+      {
+        id: "terminal.openWezTerm",
+        title: language.t("command.terminal.openWezTerm"),
+        description: language.t("command.terminal.openWezTerm.description"),
+        keywords: kw("command.terminal.openWezTerm", "command.terminal.openWezTerm.description"),
+        category: language.t("command.category.terminal"),
+        disabled: !options().some((item) => item.id === "wezterm"),
+        onSelect: () => openDir("wezterm"),
+      },
+    ]
+  })
 
   const copyPath = () => {
     const directory = projectDirectory()

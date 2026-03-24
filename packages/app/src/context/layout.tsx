@@ -1,5 +1,5 @@
 import { createStore, produce } from "solid-js/store"
-import { batch, createEffect, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
+import { batch, createEffect, createMemo, onCleanup, onMount, untrack, type Accessor } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useGlobalSync } from "./global-sync"
 import { useGlobalSDK } from "./global-sdk"
@@ -500,7 +500,31 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       const current = server.current
       const projects = list()
       if (!current || current.integration === "openclaw") return
-      setRail("projects", projects)
+      // After a server switch (e.g. returning from OpenClaw) the enriched()
+      // data temporarily loses server-provided icon metadata because
+      // globalSync.data.project still contains the previous server's records.
+      // Without intervention the colour-assignment effect would pick random
+      // colours, causing a visible flash.  Preserve cached rail icons and
+      // seed the local `colors` store so downstream memos use stable colours.
+      // Read rail and colors with untrack() to avoid a circular dependency
+      // (this effect writes to both).
+      const cached = untrack(() => rail.projects)
+      if (cached.length > 0) {
+        const prev = new Map(cached.map((p) => [p.worktree, p] as const))
+        const patched = projects.map((project) => {
+          const old = prev.get(project.worktree)
+          if (old?.icon?.color && !project.icon?.color) {
+            if (!untrack(() => colors[project.worktree])) {
+              setColors(project.worktree, old.icon.color as AvatarColorKey)
+            }
+            return { ...project, icon: old.icon }
+          }
+          return project
+        })
+        setRail("projects", patched)
+      } else {
+        setRail("projects", projects)
+      }
     })
 
     createEffect(() => {

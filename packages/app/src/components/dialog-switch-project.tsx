@@ -6,6 +6,7 @@ import { useParams } from "@solidjs/router"
 import { createMemo, Show } from "solid-js"
 import { useLayout, getAvatarColors, type LocalProject } from "@/context/layout"
 import { useLanguage } from "@/context/language"
+import { useServer } from "@/context/server"
 import { Avatar } from "@opencode-ai/ui/avatar"
 import { Icon } from "@opencode-ai/ui/icon"
 import { decode64 } from "@/utils/base64"
@@ -16,12 +17,14 @@ type ProjectEntry = {
   path: string
   isCurrent: boolean
   project: LocalProject
+  isOpenclaw?: boolean
 }
 
 export function DialogSwitchProject(props: { onSelect: (directory: string) => void }) {
   const dialog = useDialog()
   const language = useLanguage()
   const layout = useLayout()
+  const server = useServer()
   const params = useParams()
 
   const currentDirectory = createMemo(() => {
@@ -32,17 +35,37 @@ export function DialogSwitchProject(props: { onSelect: (directory: string) => vo
     }
   })
 
+  const hasOpenclaw = createMemo(() => server.list.some((item) => item.integration === "openclaw"))
+
   const entries = createMemo((): ProjectEntry[] => {
-    const projects = layout.projects.list()
+    const projects = layout.projects.visible()
     const current = currentDirectory()
 
-    return projects.map((project) => ({
+    const result: ProjectEntry[] = projects.map((project) => ({
       id: project.worktree,
       name: project.name || getFilename(project.worktree),
       path: project.worktree,
       isCurrent: project.worktree === current,
       project,
     }))
+
+    if (hasOpenclaw()) {
+      result.unshift({
+        id: "/openclaw",
+        name: "OpenClaw",
+        path: "/openclaw",
+        isCurrent: current === "/openclaw",
+        isOpenclaw: true,
+        project: {
+          worktree: "/openclaw",
+          name: "OpenClaw",
+          expanded: true,
+          sandboxes: [],
+        } as LocalProject,
+      })
+    }
+
+    return result
   })
 
   const handleSelect = (entry: ProjectEntry | undefined) => {
@@ -64,14 +87,25 @@ export function DialogSwitchProject(props: { onSelect: (directory: string) => vo
         {(item) => (
           <div class="w-full flex items-center justify-between rounded-md pl-1">
             <div class="flex items-center grow min-w-0">
-              <Avatar
-                fallback={item.name}
-                src={item.project.icon?.override}
-                {...getAvatarColors(item.project.icon?.color)}
-                class="size-6 rounded shrink-0"
-              />
+              <Show
+                when={!item.isOpenclaw}
+                fallback={
+                  <div class="size-6 rounded shrink-0 flex items-center justify-center bg-surface-base">
+                    <Icon name="openclaw" class="text-icon-base size-4" />
+                  </div>
+                }
+              >
+                <Avatar
+                  fallback={item.name}
+                  src={item.project.icon?.override}
+                  {...getAvatarColors(item.project.icon?.color)}
+                  class="size-6 rounded shrink-0"
+                />
+              </Show>
               <span class="text-14-medium text-text-base truncate w-[200px] shrink-0 pl-2">{item.name}</span>
-              <span class="text-12-regular text-text-weak truncate grow min-w-0 text-left pl-3">{item.path}</span>
+              <Show when={!item.isOpenclaw}>
+                <span class="text-12-regular text-text-weak truncate grow min-w-0 text-left pl-3">{item.path}</span>
+              </Show>
               <Show when={item.isCurrent}>
                 <span class="text-12-regular text-text-weak shrink-0 ml-2">
                   {language.t("project.switch.current")}

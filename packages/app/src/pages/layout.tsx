@@ -1096,7 +1096,8 @@ export default function Layout(props: ParentProps) {
         keywords: kw("command.project.switch"),
         category: language.t("command.category.project"),
         keybind: "mod+t",
-        disabled: layout.projects.list().length === 0,
+        disabled:
+          layout.projects.list().length === 0 && !server.list.some((item) => item.integration === "openclaw"),
         onSelect: () => {
           dialog.show(() => <DialogSwitchProject onSelect={navigateToProject} />, undefined, {
             modal: false,
@@ -1469,6 +1470,8 @@ export default function Layout(props: ParentProps) {
   async function navigateToProject(directory: string | undefined) {
     if (!directory) return
     if (isOpenclawDir(directory)) {
+      const conn = server.list.find((item) => item.integration === "openclaw")
+      if (conn) server.setActive(ServerConnection.key(conn))
       navigateWithSidebarReset(`/${openclawSlug}/session`)
       return
     }

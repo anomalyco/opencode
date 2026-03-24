@@ -1,10 +1,9 @@
-import { createEffect, createMemo, Match, Show, Switch, type ParentProps } from "solid-js"
+import { createEffect, createMemo, Show, type ParentProps } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useNavigate, useParams } from "@solidjs/router"
 import { SDKProvider } from "@/context/sdk"
 import { SyncProvider, useSync } from "@/context/sync"
 import { LocalProvider } from "@/context/local"
-import { useServer } from "@/context/server"
 
 import { DataProvider } from "@opencode-ai/ui/context"
 import { decode64 } from "@/utils/base64"
@@ -42,10 +41,8 @@ export default function Layout(props: ParentProps) {
   const params = useParams()
   const navigate = useNavigate()
   const language = useLanguage()
-  const server = useServer()
   const [state, setState] = createStore({ invalid: "" })
   const directory = createMemo(() => decode64(params.dir) ?? "")
-  const openclaw = createMemo(() => directory() === "/openclaw")
 
   createEffect(() => {
     if (!params.dir) return
@@ -62,23 +59,7 @@ export default function Layout(props: ParentProps) {
 
   return (
     <Show when={directory()}>
-      {(dir) => (
-        <Switch>
-          <Match when={openclaw()}>
-            <Show when={server.key} keyed>
-              {(_) => (
-                // OpenClaw is a synthetic workspace entry. Keep its data scope isolated so
-                // switching between assistant/global state and normal projects cannot reuse
-                // a stale per-directory provider instance.
-                <DirectoryProviders directory={dir()}>{props.children}</DirectoryProviders>
-              )}
-            </Show>
-          </Match>
-          <Match when={true}>
-            <DirectoryProviders directory={dir()}>{props.children}</DirectoryProviders>
-          </Match>
-        </Switch>
-      )}
+      <DirectoryProviders directory={directory()}>{props.children}</DirectoryProviders>
     </Show>
   )
 }
