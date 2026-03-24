@@ -3,6 +3,19 @@
 
 // borrowed from https://github.com/skyline69/balatro-mod-manager
 #[cfg(target_os = "linux")]
+fn has_nvidia() -> bool {
+    std::fs::read_dir("/sys/class/drm")
+        .ok()
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path().join("device/vendor"))
+        .filter_map(|path| std::fs::read_to_string(path).ok())
+        .map(|value| value.trim().to_ascii_lowercase())
+        .any(|value| value == "0x10de" || value == "10de")
+}
+
+#[cfg(target_os = "linux")]
 fn configure_display_backend() -> Option<String> {
     use opencode_lib::linux_windowing::{Backend, SessionEnv, select_backend};
     use std::env;
@@ -16,27 +29,43 @@ fn configure_display_backend() -> Option<String> {
     };
 
     let session = SessionEnv::capture();
+    let nvidia = has_nvidia();
+    if nvidia {
+        set_env_if_absent("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    }
     let prefer_wayland = opencode_lib::linux_display::read_wayland().unwrap_or(false);
-    let decision = select_backend(&session, prefer_wayland)?;
+    let decision = select_backend(&session, prefer_wayland);
 
-    match decision.backend {
-        Backend::X11 => {
-            set_env_if_absent("WINIT_UNIX_BACKEND", "x11");
-            set_env_if_absent("GDK_BACKEND", "x11");
-            set_env_if_absent("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    if let Some(decision) = decision {
+        match decision.backend {
+            Backend::X11 => {
+                set_env_if_absent("WINIT_UNIX_BACKEND", "x11");
+                set_env_if_absent("GDK_BACKEND", "x11");
+                set_env_if_absent("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+            }
+            Backend::Wayland => {
+                set_env_if_absent("WINIT_UNIX_BACKEND", "wayland");
+                set_env_if_absent("GDK_BACKEND", "wayland");
+                set_env_if_absent("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+            }
+            Backend::Auto => {
+                set_env_if_absent("GDK_BACKEND", "wayland,x11");
+                set_env_if_absent("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+            }
         }
-        Backend::Wayland => {
-            set_env_if_absent("WINIT_UNIX_BACKEND", "wayland");
-            set_env_if_absent("GDK_BACKEND", "wayland");
-            set_env_if_absent("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+
+        if nvidia {
+            return Some(format!("{} NVIDIA GPU detected; disabling dmabuf renderer.", decision.note));
         }
-        Backend::Auto => {
-            set_env_if_absent("GDK_BACKEND", "wayland,x11");
-            set_env_if_absent("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
-        }
+
+        return Some(decision.note);
     }
 
-    Some(decision.note)
+    if nvidia {
+        return Some("NVIDIA GPU detected; disabling dmabuf renderer.".into());
+    }
+
+    None
 }
 
 fn main() {
