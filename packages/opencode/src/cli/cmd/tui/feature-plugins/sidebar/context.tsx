@@ -1,6 +1,5 @@
 import type { AssistantMessage } from "@opencode-ai/sdk/v2"
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
-import type { RGBA } from "@opentui/core"
 import { createMemo } from "solid-js"
 
 const money = new Intl.NumberFormat("en-US", {
@@ -9,7 +8,7 @@ const money = new Intl.NumberFormat("en-US", {
 })
 
 function View(props: { api: TuiPluginApi; session_id: string }) {
-  const theme = () => props.api.theme.current as Record<string, string | RGBA>
+  const theme = () => props.api.theme.current
   const msg = createMemo(() => props.api.state.session.messages(props.session_id))
   const cost = createMemo(() => msg().reduce((sum, item) => sum + (item.role === "assistant" ? item.cost : 0), 0))
 

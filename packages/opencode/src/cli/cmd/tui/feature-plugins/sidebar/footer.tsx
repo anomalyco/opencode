@@ -1,9 +1,8 @@
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
-import type { RGBA } from "@opentui/core"
 import { createMemo, Show } from "solid-js"
 
 function View(props: { api: TuiPluginApi }) {
-  const theme = () => props.api.theme.current as Record<string, string | RGBA>
+  const theme = () => props.api.theme.current
   const has = createMemo(() =>
     props.api.state.provider.some(
       (item) => item.id !== "opencode" || Object.values(item.models).some((model) => model.cost?.input !== 0),

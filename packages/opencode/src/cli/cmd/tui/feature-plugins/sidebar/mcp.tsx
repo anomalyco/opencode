@@ -1,10 +1,9 @@
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
-import type { RGBA } from "@opentui/core"
 import { createMemo, For, Match, Show, Switch, createSignal } from "solid-js"
 
 function View(props: { api: TuiPluginApi }) {
   const [open, setOpen] = createSignal(true)
-  const theme = () => props.api.theme.current as Record<string, string | RGBA>
+  const theme = () => props.api.theme.current
   const list = createMemo(() => props.api.state.mcp())
   const on = createMemo(() => list().filter((item) => item.status === "connected").length)
   const bad = createMemo(
@@ -16,14 +15,12 @@ function View(props: { api: TuiPluginApi }) {
   )
 
   const dot = (status: string) => {
-    const map: Record<string, string | RGBA> = {
-      connected: theme().success,
-      failed: theme().error,
-      disabled: theme().textMuted,
-      needs_auth: theme().warning,
-      needs_client_registration: theme().error,
-    }
-    return map[status] ?? theme().textMuted
+    if (status === "connected") return theme().success
+    if (status === "failed") return theme().error
+    if (status === "disabled") return theme().textMuted
+    if (status === "needs_auth") return theme().warning
+    if (status === "needs_client_registration") return theme().error
+    return theme().textMuted
   }
 
   return (

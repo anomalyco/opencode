@@ -185,7 +185,18 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
     },
     theme: {
       get current() {
-        return opts.theme?.current ?? {}
+        return (
+          opts.theme?.current ?? {
+            text: "#ffffff",
+            textMuted: "#999999",
+            success: "#00ff00",
+            error: "#ff0000",
+            warning: "#ffff00",
+            backgroundElement: "#111111",
+            diffAdded: "#00ff00",
+            diffRemoved: "#ff0000",
+          }
+        )
       },
       get selected() {
         return selected

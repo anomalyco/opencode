@@ -1,9 +1,8 @@
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
-import type { RGBA } from "@opentui/core"
 import { Show } from "solid-js"
 
 function View(props: { api: TuiPluginApi; title: string; share_url?: string }) {
-  const theme = () => props.api.theme.current as Record<string, string | RGBA>
+  const theme = () => props.api.theme.current
 
   return (
     <box paddingRight={1}>

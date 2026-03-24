@@ -1,10 +1,9 @@
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
-import type { RGBA } from "@opentui/core"
 import { createMemo, For, Show, createSignal } from "solid-js"
 
 function View(props: { api: TuiPluginApi }) {
   const [open, setOpen] = createSignal(true)
-  const theme = () => props.api.theme.current as Record<string, string | RGBA>
+  const theme = () => props.api.theme.current
   const list = createMemo(() => props.api.state.lsp())
   const off = createMemo(() => props.api.state.config.lsp === false)
 

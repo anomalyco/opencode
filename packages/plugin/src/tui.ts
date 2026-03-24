@@ -8,7 +8,7 @@ import type {
   Provider,
   Config as SdkConfig,
 } from "@opencode-ai/sdk/v2"
-import type { CliRenderer, ParsedKey } from "@opentui/core"
+import type { CliRenderer, ParsedKey, RGBA } from "@opentui/core"
 import type { JSX, SolidPlugin } from "@opentui/solid"
 import type { Config as PluginConfig, Plugin, PluginOptions } from "./index.js"
 
@@ -135,8 +135,20 @@ export type TuiToast = {
   duration?: number
 }
 
+export type TuiThemeCurrent = {
+  readonly text: RGBA | string
+  readonly textMuted: RGBA | string
+  readonly success: RGBA | string
+  readonly error: RGBA | string
+  readonly warning: RGBA | string
+  readonly backgroundElement: RGBA | string
+  readonly diffAdded: RGBA | string
+  readonly diffRemoved: RGBA | string
+  readonly [key: string]: RGBA | string | number | boolean
+}
+
 export type TuiTheme = {
-  readonly current: Record<string, unknown>
+  readonly current: TuiThemeCurrent
   readonly selected: string
   has: (name: string) => boolean
   set: (name: string) => boolean
