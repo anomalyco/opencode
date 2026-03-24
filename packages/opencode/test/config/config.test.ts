@@ -251,7 +251,7 @@ test("resolves env templates in account config with account token", async () => 
   const originalToken = Account.token
   const originalControlToken = process.env["OPENCODE_CONSOLE_TOKEN"]
 
-  Account.active = mock(() => ({
+  Account.active = mock(async () => ({
     id: AccountID.make("account-1"),
     email: "user@example.com",
     url: "https://control.example.com",
