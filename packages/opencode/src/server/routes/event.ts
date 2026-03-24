@@ -32,54 +32,57 @@ export const EventRoutes = lazy(() =>
       log.info("event connected")
       c.header("X-Accel-Buffering", "no")
       c.header("X-Content-Type-Options", "nosniff")
-      return streamSSE(c, async (stream) => {
-        const q = new AsyncQueue<string | null>()
-        let done = false
+      return streamSSE(
+        c,
+        Instance.bind(async (stream) => {
+          const q = new AsyncQueue<string | null>()
+          let done = false
 
-        q.push(
-          JSON.stringify({
-            type: "server.connected",
-            properties: {},
-          }),
-        )
-
-        // Send heartbeat every 10s to prevent stalled proxy streams.
-        const heartbeat = setInterval(() => {
           q.push(
             JSON.stringify({
-              type: "server.heartbeat",
+              type: "server.connected",
               properties: {},
             }),
           )
-        }, 10_000)
 
-        const unsub = Bus.subscribeAll((event) => {
-          q.push(JSON.stringify(event))
-          if (event.type === Bus.InstanceDisposed.type) {
+          // Send heartbeat every 10s to prevent stalled proxy streams.
+          const heartbeat = setInterval(() => {
+            q.push(
+              JSON.stringify({
+                type: "server.heartbeat",
+                properties: {},
+              }),
+            )
+          }, 10_000)
+
+          const unsub = Bus.subscribeAll((event) => {
+            q.push(JSON.stringify(event))
+            if (event.type === Bus.InstanceDisposed.type) {
+              stop()
+            }
+          })
+
+          const stop = () => {
+            if (done) return
+            done = true
+            clearInterval(heartbeat)
+            unsub()
+            q.push(null)
+            log.info("event disconnected")
+          }
+
+          stream.onAbort(stop)
+
+          try {
+            for await (const data of q) {
+              if (data === null) return
+              await stream.writeSSE({ data })
+            }
+          } finally {
             stop()
           }
-        })
-
-        const stop = () => {
-          if (done) return
-          done = true
-          clearInterval(heartbeat)
-          unsub()
-          q.push(null)
-          log.info("event disconnected")
-        }
-
-        stream.onAbort(stop)
-
-        try {
-          for await (const data of q) {
-            if (data === null) return
-            await stream.writeSSE({ data })
-          }
-        } finally {
-          stop()
-        }
-      })
+        }),
+      )
     },
   ),
 )

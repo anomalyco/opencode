@@ -1,0 +1,29 @@
+{
+  "name": "@opencode-ai/browser",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "2.0.65",
+    "@xterm/addon-fit": "0.10.0",
+    "@xterm/xterm": "5.5.0",
+    "ai": "5.0.124",
+    "drizzle-orm": "1.0.0-beta.19-d95b7a4",
+    "effect": "4.0.0-beta.35",
+    "hono": "4.10.7",
+    "sql.js": "1.12.0",
+    "ulid": "3.0.1",
+    "zod": "4.1.8"
+  },
+  "devDependencies": {
+    "@types/node": "22.13.9",
+    "typescript": "5.8.2",
+    "vite": "7.1.4",
+    "vite-plugin-node-polyfills": "0.23.0"
+  }
+}

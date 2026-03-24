@@ -44,6 +44,10 @@ export namespace Config {
 
   const log = Log.create({ service: "config" })
 
+  function isBrowserChannel(): boolean {
+    return Installation.CHANNEL === "browser"
+  }
+
   // Managed settings directory for enterprise deployments (highest priority, admin-controlled)
   // These settings override all user and project settings
   function systemManagedConfigDir(): string {
@@ -154,6 +158,7 @@ export namespace Config {
 
       deps.push(
         iife(async () => {
+          if (isBrowserChannel()) return
           const shouldInstall = await needsInstall(dir)
           if (shouldInstall) await installDependencies(dir)
         }),
@@ -271,6 +276,11 @@ export namespace Config {
   }
 
   export async function installDependencies(dir: string) {
+    if (isBrowserChannel()) {
+      log.debug("skipping config dependency install in browser mode", { dir })
+      return
+    }
+
     const pkg = path.join(dir, "package.json")
     const targetVersion = Installation.isLocal() ? "*" : Installation.VERSION
 
@@ -333,6 +343,10 @@ export namespace Config {
   }
 
   export async function needsInstall(dir: string) {
+    if (isBrowserChannel()) {
+      return false
+    }
+
     // Some config dirs may be read-only.
     // Installing deps there will fail; skip installation in that case.
     const writable = await isWritable(dir)

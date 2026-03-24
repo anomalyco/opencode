@@ -1962,6 +1962,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         (await Provider.getSmallModel(input.providerID)) ?? (await Provider.getModel(input.providerID, input.modelID))
       )
     })
+    if (!model) return
     const result = await LLM.stream({
       agent,
       user: firstRealUser.info as MessageV2.User,

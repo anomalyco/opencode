@@ -2,6 +2,8 @@ import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentu
 import { Clipboard } from "@tui/util/clipboard"
 import { Selection } from "@tui/util/selection"
 import { MouseButton, TextAttributes } from "@opentui/core"
+import type { BrowserRenderer } from "@opentui/core/browser"
+import type { CliRenderer } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
 import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
 import { win32DisableProcessedInput, win32FlushInputBuffer, win32InstallCtrlCGuard } from "./win32"
@@ -114,6 +116,7 @@ export function tui(input: {
   fetch?: typeof fetch
   headers?: RequestInit["headers"]
   events?: EventSource
+  renderer?: CliRenderer | BrowserRenderer
 }) {
   // promise to prevent immediate exit
   return new Promise<void>(async (resolve) => {
@@ -181,7 +184,7 @@ export function tui(input: {
           </ErrorBoundary>
         )
       },
-      {
+      input.renderer ?? {
         targetFps: 60,
         gatherStats: false,
         exitOnCtrlC: false,

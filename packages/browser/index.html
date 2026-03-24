@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OpenCode Browser</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; background: #1a1a2e; color: #e0e0e0; font-family: system-ui, -apple-system, sans-serif; }
+    #app { display: flex; flex-direction: column; height: 100vh; }
+    #status-bar { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; background: #16213e; border-bottom: 1px solid #0f3460; font-size: 13px; }
+    #status-bar .left { display: flex; align-items: center; gap: 12px; }
+    #status-bar .right { display: flex; align-items: center; gap: 12px; }
+    #status-bar .badge { background: #0f3460; padding: 2px 8px; border-radius: 4px; font-size: 12px; }
+    #api-key-bar { display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: #1a1a2e; border-bottom: 1px solid #0f3460; }
+    #api-key-bar input { flex: 1; padding: 6px 10px; background: #16213e; border: 1px solid #0f3460; color: #e0e0e0; border-radius: 4px; font-size: 13px; font-family: monospace; }
+    #api-key-bar input:focus { outline: none; border-color: #e94560; }
+    #api-key-bar button { padding: 6px 16px; background: #e94560; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
+    #api-key-bar button:hover { background: #c73e54; }
+    #api-key-bar.hidden { display: none; }
+    #terminal-container { flex: 1; padding: 4px; overflow: hidden; }
+    .xterm { height: 100%; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="status-bar">
+      <div class="left">
+        <strong>OpenCode</strong>
+        <span class="badge" id="model-badge">anthropic/claude-sonnet-4-20250514</span>
+      </div>
+      <div class="right">
+        <span id="session-info">No session</span>
+      </div>
+    </div>
+    <div id="api-key-bar">
+      <label for="api-key-input">Anthropic API Key:</label>
+      <input type="password" id="api-key-input" placeholder="sk-ant-..." />
+      <button id="api-key-submit">Connect</button>
+    </div>
+    <div id="terminal-container"></div>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

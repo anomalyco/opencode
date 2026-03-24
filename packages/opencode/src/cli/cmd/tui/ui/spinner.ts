@@ -1,6 +1,9 @@
 import type { ColorInput } from "@opentui/core"
 import { RGBA } from "@opentui/core"
-import type { ColorGenerator } from "opentui-spinner"
+
+export interface ColorGenerator {
+  (frameIndex: number, charIndex: number, totalFrames: number, totalChars: number): ColorInput
+}
 
 interface AdvancedGradientOptions {
   colors: ColorInput[]
