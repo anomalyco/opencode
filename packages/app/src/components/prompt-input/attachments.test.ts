@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { attachmentMime } from "./files"
+import { pasteMode } from "./paste"
 
 describe("attachmentMime", () => {
   test("keeps PDFs when the browser reports the mime", async () => {
@@ -20,5 +21,24 @@ describe("attachmentMime", () => {
   test("rejects binary files", async () => {
     const file = new File([Uint8Array.of(0, 255, 1, 2)], "blob.bin", { type: "application/octet-stream" })
     expect(await attachmentMime(file)).toBeUndefined()
+  })
+})
+
+describe("pasteMode", () => {
+  test("uses native paste for short single-line text", () => {
+    expect(pasteMode("hello world")).toBe("native")
+  })
+
+  test("uses manual paste for multiline text", () => {
+    expect(
+      pasteMode(`{
+  "ok": true
+}`),
+    ).toBe("manual")
+    expect(pasteMode("a\r\nb")).toBe("manual")
+  })
+
+  test("uses manual paste for large text", () => {
+    expect(pasteMode("x".repeat(8000))).toBe("manual")
   })
 })

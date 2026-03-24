@@ -225,6 +225,7 @@ export const dict = {
   "common.cancel": "İptal",
   "common.connect": "Bağlan",
   "common.disconnect": "Bağlantı Kes",
+  "common.continue": "Gönder",
   "common.submit": "Gönder",
   "common.save": "Kaydet",
   "common.saving": "Kaydediliyor...",

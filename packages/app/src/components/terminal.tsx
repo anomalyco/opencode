@@ -1,4 +1,7 @@
-import { type HexColor, resolveThemeVariant, useTheme, withAlpha } from "@opencode-ai/ui/theme"
+import { withAlpha } from "@opencode-ai/ui/theme/color"
+import { useTheme } from "@opencode-ai/ui/theme/context"
+import { resolveThemeVariant } from "@opencode-ai/ui/theme/resolve"
+import type { HexColor } from "@opencode-ai/ui/theme/types"
 import { showToast } from "@opencode-ai/ui/toast"
 import type { FitAddon, Ghostty, Terminal as Term } from "ghostty-web"
 import { type ComponentProps, createEffect, createMemo, onCleanup, onMount, splitProps } from "solid-js"
@@ -65,14 +68,11 @@ const debugTerminal = (...values: unknown[]) => {
   console.debug("[terminal]", ...values)
 }
 
-const errorStatus = (err: unknown) => {
+const errorName = (err: unknown) => {
   if (!err || typeof err !== "object") return
-  if (!("data" in err)) return
-  const data = err.data
-  if (!data || typeof data !== "object") return
-  if (!("statusCode" in data)) return
-  const status = data.statusCode
-  return typeof status === "number" ? status : undefined
+  if (!("name" in err)) return
+  const errorName = err.name
+  return typeof errorName === "string" ? errorName : undefined
 }
 
 const useTerminalUiBindings = (input: {
@@ -168,6 +168,12 @@ export const Terminal = (props: TerminalProps) => {
   const theme = useTheme()
   const language = useLanguage()
   const server = useServer()
+  const directory = sdk.directory
+  const client = sdk.client
+  const url = sdk.url
+  const auth = server.current?.http
+  const username = auth?.username ?? "opencode"
+  const password = auth?.password ?? ""
   let container!: HTMLDivElement
   const [local, others] = splitProps(props, ["pty", "class", "classList", "autoFocus", "onConnect", "onConnectError"])
   const id = local.pty.id
@@ -218,7 +224,7 @@ export const Terminal = (props: TerminalProps) => {
   }
 
   const pushSize = (cols: number, rows: number) => {
-    return sdk.client.pty
+    return client.pty
       .update({
         ptyID: id,
         size: { cols, rows },
@@ -477,11 +483,11 @@ export const Terminal = (props: TerminalProps) => {
       }
 
       const gone = () =>
-        sdk.client.pty
+        client.pty
           .get({ ptyID: id })
           .then(() => false)
           .catch((err) => {
-            if (errorStatus(err) === 404) return true
+            if (errorName(err) === "NotFoundError") return true
             debugTerminal("failed to inspect terminal session", err)
             return false
           })
@@ -509,14 +515,14 @@ export const Terminal = (props: TerminalProps) => {
         if (disposed) return
         drop?.()
 
-        const url = new URL(sdk.url + `/pty/${id}/connect`)
-        url.searchParams.set("directory", sdk.directory)
-        url.searchParams.set("cursor", String(seek))
-        url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
-        url.username = server.current?.http.username ?? "opencode"
-        url.password = server.current?.http.password ?? ""
+        const next = new URL(url + `/pty/${id}/connect`)
+        next.searchParams.set("directory", directory)
+        next.searchParams.set("cursor", String(seek))
+        next.protocol = next.protocol === "https:" ? "wss:" : "ws:"
+        next.username = username
+        next.password = password
 
-        const socket = new WebSocket(url)
+        const socket = new WebSocket(next)
         socket.binaryType = "arraybuffer"
         ws = socket
 
