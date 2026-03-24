@@ -1657,7 +1657,7 @@ describe("ProviderTransform.message - bedrock caching with non-bedrock providerI
     ] as any[]
 
     const result = ProviderTransform.message(msgs, model, {}) as any[]
-    
+
     // Cache should be at the message level and not the content-part level
     expect(result[0].providerOptions?.bedrock).toEqual({
       cachePoint: { type: "default" },
