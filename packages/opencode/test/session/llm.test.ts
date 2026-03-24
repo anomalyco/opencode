@@ -535,6 +535,113 @@ describe("session.llm.stream", () => {
     })
   })
 
+  test("accepts wrapped responses stream errors without schema validation failure", async () => {
+    const server = state.server
+    if (!server) {
+      throw new Error("Server not initialized")
+    }
+
+    const source = await loadFixture("openai", "gpt-5.2")
+    const model = source.model
+    const msg = "Concurrency limit exceeded for user, please retry later"
+    const request = waitRequest(
+      "/responses",
+      createEventResponse(
+        [
+          {
+            error: {
+              type: "rate_limit_error",
+              message: msg,
+            },
+          },
+        ],
+        true,
+      ),
+    )
+
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            enabled_providers: ["openai"],
+            provider: {
+              openai: {
+                name: "OpenAI",
+                env: ["OPENAI_API_KEY"],
+                npm: "@ai-sdk/openai",
+                api: "https://api.openai.com/v1",
+                models: {
+                  [model.id]: model,
+                },
+                options: {
+                  apiKey: "test-openai-key",
+                  baseURL: `${server.url.origin}/v1`,
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const resolved = await Provider.getModel(ProviderID.openai, ModelID.make(model.id))
+        const sessionID = SessionID.make("session-test-2-error")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+          temperature: 0.2,
+        } satisfies Agent.Info
+
+        const user = {
+          id: MessageID.make("user-2-error"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: ProviderID.make("openai"), modelID: resolved.id },
+          variant: "high",
+        } satisfies MessageV2.User
+
+        const stream = await LLM.stream({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          abort: new AbortController().signal,
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {},
+        })
+
+        let got = false
+        let data: unknown = undefined
+        for await (const part of stream.fullStream) {
+          if (part.type !== "error") continue
+          got = true
+          data = part.error
+        }
+
+        expect(got).toBe(true)
+        expect(data).toStrictEqual({
+          error: {
+            type: "rate_limit_error",
+            message: msg,
+          },
+        })
+      },
+    })
+
+    const capture = await request
+    expect(capture.body.stream).toBe(true)
+  })
+
   test("sends messages API payload for Anthropic models", async () => {
     const server = state.server
     if (!server) {

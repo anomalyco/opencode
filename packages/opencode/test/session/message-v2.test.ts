@@ -846,6 +846,43 @@ describe("session.message-v2.fromError", () => {
     })
   })
 
+  test("serializes wrapped rate limit stream errors as retryable APIError", () => {
+    const input = {
+      error: {
+        type: "rate_limit_error",
+        message: "Concurrency limit exceeded for user, please retry later",
+      },
+    }
+    const result = MessageV2.fromError(input, { providerID })
+
+    expect(result).toStrictEqual({
+      name: "APIError",
+      data: {
+        message: "Concurrency limit exceeded for user, please retry later",
+        isRetryable: true,
+        responseBody: JSON.stringify(input),
+      },
+    })
+  })
+
+  test("serializes top-level stream rate limit errors as retryable APIError", () => {
+    const input = {
+      type: "error",
+      code: "rate_limit_exceeded",
+      message: "Too many requests",
+    }
+    const result = MessageV2.fromError(input, { providerID })
+
+    expect(result).toStrictEqual({
+      name: "APIError",
+      data: {
+        message: "Too many requests",
+        isRetryable: true,
+        responseBody: JSON.stringify(input),
+      },
+    })
+  })
+
   test("detects context overflow from APICallError provider messages", () => {
     const cases = [
       "prompt is too long: 213462 tokens > 200000 maximum",

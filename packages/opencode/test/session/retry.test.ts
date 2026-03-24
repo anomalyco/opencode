@@ -125,6 +125,20 @@ describe("session.retry.retryable", () => {
 
     expect(SessionRetry.retryable(error)).toBeUndefined()
   })
+
+  test("retries wrapped rate limit stream errors after normalization", () => {
+    const error = MessageV2.fromError(
+      {
+        error: {
+          type: "rate_limit_error",
+          message: "Concurrency limit exceeded for user, please retry later",
+        },
+      },
+      { providerID },
+    )
+
+    expect(SessionRetry.retryable(error)).toBe("Concurrency limit exceeded for user, please retry later")
+  })
 })
 
 describe("session.message-v2.fromError", () => {

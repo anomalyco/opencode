@@ -100,6 +100,27 @@ export namespace ProviderError {
     return undefined
   }
 
+  function stream(body: object) {
+    const root = body as Record<string, unknown>
+    const raw =
+      typeof root.error === "object" && root.error !== null ? root.error : root.type === "error" ? root : undefined
+    if (!raw || typeof raw !== "object") return
+    const item = raw as Record<string, unknown>
+
+    const code = typeof item.code === "string" ? item.code : undefined
+    const type = typeof item.type === "string" ? item.type : undefined
+    const message = typeof item.message === "string" ? item.message : undefined
+    const param = typeof item.param === "string" || item.param === null ? item.param : undefined
+
+    if (!code && !type && !message && param === undefined) return
+    return {
+      code,
+      type,
+      message,
+      param,
+    }
+  }
+
   export type ParsedStreamError =
     | {
         type: "context_overflow"
@@ -109,7 +130,7 @@ export namespace ProviderError {
     | {
         type: "api_error"
         message: string
-        isRetryable: false
+        isRetryable: boolean
         responseBody: string
       }
 
@@ -118,9 +139,10 @@ export namespace ProviderError {
     if (!body) return
 
     const responseBody = JSON.stringify(body)
-    if (body.type !== "error") return
+    const err = stream(body)
+    if (!err) return
 
-    switch (body?.error?.code) {
+    switch (err.code) {
       case "context_length_exceeded":
         return {
           type: "context_overflow",
@@ -144,10 +166,27 @@ export namespace ProviderError {
       case "invalid_prompt":
         return {
           type: "api_error",
-          message: typeof body?.error?.message === "string" ? body?.error?.message : "Invalid prompt.",
+          message: err.message ?? "Invalid prompt.",
           isRetryable: false,
           responseBody,
         }
+    }
+
+    if (err.type === "too_many_requests" || err.type === "rate_limit_error" || err.code?.includes("rate_limit")) {
+      return {
+        type: "api_error",
+        message: err.message ?? "Rate Limited",
+        isRetryable: true,
+        responseBody,
+      }
+    }
+
+    if (!err.message) return
+    return {
+      type: "api_error",
+      message: err.message,
+      isRetryable: false,
+      responseBody,
     }
   }
 

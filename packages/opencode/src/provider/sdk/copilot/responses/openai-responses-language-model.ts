@@ -1275,7 +1275,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
                   filename: value.annotation.filename ?? value.annotation.file_id,
                 })
               }
-            } else if (isErrorChunk(value)) {
+            } else if (isErrorChunk(value) || isWrappedErrorChunk(value)) {
               controller.enqueue({ type: "error", error: value })
             }
           },
@@ -1330,12 +1330,31 @@ const textDeltaChunkSchema = z.object({
   logprobs: LOGPROBS_SCHEMA.nullish(),
 })
 
-const errorChunkSchema = z.object({
-  type: z.literal("error"),
-  code: z.string(),
-  message: z.string(),
+const errorDetailSchema = z.object({
+  type: z.string().nullish(),
+  code: z.string().nullish(),
+  message: z.string().nullish(),
   param: z.string().nullish(),
-  sequence_number: z.number(),
+})
+
+const errorChunkSchema = z.union([
+  z.object({
+    type: z.literal("error"),
+    code: z.string().nullish(),
+    message: z.string().nullish(),
+    param: z.string().nullish(),
+    sequence_number: z.number().nullish(),
+  }),
+  z.object({
+    type: z.literal("error"),
+    error: errorDetailSchema,
+    sequence_number: z.number().nullish(),
+  }),
+])
+
+const wrappedErrorChunkSchema = z.object({
+  type: z.undefined().optional(),
+  error: errorDetailSchema,
 })
 
 const responseFinishedChunkSchema = z.object({
@@ -1528,6 +1547,7 @@ const openaiResponsesChunkSchema = z.union([
   responseReasoningSummaryPartAddedSchema,
   responseReasoningSummaryTextDeltaSchema,
   errorChunkSchema,
+  wrappedErrorChunkSchema,
   z.object({ type: z.string() }).loose(), // fallback for unknown chunks
 ])
 
@@ -1622,6 +1642,12 @@ function isResponseReasoningSummaryTextDeltaChunk(
 
 function isErrorChunk(chunk: z.infer<typeof openaiResponsesChunkSchema>): chunk is z.infer<typeof errorChunkSchema> {
   return chunk.type === "error"
+}
+
+function isWrappedErrorChunk(
+  chunk: z.infer<typeof openaiResponsesChunkSchema>,
+): chunk is z.infer<typeof wrappedErrorChunkSchema> {
+  return "error" in chunk && typeof chunk.error === "object" && chunk.error !== null && chunk.type === undefined
 }
 
 type ResponsesModelConfig = {

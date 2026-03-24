@@ -10,6 +10,7 @@ import {
   type ToolSet,
   tool,
   jsonSchema,
+  TypeValidationError,
 } from "ai"
 import { mergeDeep, pipe } from "remeda"
 import { GitLabWorkflowLanguageModel } from "gitlab-ai-provider"
@@ -23,6 +24,7 @@ import { SystemPrompt } from "./system"
 import { Flag } from "@/flag/flag"
 import { Permission } from "@/permission"
 import { Auth } from "@/auth"
+import { ProviderError } from "@/provider/error"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -275,6 +277,30 @@ export namespace LLM {
                 args.params.prompt = ProviderTransform.message(args.params.prompt, input.model, options)
               }
               return args.params
+            },
+            async wrapStream(args) {
+              const result = await args.doStream()
+              return {
+                ...result,
+                stream: result.stream.pipeThrough(
+                  new TransformStream({
+                    transform(part, ctl) {
+                      if (
+                        part.type === "error" &&
+                        TypeValidationError.isInstance(part.error) &&
+                        ProviderError.parseStreamError(part.error.value)
+                      ) {
+                        ctl.enqueue({
+                          ...part,
+                          error: part.error.value,
+                        })
+                        return
+                      }
+                      ctl.enqueue(part)
+                    },
+                  }),
+                ),
+              }
             },
           },
         ],
