@@ -368,7 +368,14 @@ export namespace Ripgrep {
     // Parse JSON lines from ripgrep output
 
     return lines
-      .map((line) => JSON.parse(line))
+      .map((line) => {
+        try {
+          return JSON.parse(line)
+        } catch {
+          return null
+        }
+      })
+      .filter((parsed): parsed is NonNullable<typeof parsed> => parsed !== null)
       .map((parsed) => Result.parse(parsed))
       .filter((r) => r.type === "match")
       .map((r) => r.data)

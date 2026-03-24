@@ -117,7 +117,13 @@ export namespace Log {
         .map(([key, value]) => {
           const prefix = `${key}=`
           if (value instanceof Error) return prefix + formatError(value)
-          if (typeof value === "object") return prefix + JSON.stringify(value)
+          if (typeof value === "object") {
+            try {
+              return prefix + JSON.stringify(value)
+            } catch {
+              return prefix + "[Object with circular reference]"
+            }
+          }
           return prefix + value
         })
         .join(" ")
