@@ -1,4 +1,4 @@
-import { Show, batch, createEffect, createMemo, on, onCleanup, onMount } from "solid-js"
+import { Show, createEffect, createMemo, on, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
@@ -6,22 +6,29 @@ import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
+import { useSDK } from "@/context/sdk"
+import { useSync } from "@/context/sync"
 import { createSizing } from "@/pages/session/helpers"
 import { useSessionLayout } from "@/pages/session/session-layout"
+import { infer } from "./browser-url"
 
 export function BrowserPanel() {
   const layout = useLayout()
   const language = useLanguage()
   const platform = usePlatform()
+  const sdk = useSDK()
+  const sync = useSync()
   const { view } = useSessionLayout()
 
   const opened = createMemo(() => view().browser.opened())
   const size = createSizing()
   const width = createMemo(() => layout.browser.width())
-  const url = createMemo(() => layout.browser.url())
+  const dir = createMemo(() => sync.project?.worktree ?? sdk.directory)
+  const url = createMemo(() => layout.browser.url(dir()))
   const close = () => view().browser.close()
   let root: HTMLDivElement | undefined
   let iframe: HTMLIFrameElement | undefined
+  let run = 0
 
   const [store, setStore] = createStore({
     w: typeof window === "undefined" ? 1000 : window.innerWidth,
@@ -85,7 +92,7 @@ export function BrowserPanel() {
     setStore("currentUrl", finalUrl)
     setStore("inputUrl", finalUrl)
     setStore("loading", true)
-    layout.browser.setUrl(finalUrl)
+    layout.browser.setUrl(dir(), finalUrl)
   }
 
   const handleKeyDown = (e: KeyboardEvent) => {
@@ -116,6 +123,57 @@ export function BrowserPanel() {
   const handleIframeLoad = () => {
     setStore("loading", false)
   }
+
+  const probe = async (url: string) => {
+    const ctrl = new AbortController()
+    const timer = window.setTimeout(() => ctrl.abort(), 1200)
+    try {
+      await fetch(url, {
+        mode: "no-cors",
+        cache: "no-store",
+        signal: ctrl.signal,
+      })
+      return true
+    } catch {
+      return false
+    } finally {
+      window.clearTimeout(timer)
+    }
+  }
+
+  const detect = async (id: number) => {
+    const cmd = sync.project?.commands?.start
+    const res = (await sdk.client.file.read({ path: "package.json" }).catch(() => undefined)) as
+      | { data?: unknown }
+      | undefined
+    const text = res?.data
+    const pkg =
+      typeof text === "string"
+        ? (JSON.parse(text) as {
+            scripts?: Record<string, string | undefined>
+            dependencies?: Record<string, string | undefined>
+            devDependencies?: Record<string, string | undefined>
+          })
+        : undefined
+
+    for (const item of infer({ cmd, pkg })) {
+      const ok = await probe(item)
+      if (id !== run) return
+      if (!ok) continue
+      navigate(item)
+      return
+    }
+  }
+
+  createEffect(
+    on([opened, dir, url], ([open, dir, url]) => {
+      if (!open) return
+      if (!dir) return
+      if (url) return
+      run += 1
+      void detect(run)
+    }),
+  )
 
   return (
     <div

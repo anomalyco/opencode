@@ -232,9 +232,16 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       const browser = value.browser
       const migratedBrowser = (() => {
         if (!isRecord(browser)) return browser
-        if (browser.dock === undefined && browser.height === undefined) return browser
+        const url = typeof browser.url === "string" ? browser.url : undefined
         const { dock: _, height: __, ...rest } = browser
-        return rest
+        return {
+          ...rest,
+          urls: isRecord(rest.urls)
+            ? rest.urls
+            : url
+              ? ({ global: url } as Record<string, string>)
+              : ({} as Record<string, string>),
+        }
       })()
 
       if (
@@ -278,7 +285,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         browser: {
           width: DEFAULT_BROWSER_WIDTH,
           opened: false,
-          url: undefined as string | undefined,
+          urls: {} as Record<string, string | undefined>,
         },
         review: {
           diffStyle: "split" as ReviewDiffStyle,
@@ -671,12 +678,14 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       },
       browser: {
         width: createMemo(() => store.browser.width),
-        url: createMemo(() => store.browser.url),
+        url(directory: string) {
+          return store.browser.urls[directory] ?? store.browser.urls.global
+        },
         resizeWidth(width: number) {
           setStore("browser", "width", width)
         },
-        setUrl(url: string | undefined) {
-          setStore("browser", "url", url)
+        setUrl(directory: string, url: string | undefined) {
+          setStore("browser", "urls", directory, url)
         },
       },
       review: {
