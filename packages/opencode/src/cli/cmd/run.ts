@@ -11,7 +11,7 @@ import { createOpencodeClient, type Message, type OpencodeClient, type ToolPart 
 import { Server } from "../../server/server"
 import { Provider } from "../../provider/provider"
 import { Agent } from "../../agent/agent"
-import { PermissionNext } from "../../permission"
+import { Permission } from "../../permission"
 import { Tool } from "../../tool/tool"
 import { GlobTool } from "../../tool/glob"
 import { GrepTool } from "../../tool/grep"
@@ -28,13 +28,13 @@ import { BashTool } from "../../tool/bash"
 import { TodoWriteTool } from "../../tool/todo"
 import { Locale } from "../../util/locale"
 
-type ToolProps<T extends Tool.Info> = {
+type ToolProps<T> = {
   input: Tool.InferParameters<T>
   metadata: Tool.InferMetadata<T>
   part: ToolPart
 }
 
-function props<T extends Tool.Info>(part: ToolPart): ToolProps<T> {
+function props<T>(part: ToolPart): ToolProps<T> {
   const state = part.state
   return {
     input: state.input as Tool.InferParameters<T>,
@@ -354,7 +354,7 @@ export const RunCommand = cmd({
       process.exit(1)
     }
 
-    const rules: PermissionNext.Ruleset = [
+    const rules: Permission.Ruleset = [
       {
         permission: "question",
         action: "deny",

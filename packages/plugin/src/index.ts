@@ -9,8 +9,9 @@ import type {
   Message,
   Part,
   Auth,
-  Config,
+  Config as SDKConfig,
 } from "@opencode-ai/sdk"
+import type { Provider as ProviderV2, Model as ModelV2 } from "@opencode-ai/sdk/v2"
 
 import type { BunShell } from "./shell.js"
 import { type ToolDefinition } from "./tool.js"
@@ -32,7 +33,19 @@ export type PluginInput = {
   $: BunShell
 }
 
-export type Plugin = (input: PluginInput) => Promise<Hooks>
+export type PluginOptions = Record<string, unknown>
+
+export type Config = Omit<SDKConfig, "plugin"> & {
+  plugin?: Array<string | [string, PluginOptions]>
+}
+
+export type Plugin = (input: PluginInput, options?: PluginOptions) => Promise<Hooks>
+
+export type PluginModule = {
+  id?: string
+  server: Plugin
+  tui?: never
+}
 
 type Rule = {
   key: string
@@ -72,7 +85,7 @@ export type AuthHook = {
               when?: Rule
             }
         >
-        authorize(inputs?: Record<string, string>): Promise<AuthOuathResult>
+        authorize(inputs?: Record<string, string>): Promise<AuthOAuthResult>
       }
     | {
         type: "api"
@@ -116,7 +129,7 @@ export type AuthHook = {
   )[]
 }
 
-export type AuthOuathResult = { url: string; instructions: string } & (
+export type AuthOAuthResult = { url: string; instructions: string } & (
   | {
       method: "auto"
       callback(): Promise<
@@ -129,6 +142,7 @@ export type AuthOuathResult = { url: string; instructions: string } & (
                 access: string
                 expires: number
                 accountId?: string
+                enterpriseUrl?: string
               }
             | { key: string }
           ))
@@ -149,6 +163,7 @@ export type AuthOuathResult = { url: string; instructions: string } & (
                 access: string
                 expires: number
                 accountId?: string
+                enterpriseUrl?: string
               }
             | { key: string }
           ))
@@ -159,6 +174,18 @@ export type AuthOuathResult = { url: string; instructions: string } & (
     }
 )
 
+export type ProviderHookContext = {
+  auth?: Auth
+}
+
+export type ProviderHook = {
+  id: string
+  models?: (provider: ProviderV2, ctx: ProviderHookContext) => Promise<Record<string, ModelV2>>
+}
+
+/** @deprecated Use AuthOAuthResult instead. */
+export type AuthOuathResult = AuthOAuthResult
+
 export interface Hooks {
   event?: (input: { event: Event }) => Promise<void>
   config?: (input: Config) => Promise<void>
@@ -166,6 +193,7 @@ export interface Hooks {
     [key: string]: ToolDefinition
   }
   auth?: AuthHook
+  provider?: ProviderHook
   /**
    * Called when a new message is received
    */

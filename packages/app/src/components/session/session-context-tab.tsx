@@ -12,6 +12,7 @@ import { Markdown } from "@opencode-ai/ui/markdown"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import type { Message, Part, UserMessage } from "@opencode-ai/sdk/v2/client"
 import { useLanguage } from "@/context/language"
+import { useProviders } from "@/hooks/use-providers"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { getSessionContextMetrics } from "./session-context-metrics"
 import { estimateSessionContextBreakdown, type SessionContextBreakdownKey } from "./session-context-breakdown"
@@ -92,6 +93,7 @@ const emptyUserMessages: UserMessage[] = []
 export function SessionContextTab() {
   const sync = useSync()
   const language = useLanguage()
+  const providers = useProviders()
   const { params, view } = useSessionLayout()
 
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
@@ -130,7 +132,7 @@ export function SessionContextTab() {
       }),
   )
 
-  const metrics = createMemo(() => getSessionContextMetrics(messages(), sync.data.provider.all))
+  const metrics = createMemo(() => getSessionContextMetrics(messages(), providers.all()))
   const ctx = createMemo(() => metrics().context)
   const formatter = createMemo(() => createSessionContextFormatter(language.intl()))
 
@@ -267,14 +269,14 @@ export function SessionContextTab() {
 
   return (
     <ScrollView
-      class="@container h-full pb-10"
+      class="@container h-full"
       viewportRef={(el) => {
         scroll = el
         restoreScroll()
       }}
       onScroll={handleScroll}
     >
-      <div class="px-6 pt-4 flex flex-col gap-10">
+      <div class="px-6 pt-4 pb-10 flex flex-col gap-10">
         <div class="grid grid-cols-1 @[32rem]:grid-cols-2 gap-4">
           <For each={stats}>
             {(stat) => <Stat label={language.t(stat.label as Parameters<typeof language.t>[0])} value={stat.value()} />}
