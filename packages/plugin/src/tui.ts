@@ -1,7 +1,16 @@
-import type { OpencodeClient, Event, LspStatus, McpStatus, Todo } from "@opencode-ai/sdk/v2"
+import type {
+  OpencodeClient,
+  Event,
+  LspStatus,
+  McpStatus,
+  Todo,
+  Message,
+  Provider,
+  Config as SdkConfig,
+} from "@opencode-ai/sdk/v2"
 import type { CliRenderer, ParsedKey } from "@opentui/core"
 import type { JSX, SolidPlugin } from "@opentui/solid"
-import type { Config, Plugin, PluginOptions } from "./index.js"
+import type { Config as PluginConfig, Plugin, PluginOptions } from "./index.js"
 
 export type { CliRenderer, SlotMode } from "@opentui/core"
 
@@ -143,15 +152,24 @@ export type TuiKV = {
 }
 
 export type TuiState = {
+  readonly ready: boolean
+  readonly config: SdkConfig
+  readonly provider: ReadonlyArray<Provider>
   session: {
     diff: (sessionID: string) => ReadonlyArray<TuiSidebarFileItem>
     todo: (sessionID: string) => ReadonlyArray<TuiSidebarTodoItem>
+    messages: (sessionID: string) => ReadonlyArray<Message>
   }
   lsp: () => ReadonlyArray<TuiSidebarLspItem>
   mcp: () => ReadonlyArray<TuiSidebarMcpItem>
 }
 
-type TuiConfigView = Pick<Config, "$schema" | "theme" | "keybinds" | "plugin"> & NonNullable<Config["tui"]>
+type TuiConfigView = Pick<PluginConfig, "$schema" | "theme" | "keybinds" | "plugin"> & NonNullable<PluginConfig["tui"]>
+
+export type TuiApp = {
+  readonly version: string
+  readonly directory: string
+}
 
 type Frozen<Value> = Value extends (...args: never[]) => unknown
   ? Value
@@ -162,6 +180,7 @@ type Frozen<Value> = Value extends (...args: never[]) => unknown
       : Value
 
 export type TuiApi = {
+  app: TuiApp
   command: {
     register: (cb: () => TuiCommand[]) => () => void
     trigger: (value: string) => void

@@ -14,6 +14,8 @@ import { DialogConfirm } from "../ui/dialog-confirm"
 import { DialogPrompt } from "../ui/dialog-prompt"
 import { DialogSelect, type DialogSelectOption as SelectOption } from "../ui/dialog-select"
 import type { useToast } from "../ui/toast"
+import { Global } from "@/global"
+import { Installation } from "@/installation"
 
 type RouteEntry = {
   key: symbol
@@ -119,12 +121,24 @@ function mapOptionCb<Value>(cb?: (item: TuiDialogSelectOption<Value>) => void) {
 
 function stateApi(sync: ReturnType<typeof useSync>): TuiApi["state"] {
   return {
+    get ready() {
+      return sync.ready
+    },
+    get config() {
+      return sync.data.config
+    },
+    get provider() {
+      return sync.data.provider
+    },
     session: {
       diff(sessionID) {
         return sync.data.session_diff[sessionID] ?? []
       },
       todo(sessionID) {
         return sync.data.todo[sessionID] ?? []
+      },
+      messages(sessionID) {
+        return sync.data.message[sessionID] ?? []
       },
     },
     lsp() {
@@ -142,8 +156,23 @@ function stateApi(sync: ReturnType<typeof useSync>): TuiApi["state"] {
   }
 }
 
+function appApi(sync: ReturnType<typeof useSync>): TuiApi["app"] {
+  return {
+    get version() {
+      return Installation.VERSION
+    },
+    get directory() {
+      const dir = sync.data.path.directory || process.cwd()
+      const out = dir.replace(Global.Path.home, "~")
+      if (sync.data.vcs?.branch) return out + ":" + sync.data.vcs.branch
+      return out
+    },
+  }
+}
+
 export function createTuiApi(input: Input): TuiApi {
   return {
+    app: appApi(input.sync),
     command: {
       register(cb) {
         return input.command.register(() => cb())

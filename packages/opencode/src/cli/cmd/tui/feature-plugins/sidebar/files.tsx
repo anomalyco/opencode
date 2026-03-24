@@ -1,22 +1,20 @@
-import type { TuiPlugin } from "@opencode-ai/plugin/tui"
+import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
+import type { RGBA } from "@opentui/core"
 import { createMemo, For, Show, createSignal } from "solid-js"
-import { useSync } from "../../context/sync"
-import { useTheme } from "../../context/theme"
 
-function View(props: { session_id: string }) {
-  const sync = useSync()
-  const { theme } = useTheme()
+function View(props: { api: TuiPluginApi; session_id: string }) {
   const [open, setOpen] = createSignal(true)
-  const list = createMemo(() => sync.data.session_diff[props.session_id] ?? [])
+  const theme = () => props.api.theme.current as Record<string, string | RGBA>
+  const list = createMemo(() => props.api.state.session.diff(props.session_id))
 
   return (
     <Show when={list().length > 0}>
       <box>
         <box flexDirection="row" gap={1} onMouseDown={() => list().length > 2 && setOpen((x) => !x)}>
           <Show when={list().length > 2}>
-            <text fg={theme.text}>{open() ? "▼" : "▶"}</text>
+            <text fg={theme().text}>{open() ? "▼" : "▶"}</text>
           </Show>
-          <text fg={theme.text}>
+          <text fg={theme().text}>
             <b>Modified Files</b>
           </text>
         </box>
@@ -24,15 +22,15 @@ function View(props: { session_id: string }) {
           <For each={list()}>
             {(item) => (
               <box flexDirection="row" gap={1} justifyContent="space-between">
-                <text fg={theme.textMuted} wrapMode="none">
+                <text fg={theme().textMuted} wrapMode="none">
                   {item.file}
                 </text>
                 <box flexDirection="row" gap={1} flexShrink={0}>
                   <Show when={item.additions}>
-                    <text fg={theme.diffAdded}>+{item.additions}</text>
+                    <text fg={theme().diffAdded}>+{item.additions}</text>
                   </Show>
                   <Show when={item.deletions}>
-                    <text fg={theme.diffRemoved}>-{item.deletions}</text>
+                    <text fg={theme().diffRemoved}>-{item.deletions}</text>
                   </Show>
                 </box>
               </box>
@@ -49,7 +47,7 @@ const tui: TuiPlugin = async (api) => {
     order: 500,
     slots: {
       sidebar_content(_ctx, props) {
-        return <View session_id={props.session_id} />
+        return <View api={api} session_id={props.session_id} />
       },
     },
   })

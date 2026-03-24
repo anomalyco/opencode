@@ -18,7 +18,11 @@ type Opts = {
   count?: Count
   keybind?: Partial<HostPluginApi["keybind"]>
   tuiConfig?: HostPluginApi["tuiConfig"]
+  app?: Partial<HostPluginApi["app"]>
   state?: {
+    ready?: HostPluginApi["state"]["ready"]
+    config?: HostPluginApi["state"]["config"]
+    provider?: HostPluginApi["state"]["provider"]
     session?: Partial<HostPluginApi["state"]["session"]>
     lsp?: HostPluginApi["state"]["lsp"]
     mcp?: HostPluginApi["state"]["mcp"]
@@ -68,6 +72,14 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
   }
 
   return {
+    app: {
+      get version() {
+        return opts.app?.version ?? "0.0.0-test"
+      },
+      get directory() {
+        return opts.app?.directory ?? "~"
+      },
+    },
     client:
       opts.client ??
       createOpencodeClient({
@@ -154,9 +166,19 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
       },
     },
     state: {
+      get ready() {
+        return opts.state?.ready ?? true
+      },
+      get config() {
+        return opts.state?.config ?? {}
+      },
+      get provider() {
+        return opts.state?.provider ?? []
+      },
       session: {
         diff: opts.state?.session?.diff ?? (() => []),
         todo: opts.state?.session?.todo ?? (() => []),
+        messages: opts.state?.session?.messages ?? (() => []),
       },
       lsp: opts.state?.lsp ?? (() => []),
       mcp: opts.state?.mcp ?? (() => []),

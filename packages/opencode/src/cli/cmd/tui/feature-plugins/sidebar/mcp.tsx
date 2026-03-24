@@ -1,23 +1,11 @@
-import type { TuiPlugin } from "@opencode-ai/plugin/tui"
+import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
+import type { RGBA } from "@opentui/core"
 import { createMemo, For, Match, Show, Switch, createSignal } from "solid-js"
-import { useSync } from "../../context/sync"
-import { useTheme } from "../../context/theme"
 
-function View() {
-  const sync = useSync()
-  const { theme } = useTheme()
+function View(props: { api: TuiPluginApi }) {
   const [open, setOpen] = createSignal(true)
-
-  const list = createMemo(() =>
-    Object.entries(sync.data.mcp)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([name, item]) => ({
-        name,
-        status: item.status,
-        error: item.status === "failed" ? item.error : undefined,
-      })),
-  )
-
+  const theme = () => props.api.theme.current as Record<string, string | RGBA>
+  const list = createMemo(() => props.api.state.mcp())
   const on = createMemo(() => list().filter((item) => item.status === "connected").length)
   const bad = createMemo(
     () =>
@@ -27,12 +15,15 @@ function View() {
       ).length,
   )
 
-  const dot: Record<string, typeof theme.success> = {
-    connected: theme.success,
-    failed: theme.error,
-    disabled: theme.textMuted,
-    needs_auth: theme.warning,
-    needs_client_registration: theme.error,
+  const dot = (status: string) => {
+    const map: Record<string, string | RGBA> = {
+      connected: theme().success,
+      failed: theme().error,
+      disabled: theme().textMuted,
+      needs_auth: theme().warning,
+      needs_client_registration: theme().error,
+    }
+    return map[status] ?? theme().textMuted
   }
 
   return (
@@ -40,12 +31,12 @@ function View() {
       <box>
         <box flexDirection="row" gap={1} onMouseDown={() => list().length > 2 && setOpen((x) => !x)}>
           <Show when={list().length > 2}>
-            <text fg={theme.text}>{open() ? "▼" : "▶"}</text>
+            <text fg={theme().text}>{open() ? "▼" : "▶"}</text>
           </Show>
-          <text fg={theme.text}>
+          <text fg={theme().text}>
             <b>MCP</b>
             <Show when={!open()}>
-              <span style={{ fg: theme.textMuted }}>
+              <span style={{ fg: theme().textMuted }}>
                 {" "}
                 ({on()} active{bad() > 0 ? `, ${bad()} error${bad() > 1 ? "s" : ""}` : ""})
               </span>
@@ -59,14 +50,14 @@ function View() {
                 <text
                   flexShrink={0}
                   style={{
-                    fg: dot[item.status],
+                    fg: dot(item.status),
                   }}
                 >
                   •
                 </text>
-                <text fg={theme.text} wrapMode="word">
+                <text fg={theme().text} wrapMode="word">
                   {item.name}{" "}
-                  <span style={{ fg: theme.textMuted }}>
+                  <span style={{ fg: theme().textMuted }}>
                     <Switch fallback={item.status}>
                       <Match when={item.status === "connected"}>Connected</Match>
                       <Match when={item.status === "failed"}>
@@ -92,7 +83,7 @@ const tui: TuiPlugin = async (api) => {
     order: 200,
     slots: {
       sidebar_content() {
-        return <View />
+        return <View api={api} />
       },
     },
   })

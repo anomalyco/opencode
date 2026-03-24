@@ -1,14 +1,12 @@
-import type { TuiPlugin } from "@opencode-ai/plugin/tui"
+import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
+import type { RGBA } from "@opentui/core"
 import { createMemo, For, Show, createSignal } from "solid-js"
-import { useSync } from "../../context/sync"
-import { useTheme } from "../../context/theme"
 import { TodoItem } from "../../component/todo-item"
 
-function View(props: { session_id: string }) {
-  const sync = useSync()
-  const { theme } = useTheme()
+function View(props: { api: TuiPluginApi; session_id: string }) {
   const [open, setOpen] = createSignal(true)
-  const list = createMemo(() => sync.data.todo[props.session_id] ?? [])
+  const theme = () => props.api.theme.current as Record<string, string | RGBA>
+  const list = createMemo(() => props.api.state.session.todo(props.session_id))
   const show = createMemo(() => list().length > 0 && list().some((item) => item.status !== "completed"))
 
   return (
@@ -16,9 +14,9 @@ function View(props: { session_id: string }) {
       <box>
         <box flexDirection="row" gap={1} onMouseDown={() => list().length > 2 && setOpen((x) => !x)}>
           <Show when={list().length > 2}>
-            <text fg={theme.text}>{open() ? "▼" : "▶"}</text>
+            <text fg={theme().text}>{open() ? "▼" : "▶"}</text>
           </Show>
-          <text fg={theme.text}>
+          <text fg={theme().text}>
             <b>Todo</b>
           </text>
         </box>
@@ -35,7 +33,7 @@ const tui: TuiPlugin = async (api) => {
     order: 400,
     slots: {
       sidebar_content(_ctx, props) {
-        return <View session_id={props.session_id} />
+        return <View api={api} session_id={props.session_id} />
       },
     },
   })
