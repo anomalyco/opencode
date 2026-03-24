@@ -206,6 +206,25 @@ export const ruff: Info = {
   },
 }
 
+export const black: Info = {
+  name: "black",
+  command: ["black", "--quiet", "$FILE"],
+  extensions: [".py", ".pyi"],
+  async enabled() {
+    if (await ruff.enabled()) return false
+    if (!which("black")) return false
+    const deps = ["requirements.txt", "pyproject.toml", "Pipfile"]
+    for (const dep of deps) {
+      const found = await Filesystem.findUp(dep, Instance.directory, Instance.worktree)
+      if (found.length > 0) {
+        const content = await Filesystem.readText(found[0])
+        if (content.includes("black")) return true
+      }
+    }
+    return false
+  },
+}
+
 export const rlang: Info = {
   name: "air",
   command: ["air", "format", "$FILE"],
