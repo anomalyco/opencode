@@ -360,7 +360,10 @@ export function createFileFind(opts: CreateFileFindOptions) {
     if (current && current !== host) current.close()
     current = host
     target = host
+    const query = window.getSelection()?.toString()
     if (!open()) setState("open", true)
+    if (query) setState("query", query)
+
     requestAnimationFrame(() => {
       apply({ scroll: true })
       input?.focus()
