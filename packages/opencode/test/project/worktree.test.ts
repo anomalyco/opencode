@@ -1,5 +1,7 @@
 import { $ } from "bun"
 import { afterEach, describe, expect, test } from "bun:test"
+
+const wintest = process.platform !== "win32" ? test : test.skip
 import fs from "fs/promises"
 import path from "path"
 import { Instance } from "../../src/project/instance"
@@ -118,7 +120,7 @@ describe("Worktree", () => {
   })
 
   describe("createFromInfo", () => {
-    test("creates and bootstraps git worktree", async () => {
+    wintest("creates and bootstraps git worktree", async () => {
       await using tmp = await tmpdir({ git: true })
 
       const info = await withInstance(tmp.path, () => Worktree.makeWorktreeInfo("from-info-test"))

@@ -333,7 +333,11 @@ export namespace Worktree {
       }
 
       function cleanDirectory(target: string) {
-        return fsys.remove(target, { recursive: true }).pipe(Effect.ignore)
+        return Effect.promise(() =>
+          import("fs/promises").then((fsp) =>
+            fsp.rm(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }),
+          ),
+        )
       }
 
       const remove = Effect.fn("Worktree.remove")(function* (input: RemoveInput) {
@@ -407,24 +411,24 @@ export namespace Worktree {
           const handle = yield* spawner.spawn(
             ChildProcess.make(shell, args, { cwd: directory, extendEnv: true, stdin: "ignore" }),
           )
-          // Drain stdout/stderr to prevent pipe buffer deadlock on chatty scripts
-          yield* Effect.all(
-            [Stream.runDrain(handle.stdout), Stream.runDrain(handle.stderr)],
+          // Drain stdout, capture stderr for error reporting
+          const [, stderr] = yield* Effect.all(
+            [Stream.runDrain(handle.stdout), Stream.mkString(Stream.decodeText(handle.stderr))],
             { concurrency: 2 },
-          ).pipe(Effect.ignore)
+          ).pipe(Effect.orDie)
           const code = yield* handle.exitCode
-          return code
+          return { code, stderr }
         },
         Effect.scoped,
-        Effect.catch(() => Effect.succeed(1)),
+        Effect.catch(() => Effect.succeed({ code: 1, stderr: "" })),
       )
 
       const runStartScript = Effect.fnUntraced(function* (directory: string, cmd: string, kind: string) {
         const text = cmd.trim()
         if (!text) return true
-        const code = yield* runStartCommand(directory, text)
-        if (code === 0) return true
-        log.error("worktree start command failed", { kind, directory })
+        const result = yield* runStartCommand(directory, text)
+        if (result.code === 0) return true
+        log.error("worktree start command failed", { kind, directory, message: result.stderr })
         return false
       })
 
