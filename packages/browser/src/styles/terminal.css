@@ -1,0 +1,40 @@
+/* Terminal container styles */
+#terminal-container {
+  flex: 1;
+  padding: 4px;
+  overflow: hidden;
+  background: #1a1a2e;
+}
+
+.xterm {
+  height: 100%;
+  padding: 8px;
+}
+
+.xterm-viewport::-webkit-scrollbar {
+  width: 8px;
+}
+
+.xterm-viewport::-webkit-scrollbar-track {
+  background: #16213e;
+}
+
+.xterm-viewport::-webkit-scrollbar-thumb {
+  background: #0f3460;
+  border-radius: 4px;
+}
+
+.xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: #e94560;
+}
+
+/* Selection styling */
+.xterm .xterm-selection div {
+  background-color: rgba(15, 52, 96, 0.5) !important;
+}
+
+/* Cursor blink animation */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}

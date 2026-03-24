@@ -14,6 +14,7 @@ import { gitlabAuthPlugin as GitlabAuthPlugin } from "opencode-gitlab-auth"
 import { Effect, Layer, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRunPromise } from "@/effect/run-service"
+import { Installation } from "@/installation"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
@@ -94,6 +95,10 @@ export namespace Plugin {
               if (DEPRECATED_PLUGIN_PACKAGES.some((pkg) => plugin.includes(pkg))) continue
               log.info("loading plugin", { path: plugin })
               if (!plugin.startsWith("file://")) {
+                if (Installation.CHANNEL === "browser") {
+                  log.warn("skipping package plugin install in browser mode", { plugin })
+                  continue
+                }
                 const idx = plugin.lastIndexOf("@")
                 const pkg = idx > 0 ? plugin.substring(0, idx) : plugin
                 const version = idx > 0 ? plugin.substring(idx + 1) : "latest"
