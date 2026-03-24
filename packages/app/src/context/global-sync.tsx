@@ -1,7 +1,17 @@
 import type { Config, OpencodeClient, Path, Project, ProviderAuthResponse, Todo } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@opencode-ai/ui/toast"
-import { getFilename } from "@opencode-ai/core/util/path"
-import { batch, createContext, getOwner, onCleanup, onMount, type ParentProps, untrack, useContext } from "solid-js"
+import { getFilename } from "@opencode-ai/util/path"
+import {
+  createContext,
+  getOwner,
+  createEffect,
+  createSignal,
+  onCleanup,
+  on,
+  type ParentProps,
+  untrack,
+  useContext,
+} from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import type { InitError } from "../pages/error"
@@ -24,12 +34,7 @@ import { trimSessions } from "./global-sync/session-trim"
 import type { ProjectMeta } from "./global-sync/types"
 import { SESSION_RECENT_LIMIT } from "./global-sync/types"
 import { formatServerError } from "@/utils/server-errors"
-import { queryOptions, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/solid-query"
-import { createRefreshQueue } from "./global-sync/queue"
-import { directoryKey } from "./global-sync/utils"
-import { PathKey } from "@/utils/path-key"
-import { createDirSyncContext } from "./directory-sync"
-import { NormalizedProviderListResponse } from "@opencode-ai/ui/context"
+import { useServer } from "./server"
 
 type GlobalStore = {
   ready: boolean
@@ -75,8 +80,10 @@ export type QueryOptionsApi = ReturnType<typeof makeQueryOptionsApi>
 function createGlobalSync() {
   const globalSDK = useGlobalSDK()
   const language = useLanguage()
+  const server = useServer()
   const owner = getOwner()
   if (!owner) throw new Error("GlobalSync must be created within owner")
+  const [version, setVersion] = createSignal(0)
 
   const sdkCache = new Map<string, OpencodeClient>()
   const booting = new Map<string, Promise<void>>()
@@ -241,50 +248,46 @@ function createGlobalSync() {
     }
 
     const limit = Math.max(store.limit + SESSION_RECENT_LIMIT, SESSION_RECENT_LIMIT)
-    const promise = queryClient
-      .fetchQuery({
-        ...queryOptionsApi.sessions(key),
-        queryFn: () =>
-          loadRootSessionsWithFallback({
-            directory,
-            limit,
-            list: (query) => globalSDK.client.session.list(query),
-          })
-            .then((x) => {
-              const nonArchived = (x.data ?? [])
-                .filter((s) => !!s?.id)
-                .filter((s) => !s.time?.archived)
-                .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-              const limit = store.limit
-              const childSessions = store.session.filter((s) => !!s.parentID)
-              const sessions = trimSessions([...nonArchived, ...childSessions], {
-                limit,
-                permission: store.permission,
-              })
-              batch(() => {
-                setStore(
-                  "sessionTotal",
-                  estimateRootSessionTotal({
-                    count: nonArchived.length,
-                    limit: x.limit,
-                    limited: x.limited,
-                  }),
-                )
-                setStore("session", reconcile(sessions, { key: "id" }))
-                cleanupDroppedSessionCaches(store, setStore, sessions, setSessionTodo)
-              })
-              sessionMeta.set(key, { limit })
-            })
-            .catch((err) => {
-              console.error("Failed to load sessions", err)
-              const project = getFilename(directory)
-              showToast({
-                variant: "error",
-                title: language.t("toast.session.listFailed.title", { project }),
-                description: formatServerError(err, language.t),
-              })
-            })
-            .then(() => null),
+    const promise = loadRootSessionsWithFallback({
+      directory,
+      limit,
+      list: (query) => globalSDK.client.session.list(query),
+    })
+      .then((x) => {
+        const nonArchived = (x.data ?? [])
+          .filter((s) => !!s?.id)
+          .filter((s) => !s.time?.archived)
+          .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+        const limit = store.limit
+        const childSessions = store.session.filter((s) => !!s.parentID)
+        const sessions = trimSessions([...nonArchived, ...childSessions], {
+          limit,
+          permission: store.permission,
+        })
+        setStore(
+          "sessionTotal",
+          estimateRootSessionTotal({
+            count: nonArchived.length,
+            limit: x.limit,
+            limited: x.limited,
+          }),
+        )
+        setStore("session", reconcile(sessions, { key: "id" }))
+        cleanupDroppedSessionCaches(store, setStore, sessions, setSessionTodo)
+        sessionMeta.set(directory, { limit })
+      })
+      .catch((err) => {
+        console.error("Failed to load sessions", err)
+        const project = getFilename(directory)
+        const title =
+          server.current?.integration === "openclaw"
+            ? language.t("toast.session.listFailed.openclaw.title")
+            : language.t("toast.session.listFailed.title", { project })
+        showToast({
+          variant: "error",
+          title,
+          description: formatServerError(err, language.t),
+        })
       })
       .then(() => {})
 
@@ -387,22 +390,42 @@ function createGlobalSync() {
     }
   })
 
-  onMount(() => {
-    if (typeof requestAnimationFrame === "function") {
-      eventFrame = requestAnimationFrame(() => {
-        eventFrame = undefined
-        eventTimer = setTimeout(() => {
-          eventTimer = undefined
-          void globalSDK.event.start()
-        }, 0)
-      })
-    } else {
-      eventTimer = setTimeout(() => {
-        eventTimer = undefined
-        void globalSDK.event.start()
-      }, 0)
-    }
-  })
+  async function bootstrap() {
+    await bootstrapGlobal({
+      globalSDK: globalSDK.client,
+      connectErrorTitle: language.t("dialog.server.add.error"),
+      connectErrorDescription: language.t("error.globalSync.connectFailed", {
+        url: globalSDK.url,
+      }),
+      requestFailedTitle: language.t("common.requestFailed"),
+      translate: language.t,
+      formatMoreCount: (count) => language.t("common.moreCountSuffix", { count }),
+      setGlobalStore: setBootStore,
+    })
+  }
+
+  createEffect(
+    on(
+      () => globalSDK.version,
+      () => {
+        for (const key of Array.from(booting.keys())) booting.delete(key)
+        for (const key of Array.from(sessionLoads.keys())) sessionLoads.delete(key)
+        sessionMeta.clear()
+        for (const directory of Object.keys(children.children)) {
+          // Mounted views can keep references to child stores across a server switch.
+          // Reset the store in place and drop cached clients so the next bootstrap/load
+          // repopulates it from the newly active backend instead of stale OpenClaw data.
+          queue.clear(directory)
+          sdkCache.delete(directory)
+          clearSessionPrefetchDirectory(directory)
+          children.resetDirectory(directory)
+        }
+        setGlobalStore("reload", undefined)
+        setVersion((x) => x + 1)
+        void bootstrap()
+      },
+    ),
+  )
 
   const projectApi = {
     loadSessions,
@@ -433,6 +456,9 @@ function createGlobalSync() {
     set,
     get ready() {
       return globalStore.ready
+    },
+    get version() {
+      return version()
     },
     get error() {
       return globalStore.error

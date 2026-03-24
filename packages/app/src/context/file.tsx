@@ -8,6 +8,7 @@ import { useSDK } from "./sdk"
 import { useSync } from "./sync"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
+import { useServer } from "@/context/server"
 import { createPathHelpers } from "./file/path"
 import {
   approxBytes,
@@ -58,6 +59,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const params = useParams()
     const language = useLanguage()
     const layout = useLayout()
+    const server = useServer()
 
     const scope = createMemo(() => sdk.directory)
     const path = createPathHelpers(scope)
@@ -75,10 +77,13 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       normalizeDir: path.normalizeDir,
       list: (dir) => sdk.client.file.list({ path: dir }).then((x) => x.data ?? []),
       onError: (message) => {
+        const openclaw = server.current?.integration === "openclaw"
         showToast({
           variant: "error",
           title: language.t("toast.file.listFailed.title"),
-          description: message,
+          description: openclaw
+            ? [language.t("toast.file.listFailed.openclaw"), message].filter(Boolean).join("\n")
+            : message,
         })
       },
     })
