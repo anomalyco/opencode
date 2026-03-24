@@ -224,6 +224,15 @@ export namespace SessionPrompt {
             url: pathToFileURL(filepath).href,
             filename: name,
             mime: "application/x-directory",
+            source: {
+              type: "file",
+              path: name,
+              text: {
+                value: match[0],
+                start: match.index ?? 0,
+                end: (match.index ?? 0) + match[0].length,
+              },
+            },
           })
           return
         }
@@ -233,10 +242,39 @@ export namespace SessionPrompt {
           url: pathToFileURL(filepath).href,
           filename: name,
           mime: "text/plain",
+          source: {
+            type: "file",
+            path: name,
+            text: {
+              value: match[0],
+              start: match.index ?? 0,
+              end: (match.index ?? 0) + match[0].length,
+            },
+          },
         })
       }),
     )
     return parts
+  }
+
+  function scope(parts: PromptInput["parts"]) {
+    const seen = new Set<string>()
+    const refs = parts.flatMap((part) => {
+      if (part.type !== "file") return []
+      if (part.source?.type !== "file") return []
+      if (!part.source.text.value.startsWith("@")) return []
+      const ref = part.filename ?? part.source.path
+      if (seen.has(ref)) return []
+      seen.add(ref)
+      return [ref]
+    })
+    if (!refs.length) return
+    return (
+      "<system-reminder>\n" +
+      `Explicit reference scope: ${refs.join(", ")}. ` +
+      "These references are the current priority working set. Start with them and do not expand to sibling directories, parent directories, or unrelated files unless they are insufficient to complete the task.\n" +
+      "</system-reminder>"
+    )
   }
 
   function start(sessionID: SessionID) {
@@ -994,6 +1032,7 @@ export namespace SessionPrompt {
       ...part,
       id: part.id ? PartID.make(part.id) : PartID.ascending(),
     })
+    const reminder = scope(input.parts)
 
     const parts = await Promise.all(
       input.parts.map(async (part): Promise<Draft<MessageV2.Part>[]> => {
@@ -1302,7 +1341,20 @@ export namespace SessionPrompt {
           },
         ]
       }),
-    ).then((x) => x.flat().map(assign))
+    ).then((x) =>
+      [
+        reminder
+          ? assign({
+              messageID: info.id,
+              sessionID: input.sessionID,
+              type: "text",
+              text: reminder,
+              synthetic: true,
+            })
+          : undefined,
+        ...x.flat().map(assign),
+      ].filter((part): part is MessageV2.Part => part !== undefined),
+    )
 
     await Plugin.trigger(
       "chat.message",

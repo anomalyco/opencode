@@ -1,3 +1,4 @@
+import fs from "fs/promises"
 import path from "path"
 import { describe, expect, test } from "bun:test"
 import { fileURLToPath } from "url"
@@ -141,6 +142,93 @@ describe("session.prompt special characters", () => {
         const textParts = stored.parts.filter((part) => part.type === "text")
         const hasContent = textParts.some((part) => part.text.includes("special content"))
         expect(hasContent).toBe(true)
+
+        await Session.remove(session.id)
+      },
+    })
+  })
+})
+
+describe("session.prompt reference scope", () => {
+  test("injects reminder for explicit file and directory references", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      init: async (dir) => {
+        await fs.mkdir(path.join(dir, "src"), { recursive: true })
+        await Bun.write(path.join(dir, "note.ts"), "export const note = 1\n")
+        await Bun.write(path.join(dir, "src", "item.ts"), "export const item = 1\n")
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const parts = await SessionPrompt.resolvePromptParts("check @note.ts and @src/")
+        const msg = await SessionPrompt.prompt({
+          sessionID: session.id,
+          noReply: true,
+          parts,
+        })
+
+        if (msg.info.role !== "user") throw new Error("expected user message")
+
+        const reminder = msg.parts.find(
+          (
+            part,
+          ): part is Extract<(typeof msg.parts)[number], { type: "text" }> =>
+            part.type === "text" &&
+            part.synthetic === true &&
+            part.text.includes("Explicit reference scope: note.ts, src/"),
+        )
+
+        expect(reminder).toBeDefined()
+        expect(reminder!.text).toContain("priority working set")
+        expect(reminder!.text).toContain("sibling directories")
+        expect(reminder!.text).toContain("parent directories")
+
+        await Session.remove(session.id)
+      },
+    })
+  })
+
+  test("does not inject reminder for file parts without explicit @ references", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "note.ts"), "export const note = 1\n")
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const file = path.join(tmp.path, "note.ts")
+        const msg = await SessionPrompt.prompt({
+          sessionID: session.id,
+          noReply: true,
+          parts: [
+            { type: "text", text: "check this file" },
+            {
+              type: "file",
+              mime: "text/plain",
+              url: `file://${file}`,
+              filename: "note.ts",
+            },
+          ],
+        })
+
+        if (msg.info.role !== "user") throw new Error("expected user message")
+
+        const reminder = msg.parts.find(
+          (
+            part,
+          ): part is Extract<(typeof msg.parts)[number], { type: "text" }> =>
+            part.type === "text" && part.synthetic === true && part.text.includes("Explicit reference scope:"),
+        )
+
+        expect(reminder).toBeUndefined()
 
         await Session.remove(session.id)
       },
