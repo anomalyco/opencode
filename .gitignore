@@ -23,6 +23,9 @@ target
 .scripts
 .direnv/
 
+# Local mirrors for air-gapped use (see docs/OFFLINE_WEB.md)
+offline/
+
 # Local dev files
 opencode-dev
 logs/
