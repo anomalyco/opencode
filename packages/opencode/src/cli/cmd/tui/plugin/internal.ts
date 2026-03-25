@@ -6,6 +6,7 @@ import * as SidebarLsp from "../feature-plugins/sidebar/lsp"
 import * as SidebarTodo from "../feature-plugins/sidebar/todo"
 import * as SidebarFiles from "../feature-plugins/sidebar/files"
 import * as SidebarFooter from "../feature-plugins/sidebar/footer"
+import * as PluginManager from "../feature-plugins/system/plugins"
 
 export type InternalTuiPlugin = {
   name: string
@@ -45,5 +46,9 @@ export const INTERNAL_TUI_PLUGINS: InternalTuiPlugin[] = [
   {
     name: "sidebar-footer",
     module: SidebarFooter,
+  },
+  {
+    name: "plugin-manager",
+    module: PluginManager,
   },
 ]
