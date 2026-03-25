@@ -67,9 +67,6 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       const hasTodoWritePermission = agent.permission.some(
         (rule) => rule.permission === "todowrite" && rule.action === "allow",
       )
-      const hasTodoReadPermission = agent.permission.some(
-        (rule) => rule.permission === "todoread" && rule.action === "allow",
-      )
 
       const session = await iife(async () => {
         if (params.task_id) {
@@ -86,15 +83,6 @@ export const TaskTool = Tool.define("task", async (ctx) => {
               : [
                   {
                     permission: "todowrite" as const,
-                    pattern: "*" as const,
-                    action: "deny" as const,
-                  },
-                ]),
-            ...(hasTodoReadPermission
-              ? []
-              : [
-                  {
-                    permission: "todoread" as const,
                     pattern: "*" as const,
                     action: "deny" as const,
                   },
@@ -151,7 +139,6 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         agent: agent.name,
         tools: {
           ...(hasTodoWritePermission ? {} : { todowrite: false }),
-          ...(hasTodoReadPermission ? {} : { todoread: false }),
           ...(hasTaskPermission ? {} : { task: false }),
           ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
         },
