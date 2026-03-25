@@ -20,8 +20,8 @@
   },
   "theme": {
     "primary": {
-      "dark": "nord8",
-      "light": "nord10"
+      "dark": "nord10",
+      "light": "nord9"
     },
     "secondary": {
       "dark": "nord9",
