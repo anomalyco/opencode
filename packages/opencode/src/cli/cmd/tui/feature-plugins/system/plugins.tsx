@@ -95,7 +95,7 @@ const tui: TuiPlugin = async (api) => {
     {
       title: "Plugins",
       value: "plugins.list",
-      keybind: "<leader>p",
+      keybind: "plugin_manager",
       category: "System",
       onSelect() {
         show(api)
