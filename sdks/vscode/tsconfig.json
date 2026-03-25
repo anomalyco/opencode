@@ -1,4 +1,5 @@
 {
+  "exclude": ["test"],
   "compilerOptions": {
     "module": "Node16",
     "target": "ES2022",
@@ -6,6 +7,7 @@
     "sourceMap": true,
     "rootDir": "src",
     "typeRoots": ["./node_modules/@types"],
+    "types": ["node"],
     "strict": true /* enable all strict type-checking options */,
     "skipLibCheck": true
     /* Additional Checks */

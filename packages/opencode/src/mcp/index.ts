@@ -24,6 +24,9 @@ import { BusEvent } from "../bus/bus-event"
 import { Bus } from "@/bus"
 import { TuiEvent } from "@/cli/cmd/tui/event"
 import open from "open"
+import path from "path"
+import { Global } from "../global"
+import { Ide } from "../ide"
 
 export namespace MCP {
   const log = Log.create({ service: "mcp" })
@@ -209,6 +212,37 @@ export namespace MCP {
           }
         }),
       )
+      // Auto-discover IDE MCP server (VS Code extension).
+      // The extension writes a lock file containing its port and auth token when
+      // it starts; `Ide.discover` reads that file and validates the process is
+      // still running.  If discovery succeeds we connect directly — bypassing
+      // the config-driven create() flow — and register the client as "vscode".
+      const ideDir = path.join(Global.Path.data, "ide")
+      const ideInfo = await Ide.discover(ideDir)
+      if (ideInfo) {
+        await Ide.connectIde(ideInfo)
+          .then(async (ideClient) => {
+            // Close existing client if present to prevent memory leaks
+            const existingClient = clients[Ide.IDE_CLIENT_KEY]
+            if (existingClient) {
+              await existingClient.close().catch((error) => {
+                log.error("Failed to close existing IDE MCP client", { error })
+              })
+            }
+            clients[Ide.IDE_CLIENT_KEY] = ideClient
+            status[Ide.IDE_CLIENT_KEY] = { status: "connected" }
+            // Start receiving live editor context updates
+            await Ide.subscribeToContext(ideClient)
+          })
+          .catch((error) => {
+            log.error("failed to connect to IDE MCP server", { error })
+            status[Ide.IDE_CLIENT_KEY] = {
+              status: "failed" as const,
+              error: error instanceof Error ? error.message : String(error),
+            }
+          })
+      }
+
       return {
         status,
         clients,
