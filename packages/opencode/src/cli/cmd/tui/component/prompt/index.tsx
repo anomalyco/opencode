@@ -1136,6 +1136,18 @@ export function Prompt(props: PromptProps) {
                       if (s.type !== "reconnecting") return
                       return s
                     })
+                    const [visible, setVisible] = createSignal(false)
+                    let timer: ReturnType<typeof setTimeout> | undefined
+                    createEffect(() => {
+                      const r = reconnecting()
+                      if (r) {
+                        timer = setTimeout(() => setVisible(true), 1000)
+                      } else {
+                        clearTimeout(timer)
+                        setVisible(false)
+                      }
+                    })
+                    onCleanup(() => clearTimeout(timer))
                     const msg = createMemo(() => {
                       const r = reconnecting()
                       if (!r) return
@@ -1144,7 +1156,7 @@ export function Prompt(props: PromptProps) {
                     })
 
                     return (
-                      <Show when={reconnecting()}>
+                      <Show when={visible() && reconnecting()}>
                         <box>
                           <text fg={theme.warning}>
                             {msg()} [reconnecting attempt #{reconnecting()?.attempt}]
