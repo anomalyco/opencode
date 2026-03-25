@@ -1,3 +1,4 @@
+import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRunPromise } from "@/effect/run-service"
@@ -158,6 +159,12 @@ export namespace Command {
       })
 
       const cache = yield* InstanceState.make<State>((ctx) => init(ctx))
+
+      // Fix for #19050: rebuild commands when skills are reloaded from disk
+      Bus.subscribe(Skill.Event.Invalidated, async () => {
+        await Effect.runPromise(InstanceState.invalidate(cache)).catch(() => {})
+        log.info("invalidated command cache after skill reload")
+      })
 
       const get = Effect.fn("Command.get")(function* (name: string) {
         const state = yield* InstanceState.get(cache)

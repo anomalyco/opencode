@@ -6,8 +6,10 @@ import { Effect, Layer, ServiceMap } from "effect"
 import { NamedError } from "@opencode-ai/util/error"
 import type { Agent } from "@/agent/agent"
 import { Bus } from "@/bus"
+import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRunPromise } from "@/effect/run-service"
+import { FileWatcher } from "@/file/watcher"
 import { Flag } from "@/flag/flag"
 import { Global } from "@/global"
 import { Permission } from "@/permission"
@@ -20,6 +22,10 @@ import { Discovery } from "./discovery"
 
 export namespace Skill {
   const log = Log.create({ service: "skill" })
+  export const Event = {
+    Invalidated: BusEvent.define("skill.invalidated", z.object({})),
+  }
+
   const EXTERNAL_DIRS = [".claude", ".agents"]
   const EXTERNAL_SKILL_PATTERN = "skills/**/SKILL.md"
   const OPENCODE_SKILL_PATTERN = "{skill,skills}/**/SKILL.md"
@@ -59,6 +65,7 @@ export namespace Skill {
 
   type Cache = State & {
     ensure: () => Promise<void>
+    invalidate: () => void
   }
 
   export interface Interface {
@@ -66,6 +73,7 @@ export namespace Skill {
     readonly all: () => Effect.Effect<Info[]>
     readonly dirs: () => Effect.Effect<string[]>
     readonly available: (agent?: Agent.Info) => Effect.Effect<Info[]>
+    readonly invalidate: () => Effect.Effect<void>
   }
 
   const add = async (state: State, match: string) => {
@@ -175,7 +183,15 @@ export namespace Skill {
       return state.task
     }
 
-    return { ...state, ensure }
+    // Fix for #19050: allow cache invalidation so skills are re-read from disk
+    const invalidate = () => {
+      state.task = undefined
+      for (const key of Object.keys(state.skills)) delete state.skills[key]
+      state.dirs.clear()
+      log.info("invalidated skill cache")
+    }
+
+    return { ...state, ensure, invalidate }
   }
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Skill") {}
@@ -187,6 +203,15 @@ export namespace Skill {
       const state = yield* InstanceState.make(
         Effect.fn("Skill.state")((ctx) => Effect.sync(() => create(discovery, ctx.directory, ctx.worktree))),
       )
+
+      // Fix for #19050: invalidate skill cache when SKILL.md files change on disk
+      Bus.subscribe(FileWatcher.Event.Updated, async (evt) => {
+        if (!evt.properties.file.endsWith("SKILL.md")) return
+        const cache = await Effect.runPromise(InstanceState.get(state)).catch(() => undefined)
+        if (!cache) return
+        cache.invalidate()
+        Bus.publish(Event.Invalidated, {})
+      })
 
       const ensure = Effect.fn("Skill.ensure")(function* () {
         const cache = yield* InstanceState.get(state)
@@ -216,7 +241,12 @@ export namespace Skill {
         return list.filter((skill) => Permission.evaluate("skill", skill.name, agent.permission).action !== "deny")
       })
 
-      return Service.of({ get, all, dirs, available })
+      const invalidate = Effect.fn("Skill.invalidate")(function* () {
+        const cache = yield* InstanceState.get(state)
+        cache.invalidate()
+      })
+
+      return Service.of({ get, all, dirs, available, invalidate })
     }),
   )
 
@@ -258,5 +288,9 @@ export namespace Skill {
 
   export async function available(agent?: Agent.Info) {
     return runPromise((skill) => skill.available(agent))
+  }
+
+  export async function invalidate() {
+    return runPromise((skill) => skill.invalidate())
   }
 }
