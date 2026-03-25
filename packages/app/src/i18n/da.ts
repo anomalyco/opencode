@@ -800,8 +800,6 @@ export const dict = {
   "settings.permissions.tool.skill.description": "Indlæs en færdighed efter navn",
   "settings.permissions.tool.lsp.title": "LSP",
   "settings.permissions.tool.lsp.description": "Kør sprogserverforespørgsler",
-  "settings.permissions.tool.todoread.title": "Læs To-do",
-  "settings.permissions.tool.todoread.description": "Læs to-do listen",
   "settings.permissions.tool.todowrite.title": "Skriv To-do",
   "settings.permissions.tool.todowrite.description": "Opdater to-do listen",
   "settings.permissions.tool.webfetch.title": "Webhentning",

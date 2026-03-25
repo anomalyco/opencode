@@ -248,11 +248,6 @@
     opacity: 1;
     pointer-events: auto;
   }
-
-  [data-component="markdown"] {
-    margin-top: 0;
-    font-size: var(--font-size-base);
-  }
 }
 
 [data-component="compaction-part"] {
@@ -290,7 +285,7 @@
   [data-component="markdown"] {
     margin-top: 24px;
     font-style: normal;
-    font-size: inherit;
+    font-size: var(--font-size-base);
     color: var(--text-weak);
 
     strong,
