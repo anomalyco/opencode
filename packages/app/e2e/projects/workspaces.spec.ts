@@ -11,6 +11,7 @@ import {
   cleanupTestProject,
   clickMenuItem,
   confirmDialog,
+  openProjectMenu,
   openSidebar,
   openWorkspaceMenu,
   resolveSlug,
@@ -19,7 +20,7 @@ import {
   waitDir,
   waitSlug,
 } from "../actions"
-import { dropdownMenuContentSelector, inlineInputSelector, workspaceItemSelector } from "../selectors"
+import { inlineInputSelector, workspaceItemSelector } from "../selectors"
 import { createSdk, dirSlug } from "../utils"
 
 async function setupWorkspaceTest(page: Page, project: { slug: string }) {
@@ -127,17 +128,10 @@ test("non-git projects keep workspace mode disabled", async ({ page, withProject
       await openSidebar(page)
       await expect(page.getByRole("button", { name: "New workspace" })).toHaveCount(0)
 
-      const trigger = page.locator('[data-action="project-menu"]').first()
-      const hasMenu = await trigger
-        .isVisible()
-        .then((x) => x)
-        .catch(() => false)
-      if (!hasMenu) return
+      const slug = slugFromUrl(page.url())
+      if (!slug) throw new Error("Missing project slug for non-git workspace test")
 
-      await trigger.click({ force: true })
-
-      const menu = page.locator(dropdownMenuContentSelector).first()
-      await expect(menu).toBeVisible()
+      const menu = await openProjectMenu(page, slug)
 
       const toggle = menu.locator('[data-action="project-workspaces-toggle"]').first()
 
