@@ -229,6 +229,9 @@ export namespace ProviderTransform {
       openaiCompatible: {
         cache_control: { type: "ephemeral" },
       },
+      copilot: {
+        copilot_cache_control: { type: "ephemeral" },
+      },
     }
 
     // Determine if we should use message-level or content-level options
@@ -294,9 +297,32 @@ export namespace ProviderTransform {
     msgs = unsupportedParts(msgs, model)
     msgs = normalizeMessages(msgs, model, options)
 
-    // Apply caching only when explicitly enabled via model.caching
-    // No auto-detection - user must opt-in via model config
-    if (model.caching === true || (model.caching && typeof model.caching === "object")) {
+    // Apply caching when:
+    // 1. Explicitly enabled via model.caching (true or object)
+    // 2. Auto-detected: Anthropic models (not gateway)
+    // 3. Auto-detected: Amazon Bedrock models that support caching (Claude, Nova)
+    const isAnthropic = model.providerID === "anthropic" ||
+      model.api.id.includes("anthropic") ||
+      model.api.id.includes("claude") ||
+      model.id.includes("anthropic") ||
+      model.id.includes("claude") ||
+      model.api.npm === "@ai-sdk/anthropic"
+    const isBedrock = model.api.npm === "@ai-sdk/amazon-bedrock" || model.providerID.includes("bedrock")
+    const isBedrockCacheEligible = isBedrock && (
+      // Explicit caching option (true or false via model.options.caching)
+      (model.options?.caching === true) ||
+      // Explicit caching option via model.caching
+      (model.caching === true) ||
+      // Auto-detect Claude/Nova models (unless caching is explicitly disabled)
+      (model.options?.caching !== false && (
+        model.api.id.includes("claude") ||
+        model.api.id.includes("nova") ||
+        model.id.includes("claude") ||
+        model.id.includes("nova")
+      ))
+    )
+
+    if (model.caching || (isAnthropic && model.api.npm !== "@ai-sdk/gateway" && model.options?.caching !== false) || isBedrockCacheEligible) {
       msgs = applyCaching(msgs, model)
     }
 
