@@ -1,7 +1,30 @@
 import { NamedError } from "@opencode-ai/util/error"
-import matter from "gray-matter"
 import { z } from "zod"
 import { Filesystem } from "../util/filesystem"
+
+type FrontmatterResult = {
+  data: Record<string, unknown>
+  content: string
+}
+
+type FrontmatterParser = (input: string) => FrontmatterResult
+
+let matterPromise: Promise<FrontmatterParser> | undefined
+
+async function loadMatter(): Promise<FrontmatterParser> {
+  if (!matterPromise) {
+    matterPromise = (
+      typeof globalThis.window === "undefined"
+        ? import("gray-matter")
+        : import("../../../browser/src/shims/gray-matter.browser.ts")
+    ).then((mod) => {
+      const matter = mod.default
+      return matter as unknown as FrontmatterParser
+    })
+  }
+
+  return matterPromise
+}
 
 export namespace ConfigMarkdown {
   export const FILE_REGEX = /(?<![\w`])@(\.?[^\s`,.]*(?:\.[^\s`,.]+)*)/g
@@ -70,6 +93,7 @@ export namespace ConfigMarkdown {
 
   export async function parse(filePath: string) {
     const template = await Filesystem.readText(filePath)
+    const matter = await loadMatter()
 
     try {
       const md = matter(template)

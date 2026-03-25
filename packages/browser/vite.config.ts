@@ -144,8 +144,8 @@ export default defineConfig(async () => {
       // Ignore → browser shim
       "ignore": path.resolve(__dirname, "src/shims/ignore.browser.ts"),
 
-      // Gray matter → stub
-      "gray-matter": path.resolve(__dirname, "src/shims/stubs.ts"),
+      // Gray matter → browser shim
+      "gray-matter": path.resolve(__dirname, "src/shims/gray-matter.browser.ts"),
 
       // Mime types
       "mime-types": path.resolve(__dirname, "src/shims/mime-types.browser.ts"),
