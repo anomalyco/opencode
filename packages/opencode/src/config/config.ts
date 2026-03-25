@@ -20,7 +20,7 @@ import {
   parse as parseJsonc,
   printParseErrorCode,
 } from "jsonc-parser"
-import { Instance, type Shape } from "../project/instance"
+import { Instance, type Info as InstanceInfo } from "../project/instance"
 import { LSPServer } from "../lsp/server"
 import { BunProc } from "@/bun"
 import { Installation } from "@/installation"
@@ -78,7 +78,7 @@ export namespace Config {
     return merged
   }
 
-  async function loadState(ctx: Shape) {
+  async function loadState(ctx: InstanceInfo) {
     const glb = global()
     const auth = await Auth.all()
 

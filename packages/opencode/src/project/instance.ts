@@ -1,4 +1,5 @@
 import { GlobalBus } from "@/bus/global"
+import type { InstanceContext } from "@/effect/instance-context"
 import { disposeInstance } from "@/effect/instance-registry"
 import { Filesystem } from "@/util/filesystem"
 import { iife } from "@/util/iife"
@@ -7,13 +8,10 @@ import { Context } from "../util/context"
 import { Project } from "./project"
 import { State } from "./state"
 
-export interface Shape {
-  directory: string
-  worktree: string
-  project: Project.Info
-}
-const context = Context.create<Shape>("instance")
-const cache = new Map<string, Promise<Shape>>()
+export type Info = InstanceContext.Info
+
+const context = Context.create<Info>("instance")
+const cache = new Map<string, Promise<Info>>()
 
 const disposal = {
   all: undefined as Promise<void> | undefined,
@@ -52,7 +50,7 @@ function boot(input: { directory: string; init?: () => Promise<any>; project?: P
   })
 }
 
-function track(directory: string, next: Promise<Shape>) {
+function track(directory: string, next: Promise<Info>) {
   const task = next.catch((error) => {
     if (cache.get(directory) === task) cache.delete(directory)
     throw error
