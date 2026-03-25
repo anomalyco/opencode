@@ -827,6 +827,7 @@ export const SessionRoutes = lazy(() =>
                 model: body.model,
                 system: body.system,
                 format: body.format,
+                priority: body.priority,
               })
             } else {
               throw err
@@ -872,6 +873,7 @@ export const SessionRoutes = lazy(() =>
                 model: body.model,
                 system: body.system,
                 format: body.format,
+                priority: body.priority,
               })
               log.info("prompt_async queued", { sessionID })
             } else {

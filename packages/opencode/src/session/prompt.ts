@@ -82,6 +82,8 @@ export namespace SessionPrompt {
             model?: Provider.Model
             system?: string
             format?: MessageV2.Format
+            priority?: "urgent" | "normal" | "background"
+            queuedAt: number
           }[]
         }
       > = {}
@@ -107,13 +109,18 @@ export namespace SessionPrompt {
       model?: Provider.Model
       system?: string
       format?: MessageV2.Format
+      priority?: "urgent" | "normal" | "background"
     },
   ) {
     const s = state()
     if (!s[sessionID]) {
       s[sessionID] = { abort: new AbortController(), callbacks: [], pending: [] }
     }
-    s[sessionID].pending.push(input)
+    s[sessionID].pending.push({
+      ...input,
+      priority: input.priority ?? "normal",
+      queuedAt: Date.now(),
+    })
   }
 
   export const PromptInput = z.object({
@@ -180,6 +187,7 @@ export namespace SessionPrompt {
           }),
       ]),
     ),
+    priority: z.enum(["urgent", "normal", "background"]).optional().default("normal"),
   })
   export type PromptInput = z.infer<typeof PromptInput>
 
@@ -324,11 +332,29 @@ export namespace SessionPrompt {
       log.info("loop", { step, sessionID })
       if (abort.aborted) break
 
-      // Drain pending messages and inject them as user messages BEFORE loading message history
+      // Drain pending messages with priority ordering and batch limiting
       const pending = state()[sessionID]?.pending ?? []
       if (pending.length > 0) {
-        state()[sessionID].pending = []
-        for (const p of pending) {
+        // Sort by priority (urgent first) then by queue time (FIFO within same priority)
+        const priorityOrder = { urgent: 0, normal: 1, background: 2 }
+        const sorted = [...pending].sort((a, b) => {
+          const aPri = priorityOrder[a.priority ?? "normal"]
+          const bPri = priorityOrder[b.priority ?? "normal"]
+          if (aPri !== bPri) return aPri - bPri
+          return a.queuedAt - b.queuedAt
+        })
+
+        // Batch limit: urgent always processed, normal/background capped per iteration
+        const urgentMessages = sorted.filter((p) => p.priority === "urgent")
+        const nonUrgent = sorted.filter((p) => p.priority !== "urgent")
+        const batchLimit = Math.max(0, 5 - urgentMessages.length) // Up to 5 total, urgent takes priority
+        const toProcess = [...urgentMessages, ...nonUrgent.slice(0, batchLimit)]
+        const toKeep = nonUrgent.slice(batchLimit)
+
+        // Update queue: keep unprocessed messages
+        state()[sessionID].pending = toKeep
+
+        for (const p of toProcess) {
           const agentName = await Agent.defaultAgent()
           const agent = await Agent.get(agentName)
           if (!agent) continue
@@ -347,7 +373,18 @@ export namespace SessionPrompt {
 
           await Session.updateMessage(info)
           for (const part of p.parts) {
-            await Session.updatePart({ ...part, messageID: info.id, sessionID })
+            // Add context tag to queued messages so LLM knows they're mid-task additions
+            const isQueued = part.type === "text" && !part.synthetic
+            if (isQueued) {
+              await Session.updatePart({
+                ...part,
+                messageID: info.id,
+                sessionID,
+                text: `<queued-message priority="${p.priority ?? "normal"}">\n${part.text}\n</queued-message>`,
+              })
+            } else {
+              await Session.updatePart({ ...part, messageID: info.id, sessionID })
+            }
           }
 
           p.resolve({ info, parts: p.parts })
