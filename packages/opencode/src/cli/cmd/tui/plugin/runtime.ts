@@ -7,7 +7,6 @@ import {
   type TuiSlotPlugin,
   type TuiTheme,
 } from "@opencode-ai/plugin/tui"
-import type { CliRenderer } from "@opentui/core"
 import path from "path"
 import { fileURLToPath } from "url"
 
@@ -42,7 +41,7 @@ type Deps = {
 type Api = HostPluginApi
 
 type Scope = {
-  lifecycle: TuiPluginApi<CliRenderer>["lifecycle"]
+  lifecycle: TuiPluginApi["lifecycle"]
   wrap: (fn: (() => void) | undefined) => () => void
   dispose: () => Promise<void>
 }
@@ -87,7 +86,7 @@ function runCleanup(fn: () => unknown, ms: number): Promise<CleanupResult> {
   })
 }
 
-function isTuiPlugin(value: unknown): value is TuiPlugin<CliRenderer> {
+function isTuiPlugin(value: unknown): value is TuiPlugin {
   return typeof value === "function"
 }
 
@@ -310,7 +309,7 @@ function scope(load: Loaded, name: string) {
     }
   }
 
-  const lifecycle: TuiPluginApi<CliRenderer>["lifecycle"] = {
+  const lifecycle: TuiPluginApi["lifecycle"] = {
     signal: ctrl.signal,
     onDispose,
   }
@@ -373,8 +372,8 @@ function plug(plugin: TuiSlotPlugin, id: string): HostSlotPlugin {
   }
 }
 
-function pluginApi(api: Api, host: HostSlots, load: Loaded, state: Scope, base: string): TuiPluginApi<CliRenderer> {
-  const command: TuiPluginApi<CliRenderer>["command"] = {
+function pluginApi(api: Api, host: HostSlots, load: Loaded, state: Scope, base: string): TuiPluginApi {
+  const command: TuiPluginApi["command"] = {
     register(cb) {
       return state.wrap(api.command.register(cb))
     },
@@ -383,7 +382,7 @@ function pluginApi(api: Api, host: HostSlots, load: Loaded, state: Scope, base: 
     },
   }
 
-  const route: TuiPluginApi<CliRenderer>["route"] = {
+  const route: TuiPluginApi["route"] = {
     register(list) {
       return state.wrap(api.route.register(list))
     },
@@ -395,11 +394,11 @@ function pluginApi(api: Api, host: HostSlots, load: Loaded, state: Scope, base: 
     },
   }
 
-  const theme: TuiPluginApi<CliRenderer>["theme"] = Object.assign(Object.create(api.theme), {
+  const theme: TuiPluginApi["theme"] = Object.assign(Object.create(api.theme), {
     install: load.install,
   })
 
-  const event: TuiPluginApi<CliRenderer>["event"] = {
+  const event: TuiPluginApi["event"] = {
     on(type, handler) {
       return state.wrap(api.event.on(type, handler))
     },
@@ -407,7 +406,7 @@ function pluginApi(api: Api, host: HostSlots, load: Loaded, state: Scope, base: 
 
   let count = 0
 
-  const slots: TuiPluginApi<CliRenderer>["slots"] = {
+  const slots: TuiPluginApi["slots"] = {
     register(plugin) {
       const id = count ? `${base}:${count}` : base
       count += 1

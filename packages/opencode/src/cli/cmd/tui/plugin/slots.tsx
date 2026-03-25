@@ -1,5 +1,4 @@
-import type { CliRenderer } from "@opentui/core"
-import { type SlotMode, type TuiHostPluginApi, type TuiSlotContext, type TuiSlotMap } from "@opencode-ai/plugin/tui"
+import { type SlotMode, type TuiPluginApi, type TuiSlotContext, type TuiSlotMap } from "@opencode-ai/plugin/tui"
 import { createSlot, createSolidSlotRegistry, type JSX, type SolidPlugin } from "@opentui/solid"
 import { isRecord } from "@/util/record"
 
@@ -12,7 +11,7 @@ type SlotProps<K extends keyof TuiSlotMap> = {
 type Slot = <K extends keyof TuiSlotMap>(props: SlotProps<K>) => JSX.Element | null
 export type HostSlotPlugin = SolidPlugin<TuiSlotMap, TuiSlotContext>
 
-export type HostPluginApi = TuiHostPluginApi<CliRenderer>
+export type HostPluginApi = TuiPluginApi
 export type HostSlots = {
   register: (plugin: HostSlotPlugin) => () => void
 }

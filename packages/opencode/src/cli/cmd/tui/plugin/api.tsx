@@ -1,5 +1,5 @@
 import type { ParsedKey } from "@opentui/core"
-import type { TuiApi, TuiDialogSelectOption, TuiRouteDefinition } from "@opencode-ai/plugin/tui"
+import type { TuiDialogSelectOption, TuiPluginApi, TuiRouteDefinition } from "@opencode-ai/plugin/tui"
 import type { useCommandDialog } from "@tui/component/dialog-command"
 import type { useKeybind } from "@tui/context/keybind"
 import type { useRoute } from "@tui/context/route"
@@ -35,6 +35,11 @@ type Input = {
   sync: ReturnType<typeof useSync>
   theme: ReturnType<typeof useTheme>
   toast: ReturnType<typeof useToast>
+  client: () => TuiPluginApi["client"]
+  scopedClient: TuiPluginApi["scopedClient"]
+  workspace: TuiPluginApi["workspace"]
+  event: TuiPluginApi["event"]
+  renderer: TuiPluginApi["renderer"]
 }
 
 function routeRegister(routes: RouteMap, list: TuiRouteDefinition[], bump: () => void) {
@@ -77,7 +82,7 @@ function routeNavigate(route: ReturnType<typeof useRoute>, name: string, params?
   route.navigate({ type: "plugin", id: name, data: params })
 }
 
-function routeCurrent(route: ReturnType<typeof useRoute>): TuiApi["route"]["current"] {
+function routeCurrent(route: ReturnType<typeof useRoute>): TuiPluginApi["route"]["current"] {
   if (route.data.type === "home") return { name: "home" }
   if (route.data.type === "session") {
     return {
@@ -118,7 +123,7 @@ function mapOptionCb<Value>(cb?: (item: TuiDialogSelectOption<Value>) => void) {
   return (item: SelectOption<Value>) => cb(pickOption(item))
 }
 
-function stateApi(sync: ReturnType<typeof useSync>): TuiApi["state"] {
+function stateApi(sync: ReturnType<typeof useSync>): TuiPluginApi["state"] {
   return {
     get ready() {
       return sync.ready
@@ -187,7 +192,7 @@ function stateApi(sync: ReturnType<typeof useSync>): TuiApi["state"] {
   }
 }
 
-function appApi(): TuiApi["app"] {
+function appApi(): TuiPluginApi["app"] {
   return {
     get version() {
       return Installation.VERSION
@@ -195,7 +200,14 @@ function appApi(): TuiApi["app"] {
   }
 }
 
-export function createTuiApi(input: Input): TuiApi {
+export function createTuiApi(input: Input): TuiPluginApi {
+  const lifecycle: TuiPluginApi["lifecycle"] = {
+    signal: new AbortController().signal,
+    onDispose() {
+      return () => {}
+    },
+  }
+
   return {
     app: appApi(),
     command: {
@@ -304,6 +316,19 @@ export function createTuiApi(input: Input): TuiApi {
       },
     },
     state: stateApi(input.sync),
+    get client() {
+      return input.client()
+    },
+    scopedClient: input.scopedClient,
+    workspace: input.workspace,
+    event: input.event,
+    renderer: input.renderer,
+    slots: {
+      register() {
+        throw new Error("slots.register is only available in plugin context")
+      },
+    },
+    lifecycle,
     theme: {
       get current() {
         return input.theme.theme

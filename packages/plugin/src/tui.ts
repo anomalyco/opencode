@@ -255,37 +255,6 @@ type Frozen<Value> = Value extends (...args: never[]) => unknown
       ? { readonly [Key in keyof Value]: Frozen<Value[Key]> }
       : Value
 
-export type TuiApi = {
-  app: TuiApp
-  command: {
-    register: (cb: () => TuiCommand[]) => () => void
-    trigger: (value: string) => void
-  }
-  route: {
-    register: (routes: TuiRouteDefinition[]) => () => void
-    navigate: (name: string, params?: Record<string, unknown>) => void
-    readonly current: TuiRouteCurrent
-  }
-  ui: {
-    Dialog: (props: TuiDialogProps) => JSX.Element
-    DialogAlert: (props: TuiDialogAlertProps) => JSX.Element
-    DialogConfirm: (props: TuiDialogConfirmProps) => JSX.Element
-    DialogPrompt: (props: TuiDialogPromptProps) => JSX.Element
-    DialogSelect: <Value = unknown>(props: TuiDialogSelectProps<Value>) => JSX.Element
-    toast: (input: TuiToast) => void
-    dialog: TuiDialogStack
-  }
-  keybind: {
-    match: (key: string, evt: ParsedKey) => boolean
-    print: (key: string) => string
-    create: (defaults: TuiKeybindMap, overrides?: Record<string, unknown>) => TuiKeybindSet
-  }
-  readonly tuiConfig: Frozen<TuiConfigView>
-  kv: TuiKV
-  state: TuiState
-  theme: TuiTheme
-}
-
 export type TuiSidebarMcpItem = {
   name: string
   status: McpStatus["status"]
@@ -370,26 +339,47 @@ export type TuiWorkspace = {
   set: (workspaceID?: string) => void
 }
 
-export type TuiHostPluginApi<Renderer = CliRenderer> = TuiApi & {
+export type TuiPluginApi = {
+  app: TuiApp
+  command: {
+    register: (cb: () => TuiCommand[]) => () => void
+    trigger: (value: string) => void
+  }
+  route: {
+    register: (routes: TuiRouteDefinition[]) => () => void
+    navigate: (name: string, params?: Record<string, unknown>) => void
+    readonly current: TuiRouteCurrent
+  }
+  ui: {
+    Dialog: (props: TuiDialogProps) => JSX.Element
+    DialogAlert: (props: TuiDialogAlertProps) => JSX.Element
+    DialogConfirm: (props: TuiDialogConfirmProps) => JSX.Element
+    DialogPrompt: (props: TuiDialogPromptProps) => JSX.Element
+    DialogSelect: <Value = unknown>(props: TuiDialogSelectProps<Value>) => JSX.Element
+    toast: (input: TuiToast) => void
+    dialog: TuiDialogStack
+  }
+  keybind: {
+    match: (key: string, evt: ParsedKey) => boolean
+    print: (key: string) => string
+    create: (defaults: TuiKeybindMap, overrides?: Record<string, unknown>) => TuiKeybindSet
+  }
+  readonly tuiConfig: Frozen<TuiConfigView>
+  kv: TuiKV
+  state: TuiState
+  theme: TuiTheme
   client: OpencodeClient
   scopedClient: (workspaceID?: string) => OpencodeClient
   workspace: TuiWorkspace
   event: TuiEventBus
-  renderer: Renderer
-}
-
-export type TuiPluginApi<Renderer = CliRenderer> = TuiHostPluginApi<Renderer> & {
+  renderer: CliRenderer
   slots: TuiSlots
   lifecycle: TuiLifecycle
 }
 
-export type TuiPlugin<Renderer = CliRenderer> = (
-  api: TuiPluginApi<Renderer>,
-  options: PluginOptions | undefined,
-  meta: TuiPluginMeta,
-) => Promise<void>
+export type TuiPlugin = (api: TuiPluginApi, options: PluginOptions | undefined, meta: TuiPluginMeta) => Promise<void>
 
-export type TuiPluginModule<Renderer = CliRenderer> = {
+export type TuiPluginModule = {
   server?: Plugin
-  tui?: TuiPlugin<Renderer>
+  tui?: TuiPlugin
 }

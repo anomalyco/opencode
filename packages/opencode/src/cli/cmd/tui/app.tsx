@@ -59,7 +59,7 @@ import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { TuiConfigProvider, useTuiConfig } from "./context/tui-config"
 import { TuiConfig } from "@/config/tui"
 import { createTuiApi, TuiPluginRuntime, type RouteMap } from "./plugin"
-import type { TuiHostPluginApi } from "@opencode-ai/plugin/tui"
+import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { FormatError, FormatUnknownError } from "@/cli/error"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
@@ -278,7 +278,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     map.set(key, next)
     return next
   }
-  const workspace: TuiHostPluginApi["workspace"] = {
+  const workspace: TuiPluginApi["workspace"] = {
     current() {
       return sdk.workspaceID
     },
@@ -310,19 +310,14 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     sync,
     theme: themeState,
     toast,
-  })
-  const host: TuiHostPluginApi = {
-    ...api,
-    get client() {
-      return sdk.client
-    },
+    client: () => sdk.client,
     scopedClient: scoped,
     workspace,
     event: sdk.event,
     renderer,
-  }
+  })
   const [ready, setReady] = createSignal(false)
-  TuiPluginRuntime.init(host)
+  TuiPluginRuntime.init(api)
     .catch((error) => {
       console.error("Failed to load TUI plugins", error)
     })

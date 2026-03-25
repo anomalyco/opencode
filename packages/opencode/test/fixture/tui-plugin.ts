@@ -115,6 +115,7 @@ type Opts = {
 export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
   const kv: Record<string, unknown> = {}
   const count = opts.count
+  const ctrl = new AbortController()
   const own = createOpencodeClient({
     baseUrl: "http://localhost:4096",
   })
@@ -182,6 +183,15 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
       },
     },
     renderer,
+    slots: {
+      register: () => "fixture-slot",
+    },
+    lifecycle: {
+      signal: ctrl.signal,
+      onDispose() {
+        return () => {}
+      },
+    },
     command: {
       register: () => {
         if (count) count.command_add += 1
