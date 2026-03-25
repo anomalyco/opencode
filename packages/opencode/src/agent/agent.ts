@@ -33,6 +33,7 @@ export namespace Agent {
       hidden: z.boolean().optional(),
       topP: z.number().optional(),
       temperature: z.number().optional(),
+      order: z.number().int().optional(),
       color: z.string().optional(),
       permission: Permission.Ruleset,
       model: z
@@ -256,6 +257,7 @@ export namespace Agent {
             item.color = value.color ?? item.color
             item.hidden = value.hidden ?? item.hidden
             item.name = value.name ?? item.name
+            item.order = value.order ?? item.order
             item.steps = value.steps ?? item.steps
             item.options = mergeDeep(item.options, value.options ?? {})
             item.permission = Permission.merge(item.permission, Permission.fromConfig(value.permission ?? {}))
@@ -288,6 +290,7 @@ export namespace Agent {
               values(),
               sortBy(
                 [(x) => (cfg.default_agent ? x.name === cfg.default_agent : x.name === "build"), "desc"],
+                [(x) => x.order ?? Infinity, "asc"],
                 [(x) => x.name, "asc"],
               ),
             )

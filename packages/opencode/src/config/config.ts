@@ -723,6 +723,11 @@ export namespace Config {
       disable: z.boolean().optional(),
       description: z.string().optional().describe("Description of when to use the agent"),
       mode: z.enum(["subagent", "primary", "all"]).optional(),
+      order: z
+        .number()
+        .int()
+        .optional()
+        .describe("Sorting order for agent cycling (Tab). Lower values appear first. Agents without order are sorted alphabetically after ordered agents."),
       hidden: z
         .boolean()
         .optional()
@@ -755,6 +760,7 @@ export namespace Config {
         "temperature",
         "top_p",
         "mode",
+        "order",
         "hidden",
         "color",
         "steps",
