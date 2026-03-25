@@ -177,6 +177,12 @@ export namespace LSP {
 
   async function getClients(file: string) {
     const s = await state()
+
+    // Only spawn LSP clients for files within the instance directory
+    if (!Instance.containsPath(file)) {
+      return []
+    }
+
     const extension = path.parse(file).ext || file
     const result: LSPClient.Info[] = []
 
