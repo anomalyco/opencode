@@ -18,6 +18,16 @@ import type { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
 
 export namespace MessageV2 {
+  const NETWORK_ERROR_CODES = new Set([
+    "ECONNRESET",
+    "ETIMEDOUT",
+    "ENETUNREACH",
+    "EHOSTUNREACH",
+    "ENOTFOUND",
+    "EPIPE",
+    "ECONNREFUSED",
+  ])
+
   export function isMedia(mime: string) {
     return mime.startsWith("image/") || mime === "application/pdf"
   }
@@ -916,15 +926,26 @@ export namespace MessageV2 {
           },
           { cause: e },
         ).toObject()
-      case (e as SystemError)?.code === "ECONNRESET":
+      case NETWORK_ERROR_CODES.has((e as SystemError)?.code ?? ""):
         return new MessageV2.APIError(
           {
-            message: "Connection reset by server",
+            message: "Network error",
             isRetryable: true,
             metadata: {
               code: (e as SystemError).code ?? "",
               syscall: (e as SystemError).syscall ?? "",
               message: (e as SystemError).message ?? "",
+            },
+          },
+          { cause: e },
+        ).toObject()
+      case e instanceof Error && e.message === "SSE read timed out":
+        return new MessageV2.APIError(
+          {
+            message: "SSE read timed out",
+            isRetryable: true,
+            metadata: {
+              message: e.message,
             },
           },
           { cause: e },

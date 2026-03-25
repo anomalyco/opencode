@@ -19,6 +19,11 @@ export namespace SessionStatus {
         next: z.number(),
       }),
       z.object({
+        type: z.literal("reconnecting"),
+        attempt: z.number(),
+        message: z.string(),
+      }),
+      z.object({
         type: z.literal("busy"),
       }),
     ])
