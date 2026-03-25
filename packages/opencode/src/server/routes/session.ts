@@ -831,7 +831,7 @@ export const SessionRoutes = lazy(() =>
             } else {
               throw err
             }
-          })
+          }
         })
       },
     )
