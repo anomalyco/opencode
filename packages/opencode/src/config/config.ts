@@ -1185,7 +1185,7 @@ export namespace Config {
           if (!parsed.data.$schema && isFile) {
             parsed.data.$schema = "https://opencode.ai/config.json"
             const updated = original.replace(/^\s*\{/, '{\n  "$schema": "https://opencode.ai/config.json",')
-            yield* fs.writeFileString(options.path, updated).pipe(Effect.orDie)
+            yield* fs.writeFileString(options.path, updated).pipe(Effect.catch(() => Effect.void))
           }
           const data = parsed.data
           if (data.plugin && isFile) {
@@ -1237,13 +1237,14 @@ export namespace Config {
                 if (provider && model) result.model = `${provider}/${model}`
                 result["$schema"] = "https://opencode.ai/config.json"
                 result = mergeDeep(result, rest)
+                await fsNode.writeFile(
+                  path.join(Global.Path.config, "config.json"),
+                  JSON.stringify(result, null, 2),
+                )
+                await fsNode.unlink(legacy)
               })
               .catch(() => {}),
           )
-          yield* fs.writeFileString(path.join(Global.Path.config, "config.json"), JSON.stringify(result, null, 2)).pipe(
-            Effect.orDie,
-          )
-          yield* Effect.promise(() => fsNode.unlink(legacy).catch(() => {}))
         }
 
         _cachedGlobal = result
@@ -1346,30 +1347,32 @@ export namespace Config {
 
         const active = yield* Effect.promise(() => Account.active())
         if (active?.active_org_id) {
-          yield* Effect.promise(async () => {
-            try {
-              const [config, token] = await Promise.all([
-                Account.config(active.id, active.active_org_id!),
-                Account.token(active.id),
-              ])
-              if (token) {
-                process.env["OPENCODE_CONSOLE_TOKEN"] = token
-                Env.set("OPENCODE_CONSOLE_TOKEN", token)
-              }
-
-              if (config) {
-                result = mergeConfigConcatArrays(
-                  result,
-                  await ConfigPaths.parseText(JSON.stringify(config), {
-                    source: `${active.url}/api/config`,
-                    dir: path.dirname(`${active.url}/api/config`),
-                  }).then((data) => Info.parse(data)),
-                )
-              }
-            } catch (err: any) {
-              log.debug("failed to fetch remote account config", { error: err?.message ?? err })
+          yield* Effect.gen(function* () {
+            const [config, token] = yield* Effect.promise(() =>
+              Promise.all([Account.config(active.id, active.active_org_id!), Account.token(active.id)]),
+            )
+            if (token) {
+              process.env["OPENCODE_CONSOLE_TOKEN"] = token
+              Env.set("OPENCODE_CONSOLE_TOKEN", token)
             }
-          })
+
+            if (config) {
+              result = mergeConfigConcatArrays(
+                result,
+                yield* loadConfig(JSON.stringify(config), {
+                  dir: path.dirname(`${active.url}/api/config`),
+                  source: `${active.url}/api/config`,
+                }),
+              )
+            }
+          }).pipe(
+            Effect.catchDefect((err) => {
+              log.debug("failed to fetch remote account config", {
+                error: err instanceof Error ? err.message : String(err),
+              })
+              return Effect.void
+            }),
+          )
         }
 
         if (existsSync(managedDir)) {
