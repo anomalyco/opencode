@@ -50,11 +50,32 @@ async function cleanup() {
   } catch {}
 }
 
-async function fix(pr: PR, files: string[]) {
+async function fix(pr: PR, files: string[], prs: PR[], applied: number[], idx: number) {
   console.log(`  Trying to auto-resolve ${files.length} conflict(s) with opencode...`)
+
+  const done =
+    prs
+      .filter((x) => applied.includes(x.number))
+      .map((x) => `- #${x.number}: ${x.title}`)
+      .join("\n") || "(none yet)"
+
+  const next =
+    prs
+      .slice(idx + 1)
+      .map((x) => `- #${x.number}: ${x.title}`)
+      .join("\n") || "(none)"
+
   const prompt = [
     `Resolve the current git merge conflicts while merging PR #${pr.number} into the beta branch.`,
+    `PR #${pr.number}: ${pr.title}`,
     `Only touch these files: ${files.join(", ")}.`,
+    `Merged PRs on HEAD:\n${done}`,
+    `Pending PRs after this one (context only):\n${next}`,
+    "IMPORTANT: The conflict resolution must be consistent with already-merged PRs.",
+    "Pending PRs are context only; do not introduce their changes unless they are already present on HEAD.",
+    "Prefer already-merged PRs over the base branch when resolving stacked conflicts.",
+    "If a PR already deleted a file/directory, do not re-add it, instead apply changes in the new semantic location.",
+    "If a PR already changed an import, keep that change.",
     "Keep the merge in progress, do not abort the merge, and do not create a commit.",
     "When done, leave the working tree with no unmerged files.",
   ].join("\n")
@@ -99,7 +120,7 @@ async function main() {
   const applied: number[] = []
   const failed: FailedPR[] = []
 
-  for (const pr of prs) {
+  for (const [idx, pr] of prs.entries()) {
     console.log(`\nProcessing PR #${pr.number}: ${pr.title}`)
 
     console.log("  Fetching PR head...")
@@ -119,7 +140,7 @@ async function main() {
       const files = await conflicts()
       if (files.length > 0) {
         console.log("  Failed to merge (conflicts)")
-        if (!(await fix(pr, files))) {
+        if (!(await fix(pr, files, prs, applied, idx))) {
           await cleanup()
           failed.push({ number: pr.number, title: pr.title, reason: "Merge conflicts" })
           await commentOnPR(pr.number, "Merge conflicts with dev branch")
