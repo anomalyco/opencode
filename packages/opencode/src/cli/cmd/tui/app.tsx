@@ -110,6 +110,7 @@ export function tui(input: {
   url: string
   args: Args
   config: TuiConfig.Info
+  onSnapshot?: () => Promise<string[]>
   directory?: string
   fetch?: typeof fetch
   headers?: RequestInit["headers"]
@@ -160,7 +161,7 @@ export function tui(input: {
                                         <FrecencyProvider>
                                           <PromptHistoryProvider>
                                             <PromptRefProvider>
-                                              <App />
+                                              <App onSnapshot={input.onSnapshot} />
                                             </PromptRefProvider>
                                           </PromptHistoryProvider>
                                         </FrecencyProvider>
@@ -201,7 +202,7 @@ export function tui(input: {
   })
 }
 
-function App() {
+function App(props: { onSnapshot?: () => Promise<string[]> }) {
   const route = useRoute()
   const dimensions = useTerminalDimensions()
   const renderer = useRenderer()
@@ -212,7 +213,7 @@ function App() {
   const command = useCommandDialog()
   const sdk = useSDK()
   const toast = useToast()
-  const { theme, mode, setMode } = useTheme()
+  const { theme, mode, setMode, locked, lock, unlock } = useTheme()
   const sync = useSync()
   const exit = useExit()
   const promptRef = usePromptRef()
@@ -557,10 +558,20 @@ function App() {
       category: "System",
     },
     {
-      title: "Toggle appearance",
+      title: "Toggle Theme Mode",
       value: "theme.switch_mode",
       onSelect: (dialog) => {
         setMode(mode() === "dark" ? "light" : "dark")
+        dialog.clear()
+      },
+      category: "System",
+    },
+    {
+      title: locked() ? "Unlock Theme Mode" : "Lock Theme Mode",
+      value: "theme.mode.lock",
+      onSelect: (dialog) => {
+        if (locked()) unlock()
+        else lock()
         dialog.clear()
       },
       category: "System",
@@ -617,11 +628,11 @@ function App() {
       title: "Write heap snapshot",
       category: "System",
       value: "app.heap_snapshot",
-      onSelect: (dialog) => {
-        const path = writeHeapSnapshot()
+      onSelect: async (dialog) => {
+        const files = await props.onSnapshot?.()
         toast.show({
           variant: "info",
-          message: `Heap snapshot written to ${path}`,
+          message: `Heap snapshot written to ${files?.join(", ")}`,
           duration: 5000,
         })
         dialog.clear()

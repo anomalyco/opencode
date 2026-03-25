@@ -164,7 +164,7 @@ Still open and likely worth migrating:
 - [x] `Plugin`
 - [x] `ToolRegistry`
 - [ ] `Pty`
-- [ ] `Worktree`
+- [x] `Worktree`
 - [ ] `Bus`
 - [x] `Command`
 - [ ] `Config`
@@ -173,6 +173,6 @@ Still open and likely worth migrating:
 - [ ] `SessionPrompt`
 - [ ] `SessionCompaction`
 - [ ] `Provider`
-- [ ] `Project`
+- [x] `Project`
 - [ ] `LSP`
 - [ ] `MCP`
