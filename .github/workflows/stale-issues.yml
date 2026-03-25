@@ -15,8 +15,9 @@ jobs:
     permissions:
       issues: write
     steps:
-      - uses: actions/stale@v10
+      - uses: actions/stale@v10.2.0
         with:
+          operations-per-run: 1000
           days-before-stale: ${{ env.DAYS_BEFORE_STALE }}
           days-before-close: ${{ env.DAYS_BEFORE_CLOSE }}
           stale-issue-label: "stale"
