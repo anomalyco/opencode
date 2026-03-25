@@ -902,8 +902,6 @@ export const dict = {
   "settings.permissions.tool.skill.description": "Load a skill by name",
   "settings.permissions.tool.lsp.title": "LSP",
   "settings.permissions.tool.lsp.description": "Run language server queries",
-  "settings.permissions.tool.todoread.title": "Todo Read",
-  "settings.permissions.tool.todoread.description": "Read the todo list",
   "settings.permissions.tool.todowrite.title": "Todo Write",
   "settings.permissions.tool.todowrite.description": "Update the todo list",
   "settings.permissions.tool.webfetch.title": "Web Fetch",
