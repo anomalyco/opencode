@@ -148,7 +148,6 @@ export namespace Agent {
               permission: Permission.merge(
                 defaults,
                 Permission.fromConfig({
-                  todoread: "deny",
                   todowrite: "deny",
                 }),
                 user,
