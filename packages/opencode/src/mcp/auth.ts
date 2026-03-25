@@ -34,27 +34,19 @@ export namespace McpAuth {
   const filepath = path.join(Global.Path.data, "mcp-auth.json")
 
   export interface Interface {
-    readonly all: () => Effect.Effect<Record<string, Entry>, AppFileSystem.Error>
-    readonly get: (mcpName: string) => Effect.Effect<Entry | undefined, AppFileSystem.Error>
-    readonly getForUrl: (mcpName: string, serverUrl: string) => Effect.Effect<Entry | undefined, AppFileSystem.Error>
-    readonly set: (mcpName: string, entry: Entry, serverUrl?: string) => Effect.Effect<void, AppFileSystem.Error>
-    readonly remove: (mcpName: string) => Effect.Effect<void, AppFileSystem.Error>
-    readonly updateTokens: (
-      mcpName: string,
-      tokens: Tokens,
-      serverUrl?: string,
-    ) => Effect.Effect<void, AppFileSystem.Error>
-    readonly updateClientInfo: (
-      mcpName: string,
-      clientInfo: ClientInfo,
-      serverUrl?: string,
-    ) => Effect.Effect<void, AppFileSystem.Error>
-    readonly updateCodeVerifier: (mcpName: string, codeVerifier: string) => Effect.Effect<void, AppFileSystem.Error>
-    readonly clearCodeVerifier: (mcpName: string) => Effect.Effect<void, AppFileSystem.Error>
-    readonly updateOAuthState: (mcpName: string, oauthState: string) => Effect.Effect<void, AppFileSystem.Error>
-    readonly getOAuthState: (mcpName: string) => Effect.Effect<string | undefined, AppFileSystem.Error>
-    readonly clearOAuthState: (mcpName: string) => Effect.Effect<void, AppFileSystem.Error>
-    readonly isTokenExpired: (mcpName: string) => Effect.Effect<boolean | null, AppFileSystem.Error>
+    readonly all: () => Effect.Effect<Record<string, Entry>>
+    readonly get: (mcpName: string) => Effect.Effect<Entry | undefined>
+    readonly getForUrl: (mcpName: string, serverUrl: string) => Effect.Effect<Entry | undefined>
+    readonly set: (mcpName: string, entry: Entry, serverUrl?: string) => Effect.Effect<void>
+    readonly remove: (mcpName: string) => Effect.Effect<void>
+    readonly updateTokens: (mcpName: string, tokens: Tokens, serverUrl?: string) => Effect.Effect<void>
+    readonly updateClientInfo: (mcpName: string, clientInfo: ClientInfo, serverUrl?: string) => Effect.Effect<void>
+    readonly updateCodeVerifier: (mcpName: string, codeVerifier: string) => Effect.Effect<void>
+    readonly clearCodeVerifier: (mcpName: string) => Effect.Effect<void>
+    readonly updateOAuthState: (mcpName: string, oauthState: string) => Effect.Effect<void>
+    readonly getOAuthState: (mcpName: string) => Effect.Effect<string | undefined>
+    readonly clearOAuthState: (mcpName: string) => Effect.Effect<void>
+    readonly isTokenExpired: (mcpName: string) => Effect.Effect<boolean | null>
   }
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/McpAuth") {}
@@ -87,13 +79,13 @@ export namespace McpAuth {
       const set = Effect.fn("McpAuth.set")(function* (mcpName: string, entry: Entry, serverUrl?: string) {
         const data = yield* all()
         if (serverUrl) entry.serverUrl = serverUrl
-        yield* fs.writeJson(filepath, { ...data, [mcpName]: entry }, 0o600)
+        yield* fs.writeJson(filepath, { ...data, [mcpName]: entry }, 0o600).pipe(Effect.orDie)
       })
 
       const remove = Effect.fn("McpAuth.remove")(function* (mcpName: string) {
         const data = yield* all()
         delete data[mcpName]
-        yield* fs.writeJson(filepath, data, 0o600)
+        yield* fs.writeJson(filepath, data, 0o600).pipe(Effect.orDie)
       })
 
       const updateTokens = Effect.fn("McpAuth.updateTokens")(function* (

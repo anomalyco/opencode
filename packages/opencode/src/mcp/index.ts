@@ -24,7 +24,7 @@ import { BusEvent } from "../bus/bus-event"
 import { Bus } from "@/bus"
 import { TuiEvent } from "@/cli/cmd/tui/event"
 import open from "open"
-import { Effect, Layer, Scope, ServiceMap, Stream } from "effect"
+import { Effect, Layer, Option, Scope, ServiceMap, Stream } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRunPromise } from "@/effect/run-service"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
@@ -169,49 +169,25 @@ export namespace MCP {
   }
 
 
-  // Helper function to fetch prompts for a specific client
-  async function fetchPromptsForClient(clientName: string, client: Client) {
-    const prompts = await client.listPrompts().catch((e) => {
-      log.error("failed to get prompts", { clientName, error: e.message })
+  async function fetchFromClient<T extends { name: string }>(
+    clientName: string,
+    client: Client,
+    listFn: (c: Client) => Promise<T[]>,
+    label: string,
+  ): Promise<Record<string, T & { client: string }> | undefined> {
+    const items = await listFn(client).catch((e: any) => {
+      log.error(`failed to get ${label}`, { clientName, error: e.message })
       return undefined
     })
+    if (!items) return undefined
 
-    if (!prompts) {
-      return
+    const out: Record<string, T & { client: string }> = {}
+    const sanitizedClient = clientName.replace(/[^a-zA-Z0-9_-]/g, "_")
+    for (const item of items) {
+      const sanitizedName = item.name.replace(/[^a-zA-Z0-9_-]/g, "_")
+      out[sanitizedClient + ":" + sanitizedName] = { ...item, client: clientName }
     }
-
-    const commands: Record<string, PromptInfo & { client: string }> = {}
-
-    for (const prompt of prompts.prompts) {
-      const sanitizedClientName = clientName.replace(/[^a-zA-Z0-9_-]/g, "_")
-      const sanitizedPromptName = prompt.name.replace(/[^a-zA-Z0-9_-]/g, "_")
-      const key = sanitizedClientName + ":" + sanitizedPromptName
-
-      commands[key] = { ...prompt, client: clientName }
-    }
-    return commands
-  }
-
-  async function fetchResourcesForClient(clientName: string, client: Client) {
-    const resources = await client.listResources().catch((e) => {
-      log.error("failed to get prompts", { clientName, error: e.message })
-      return undefined
-    })
-
-    if (!resources) {
-      return
-    }
-
-    const commands: Record<string, ResourceInfo & { client: string }> = {}
-
-    for (const resource of resources.resources) {
-      const sanitizedClientName = clientName.replace(/[^a-zA-Z0-9_-]/g, "_")
-      const sanitizedResourceName = resource.name.replace(/[^a-zA-Z0-9_-]/g, "_")
-      const key = sanitizedClientName + ":" + sanitizedResourceName
-
-      commands[key] = { ...resource, client: clientName }
-    }
-    return commands
+    return out
   }
 
   async function create(key: string, mcp: Config.Mcp) {
@@ -450,7 +426,7 @@ export namespace MCP {
       clientName: string,
       resourceUri: string,
     ) => Effect.Effect<Awaited<ReturnType<MCPClient["readResource"]>> | undefined>
-    readonly startAuth: (mcpName: string) => Effect.Effect<{ authorizationUrl: string }>
+    readonly startAuth: (mcpName: string) => Effect.Effect<{ authorizationUrl: string; oauthState: string }>
     readonly authenticate: (mcpName: string) => Effect.Effect<Status>
     readonly finishAuth: (mcpName: string, authorizationCode: string) => Effect.Effect<Status>
     readonly removeAuth: (mcpName: string) => Effect.Effect<void>
@@ -537,12 +513,9 @@ export namespace MCP {
                     const pid = (client.transport as any)?.pid
                     if (typeof pid === "number") {
                       const pids = yield* descendants(pid)
-                      yield* Effect.forEach(pids, (dpid) =>
-                        Effect.try({
-                          try: () => process.kill(dpid, "SIGTERM"),
-                          catch: () => new Error(`failed to kill ${dpid}`),
-                        }).pipe(Effect.ignore),
-                      )
+                      for (const dpid of pids) {
+                        try { process.kill(dpid, "SIGTERM") } catch {}
+                      }
                     }
                     yield* Effect.tryPromise(() => client.close()).pipe(Effect.ignore)
                   }),
@@ -559,13 +532,9 @@ export namespace MCP {
       function closeClient(s: State, name: string) {
         const client = s.clients[name]
         if (!client) return Effect.void
-        return Effect.tryPromise({
-          try: () => client.close(),
-          catch: (error) => {
-            log.error("failed to close MCP client", { name, error })
-            return error
-          },
-        }).pipe(Effect.ignore)
+        return Effect.promise(() =>
+          client.close().catch((error: any) => log.error("failed to close MCP client", { name, error })),
+        )
       }
 
       const status = Effect.fn("MCP.status")(function* () {
@@ -611,15 +580,9 @@ export namespace MCP {
       })
 
       const connect = Effect.fn("MCP.connect")(function* (name: string) {
-        const cfg = yield* Effect.promise(() => Config.get())
-        const config = cfg.mcp ?? {}
-        const mcp = config[name]
+        const mcp = yield* getMcpConfig(name)
         if (!mcp) {
-          log.error("MCP config not found", { name })
-          return
-        }
-        if (!isMcpConfigured(mcp)) {
-          log.error("Ignoring MCP connect request for config without type", { name })
+          log.error("MCP config not found or invalid", { name })
           return
         }
         yield* createAndStore(name, { ...mcp, enabled: true })
@@ -660,7 +623,7 @@ export namespace MCP {
                 },
               }).pipe(Effect.option)
 
-              if (toolsResult._tag === "None") {
+              if (Option.isNone(toolsResult)) {
                 // Fork background reconnection — tools come back next turn
                 const mcpConfig = config[clientName]
                 if (mcpConfig && isMcpConfigured(mcpConfig)) {
@@ -700,12 +663,16 @@ export namespace MCP {
 
       const prompts = Effect.fn("MCP.prompts")(function* () {
         const s = yield* InstanceState.get(cache)
-        return yield* collectFromConnected(s, fetchPromptsForClient)
+        return yield* collectFromConnected(s, (name, client) =>
+          fetchFromClient(name, client, (c) => c.listPrompts().then((r) => r.prompts), "prompts"),
+        )
       })
 
       const resources = Effect.fn("MCP.resources")(function* () {
         const s = yield* InstanceState.get(cache)
-        return yield* collectFromConnected(s, fetchResourcesForClient)
+        return yield* collectFromConnected(s, (name, client) =>
+          fetchFromClient(name, client, (c) => c.listResources().then((r) => r.resources), "resources"),
+        )
       })
 
       function withClient<A>(
@@ -773,8 +740,7 @@ export namespace MCP {
         const oauthState = Array.from(crypto.getRandomValues(new Uint8Array(32)))
           .map((b) => b.toString(16).padStart(2, "0"))
           .join("")
-        yield* auth.updateOAuthState(mcpName, oauthState).pipe(Effect.orDie)
-
+        yield* auth.updateOAuthState(mcpName, oauthState)
         const oauthConfig = typeof mcpConfig.oauth === "object" ? mcpConfig.oauth : undefined
         let capturedUrl: URL | undefined
         const authProvider = new McpOAuthProvider(
@@ -794,11 +760,11 @@ export namespace MCP {
           try {
             const client = new Client({ name: "opencode", version: Installation.VERSION })
             await client.connect(transport)
-            return { authorizationUrl: "" }
+            return { authorizationUrl: "", oauthState }
           } catch (error) {
             if (error instanceof UnauthorizedError && capturedUrl) {
               pendingOAuthTransports.set(mcpName, transport)
-              return { authorizationUrl: capturedUrl.toString() }
+              return { authorizationUrl: capturedUrl.toString(), oauthState }
             }
             throw error
           }
@@ -806,11 +772,8 @@ export namespace MCP {
       })
 
       const authenticate = Effect.fn("MCP.authenticate")(function* (mcpName: string) {
-        const { authorizationUrl } = yield* startAuth(mcpName)
+        const { authorizationUrl, oauthState } = yield* startAuth(mcpName)
         if (!authorizationUrl) return { status: "connected" } as Status
-
-        const oauthState = yield* auth.getOAuthState(mcpName).pipe(Effect.orDie)
-        if (!oauthState) throw new Error("OAuth state not found - this should not happen")
 
         log.info("opening browser for oauth", { mcpName, url: authorizationUrl, state: oauthState })
 
@@ -818,16 +781,19 @@ export namespace MCP {
 
         yield* Effect.tryPromise(() => open(authorizationUrl)).pipe(
           Effect.flatMap((subprocess) =>
-            Effect.tryPromise(
-              () =>
-                new Promise<void>((resolve, reject) => {
-                  const timeout = setTimeout(() => resolve(), 500)
-                  subprocess.on("error", (error) => { clearTimeout(timeout); reject(error) })
-                  subprocess.on("exit", (code) => {
-                    if (code !== null && code !== 0) { clearTimeout(timeout); reject(new Error(`Browser open failed with exit code ${code}`)) }
-                  })
-                }),
-            ),
+            Effect.callback<void, Error>((resume) => {
+              const timer = setTimeout(() => resume(Effect.void), 500)
+              subprocess.on("error", (err) => {
+                clearTimeout(timer)
+                resume(Effect.fail(err))
+              })
+              subprocess.on("exit", (code) => {
+                if (code !== null && code !== 0) {
+                  clearTimeout(timer)
+                  resume(Effect.fail(new Error(`Browser open failed with exit code ${code}`)))
+                }
+              })
+            }),
           ),
           Effect.catch(() => {
             log.warn("failed to open browser, user must open URL manually", { mcpName })
@@ -837,13 +803,12 @@ export namespace MCP {
 
         const code = yield* Effect.promise(() => callbackPromise)
 
-        const storedState = yield* auth.getOAuthState(mcpName).pipe(Effect.orDie)
+        const storedState = yield* auth.getOAuthState(mcpName)
         if (storedState !== oauthState) {
-          yield* auth.clearOAuthState(mcpName).pipe(Effect.orDie)
+          yield* auth.clearOAuthState(mcpName)
           throw new Error("OAuth state mismatch - potential CSRF attack")
         }
-        yield* auth.clearOAuthState(mcpName).pipe(Effect.orDie)
-
+        yield* auth.clearOAuthState(mcpName)
         return yield* finishAuth(mcpName, code)
       })
 
@@ -862,11 +827,11 @@ export namespace MCP {
           },
         }).pipe(Effect.option)
 
-        if (result._tag === "None") {
+        if (Option.isNone(result)) {
           return { status: "failed", error: "OAuth completion failed" } as Status
         }
 
-        yield* auth.clearCodeVerifier(mcpName).pipe(Effect.orDie)
+        yield* auth.clearCodeVerifier(mcpName)
         pendingOAuthTransports.delete(mcpName)
 
         const mcpConfig = yield* getMcpConfig(mcpName)
@@ -876,10 +841,10 @@ export namespace MCP {
       })
 
       const removeAuth = Effect.fn("MCP.removeAuth")(function* (mcpName: string) {
-        yield* auth.remove(mcpName).pipe(Effect.orDie)
+        yield* auth.remove(mcpName)
         McpOAuthCallback.cancelPending(mcpName)
         pendingOAuthTransports.delete(mcpName)
-        yield* auth.clearOAuthState(mcpName).pipe(Effect.orDie)
+        yield* auth.clearOAuthState(mcpName)
         log.info("removed oauth credentials", { mcpName })
       })
 
@@ -890,14 +855,14 @@ export namespace MCP {
       })
 
       const hasStoredTokens = Effect.fn("MCP.hasStoredTokens")(function* (mcpName: string) {
-        const entry = yield* auth.get(mcpName).pipe(Effect.orDie)
+        const entry = yield* auth.get(mcpName)
         return !!entry?.tokens
       })
 
       const getAuthStatus = Effect.fn("MCP.getAuthStatus")(function* (mcpName: string) {
-        const entry = yield* auth.get(mcpName).pipe(Effect.orDie)
+        const entry = yield* auth.get(mcpName)
         if (!entry?.tokens) return "not_authenticated" as AuthStatus
-        const expired = yield* auth.isTokenExpired(mcpName).pipe(Effect.orDie)
+        const expired = yield* auth.isTokenExpired(mcpName)
         return (expired ? "expired" : "authenticated") as AuthStatus
       })
 
