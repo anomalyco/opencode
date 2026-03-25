@@ -3,10 +3,22 @@ import { Tool } from "./tool"
 import { Question } from "../question"
 import DESCRIPTION from "./question.txt"
 
+const OptionSchema = z.object({
+  label: z.string().describe("Display text (1-5 words, concise)"),
+  description: z.string().describe("Explanation of choice"),
+})
+
+const QuestionInfoSchema = z.object({
+  question: z.string().describe("Complete question"),
+  header: z.string().describe("Very short label (max 30 chars)"),
+  options: z.array(OptionSchema).describe("Available choices"),
+  multiple: z.boolean().optional().describe("Allow selecting multiple choices"),
+})
+
 export const QuestionTool = Tool.define("question", {
   description: DESCRIPTION,
   parameters: z.object({
-    questions: z.array(Question.Info.omit({ custom: true })).describe("Questions to ask"),
+    questions: z.array(QuestionInfoSchema).describe("Questions to ask"),
   }),
   async execute(params, ctx) {
     const answers = await Question.ask({
