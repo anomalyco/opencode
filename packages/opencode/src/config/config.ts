@@ -512,6 +512,7 @@ export namespace Config {
   const McpJson = z.object({
     mcpServers: z
       .record(
+        z.string(),
         z.object({
           command: z.string(),
           args: z.string().array().optional(),
@@ -521,14 +522,20 @@ export namespace Config {
       .optional(),
   })
 
-  async function loadMcp(dir: string): Promise<NonNullable<Info["mcp"]>> {
-    const file = Bun.file(path.join(dir, "mcp.json"))
-    if (!(await file.exists())) return {}
+  async function loadMcp(dir: string): Promise<NonNullable<InfoMcp>> {
+    const source = path.join(dir, "mcp.json")
+    if (!(await Filesystem.exists(source))) return {}
 
-    const parsed = McpJson.safeParse(await file.json().catch(() => ({})))
-    if (!parsed.success) return {}
+    const text = await Filesystem.readJson(source)
+    const parsed = McpJson.safeParse(text)
+    if (!parsed.success) {
+      throw new InvalidError({
+        path: source,
+        issues: parsed.error.issues,
+      })
+    }
 
-    const result: NonNullable<Info["mcp"]> = {}
+    const result: NonNullable<InfoMcp> = {}
     for (const [name, cfg] of Object.entries(parsed.data.mcpServers ?? {})) {
       result[name] = { type: "local", command: [cfg.command, ...(cfg.args ?? [])] }
       if (cfg.env) result[name].environment = cfg.env
@@ -1063,6 +1070,21 @@ export namespace Config {
     })
   export type Provider = z.infer<typeof Provider>
 
+  export const InfoMcp = z
+    .record(
+      z.string(),
+      z.union([
+        Mcp,
+        z
+          .object({
+            enabled: z.boolean(),
+          })
+          .strict(),
+      ]),
+    )
+    .optional()
+    .describe("MCP (Model Context Protocol) server configurations")
+
   export const Info = z
     .object({
       $schema: z.string().optional().describe("JSON schema reference for configuration validation"),
@@ -1148,20 +1170,7 @@ export namespace Config {
         .record(z.string(), Provider)
         .optional()
         .describe("Custom provider configurations and model overrides"),
-      mcp: z
-        .record(
-          z.string(),
-          z.union([
-            Mcp,
-            z
-              .object({
-                enabled: z.boolean(),
-              })
-              .strict(),
-          ]),
-        )
-        .optional()
-        .describe("MCP (Model Context Protocol) server configurations"),
+      mcp: InfoMcp,
       formatter: z
         .union([
           z.literal(false),
