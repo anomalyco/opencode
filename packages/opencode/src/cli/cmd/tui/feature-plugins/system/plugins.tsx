@@ -1,14 +1,12 @@
 import { Keybind } from "@/util/keybind"
-import type { TuiPlugin, TuiPluginStatus } from "@opencode-ai/plugin/tui"
+import type { TuiPlugin, TuiPluginApi, TuiPluginStatus } from "@opencode-ai/plugin/tui"
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
 import { createMemo, createSignal } from "solid-js"
-
-type Api = Parameters<TuiPlugin>[0]
 
 const id = "internal:plugin-manager"
 const key = Keybind.parse("space").at(0)
 
-function state(api: Api, item: TuiPluginStatus) {
+function state(api: TuiPluginApi, item: TuiPluginStatus) {
   return (
     <span style={{ fg: item.active ? api.theme.current.success : api.theme.current.error }}>
       {item.active ? "active" : "inactive"}
@@ -16,7 +14,7 @@ function state(api: Api, item: TuiPluginStatus) {
   )
 }
 
-function row(api: Api, item: TuiPluginStatus): DialogSelectOption<string> {
+function row(api: TuiPluginApi, item: TuiPluginStatus): DialogSelectOption<string> {
   return {
     title: item.name,
     value: item.id,
@@ -27,7 +25,7 @@ function row(api: Api, item: TuiPluginStatus): DialogSelectOption<string> {
   }
 }
 
-function View(props: { api: Api }) {
+function View(props: { api: TuiPluginApi }) {
   const [list, setList] = createSignal(props.api.plugins.list())
   const [cur, setCur] = createSignal<string | undefined>()
   const [lock, setLock] = createSignal(false)
@@ -88,7 +86,7 @@ function View(props: { api: Api }) {
   )
 }
 
-function show(api: Api) {
+function show(api: TuiPluginApi) {
   api.ui.dialog.replace(() => <View api={api} />)
 }
 
