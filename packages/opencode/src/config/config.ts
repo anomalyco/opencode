@@ -79,7 +79,7 @@ export namespace Config {
   }
 
   async function loadState(ctx: InstanceInfo) {
-    const glb = global()
+    const cfg = global()
     const auth = await Auth.all()
 
     // Config loading order (low -> high precedence): https://opencode.ai/docs/config#precedence-order
@@ -116,7 +116,7 @@ export namespace Config {
     }
 
     // Global user config overrides remote config.
-    result = mergeConfigConcatArrays(result, await glb)
+    result = mergeConfigConcatArrays(result, await cfg)
 
     // Custom config path overrides global config.
     if (Flag.OPENCODE_CONFIG) {
