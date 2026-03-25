@@ -1,5 +1,4 @@
 import { GlobalBus } from "@/bus/global"
-import type { InstanceContext } from "@/effect/instance-context"
 import { disposeInstance } from "@/effect/instance-registry"
 import { Filesystem } from "@/util/filesystem"
 import { iife } from "@/util/iife"
@@ -8,7 +7,11 @@ import { Context } from "../util/context"
 import { Project } from "./project"
 import { State } from "./state"
 
-export type Info = InstanceContext.Info
+export interface Info {
+  directory: string
+  worktree: string
+  project: Project.Info
+}
 
 const context = Context.create<Info>("instance")
 const cache = new Map<string, Promise<Info>>()
