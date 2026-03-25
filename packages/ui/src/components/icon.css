@@ -27,6 +27,11 @@
     height: 24px;
   }
 
+  &[data-size="x-large"] {
+    width: 100px;
+    height: 100px;
+  }
+
   [data-slot="icon-svg"] {
     width: 100%;
     height: auto;
