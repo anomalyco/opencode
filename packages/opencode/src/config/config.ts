@@ -1084,6 +1084,7 @@ export namespace Config {
     )
     .optional()
     .describe("MCP (Model Context Protocol) server configurations")
+  export type InfoMcp = z.infer<typeof InfoMcp>
 
   export const Info = z
     .object({
