@@ -1,0 +1,23 @@
+name: close-issues
+
+on:
+  schedule:
+    - cron: "0 2 * * *" # Daily at 2:00 AM
+  workflow_dispatch:
+
+jobs:
+  close:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Close stale issues
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bun script/github/close-issues.ts
