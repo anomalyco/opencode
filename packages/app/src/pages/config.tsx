@@ -9,6 +9,7 @@ import { TextField } from "@opencode-ai/ui/text-field"
 import { Switch as Toggle } from "@opencode-ai/ui/switch"
 import { showToast } from "@opencode-ai/ui/toast"
 import { applyEdits, modify } from "jsonc-parser"
+import { useSearchParams } from "@solidjs/router"
 import { paint } from "@/components/prompt-input/expand"
 import { DialogConnectProvider } from "@/components/dialog-connect-provider"
 import {
@@ -1423,6 +1424,7 @@ export default function ConfigPage() {
   const platform = usePlatform()
   const globalSDK = useGlobalSDK()
   const globalSync = useGlobalSync()
+  const [query] = useSearchParams<{ section?: string; pick?: string }>()
   let skillsList: HTMLDivElement | undefined
   const [state, setState] = createStore({
     section: "agents-md" as Section,
@@ -1485,6 +1487,19 @@ export default function ConfigPage() {
   const clawsEnabled = createMemo(
     () => !!platform.getOpenclawConfig && !!platform.setOpenclawConfig && !!platform.testOpenclawConfig,
   )
+  const querySection = createMemo<Section | undefined>(() => {
+    const value = query.section
+    if (
+      value === "agents-md" ||
+      value === "providers" ||
+      value === "agents" ||
+      value === "skills" ||
+      value === "plugins" ||
+      value === "claws"
+    ) {
+      return value
+    }
+  })
   const opened = createMemo(() =>
     [...globalSync.data.project].sort((a, b) => (a.name ?? name(a.worktree)).localeCompare(b.name ?? name(b.worktree))),
   )
@@ -1909,6 +1924,17 @@ export default function ConfigPage() {
       },
     ),
   )
+
+  createEffect(() => {
+    const section = querySection()
+    const pick = query.pick
+    if (!section) return
+    if (section === "claws" && !clawsEnabled()) return
+    batch(() => {
+      setState("section", section)
+      if (typeof pick === "string") setState("pick", pick)
+    })
+  })
 
   function keepSkillsScroll(run: () => void) {
     const top = skillsList?.scrollTop ?? 0

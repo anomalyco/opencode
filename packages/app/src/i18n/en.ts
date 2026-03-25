@@ -615,6 +615,7 @@ export const dict = {
   "session.revertDock.restore": "Restore message",
 
   "session.new.title": "Build anything",
+  "session.new.openclaw.title": "I'm your personal assistant",
   "session.new.worktree.main": "Main branch",
   "session.new.worktree.mainWithBranch": "Main branch ({{branch}})",
   "session.new.worktree.create": "Create new worktree",

@@ -28,6 +28,7 @@ export function NewSessionView(props: NewSessionViewProps) {
     return MAIN_WORKTREE
   })
   const projectRoot = createMemo(() => sync.project?.worktree ?? sdk.directory)
+  const claw = createMemo(() => projectRoot() === "/openclaw")
   const isWorktree = createMemo(() => {
     const project = sync.project
     if (!project) return false
@@ -53,8 +54,12 @@ export function NewSessionView(props: NewSessionViewProps) {
       <div class="flex-1 px-6 pb-30 flex items-center justify-center text-center">
         <div class="w-full max-w-200 flex flex-col items-center text-center gap-4">
           <div class="flex flex-col items-center gap-6">
-            <Mark class="w-10" />
-            <div class="text-20-medium text-text-strong">{language.t("session.new.title")}</div>
+            <Show when={claw()} fallback={<Mark class="w-10" />}>
+              <Icon name="openclaw" size="x-large" />
+            </Show>
+            <div class="text-20-medium text-text-strong">
+              {claw() ? language.t("session.new.openclaw.title") : language.t("session.new.title")}
+            </div>
           </div>
           <div class="w-full flex flex-col gap-4 items-center">
             <div class="flex items-start justify-center gap-3 min-h-5">
@@ -63,13 +68,15 @@ export function NewSessionView(props: NewSessionViewProps) {
                 <span class="text-text-strong">{getFilename(projectRoot())}</span>
               </div>
             </div>
-            <div class="flex items-start justify-center gap-1.5 min-h-5">
-              <Icon name="branch" size="small" class="mt-0.5 shrink-0" />
-              <div class="text-12-medium text-text-weak select-text leading-5 min-w-0 max-w-160 break-words text-center">
-                {label(current())}
+            <Show when={!claw()}>
+              <div class="flex items-start justify-center gap-1.5 min-h-5">
+                <Icon name="branch" size="small" class="mt-0.5 shrink-0" />
+                <div class="text-12-medium text-text-weak select-text leading-5 min-w-0 max-w-160 break-words text-center">
+                  {label(current())}
+                </div>
               </div>
-            </div>
-            <Show when={sync.project}>
+            </Show>
+            <Show when={!claw() && sync.project}>
               {(project) => (
                 <div class="flex items-start justify-center gap-3 min-h-5">
                   <div class="text-12-medium text-text-weak leading-5 min-w-0 max-w-160 break-words text-center">

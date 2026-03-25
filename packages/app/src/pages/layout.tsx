@@ -1096,8 +1096,7 @@ export default function Layout(props: ParentProps) {
         keywords: kw("command.project.switch"),
         category: language.t("command.category.project"),
         keybind: "mod+t",
-        disabled:
-          layout.projects.list().length === 0 && !server.list.some((item) => item.integration === "openclaw"),
+        disabled: layout.projects.list().length === 0 && !server.list.some((item) => item.integration === "openclaw"),
         onSelect: () => {
           dialog.show(() => <DialogSwitchProject onSelect={navigateToProject} />, undefined, {
             modal: false,
@@ -1376,15 +1375,19 @@ export default function Layout(props: ParentProps) {
     dialog.show(() => <DialogSettings />)
   }
 
-  function openConfig() {
+  function openConfig(section?: string, pick?: string) {
     if (!params.dir) return
-    navigate(`/${params.dir}/config`)
+    const q = new URLSearchParams()
+    if (section) q.set("section", section)
+    if (pick) q.set("pick", pick)
+    const next = q.size ? `/${params.dir}/config?${q.toString()}` : `/${params.dir}/config`
+    navigate(next)
   }
 
   function openOpenclaw() {
     const conn = server.list.find((item) => item.integration === "openclaw")
     if (!conn) {
-      openSettings()
+      openConfig("claws", "claw:openclaw")
       return
     }
     // The rail button toggles between the synthetic OpenClaw workspace and the

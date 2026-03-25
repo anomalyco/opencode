@@ -121,7 +121,7 @@ const icons = {
 
 export interface IconProps extends ComponentProps<"svg"> {
   name: keyof typeof icons
-  size?: "small" | "normal" | "medium" | "large"
+  size?: "small" | "normal" | "medium" | "large" | "x-large"
 }
 
 export function Icon(props: IconProps) {
