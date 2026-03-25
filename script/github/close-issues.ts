@@ -58,6 +58,7 @@ async function main() {
 
     const all = (await res.json()) as Issue[]
     if (all.length === 0) break
+    console.log(`Fetched page ${page} ${all.length} issues`)
 
     const stale: number[] = []
     for (const i of all) {
@@ -67,8 +68,10 @@ async function main() {
       } else {
         console.log(`\nFound fresh issue #${i.number}, stopping`)
         if (stale.length > 0) {
-          await Promise.all(stale.map(close))
-          closed += stale.length
+          for (const num of stale) {
+            await close(num)
+            closed++
+          }
         }
         console.log(`Closed ${closed} issues total`)
         return
@@ -76,8 +79,10 @@ async function main() {
     }
 
     if (stale.length > 0) {
-      await Promise.all(stale.map(close))
-      closed += stale.length
+      for (const num of stale) {
+        await close(num)
+        closed++
+      }
     }
 
     page++
