@@ -50,7 +50,7 @@ async function cleanup() {
   } catch {}
 }
 
-async function fix(pr: PR, files: string[], prs: PR[], applied: number[]) {
+async function fix(pr: PR, files: string[], prs: PR[], applied: number[], idx: number) {
   console.log(`  Trying to auto-resolve ${files.length} conflict(s) with opencode...`)
 
   const appliedList =
@@ -64,7 +64,8 @@ async function fix(pr: PR, files: string[], prs: PR[], applied: number[]) {
       : "(none yet)"
 
   const remaining = prs
-    .filter((p) => p.number !== pr.number && !applied.includes(p.number))
+    .slice(idx + 1)
+    .filter((p) => !applied.includes(p.number))
     .map((p) => `- #${p.number}: ${p.title}`)
     .join("\n")
 
@@ -126,7 +127,7 @@ async function main() {
   const applied: number[] = []
   const failed: FailedPR[] = []
 
-  for (const pr of prs) {
+  for (const [idx, pr] of prs.entries()) {
     console.log(`\nProcessing PR #${pr.number}: ${pr.title}`)
 
     console.log("  Fetching PR head...")
@@ -146,7 +147,7 @@ async function main() {
       const files = await conflicts()
       if (files.length > 0) {
         console.log("  Failed to merge (conflicts)")
-        if (!(await fix(pr, files, prs, applied))) {
+        if (!(await fix(pr, files, prs, applied, idx))) {
           await cleanup()
           failed.push({ number: pr.number, title: pr.title, reason: "Merge conflicts" })
           await commentOnPR(pr.number, "Merge conflicts with dev branch")
