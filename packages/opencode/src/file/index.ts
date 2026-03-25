@@ -1,7 +1,7 @@
 import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRunPromise } from "@/effect/run-service"
-import { git } from "@/util/git"
+import { Git } from "@/git"
 import { Effect, Fiber, Layer, Scope, ServiceMap } from "effect"
 import { formatPatch, structuredPatch } from "diff"
 import fs from "fs"
@@ -432,7 +432,7 @@ export namespace File {
 
         return yield* Effect.promise(async () => {
           const diffOutput = (
-            await git(["-c", "core.fsmonitor=false", "-c", "core.quotepath=false", "diff", "--numstat", "HEAD"], {
+            await Git.run(["-c", "core.fsmonitor=false", "-c", "core.quotepath=false", "diff", "--numstat", "HEAD"], {
               cwd: Instance.directory,
             })
           ).text()
@@ -452,7 +452,7 @@ export namespace File {
           }
 
           const untrackedOutput = (
-            await git(
+            await Git.run(
               [
                 "-c",
                 "core.fsmonitor=false",
@@ -485,7 +485,7 @@ export namespace File {
           }
 
           const deletedOutput = (
-            await git(
+            await Git.run(
               [
                 "-c",
                 "core.fsmonitor=false",
@@ -576,17 +576,17 @@ export namespace File {
 
           if (Instance.project.vcs === "git") {
             let diff = (
-              await git(["-c", "core.fsmonitor=false", "diff", "--", file], { cwd: Instance.directory })
+              await Git.run(["-c", "core.fsmonitor=false", "diff", "--", file], { cwd: Instance.directory })
             ).text()
             if (!diff.trim()) {
               diff = (
-                await git(["-c", "core.fsmonitor=false", "diff", "--staged", "--", file], {
+                await Git.run(["-c", "core.fsmonitor=false", "diff", "--staged", "--", file], {
                   cwd: Instance.directory,
                 })
               ).text()
             }
             if (diff.trim()) {
-              const original = (await git(["show", `HEAD:${file}`], { cwd: Instance.directory })).text()
+              const original = (await Git.run(["show", `HEAD:${file}`], { cwd: Instance.directory })).text()
               const patch = structuredPatch(file, file, original, content, "old", "new", {
                 context: Infinity,
                 ignoreWhitespace: true,

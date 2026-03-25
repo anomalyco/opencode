@@ -39,17 +39,21 @@ import { websocket } from "hono/bun"
 import { HTTPException } from "hono/http-exception"
 import { errors } from "./error"
 import { Filesystem } from "@/util/filesystem"
+import { Snapshot } from "@/snapshot"
 import { QuestionRoutes } from "./routes/question"
 import { PermissionRoutes } from "./routes/permission"
 import { GlobalRoutes } from "./routes/global"
 import { MDNS } from "./mdns"
 import { lazy } from "@/util/lazy"
+import { initProjectors } from "./projectors"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
 
 const csp = (hash = "") =>
   `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'${hash ? ` 'sha256-${hash}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:`
+
+initProjectors()
 
 export namespace Server {
   const log = Log.create({ service: "server" })
@@ -334,10 +338,38 @@ export namespace Server {
           },
         }),
         async (c) => {
-          const branch = await Vcs.branch()
+          const [branch, default_branch] = await Promise.all([Vcs.branch(), Vcs.defaultBranch()])
           return c.json({
             branch,
+            default_branch,
           })
+        },
+      )
+      .get(
+        "/vcs/diff",
+        describeRoute({
+          summary: "Get VCS diff",
+          description: "Retrieve the current git diff for the working tree or against the default branch.",
+          operationId: "vcs.diff",
+          responses: {
+            200: {
+              description: "VCS diff",
+              content: {
+                "application/json": {
+                  schema: resolver(Snapshot.FileDiff.array()),
+                },
+              },
+            },
+          },
+        }),
+        validator(
+          "query",
+          z.object({
+            mode: Vcs.Mode,
+          }),
+        ),
+        async (c) => {
+          return c.json(await Vcs.diff(c.req.valid("query").mode))
         },
       )
       .get(
