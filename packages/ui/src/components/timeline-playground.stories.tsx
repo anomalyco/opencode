@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { createSignal, createMemo, For, Show, Index, batch } from "solid-js"
+import { createSignal, createMemo, createEffect, on, For, Show, Index, batch } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import type {
   Message,
@@ -515,6 +515,26 @@ function compactionPart(): CompactionPart {
 // ---------------------------------------------------------------------------
 // CSS Controls definition
 // ---------------------------------------------------------------------------
+
+// Source file basenames inside packages/ui/src/components/
+const MD = "markdown.css"
+const MP = "message-part.css"
+const ST = "session-turn.css"
+
+/**
+ * Source mapping for a CSS control.
+ * - `anchor`: immutable text near the property (comment, selector, etc.) that
+ *   won't change when values change — used to locate the right rule block.
+ * - `prop`: the CSS property name whose value gets replaced.
+ * - `format`: turns the slider number into a CSS value string.
+ */
+type CSSSource = {
+  file: string
+  anchor: string
+  prop: string
+  format: (v: string) => string
+}
+
 type CSSControl = {
   key: string
   label: string
@@ -528,7 +548,12 @@ type CSSControl = {
   step?: string
   options?: string[]
   unit?: string
+  source?: CSSSource
 }
+
+const px = (v: string) => `${v}px`
+const pxZero = (v: string) => `${v}px 0`
+const pct = (v: string) => `${v}%`
 
 const CSS_CONTROLS: CSSControl[] = [
   // --- Timeline spacing ---
@@ -537,13 +562,14 @@ const CSS_CONTROLS: CSSControl[] = [
     label: "Turn gap",
     group: "Timeline Spacing",
     type: "range",
-    initial: "12",
-    selector: '[role="log"]',
+    initial: "48",
+    selector: '[data-slot="session-turn-list"]',
     property: "gap",
     min: "0",
     max: "80",
     step: "1",
     unit: "px",
+    source: { file: ST, anchor: '[data-slot="session-turn-list"]', prop: "gap", format: px },
   },
   {
     key: "container-gap",
@@ -557,6 +583,7 @@ const CSS_CONTROLS: CSSControl[] = [
     max: "60",
     step: "1",
     unit: "px",
+    source: { file: ST, anchor: '[data-slot="session-turn-message-container"]', prop: "gap", format: px },
   },
   {
     key: "assistant-gap",
@@ -570,6 +597,7 @@ const CSS_CONTROLS: CSSControl[] = [
     max: "40",
     step: "1",
     unit: "px",
+    source: { file: ST, anchor: '[data-slot="session-turn-assistant-content"]', prop: "gap", format: px },
   },
   {
     key: "text-part-margin",
@@ -583,6 +611,7 @@ const CSS_CONTROLS: CSSControl[] = [
     max: "60",
     step: "1",
     unit: "px",
+    source: { file: MP, anchor: '[data-component="text-part"]', prop: "margin-top", format: px },
   },
 
   // --- Markdown typography ---
@@ -598,6 +627,7 @@ const CSS_CONTROLS: CSSControl[] = [
     max: "22",
     step: "1",
     unit: "px",
+    source: { file: MD, anchor: "/* Reset & Base Typography */", prop: "font-size", format: px },
   },
   {
     key: "md-line-height",
@@ -611,6 +641,7 @@ const CSS_CONTROLS: CSSControl[] = [
     max: "300",
     step: "5",
     unit: "%",
+    source: { file: MD, anchor: "/* Reset & Base Typography */", prop: "line-height", format: pct },
   },
 
   // --- Markdown headings ---
@@ -626,6 +657,7 @@ const CSS_CONTROLS: CSSControl[] = [
     max: "60",
     step: "1",
     unit: "px",
+    source: { file: MD, anchor: "/* Headings:", prop: "margin-top", format: px },
   },
   {
     key: "md-heading-margin-bottom",
@@ -639,6 +671,7 @@ const CSS_CONTROLS: CSSControl[] = [
     max: "40",
     step: "1",
     unit: "px",
+    source: { file: MD, anchor: "/* Headings:", prop: "margin-bottom", format: px },
   },
   {
     key: "md-heading-font-size",
@@ -652,6 +685,7 @@ const CSS_CONTROLS: CSSControl[] = [
     max: "28",
     step: "1",
     unit: "px",
+    source: { file: MD, anchor: "/* Headings:", prop: "font-size", format: px },
   },
 
   // --- Markdown paragraphs ---
@@ -667,6 +701,7 @@ const CSS_CONTROLS: CSSControl[] = [
     max: "40",
     step: "1",
     unit: "px",
+    source: { file: MD, anchor: "/* Paragraphs */", prop: "margin-bottom", format: px },
   },
 
   // --- Markdown lists ---
@@ -682,6 +717,7 @@ const CSS_CONTROLS: CSSControl[] = [
     max: "40",
     step: "1",
     unit: "px",
+    source: { file: MD, anchor: "/* Lists */", prop: "margin-top", format: px },
   },
   {
     key: "md-list-margin-bottom",
@@ -695,6 +731,7 @@ const CSS_CONTROLS: CSSControl[] = [
     max: "40",
     step: "1",
     unit: "px",
+    source: { file: MD, anchor: "/* Lists */", prop: "margin-bottom", format: px },
   },
   {
     key: "md-list-padding-left",
@@ -708,6 +745,7 @@ const CSS_CONTROLS: CSSControl[] = [
     max: "60",
     step: "1",
     unit: "px",
+    source: { file: MD, anchor: "/* Lists */", prop: "padding-left", format: px },
   },
   {
     key: "md-li-margin-bottom",
@@ -721,6 +759,8 @@ const CSS_CONTROLS: CSSControl[] = [
     max: "20",
     step: "1",
     unit: "px",
+    // Anchor on `li {` to skip the `ul,ol` margin-bottom above
+    source: { file: MD, anchor: "\n  li {", prop: "margin-bottom", format: px },
   },
 
   // --- Markdown code blocks ---
@@ -736,6 +776,7 @@ const CSS_CONTROLS: CSSControl[] = [
     max: "60",
     step: "1",
     unit: "px",
+    source: { file: MD, anchor: "\n  pre {", prop: "margin-top", format: px },
   },
   {
     key: "md-pre-margin-bottom",
@@ -749,6 +790,7 @@ const CSS_CONTROLS: CSSControl[] = [
     max: "60",
     step: "1",
     unit: "px",
+    source: { file: MD, anchor: "\n  pre {", prop: "margin-bottom", format: px },
   },
   {
     key: "md-shiki-font-size",
@@ -762,6 +804,7 @@ const CSS_CONTROLS: CSSControl[] = [
     max: "20",
     step: "1",
     unit: "px",
+    source: { file: MD, anchor: ".shiki {", prop: "font-size", format: px },
   },
   {
     key: "md-shiki-padding",
@@ -775,6 +818,7 @@ const CSS_CONTROLS: CSSControl[] = [
     max: "32",
     step: "1",
     unit: "px",
+    source: { file: MD, anchor: ".shiki {", prop: "padding", format: px },
   },
   {
     key: "md-shiki-radius",
@@ -788,6 +832,7 @@ const CSS_CONTROLS: CSSControl[] = [
     max: "16",
     step: "1",
     unit: "px",
+    source: { file: MD, anchor: ".shiki {", prop: "border-radius", format: px },
   },
 
   // --- Markdown blockquotes ---
@@ -803,6 +848,7 @@ const CSS_CONTROLS: CSSControl[] = [
     max: "60",
     step: "1",
     unit: "px",
+    source: { file: MD, anchor: "/* Blockquotes */", prop: "margin", format: pxZero },
   },
   {
     key: "md-blockquote-padding-left",
@@ -816,6 +862,7 @@ const CSS_CONTROLS: CSSControl[] = [
     max: "40",
     step: "1",
     unit: "px",
+    source: { file: MD, anchor: "/* Blockquotes */", prop: "padding-left", format: px },
   },
   {
     key: "md-blockquote-border-width",
@@ -829,6 +876,12 @@ const CSS_CONTROLS: CSSControl[] = [
     max: "8",
     step: "1",
     unit: "px",
+    source: {
+      file: MD,
+      anchor: "/* Blockquotes */",
+      prop: "border-left",
+      format: (v) => `${v}px solid var(--border-weak-base)`,
+    },
   },
 
   // --- Markdown tables ---
@@ -844,6 +897,7 @@ const CSS_CONTROLS: CSSControl[] = [
     max: "60",
     step: "1",
     unit: "px",
+    source: { file: MD, anchor: "/* Tables */", prop: "margin", format: pxZero },
   },
   {
     key: "md-td-padding",
@@ -857,6 +911,8 @@ const CSS_CONTROLS: CSSControl[] = [
     max: "24",
     step: "1",
     unit: "px",
+    // Anchor on td selector to skip other padding rules
+    source: { file: MD, anchor: "th,\n  td {", prop: "padding", format: px },
   },
 
   // --- Markdown HR ---
@@ -872,6 +928,7 @@ const CSS_CONTROLS: CSSControl[] = [
     max: "80",
     step: "1",
     unit: "px",
+    source: { file: MD, anchor: "/* Horizontal Rule", prop: "margin", format: pxZero },
   },
 
   // --- Reasoning part ---
@@ -887,6 +944,7 @@ const CSS_CONTROLS: CSSControl[] = [
     max: "60",
     step: "1",
     unit: "px",
+    source: { file: MP, anchor: '[data-component="reasoning-part"]', prop: "margin-top", format: px },
   },
 
   // --- User message ---
@@ -902,6 +960,7 @@ const CSS_CONTROLS: CSSControl[] = [
     max: "32",
     step: "1",
     unit: "px",
+    source: { file: MP, anchor: '[data-slot="user-message-text"]', prop: "padding", format: px },
   },
   {
     key: "user-msg-radius",
@@ -915,6 +974,7 @@ const CSS_CONTROLS: CSSControl[] = [
     max: "24",
     step: "1",
     unit: "px",
+    source: { file: MP, anchor: '[data-slot="user-message-text"]', prop: "border-radius", format: px },
   },
 
   // --- Tool parts ---
@@ -930,6 +990,7 @@ const CSS_CONTROLS: CSSControl[] = [
     max: "600",
     step: "10",
     unit: "px",
+    source: { file: MP, anchor: '[data-slot="bash-scroll"]', prop: "max-height", format: px },
   },
 ]
 
@@ -952,7 +1013,37 @@ function Playground() {
 
   // ---- CSS overrides ----
   const [css, setCss] = createStore<Record<string, string>>({})
+  const [defaults, setDefaults] = createStore<Record<string, string>>({})
   let styleEl: HTMLStyleElement | undefined
+  let previewRef: HTMLDivElement | undefined
+
+  /** Read computed styles from the DOM to seed slider defaults */
+  const readDefaults = () => {
+    const root = previewRef
+    if (!root) return
+    const next: Record<string, string> = {}
+    for (const ctrl of CSS_CONTROLS) {
+      const el = root.querySelector(ctrl.selector) as HTMLElement | null
+      if (!el) continue
+      const styles = getComputedStyle(el)
+      // Use bracket access — getPropertyValue doesn't resolve shorthands
+      const raw = (styles as any)[ctrl.property] as string
+      if (!raw) continue
+      // Shorthands may return "24px 0px" — take the first value
+      const num = parseFloat(raw.split(" ")[0])
+      if (!Number.isFinite(num)) continue
+      // line-height returns px — convert back to % relative to font-size
+      if (ctrl.unit === "%") {
+        const fs = parseFloat(styles.fontSize)
+        if (fs > 0) {
+          next[ctrl.key] = String(Math.round((num / fs) * 100))
+          continue
+        }
+      }
+      next[ctrl.key] = String(Math.round(num))
+    }
+    setDefaults(next)
+  }
 
   const updateStyle = () => {
     const rules: string[] = []
@@ -992,6 +1083,18 @@ function Playground() {
       all: [{ id: "anthropic", models: { "claude-sonnet-4-20250514": { name: "Claude Sonnet" } } }],
     },
   }))
+
+  // Read computed defaults once DOM has turn elements to query
+  createEffect(
+    on(
+      () => userMessages().length,
+      (len) => {
+        if (len === 0) return
+        // Wait a frame for the DOM to settle after render
+        requestAnimationFrame(readDefaults)
+      },
+    ),
+  )
 
   // ---- Find or create the last assistant message to append parts to ----
   const lastAssistantID = createMemo(() => {
@@ -1155,6 +1258,52 @@ function Playground() {
   }
 
   const [exported, setExported] = createSignal("")
+
+  // ---- Apply to source files ----
+  const [applying, setApplying] = createSignal(false)
+  const [applyResult, setApplyResult] = createSignal("")
+
+  const changedControls = createMemo(() => CSS_CONTROLS.filter((ctrl) => css[ctrl.key] !== undefined && ctrl.source))
+
+  const applyToSource = async () => {
+    const controls = changedControls()
+    if (controls.length === 0) return
+
+    setApplying(true)
+    setApplyResult("")
+
+    const edits = controls.map((ctrl) => {
+      const src = ctrl.source!
+      return { file: src.file, anchor: src.anchor, prop: src.prop, value: src.format(css[ctrl.key]!) }
+    })
+
+    try {
+      const resp = await fetch("/__playground/apply-css", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ edits }),
+      })
+      const data = await resp.json()
+      const ok = data.results?.filter((r: any) => r.ok).length ?? 0
+      const fail = data.results?.filter((r: any) => !r.ok) ?? []
+      const lines = [`Applied ${ok}/${edits.length} edits`]
+      for (const f of fail) {
+        lines.push(`  FAIL ${f.file} ${f.prop}: ${f.error}`)
+      }
+      setApplyResult(lines.join("\n"))
+
+      if (ok > 0) {
+        // Clear overrides — values are now in source CSS, Vite will HMR.
+        resetCss()
+        // Wait for Vite HMR then re-read computed defaults
+        setTimeout(readDefaults, 500)
+      }
+    } catch (err) {
+      setApplyResult(`Error: ${err}`)
+    } finally {
+      setApplying(false)
+    }
+  }
 
   // ---- Panel collapse state ----
   const [panels, setPanels] = createStore({
@@ -1408,7 +1557,7 @@ function Playground() {
                                     "text-align": "right",
                                   }}
                                 >
-                                  {css[ctrl.key] ?? ctrl.initial}
+                                  {css[ctrl.key] ?? defaults[ctrl.key] ?? ctrl.initial}
                                   {ctrl.unit ?? ""}
                                 </span>
                               </div>
@@ -1417,7 +1566,7 @@ function Playground() {
                                 min={ctrl.min ?? "0"}
                                 max={ctrl.max ?? "100"}
                                 step={ctrl.step ?? "1"}
-                                value={css[ctrl.key] ?? ctrl.initial}
+                                value={css[ctrl.key] ?? defaults[ctrl.key] ?? ctrl.initial}
                                 onInput={(e) => setCssValue(ctrl.key, e.currentTarget.value)}
                                 style={{
                                   width: "100%",
@@ -1461,21 +1610,60 @@ function Playground() {
           </button>
           <Show when={panels.export}>
             <div style={{ padding: "0 12px 12px", display: "flex", "flex-direction": "column", gap: "8px" }}>
-              <button
-                style={{
-                  padding: "6px 12px",
-                  "border-radius": "4px",
-                  border: "1px solid var(--border-interactive-base)",
-                  background: "var(--surface-interactive-weak)",
-                  cursor: "pointer",
-                  "font-size": "12px",
-                  "font-weight": "500",
-                  color: "var(--text-interactive-base)",
-                }}
-                onClick={() => setExported(exportCss())}
-              >
+              <button style={btnAccent} onClick={() => setExported(exportCss())}>
                 Copy CSS to clipboard
               </button>
+              <button
+                style={{
+                  ...btnAccent,
+                  opacity: changedControls().length === 0 || applying() ? "0.5" : "1",
+                  cursor: changedControls().length === 0 || applying() ? "not-allowed" : "pointer",
+                }}
+                disabled={changedControls().length === 0 || applying()}
+                onClick={applyToSource}
+              >
+                {applying()
+                  ? "Applying..."
+                  : `Apply ${changedControls().length} edit${changedControls().length === 1 ? "" : "s"} to source`}
+              </button>
+              <Show when={changedControls().length > 0}>
+                <div
+                  style={{
+                    "font-size": "10px",
+                    color: "var(--text-weaker)",
+                    "line-height": "1.4",
+                  }}
+                >
+                  <For each={changedControls()}>
+                    {(ctrl) => (
+                      <div>
+                        {ctrl.source!.file}: {ctrl.property} = {css[ctrl.key]}
+                        {ctrl.unit}
+                      </div>
+                    )}
+                  </For>
+                </div>
+              </Show>
+              <Show when={applyResult()}>
+                <pre
+                  style={{
+                    padding: "8px",
+                    "border-radius": "4px",
+                    background: "var(--surface-inset-base)",
+                    border: "1px solid var(--border-weak-base)",
+                    "font-size": "11px",
+                    "font-family": "var(--font-family-mono)",
+                    "line-height": "1.5",
+                    "white-space": "pre-wrap",
+                    "word-break": "break-all",
+                    "max-height": "200px",
+                    "overflow-y": "auto",
+                    color: "var(--text-base)",
+                  }}
+                >
+                  {applyResult()}
+                </pre>
+              </Show>
               <Show when={exported()}>
                 <pre
                   style={{
@@ -1502,7 +1690,10 @@ function Playground() {
       </div>
 
       {/* Main area: timeline preview */}
-      <div style={{ flex: "1", overflow: "auto", "min-width": "0", "background-color": "var(--background-stronger)" }}>
+      <div
+        ref={previewRef!}
+        style={{ flex: "1", overflow: "auto", "min-width": "0", "background-color": "var(--background-stronger)" }}
+      >
         <DataProvider data={data()} directory="/project">
           <FileComponentProvider component={FileStub}>
             <div
@@ -1531,7 +1722,8 @@ function Playground() {
               >
                 <div
                   role="log"
-                  style={{ display: "flex", "flex-direction": "column", gap: "48px", width: "100%", padding: "0 20px" }}
+                  data-slot="session-turn-list"
+                  style={{ display: "flex", "flex-direction": "column", width: "100%", padding: "0 20px" }}
                 >
                   <For each={userMessages()}>
                     {(msg) => (

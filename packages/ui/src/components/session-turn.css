@@ -226,3 +226,7 @@
     display: none;
   }
 }
+
+[data-slot="session-turn-list"] {
+  gap: 48px;
+}

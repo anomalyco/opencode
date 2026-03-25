@@ -896,7 +896,8 @@ export function MessageTimeline(props: {
             </Show>
             <div
               role="log"
-              class="flex flex-col gap-12 items-start justify-start pb-16 transition-[margin]"
+              data-slot="session-turn-list"
+              class="flex flex-col items-start justify-start pb-16 transition-[margin]"
               classList={{
                 "w-full": true,
                 "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
