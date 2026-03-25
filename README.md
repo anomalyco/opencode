@@ -7,6 +7,13 @@
 
 ## ✨ 主要改进
 
+### OpenClaw 集成
+
+<p align="center">
+  <img width="165" height="128" alt="image" src="https://github.com/user-attachments/assets/598d7347-39e0-4662-85da-84fc4263131e" />
+</p>
+
+
 ### 🎨 UI 优化
 
 <p align="center">
