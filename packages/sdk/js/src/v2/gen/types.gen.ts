@@ -1068,36 +1068,36 @@ export type SyncEventSessionUpdated = {
   data: {
     sessionID: string
     info: {
-      id?: string
-      slug?: string
-      projectID?: string
-      workspaceID?: string
-      directory?: string
-      parentID?: string
-      summary?: {
+      id: string | null
+      slug: string | null
+      projectID: string | null
+      workspaceID: string | null
+      directory: string | null
+      parentID: string | null
+      summary: {
         additions: number
         deletions: number
         files: number
         diffs?: Array<FileDiff>
-      }
+      } | null
       share?: {
-        url?: string
+        url: string | null
       }
-      title?: string
-      version?: string
+      title: string | null
+      version: string | null
       time?: {
-        created?: number
-        updated?: number
-        compacting?: number
-        archived?: number
+        created: number | null
+        updated: number | null
+        compacting: number | null
+        archived: number | null
       }
-      permission?: PermissionRuleset
-      revert?: {
+      permission: PermissionRuleset | null
+      revert: {
         messageID: string
         partID?: string
         snapshot?: string
         diff?: string
-      }
+      } | null
     }
   }
 }

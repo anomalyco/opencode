@@ -1,13 +1,11 @@
-
-
 tl;dr All of these APIs work, are properly type-checked, and are sync events are backwards compatible with `Bus`:
 
 ```ts
 // The schema from `Updated` typechecks the object correctly
-SyncEvent.run(Updated, { sessionID: id, info: { title: "foo"} })
+SyncEvent.run(Updated, { sessionID: id, info: { title: "foo" } })
 
 // `subscribeAll` passes a generic sync event
-SyncEvent.subscribeAll(event => {
+SyncEvent.subscribeAll((event) => {
   // These will be type-checked correctly
   event.id
   event.seq
@@ -17,13 +15,13 @@ SyncEvent.subscribeAll(event => {
 })
 
 // This works, but you shouldn't publish sync event like this (should fail in the future)
-Bus.publish(Updated, { sessionID: id, info: { title: "foo"} })
+Bus.publish(Updated, { sessionID: id, info: { title: "foo" } })
 
-// Update event is fully type-checked 
-Bus.subscribe(Updated, event => event.properties.info.title)
+// Update event is fully type-checked
+Bus.subscribe(Updated, (event) => event.properties.info.title)
 
-// Update event is fully type-checked 
-client.subscribe("session.updated", evt => evt.properties.info.title)
+// Update event is fully type-checked
+client.subscribe("session.updated", (evt) => evt.properties.info.title)
 ```
 
 # Goal
@@ -120,10 +118,10 @@ It's very important that types are correct when working with events. Event defin
 
 ```ts
 // The schema from `Updated` typechecks the object correctly
-SyncEvent.run(Updated, { sessionID: id, info: { title: "foo"} })
+SyncEvent.run(Updated, { sessionID: id, info: { title: "foo" } })
 
 // `subscribeAll` passes a generic sync event
-SyncEvent.subscribeAll(event => {
+SyncEvent.subscribeAll((event) => {
   // These will be type-checked correctly
   event.id
   event.seq
@@ -133,13 +131,13 @@ SyncEvent.subscribeAll(event => {
 })
 
 // This works, but you shouldn't publish sync event like this (should fail in the future)
-Bus.publish(Updated, { sessionID: id, info: { title: "foo"} })
+Bus.publish(Updated, { sessionID: id, info: { title: "foo" } })
 
-// Update event is fully type-checked 
-Bus.subscribe(Updated, event => event.properties.info.title)
+// Update event is fully type-checked
+Bus.subscribe(Updated, (event) => event.properties.info.title)
 
-// Update event is fully type-checked 
-client.subscribe("session.updated", evt => evt.properties.info.title)
+// Update event is fully type-checked
+client.subscribe("session.updated", (evt) => evt.properties.info.title)
 ```
 
 The last two examples look similar to `SyncEvent.run`, but they were the cause of a lot of grief. Those are existing APIs that we can't break, but we are passing in the new sync event definitions to these APIs, which sometimes have a different event shape.
@@ -153,7 +151,7 @@ const Update = SyncEvent.define({
   aggregate: "sessionID",
   schema: z.object({
     sessionID: SessionID.zod,
-    info: partialSchema(Info)
+    info: partialSchema(Info),
   }),
   busSchema: z.object({
     sessionID: SessionID.zod,
@@ -162,20 +160,20 @@ const Update = SyncEvent.define({
 })
 ```
 
-*Important*: the conversion done in `convertEvent` is not automatically type-checked with `busSchema`. It's very important they match, but because we need this at type-checking time this needs to live here.
+_Important_: the conversion done in `convertEvent` is not automatically type-checked with `busSchema`. It's very important they match, but because we need this at type-checking time this needs to live here.
 
 Internally, the way this works is `busSchema` is stored on a `properties` field which is what the bus system expects. Doing this made everything with `Bus` "just work". This is why you can pass a sync event to the bus APIs.
 
-*Alternatives*
+_Alternatives_
 
 These are some other paths I explored:
 
-* Providing a way to subscribe to individual sync events, and change all the instances of `Bus.subscribe` in our code to it. Then you are directly only working with sync events always.
-  * Two big problems. First, `Bus` is instance-scoped, and we'd need to make the sync event system instance-scoped too for backwards compat. If we didn't, those listeners would get calls for events they weren't expecting.
-  * Second, we can't change consumers of our SDK. So they still have to use the old events, and we might as well stick with them for consistency
-* Directly add sync event support to bus system
-  * I explored adding sync events to the bus, but due to backwards compat, it only made it more complicated (still need to support both shapes)
-* I explored a `convertSchema` function to convert the event schema at runtime so we didn't need `busSchema`
-  * Fatal flaw: we need type-checking done earlier. We can't do this at run-time. This worked for consumers of our SDK (because it gets generated TS types from the converted schema) but breaks for our internal usage of `Bus.subscribe` calls
+- Providing a way to subscribe to individual sync events, and change all the instances of `Bus.subscribe` in our code to it. Then you are directly only working with sync events always.
+  - Two big problems. First, `Bus` is instance-scoped, and we'd need to make the sync event system instance-scoped too for backwards compat. If we didn't, those listeners would get calls for events they weren't expecting.
+  - Second, we can't change consumers of our SDK. So they still have to use the old events, and we might as well stick with them for consistency
+- Directly add sync event support to bus system
+  - I explored adding sync events to the bus, but due to backwards compat, it only made it more complicated (still need to support both shapes)
+- I explored a `convertSchema` function to convert the event schema at runtime so we didn't need `busSchema`
+  - Fatal flaw: we need type-checking done earlier. We can't do this at run-time. This worked for consumers of our SDK (because it gets generated TS types from the converted schema) but breaks for our internal usage of `Bus.subscribe` calls
 
 I explored many other permutations of the above solutions. What we have today I think is the best balance of backwards compatibility while opening a path forward for the new events.

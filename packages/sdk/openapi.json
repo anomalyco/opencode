@@ -10048,102 +10048,229 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string",
-                    "pattern": "^ses.*"
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^ses.*"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "slug": {
-                    "type": "string"
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "projectID": {
-                    "type": "string"
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "workspaceID": {
-                    "type": "string",
-                    "pattern": "^wrk.*"
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^wrk.*"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "directory": {
-                    "type": "string"
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "parentID": {
-                    "type": "string",
-                    "pattern": "^ses.*"
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^ses.*"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "summary": {
-                    "type": "object",
-                    "properties": {
-                      "additions": {
-                        "type": "number"
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "additions": {
+                            "type": "number"
+                          },
+                          "deletions": {
+                            "type": "number"
+                          },
+                          "files": {
+                            "type": "number"
+                          },
+                          "diffs": {
+                            "type": "array",
+                            "items": {
+                              "$ref": "#/components/schemas/FileDiff"
+                            }
+                          }
+                        },
+                        "required": ["additions", "deletions", "files"]
                       },
-                      "deletions": {
-                        "type": "number"
-                      },
-                      "files": {
-                        "type": "number"
-                      },
-                      "diffs": {
-                        "type": "array",
-                        "items": {
-                          "$ref": "#/components/schemas/FileDiff"
-                        }
+                      {
+                        "type": "null"
                       }
-                    },
-                    "required": ["additions", "deletions", "files"]
+                    ]
                   },
                   "share": {
                     "type": "object",
                     "properties": {
                       "url": {
-                        "type": "string"
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       }
-                    }
+                    },
+                    "required": ["url"]
                   },
                   "title": {
-                    "type": "string"
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "version": {
-                    "type": "string"
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   },
                   "time": {
                     "type": "object",
                     "properties": {
                       "created": {
-                        "type": "number"
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       },
                       "updated": {
-                        "type": "number"
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       },
                       "compacting": {
-                        "type": "number"
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       },
                       "archived": {
-                        "type": "number"
-                      }
-                    }
-                  },
-                  "permission": {
-                    "$ref": "#/components/schemas/PermissionRuleset"
-                  },
-                  "revert": {
-                    "type": "object",
-                    "properties": {
-                      "messageID": {
-                        "type": "string",
-                        "pattern": "^msg.*"
-                      },
-                      "partID": {
-                        "type": "string",
-                        "pattern": "^prt.*"
-                      },
-                      "snapshot": {
-                        "type": "string"
-                      },
-                      "diff": {
-                        "type": "string"
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       }
                     },
-                    "required": ["messageID"]
+                    "required": ["created", "updated", "compacting", "archived"]
+                  },
+                  "permission": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/PermissionRuleset"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "revert": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "messageID": {
+                            "type": "string",
+                            "pattern": "^msg.*"
+                          },
+                          "partID": {
+                            "type": "string",
+                            "pattern": "^prt.*"
+                          },
+                          "snapshot": {
+                            "type": "string"
+                          },
+                          "diff": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["messageID"]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
-                }
+                },
+                "required": [
+                  "id",
+                  "slug",
+                  "projectID",
+                  "workspaceID",
+                  "directory",
+                  "parentID",
+                  "summary",
+                  "title",
+                  "version",
+                  "permission",
+                  "revert"
+                ]
               }
             },
             "required": ["sessionID", "info"]
