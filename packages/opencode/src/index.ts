@@ -18,6 +18,7 @@ import { WorkspaceServeCommand } from "./cli/cmd/workspace-serve"
 import { Filesystem } from "./util/filesystem"
 import { DebugCommand } from "./cli/cmd/debug"
 import { StatsCommand } from "./cli/cmd/stats"
+import { QuotaCommand } from "./cli/cmd/quota"
 import { McpCommand } from "./cli/cmd/mcp"
 import { GithubCommand } from "./cli/cmd/github"
 import { ExportCommand } from "./cli/cmd/export"
@@ -139,6 +140,7 @@ let cli = yargs(hideBin(process.argv))
   .command(WebCommand)
   .command(ModelsCommand)
   .command(StatsCommand)
+  .command(QuotaCommand)
   .command(ExportCommand)
   .command(ImportCommand)
   .command(GithubCommand)
