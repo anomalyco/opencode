@@ -2,6 +2,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Log } from "../util/log"
 import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler } from "hono-openapi"
+import { swaggerUI } from "@hono/swagger-ui"
 import { Hono } from "hono"
 import { cors } from "hono/cors"
 import { streamSSE } from "hono/streaming"
@@ -219,19 +220,11 @@ export namespace Server {
         })
       })
       .use(WorkspaceRouterMiddleware)
-      .get(
-        "/doc",
-        openAPIRouteHandler(app, {
-          documentation: {
-            info: {
-              title: "opencode",
-              version: "0.0.3",
-              description: "opencode api",
-            },
-            openapi: "3.1.1",
-          },
-        }),
-      )
+      .get("/doc/json", async (c) => {
+        const spec = await Server.openapi()
+        return c.json(spec)
+      })
+      .get("/doc", swaggerUI({ url: "/doc/json" }))
       .use(
         validator(
           "query",
