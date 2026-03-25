@@ -535,6 +535,8 @@ export const dict = {
   "session.review.noVcs.createGit.action": "Create Git repository",
   "session.review.noSnapshot": "Snapshot tracking is disabled in config, so session changes are unavailable",
   "session.review.noChanges": "No changes",
+  "session.review.noUncommittedChanges": "No uncommitted changes yet",
+  "session.review.noBranchChanges": "No branch changes yet",
 
   "session.files.selectToOpen": "Select a file to open",
   "session.files.all": "All files",
