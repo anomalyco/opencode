@@ -1244,7 +1244,9 @@ export namespace Config {
         return result
       })
 
-      let cachedGlobal = yield* Effect.cached(loadGlobal())
+      let cachedGlobal = yield* Effect.cached(
+        loadGlobal().pipe(Effect.orElseSucceed(() => ({}) as Info)),
+      )
 
       const getGlobal = Effect.fn("Config.getGlobal")(function* () {
         return yield* cachedGlobal
@@ -1451,7 +1453,9 @@ export namespace Config {
       })
 
       const invalidate = Effect.fn("Config.invalidate")(function* (wait?: boolean) {
-        cachedGlobal = yield* Effect.cached(loadGlobal())
+        cachedGlobal = yield* Effect.cached(
+          loadGlobal().pipe(Effect.orElseSucceed(() => ({}) as Info)),
+        )
         const task = Instance.disposeAll()
           .catch(() => undefined)
           .finally(() =>
