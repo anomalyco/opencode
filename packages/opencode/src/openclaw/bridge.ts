@@ -340,14 +340,6 @@ function toolCalls(item: GwMessage, messageID: string, sessionID: string, time: 
   const result: ToolPart[] = []
   let n = 0
 
-  log.debug("openclaw inspect tool calls", {
-    sessionID,
-    messageID,
-    role: item.role,
-    contentShape: shape(item.content),
-    directToolCalls: shape(direct),
-  })
-
   const push = (callID: string, tool: string, input: Record<string, unknown>, metadata?: Record<string, unknown>) => {
     result.push({
       id: `${messageID}-p${n++}`,
@@ -393,14 +385,6 @@ function toolCalls(item: GwMessage, messageID: string, sessionID: string, time: 
           : record(part.function) && "arguments" in (record(part.function) ?? {})
             ? parseArgs(record(part.function)?.arguments)
             : {}
-    log.info("openclaw parsed tool call", {
-      sessionID,
-      messageID,
-      type,
-      callID,
-      tool,
-      input: preview(args),
-    })
     push(callID, tool, args, record(part.metadata))
   }
 
@@ -410,13 +394,6 @@ function toolCalls(item: GwMessage, messageID: string, sessionID: string, time: 
     const fn = record(part.function)
     if (typeof fn?.name !== "string") continue
     const callID = typeof part.id === "string" ? part.id : `${messageID}-call-${n}`
-    log.info("openclaw parsed direct tool call", {
-      sessionID,
-      messageID,
-      callID,
-      tool: fn.name,
-      input: preview(fn.arguments),
-    })
     push(callID, fn.name, parseArgs(fn.arguments), record(part.metadata))
   }
 
@@ -479,13 +456,6 @@ function toolResults(item: GwMessage) {
         (typeof part.status === "string" && ["error", "failed"].includes(part.status)) ||
         (typeof record(part.details)?.status === "string" &&
           ["error", "failed"].includes(String(record(part.details)?.status)))
-      log.info("openclaw parsed tool result", {
-        role: item.role,
-        callID,
-        failed,
-        output: preview(body),
-        block: shape(part),
-      })
       return {
         callID,
         output: body,
@@ -494,13 +464,6 @@ function toolResults(item: GwMessage) {
       }
     })
     .filter((item): item is NonNullable<typeof item> => !!item)
-  if (result.length === 0 && blocks.length > 0) {
-    log.debug("openclaw no tool results parsed", {
-      role: item.role,
-      contentShape: shape(item.content),
-      rootContentShape: shape(root.content),
-    })
-  }
   return result
 }
 
@@ -626,12 +589,6 @@ function historyMessages(sessionID: string, input: GwMessage[]) {
   let parentID: string | undefined
 
   for (const item of input) {
-    log.debug("openclaw history item", {
-      sessionID,
-      role: item.role,
-      contentShape: shape(item.content),
-      preview: preview(item.content),
-    })
     const role =
       item.role === "assistant"
         ? "assistant"
@@ -714,6 +671,8 @@ function streamParts(
 
   for (const call of calls) {
     const current = part.get(call.callID) ?? tools?.get(call.callID)
+    // Gateway deltas can replay the same toolCall after its toolResult already
+    // arrived. Never downgrade a completed/error tool back to running.
     if (current && current.state.status !== "running") {
       part.set(call.callID, current)
       continue
@@ -1241,6 +1200,8 @@ function current(list: Message[], hit: { parentID: string; messageID?: string },
 
 function source(list: Message[], hit: { parentID: string; prompt?: string }, started: number) {
   if (!hit.prompt) return
+  // Optimistic user ids differ from gateway history ids. Match the real user
+  // turn by prompt text and nearest timestamp, then attach assistant history to it.
   return list
     .filter((item) => item.info.role === "user")
     .filter((item) => inputText(item.parts) === hit.prompt)
@@ -1284,6 +1245,9 @@ function replay(
 }
 
 function stamp(item: Message) {
+  // Replayed assistant messages can reuse the same message id while their tool
+  // parts change from running to completed. Track a small content signature so
+  // pumpHistory re-emits meaningful state transitions instead of dropping them.
   return JSON.stringify({
     id: item.info.id,
     parts: item.parts.map((part) =>
