@@ -3,6 +3,7 @@ import type { TuiDialogSelectOption, TuiPluginApi, TuiRouteDefinition } from "@o
 import type { useCommandDialog } from "@tui/component/dialog-command"
 import type { useKeybind } from "@tui/context/keybind"
 import type { useRoute } from "@tui/context/route"
+import type { useSDK } from "@tui/context/sdk"
 import type { useSync } from "@tui/context/sync"
 import type { useTheme } from "@tui/context/theme"
 import { Dialog as DialogUI, type useDialog } from "@tui/ui/dialog"
@@ -15,6 +16,7 @@ import { DialogPrompt } from "../ui/dialog-prompt"
 import { DialogSelect, type DialogSelectOption as SelectOption } from "../ui/dialog-select"
 import type { useToast } from "../ui/toast"
 import { Installation } from "@/installation"
+import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2"
 
 type RouteEntry = {
   key: symbol
@@ -32,14 +34,16 @@ type Input = {
   route: ReturnType<typeof useRoute>
   routes: RouteMap
   bump: () => void
+  sdk: ReturnType<typeof useSDK>
   sync: ReturnType<typeof useSync>
   theme: ReturnType<typeof useTheme>
   toast: ReturnType<typeof useToast>
-  client: () => TuiPluginApi["client"]
-  scopedClient: TuiPluginApi["scopedClient"]
-  workspace: TuiPluginApi["workspace"]
-  event: TuiPluginApi["event"]
   renderer: TuiPluginApi["renderer"]
+}
+
+type TuiHostPluginApi = TuiPluginApi & {
+  map: Map<string | undefined, OpencodeClient>
+  dispose: () => void
 }
 
 function routeRegister(routes: RouteMap, list: TuiRouteDefinition[], bump: () => void) {
@@ -200,7 +204,29 @@ function appApi(): TuiPluginApi["app"] {
   }
 }
 
-export function createTuiApi(input: Input): TuiPluginApi {
+export function createTuiApi(input: Input): TuiHostPluginApi {
+  const map = new Map<string | undefined, OpencodeClient>()
+  const scoped: TuiPluginApi["scopedClient"] = (workspaceID) => {
+    const hit = map.get(workspaceID)
+    if (hit) return hit
+
+    const next = createOpencodeClient({
+      baseUrl: input.sdk.url,
+      fetch: input.sdk.fetch,
+      directory: input.sync.data.path.directory || input.sdk.directory,
+      experimental_workspaceID: workspaceID,
+    })
+    map.set(workspaceID, next)
+    return next
+  }
+  const workspace: TuiPluginApi["workspace"] = {
+    current() {
+      return input.sdk.workspaceID
+    },
+    set(workspaceID) {
+      input.sdk.setWorkspace(workspaceID)
+    },
+  }
   const lifecycle: TuiPluginApi["lifecycle"] = {
     signal: new AbortController().signal,
     onDispose() {
@@ -317,11 +343,11 @@ export function createTuiApi(input: Input): TuiPluginApi {
     },
     state: stateApi(input.sync),
     get client() {
-      return input.client()
+      return input.sdk.client
     },
-    scopedClient: input.scopedClient,
-    workspace: input.workspace,
-    event: input.event,
+    scopedClient: scoped,
+    workspace,
+    event: input.sdk.event,
     renderer: input.renderer,
     slots: {
       register() {
@@ -351,6 +377,10 @@ export function createTuiApi(input: Input): TuiPluginApi {
       get ready() {
         return input.theme.ready
       },
+    },
+    map,
+    dispose() {
+      map.clear()
     },
   }
 }
