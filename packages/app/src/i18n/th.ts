@@ -606,6 +606,7 @@ export const dict = {
   "sidebar.project.clearNotifications": "ล้างการแจ้งเตือน",
 
   "app.name.desktop": "OpenCode Desktop",
+  "app.name.web": "OpenCode Web",
 
   "settings.section.desktop": "เดสก์ท็อป",
   "settings.section.server": "เซิร์ฟเวอร์",

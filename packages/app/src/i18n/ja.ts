@@ -547,6 +547,7 @@ export const dict = {
   "sidebar.project.viewAllSessions": "すべてのセッションを表示",
   "sidebar.project.clearNotifications": "通知をクリア",
   "app.name.desktop": "OpenCode Desktop",
+  "app.name.web": "OpenCode Web",
   "settings.section.desktop": "デスクトップ",
   "settings.section.server": "サーバー",
   "settings.tab.general": "一般",

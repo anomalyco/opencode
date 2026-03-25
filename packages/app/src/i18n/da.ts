@@ -608,6 +608,7 @@ export const dict = {
   "sidebar.project.clearNotifications": "Ryd notifikationer",
 
   "app.name.desktop": "OpenCode Desktop",
+  "app.name.web": "OpenCode Web",
   "settings.section.desktop": "Desktop",
   "settings.section.server": "Server",
   "settings.tab.general": "Generelt",

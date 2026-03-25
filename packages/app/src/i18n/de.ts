@@ -559,6 +559,7 @@ export const dict = {
   "sidebar.project.viewAllSessions": "Alle Sitzungen anzeigen",
   "sidebar.project.clearNotifications": "Benachrichtigungen löschen",
   "app.name.desktop": "OpenCode Desktop",
+  "app.name.web": "OpenCode Web",
   "settings.section.desktop": "Desktop",
   "settings.section.server": "Server",
   "settings.tab.general": "Allgemein",

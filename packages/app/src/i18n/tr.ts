@@ -618,6 +618,7 @@ export const dict = {
   "sidebar.project.clearNotifications": "Bildirimleri temizle",
 
   "app.name.desktop": "OpenCode Masaüstü",
+  "app.name.web": "OpenCode Web",
 
   "settings.section.desktop": "Masaüstü",
   "settings.section.server": "Sunucu",
