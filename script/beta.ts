@@ -50,11 +50,38 @@ async function cleanup() {
   } catch {}
 }
 
-async function fix(pr: PR, files: string[]) {
+async function fix(pr: PR, files: string[], prs: PR[], applied: number[]) {
   console.log(`  Trying to auto-resolve ${files.length} conflict(s) with opencode...`)
+
+  const appliedList =
+    applied.length > 0
+      ? applied
+          .map((n) => {
+            const p = prs.find((x) => x.number === n)
+            return `- #${n}: ${p?.title ?? ""}`
+          })
+          .join("\n")
+      : "(none yet)"
+
+  const remaining = prs
+    .filter((p) => p.number !== pr.number && !applied.includes(p.number))
+    .map((p) => `- #${p.number}: ${p.title}`)
+    .join("\n")
+
   const prompt = [
     `Resolve the current git merge conflicts while merging PR #${pr.number} into the beta branch.`,
+    `PR #${pr.number}: ${pr.title}`,
     `Only touch these files: ${files.join(", ")}.`,
+    "",
+    "PRs already merged into beta (their changes are on HEAD):",
+    appliedList,
+    "",
+    "PRs still pending after this one:",
+    remaining || "(none)",
+    "",
+    "IMPORTANT: The conflict resolution must be consistent with already-merged PRs.",
+    "If a PR already deleted a file/directory, do not re-add it.",
+    "If a PR already changed an import, keep that change.",
     "Keep the merge in progress, do not abort the merge, and do not create a commit.",
     "When done, leave the working tree with no unmerged files.",
   ].join("\n")
@@ -119,7 +146,7 @@ async function main() {
       const files = await conflicts()
       if (files.length > 0) {
         console.log("  Failed to merge (conflicts)")
-        if (!(await fix(pr, files))) {
+        if (!(await fix(pr, files, prs, applied))) {
           await cleanup()
           failed.push({ number: pr.number, title: pr.title, reason: "Merge conflicts" })
           await commentOnPR(pr.number, "Merge conflicts with dev branch")
