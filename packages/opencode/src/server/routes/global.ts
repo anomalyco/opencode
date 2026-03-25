@@ -12,6 +12,7 @@ import { Log } from "../../util/log"
 import { lazy } from "../../util/lazy"
 import { Config } from "../../config/config"
 import { errors } from "../error"
+import { getAllQuota, type QuotaProviderResult } from "../../cli/cmd/quota"
 
 const log = Log.create({ service: "server" })
 
@@ -253,5 +254,54 @@ export const GlobalRoutes = lazy(() =>
         }
         return c.json(result, 500)
       },
+    )
+    .get(
+      "/quota",
+      describeRoute({
+        summary: "Get provider quota",
+        description: "Get quota information for all configured providers.",
+        operationId: "global.quota",
+        responses: {
+          200: {
+            description: "Quota information",
+            content: {
+              "application/json": {
+                schema: resolver(z.array(z.lazy(() => quotaResultSchema))),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        const results = await getAllQuota()
+        return c.json(results)
+      },
     ),
 )
+
+// Quota result schema
+const quotaResultSchema = z.object({
+  providerId: z.string(),
+  providerName: z.string(),
+  ok: z.boolean(),
+  configured: z.boolean(),
+  usage: z
+    .object({
+      windows: z.record(
+        z.string(),
+        z.object({
+          usedPercent: z.number().nullable(),
+          remainingPercent: z.number().nullable(),
+          windowSeconds: z.number().nullable(),
+          resetAfterSeconds: z.number().nullable(),
+          resetAt: z.number().nullable(),
+          resetAtFormatted: z.string().nullable(),
+          resetAfterFormatted: z.string().nullable(),
+          valueLabel: z.string().nullable(),
+        }),
+      ),
+    })
+    .nullable(),
+  error: z.string().nullable(),
+  fetchedAt: z.number(),
+})

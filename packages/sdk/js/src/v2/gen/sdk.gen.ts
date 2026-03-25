@@ -46,6 +46,7 @@ import type {
   GlobalDisposeResponses,
   GlobalEventResponses,
   GlobalHealthResponses,
+  GlobalQuotaResponses,
   GlobalUpgradeErrors,
   GlobalUpgradeResponses,
   InstanceDisposeResponses,
@@ -326,6 +327,18 @@ export class Global extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * Get provider quota
+   *
+   * Get quota information for all configured providers.
+   */
+  public quota<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<GlobalQuotaResponses, unknown, ThrowOnError>({
+      url: "/global/quota",
+      ...options,
     })
   }
 

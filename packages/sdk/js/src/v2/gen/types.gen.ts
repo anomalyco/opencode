@@ -2065,6 +2065,43 @@ export type GlobalUpgradeResponses = {
 
 export type GlobalUpgradeResponse = GlobalUpgradeResponses[keyof GlobalUpgradeResponses]
 
+export type GlobalQuotaData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/global/quota"
+}
+
+export type GlobalQuotaResponses = {
+  /**
+   * Quota information
+   */
+  200: Array<{
+    providerId: string
+    providerName: string
+    ok: boolean
+    configured: boolean
+    usage: {
+      windows: {
+        [key: string]: {
+          usedPercent: number | null
+          remainingPercent: number | null
+          windowSeconds: number | null
+          resetAfterSeconds: number | null
+          resetAt: number | null
+          resetAtFormatted: string | null
+          resetAfterFormatted: string | null
+          valueLabel: string | null
+        }
+      }
+    } | null
+    error: string | null
+    fetchedAt: number
+  }>
+}
+
+export type GlobalQuotaResponse = GlobalQuotaResponses[keyof GlobalQuotaResponses]
+
 export type AuthRemoveData = {
   body?: never
   path: {

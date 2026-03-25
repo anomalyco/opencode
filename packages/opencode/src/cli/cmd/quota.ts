@@ -1266,6 +1266,10 @@ function findAuthForAliases(authMap: Record<string, Auth.Info>, aliases: string[
   return undefined
 }
 
+// Export for use in API endpoints
+export { PROVIDERS, findAuthForAliases }
+export type { QuotaProviderResult, UsageWindow, ProviderUsage }
+
 export const QuotaCommand = cmd({
   command: "quota [provider]",
   describe: "show quota usage for providers",
@@ -1346,4 +1350,33 @@ function displayResult(result: QuotaProviderResult) {
       UI.println(`  ${result.providerName}/${windowName}: available`)
     }
   }
+}
+
+// Get quota for all configured providers (for API use)
+export async function getAllQuota(): Promise<QuotaProviderResult[]> {
+  const authMap = await Auth.all()
+  const results: QuotaProviderResult[] = []
+
+  for (const [id, provider] of Object.entries(PROVIDERS)) {
+    const auth = findAuthForAliases(authMap, provider.aliases)
+    const isConfigured = await provider.isConfigured(auth)
+    if (isConfigured) {
+      try {
+        const result = await provider.fetchQuota(auth!)
+        results.push(result)
+      } catch (e) {
+        results.push({
+          providerId: id,
+          providerName: provider.providerName,
+          ok: false,
+          configured: true,
+          usage: null,
+          error: e instanceof Error ? e.message : "Unknown error",
+          fetchedAt: Date.now(),
+        })
+      }
+    }
+  }
+
+  return results
 }
