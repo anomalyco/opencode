@@ -117,8 +117,29 @@ export namespace MCP {
     })
   }
 
+  function isNetworkError(err: unknown): boolean {
+    if (err instanceof UnauthorizedError) return false
+    if (!(err instanceof Error)) return false
+    if ("code" in err && typeof (err as { code: unknown }).code === "number") return false
+    const msg = err.message.toLowerCase()
+    return (
+      msg.includes("econnreset") ||
+      msg.includes("econnrefused") ||
+      msg.includes("etimedout") ||
+      msg.includes("fetch failed") ||
+      msg.includes("socket") ||
+      msg.includes("network") ||
+      msg.includes("connection")
+    )
+  }
+
   // Convert MCP tool definition to AI SDK Tool type
-  async function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, timeout?: number): Promise<Tool> {
+  async function convertMcpTool(
+    mcpTool: MCPToolDef,
+    client: MCPClient,
+    timeout?: number,
+    reconnect?: () => Promise<MCPClient | undefined>,
+  ): Promise<Tool> {
     const inputSchema = mcpTool.inputSchema
 
     // Spread first, then override type to ensure it's always "object"
@@ -133,17 +154,27 @@ export namespace MCP {
       description: mcpTool.description ?? "",
       inputSchema: jsonSchema(schema),
       execute: async (args: unknown) => {
-        return client.callTool(
-          {
-            name: mcpTool.name,
-            arguments: (args || {}) as Record<string, unknown>,
-          },
-          CallToolResultSchema,
-          {
-            resetTimeoutOnProgress: true,
-            timeout,
-          },
-        )
+        const call = (c: MCPClient) =>
+          c.callTool(
+            {
+              name: mcpTool.name,
+              arguments: (args || {}) as Record<string, unknown>,
+            },
+            CallToolResultSchema,
+            {
+              resetTimeoutOnProgress: true,
+              timeout,
+            },
+          )
+        if (!reconnect) return call(client)
+        try {
+          return await call(client)
+        } catch (err) {
+          if (!isNetworkError(err)) throw err
+          const fresh = await reconnect().catch(() => undefined)
+          if (!fresh) throw err
+          return call(fresh)
+        }
       },
     })
   }
@@ -636,10 +667,32 @@ export namespace MCP {
       const mcpConfig = config[clientName]
       const entry = isMcpConfigured(mcpConfig) ? mcpConfig : undefined
       const timeout = entry?.timeout ?? defaultTimeout
+      const reconnect: (() => Promise<MCPClient | undefined>) | undefined =
+        entry && entry.type === "remote"
+          ? async () => {
+              const cur = await state()
+              const old = cur.clients[clientName]
+              if (old) {
+                await old.close().catch(() => {})
+                delete cur.clients[clientName]
+              }
+              log.info("reconnecting remote mcp server after tool call failure", { clientName })
+              const r = await create(clientName, entry).catch(() => undefined)
+              if (!r?.mcpClient) return undefined
+              cur.clients[clientName] = r.mcpClient
+              cur.status[clientName] = r.status
+              return r.mcpClient
+            }
+          : undefined
       for (const mcpTool of toolsResult.tools) {
         const sanitizedClientName = clientName.replace(/[^a-zA-Z0-9_-]/g, "_")
         const sanitizedToolName = mcpTool.name.replace(/[^a-zA-Z0-9_-]/g, "_")
-        result[sanitizedClientName + "_" + sanitizedToolName] = await convertMcpTool(mcpTool, client, timeout)
+        result[sanitizedClientName + "_" + sanitizedToolName] = await convertMcpTool(
+          mcpTool,
+          client,
+          timeout,
+          reconnect,
+        )
       }
     }
     return result

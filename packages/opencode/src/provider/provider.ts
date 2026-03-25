@@ -1237,18 +1237,19 @@ export namespace Provider {
       if (existing) return existing
 
       const customFetch = options["fetch"]
-      const chunkTimeout = options["chunkTimeout"]
+      const chunkTimeoutRaw = options["chunkTimeout"]
       delete options["chunkTimeout"]
+      const chunkTimeout = typeof chunkTimeoutRaw === "number" && chunkTimeoutRaw > 0 ? chunkTimeoutRaw : 30_000
 
       options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
         // Preserve custom fetch if it exists, wrap it with timeout logic
         const fetchFn = customFetch ?? fetch
         const opts = init ?? {}
-        const chunkAbortCtl = typeof chunkTimeout === "number" && chunkTimeout > 0 ? new AbortController() : undefined
+        const chunkAbortCtl = new AbortController()
         const signals: AbortSignal[] = []
 
         if (opts.signal) signals.push(opts.signal)
-        if (chunkAbortCtl) signals.push(chunkAbortCtl.signal)
+        signals.push(chunkAbortCtl.signal)
         if (options["timeout"] !== undefined && options["timeout"] !== null && options["timeout"] !== false)
           signals.push(AbortSignal.timeout(options["timeout"]))
 
@@ -1279,7 +1280,6 @@ export namespace Provider {
           timeout: false,
         })
 
-        if (!chunkAbortCtl) return res
         return wrapSSE(res, chunkTimeout, chunkAbortCtl)
       }
 

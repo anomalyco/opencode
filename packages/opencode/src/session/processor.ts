@@ -19,6 +19,7 @@ import type { SessionID, MessageID } from "./schema"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
+  const MAX_NETWORK_RETRIES = 5
   const log = Log.create({ service: "session.processor" })
 
   export type Info = Awaited<ReturnType<typeof create>>
@@ -34,7 +35,55 @@ export namespace SessionProcessor {
     let snapshot: string | undefined
     let blocked = false
     let attempt = 0
+    let networkAttempt = 0
+    let receivedChunk = false
     let needsCompaction = false
+    const cleanup = async () => {
+      const parts = await MessageV2.parts(input.assistantMessage.id)
+      for (const part of parts) {
+        if (part.type === "tool" && part.state.status !== "completed" && part.state.status !== "error") {
+          await Session.updatePart({
+            ...part,
+            state: {
+              ...part.state,
+              status: "error",
+              error: "Tool execution aborted",
+              time: {
+                start: Date.now(),
+                end: Date.now(),
+              },
+            },
+          })
+          continue
+        }
+        if (part.type === "text") {
+          await Session.updatePart({
+            ...part,
+            text: "",
+            time: part.time
+              ? {
+                  start: part.time.start,
+                }
+              : undefined,
+          })
+          continue
+        }
+        if (part.type === "reasoning") {
+          await Session.updatePart({
+            ...part,
+            text: "",
+            time: {
+              start: part.time.start,
+            },
+          })
+        }
+      }
+      Object.keys(toolcalls).forEach((id) => {
+        delete toolcalls[id]
+      })
+      input.assistantMessage.time.completed = undefined
+      await Session.updateMessage(input.assistantMessage)
+    }
 
     const result = {
       get message() {
@@ -49,11 +98,13 @@ export namespace SessionProcessor {
         const shouldBreak = (await Config.get()).experimental?.continue_loop_on_deny !== true
         while (true) {
           try {
+            receivedChunk = false
             let currentText: MessageV2.TextPart | undefined
             let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
             const stream = await LLM.stream(streamInput)
 
             for await (const value of stream.fullStream) {
+              receivedChunk = true
               input.abort.throwIfAborted()
               switch (value.type) {
                 case "start":
@@ -366,16 +417,43 @@ export namespace SessionProcessor {
             } else {
               const retry = SessionRetry.retryable(error)
               if (retry !== undefined) {
-                attempt++
-                const delay = SessionRetry.delay(attempt, error.name === "APIError" ? error : undefined)
-                await SessionStatus.set(input.sessionID, {
-                  type: "retry",
-                  attempt,
-                  message: retry,
-                  next: Date.now() + delay,
-                })
-                await SessionRetry.sleep(delay, input.abort).catch(() => {})
-                continue
+                const network =
+                  MessageV2.APIError.isInstance(error) &&
+                  error.data.isRetryable &&
+                  (error.data.message.includes("Network error") ||
+                    error.data.message.includes("SSE read timed out") ||
+                    error.data.message.includes("Connection reset by server"))
+                if (network) {
+                  networkAttempt++
+                  if (networkAttempt <= MAX_NETWORK_RETRIES) {
+                    const delay = Math.min(1000 * Math.pow(2, networkAttempt - 1), 5000)
+                    await SessionStatus.set(input.sessionID, {
+                      type: "reconnecting",
+                      attempt: networkAttempt,
+                      message: retry,
+                    })
+                    if (receivedChunk) {
+                      await cleanup()
+                    }
+                    await SessionRetry.sleep(delay, input.abort).catch(() => {})
+                    continue
+                  }
+                }
+                if (!network) {
+                  attempt++
+                  const delay = SessionRetry.delay(attempt, error.name === "APIError" ? error : undefined)
+                  await SessionStatus.set(input.sessionID, {
+                    type: "retry",
+                    attempt,
+                    message: retry,
+                    next: Date.now() + delay,
+                  })
+                  if (receivedChunk) {
+                    await cleanup()
+                  }
+                  await SessionRetry.sleep(delay, input.abort).catch(() => {})
+                  continue
+                }
               }
               input.assistantMessage.error = error
               Bus.publish(Session.Event.Error, {
