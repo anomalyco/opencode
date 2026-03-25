@@ -83,7 +83,7 @@ export namespace SessionProcessor {
                   if (value.id in reasoningMap) {
                     const part = reasoningMap[value.id]
                     part.text += value.text
-                    if (value.providerMetadata) part.metadata = value.providerMetadata
+                    if (value.providerMetadata) Object.assign((part.metadata ??= {}), value.providerMetadata)
                     await Session.updatePartDelta({
                       sessionID: part.sessionID,
                       messageID: part.messageID,
@@ -97,13 +97,11 @@ export namespace SessionProcessor {
                 case "reasoning-end":
                   if (value.id in reasoningMap) {
                     const part = reasoningMap[value.id]
-                    part.text = part.text.trimEnd()
-
                     part.time = {
                       ...part.time,
                       end: Date.now(),
                     }
-                    if (value.providerMetadata) part.metadata = value.providerMetadata
+                    if (value.providerMetadata) Object.assign((part.metadata ??= {}), value.providerMetadata)
                     await Session.updatePart(part)
                     delete reasoningMap[value.id]
                   }
@@ -306,7 +304,7 @@ export namespace SessionProcessor {
                 case "text-delta":
                   if (currentText) {
                     currentText.text += value.text
-                    if (value.providerMetadata) currentText.metadata = value.providerMetadata
+                    if (value.providerMetadata) Object.assign((currentText.metadata ??= {}), value.providerMetadata)
                     await Session.updatePartDelta({
                       sessionID: currentText.sessionID,
                       messageID: currentText.messageID,
@@ -334,7 +332,7 @@ export namespace SessionProcessor {
                       start: Date.now(),
                       end: Date.now(),
                     }
-                    if (value.providerMetadata) currentText.metadata = value.providerMetadata
+                    if (value.providerMetadata) Object.assign((currentText.metadata ??= {}), value.providerMetadata)
                     await Session.updatePart(currentText)
                   }
                   currentText = undefined
