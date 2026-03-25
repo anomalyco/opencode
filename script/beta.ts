@@ -2,6 +2,8 @@
 
 import { $ } from "bun"
 
+const model = "opencode/gpt-5.3-codex"
+
 interface PR {
   number: number
   title: string
@@ -50,17 +52,55 @@ async function cleanup() {
   } catch {}
 }
 
-async function fix(pr: PR, files: string[]) {
+function lines(prs: PR[]) {
+  return prs.map((x) => `- #${x.number}: ${x.title}`).join("\n") || "(none)"
+}
+
+async function typecheck() {
+  try {
+    await $`bun typecheck`.cwd("packages/opencode")
+    return true
+  } catch (err) {
+    console.log(`Typecheck failed: ${err}`)
+    return false
+  }
+}
+
+async function build() {
+  try {
+    await $`./script/build.ts --single`.cwd("packages/opencode")
+    return true
+  } catch (err) {
+    console.log(`Build failed: ${err}`)
+    return false
+  }
+}
+
+async function fix(pr: PR, files: string[], prs: PR[], applied: number[], idx: number) {
   console.log(`  Trying to auto-resolve ${files.length} conflict(s) with opencode...`)
+
+  const done = lines(prs.filter((x) => applied.includes(x.number)))
+  const next = lines(prs.slice(idx + 1))
+
   const prompt = [
     `Resolve the current git merge conflicts while merging PR #${pr.number} into the beta branch.`,
+    `PR #${pr.number}: ${pr.title}`,
     `Only touch these files: ${files.join(", ")}.`,
+    `Merged PRs on HEAD:\n${done}`,
+    `Pending PRs after this one (context only):\n${next}`,
+    "IMPORTANT: The conflict resolution must be consistent with already-merged PRs.",
+    "Pending PRs are context only; do not introduce their changes unless they are already present on HEAD.",
+    "Prefer already-merged PRs over the base branch when resolving stacked conflicts.",
+    "If a PR already deleted a file/directory, do not re-add it, instead apply changes in the new semantic location.",
+    "If a PR already changed an import, keep that change.",
+    "After resolving the conflicts, run `bun typecheck` in `packages/opencode`.",
+    "Fix any merge-caused typecheck errors before finishing.",
     "Keep the merge in progress, do not abort the merge, and do not create a commit.",
-    "When done, leave the working tree with no unmerged files.",
+    "When done, leave the working tree with no unmerged files and a passing typecheck.",
   ].join("\n")
 
   try {
-    await $`opencode run -m opencode/gpt-5.3-codex ${prompt}`
+    await $`opencode run -m ${model} ${prompt}`
   } catch (err) {
     console.log(`  opencode failed: ${err}`)
     return false
@@ -72,7 +112,63 @@ async function fix(pr: PR, files: string[]) {
     return false
   }
 
+  if (!(await typecheck())) return false
+
   console.log("  Conflicts resolved with opencode")
+  return true
+}
+
+async function smoke(prs: PR[], applied: number[]) {
+  console.log("\nRunning final smoke check with opencode...")
+
+  const done = lines(prs.filter((x) => applied.includes(x.number)))
+  const prompt = [
+    "The beta merge batch is complete.",
+    `Merged PRs on HEAD:\n${done}`,
+    "Run `bun typecheck` in `packages/opencode`.",
+    "Run `./script/build.ts --single` in `packages/opencode`.",
+    "Fix any merge-caused issues until both commands pass.",
+    "Do not create a commit.",
+  ].join("\n")
+
+  try {
+    await $`opencode run -m ${model} ${prompt}`
+  } catch (err) {
+    console.log(`Smoke fix failed: ${err}`)
+    return false
+  }
+
+  if (!(await typecheck())) {
+    return false
+  }
+
+  if (!(await build())) {
+    return false
+  }
+
+  const out = await $`git status --porcelain`.text()
+  if (!out.trim()) {
+    console.log("Smoke check passed")
+    return true
+  }
+
+  try {
+    await $`git add -A`
+    await $`git commit -m "Fix beta integration"`
+  } catch (err) {
+    console.log(`Failed to commit smoke fixes: ${err}`)
+    return false
+  }
+
+  if (!(await typecheck())) {
+    return false
+  }
+
+  if (!(await build())) {
+    return false
+  }
+
+  console.log("Smoke check passed")
   return true
 }
 
@@ -99,7 +195,7 @@ async function main() {
   const applied: number[] = []
   const failed: FailedPR[] = []
 
-  for (const pr of prs) {
+  for (const [idx, pr] of prs.entries()) {
     console.log(`\nProcessing PR #${pr.number}: ${pr.title}`)
 
     console.log("  Fetching PR head...")
@@ -119,7 +215,7 @@ async function main() {
       const files = await conflicts()
       if (files.length > 0) {
         console.log("  Failed to merge (conflicts)")
-        if (!(await fix(pr, files))) {
+        if (!(await fix(pr, files, prs, applied, idx))) {
           await cleanup()
           failed.push({ number: pr.number, title: pr.title, reason: "Merge conflicts" })
           await commentOnPR(pr.number, "Merge conflicts with dev branch")
@@ -172,6 +268,13 @@ async function main() {
     console.log(`Failed: ${failed.length} PRs`)
     failed.forEach((f) => console.log(`  - PR #${f.number}: ${f.reason}`))
     throw new Error(`${failed.length} PR(s) failed to merge`)
+  }
+
+  if (applied.length > 0) {
+    const ok = await smoke(prs, applied)
+    if (!ok) {
+      throw new Error("Final smoke check failed")
+    }
   }
 
   console.log("\nChecking if beta branch has changes...")
