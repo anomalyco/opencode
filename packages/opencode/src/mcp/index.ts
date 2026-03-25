@@ -16,6 +16,7 @@ import z from "zod/v4"
 import { Instance } from "../project/instance"
 import { Installation } from "../installation"
 import { withTimeout } from "@/util/timeout"
+import { AppFileSystem } from "@/filesystem"
 import { McpOAuthProvider } from "./oauth-provider"
 import { McpOAuthCallback } from "./oauth-callback"
 import { McpAuth } from "./auth"
@@ -464,6 +465,7 @@ export namespace MCP {
     Service,
     Effect.gen(function* () {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+      const auth = yield* McpAuth.Service
 
       const descendants = Effect.fnUntraced(
         function* (pid: number) {
@@ -760,10 +762,10 @@ export namespace MCP {
       })
 
       const removeAuth = Effect.fn("MCP.removeAuth")(function* (mcpName: string) {
-        yield* Effect.promise(() => McpAuth.remove(mcpName))
+        yield* auth.remove(mcpName).pipe(Effect.orDie)
         McpOAuthCallback.cancelPending(mcpName)
         pendingOAuthTransports.delete(mcpName)
-        yield* Effect.promise(() => McpAuth.clearOAuthState(mcpName))
+        yield* auth.clearOAuthState(mcpName).pipe(Effect.orDie)
         log.info("removed oauth credentials", { mcpName })
       })
 
@@ -776,14 +778,14 @@ export namespace MCP {
       })
 
       const hasStoredTokens = Effect.fn("MCP.hasStoredTokens")(function* (mcpName: string) {
-        const entry = yield* Effect.promise(() => McpAuth.get(mcpName))
+        const entry = yield* auth.get(mcpName).pipe(Effect.orDie)
         return !!entry?.tokens
       })
 
       const getAuthStatus = Effect.fn("MCP.getAuthStatus")(function* (mcpName: string) {
-        const entry = yield* Effect.promise(() => McpAuth.get(mcpName))
+        const entry = yield* auth.get(mcpName).pipe(Effect.orDie)
         if (!entry?.tokens) return "not_authenticated" as AuthStatus
-        const expired = yield* Effect.promise(() => McpAuth.isTokenExpired(mcpName))
+        const expired = yield* auth.isTokenExpired(mcpName).pipe(Effect.orDie)
         return (expired ? "expired" : "authenticated") as AuthStatus
       })
 
@@ -993,7 +995,9 @@ export namespace MCP {
   // --- Per-service runtime ---
 
   const defaultLayer = layer.pipe(
+    Layer.provide(McpAuth.layer),
     Layer.provide(CrossSpawnSpawner.layer),
+    Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(NodeFileSystem.layer),
     Layer.provide(NodePath.layer),
   )
