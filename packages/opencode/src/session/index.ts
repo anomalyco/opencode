@@ -788,6 +788,86 @@ export namespace Session {
     },
   )
 
+  export async function interruptAssistant(input: {
+    msg: MessageV2.Assistant
+    error: string
+    time?: number
+  }) {
+    const now = input.time ?? Date.now()
+    const done = !input.msg.time.completed
+    const list = (await MessageV2.parts(input.msg.id)).filter(
+      (part): part is MessageV2.ToolPart =>
+        part.type === "tool" && (part.state.status === "pending" || part.state.status === "running"),
+    )
+
+    await Promise.all(
+      list.map((part) =>
+        updatePart({
+          ...part,
+          state: {
+            status: "error",
+            input: part.state.input,
+            error: input.error,
+            ...(part.state.status === "running" && part.state.metadata ? { metadata: part.state.metadata } : {}),
+            time: {
+              start: part.state.status === "running" ? part.state.time.start : now,
+              end: now,
+            },
+          },
+        }),
+      ),
+    )
+
+    if (done) {
+      input.msg.time.completed = now
+    }
+
+    if (list.length > 0 || done) {
+      await updateMessage(input.msg)
+    }
+
+    return list.length > 0 || done
+  }
+
+  export async function recoverInterrupted() {
+    const rows = Database.use((db) =>
+      db
+        .select({
+          id: MessageTable.id,
+          sessionID: MessageTable.session_id,
+          data: MessageTable.data,
+        })
+        .from(MessageTable)
+        .innerJoin(SessionTable, eq(SessionTable.id, MessageTable.session_id))
+        .where(eq(SessionTable.project_id, Instance.project.id))
+        .all(),
+    )
+
+    const list = rows.flatMap((row) => {
+      if (row.data.role !== "assistant") return []
+      if (row.data.time.completed) return []
+      return [{ ...row.data, id: row.id, sessionID: row.sessionID } as MessageV2.Assistant]
+    })
+
+    const count = (await Promise.all(
+      list.map((msg) =>
+        interruptAssistant({
+          msg,
+          error: "Tool execution was interrupted (server restart)",
+        }),
+      ),
+    )).filter(Boolean).length
+
+    if (count) {
+      log.info("recovered interrupted assistant messages", {
+        count,
+        projectID: Instance.project.id,
+      })
+    }
+
+    return count
+  }
+
   export const getUsage = fn(
     z.object({
       model: z.custom<Provider.Model>(),
