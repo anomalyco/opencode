@@ -185,7 +185,7 @@ function withInstance(
 // Bug #1: tools() silently deletes clients on transient listTools() failure
 // ========================================================================
 
-test.todo(
+test(
   "tools() removes client from state when listTools fails",
   withInstance(
     {
@@ -216,9 +216,10 @@ test.todo(
       serverState.listToolsShouldFail = true
       await MCP.tools()
 
-      // After the transient error clears, tools should recover
-      // automatically — the server shouldn't be permanently removed.
+      // After the transient error clears, the background reconnection
+      // fiber should restore the server. Give it a tick to complete.
       serverState.listToolsShouldFail = false
+      await new Promise((r) => setTimeout(r, 100))
 
       const toolsRecovered = await MCP.tools()
       expect(Object.keys(toolsRecovered).length).toBeGreaterThan(0)
@@ -230,7 +231,7 @@ test.todo(
 // Bug #2: status() shows stale data after tools() deletes a client
 // ========================================================================
 
-test.todo(
+test(
   "status shows 'failed' after tools() encounters a transient error",
   withInstance(
     {
@@ -256,7 +257,9 @@ test.todo(
       await MCP.tools()
       serverState.listToolsShouldFail = false
 
-      // After the error clears, status should recover automatically
+      // Give background reconnection fiber time to complete
+      await new Promise((r) => setTimeout(r, 100))
+
       await MCP.tools()
       const statusAfter = await MCP.status()
       expect(statusAfter["status-server"]?.status).toBe("connected")

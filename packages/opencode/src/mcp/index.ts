@@ -24,7 +24,7 @@ import { BusEvent } from "../bus/bus-event"
 import { Bus } from "@/bus"
 import { TuiEvent } from "@/cli/cmd/tui/event"
 import open from "open"
-import { Effect, Layer, ServiceMap, Stream } from "effect"
+import { Effect, Layer, Scope, ServiceMap, Stream } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRunPromise } from "@/effect/run-service"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
@@ -464,6 +464,7 @@ export namespace MCP {
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
+      const scope = yield* Scope.Scope
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
       const auth = yield* McpAuth.Service
 
@@ -658,7 +659,18 @@ export namespace MCP {
                   return e
                 },
               }).pipe(Effect.option)
-              if (toolsResult._tag === "None") return
+
+              if (toolsResult._tag === "None") {
+                // Fork background reconnection — tools come back next turn
+                const mcpConfig = config[clientName]
+                if (mcpConfig && isMcpConfigured(mcpConfig)) {
+                  yield* createAndStore(clientName, mcpConfig).pipe(
+                    Effect.catch(() => Effect.void),
+                    Effect.forkIn(scope),
+                  )
+                }
+                return
+              }
 
               const mcpConfig = config[clientName]
               const entry = isMcpConfigured(mcpConfig) ? mcpConfig : undefined
