@@ -589,6 +589,11 @@ export type SessionStatus =
       next: number
     }
   | {
+      type: "reconnecting"
+      attempt: number
+      message: string
+    }
+  | {
       type: "busy"
     }
 

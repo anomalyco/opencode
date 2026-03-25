@@ -1063,7 +1063,9 @@ export function Prompt(props: PromptProps) {
               flexDirection="row"
               gap={1}
               flexGrow={1}
-              justifyContent={status().type === "retry" ? "space-between" : "flex-start"}
+              justifyContent={
+                status().type === "retry" || status().type === "reconnecting" ? "space-between" : "flex-start"
+              }
             >
               <box flexShrink={0} flexDirection="row" gap={1}>
                 <box marginLeft={1}>
@@ -1128,6 +1130,29 @@ export function Prompt(props: PromptProps) {
                       </Show>
                     )
                   })()}
+                  {(() => {
+                    const reconnecting = createMemo(() => {
+                      const s = status()
+                      if (s.type !== "reconnecting") return
+                      return s
+                    })
+                    const msg = createMemo(() => {
+                      const r = reconnecting()
+                      if (!r) return
+                      if (r.message.length > 80) return r.message.slice(0, 80) + "..."
+                      return r.message
+                    })
+
+                    return (
+                      <Show when={reconnecting()}>
+                        <box>
+                          <text fg={theme.warning}>
+                            {msg()} [reconnecting attempt #{reconnecting()?.attempt}]
+                          </text>
+                        </box>
+                      </Show>
+                    )
+                  })()}
                 </box>
               </box>
               <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
@@ -1138,7 +1163,7 @@ export function Prompt(props: PromptProps) {
               </text>
             </box>
           </Show>
-          <Show when={status().type !== "retry"}>
+          <Show when={status().type !== "retry" && status().type !== "reconnecting"}>
             <box gap={2} flexDirection="row">
               <Switch>
                 <Match when={store.mode === "normal"}>
