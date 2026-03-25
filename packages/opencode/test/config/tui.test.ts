@@ -628,3 +628,40 @@ test("tracks global and local plugin metadata in merged tui config", async () =>
     },
   })
 })
+
+test("merges plugin_enabled flags across config layers", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(Global.Path.config, "tui.json"),
+        JSON.stringify({
+          plugin_enabled: {
+            "internal:sidebar-title": false,
+            "demo.plugin": true,
+          },
+        }),
+      )
+      await Bun.write(
+        path.join(dir, "tui.json"),
+        JSON.stringify({
+          plugin_enabled: {
+            "demo.plugin": false,
+            "local.plugin": true,
+          },
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await TuiConfig.get()
+      expect(config.plugin_enabled).toEqual({
+        "internal:sidebar-title": false,
+        "demo.plugin": false,
+        "local.plugin": true,
+      })
+    },
+  })
+})

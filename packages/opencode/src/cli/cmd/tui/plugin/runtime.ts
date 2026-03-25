@@ -4,6 +4,7 @@ import {
   type TuiPlugin,
   type TuiPluginApi,
   type TuiPluginMeta,
+  type TuiPluginStatus,
   type TuiSlotPlugin,
   type TuiTheme,
 } from "@opencode-ai/plugin/tui"
@@ -46,8 +47,33 @@ type Scope = {
   dispose: () => Promise<void>
 }
 
+type Unit = {
+  id: string
+  key: string
+  load: Loaded
+  meta: TuiPluginMeta
+  plugin: TuiPlugin
+  opts: Config.PluginOptions | undefined
+  enabled: boolean
+  active?: Scope
+}
+
+type Run = {
+  api: Api
+  slots: HostSlots
+  list: Unit[]
+  map: Map<string, Unit>
+}
+
+type Ops = {
+  list: () => ReadonlyArray<TuiPluginStatus>
+  activatePlugin: (id: string) => Promise<boolean>
+  deactivatePlugin: (id: string) => Promise<boolean>
+}
+
 const log = Log.create({ service: "tui.plugin" })
 const DISPOSE_TIMEOUT_MS = 5000
+const KV_KEY = "plugin_enabled"
 
 function fail(message: string, data: Record<string, unknown>) {
   if (!("error" in data)) {
@@ -361,8 +387,109 @@ function scope(load: Loaded, name: string) {
 }
 
 function sid(meta: TuiPluginMeta, name: string) {
+  if (meta.source === "internal") {
+    const base = `internal:${meta.name}`
+    if (name === "default") return base
+    return `${base}:${name}`
+  }
   if (name === "default") return meta.name
   return `${meta.name}:${name}`
+}
+
+function own(value: unknown, load: Loaded, key: string) {
+  if (!isRecord(value)) return
+  if (!("id" in value)) return
+  if (typeof value.id !== "string") {
+    log.warn("ignoring invalid tui plugin id", {
+      path: load.spec,
+      name: key,
+      type: typeof value.id,
+    })
+    return
+  }
+  const id = value.id.trim()
+  if (id) return id
+  log.warn("ignoring empty tui plugin id", {
+    path: load.spec,
+    name: key,
+  })
+}
+
+function bools(value: unknown) {
+  if (!isRecord(value)) return {}
+  return Object.fromEntries(
+    Object.entries(value).filter((item): item is [string, boolean] => typeof item[1] === "boolean"),
+  )
+}
+
+function save(api: Api, id: string, enabled: boolean) {
+  const next = {
+    ...bools(api.kv.get(KV_KEY, {})),
+    [id]: enabled,
+  }
+  api.kv.set(KV_KEY, next)
+}
+
+function status(run: Run): TuiPluginStatus[] {
+  return run.list.map((item) => ({
+    id: item.id,
+    name: item.meta.name,
+    source: item.meta.source,
+    spec: item.meta.spec,
+    target: item.meta.target,
+    enabled: item.enabled,
+    active: item.active !== undefined,
+  }))
+}
+
+async function stop(item: Unit, persist: boolean, api: Api) {
+  item.enabled = false
+  if (persist) save(api, item.id, false)
+  if (!item.active) return true
+  const active = item.active
+  item.active = undefined
+  await active.dispose()
+  return true
+}
+
+async function start(item: Unit, run: Run, persist: boolean) {
+  item.enabled = true
+  if (persist) save(run.api, item.id, true)
+  if (item.active) return true
+
+  const active = scope(item.load, item.key)
+  const plugin = pluginApi(run.api, run.slots, item.load, active, item.id, {
+    list() {
+      return status(run)
+    },
+    activatePlugin(id) {
+      return TuiPluginRuntime.activatePlugin(id)
+    },
+    deactivatePlugin(id) {
+      return TuiPluginRuntime.deactivatePlugin(id)
+    },
+  })
+  const ready = await Promise.resolve()
+    .then(async () => {
+      await item.plugin(plugin, item.opts, item.meta)
+      return true
+    })
+    .catch((error) => {
+      fail("failed to initialize tui plugin export", {
+        path: item.load.spec,
+        name: item.key,
+        error,
+      })
+      return false
+    })
+
+  if (!ready) {
+    await active.dispose()
+    return false
+  }
+
+  item.active = active
+  return true
 }
 
 function plug(plugin: TuiSlotPlugin, id: string): HostSlotPlugin {
@@ -372,7 +499,7 @@ function plug(plugin: TuiSlotPlugin, id: string): HostSlotPlugin {
   }
 }
 
-function pluginApi(api: Api, host: HostSlots, load: Loaded, state: Scope, base: string): TuiPluginApi {
+function pluginApi(api: Api, host: HostSlots, load: Loaded, state: Scope, base: string, ops: Ops): TuiPluginApi {
   const command: TuiPluginApi["command"] = {
     register(cb) {
       return state.wrap(api.command.register(cb))
@@ -433,55 +560,76 @@ function pluginApi(api: Api, host: HostSlots, load: Loaded, state: Scope, base: 
     event,
     renderer: api.renderer,
     slots,
+    plugins: {
+      list: ops.list,
+      activatePlugin: ops.activatePlugin,
+      deactivatePlugin: ops.deactivatePlugin,
+    },
     lifecycle: state.lifecycle,
   }
 }
 
-async function applyPlugin(api: Api, host: HostSlots, load: Loaded, meta: TuiPluginMeta, all: Scope[]) {
+function units(load: Loaded, meta: TuiPluginMeta) {
+  const list: Unit[] = []
   const opts = load.item ? Config.pluginOptions(load.item) : undefined
 
-  for (const [name, value] of uniqueModuleEntries(load.mod)) {
+  for (const [key, value] of uniqueModuleEntries(load.mod)) {
     if (!value || typeof value !== "object") {
       log.warn("ignoring non-object tui plugin export", {
         path: load.spec,
-        name,
+        name: key,
         type: value === null ? "null" : typeof value,
       })
       continue
     }
 
-    const tuiPlugin = getTuiPlugin(value)
-    if (!tuiPlugin) continue
+    const plugin = getTuiPlugin(value)
+    if (!plugin) continue
+    const id = own(value, load, key) ?? sid(meta, key)
+    list.push({
+      id,
+      key,
+      load,
+      meta,
+      plugin,
+      opts,
+      enabled: true,
+    })
+  }
 
-    const state = scope(load, name)
-    const plugin = pluginApi(api, host, load, state, sid(meta, name))
-    const ready = await Promise.resolve()
-      .then(async () => {
-        await tuiPlugin(plugin, opts, meta)
-        return true
-      })
-      .catch((error) => {
-        fail("failed to initialize tui plugin export", {
-          path: load.spec,
-          name,
-          error,
-        })
-        return false
-      })
+  return list
+}
 
-    if (!ready) {
-      await state.dispose()
-      continue
-    }
+function push(run: Run, item: Unit) {
+  if (run.map.has(item.id)) {
+    fail("duplicate tui plugin id", {
+      id: item.id,
+      path: item.load.spec,
+      name: item.key,
+    })
+    return
+  }
 
-    all.push(state)
+  run.map.set(item.id, item)
+  run.list.push(item)
+}
+
+function mark(run: Run, config: TuiConfig.Info) {
+  const map = {
+    ...bools(config.plugin_enabled),
+    ...bools(run.api.kv.get(KV_KEY, {})),
+  }
+  for (const item of run.list) {
+    const hit = map[item.id]
+    if (hit === undefined) continue
+    item.enabled = hit
   }
 }
 
 export namespace TuiPluginRuntime {
   let dir = ""
   let loaded: Promise<void> | undefined
-  let list: Scope[] = []
+  let run: Run | undefined
   export const Slot = View
 
   export async function init(api: HostPluginApi) {
@@ -498,22 +646,47 @@ export namespace TuiPluginRuntime {
     return loaded
   }
 
+  export function list() {
+    if (!run) return []
+    return status(run)
+  }
+
+  export async function activatePlugin(id: string) {
+    const item = run?.map.get(id)
+    if (!item || !run) return false
+    return start(item, run, true)
+  }
+
+  export async function deactivatePlugin(id: string) {
+    const item = run?.map.get(id)
+    if (!item || !run) return false
+    return stop(item, true, run.api)
+  }
+
   export async function dispose() {
     const task = loaded
     loaded = undefined
     dir = ""
     if (task) await task
-    const queue = [...list].reverse()
-    list = []
-    for (const state of queue) {
-      await state.dispose()
+    const hit = run
+    run = undefined
+    if (!hit) return
+    const queue = [...hit.list].reverse()
+    for (const item of queue) {
+      await stop(item, false, hit.api)
     }
   }
 
   async function load(api: Api) {
     const cwd = process.cwd()
-    const next: Scope[] = []
     const slots = setupSlots(api)
+    const next: Run = {
+      api,
+      slots,
+      list: [],
+      map: new Map(),
+    }
+    run = next
 
     await Instance.provide({
       directory: cwd,
@@ -528,7 +701,10 @@ export namespace TuiPluginRuntime {
         for (const item of INTERNAL_TUI_PLUGINS) {
           log.info("loading internal tui plugin", { name: item.name })
           const entry = prepInternalPlugin(item)
-          await applyPlugin(api, slots, entry, createMeta(entry.spec, entry.target, undefined, item.name), next)
+          const meta = createMeta(entry.spec, entry.target, undefined, item.name)
+          for (const plugin of units(entry, meta)) {
+            push(next, plugin)
+          }
         }
 
         const loaded = await Promise.all(plugins.map((item) => prepPlugin(config, item)))
@@ -570,14 +746,17 @@ export namespace TuiPluginRuntime {
             })
           }
 
-          // Keep plugin execution sequential for deterministic side effects:
-          // command registration order affects keybind/command precedence,
-          // route registration is last-wins when ids collide,
-          // and hook chains rely on stable plugin ordering.
-          await applyPlugin(api, slots, entry, createMeta(entry.spec, entry.target, hit), next)
+          const row = createMeta(entry.spec, entry.target, hit)
+          for (const plugin of units(entry, row)) {
+            push(next, plugin)
+          }
         }
 
-        list = next
+        mark(next, config)
+        for (const item of next.list) {
+          if (!item.enabled) continue
+          await start(item, next, false)
+        }
       },
     }).catch((error) => {
       fail("failed to load tui plugins", { directory: cwd, error })

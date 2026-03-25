@@ -30,6 +30,7 @@ export const TuiInfo = z
     theme: z.string().optional(),
     keybinds: KeybindOverride.optional(),
     plugin: Config.PluginSpec.array().optional(),
+    plugin_enabled: z.record(z.string(), z.boolean()).optional(),
   })
   .extend(TuiOptions.shape)
   .strict()

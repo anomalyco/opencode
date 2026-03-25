@@ -241,7 +241,10 @@ export type TuiState = {
   mcp: () => ReadonlyArray<TuiSidebarMcpItem>
 }
 
-type TuiConfigView = Pick<PluginConfig, "$schema" | "theme" | "keybinds" | "plugin"> & NonNullable<PluginConfig["tui"]>
+type TuiConfigView = Pick<PluginConfig, "$schema" | "theme" | "keybinds" | "plugin"> &
+  NonNullable<PluginConfig["tui"]> & {
+    plugin_enabled?: Record<string, boolean>
+  }
 
 export type TuiApp = {
   readonly version: string
@@ -334,6 +337,16 @@ export type TuiPluginMeta = TuiPluginEntry & {
   state: TuiPluginState
 }
 
+export type TuiPluginStatus = {
+  id: string
+  name: string
+  source: TuiPluginEntry["source"]
+  spec: string
+  target: string
+  enabled: boolean
+  active: boolean
+}
+
 export type TuiWorkspace = {
   current: () => string | undefined
   set: (workspaceID?: string) => void
@@ -374,12 +387,18 @@ export type TuiPluginApi = {
   event: TuiEventBus
   renderer: CliRenderer
   slots: TuiSlots
+  plugins: {
+    list: () => ReadonlyArray<TuiPluginStatus>
+    activatePlugin: (id: string) => Promise<boolean>
+    deactivatePlugin: (id: string) => Promise<boolean>
+  }
   lifecycle: TuiLifecycle
 }
 
 export type TuiPlugin = (api: TuiPluginApi, options: PluginOptions | undefined, meta: TuiPluginMeta) => Promise<void>
 
 export type TuiPluginModule = {
+  id?: string
   server?: Plugin
   tui?: TuiPlugin
 }

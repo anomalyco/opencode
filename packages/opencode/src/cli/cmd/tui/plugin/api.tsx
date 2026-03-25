@@ -354,6 +354,17 @@ export function createTuiApi(input: Input): TuiHostPluginApi {
         throw new Error("slots.register is only available in plugin context")
       },
     },
+    plugins: {
+      list() {
+        return []
+      },
+      async activatePlugin() {
+        return false
+      },
+      async deactivatePlugin() {
+        return false
+      },
+    },
     lifecycle,
     theme: {
       get current() {
