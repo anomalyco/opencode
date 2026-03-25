@@ -7,6 +7,7 @@ import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRunPromise } from "@/effect/run-service"
 import { AppFileSystem } from "@/filesystem"
+import { Hash } from "@/util/hash"
 import { Config } from "../config/config"
 import { Global } from "../global"
 import { Log } from "../util/log"
@@ -71,7 +72,7 @@ export namespace Snapshot {
             const state = {
               directory: ctx.directory,
               worktree: ctx.worktree,
-              gitdir: path.join(Global.Path.data, "snapshot", ctx.project.id),
+              gitdir: path.join(Global.Path.data, "snapshot", ctx.project.id, Hash.fast(ctx.worktree)),
               vcs: ctx.project.vcs,
             }
 
