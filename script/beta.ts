@@ -74,7 +74,7 @@ async function fix(pr: PR, files: string[], prs: PR[], applied: number[], idx: n
     "IMPORTANT: The conflict resolution must be consistent with already-merged PRs.",
     "Stacked work should be preserved, and may cause conflicts.",
     "Ensure merged and pending PRs are prefered over the work in the base branch.",
-    "If a PR already deleted a file/directory, do not re-add it.",
+    "If a PR already deleted a file/directory, do not re-add it, instead apply changes in the new semantic location.",
     "If a PR already changed an import, keep that change.",
     "Keep the merge in progress, do not abort the merge, and do not create a commit.",
     "When done, leave the working tree with no unmerged files.",
