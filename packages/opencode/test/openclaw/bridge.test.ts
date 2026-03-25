@@ -403,6 +403,71 @@ describe("OpenClawBridge live events", () => {
     )
   })
 
+  test("does not downgrade a completed tool back to running on repeated toolCall payloads", () => {
+    const current = new Map<string, ToolPart>()
+    const done = OpenClawBridge.internal.streamParts(
+      "msg_1",
+      "sess",
+      {
+        role: "assistant",
+        content: {
+          type: "toolResult",
+          toolCallId: "call_real_1",
+          result: "2026-03-25",
+        },
+      },
+      2,
+      current,
+    )
+
+    current.set("call_real_1", {
+      id: done.parts[0]!.id,
+      sessionID: "sess",
+      messageID: "msg_1",
+      type: "tool",
+      callID: "call_real_1",
+      tool: "exec",
+      state: {
+        status: "completed",
+        input: { command: "date +%F" },
+        output: "2026-03-25",
+        title: "Exec",
+        metadata: {},
+        time: { start: 1, end: 2 },
+      },
+    })
+
+    const repeated = OpenClawBridge.internal.streamParts(
+      "msg_1",
+      "sess",
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "toolCall",
+            id: "call_real_1",
+            name: "exec",
+            arguments: { command: "date +%F" },
+          },
+        ],
+      },
+      3,
+      current,
+    )
+
+    expect(repeated.parts).toHaveLength(1)
+    expect(repeated.parts[0]).toEqual(
+      expect.objectContaining({
+        type: "tool",
+        callID: "call_real_1",
+        state: expect.objectContaining({
+          status: "completed",
+          output: "2026-03-25",
+        }),
+      }),
+    )
+  })
+
   test("matches current assistant message by parent id even if gateway timestamp is older than started", () => {
     const sessionID = "sess"
     const userID = `${sessionID}-m0000000000001-0000`
@@ -460,5 +525,51 @@ describe("OpenClawBridge live events", () => {
 
     const anchor = OpenClawBridge.internal.source(list, { parentID: "optimistic", prompt: "kill main_v2" }, 10)
     expect(anchor).toBe(list[2]?.info.id)
+  })
+
+  test("changes stamp when a tool part moves from running to completed", () => {
+    const running = OpenClawBridge.internal.streamParts(
+      "msg_1",
+      "sess",
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "toolCall",
+            id: "call_real_1",
+            name: "exec",
+            arguments: { command: "date +%F" },
+          },
+        ],
+      },
+      1,
+    ).parts[0]!
+
+    const done = OpenClawBridge.internal.streamParts(
+      "msg_1",
+      "sess",
+      {
+        role: "assistant",
+        content: {
+          type: "toolResult",
+          toolCallId: "call_real_1",
+          result: "2026-03-25",
+        },
+      },
+      2,
+      new Map([["call_real_1", running]]),
+    ).parts[0]!
+
+    expect(
+      OpenClawBridge.internal.stamp({
+        info: { id: "msg_1" },
+        parts: [running],
+      } as any),
+    ).not.toBe(
+      OpenClawBridge.internal.stamp({
+        info: { id: "msg_1" },
+        parts: [done],
+      } as any),
+    )
   })
 })

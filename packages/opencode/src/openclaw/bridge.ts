@@ -713,9 +713,14 @@ function streamParts(
   const part = new Map<string, ToolPart>()
 
   for (const call of calls) {
+    const current = part.get(call.callID) ?? tools?.get(call.callID)
+    if (current && current.state.status !== "running") {
+      part.set(call.callID, current)
+      continue
+    }
     const next = {
       ...call,
-      id: tools?.get(call.callID)?.id ?? partID(messageID, call.callID),
+      id: current?.id ?? partID(messageID, call.callID),
       messageID,
       sessionID,
     } satisfies ToolPart
@@ -1278,12 +1283,23 @@ function replay(
   } satisfies Message
 }
 
+function stamp(item: Message) {
+  return JSON.stringify({
+    id: item.info.id,
+    parts: item.parts.map((part) =>
+      part.type === "text"
+        ? { id: part.id, type: part.type, text: part.text }
+        : { id: part.id, type: part.type, callID: part.callID, tool: part.tool, state: part.state.status },
+    ),
+  })
+}
+
 async function pumpHistory(
   client: GwClient,
   sessionID: string,
   started: number,
   hit: { parentID: string; messageID: string; partID: string; tools: Map<string, ToolPart>; prompt?: string },
-  seen: Set<string>,
+  seen: Map<string, string>,
   onItem: (item: Message) => void,
 ) {
   const list = await history(client, sessionID).catch(() => [])
@@ -1297,10 +1313,10 @@ async function pumpHistory(
         item.info.parentID === anchor ||
         item.info.time.created >= started,
     )
-    .filter((item) => !seen.has(item.info.id))
+    .filter((item) => seen.get(item.info.id) !== stamp(item))
     .sort((a, b) => a.info.time.created - b.info.time.created || cmp(a.info.id, b.info.id))
   for (const item of next) {
-    seen.add(item.info.id)
+    seen.set(item.info.id, stamp(item))
     onItem(replay(item, hit))
   }
   return next
@@ -1330,6 +1346,7 @@ export namespace OpenClawBridge {
     current,
     historyMessages,
     source,
+    stamp,
     streamParts,
   }
 
@@ -1759,7 +1776,7 @@ export namespace OpenClawBridge {
             active.set(sessionID, { parentID: optimistic.info.id, messageID, partID, tools })
             log.debug("openclaw prompt_async accepted", { sessionID, runID })
             emitStatus(sessionID, "busy")
-            const seen = new Set<string>()
+            const seen = new Map<string, string>()
             void (async () => {
               for (let i = 0; i < 90; i++) {
                 await new Promise((resolve) => setTimeout(resolve, 500))
@@ -1847,7 +1864,7 @@ export namespace OpenClawBridge {
         c.status(200)
         c.header("Content-Type", "application/json")
         return stream(c, async (stream) => {
-          const seen = new Set<string>()
+          const seen = new Map<string, string>()
           for (let i = 0; i < 20; i++) {
             await new Promise((resolve) => setTimeout(resolve, 300))
             const items = await pumpHistory(
