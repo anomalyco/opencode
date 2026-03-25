@@ -790,8 +790,6 @@ export const dict = {
   "settings.permissions.tool.skill.description": "按名稱載入技能",
   "settings.permissions.tool.lsp.title": "LSP",
   "settings.permissions.tool.lsp.description": "執行語言伺服器查詢",
-  "settings.permissions.tool.todoread.title": "讀取待辦",
-  "settings.permissions.tool.todoread.description": "讀取待辦清單",
   "settings.permissions.tool.todowrite.title": "更新待辦",
   "settings.permissions.tool.todowrite.description": "更新待辦清單",
   "settings.permissions.tool.webfetch.title": "Web Fetch",
