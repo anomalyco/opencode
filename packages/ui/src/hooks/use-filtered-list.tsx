@@ -14,6 +14,7 @@ export interface FilteredListProps<T> {
   sortGroupsBy?: (a: { category: string; items: T[] }, b: { category: string; items: T[] }) => number
   onSelect?: (value: T | undefined, index: number) => void
   noInitialSelection?: boolean
+  stale?: boolean
 }
 
 export function useFilteredList<T>(props: FilteredListProps<T>) {
@@ -51,8 +52,9 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
   )
 
   const flat = createMemo(() => {
+    const groups = props.stale === false && grouped.loading ? empty : grouped.latest || []
     return pipe(
-      grouped.latest || [],
+      groups,
       flatMap((x) => x.items),
     )
   })

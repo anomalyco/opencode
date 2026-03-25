@@ -591,14 +591,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const seen = new Set(open)
       const pinned: AtOption[] = open.map((path) => ({ type: "file", path, display: path, recent: true }))
       if (!query.trim()) return [...agents, ...pinned]
+      const pathy = /[./\\]/.test(query)
       const paths = await files.searchFiles(query)
       const fileOptions: AtOption[] = paths
         .filter((path) => !seen.has(path))
         .map((path) => ({ type: "file", path, display: path }))
+      if (pathy) return fileOptions
       return [...agents, ...pinned, ...fileOptions]
     },
     key: atKey,
     filterKeys: ["display"],
+    stale: false,
     groupBy: (item) => {
       if (item.type === "agent") return "agent"
       if (item.recent) return "recent"
