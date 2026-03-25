@@ -142,6 +142,7 @@ export namespace Config {
 
     for (const dir of unique(directories)) {
       if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
+        result.mcp = mergeDeep(result.mcp ?? {}, await loadMcp(dir))
         for (const file of ["opencode.jsonc", "opencode.json"]) {
           log.debug(`loading config from ${path.join(dir, file)}`)
           result = mergeConfigConcatArrays(result, await loadFile(path.join(dir, file)))
@@ -506,6 +507,36 @@ export namespace Config {
       plugins.push(pathToFileURL(item).href)
     }
     return plugins
+  }
+
+  async function loadMcp(dir: string): Promise<NonNullable<Info["mcp"]>> {
+    const file = Bun.file(path.join(dir, "mcp.json"))
+    if (!(await file.exists())) return {}
+
+    const data = await file.json().catch(() => ({}))
+    const servers = data?.mcpServers
+    if (!servers || typeof servers !== "object" || Array.isArray(servers)) return {}
+
+    const result: NonNullable<Info["mcp"]> = {}
+    for (const [name, cfg] of Object.entries(servers)) {
+      if (!cfg || typeof cfg !== "object" || Array.isArray(cfg)) continue
+
+      const c = cfg as Record<string, unknown>
+      if (typeof c["command"] !== "string") continue
+
+      const args = Array.isArray(c["args"]) ? c["args"].filter((a): a is string => typeof a === "string") : []
+      const raw = c["env"]
+
+      result[name] = {
+        type: "local",
+        command: [c["command"], ...args],
+      }
+      if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+        result[name]["environment"] = Object.fromEntries(Object.entries(raw as Record<string, unknown>)) as Record<string, string>
+      }
+    }
+    log.debug("loaded mcp.json", { dir, count: Object.keys(result).length })
+    return result
   }
 
   /**
