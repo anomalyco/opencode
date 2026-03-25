@@ -14,7 +14,6 @@ import { DialogConfirm } from "../ui/dialog-confirm"
 import { DialogPrompt } from "../ui/dialog-prompt"
 import { DialogSelect, type DialogSelectOption as SelectOption } from "../ui/dialog-select"
 import type { useToast } from "../ui/toast"
-import { Global } from "@/global"
 import { Installation } from "@/installation"
 
 type RouteEntry = {
@@ -130,6 +129,23 @@ function stateApi(sync: ReturnType<typeof useSync>): TuiApi["state"] {
     get provider() {
       return sync.data.provider
     },
+    get path() {
+      return sync.data.path
+    },
+    get vcs() {
+      if (!sync.data.vcs) return
+      return {
+        branch: sync.data.vcs.branch,
+      }
+    },
+    workspace: {
+      list() {
+        return sync.data.workspaceList
+      },
+      get(workspaceID) {
+        return sync.workspace.get(workspaceID)
+      },
+    },
     session: {
       count() {
         return sync.data.session.length
@@ -143,6 +159,18 @@ function stateApi(sync: ReturnType<typeof useSync>): TuiApi["state"] {
       messages(sessionID) {
         return sync.data.message[sessionID] ?? []
       },
+      status(sessionID) {
+        return sync.data.session_status[sessionID]
+      },
+      permission(sessionID) {
+        return sync.data.permission[sessionID] ?? []
+      },
+      question(sessionID) {
+        return sync.data.question[sessionID] ?? []
+      },
+    },
+    part(messageID) {
+      return sync.data.part[messageID] ?? []
     },
     lsp() {
       return sync.data.lsp.map((item) => ({ id: item.id, root: item.root, status: item.status }))
@@ -159,23 +187,17 @@ function stateApi(sync: ReturnType<typeof useSync>): TuiApi["state"] {
   }
 }
 
-function appApi(sync: ReturnType<typeof useSync>): TuiApi["app"] {
+function appApi(): TuiApi["app"] {
   return {
     get version() {
       return Installation.VERSION
-    },
-    get directory() {
-      const dir = sync.data.path.directory || process.cwd()
-      const out = dir.replace(Global.Path.home, "~")
-      if (sync.data.vcs?.branch) return out + ":" + sync.data.vcs.branch
-      return out
     },
   }
 }
 
 export function createTuiApi(input: Input): TuiApi {
   return {
-    app: appApi(input.sync),
+    app: appApi(),
     command: {
       register(cb) {
         return input.command.register(() => cb())

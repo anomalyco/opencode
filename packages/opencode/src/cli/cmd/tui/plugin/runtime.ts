@@ -39,9 +39,7 @@ type Deps = {
   wait?: Promise<void>
 }
 
-type Api = HostPluginApi & {
-  slots: HostSlots
-}
+type Api = HostPluginApi
 
 type Scope = {
   lifecycle: TuiPluginApi<CliRenderer>["lifecycle"]
@@ -375,7 +373,7 @@ function plug(plugin: TuiSlotPlugin, id: string): HostSlotPlugin {
   }
 }
 
-function pluginApi(api: Api, load: Loaded, state: Scope, base: string): TuiPluginApi<CliRenderer> {
+function pluginApi(api: Api, host: HostSlots, load: Loaded, state: Scope, base: string): TuiPluginApi<CliRenderer> {
   const command: TuiPluginApi<CliRenderer>["command"] = {
     register(cb) {
       return state.wrap(api.command.register(cb))
@@ -397,12 +395,8 @@ function pluginApi(api: Api, load: Loaded, state: Scope, base: string): TuiPlugi
     },
   }
 
-  const theme: TuiPluginApi<CliRenderer>["theme"] = Object.create(api.theme, {
-    install: {
-      value: load.install,
-      configurable: true,
-      enumerable: true,
-    },
+  const theme: TuiPluginApi<CliRenderer>["theme"] = Object.assign(Object.create(api.theme), {
+    install: load.install,
   })
 
   const event: TuiPluginApi<CliRenderer>["event"] = {
@@ -417,23 +411,34 @@ function pluginApi(api: Api, load: Loaded, state: Scope, base: string): TuiPlugi
     register(plugin) {
       const id = count ? `${base}:${count}` : base
       count += 1
-      state.wrap(api.slots.register(plug(plugin, id)))
+      state.wrap(host.register(plug(plugin, id)))
       return id
     },
   }
 
   return {
-    ...api,
+    app: api.app,
     command,
     route,
+    ui: api.ui,
+    keybind: api.keybind,
+    tuiConfig: api.tuiConfig,
+    kv: api.kv,
+    state: api.state,
     theme,
+    get client() {
+      return api.client
+    },
+    scopedClient: api.scopedClient,
+    workspace: api.workspace,
     event,
+    renderer: api.renderer,
     slots,
     lifecycle: state.lifecycle,
   }
 }
 
-async function applyPlugin(api: Api, load: Loaded, meta: TuiPluginMeta, all: Scope[]) {
+async function applyPlugin(api: Api, host: HostSlots, load: Loaded, meta: TuiPluginMeta, all: Scope[]) {
   const opts = load.item ? Config.pluginOptions(load.item) : undefined
 
   for (const [name, value] of uniqueModuleEntries(load.mod)) {
@@ -450,7 +455,7 @@ async function applyPlugin(api: Api, load: Loaded, meta: TuiPluginMeta, all: Sco
     if (!tuiPlugin) continue
 
     const state = scope(load, name)
-    const plugin = pluginApi(api, load, state, sid(meta, name))
+    const plugin = pluginApi(api, host, load, state, sid(meta, name))
     const ready = await Promise.resolve()
       .then(async () => {
         await tuiPlugin(plugin, opts, meta)
@@ -490,10 +495,7 @@ export namespace TuiPluginRuntime {
     }
 
     dir = cwd
-    loaded = load({
-      ...api,
-      slots: setupSlots(api),
-    })
+    loaded = load(api)
     return loaded
   }
 
@@ -512,6 +514,7 @@ export namespace TuiPluginRuntime {
   async function load(api: Api) {
     const cwd = process.cwd()
     const next: Scope[] = []
+    const slots = setupSlots(api)
 
     await Instance.provide({
       directory: cwd,
@@ -526,7 +529,7 @@ export namespace TuiPluginRuntime {
         for (const item of INTERNAL_TUI_PLUGINS) {
           log.info("loading internal tui plugin", { name: item.name })
           const entry = prepInternalPlugin(item)
-          await applyPlugin(api, entry, createMeta(entry.spec, entry.target, undefined, item.name), next)
+          await applyPlugin(api, slots, entry, createMeta(entry.spec, entry.target, undefined, item.name), next)
         }
 
         const loaded = await Promise.all(plugins.map((item) => prepPlugin(config, item)))
@@ -572,7 +575,7 @@ export namespace TuiPluginRuntime {
           // command registration order affects keybind/command precedence,
           // route registration is last-wins when ids collide,
           // and hook chains rely on stable plugin ordering.
-          await applyPlugin(api, entry, createMeta(entry.spec, entry.target, hit), next)
+          await applyPlugin(api, slots, entry, createMeta(entry.spec, entry.target, hit), next)
         }
 
         list = next

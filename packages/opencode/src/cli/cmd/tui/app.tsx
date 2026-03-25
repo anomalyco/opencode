@@ -14,6 +14,7 @@ import {
   batch,
   Show,
   on,
+  onCleanup,
 } from "solid-js"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
 import { Flag } from "@/flag/flag"
@@ -53,10 +54,12 @@ import { Provider } from "@/provider/provider"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
 import { writeHeapSnapshot } from "v8"
+import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { TuiConfigProvider, useTuiConfig } from "./context/tui-config"
 import { TuiConfig } from "@/config/tui"
 import { createTuiApi, TuiPluginRuntime, type RouteMap } from "./plugin"
+import type { TuiHostPluginApi } from "@opencode-ai/plugin/tui"
 import { FormatError, FormatUnknownError } from "@/cli/error"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
@@ -259,6 +262,30 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   const themeState = useTheme()
   const { theme, mode, setMode, locked, lock, unlock } = themeState
   const sync = useSync()
+  const map = new Map<string, OpencodeClient>()
+  const root = "__local__"
+  const scoped = (workspaceID?: string) => {
+    const key = workspaceID ?? root
+    const hit = map.get(key)
+    if (hit) return hit
+
+    const next = createOpencodeClient({
+      baseUrl: sdk.url,
+      fetch: sdk.fetch,
+      directory: sync.data.path.directory || sdk.directory,
+      experimental_workspaceID: workspaceID,
+    })
+    map.set(key, next)
+    return next
+  }
+  const workspace: TuiHostPluginApi["workspace"] = {
+    current() {
+      return sdk.workspaceID
+    },
+    set(workspaceID) {
+      sdk.setWorkspace(workspaceID)
+    },
+  }
   const exit = useExit()
   const promptRef = usePromptRef()
   const routes: RouteMap = new Map()
@@ -267,6 +294,10 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     routeRev()
     return routes.get(name)?.at(-1)?.render
   }
+  onCleanup(() => {
+    map.clear()
+  })
+
   const api = createTuiApi({
     command,
     tuiConfig,
@@ -280,13 +311,18 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     theme: themeState,
     toast,
   })
-  const [ready, setReady] = createSignal(false)
-  TuiPluginRuntime.init({
-    client: sdk.client,
+  const host: TuiHostPluginApi = {
+    ...api,
+    get client() {
+      return sdk.client
+    },
+    scopedClient: scoped,
+    workspace,
     event: sdk.event,
     renderer,
-    ...api,
-  })
+  }
+  const [ready, setReady] = createSignal(false)
+  TuiPluginRuntime.init(host)
     .catch((error) => {
       console.error("Failed to load TUI plugins", error)
     })

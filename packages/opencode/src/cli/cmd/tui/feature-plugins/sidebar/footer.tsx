@@ -1,5 +1,6 @@
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { createMemo, Show } from "solid-js"
+import { Global } from "@/global"
 
 function View(props: { api: TuiPluginApi }) {
   const theme = () => props.api.theme.current
@@ -11,8 +12,10 @@ function View(props: { api: TuiPluginApi }) {
   const done = createMemo(() => props.api.kv.get("dismissed_getting_started", false))
   const show = createMemo(() => !has() && !done())
   const path = createMemo(() => {
-    const dir = props.api.app.directory
-    const list = dir.split("/")
+    const dir = props.api.state.path.directory || process.cwd()
+    const out = dir.replace(Global.Path.home, "~")
+    const text = props.api.state.vcs?.branch ? out + ":" + props.api.state.vcs.branch : out
+    const list = text.split("/")
     return {
       parent: list.slice(0, -1).join("/"),
       name: list.at(-1) ?? "",

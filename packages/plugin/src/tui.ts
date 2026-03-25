@@ -5,7 +5,12 @@ import type {
   McpStatus,
   Todo,
   Message,
+  Part,
   Provider,
+  PermissionRequest,
+  QuestionRequest,
+  SessionStatus,
+  Workspace,
   Config as SdkConfig,
 } from "@opencode-ai/sdk/v2"
 import type { CliRenderer, ParsedKey, RGBA } from "@opentui/core"
@@ -211,12 +216,27 @@ export type TuiState = {
   readonly ready: boolean
   readonly config: SdkConfig
   readonly provider: ReadonlyArray<Provider>
+  readonly path: {
+    state: string
+    config: string
+    worktree: string
+    directory: string
+  }
+  readonly vcs: { branch?: string } | undefined
+  readonly workspace: {
+    list: () => ReadonlyArray<Workspace>
+    get: (workspaceID: string) => Workspace | undefined
+  }
   session: {
     count: () => number
     diff: (sessionID: string) => ReadonlyArray<TuiSidebarFileItem>
     todo: (sessionID: string) => ReadonlyArray<TuiSidebarTodoItem>
     messages: (sessionID: string) => ReadonlyArray<Message>
+    status: (sessionID: string) => SessionStatus | undefined
+    permission: (sessionID: string) => ReadonlyArray<PermissionRequest>
+    question: (sessionID: string) => ReadonlyArray<QuestionRequest>
   }
+  part: (messageID: string) => ReadonlyArray<Part>
   lsp: () => ReadonlyArray<TuiSidebarLspItem>
   mcp: () => ReadonlyArray<TuiSidebarMcpItem>
 }
@@ -225,7 +245,6 @@ type TuiConfigView = Pick<PluginConfig, "$schema" | "theme" | "keybinds" | "plug
 
 export type TuiApp = {
   readonly version: string
-  readonly directory: string
 }
 
 type Frozen<Value> = Value extends (...args: never[]) => unknown
@@ -346,8 +365,15 @@ export type TuiPluginMeta = TuiPluginEntry & {
   state: TuiPluginState
 }
 
+export type TuiWorkspace = {
+  current: () => string | undefined
+  set: (workspaceID?: string) => void
+}
+
 export type TuiHostPluginApi<Renderer = CliRenderer> = TuiApi & {
   client: OpencodeClient
+  scopedClient: (workspaceID?: string) => OpencodeClient
+  workspace: TuiWorkspace
   event: TuiEventBus
   renderer: Renderer
 }
