@@ -81,7 +81,9 @@ function themeCurrent(): HostPluginApi["theme"]["current"] {
 }
 
 type Opts = {
-  client?: HostPluginApi["client"]
+  client?: HostPluginApi["client"] | (() => HostPluginApi["client"])
+  scopedClient?: HostPluginApi["scopedClient"]
+  workspace?: Partial<HostPluginApi["workspace"]>
   renderer?: HostPluginApi["renderer"]
   count?: Count
   keybind?: Partial<HostPluginApi["keybind"]>
@@ -91,7 +93,11 @@ type Opts = {
     ready?: HostPluginApi["state"]["ready"]
     config?: HostPluginApi["state"]["config"]
     provider?: HostPluginApi["state"]["provider"]
+    path?: HostPluginApi["state"]["path"]
+    vcs?: HostPluginApi["state"]["vcs"]
+    workspace?: Partial<HostPluginApi["state"]["workspace"]>
     session?: Partial<HostPluginApi["state"]["session"]>
+    part?: HostPluginApi["state"]["part"]
     lsp?: HostPluginApi["state"]["lsp"]
     mcp?: HostPluginApi["state"]["mcp"]
   }
@@ -109,6 +115,22 @@ type Opts = {
 export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
   const kv: Record<string, unknown> = {}
   const count = opts.count
+  const own = createOpencodeClient({
+    baseUrl: "http://localhost:4096",
+  })
+  const fallback = () => own
+  const read =
+    typeof opts.client === "function"
+      ? opts.client
+      : opts.client
+        ? () => opts.client as HostPluginApi["client"]
+        : fallback
+  const client = () => read()
+  const scopedClient = opts.scopedClient ?? ((_workspaceID?: string) => client())
+  const workspace: HostPluginApi["workspace"] = {
+    current: opts.workspace?.current ?? (() => undefined),
+    set: opts.workspace?.set ?? (() => {}),
+  }
   let depth = 0
   let size: "medium" | "large" = "medium"
   const has = opts.theme?.has ?? (() => false)
@@ -144,15 +166,12 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
       get version() {
         return opts.app?.version ?? "0.0.0-test"
       },
-      get directory() {
-        return opts.app?.directory ?? "~"
-      },
     },
-    client:
-      opts.client ??
-      createOpencodeClient({
-        baseUrl: "http://localhost:4096",
-      }),
+    get client() {
+      return client()
+    },
+    scopedClient,
+    workspace,
     event: {
       on: () => {
         if (count) count.event_add += 1
@@ -243,12 +262,26 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
       get provider() {
         return opts.state?.provider ?? []
       },
+      get path() {
+        return opts.state?.path ?? { state: "", config: "", worktree: "", directory: "" }
+      },
+      get vcs() {
+        return opts.state?.vcs
+      },
+      workspace: {
+        list: opts.state?.workspace?.list ?? (() => []),
+        get: opts.state?.workspace?.get ?? (() => undefined),
+      },
       session: {
         count: opts.state?.session?.count ?? (() => 0),
         diff: opts.state?.session?.diff ?? (() => []),
         todo: opts.state?.session?.todo ?? (() => []),
         messages: opts.state?.session?.messages ?? (() => []),
+        status: opts.state?.session?.status ?? (() => undefined),
+        permission: opts.state?.session?.permission ?? (() => []),
+        question: opts.state?.session?.question ?? (() => []),
       },
+      part: opts.state?.part ?? (() => []),
       lsp: opts.state?.lsp ?? (() => []),
       mcp: opts.state?.mcp ?? (() => []),
     },
