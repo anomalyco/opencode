@@ -15,14 +15,61 @@ import { SessionCompaction } from "./compaction"
 import { Permission } from "@/permission"
 import { Question } from "@/question"
 import { PartID } from "./schema"
+import { FileTime } from "@/file/time"
+import { Filesystem } from "@/util/filesystem"
 import type { SessionID, MessageID } from "./schema"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
+  const STALE = "has been modified since it was last read."
+  const LIMIT = 24_000
   const log = Log.create({ service: "session.processor" })
 
   export type Info = Awaited<ReturnType<typeof create>>
   export type Result = Awaited<ReturnType<Info["process"]>>
+
+  async function reread(input: { sessionID: SessionID; error: string }) {
+    if (!input.error.includes(STALE)) return
+
+    const file = input.error.match(/^File (.+) has been modified since it was last read\./)?.[1]
+    if (!file) return
+
+    const stat = Filesystem.stat(file)
+    if (!stat?.isFile()) return
+
+    const body = await Filesystem.readText(file).catch(() => undefined)
+    if (body === undefined) return
+
+    await FileTime.read(input.sessionID, file)
+    const read = await FileTime.get(input.sessionID, file)
+    const more = body.length > LIMIT
+    const text = more ? body.slice(0, LIMIT) : body
+
+    return {
+      error: [
+        input.error,
+        "",
+        "The latest file content was automatically re-read from disk and the session FileTime stamp was refreshed.",
+        "Base your next edit on this fresh content instead of the previous stale oldString.",
+        stat.mtime ? `Current modification: ${stat.mtime.toISOString()}` : undefined,
+        read ? `Session read timestamp: ${read.toISOString()}` : undefined,
+        "",
+        `<fresh-file path="${file}" truncated="${more}">`,
+        text,
+        `${more ? "\n... (truncated)" : ""}`,
+        "</fresh-file>",
+      ]
+        .filter((item) => item !== undefined)
+        .join("\n"),
+      metadata: {
+        filepath: file,
+        fresh: text,
+        truncated: more,
+        mtime: stat.mtime?.toISOString(),
+        read: read?.toISOString(),
+      },
+    }
+  }
 
   export function create(input: {
     assistantMessage: MessageV2.Assistant
@@ -205,12 +252,21 @@ export namespace SessionProcessor {
                 case "tool-error": {
                   const match = toolcalls[value.toolCallId]
                   if (match && match.state.status === "running") {
+                    const error = value.error instanceof Error ? value.error.message : String(value.error)
+                    const next = await reread({
+                      sessionID: input.sessionID,
+                      error,
+                    })
                     await Session.updatePart({
                       ...match,
                       state: {
                         status: "error",
                         input: value.input ?? match.state.input,
-                        error: value.error instanceof Error ? value.error.message : String(value.error),
+                        error: next?.error ?? error,
+                        metadata: {
+                          ...match.state.metadata,
+                          ...next?.metadata,
+                        },
                         time: {
                           start: match.state.time.start,
                           end: Date.now(),
