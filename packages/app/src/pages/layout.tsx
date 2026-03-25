@@ -967,6 +967,8 @@ export default function Layout(props: ParentProps) {
         : projects[(index + offset + projects.length) % projects.length]
     if (!target) return
 
+    // warm up child store to prevent flicker
+    globalSync.child(target.worktree)
     openProject(target.worktree)
   }
 
