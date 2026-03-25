@@ -890,7 +890,7 @@ export const GithubRunCommand = cmd({
         }
 
         let text = ""
-        Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
+        Bus.subscribe(MessageV2.Event.PartUpdated, (evt) => {
           if (evt.properties.part.sessionID !== session.id) return
           //if (evt.properties.part.messageID === messageID) return
           const part = evt.properties.part
