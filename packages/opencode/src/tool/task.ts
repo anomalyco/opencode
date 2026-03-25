@@ -64,6 +64,11 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
 
       const hasTaskPermission = agent.permission.some((rule) => rule.permission === "task")
+      const allow = (permission: "todowrite" | "todoread") =>
+        agent.permission.some((rule) => rule.permission === permission) &&
+        Permission.evaluate(permission, "*", agent.permission).action === "allow"
+      const write = allow("todowrite")
+      const read = allow("todoread")
 
       const session = await iife(async () => {
         if (params.task_id) {
@@ -75,16 +80,24 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           parentID: ctx.sessionID,
           title: params.description + ` (@${agent.name} subagent)`,
           permission: [
-            {
-              permission: "todowrite",
-              pattern: "*",
-              action: "deny",
-            },
-            {
-              permission: "todoread",
-              pattern: "*",
-              action: "deny",
-            },
+            ...(!write
+              ? [
+                  {
+                    permission: "todowrite" as const,
+                    pattern: "*" as const,
+                    action: "deny" as const,
+                  },
+                ]
+              : []),
+            ...(!read
+              ? [
+                  {
+                    permission: "todoread" as const,
+                    pattern: "*" as const,
+                    action: "deny" as const,
+                  },
+                ]
+              : []),
             ...(hasTaskPermission
               ? []
               : [
@@ -136,8 +149,8 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         },
         agent: agent.name,
         tools: {
-          todowrite: false,
-          todoread: false,
+          ...(!write ? { todowrite: false } : {}),
+          ...(!read ? { todoread: false } : {}),
           ...(hasTaskPermission ? {} : { task: false }),
           ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
         },
