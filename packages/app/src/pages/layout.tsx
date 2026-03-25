@@ -211,13 +211,22 @@ export default function Layout(props: ParentProps) {
 
   onMount(() => {
     const stop = () => setState("sizing", false)
+    const blur = () => reset()
+    const hide = () => {
+      if (document.visibilityState !== "hidden") return
+      reset()
+    }
     window.addEventListener("pointerup", stop)
     window.addEventListener("pointercancel", stop)
     window.addEventListener("blur", stop)
+    window.addEventListener("blur", blur)
+    document.addEventListener("visibilitychange", hide)
     onCleanup(() => {
       window.removeEventListener("pointerup", stop)
       window.removeEventListener("pointercancel", stop)
       window.removeEventListener("blur", stop)
+      window.removeEventListener("blur", blur)
+      document.removeEventListener("visibilitychange", hide)
     })
   })
 
@@ -235,6 +244,12 @@ export default function Layout(props: ParentProps) {
     if (navLeave.current === undefined) return
     clearTimeout(navLeave.current)
     navLeave.current = undefined
+  }
+
+  const reset = () => {
+    disarm()
+    setState("hoverSession", undefined)
+    setHoverProject(undefined)
   }
 
   const arm = () => {
@@ -305,8 +320,7 @@ export default function Layout(props: ParentProps) {
 
   const clearSidebarHoverState = () => {
     if (layout.sidebar.opened()) return
-    setState("hoverSession", undefined)
-    setHoverProject(undefined)
+    reset()
   }
 
   const navigateWithSidebarReset = (href: string) => {
@@ -936,6 +950,26 @@ export default function Layout(props: ParentProps) {
     navigateToSession(session)
   }
 
+  function navigateProjectByOffset(offset: number) {
+    const projects = layout.projects.list()
+    if (projects.length === 0) return
+
+    const current = currentProject()?.worktree
+    const fallback = currentDir() ? projectRoot(currentDir()) : undefined
+    const active = current ?? fallback
+    const index = active ? projects.findIndex((project) => project.worktree === active) : -1
+
+    const target =
+      index === -1
+        ? offset > 0
+          ? projects[0]
+          : projects[projects.length - 1]
+        : projects[(index + offset + projects.length) % projects.length]
+    if (!target) return
+
+    openProject(target.worktree)
+  }
+
   function navigateSessionByUnseen(offset: number) {
     const sessions = currentSessions()
     if (sessions.length === 0) return
@@ -1001,6 +1035,20 @@ export default function Layout(props: ParentProps) {
         category: language.t("command.category.project"),
         keybind: "mod+o",
         onSelect: () => chooseProject(),
+      },
+      {
+        id: "project.previous",
+        title: language.t("command.project.previous"),
+        category: language.t("command.category.project"),
+        keybind: "mod+alt+arrowup",
+        onSelect: () => navigateProjectByOffset(-1),
+      },
+      {
+        id: "project.next",
+        title: language.t("command.project.next"),
+        category: language.t("command.category.project"),
+        keybind: "mod+alt+arrowdown",
+        onSelect: () => navigateProjectByOffset(1),
       },
       {
         id: "provider.connect",
@@ -1750,6 +1798,9 @@ export default function Layout(props: ParentProps) {
     document.documentElement.style.setProperty("--dialog-left-margin", `${sidebarWidth}px`)
   })
 
+  const side = createMemo(() => Math.max(layout.sidebar.width(), 244))
+  const panel = createMemo(() => Math.max(side() - 64, 0))
+
   const loadedSessionDirs = new Set<string>()
 
   createEffect(
@@ -1941,6 +1992,10 @@ export default function Layout(props: ParentProps) {
     onProjectMouseEnter: (worktree, event) => aim.enter(worktree, event),
     onProjectMouseLeave: (worktree) => aim.leave(worktree),
     onProjectFocus: (worktree) => aim.activate(worktree),
+    onHoverOpenChanged: (worktree, hoverOpen) => {
+      if (!hoverOpen && state.hoverProject && state.hoverProject !== worktree) return
+      setState("hoverProject", hoverOpen ? worktree : undefined)
+    },
     navigateToProject,
     openSidebar: () => layout.sidebar.open(),
     closeProject,
@@ -2022,7 +2077,7 @@ export default function Layout(props: ParentProps) {
           "max-w-full overflow-hidden": panelProps.mobile,
         }}
         style={{
-          width: panelProps.mobile ? undefined : `${Math.max(Math.max(layout.sidebar.width(), 244) - 64, 0)}px`,
+          width: panelProps.mobile ? undefined : `${panel()}px`,
         }}
       >
         <Show
@@ -2085,9 +2140,11 @@ export default function Layout(props: ParentProps) {
                     variant="ghost"
                     data-action="project-menu"
                     data-project={slug()}
-                    class="shrink-0 size-6 rounded-md data-[expanded]:bg-surface-base-active"
+                    class="shrink-0 size-6 rounded-md transition-opacity data-[expanded]:bg-surface-base-active"
                     classList={{
-                      "opacity-0 group-hover/project:opacity-100 data-[expanded]:opacity-100": !panelProps.mobile,
+                      "opacity-100": panelProps.mobile || merged(),
+                      "opacity-0 group-hover/project:opacity-100 group-focus-within/project:opacity-100 data-[expanded]:opacity-100":
+                        !panelProps.mobile && !merged(),
                     }}
                     aria-label={language.t("common.moreOptions")}
                   />
@@ -2312,7 +2369,7 @@ export default function Layout(props: ParentProps) {
                 "absolute inset-y-0 left-0": true,
                 "z-10": true,
               }}
-              style={{ width: `${Math.max(layout.sidebar.width(), 244)}px` }}
+              style={{ width: `${side()}px` }}
               ref={(el) => {
                 setState("nav", el)
               }}
@@ -2327,25 +2384,28 @@ export default function Layout(props: ParentProps) {
               }}
             >
               <div class="@container w-full h-full contain-strict">{sidebarContent()}</div>
-              <Show when={layout.sidebar.opened()}>
-                <div onPointerDown={() => setState("sizing", true)}>
-                  <ResizeHandle
-                    direction="horizontal"
-                    size={layout.sidebar.width()}
-                    min={244}
-                    max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.3 + 64}
-                    collapseThreshold={244}
-                    onResize={(w) => {
-                      setState("sizing", true)
-                      if (sizet !== undefined) clearTimeout(sizet)
-                      sizet = window.setTimeout(() => setState("sizing", false), 120)
-                      layout.sidebar.resize(w)
-                    }}
-                    onCollapse={layout.sidebar.close}
-                  />
-                </div>
-              </Show>
             </nav>
+
+            <Show when={layout.sidebar.opened()}>
+              <div
+                class="hidden xl:block absolute inset-y-0 z-30 w-0 overflow-visible"
+                style={{ left: `${side()}px` }}
+                onPointerDown={() => setState("sizing", true)}
+              >
+                <ResizeHandle
+                  direction="horizontal"
+                  size={layout.sidebar.width()}
+                  min={244}
+                  max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.3 + 64}
+                  onResize={(w) => {
+                    setState("sizing", true)
+                    if (sizet !== undefined) clearTimeout(sizet)
+                    sizet = window.setTimeout(() => setState("sizing", false), 120)
+                    layout.sidebar.resize(w)
+                  }}
+                />
+              </div>
+            </Show>
 
             <div
               class="hidden xl:block pointer-events-none absolute top-0 right-0 z-0 border-t border-border-weaker-base"
@@ -2386,7 +2446,7 @@ export default function Layout(props: ParentProps) {
                   !state.sizing,
               }}
               style={{
-                "--main-left": layout.sidebar.opened() ? `${Math.max(layout.sidebar.width(), 244)}px` : "4rem",
+                "--main-left": layout.sidebar.opened() ? `${side()}px` : "4rem",
               }}
             >
               <main
@@ -2433,7 +2493,7 @@ export default function Layout(props: ParentProps) {
                 "duration-180 ease-out": state.peeked && !layout.sidebar.opened(),
                 "duration-120 ease-in": !state.peeked || layout.sidebar.opened(),
               }}
-              style={{ left: `calc(4rem + ${Math.max(Math.max(layout.sidebar.width(), 244) - 64, 0)}px)` }}
+              style={{ left: `calc(4rem + ${panel()}px)` }}
             >
               <div class="h-full w-px" style={{ "box-shadow": "var(--shadow-sidebar-overlay)" }} />
             </div>

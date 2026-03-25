@@ -1,6 +1,8 @@
-import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node"
+import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Effect, Layer, Schema, ServiceMap, Stream } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
+import { makeRunPromise } from "@/effect/run-service"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import path from "path"
@@ -14,10 +16,14 @@ declare global {
   const OPENCODE_CHANNEL: string
 }
 
+import semver from "semver"
+
 export namespace Installation {
   const log = Log.create({ service: "installation" })
 
   export type Method = "curl" | "npm" | "yarn" | "pnpm" | "bun" | "brew" | "scoop" | "choco" | "unknown"
+
+  export type ReleaseType = "patch" | "minor" | "major"
 
   export const Event = {
     Updated: BusEvent.define(
@@ -32,6 +38,17 @@ export namespace Installation {
         version: z.string(),
       }),
     ),
+  }
+
+  export function getReleaseType(current: string, latest: string): ReleaseType {
+    const currMajor = semver.major(current)
+    const currMinor = semver.minor(current)
+    const newMajor = semver.major(latest)
+    const newMinor = semver.minor(latest)
+
+    if (newMajor > currMajor) return "major"
+    if (newMinor > currMinor) return "minor"
+    return "patch"
   }
 
   export const Info = z
@@ -293,7 +310,7 @@ export namespace Installation {
               result = yield* run(["scoop", "install", `opencode@${target}`])
               break
             default:
-              throw new Error(`Unknown method: ${m}`)
+              return yield* new UpgradeFailedError({ stderr: `Unknown method: ${m}` })
           }
           if (!result || result.code !== 0) {
             const stderr = m === "choco" ? "not running from an elevated command shell" : result?.stderr || ""
@@ -324,32 +341,26 @@ export namespace Installation {
 
   export const defaultLayer = layer.pipe(
     Layer.provide(FetchHttpClient.layer),
-    Layer.provide(NodeChildProcessSpawner.layer),
+    Layer.provide(CrossSpawnSpawner.layer),
     Layer.provide(NodeFileSystem.layer),
     Layer.provide(NodePath.layer),
   )
 
-  // Legacy adapters — dynamic import avoids circular dependency since
-  // foundational modules (db.ts, provider/models.ts) import Installation
-  // at load time, and runtime transitively loads those same modules.
-  async function runPromise<A>(f: (service: Interface) => Effect.Effect<A, any>) {
-    const { runtime } = await import("@/effect/runtime")
-    return runtime.runPromise(Service.use(f))
-  }
+  const runPromise = makeRunPromise(Service, defaultLayer)
 
-  export function info(): Promise<Info> {
+  export async function info(): Promise<Info> {
     return runPromise((svc) => svc.info())
   }
 
-  export function method(): Promise<Method> {
+  export async function method(): Promise<Method> {
     return runPromise((svc) => svc.method())
   }
 
-  export function latest(installMethod?: Method): Promise<string> {
+  export async function latest(installMethod?: Method): Promise<string> {
     return runPromise((svc) => svc.latest(installMethod))
   }
 
-  export function upgrade(m: Method, target: string): Promise<void> {
+  export async function upgrade(m: Method, target: string): Promise<void> {
     return runPromise((svc) => svc.upgrade(m, target))
   }
 }

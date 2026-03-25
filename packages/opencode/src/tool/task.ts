@@ -10,7 +10,7 @@ import { SessionPrompt } from "../session/prompt"
 import { iife } from "@/util/iife"
 import { defer } from "@/util/defer"
 import { Config } from "../config/config"
-import { Permission as PermissionNext } from "@/permission/service"
+import { Permission } from "@/permission"
 
 const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
@@ -31,7 +31,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
   // Filter agents by permissions if agent provided
   const caller = ctx?.agent
   const accessibleAgents = caller
-    ? agents.filter((a) => PermissionNext.evaluate("task", a.name, caller.permission).action !== "deny")
+    ? agents.filter((a) => Permission.evaluate("task", a.name, caller.permission).action !== "deny")
     : agents
   const list = accessibleAgents.toSorted((a, b) => a.name.localeCompare(b.name))
 
