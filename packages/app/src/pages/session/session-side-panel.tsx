@@ -19,8 +19,7 @@ import { useCommand } from "@/context/command"
 import { useFile, type SelectedLineRange } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
-import { usePlatform } from "@/context/platform"
-import { useSettings } from "@/context/settings"
+import { useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
 import { FileTabContent } from "@/pages/session/file-tabs"
@@ -53,6 +52,7 @@ export function SessionSidePanel(props: {
   const sync = useSync()
   const file = useFile()
   const language = useLanguage()
+  const server = useServer()
   const command = useCommand()
   const dialog = useDialog()
   const { sessionKey, tabs, view, params } = useSessionLayout()
@@ -118,6 +118,7 @@ export function SessionSidePanel(props: {
     if (!state?.loaded) return false
     return file.tree.children("").length === 0
   })
+  const openclaw = createMemo(() => server.current?.integration === "openclaw")
 
   const normalizeTab = (tab: string) => {
     if (!tab.startsWith("file://")) return tab
@@ -329,36 +330,30 @@ export function SessionSidePanel(props: {
                           </div>
                         </div>
                       </Show>
-                    </Tabs.Content>
-
-                    <Show when={contextOpen()}>
-                      <Tabs.Content value="context" class="flex flex-col h-full overflow-hidden contain-strict">
-                        <Show when={activeTab() === "context"}>
-                          <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
-                            <SessionContextTab />
-                          </div>
-                        </Show>
-                      </Tabs.Content>
-                    </Show>
-
-                    <Show when={activeFileTab()} keyed>
-                      {(tab) => <FileTabContent tab={tab} />}
-                    </Show>
-                  </Tabs>
-                  <DragOverlay>
-                    <Show when={store.activeDraggable} keyed>
-                      {(tab) => {
-                        const path = file.pathFromTab(tab)
-                        return (
-                          <div data-component="tabs-drag-preview">
-                            <Show when={path}>{(p) => <FileVisual active path={p()} />}</Show>
-                          </div>
-                        )
-                      }}
-                    </Show>
-                  </DragOverlay>
-                </DragDropProvider>
-              </div>
+                    </Match>
+                    <Match when={true}>
+                      {empty(
+                        language.t(sync.project && !sync.project.vcs ? "session.review.noChanges" : reviewEmptyKey()),
+                      )}
+                    </Match>
+                  </Switch>
+                </Tabs.Content>
+                <Tabs.Content value="all" class="bg-background-stronger px-3 py-0">
+                  <Switch>
+                    <Match when={openclaw()}>{empty(language.t("toast.file.listFailed.openclaw"))}</Match>
+                    <Match when={nofiles()}>{empty(language.t("session.files.empty"))}</Match>
+                    <Match when={true}>
+                      <FileTree
+                        path=""
+                        class="pt-3"
+                        modified={diffFiles()}
+                        kinds={kinds()}
+                        onFileClick={(node) => openTab(file.tab(node.path))}
+                      />
+                    </Match>
+                  </Switch>
+                </Tabs.Content>
+              </Tabs>
             </div>
 
             <Show when={shown()}>

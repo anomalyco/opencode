@@ -13,7 +13,7 @@ export interface SlashCommand {
   title: string
   description?: string
   keybind?: string
-  type: "builtin" | "custom"
+  type: "builtin" | "custom" | "openclaw"
   source?: "command" | "mcp" | "skill"
 }
 
