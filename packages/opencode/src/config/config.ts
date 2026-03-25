@@ -31,6 +31,7 @@ import { Event } from "../server/event"
 import { Glob } from "../util/glob"
 import { PackageRegistry } from "@/bun/registry"
 import { proxied } from "@/util/proxied"
+import { iife } from "@/util/iife"
 import { Account } from "@/account"
 import { ConfigPaths } from "./paths"
 import { Filesystem } from "@/util/filesystem"
@@ -154,10 +155,10 @@ export namespace Config {
       }
 
       deps.push(
-        (async () => {
+        iife(async () => {
           const ok = await needsInstall(dir)
           if (ok) await installDependencies(dir)
-        })(),
+        }),
       )
 
       result.command = mergeDeep(result.command ?? {}, await loadCommand(dir))
@@ -1308,16 +1309,17 @@ export namespace Config {
       )
 
       const get = Effect.fn("Config.get")(function* () {
-        return (yield* InstanceState.get(state)).config
+        return yield* InstanceState.use(state, (state) => state.config)
       })
 
       const directories = Effect.fn("Config.directories")(function* () {
-        return (yield* InstanceState.get(state)).directories
+        return yield* InstanceState.use(state, (state) => state.directories)
       })
 
       const waitForDependencies = Effect.fn("Config.waitForDependencies")(function* () {
-        const deps = (yield* InstanceState.get(state)).deps
-        yield* Effect.promise(() => Promise.all(deps).then(() => undefined))
+        yield* InstanceState.useEffect(state, (state) =>
+          Effect.promise(() => Promise.all(state.deps).then(() => undefined)),
+        )
       })
 
       const update = Effect.fn("Config.update")(function* (config: Info) {
@@ -1329,12 +1331,7 @@ export namespace Config {
 
       const updateGlobal = Effect.fn("Config.updateGlobal")(function* (config: Info) {
         const file = globalConfigFile()
-        const before = yield* Effect.promise(() =>
-          Filesystem.readText(file).catch((err: any) => {
-            if (err.code === "ENOENT") return "{}"
-            throw new JsonError({ path: file }, { cause: err })
-          }),
-        )
+        const before = (yield* Effect.promise(() => readFile(file))) ?? "{}"
 
         const next = yield* Effect.promise(async () => {
           if (!file.endsWith(".jsonc")) {
@@ -1351,8 +1348,8 @@ export namespace Config {
         })
 
         yield* resetGlobal()
-        yield* Effect.promise(() =>
-          Instance.disposeAll()
+        yield* Effect.sync(() => {
+          void Instance.disposeAll()
             .catch(() => undefined)
             .finally(() => {
               GlobalBus.emit("event", {
@@ -1362,8 +1359,8 @@ export namespace Config {
                   properties: {},
                 },
               })
-            }),
-        )
+            })
+        })
 
         return next
       })
