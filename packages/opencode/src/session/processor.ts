@@ -42,17 +42,10 @@ export namespace SessionProcessor {
       const parts = await MessageV2.parts(input.assistantMessage.id)
       for (const part of parts) {
         if (part.type === "tool" && part.state.status !== "completed" && part.state.status !== "error") {
-          await Session.updatePart({
-            ...part,
-            state: {
-              ...part.state,
-              status: "error",
-              error: "Tool execution aborted",
-              time: {
-                start: Date.now(),
-                end: Date.now(),
-              },
-            },
+          await Session.removePart({
+            sessionID: input.sessionID,
+            messageID: input.assistantMessage.id,
+            partID: part.id,
           })
           continue
         }
