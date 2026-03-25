@@ -16,6 +16,15 @@ type TerminalProbeControl = {
 
 export type E2EWindow = Window & {
   __opencode_e2e?: {
+    sidebar?: {
+      enabled?: boolean
+    }
+    session?: {
+      enabled?: boolean
+      controls?: {
+        promote?: (dir: string, session: string) => void
+      }
+    }
     model?: {
       enabled?: boolean
       current?: ModelProbeState

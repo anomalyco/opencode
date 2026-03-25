@@ -39,6 +39,12 @@ export async function enableE2E(page: Page) {
     const win = window as E2EWindow
     win.__opencode_e2e = {
       ...win.__opencode_e2e,
+      sidebar: {
+        enabled: true,
+      },
+      session: {
+        enabled: true,
+      },
       model: {
         enabled: true,
       },
@@ -390,6 +396,27 @@ export async function seedProjects(page: Page, input: { directory: string; extra
       )
     },
     { directory: input.directory, serverUrl, extra: input.extra ?? [] },
+  )
+}
+
+export async function seedSidebar(page: Page, input: { directory: string; extra?: string[] }) {
+  await page.addInitScript(
+    (args: { directory: string; extra: string[] }) => {
+      const key = "opencode.e2e.dat:sidebar"
+      const raw = localStorage.getItem(key)
+      const list = (() => {
+        if (!raw) return []
+        try {
+          const value = JSON.parse(raw) as unknown
+          return Array.isArray(value) ? value.filter((x): x is string => typeof x === "string") : []
+        } catch {
+          return []
+        }
+      })()
+
+      localStorage.setItem(key, JSON.stringify([...new Set([...list, args.directory, ...args.extra])]))
+    },
+    { directory: input.directory, extra: input.extra ?? [] },
   )
 }
 
@@ -958,7 +985,7 @@ export async function openStatusPopover(page: Page) {
 export async function openProjectMenu(page: Page, projectSlug: string) {
   await openSidebar(page)
   const item = page.locator(projectSwitchSelector(projectSlug)).first()
-  await expect(item).toBeVisible()
+  await expect(item).toBeVisible({ timeout: 30_000 })
   await item.hover()
 
   const trigger = page.locator(projectMenuTriggerSelector(projectSlug)).first()

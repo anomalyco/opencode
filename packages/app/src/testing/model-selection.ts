@@ -12,6 +12,7 @@ type State = {
 export type ModelProbeState = {
   dir?: string
   sessionID?: string
+  variants?: string[]
   last?: {
     type: "agent" | "model" | "variant"
     agent?: string
@@ -61,6 +62,7 @@ export const modelProbe = {
     if (!state) return
     state.current = {
       ...input,
+      variants: input.variants ? [...input.variants] : undefined,
       model: input.model ? { ...input.model } : undefined,
       last: input.last
         ? {

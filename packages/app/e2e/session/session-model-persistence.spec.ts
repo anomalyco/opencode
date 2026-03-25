@@ -1,14 +1,6 @@
 import type { Locator, Page } from "@playwright/test"
 import { test, expect } from "../fixtures"
-import {
-  openSidebar,
-  resolveSlug,
-  sessionIDFromUrl,
-  setWorkspacesEnabled,
-  waitSession,
-  waitSessionIdle,
-  waitSlug,
-} from "../actions"
+import { openSidebar, resolveSlug, sessionIDFromUrl, setWorkspacesEnabled, waitSession, waitSlug } from "../actions"
 import {
   promptAgentSelector,
   promptModelSelector,
@@ -29,6 +21,17 @@ type Probe = {
   dir?: string
   sessionID?: string
   model?: { providerID: string; modelID: string }
+  variants?: string[]
+}
+
+type SessionWindow = Window & {
+  __opencode_e2e?: {
+    session?: {
+      controls?: {
+        promote?: (dir: string, session: string) => void
+      }
+    }
+  }
 }
 
 const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
@@ -95,9 +98,23 @@ async function variantCount(page: Page) {
   const select = page.locator(promptVariantSelector)
   await expect(select).toBeVisible()
   await select.locator('[data-slot="select-select-trigger"]').click()
-  const count = await page.locator('[data-slot="select-select-item"]').count()
+  const list = page.locator('[data-slot="select-select-content-list"]').last()
+  await expect(list).toBeVisible()
+  const count = await list.locator('[data-slot="select-select-item"]').count()
   await page.keyboard.press("Escape")
   return count
+}
+
+async function waitVariants(page: Page, count: number) {
+  await expect
+    .poll(
+      () =>
+        probe(page).then((state) => {
+          return (state?.variants?.length ?? 0) + 1
+        }),
+      { timeout: 30_000 },
+    )
+    .toBeGreaterThanOrEqual(count)
 }
 
 async function agents(page: Page) {
@@ -111,6 +128,7 @@ async function agents(page: Page) {
 
 async function ensureVariant(page: Page, directory: string): Promise<Footer> {
   const current = await read(page)
+  await waitVariants(page, 2)
   if ((await variantCount(page)) >= 2) return current
 
   const cfg = await createSdk(directory)
@@ -132,11 +150,14 @@ async function ensureVariant(page: Page, directory: string): Promise<Footer> {
 
 async function chooseDifferentVariant(page: Page): Promise<Footer> {
   const current = await read(page)
+  await waitVariants(page, 2)
   const select = page.locator(promptVariantSelector)
   await expect(select).toBeVisible()
   await select.locator('[data-slot="select-select-trigger"]').click()
 
-  const items = page.locator('[data-slot="select-select-item"]')
+  const list = page.locator('[data-slot="select-select-content-list"]').last()
+  await expect(list).toBeVisible()
+  const items = list.locator('[data-slot="select-select-item"]')
   const count = await items.count()
   if (count < 2) throw new Error("Current model has no alternate variant to select")
 
@@ -194,19 +215,21 @@ async function submit(page: Page, value: string) {
   return id
 }
 
-async function waitUser(directory: string, sessionID: string) {
+async function createSession(page: Page, directory: string, title: string) {
   const sdk = createSdk(directory)
-  await expect
-    .poll(
-      async () => {
-        const items = await sdk.session.messages({ sessionID, limit: 20 }).then((x) => x.data ?? [])
-        return items.some((item) => item.info.role === "user")
-      },
-      { timeout: 30_000 },
-    )
-    .toBe(true)
-  await sdk.session.abort({ sessionID }).catch(() => undefined)
-  await waitSessionIdle(sdk, sessionID, 30_000).catch(() => undefined)
+  const data = await sdk.session.create({ title }).then((x) => x.data)
+  if (!data?.id) throw new Error("Session create did not return an id")
+
+  await page.evaluate(
+    (input) => {
+      const fn = (window as SessionWindow).__opencode_e2e?.session?.controls?.promote
+      if (!fn) throw new Error("Session promote control is unavailable")
+      fn(input.directory, input.id)
+    },
+    { directory, id: data.id },
+  )
+
+  return data.id
 }
 
 async function createWorkspace(page: Page, root: string, seen: string[]) {
@@ -260,9 +283,9 @@ test("session model and variant restore per session without leaking into new ses
 
     await ensureVariant(page, directory)
     const firstState = await chooseDifferentVariant(page)
-    const first = await submit(page, `session variant ${Date.now()}`)
+    const first = await createSession(page, directory, `session variant ${Date.now()}`)
     trackSession(first)
-    await waitUser(directory, first)
+    await goto(page, directory, first)
 
     await page.reload()
     await waitSession(page, { directory, sessionID: first })
@@ -273,9 +296,9 @@ test("session model and variant restore per session without leaking into new ses
     expect(fresh.variant).not.toBe(firstState.variant)
 
     const secondState = await chooseOtherModel(page)
-    const second = await submit(page, `session model ${Date.now()}`)
+    const second = await createSession(page, directory, `session model ${Date.now()}`)
     trackSession(second)
-    await waitUser(directory, second)
+    await goto(page, directory, second)
 
     await goto(page, directory, first)
     await waitFooter(page, firstState)
@@ -296,9 +319,9 @@ test("session model restore across workspaces", async ({ page, withProject }) =>
 
     await ensureVariant(page, root)
     const firstState = await chooseDifferentVariant(page)
-    const first = await submit(page, `root session ${Date.now()}`)
+    const first = await createSession(page, root, `root session ${Date.now()}`)
     trackSession(first, root)
-    await waitUser(root, first)
+    await goto(page, root, first)
 
     await openSidebar(page)
     await setWorkspacesEnabled(page, slug, true)
@@ -308,9 +331,9 @@ test("session model restore across workspaces", async ({ page, withProject }) =>
     trackDirectory(oneDir)
 
     const secondState = await chooseOtherModel(page)
-    const second = await submit(page, `workspace one ${Date.now()}`)
+    const second = await createSession(page, oneDir, `workspace one ${Date.now()}`)
     trackSession(second, oneDir)
-    await waitUser(oneDir, second)
+    await goto(page, oneDir, second)
 
     const two = await createWorkspace(page, slug, [one.slug])
     const twoDir = await newWorkspaceSession(page, two.slug)
@@ -318,9 +341,9 @@ test("session model restore across workspaces", async ({ page, withProject }) =>
 
     await ensureVariant(page, twoDir)
     const thirdState = await chooseDifferentVariant(page)
-    const third = await submit(page, `workspace two ${Date.now()}`)
+    const third = await createSession(page, twoDir, `workspace two ${Date.now()}`)
     trackSession(third, twoDir)
-    await waitUser(twoDir, third)
+    await goto(page, twoDir, third)
 
     await goto(page, root, first)
     await waitFooter(page, firstState)

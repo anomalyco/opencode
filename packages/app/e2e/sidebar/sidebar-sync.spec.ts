@@ -1,6 +1,15 @@
 import type { Browser, Page } from "@playwright/test"
 import { test, expect } from "../fixtures"
-import { cleanupTestProject, clickMenuItem, createTestProject, enableE2E, openProjectMenu, openSidebar, seedProjects, waitSession } from "../actions"
+import {
+  cleanupTestProject,
+  clickMenuItem,
+  createTestProject,
+  enableE2E,
+  openProjectMenu,
+  openSidebar,
+  seedProjects,
+  waitSession,
+} from "../actions"
 import { projectSwitchSelector, sidebarNavSelector } from "../selectors"
 import { createSdk, dirSlug, sessionPath } from "../utils"
 
@@ -28,6 +37,8 @@ async function clearRail(sdk: ReturnType<typeof createSdk>) {
 }
 
 test.describe("sidebar sync", () => {
+  test.describe.configure({ mode: "serial" })
+
   test("project opened syncs to a fresh client UI", async ({ browser }) => {
     let directory = ""
     try {

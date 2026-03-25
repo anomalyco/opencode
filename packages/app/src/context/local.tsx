@@ -6,6 +6,7 @@ import { createStore } from "solid-js/store"
 import { useModels } from "@/context/models"
 import { useProviders } from "@/hooks/use-providers"
 import { modelEnabled, modelProbe } from "@/testing/model-selection"
+import { sessionEnabled, sessionProbe } from "@/testing/session"
 import { Persist, persisted } from "@/utils/persist"
 import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "./model-variant"
 import { useSDK } from "./sdk"
@@ -396,6 +397,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         modelProbe.set({
           dir: sdk.directory,
           sessionID: id(),
+          variants: result.model.variant.list(),
           last: store.last,
           agent: agent?.name,
           model: model
@@ -415,6 +417,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       })
 
       onCleanup(() => modelProbe.clear())
+    }
+
+    if (sessionEnabled()) {
+      sessionProbe.control({ promote: result.session.promote })
+      onCleanup(() => sessionProbe.clear())
     }
 
     return result

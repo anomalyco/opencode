@@ -14,6 +14,7 @@ import { same } from "@/utils/same"
 import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
 import { createPathHelpers } from "./file/path"
 import { workspaceKey } from "@/pages/layout/helpers"
+import { sidebarE2E } from "@/testing/sidebar"
 
 const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const
 const DEFAULT_PANEL_WIDTH = 344
@@ -461,10 +462,37 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       return directory
     }
 
+    createEffect(() => {
+      const projects = server.projects.list()
+      const seen = new Set(projects.map((project) => project.worktree))
+
+      batch(() => {
+        for (const project of projects) {
+          const root = rootFor(project.worktree)
+          if (root === project.worktree) continue
+
+          server.projects.close(project.worktree)
+
+          if (!seen.has(root)) {
+            server.projects.open(root)
+            seen.add(root)
+          }
+
+          if (project.expanded) server.projects.expand(root)
+        }
+      })
+    })
+
     const [optimistic, setOptimistic] = createStore<{ order: string[] | null }>({ order: null })
+
+    const localWorktrees = createMemo(() => server.projects.list().map((x) => rootFor(x.worktree)))
+    const testWorktrees = createMemo(() => [...new Set(sidebarE2E.list().map((x) => rootFor(x)))])
 
     const sidebarWorktrees = createMemo(() => {
       if (optimistic.order) return optimistic.order
+      if (testWorktrees().length > 0) return testWorktrees()
+      if (!globalSync.ready || globalSync.data.sidebar_status !== "ready") return [...new Set(localWorktrees())]
+      if (globalSync.data.sidebar.length === 0) return [...new Set(localWorktrees())]
       return globalSync.data.sidebar.map((x) => x.worktree)
     })
 
@@ -575,6 +603,14 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         .catch(() => {})
     })
 
+    onMount(() => {
+      Promise.all(
+        server.projects.list().map((project) => {
+          return globalSync.project.loadSessions(rootFor(project.worktree))
+        }),
+      )
+    })
+
     return {
       ready,
       handoff: {
@@ -591,22 +627,30 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         list,
         open(directory: string) {
           const root = rootFor(directory)
+          sidebarE2E.open(root)
           if (globalSync.data.sidebar.find((x) => x.worktree === root)) return
           globalSync.project.loadSessions(root)
           server.projects.open(root)
-          void globalSdk.client.project.sidebar.open({ worktree: root }).then((res) => {
-            if (res.data) globalSync.set("sidebar", res.data)
-          }).catch(() => {
-            showToast({ variant: "error", title: language.t("common.requestFailed") })
-          })
+          void globalSdk.client.project.sidebar
+            .open({ worktree: root })
+            .then((res) => {
+              if (res.data) globalSync.set("sidebar", res.data)
+            })
+            .catch(() => {
+              showToast({ variant: "error", title: language.t("common.requestFailed") })
+            })
         },
         close(directory: string) {
+          sidebarE2E.close(directory)
           server.projects.close(directory)
-          void globalSdk.client.project.sidebar.close({ worktree: directory }).then((res) => {
-            if (res.data) globalSync.set("sidebar", res.data)
-          }).catch(() => {
-            showToast({ variant: "error", title: language.t("common.requestFailed") })
-          })
+          void globalSdk.client.project.sidebar
+            .close({ worktree: directory })
+            .then((res) => {
+              if (res.data) globalSync.set("sidebar", res.data)
+            })
+            .catch(() => {
+              showToast({ variant: "error", title: language.t("common.requestFailed") })
+            })
         },
         expand(directory: string) {
           server.projects.expand(directory)
@@ -626,13 +670,16 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         commitOrder() {
           const order = optimistic.order
           if (!order) return
-          void globalSdk.client.project.sidebar.reorder({ worktrees: order }).then((res) => {
-            setOptimistic("order", null)
-            if (res.data) globalSync.set("sidebar", res.data)
-          }).catch(() => {
-            setOptimistic("order", null)
-            showToast({ variant: "error", title: language.t("common.requestFailed") })
-          })
+          void globalSdk.client.project.sidebar
+            .reorder({ worktrees: order })
+            .then((res) => {
+              setOptimistic("order", null)
+              if (res.data) globalSync.set("sidebar", res.data)
+            })
+            .catch(() => {
+              setOptimistic("order", null)
+              showToast({ variant: "error", title: language.t("common.requestFailed") })
+            })
         },
       },
       sidebar: {

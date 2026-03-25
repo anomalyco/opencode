@@ -6,6 +6,7 @@ import {
   createTestProject,
   enableE2E,
   setHealthPhase,
+  seedSidebar,
   seedProjects,
   sessionIDFromUrl,
   waitSlug,
@@ -125,6 +126,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
 
 async function seedStorage(page: Page, input: { directory: string; extra?: string[] }) {
   await seedProjects(page, input)
+  await seedSidebar(page, input)
   await enableE2E(page)
 }
 
