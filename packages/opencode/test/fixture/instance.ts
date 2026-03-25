@@ -28,9 +28,13 @@ export function withServices<S>(
     directory,
     fn: async () => {
       const ctx = Layer.sync(InstanceContext, () =>
-        InstanceContext.of({ directory: Instance.directory, project: Instance.project }),
+        InstanceContext.of({
+          directory: Instance.directory,
+          worktree: Instance.worktree,
+          project: Instance.project,
+        }),
       )
-      let resolved: Layer.Layer<S> = Layer.fresh(layer).pipe(Layer.provide(ctx)) as any
+      let resolved: Layer.Layer<S> = layer.pipe(Layer.provide(ctx)) as any
       if (options?.provide) {
         for (const l of options.provide) {
           resolved = resolved.pipe(Layer.provide(l)) as any

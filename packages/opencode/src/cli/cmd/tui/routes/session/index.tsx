@@ -907,12 +907,12 @@ export function Session() {
             const filename = options.filename.trim()
             const filepath = path.join(exportDir, filename)
 
-            await Bun.write(filepath, transcript)
+            await Filesystem.write(filepath, transcript)
 
             // Open with EDITOR if available
             const result = await Editor.open({ value: transcript, renderer })
             if (result !== undefined) {
-              await Bun.write(filepath, result)
+              await Filesystem.write(filepath, result)
             }
 
             toast.show({ message: `Session exported to ${filename}`, variant: "success" })
@@ -1465,6 +1465,8 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
               streaming={true}
               content={props.part.text.trim()}
               conceal={ctx.conceal()}
+              fg={theme.markdownText}
+              bg={theme.background}
             />
           </Match>
           <Match when={!Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
@@ -1667,6 +1669,7 @@ function InlineTool(props: {
 
   const denied = createMemo(
     () =>
+      error()?.includes("QuestionRejectedError") ||
       error()?.includes("rejected permission") ||
       error()?.includes("specified a rule") ||
       error()?.includes("user dismissed"),

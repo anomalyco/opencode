@@ -1,16 +1,17 @@
-import { BusEvent } from "@/bus/bus-event"
-import { Bus } from "@/bus"
-import z from "zod"
-import { Log } from "@/util/log"
-import { Instance } from "./instance"
-import { InstanceContext } from "@/effect/instance-context"
-import { FileWatcher } from "@/file/watcher"
-import { git } from "@/util/git"
 import { Effect, Layer, ServiceMap } from "effect"
-
-const log = Log.create({ service: "vcs" })
+import { Bus } from "@/bus"
+import { BusEvent } from "@/bus/bus-event"
+import { InstanceState } from "@/effect/instance-state"
+import { makeRunPromise } from "@/effect/run-service"
+import { FileWatcher } from "@/file/watcher"
+import { Log } from "@/util/log"
+import { git } from "@/util/git"
+import { Instance } from "./instance"
+import z from "zod"
 
 export namespace Vcs {
+  const log = Log.create({ service: "vcs" })
+
   export const Event = {
     BranchUpdated: BusEvent.define(
       "vcs.branch.updated",
@@ -28,57 +29,83 @@ export namespace Vcs {
       ref: "VcsInfo",
     })
   export type Info = z.infer<typeof Info>
-}
 
-export namespace VcsService {
-  export interface Service {
+  export interface Interface {
     readonly init: () => Effect.Effect<void>
     readonly branch: () => Effect.Effect<string | undefined>
   }
-}
 
-export class VcsService extends ServiceMap.Service<VcsService, VcsService.Service>()("@opencode/Vcs") {
-  static readonly layer = Layer.effect(
-    VcsService,
+  interface State {
+    current: string | undefined
+  }
+
+  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Vcs") {}
+
+  export const layer = Layer.effect(
+    Service,
     Effect.gen(function* () {
-      const instance = yield* InstanceContext
-      let current: string | undefined
-
-      if (instance.project.vcs === "git") {
-        const currentBranch = async () => {
-          const result = await git(["rev-parse", "--abbrev-ref", "HEAD"], {
-            cwd: instance.project.worktree,
-          })
-          if (result.exitCode !== 0) return undefined
-          const text = result.text().trim()
-          return text || undefined
-        }
-
-        current = yield* Effect.promise(() => currentBranch())
-        log.info("initialized", { branch: current })
-
-        const unsubscribe = Bus.subscribe(
-          FileWatcher.Event.Updated,
-          Instance.bind(async (evt) => {
-            if (!evt.properties.file.endsWith("HEAD")) return
-            const next = await currentBranch()
-            if (next !== current) {
-              log.info("branch changed", { from: current, to: next })
-              current = next
-              Bus.publish(Vcs.Event.BranchUpdated, { branch: next })
+      const state = yield* InstanceState.make<State>(
+        Effect.fn("Vcs.state")((ctx) =>
+          Effect.gen(function* () {
+            if (ctx.project.vcs !== "git") {
+              return { current: undefined }
             }
+
+            const getCurrentBranch = async () => {
+              const result = await git(["rev-parse", "--abbrev-ref", "HEAD"], {
+                cwd: ctx.worktree,
+              })
+              if (result.exitCode !== 0) return undefined
+              const text = result.text().trim()
+              return text || undefined
+            }
+
+            const value = {
+              current: yield* Effect.promise(() => getCurrentBranch()),
+            }
+            log.info("initialized", { branch: value.current })
+
+            yield* Effect.acquireRelease(
+              Effect.sync(() =>
+                Bus.subscribe(
+                  FileWatcher.Event.Updated,
+                  Instance.bind(async (evt) => {
+                    if (!evt.properties.file.endsWith("HEAD")) return
+                    const next = await getCurrentBranch()
+                    if (next !== value.current) {
+                      log.info("branch changed", { from: value.current, to: next })
+                      value.current = next
+                      Bus.publish(Event.BranchUpdated, { branch: next })
+                    }
+                  }),
+                ),
+              ),
+              (unsubscribe) => Effect.sync(unsubscribe),
+            )
+
+            return value
           }),
-        )
+        ),
+      )
 
-        yield* Effect.addFinalizer(() => Effect.sync(unsubscribe))
-      }
-
-      return VcsService.of({
-        init: Effect.fn("VcsService.init")(function* () {}),
-        branch: Effect.fn("VcsService.branch")(function* () {
-          return current
+      return Service.of({
+        init: Effect.fn("Vcs.init")(function* () {
+          yield* InstanceState.get(state)
+        }),
+        branch: Effect.fn("Vcs.branch")(function* () {
+          return yield* InstanceState.use(state, (x) => x.current)
         }),
       })
     }),
   )
+
+  const runPromise = makeRunPromise(Service, layer)
+
+  export function init() {
+    return runPromise((svc) => svc.init())
+  }
+
+  export function branch() {
+    return runPromise((svc) => svc.branch())
+  }
 }

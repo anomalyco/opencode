@@ -4,6 +4,7 @@ import { MessageV2 } from "../../src/session/message-v2"
 import type { Provider } from "../../src/provider/provider"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { SessionID, MessageID, PartID } from "../../src/session/schema"
+import { Question } from "../../src/question"
 
 const sessionID = SessionID.make("session")
 const providerID = ProviderID.make("test")
@@ -912,6 +913,17 @@ describe("session.message-v2.fromError", () => {
       name: "UnknownError",
       data: {
         message: "123",
+      },
+    })
+  })
+
+  test("serializes tagged errors with their message", () => {
+    const result = MessageV2.fromError(new Question.RejectedError(), { providerID })
+
+    expect(result).toStrictEqual({
+      name: "UnknownError",
+      data: {
+        message: "The user dismissed this question",
       },
     })
   })
