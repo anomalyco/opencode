@@ -151,7 +151,7 @@ cp -R "packages/desktop/src-tauri/target/release/bundle/macos/OpenCode.app" /App
 
 ```bash
 # 启动开发服务器
-bun run --cwd packages/desktop tauri dev
+bun run dev:desktop
 ```
 
 ## 📖 关于 OpenCode
