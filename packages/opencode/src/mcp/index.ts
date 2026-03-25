@@ -620,6 +620,11 @@ export namespace MCP {
               }).pipe(Effect.option)
 
               if (Option.isNone(toolsResult)) {
+                // Close the dead client before reconnecting to avoid
+                // orphaned processes (especially for stdio servers)
+                yield* Effect.promise(() =>
+                  client.close().catch(() => {}),
+                )
                 if (entry) {
                   yield* createAndStore(clientName, entry).pipe(
                     Effect.ignore,
