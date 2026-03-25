@@ -45,6 +45,17 @@ export type OpenclawConfig = {
   token?: string
 }
 
+export type OpenclawServer = {
+  url: string
+  username?: string
+  password?: string
+}
+
+export type OpenclawTest = {
+  ok: boolean
+  logs: string[]
+}
+
 export type Platform = {
   /** Platform discriminator */
   platform: "web" | "desktop"
@@ -135,6 +146,12 @@ export type Platform = {
 
   /** Set the configured OpenClaw integration (desktop only) */
   setOpenclawConfig?(config: OpenclawConfig): Promise<void> | void
+
+  /** Save and test the configured OpenClaw integration (desktop only) */
+  testOpenclawConfig?(config: OpenclawConfig): Promise<OpenclawTest>
+
+  /** Abort a running OpenClaw connection test (desktop only) */
+  abortOpenclawTest?(): Promise<boolean>
 
   /** Get the preferred display backend (desktop only) */
   getDisplayBackend?(): Promise<DisplayBackend | null> | DisplayBackend | null

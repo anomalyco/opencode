@@ -519,6 +519,22 @@ const createPlatform = (): Platform => {
       setOpenclawTick((x) => x + 1)
     },
 
+    testOpenclawConfig: async (config) => {
+      const next = await commands.testOpenclawServer({
+        enabled: config.enabled,
+        url: config.url ?? null,
+        token: config.token ?? null,
+      })
+      return {
+        ok: next.ok,
+        logs: next.logs,
+      }
+    },
+
+    abortOpenclawTest: async () => {
+      return commands.abortOpenclawTest()
+    },
+
     getDefaultServer: async () => {
       const url = await commands.getDefaultServerUrl().catch(() => null)
       if (!url) return null
@@ -670,7 +686,7 @@ render(() => {
   return (
     <PlatformProvider value={platform}>
       <AppBaseProviders>
-        <Show when={!defaultServer.loading && !sidecar.loading && !openclaw.loading}>
+        <Show when={!defaultServer.loading && !sidecar.loading}>
           {(_) => {
             return (
               <>

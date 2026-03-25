@@ -1,15 +1,14 @@
-import { Component, Show, createEffect, createMemo, createResource, type JSX } from "solid-js"
+import { Component, Show, createMemo, createResource, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Select } from "@opencode-ai/ui/select"
 import { Switch } from "@opencode-ai/ui/switch"
-import { TextField } from "@opencode-ai/ui/text-field"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useLanguage } from "@/context/language"
-import { type OpenclawConfig, usePlatform } from "@/context/platform"
+import { usePlatform } from "@/context/platform"
 import { useSettings, monoFontFamily } from "@/context/settings"
 import { playSound, SOUND_OPTIONS } from "@/utils/sound"
 import { Link } from "./link"
@@ -50,42 +49,6 @@ export const SettingsGeneral: Component = () => {
   })
 
   const linux = createMemo(() => platform.platform === "desktop" && platform.os === "linux")
-  const desktop = createMemo(() => platform.platform === "desktop")
-  const [openclaw] = createResource(async () => platform.getOpenclawConfig?.())
-  const [openclawForm, setOpenclawForm] = createStore({
-    enabled: false,
-    url: "",
-    token: "",
-  })
-  let openclawSave: ReturnType<typeof setTimeout> | undefined
-
-  const syncOpenclaw = (next?: OpenclawConfig) => {
-    setOpenclawForm({
-      enabled: next?.enabled ?? false,
-      url: next?.url ?? "",
-      token: next?.token ?? "",
-    })
-  }
-
-  createEffect(() => syncOpenclaw(openclaw.latest))
-
-  const saveOpenclaw = async (patch?: Partial<typeof openclawForm>) => {
-    if (!platform.setOpenclawConfig) return
-    const next = {
-      enabled: patch?.enabled ?? openclawForm.enabled,
-      url: (patch?.url ?? openclawForm.url).trim() || undefined,
-      token: (patch?.token ?? openclawForm.token).trim() || undefined,
-    }
-    await platform.setOpenclawConfig(next)
-    syncOpenclaw(next)
-  }
-
-  const saveOpenclawLater = (patch?: Partial<typeof openclawForm>) => {
-    clearTimeout(openclawSave)
-    openclawSave = setTimeout(() => {
-      void saveOpenclaw(patch)
-    }, 250)
-  }
 
   const check = () => {
     if (!platform.checkUpdate) return
@@ -650,65 +613,6 @@ export const SettingsGeneral: Component = () => {
     </div>
   )
 
-  const OpenclawSection = () => (
-    <div class="flex flex-col gap-1">
-      <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.desktop.section.openclaw")}</h3>
-
-      <SettingsList>
-        <SettingsRow
-          title={language.t("settings.desktop.openclaw.enabled.title")}
-          description={language.t("settings.desktop.openclaw.enabled.description")}
-        >
-          <div data-action="settings-openclaw-enabled">
-            <Switch
-              checked={openclawForm.enabled}
-              onChange={(checked) => {
-                setOpenclawForm("enabled", checked)
-                clearTimeout(openclawSave)
-                void saveOpenclaw({ enabled: checked })
-              }}
-            />
-          </div>
-        </SettingsRow>
-
-        <SettingsRow
-          title={language.t("settings.desktop.openclaw.url.title")}
-          description={language.t("settings.desktop.openclaw.url.description")}
-        >
-          <div class="w-full max-w-[340px]">
-            <TextField
-              value={openclawForm.url}
-              placeholder="ws://127.0.0.1:18789"
-              onChange={(value) => {
-                setOpenclawForm("url", value)
-                saveOpenclawLater({ url: value })
-              }}
-              onBlur={() => void saveOpenclaw({ url: openclawForm.url })}
-            />
-          </div>
-        </SettingsRow>
-
-        <SettingsRow
-          title={language.t("settings.desktop.openclaw.token.title")}
-          description={language.t("settings.desktop.openclaw.token.description")}
-        >
-          <div class="w-full max-w-[340px]">
-            <TextField
-              type="password"
-              value={openclawForm.token}
-              placeholder={language.t("settings.desktop.openclaw.token.placeholder")}
-              onChange={(value) => {
-                setOpenclawForm("token", value)
-                saveOpenclawLater({ token: value })
-              }}
-              onBlur={() => void saveOpenclaw({ token: openclawForm.token })}
-            />
-          </div>
-        </SettingsRow>
-      </SettingsList>
-    </div>
-  )
-
   return (
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
@@ -757,10 +661,6 @@ export const SettingsGeneral: Component = () => {
         </Show>*/}
 
         <UpdatesSection />
-
-        <Show when={desktop() && platform.getOpenclawConfig && platform.setOpenclawConfig}>
-          <OpenclawSection />
-        </Show>
 
         <Show when={linux()}>
           {(_) => {

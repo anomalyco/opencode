@@ -27,6 +27,8 @@ export const commands = {
 	username: string | null,
 	password: string | null,
 } | null>("get_openclaw_server"),
+	testOpenclawServer: (config: OpenclawConfig) => __TAURI_INVOKE<OpenclawTestResult>("test_openclaw_server", { config }),
+	abortOpenclawTest: () => __TAURI_INVOKE<boolean>("abort_openclaw_test"),
 	parseMarkdownCommand: (markdown: string) => __TAURI_INVOKE<string>("parse_markdown_command", { markdown }),
 	checkAppExists: (appName: string) => __TAURI_INVOKE<boolean>("check_app_exists", { appName }),
 	filterDirectories: (paths: string[]) => __TAURI_INVOKE<string[]>("filter_directories", { paths }),
@@ -95,6 +97,11 @@ export type OpenclawConfig = {
 		enabled: boolean,
 		url: string | null,
 		token: string | null,
+	};
+
+export type OpenclawTestResult = {
+		ok: boolean,
+		logs: string[],
 	};
 
 export type ServerReadyData = {

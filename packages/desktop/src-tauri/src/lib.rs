@@ -21,7 +21,7 @@ use std::{
     path::PathBuf,
     process::Command,
     sync::{Arc, Mutex},
-    time::Duration,
+    time::{Duration, Instant},
 };
 use tauri::{
     AppHandle, Emitter, Listener, Manager, RunEvent, State, ipc::Channel, path::BaseDirectory,
@@ -83,6 +83,13 @@ struct ServerReadyData {
     password: Option<String>,
 }
 
+#[derive(Clone, serde::Serialize, specta::Type, Debug)]
+#[serde(rename_all = "camelCase")]
+struct OpenclawTestResult {
+    ok: bool,
+    logs: Vec<String>,
+}
+
 #[derive(Clone, Copy, serde::Serialize, specta::Type, Debug)]
 #[serde(tag = "phase", rename_all = "snake_case")]
 enum InitStep {
@@ -113,6 +120,7 @@ struct OpenclawState {
     child: Arc<Mutex<Option<CommandChild>>>,
     data: Arc<Mutex<Option<ServerReadyData>>>,
     config: Arc<Mutex<Option<server::OpenclawConfig>>>,
+    test: Arc<Mutex<Option<CommandChild>>>,
 }
 
 /// Resolves with sidecar credentials as soon as the sidecar is spawned (before health check).
@@ -467,6 +475,23 @@ fn kill_openclaw(app: &AppHandle) {
     }
 }
 
+fn kill_openclaw_test(app: &AppHandle) -> bool {
+    let Some(state) = app.try_state::<OpenclawState>() else {
+        tracing::info!("OpenClaw test adapter not running");
+        return false;
+    };
+
+    if let Ok(mut child) = state.test.lock()
+        && let Some(child) = child.take()
+    {
+        let _ = child.kill();
+        tracing::info!("Killed OpenClaw test adapter");
+        return true;
+    }
+
+    false
+}
+
 #[tauri::command]
 #[specta::specta]
 fn kill_sidecar(app: AppHandle) {
@@ -671,6 +696,105 @@ async fn reload_sidecar(app: AppHandle) -> Result<(), String> {
 #[specta::specta]
 async fn get_openclaw_server(app: AppHandle) -> Result<Option<ServerReadyData>, String> {
     sync_openclaw_server(app).await
+}
+
+#[tauri::command]
+#[specta::specta]
+async fn test_openclaw_server(
+    app: AppHandle,
+    config: server::OpenclawConfig,
+) -> Result<OpenclawTestResult, String> {
+    let _ = kill_openclaw_test(&app);
+    let mut logs = vec!["Starting OpenClaw connection test".to_string()];
+    if !config.enabled {
+        return Ok(OpenclawTestResult {
+            ok: false,
+            logs: vec![
+                "Starting OpenClaw connection test".to_string(),
+                "Config check failed: OpenClaw is disabled".to_string(),
+            ],
+        });
+    }
+
+    let Some(url) = config.url.clone().filter(|x| !x.trim().is_empty()) else {
+        return Ok(OpenclawTestResult {
+            ok: false,
+            logs: vec![
+                "Starting OpenClaw connection test".to_string(),
+                "Config check failed: Gateway URL is required".to_string(),
+            ],
+        });
+    };
+    logs.push(format!("Gateway URL detected: {url}"));
+    logs.push(format!("Gateway token present: {}", config.token.as_ref().is_some_and(|x| !x.trim().is_empty())));
+    let port = get_openclaw_port();
+    let hostname = "127.0.0.1".to_string();
+    let password = uuid::Uuid::new_v4().to_string();
+    let http = format!("http://{hostname}:{port}");
+    logs.push(format!("Allocating temporary adapter on {http}"));
+    let (child, health_check) =
+        crate::cli::serve_openclaw(&app, &hostname, port, &password, &url, config.token.as_deref());
+    logs.push("Temporary adapter spawned".to_string());
+
+    if let Some(state) = app.try_state::<OpenclawState>()
+        && let Ok(mut test) = state.test.lock()
+    {
+        *test = Some(child.clone());
+    }
+
+    let ready = async {
+        let started = Instant::now();
+        loop {
+            sleep(Duration::from_millis(100)).await;
+            if server::check_health(&http, Some(&password)).await {
+                tracing::info!(elapsed = ?started.elapsed(), url = %http, "OpenClaw test adapter ready");
+                return Ok(started.elapsed());
+            }
+        }
+    };
+
+    let terminated = async {
+        match health_check.await {
+            Ok(payload) => Err(format!(
+                "OpenClaw adapter terminated before becoming healthy (code={:?} signal={:?})",
+                payload.code, payload.signal
+            )),
+            Err(err) => Err(format!("OpenClaw adapter exit watch failed: {err}")),
+        }
+    };
+
+    let result = timeout(Duration::from_secs(15), async {
+        tokio::select! {
+            res = ready => res,
+            res = terminated => res,
+        }
+    })
+    .await;
+
+    let _ = child.kill();
+    let _ = kill_openclaw_test(&app);
+    logs.push("Temporary adapter stopped".to_string());
+
+    match result {
+        Ok(Ok(elapsed)) => {
+            logs.push(format!("Health check passed in {} ms", elapsed.as_millis()));
+            Ok(OpenclawTestResult { ok: true, logs })
+        }
+        Ok(Err(err)) => {
+            logs.push(format!("Health check failed: {err}"));
+            Ok(OpenclawTestResult { ok: false, logs })
+        }
+        Err(_) => {
+            logs.push("Health check timed out after 15000 ms".to_string());
+            Ok(OpenclawTestResult { ok: false, logs })
+        }
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+fn abort_openclaw_test(app: AppHandle) -> bool {
+    kill_openclaw_test(&app)
 }
 
 #[tauri::command]
@@ -1221,6 +1345,8 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             get_display_backend,
             set_display_backend,
             get_openclaw_server,
+            test_openclaw_server,
+            abort_openclaw_test,
             markdown::parse_markdown_command,
             check_app_exists,
             filter_directories,
@@ -1422,6 +1548,7 @@ fn setup_app(app: &tauri::AppHandle, init_rx: watch::Receiver<InitStep>) {
         child: Arc::new(Mutex::new(None)),
         data: Arc::new(Mutex::new(None)),
         config: Arc::new(Mutex::new(None)),
+        test: Arc::new(Mutex::new(None)),
     });
 }
 
