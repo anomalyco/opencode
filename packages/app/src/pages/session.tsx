@@ -52,6 +52,7 @@ import { MessageTimeline } from "@/pages/session/message-timeline"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { syncSessionModel } from "@/pages/session/session-model-helpers"
+import { syncSession, takeSessionResume } from "@/pages/session/session-resume"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
@@ -689,9 +690,12 @@ export default function Page() {
   }
 
   const hasScrollGesture = () => Date.now() - ui.scrollGesture < scrollGestureWindowMs
+  let resumed: string | undefined
+  let syncRun = 0
 
   createEffect(
     on([() => sdk.directory, () => params.id] as const, ([, id]) => {
+      const run = ++syncRun
       if (refreshFrame !== undefined) cancelAnimationFrame(refreshFrame)
       if (refreshTimer !== undefined) window.clearTimeout(refreshTimer)
       refreshFrame = undefined
@@ -707,21 +711,32 @@ export default function Page() {
             return Date.now() - info.at > SESSION_PREFETCH_TTL
           })()
       const todos = untrack(() => sync.data.todo[id] !== undefined || globalSync.data.session_todo[id] !== undefined)
+      const resume = takeSessionResume(id)
 
-      untrack(() => {
-        void sync.session.sync(id)
-      })
+      void untrack(async () => {
+        resumed = await syncSession({
+          sessionID: id,
+          resume,
+          resumed,
+          sync: sync.session.sync,
+          resumeSession: sdk.client.session.resume,
+          onResumeError: console.error,
+          onSyncError: () => {},
+          onMissing: () => {},
+        })
+        if (run !== syncRun) return
 
-      refreshFrame = requestAnimationFrame(() => {
-        refreshFrame = undefined
-        refreshTimer = window.setTimeout(() => {
-          refreshTimer = undefined
-          if (params.id !== id) return
-          untrack(() => {
-            if (stale) void sync.session.sync(id, { force: true })
-            void sync.session.todo(id, todos ? { force: true } : undefined)
-          })
-        }, 0)
+        refreshFrame = requestAnimationFrame(() => {
+          refreshFrame = undefined
+          refreshTimer = window.setTimeout(() => {
+            refreshTimer = undefined
+            if (params.id !== id) return
+            untrack(() => {
+              if (stale) void sync.session.sync(id, { force: true })
+              void sync.session.todo(id, todos ? { force: true } : undefined)
+            })
+          }, 0)
+        })
       })
     }),
   )

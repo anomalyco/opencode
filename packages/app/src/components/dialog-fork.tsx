@@ -11,6 +11,7 @@ import { extractPromptFromParts } from "@/utils/prompt"
 import type { TextPart as SDKTextPart } from "@opencode-ai/sdk/v2/client"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { useLanguage } from "@/context/language"
+import { skipSessionResume } from "@/pages/session/session-resume"
 
 interface ForkableMessage {
   id: string
@@ -76,6 +77,7 @@ export const DialogFork: Component = () => {
           return
         }
         dialog.close()
+        skipSessionResume(forked.data.id)
         prompt.set(restored, undefined, { dir, id: forked.data.id })
         navigate(`/${dir}/session/${forked.data.id}`)
       })
