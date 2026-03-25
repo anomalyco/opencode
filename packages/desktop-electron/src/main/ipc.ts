@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process"
 import { BrowserWindow, Notification, app, clipboard, dialog, ipcMain, shell } from "electron"
+import * as path from "node:path"
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
 
 import type { InitStep, ServerReadyData, SqliteMigrationProgress, TitlebarTheme, WslConfig } from "../preload/types"
@@ -127,7 +128,16 @@ export function registerIpcHandlers(deps: Deps) {
   )
 
   ipcMain.on("open-link", (_event: IpcMainEvent, url: string) => {
-    void shell.openExternal(url)
+    // Convert local file paths to file:// URLs
+    // If the URL doesn't have a scheme (not http://, https://, file://, etc.),
+    // treat it as a local file path and convert to file://
+    let finalUrl = url
+    if (!url.match(/^[a-zA-Z][a-zA-Z\d+.-]*:/)) {
+      // Resolve relative paths to absolute paths
+      const absolutePath = path.resolve(url)
+      finalUrl = `file://${absolutePath}`
+    }
+    void shell.openExternal(finalUrl)
   })
 
   ipcMain.handle("open-path", async (_event: IpcMainInvokeEvent, path: string, app?: string) => {
