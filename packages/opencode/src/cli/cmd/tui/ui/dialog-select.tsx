@@ -187,8 +187,13 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   useKeyboard((evt) => {
     setStore("input", "keyboard")
 
-    if (evt.name === "up" || (evt.ctrl && evt.name === "p")) move(-1)
-    if (evt.name === "down" || (evt.ctrl && evt.name === "n")) move(1)
+    if (evt.name === "up" || (evt.ctrl && evt.name === "p") || (evt.ctrl && evt.name === "k")) move(-1)
+    if (evt.name === "down" ||
+        (evt.ctrl && evt.name === "n") ||
+        (evt.ctrl && evt.name === "j") ||
+        evt.name === "linefeed")  // "linefeed" needed for tmux compatibility.
+      move(1)
+
     if (evt.name === "pageup") move(-10)
     if (evt.name === "pagedown") move(10)
     if (evt.name === "home") moveTo(0)
@@ -242,6 +247,10 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         </box>
         <box paddingTop={1}>
           <input
+            onKeyDown={(e) => {
+              // Default handling for movement ctrl+k would prevent custom handling like theme previewing.
+              if (e.ctrl && e.name === "k") e.preventDefault()
+            }}
             onInput={(e) => {
               batch(() => {
                 setStore("filter", e)
