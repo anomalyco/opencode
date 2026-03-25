@@ -5,6 +5,7 @@ import { test, expect, mock, beforeEach } from "bun:test"
 // Per-client state for controlling mock behavior
 interface MockClientState {
   tools: Array<{ name: string; description?: string; inputSchema: object }>
+  listToolsCalls: number
   listToolsShouldFail: boolean
   listToolsError: string
   listPromptsShouldFail: boolean
@@ -28,6 +29,7 @@ function getOrCreateClientState(name?: string): MockClientState {
   if (!state) {
     state = {
       tools: [{ name: "test_tool", description: "A test tool", inputSchema: { type: "object", properties: {} } }],
+      listToolsCalls: 0,
       listToolsShouldFail: false,
       listToolsError: "listTools failed",
       listPromptsShouldFail: false,
@@ -112,6 +114,7 @@ mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
     }
 
     async listTools() {
+      if (this._state) this._state.listToolsCalls++
       if (this._state?.listToolsShouldFail) {
         throw new Error(this._state.listToolsError)
       }
@@ -179,89 +182,65 @@ function withInstance(config: Record<string, any>, fn: () => Promise<void>) {
 }
 
 // ========================================================================
-// Bug #1: tools() silently deletes clients on transient listTools() failure
+// Test: tools() are cached after connect
 // ========================================================================
 
 test(
-  "tools() removes client from state when listTools fails",
-  withInstance(
-    {
-      "my-server": {
-        type: "local",
-        command: ["echo", "test"],
-      },
-    },
-    async () => {
-      lastCreatedClientName = "my-server"
-      const serverState = getOrCreateClientState("my-server")
-      serverState.tools = [
-        { name: "do_thing", description: "does a thing", inputSchema: { type: "object", properties: {} } },
-      ]
+  "tools() reuses cached tool definitions after connect",
+  withInstance({}, async () => {
+    lastCreatedClientName = "my-server"
+    const serverState = getOrCreateClientState("my-server")
+    serverState.tools = [
+      { name: "do_thing", description: "does a thing", inputSchema: { type: "object", properties: {} } },
+    ]
 
-      // First: add the server successfully
-      const addResult = await MCP.add("my-server", {
-        type: "local",
-        command: ["echo", "test"],
-      })
-      expect((addResult.status as any)["my-server"]?.status ?? (addResult.status as any).status).toBe("connected")
+    // First: add the server successfully
+    const addResult = await MCP.add("my-server", {
+      type: "local",
+      command: ["echo", "test"],
+    })
+    expect((addResult.status as any)["my-server"]?.status ?? (addResult.status as any).status).toBe("connected")
 
-      // Verify tools work initially
-      const toolsBefore = await MCP.tools()
-      expect(Object.keys(toolsBefore).length).toBeGreaterThan(0)
+    expect(serverState.listToolsCalls).toBe(1)
 
-      // Simulate a transient listTools failure
-      serverState.listToolsShouldFail = true
-      await MCP.tools()
-
-      // After the transient error clears, the background reconnection
-      // fiber should restore the server. Give it a tick to complete.
-      serverState.listToolsShouldFail = false
-      await new Promise((r) => setTimeout(r, 100))
-
-      const toolsRecovered = await MCP.tools()
-      expect(Object.keys(toolsRecovered).length).toBeGreaterThan(0)
-    },
-  ),
+    const toolsA = await MCP.tools()
+    const toolsB = await MCP.tools()
+    expect(Object.keys(toolsA).length).toBeGreaterThan(0)
+    expect(Object.keys(toolsB).length).toBeGreaterThan(0)
+    expect(serverState.listToolsCalls).toBe(1)
+  }),
 )
 
 // ========================================================================
-// Bug #2: status() shows stale data after tools() deletes a client
+// Test: tool change notifications refresh the cache
 // ========================================================================
 
 test(
-  "status shows 'failed' after tools() encounters a transient error",
-  withInstance(
-    {
-      "status-server": {
-        type: "local",
-        command: ["echo", "test"],
-      },
-    },
-    async () => {
-      lastCreatedClientName = "status-server"
-      const serverState = getOrCreateClientState("status-server")
+  "tool change notifications refresh cached tool definitions",
+  withInstance({}, async () => {
+    lastCreatedClientName = "status-server"
+    const serverState = getOrCreateClientState("status-server")
 
-      await MCP.add("status-server", {
-        type: "local",
-        command: ["echo", "test"],
-      })
+    await MCP.add("status-server", {
+      type: "local",
+      command: ["echo", "test"],
+    })
 
-      const statusBefore = await MCP.status()
-      expect(statusBefore["status-server"]?.status).toBe("connected")
+    const before = await MCP.tools()
+    expect(Object.keys(before).some((key) => key.includes("test_tool"))).toBe(true)
+    expect(serverState.listToolsCalls).toBe(1)
 
-      // Simulate a transient failure then recovery
-      serverState.listToolsShouldFail = true
-      await MCP.tools()
-      serverState.listToolsShouldFail = false
+    serverState.tools = [{ name: "next_tool", description: "next", inputSchema: { type: "object", properties: {} } }]
 
-      // Give background reconnection fiber time to complete
-      await new Promise((r) => setTimeout(r, 100))
+    const handler = Array.from(serverState.notificationHandlers.values())[0]
+    expect(handler).toBeDefined()
+    await handler?.()
 
-      await MCP.tools()
-      const statusAfter = await MCP.status()
-      expect(statusAfter["status-server"]?.status).toBe("connected")
-    },
-  ),
+    const after = await MCP.tools()
+    expect(Object.keys(after).some((key) => key.includes("next_tool"))).toBe(true)
+    expect(Object.keys(after).some((key) => key.includes("test_tool"))).toBe(false)
+    expect(serverState.listToolsCalls).toBe(2)
+  }),
 )
 
 // ========================================================================

@@ -24,7 +24,7 @@ import { BusEvent } from "../bus/bus-event"
 import { Bus } from "@/bus"
 import { TuiEvent } from "@/cli/cmd/tui/event"
 import open from "open"
-import { Effect, Layer, Option, Scope, ServiceMap, Stream } from "effect"
+import { Effect, Layer, Option, ServiceMap, Stream } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRunPromise } from "@/effect/run-service"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
@@ -129,14 +129,6 @@ export namespace MCP {
     return typeof entry === "object" && entry !== null && "type" in entry
   }
 
-  // Register notification handlers for MCP client
-  function registerNotificationHandlers(client: MCPClient, serverName: string) {
-    client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
-      log.info("tools list changed notification received", { server: serverName })
-      Bus.publish(ToolsChanged, { server: serverName })
-    })
-  }
-
   // Convert MCP tool definition to AI SDK Tool type
   function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, timeout?: number): Tool {
     const inputSchema = mcpTool.inputSchema
@@ -166,6 +158,14 @@ export namespace MCP {
         )
       },
     })
+  }
+
+  async function defs(key: string, client: MCPClient, timeout?: number) {
+    const result = await withTimeout(client.listTools(), timeout ?? DEFAULT_TIMEOUT).catch((err) => {
+      log.error("failed to get tools from client", { key, error: err })
+      return undefined
+    })
+    return result?.tools
   }
 
   async function fetchFromClient<T extends { name: string }>(
@@ -252,7 +252,6 @@ export namespace MCP {
             version: Installation.VERSION,
           })
           await withTimeout(client.connect(transport), connectTimeout)
-          registerNotificationHandlers(client, key)
           mcpClient = client
           log.info("connected", { key, transport: name })
           status = { status: "connected" }
@@ -337,7 +336,6 @@ export namespace MCP {
           version: Installation.VERSION,
         })
         await withTimeout(client.connect(transport), connectTimeout)
-        registerNotificationHandlers(client, key)
         mcpClient = client
         status = {
           status: "connected",
@@ -370,11 +368,8 @@ export namespace MCP {
       }
     }
 
-    const result = await withTimeout(mcpClient.listTools(), mcp.timeout ?? DEFAULT_TIMEOUT).catch((err) => {
-      log.error("failed to get tools from client", { key, error: err })
-      return undefined
-    })
-    if (!result) {
+    const listed = await defs(key, mcpClient, mcp.timeout)
+    if (!listed) {
       await mcpClient.close().catch((error) => {
         log.error("Failed to close MCP client", {
           error,
@@ -386,10 +381,11 @@ export namespace MCP {
       }
     }
 
-    log.info("create() successfully created client", { key, toolCount: result.tools.length })
+    log.info("create() successfully created client", { key, toolCount: listed.length })
     return {
       mcpClient,
       status,
+      defs: listed,
     }
   }
 
@@ -398,6 +394,7 @@ export namespace MCP {
   interface State {
     status: Record<string, Status>
     clients: Record<string, MCPClient>
+    defs: Record<string, MCPToolDef[]>
   }
 
   export interface Interface {
@@ -432,7 +429,6 @@ export namespace MCP {
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
-      const scope = yield* Scope.Scope
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
       const auth = yield* McpAuth.Service
 
@@ -462,12 +458,31 @@ export namespace MCP {
         Effect.catch(() => Effect.succeed([] as number[])),
       )
 
+      function watch(s: State, name: string, client: MCPClient, timeout?: number) {
+        client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
+          log.info("tools list changed notification received", { server: name })
+          if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
+
+          const listed = await defs(name, client, timeout)
+          if (!listed) return
+          if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
+
+          s.defs[name] = listed
+          await Bus.publish(ToolsChanged, { server: name }).catch((error) =>
+            log.warn("failed to publish tools changed", { server: name, error }),
+          )
+        })
+      }
+
       const cache = yield* InstanceState.make<State>(
         Effect.fn("MCP.state")(function* () {
           const cfg = yield* Effect.promise(() => Config.get())
           const config = cfg.mcp ?? {}
-          const clients: Record<string, MCPClient> = {}
-          const statusMap: Record<string, Status> = {}
+          const s: State = {
+            status: {},
+            clients: {},
+            defs: {},
+          }
 
           yield* Effect.forEach(
             Object.entries(config),
@@ -479,22 +494,22 @@ export namespace MCP {
                 }
 
                 if (mcp.enabled === false) {
-                  statusMap[key] = { status: "disabled" }
+                  s.status[key] = { status: "disabled" }
                   return
                 }
 
                 const result = yield* Effect.promise(() => create(key, mcp).catch(() => undefined))
                 if (!result) return
 
-                statusMap[key] = result.status
+                s.status[key] = result.status
                 if (result.mcpClient) {
-                  clients[key] = result.mcpClient
+                  s.clients[key] = result.mcpClient
+                  s.defs[key] = result.defs
+                  watch(s, key, result.mcpClient, mcp.timeout)
                 }
               }),
             { concurrency: "unbounded" },
           )
-
-          const s: State = { status: statusMap, clients }
 
           yield* Effect.addFinalizer(() =>
             Effect.gen(function* () {
@@ -525,6 +540,7 @@ export namespace MCP {
 
       function closeClient(s: State, name: string) {
         const client = s.clients[name]
+        delete s.defs[name]
         if (!client) return Effect.void
         return Effect.promise(() =>
           client.close().catch((error: any) => log.error("failed to close MCP client", { name, error })),
@@ -551,19 +567,27 @@ export namespace MCP {
       })
 
       const createAndStore = Effect.fn("MCP.createAndStore")(function* (name: string, mcp: Config.Mcp) {
-        const result = yield* Effect.promise(() => create(name, mcp))
         const s = yield* InstanceState.get(cache)
+        const result = yield* Effect.promise(() => create(name, mcp))
 
         if (!result) {
+          yield* closeClient(s, name)
+          delete s.clients[name]
           s.status[name] = { status: "failed" as const, error: "unknown error" }
           return s.status[name]
         }
 
         s.status[name] = result.status
-        if (result.mcpClient) {
+        if (!result.mcpClient) {
           yield* closeClient(s, name)
-          s.clients[name] = result.mcpClient
+          delete s.clients[name]
+          return result.status
         }
+
+        yield* closeClient(s, name)
+        s.clients[name] = result.mcpClient
+        s.defs[name] = result.defs
+        watch(s, name, result.mcpClient, mcp.timeout)
         return result.status
       })
 
@@ -607,28 +631,14 @@ export namespace MCP {
               const mcpConfig = config[clientName]
               const entry = mcpConfig && isMcpConfigured(mcpConfig) ? mcpConfig : undefined
 
-              const toolsResult = yield* Effect.tryPromise({
-                try: () => client.listTools(),
-                catch: (e: any) => {
-                  log.error("failed to get tools", { clientName, error: e?.message })
-                  s.status[clientName] = {
-                    status: "failed" as const,
-                    error: e instanceof Error ? e.message : String(e),
-                  }
-                  return e
-                },
-              }).pipe(Effect.option)
-
-              if (Option.isNone(toolsResult)) {
-                // createAndStore closes the old client before creating a new one
-                if (entry) {
-                  yield* createAndStore(clientName, entry).pipe(Effect.ignore, Effect.forkIn(scope))
-                }
+              const listed = s.defs[clientName]
+              if (!listed) {
+                log.warn("missing cached tools for connected server", { clientName })
                 return
               }
 
               const timeout = entry?.timeout ?? defaultTimeout
-              for (const mcpTool of toolsResult.value.tools) {
+              for (const mcpTool of listed) {
                 const sanitizedClientName = clientName.replace(/[^a-zA-Z0-9_-]/g, "_")
                 const sanitizedToolName = mcpTool.name.replace(/[^a-zA-Z0-9_-]/g, "_")
                 result[sanitizedClientName + "_" + sanitizedToolName] = convertMcpTool(mcpTool, client, timeout)
