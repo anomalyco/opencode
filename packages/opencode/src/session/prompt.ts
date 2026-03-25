@@ -330,7 +330,7 @@ export namespace SessionPrompt {
 
       step++
       if (step === 1)
-        ensureTitle({
+        await ensureTitle({
           session,
           modelID: lastUser.model.modelID,
           providerID: lastUser.model.providerID,
