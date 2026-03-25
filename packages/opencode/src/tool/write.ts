@@ -41,7 +41,7 @@ export const WriteTool = Tool.define("write", {
       },
     })
 
-    await Filesystem.write(filepath, params.content)
+    await Filesystem.write(filepath, params.content, 0o644)
     await Bus.publish(File.Event.Edited, {
       file: filepath,
     })
