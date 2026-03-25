@@ -4,6 +4,7 @@ import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon } from "@opencode-ai/ui/icon"
+import { Spinner } from "@opencode-ai/ui/spinner"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { Switch as Toggle } from "@opencode-ai/ui/switch"
 import { showToast } from "@opencode-ai/ui/toast"
@@ -20,13 +21,13 @@ import {
   validateCustomProvider,
 } from "@/components/dialog-custom-provider-form"
 import { useLanguage } from "@/context/language"
-import { type ConfigTreeItem, type ConfigWorkspace, usePlatform } from "@/context/platform"
+import { type ConfigTreeItem, type ConfigWorkspace, type OpenclawConfig, usePlatform } from "@/context/platform"
 import { monoFontFamily, useSettings } from "@/context/settings"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import type { Agent, Config, Project } from "@opencode-ai/sdk/v2/client"
 
-type Section = "agents-md" | "providers" | "agents" | "skills" | "plugins"
+type Section = "agents-md" | "providers" | "agents" | "skills" | "plugins" | "claws"
 
 type SkillGroup = "opencode" | "claude" | "project" | "external"
 
@@ -91,6 +92,14 @@ type PluginItem = {
   exists: boolean
   path?: string
   spec?: string
+}
+
+type ClawItem = {
+  id: string
+  label: string
+  note: string
+  meta?: string
+  enabled: boolean
 }
 
 type TreeNode = {
@@ -473,6 +482,21 @@ function providerCfg(input: ProviderCfg | undefined): CustomState {
     deleting: false,
     secret: true,
     err: {},
+  }
+}
+
+function clawCfg(input?: OpenclawConfig) {
+  return {
+    enabled: input?.enabled ?? false,
+    url: input?.url ?? "",
+    token: input?.token ?? "",
+    saving: false,
+    testing: false,
+    err: {
+      url: "",
+    },
+    test: undefined as undefined | { ok: boolean; logs: string[] },
+    run: 0,
   }
 }
 
@@ -914,6 +938,7 @@ function ProviderDetail(props: {
   onToggle: (item: ProviderItem, enabled: boolean) => void
 }) {
   const language = useLanguage()
+  const settings = useSettings()
 
   return (
     <div class="flex h-full min-h-0 flex-col">
@@ -993,6 +1018,156 @@ function ProviderDetail(props: {
               </For>
             </div>
           </Show>
+        </div>
+      </Show>
+    </div>
+  )
+}
+
+function ClawEditor(props: {
+  item?: ClawItem
+  form: ReturnType<typeof clawCfg>
+  dirty: boolean
+  busy: boolean
+  canTest: boolean
+  onChange: (key: "enabled" | "url" | "token", value: string | boolean) => void
+  onSave: () => void
+  onTest: () => void
+  onAbort?: () => void
+}) {
+  const language = useLanguage()
+  const settings = useSettings()
+
+  return (
+    <div class="flex h-full min-h-0 flex-col">
+      <Show
+        when={props.item}
+        fallback={<div class="px-4 py-10 text-13-regular text-text-weak">{language.t("config.claws.empty")}</div>}
+      >
+        <div class="flex flex-wrap items-start justify-between gap-3 border-b border-border-weak-base px-4 py-4">
+          <div>
+            <div class="flex items-center gap-2">
+              <div class="text-15-medium text-text-strong">{props.item?.label}</div>
+              <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
+                {props.form.enabled
+                  ? language.t("config.claws.badge.enabled")
+                  : language.t("config.claws.badge.disabled")}
+              </span>
+            </div>
+            <div class="mt-2 text-12-regular text-text-weak">{language.t("config.claws.detail")}</div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <Button
+              size="small"
+              variant="ghost"
+              icon="reset"
+              onClick={props.onTest}
+              disabled={!props.canTest || props.busy || props.form.saving || props.form.testing}
+            >
+              {language.t("config.claws.action.test")}
+            </Button>
+            <Show when={props.form.testing && props.onAbort}>
+              <Button size="small" variant="ghost" icon="stop" onClick={() => props.onAbort?.()}>
+                {language.t("config.claws.action.abort")}
+              </Button>
+            </Show>
+            <SaveButton
+              label={language.t("config.claws.action.save")}
+              onClick={props.onSave}
+              disabled={props.busy || props.form.saving || props.form.testing || !props.dirty}
+            />
+          </div>
+        </div>
+
+        <div class="min-h-0 flex-1 overflow-y-auto p-4">
+          <div class="mx-auto flex max-w-[920px] flex-col gap-6">
+            <div class="rounded-2xl border border-border-weak-base bg-background-base p-5">
+              <div class="flex flex-col gap-5">
+                <div class="flex items-center justify-between gap-4 rounded-xl border border-border-weak-base bg-surface-base px-4 py-3">
+                  <div class="min-w-0">
+                    <div class="text-13-medium text-text-strong">{language.t("config.claws.field.enabled")}</div>
+                    <div class="mt-1 text-12-regular text-text-weak">
+                      {language.t("config.claws.field.enabledDescription")}
+                    </div>
+                  </div>
+                  <Toggle
+                    checked={props.form.enabled}
+                    disabled={props.busy || props.form.saving || props.form.testing}
+                    onChange={(value) => props.onChange("enabled", value)}
+                  >
+                    {language.t("config.claws.field.enabled")}
+                  </Toggle>
+                </div>
+
+                <div class="grid gap-4 lg:grid-cols-2">
+                  <TextField
+                    type="text"
+                    label={language.t("config.claws.field.url")}
+                    placeholder="ws://127.0.0.1:18789"
+                    value={props.form.url}
+                    validationState={props.form.err.url ? "invalid" : undefined}
+                    error={props.form.err.url}
+                    disabled={props.busy || props.form.saving || props.form.testing}
+                    onChange={(value) => props.onChange("url", value)}
+                  />
+                  <TextField
+                    type="password"
+                    label={language.t("config.claws.field.token")}
+                    placeholder={language.t("config.claws.field.tokenPlaceholder")}
+                    value={props.form.token}
+                    disabled={props.busy || props.form.saving || props.form.testing}
+                    onChange={(value) => props.onChange("token", value)}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <Show when={props.form.testing || !!props.form.test}>
+              <div class="rounded-2xl border border-border-weak-base bg-surface-base p-5">
+                <div class="text-13-medium text-text-strong">{language.t("config.claws.debug.title")}</div>
+                <div class="mt-1 text-12-regular text-text-weak">{language.t("config.claws.debug.description")}</div>
+                <div class="mt-4 rounded-xl border border-border-weak-base bg-background-base px-4 py-3">
+                  <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
+                    {language.t("config.claws.debug.status")}
+                  </div>
+                  <Show
+                    when={props.form.testing}
+                    fallback={
+                      <div
+                        class="mt-2 text-13-medium"
+                        classList={{
+                          "text-text-success": !!props.form.test?.ok,
+                          "text-text-danger-base": !props.form.test?.ok,
+                        }}
+                      >
+                        {props.form.test?.ok
+                          ? language.t("config.claws.status.success")
+                          : language.t("config.claws.status.failed")}
+                      </div>
+                    }
+                  >
+                    <div class="mt-2 inline-flex items-center gap-2 text-13-medium text-text-base">
+                      <Spinner class="size-4" />
+                      <span>{language.t("config.claws.status.testing")}</span>
+                    </div>
+                  </Show>
+                </div>
+                <div class="mt-4 rounded-xl border border-border-weak-base bg-background-base px-4 py-3">
+                  <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
+                    {language.t("config.claws.debug.logs")}
+                  </div>
+                  <pre
+                    class="mt-2 overflow-x-auto whitespace-pre-wrap break-all text-12-regular text-text-weak"
+                    style={{ "font-family": monoFontFamily(settings.appearance.font()) }}
+                  >
+                    {props.form.testing
+                      ? language.t("config.claws.logs.testing", { url: props.form.url.trim() || "-" })
+                      : props.form.test?.logs.join("\n") || ""}
+                  </pre>
+                </div>
+              </div>
+            </Show>
+          </div>
         </div>
       </Show>
     </div>
@@ -1260,6 +1435,7 @@ export default function ConfigPage() {
     customID: "",
     customApiDirty: false,
     custom: providerCfg(undefined),
+    claw: clawCfg(),
     skillTitle: "",
     skillErr: "",
     skillPath: "",
@@ -1295,9 +1471,20 @@ export default function ConfigPage() {
     },
   )
 
+  const [openclaw] = createResource(
+    () => state.tick,
+    async () => {
+      if (!platform.getOpenclawConfig) return undefined
+      return platform.getOpenclawConfig()
+    },
+  )
+
   const space = createMemo(() => workspace() as ConfigWorkspace | undefined)
   const cfg = createMemo(() => globalSync.data.config)
   const t = language.t
+  const clawsEnabled = createMemo(
+    () => !!platform.getOpenclawConfig && !!platform.setOpenclawConfig && !!platform.testOpenclawConfig,
+  )
   const opened = createMemo(() =>
     [...globalSync.data.project].sort((a, b) => (a.name ?? name(a.worktree)).localeCompare(b.name ?? name(b.worktree))),
   )
@@ -1558,6 +1745,20 @@ export default function ConfigPage() {
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name))
   })
 
+  const claws = createMemo<ClawItem[]>(() => {
+    const cfg = openclaw()
+    if (!clawsEnabled()) return []
+    return [
+      {
+        id: "claw:openclaw",
+        label: "OpenClaw",
+        note: t("config.claws.note.openclaw"),
+        meta: cfg?.url?.trim() || "ws://127.0.0.1:18789",
+        enabled: cfg?.enabled ?? false,
+      },
+    ]
+  })
+
   const pluginDocs = createMemo<DocItem[]>(() =>
     plugins()
       .filter((item) => !!item.path)
@@ -1650,10 +1851,20 @@ export default function ConfigPage() {
   const selectedPlugin = createMemo(() => plugins().find((item) => item.id === state.pick))
   const selectedAgent = createMemo(() => agents().find((item) => item.id === state.pick))
   const selectedSkill = createMemo(() => skillDocs().find((item) => item.id === state.pick))
+  const selectedClaw = createMemo(() => claws().find((item) => item.id === state.pick))
   const selectedCustom = createMemo(() =>
     providers().find((item) => item.id === state.pick.replace(/^provider:/, "") && item.custom),
   )
   const dirty = createMemo(() => !!selectedDoc() && state.doc === state.pick && state.text !== state.saved)
+  const clawDirty = createMemo(() => {
+    const cfg = openclaw()
+    if (!cfg || state.section !== "claws") return false
+    return (
+      state.claw.enabled !== (cfg.enabled ?? false) ||
+      state.claw.url.trim() !== (cfg.url?.trim() ?? "") ||
+      state.claw.token.trim() !== (cfg.token?.trim() ?? "")
+    )
+  })
 
   const currentSkillRoot = createMemo(() => {
     const item = selectedSkill()
@@ -1689,6 +1900,16 @@ export default function ConfigPage() {
   const groupOpen = (key: string) => !!state.treeClosed[`skill-group:${key}`]
   const toggleGroup = (key: string) => setState("treeClosed", `skill-group:${key}`, (value) => !value)
 
+  createEffect(
+    on(
+      () => openclaw(),
+      (item) => {
+        if (!item) return
+        setState("claw", clawCfg(item))
+      },
+    ),
+  )
+
   function keepSkillsScroll(run: () => void) {
     const top = skillsList?.scrollTop ?? 0
     run()
@@ -1704,6 +1925,7 @@ export default function ConfigPage() {
       return list.length > 0 ? list : [CUSTOM_NEW]
     }
     if (section === "agents") return agents().map((item) => item.id)
+    if (section === "claws") return claws().map((item) => item.id)
     if (section === "skills") {
       const list = skillDocs().map((item) => item.id)
       return state.pick === SKILL_NEW ? [SKILL_NEW, ...list] : list
@@ -1718,6 +1940,7 @@ export default function ConfigPage() {
         agentsMd().length,
         providerVisible().length,
         agents().length,
+        claws().length,
         skillDocs().length,
         plugins().length,
       ],
@@ -1802,6 +2025,89 @@ export default function ConfigPage() {
           description: err instanceof Error ? err.message : String(err),
         })
       })
+  }
+
+  function validateClaw(required = state.claw.enabled) {
+    const url = state.claw.url.trim()
+    const err = required && !url ? t("config.claws.error.urlRequired") : ""
+    setState("claw", "err", "url", err)
+    return !err
+  }
+
+  function clawInput(): OpenclawConfig {
+    return {
+      enabled: state.claw.enabled,
+      url: state.claw.url.trim() || undefined,
+      token: state.claw.token.trim() || undefined,
+    }
+  }
+
+  async function saveClaw() {
+    if (!platform.setOpenclawConfig) return
+    if (!validateClaw()) return
+    setState("claw", "saving", true)
+    setState("claw", "test", undefined)
+    await Promise.resolve(platform.setOpenclawConfig(clawInput()))
+      .then(async () => {
+        setState("tick", (value) => value + 1)
+        showToast({ variant: "success", title: t("common.save"), description: selectedClaw()?.label ?? "OpenClaw" })
+      })
+      .catch((err: unknown) => {
+        showToast({
+          title: language.t("common.requestFailed"),
+          description: err instanceof Error ? err.message : String(err),
+        })
+      })
+      .finally(() => setState("claw", "saving", false))
+  }
+
+  async function testClaw() {
+    if (!platform.testOpenclawConfig) return
+    if (!validateClaw(true)) return
+    const run = state.claw.run + 1
+    setState("claw", "run", run)
+    setState("claw", "testing", true)
+    setState("claw", "test", undefined)
+    await platform
+      .testOpenclawConfig(clawInput())
+      .then((item) => {
+        if (state.claw.run !== run) return
+        setState("claw", "test", { ok: item.ok, logs: item.logs })
+        showToast({
+          variant: item.ok ? "success" : "error",
+          icon: item.ok ? "circle-check" : undefined,
+          title: t("config.claws.action.test"),
+          description: item.ok
+            ? t("config.claws.test.success")
+            : (item.logs[item.logs.length - 1] ?? t("common.requestFailed")),
+        })
+      })
+      .catch((err: unknown) => {
+        if (state.claw.run !== run) return
+        const message = err instanceof Error ? err.message : String(err)
+        setState("claw", "test", { ok: false, logs: [message] })
+        showToast({ title: language.t("common.requestFailed"), description: message })
+      })
+      .finally(() => {
+        if (state.claw.run !== run) return
+        setState("claw", "testing", false)
+      })
+  }
+
+  async function abortClaw() {
+    setState("claw", "run", (value) => value + 1)
+    setState("claw", "testing", false)
+    setState("claw", "test", {
+      ok: false,
+      logs: ["Starting OpenClaw connection test", "Test aborted by user"],
+    })
+    await platform.abortOpenclawTest?.().catch(() => false)
+  }
+
+  function setClaw(key: "enabled" | "url" | "token", value: string | boolean) {
+    setState("claw", key, value)
+    if (key === "url") setState("claw", "err", "url", "")
+    setState("claw", "test", undefined)
   }
 
   function openFolder() {
@@ -2158,6 +2464,13 @@ export default function ConfigPage() {
                   title={t("config.agents.title")}
                   onClick={() => setState("section", "agents")}
                 />
+                {clawsEnabled() && (
+                  <SectionButton
+                    current={state.section === "claws"}
+                    title={t("config.claws.title")}
+                    onClick={() => setState("section", "claws")}
+                  />
+                )}
                 <SectionButton
                   current={state.section === "skills"}
                   title={t("config.skills.title")}
@@ -2215,6 +2528,10 @@ export default function ConfigPage() {
                   <Match when={state.section === "agents"}>
                     <div class="text-15-medium text-text-strong">{t("config.agents.title")}</div>
                     <div class="mt-1 text-12-regular text-text-weak">{t("config.agents.header")}</div>
+                  </Match>
+                  <Match when={state.section === "claws" && clawsEnabled()}>
+                    <div class="text-15-medium text-text-strong">{t("config.claws.title")}</div>
+                    <div class="mt-1 text-12-regular text-text-weak">{t("config.claws.header")}</div>
                   </Match>
                   <Match when={state.section === "skills"}>
                     <div class="text-15-medium text-text-strong">{t("config.skills.title")}</div>
@@ -2375,6 +2692,25 @@ export default function ConfigPage() {
                             />
                           )
                         }}
+                      </For>
+                    </Match>
+
+                    <Match when={state.section === "claws" && clawsEnabled()}>
+                      <For each={claws()}>
+                        {(item) => (
+                          <ListButton
+                            active={state.pick === item.id}
+                            title={item.label}
+                            note={item.note}
+                            meta={item.meta}
+                            onClick={() => setState("pick", item.id)}
+                            extra={
+                              <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
+                                {item.enabled ? t("config.claws.badge.enabled") : t("config.claws.badge.disabled")}
+                              </span>
+                            }
+                          />
+                        )}
                       </For>
                     </Match>
 
@@ -2615,6 +2951,20 @@ export default function ConfigPage() {
                     onSecret={toggleCustomSecret}
                   />
                 </Show>
+              </Match>
+
+              <Match when={state.section === "claws" && clawsEnabled()}>
+                <ClawEditor
+                  item={selectedClaw()}
+                  form={state.claw}
+                  dirty={clawDirty()}
+                  busy={openclaw.loading}
+                  canTest={!!platform.testOpenclawConfig}
+                  onChange={setClaw}
+                  onSave={() => void saveClaw()}
+                  onTest={() => void testClaw()}
+                  onAbort={platform.abortOpenclawTest ? () => void abortClaw() : undefined}
+                />
               </Match>
 
               <Match when={state.section === "plugins"}>
