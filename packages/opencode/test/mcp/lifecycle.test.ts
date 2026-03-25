@@ -153,10 +153,7 @@ const { tmpdir } = await import("../fixture/fixture")
 
 // --- Helper ---
 
-function withInstance(
-  config: Record<string, any>,
-  fn: () => Promise<void>,
-) {
+function withInstance(config: Record<string, any>, fn: () => Promise<void>) {
   return async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
@@ -317,9 +314,7 @@ test(
     async () => {
       lastCreatedClientName = "reconn-server"
       const serverState = getOrCreateClientState("reconn-server")
-      serverState.tools = [
-        { name: "my_tool", description: "a tool", inputSchema: { type: "object", properties: {} } },
-      ]
+      serverState.tools = [{ name: "my_tool", description: "a tool", inputSchema: { type: "object", properties: {} } }]
 
       await MCP.add("reconn-server", {
         type: "local",
@@ -393,9 +388,7 @@ test(
     async () => {
       // Set up good server
       const goodState = getOrCreateClientState("good-server")
-      goodState.tools = [
-        { name: "good_tool", description: "works", inputSchema: { type: "object", properties: {} } },
-      ]
+      goodState.tools = [{ name: "good_tool", description: "works", inputSchema: { type: "object", properties: {} } }]
 
       // Set up bad server - will fail on listTools during create()
       const badState = getOrCreateClientState("bad-server")
@@ -474,9 +467,7 @@ test(
     async () => {
       lastCreatedClientName = "prompt-server"
       const serverState = getOrCreateClientState("prompt-server")
-      serverState.prompts = [
-        { name: "my-prompt", description: "A test prompt" },
-      ]
+      serverState.prompts = [{ name: "my-prompt", description: "A test prompt" }]
 
       await MCP.add("prompt-server", {
         type: "local",
@@ -504,9 +495,7 @@ test(
     async () => {
       lastCreatedClientName = "resource-server"
       const serverState = getOrCreateClientState("resource-server")
-      serverState.resources = [
-        { name: "my-resource", uri: "file:///test.txt", description: "A test resource" },
-      ]
+      serverState.resources = [{ name: "my-resource", uri: "file:///test.txt", description: "A test resource" }]
 
       await MCP.add("resource-server", {
         type: "local",

@@ -125,10 +125,7 @@ export namespace McpAuth {
         }
       })
 
-      const updateOAuthState = Effect.fn("McpAuth.updateOAuthState")(function* (
-        mcpName: string,
-        oauthState: string,
-      ) {
+      const updateOAuthState = Effect.fn("McpAuth.updateOAuthState")(function* (mcpName: string, oauthState: string) {
         const entry = (yield* get(mcpName)) ?? {}
         entry.oauthState = oauthState
         yield* set(mcpName, entry)

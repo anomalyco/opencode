@@ -168,7 +168,6 @@ export namespace MCP {
     })
   }
 
-
   async function fetchFromClient<T extends { name: string }>(
     clientName: string,
     client: Client,
@@ -507,7 +506,9 @@ export namespace MCP {
                     if (typeof pid === "number") {
                       const pids = yield* descendants(pid)
                       for (const dpid of pids) {
-                        try { process.kill(dpid, "SIGTERM") } catch {}
+                        try {
+                          process.kill(dpid, "SIGTERM")
+                        } catch {}
                       }
                     }
                     yield* Effect.tryPromise(() => client.close()).pipe(Effect.ignore)
@@ -621,10 +622,7 @@ export namespace MCP {
               if (Option.isNone(toolsResult)) {
                 // createAndStore closes the old client before creating a new one
                 if (entry) {
-                  yield* createAndStore(clientName, entry).pipe(
-                    Effect.ignore,
-                    Effect.forkIn(scope),
-                  )
+                  yield* createAndStore(clientName, entry).pipe(Effect.ignore, Effect.forkIn(scope))
                 }
                 return
               }
@@ -667,59 +665,49 @@ export namespace MCP {
         )
       })
 
-      function withClient<A>(
+      const withClient = Effect.fnUntraced(function* <A>(
         clientName: string,
         fn: (client: MCPClient) => Promise<A>,
         label: string,
         meta?: Record<string, unknown>,
       ) {
-        return Effect.gen(function* () {
-          const s = yield* InstanceState.get(cache)
-          const client = s.clients[clientName]
-          if (!client) {
-            log.warn(`client not found for ${label}`, { clientName })
-            return undefined
-          }
-          return yield* Effect.tryPromise({
-            try: () => fn(client),
-            catch: (e: any) => {
-              log.error(`failed to ${label}`, { clientName, ...meta, error: e?.message })
-              return e
-            },
-          }).pipe(Effect.orElseSucceed(() => undefined))
-        })
-      }
+        const s = yield* InstanceState.get(cache)
+        const client = s.clients[clientName]
+        if (!client) {
+          log.warn(`client not found for ${label}`, { clientName })
+          return undefined
+        }
+        return yield* Effect.tryPromise({
+          try: () => fn(client),
+          catch: (e: any) => {
+            log.error(`failed to ${label}`, { clientName, ...meta, error: e?.message })
+            return e
+          },
+        }).pipe(Effect.orElseSucceed(() => undefined))
+      })
 
       const getPrompt = Effect.fn("MCP.getPrompt")(function* (
         clientName: string,
         name: string,
         args?: Record<string, string>,
       ) {
-        return yield* withClient(
-          clientName,
-          (client) => client.getPrompt({ name, arguments: args }),
-          "getPrompt",
-          { promptName: name },
-        )
+        return yield* withClient(clientName, (client) => client.getPrompt({ name, arguments: args }), "getPrompt", {
+          promptName: name,
+        })
       })
 
       const readResource = Effect.fn("MCP.readResource")(function* (clientName: string, resourceUri: string) {
-        return yield* withClient(
-          clientName,
-          (client) => client.readResource({ uri: resourceUri }),
-          "readResource",
-          { resourceUri },
-        )
+        return yield* withClient(clientName, (client) => client.readResource({ uri: resourceUri }), "readResource", {
+          resourceUri,
+        })
       })
 
-      function getMcpConfig(mcpName: string) {
-        return Effect.gen(function* () {
-          const cfg = yield* Effect.promise(() => Config.get())
-          const mcpConfig = cfg.mcp?.[mcpName]
-          if (!mcpConfig || !isMcpConfigured(mcpConfig)) return undefined
-          return mcpConfig
-        })
-      }
+      const getMcpConfig = Effect.fnUntraced(function* (mcpName: string) {
+        const cfg = yield* Effect.promise(() => Config.get())
+        const mcpConfig = cfg.mcp?.[mcpName]
+        if (!mcpConfig || !isMcpConfigured(mcpConfig)) return undefined
+        return mcpConfig
+      })
 
       const startAuth = Effect.fn("MCP.startAuth")(function* (mcpName: string) {
         const mcpConfig = yield* getMcpConfig(mcpName)
@@ -743,7 +731,11 @@ export namespace MCP {
             clientSecret: oauthConfig?.clientSecret,
             scope: oauthConfig?.scope,
           },
-          { onRedirect: async (url) => { capturedUrl = url } },
+          {
+            onRedirect: async (url) => {
+              capturedUrl = url
+            },
+          },
         )
 
         const transport = new StreamableHTTPClientTransport(new URL(mcpConfig.url), { authProvider })

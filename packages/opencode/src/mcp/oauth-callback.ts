@@ -102,7 +102,10 @@ export namespace McpOAuthCallback {
             clearTimeout(pending.timeout)
             pendingAuths.delete(state)
             for (const [name, s] of mcpNameToState) {
-              if (s === state) { mcpNameToState.delete(name); break }
+              if (s === state) {
+                mcpNameToState.delete(name)
+                break
+              }
             }
             pending.reject(new Error(errorMsg))
           }
@@ -134,7 +137,10 @@ export namespace McpOAuthCallback {
         pendingAuths.delete(state)
         // Clean up reverse index
         for (const [name, s] of mcpNameToState) {
-          if (s === state) { mcpNameToState.delete(name); break }
+          if (s === state) {
+            mcpNameToState.delete(name)
+            break
+          }
         }
         pending.resolve(code)
 
