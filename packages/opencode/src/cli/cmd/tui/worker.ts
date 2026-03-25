@@ -156,8 +156,7 @@ export const rpc = {
     })
   },
   async reload() {
-    await Config.global.reset()
-    await Instance.disposeAll()
+    await Config.invalidate(true)
   },
   async setWorkspace(input: { workspaceID?: string }) {
     startEventStream({ directory: process.cwd(), workspaceID: input.workspaceID })

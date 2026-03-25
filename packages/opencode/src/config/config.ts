@@ -8,6 +8,7 @@ import { ModelsDev } from "../provider/models"
 import { mergeDeep, pipe, unique } from "remeda"
 import { Global } from "../global"
 import fs from "fs/promises"
+import { lazy } from "../util/lazy"
 import { NamedError } from "@opencode-ai/util/error"
 import { Flag } from "../flag/flag"
 import { Auth } from "../auth"
@@ -77,7 +78,8 @@ export namespace Config {
     return merged
   }
 
-  async function loadState(ctx: Shape, glb: Info) {
+  async function loadState(ctx: Shape) {
+    const glb = global()
     const auth = await Auth.all()
 
     // Config loading order (low -> high precedence): https://opencode.ai/docs/config#precedence-order
@@ -114,7 +116,7 @@ export namespace Config {
     }
 
     // Global user config overrides remote config.
-    result = mergeConfigConcatArrays(result, glb)
+    result = mergeConfigConcatArrays(result, await glb)
 
     // Custom config path overrides global config.
     if (Flag.OPENCODE_CONFIG) {
@@ -1239,17 +1241,14 @@ export namespace Config {
 
   export interface Interface {
     readonly get: () => Effect.Effect<Info>
-    readonly getGlobal: () => Effect.Effect<Info>
-    readonly resetGlobal: () => Effect.Effect<void>
     readonly update: (config: Info) => Effect.Effect<void>
-    readonly updateGlobal: (config: Info) => Effect.Effect<Info>
     readonly directories: () => Effect.Effect<string[]>
     readonly waitForDependencies: () => Effect.Effect<void>
   }
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Config") {}
 
-  async function loadGlobal() {
+  const global = lazy(async () => {
     let result: Info = pipe(
       {},
       mergeDeep(await loadFile(path.join(Global.Path.config, "config.json"))),
@@ -1276,35 +1275,14 @@ export namespace Config {
     }
 
     return result
-  }
+  })
 
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
-      const glb: { task?: Promise<Info> } = {}
-
-      const getGlobal = Effect.fn("Config.getGlobal")(() =>
-        Effect.promise(async () => {
-          if (glb.task) return glb.task
-          const task = loadGlobal().catch((err) => {
-            if (glb.task === task) glb.task = undefined
-            throw err
-          })
-          glb.task = task
-          return task
-        }),
-      )
-
-      const resetGlobal = Effect.fn("Config.resetGlobal")(() =>
-        Effect.sync(() => {
-          glb.task = undefined
-        }),
-      )
-
       const state = yield* InstanceState.make<State>(
         Effect.fn("Config.state")(function* (ctx) {
-          const glb = yield* getGlobal()
-          return yield* Effect.promise(() => loadState(ctx, glb))
+          return yield* Effect.promise(() => loadState(ctx))
         }),
       )
 
@@ -1329,48 +1307,9 @@ export namespace Config {
         yield* Effect.promise(() => Instance.dispose())
       })
 
-      const updateGlobal = Effect.fn("Config.updateGlobal")(function* (config: Info) {
-        const file = globalConfigFile()
-        const before = (yield* Effect.promise(() => readFile(file))) ?? "{}"
-
-        const next = yield* Effect.promise(async () => {
-          if (!file.endsWith(".jsonc")) {
-            const existing = parseConfig(before, file)
-            const merged = mergeDeep(existing, config)
-            await Filesystem.writeJson(file, merged)
-            return merged
-          }
-
-          const updated = patchJsonc(before, config)
-          const merged = parseConfig(updated, file)
-          await Filesystem.write(file, updated)
-          return merged
-        })
-
-        yield* resetGlobal()
-        yield* Effect.sync(() => {
-          void Instance.disposeAll()
-            .catch(() => undefined)
-            .finally(() => {
-              GlobalBus.emit("event", {
-                directory: "global",
-                payload: {
-                  type: Event.Disposed.type,
-                  properties: {},
-                },
-              })
-            })
-        })
-
-        return next
-      })
-
       return Service.of({
         get,
-        getGlobal,
-        resetGlobal,
         update,
-        updateGlobal,
         directories,
         waitForDependencies,
       })
@@ -1460,11 +1399,11 @@ export namespace Config {
   }
 
   export async function getGlobal() {
-    return runPromise((svc) => svc.getGlobal())
+    return global()
   }
 
-  export async function resetGlobal() {
-    return runPromise((svc) => svc.resetGlobal())
+  export function resetGlobal() {
+    global.reset()
   }
 
   export async function update(config: Info) {
@@ -1536,8 +1475,45 @@ export namespace Config {
     })
   }
 
+  function disposed() {
+    GlobalBus.emit("event", {
+      directory: "global",
+      payload: {
+        type: Event.Disposed.type,
+        properties: {},
+      },
+    })
+  }
+
+  export async function invalidate(wait = false) {
+    resetGlobal()
+    const task = Instance.disposeAll()
+      .catch(() => undefined)
+      .finally(disposed)
+    if (wait) return task
+    void task
+  }
+
   export async function updateGlobal(config: Info) {
-    return runPromise((svc) => svc.updateGlobal(config))
+    const file = globalConfigFile()
+    const before = (await readFile(file)) ?? "{}"
+
+    const next = await (async () => {
+      if (!file.endsWith(".jsonc")) {
+        const existing = parseConfig(before, file)
+        const merged = mergeDeep(existing, config)
+        await Filesystem.writeJson(file, merged)
+        return merged
+      }
+
+      const updated = patchJsonc(before, config)
+      const merged = parseConfig(updated, file)
+      await Filesystem.write(file, updated)
+      return merged
+    })()
+
+    void invalidate()
+    return next
   }
 
   export async function directories() {
@@ -1547,8 +1523,4 @@ export namespace Config {
   export async function waitForDependencies() {
     return runPromise((svc) => svc.waitForDependencies())
   }
-
-  export const global = Object.assign(async () => getGlobal(), {
-    reset: resetGlobal,
-  })
 }
