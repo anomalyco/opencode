@@ -1060,8 +1060,6 @@ export namespace Config {
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Config") {}
 
-  // Pure helpers (no I/O dependencies)
-
   function globalConfigFile() {
     const candidates = ["opencode.jsonc", "opencode.json", "config.json"].map((file) =>
       path.join(Global.Path.config, file),
@@ -1127,7 +1125,6 @@ export namespace Config {
     })
   }
 
-  export const { readFile } = ConfigPaths
   export const { JsonError, InvalidError } = ConfigPaths
 
   export const ConfigDirectoryTypoError = NamedError.create(
@@ -1139,7 +1136,6 @@ export namespace Config {
     }),
   )
 
-  // Module-level global config cache (reset sync from tests)
   let _cachedGlobal: Info | undefined
 
   export const layer: Layer.Layer<Service, never, AppFileSystem.Service> = Layer.effect(
@@ -1149,11 +1145,11 @@ export namespace Config {
 
       const readConfigFile = Effect.fnUntraced(function* (filepath: string) {
         return yield* fs.readFileString(filepath).pipe(
-          Effect.catch((e) =>
-            "reason" in e && (e as any).reason?._tag === "NotFound"
-              ? Effect.succeed(undefined)
-              : Effect.die(e),
+          Effect.catchIf(
+            (e) => e.reason._tag === "NotFound",
+            () => Effect.succeed(undefined),
           ),
+          Effect.orDie,
         )
       })
 
@@ -1477,19 +1473,17 @@ export namespace Config {
         const file = globalConfigFile()
         const before = (yield* readConfigFile(file)) ?? "{}"
 
-        const next: Info = yield* Effect.suspend(() => {
-          if (!file.endsWith(".jsonc")) {
-            const existing = parseConfig(before, file)
-            const merged = mergeDeep(existing, config)
-            return fs
-              .writeFileString(file, JSON.stringify(merged, null, 2))
-              .pipe(Effect.orDie, Effect.as(merged))
-          }
-
+        let next: Info
+        if (!file.endsWith(".jsonc")) {
+          const existing = parseConfig(before, file)
+          const merged = mergeDeep(existing, config)
+          yield* fs.writeFileString(file, JSON.stringify(merged, null, 2)).pipe(Effect.orDie)
+          next = merged
+        } else {
           const updated = patchJsonc(before, config)
-          const merged = parseConfig(updated, file)
-          return fs.writeFileString(file, updated).pipe(Effect.orDie, Effect.as(merged))
-        })
+          next = parseConfig(updated, file)
+          yield* fs.writeFileString(file, updated).pipe(Effect.orDie)
+        }
 
         yield* invalidate()
         return next
