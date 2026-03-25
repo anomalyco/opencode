@@ -486,10 +486,25 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     const enriched = createMemo(() => server.projects.list().map(enrich))
     const list = createMemo(() => {
       const projects = enriched()
+      // During a server switch the enriched() data transiently loses server-provided
+      // icon metadata while the new backend bootstraps.  Use the rail cache (which
+      // survives the switch) as a tertiary colour fallback so the first synchronous
+      // memo evaluation already carries correct colours, preventing a visible flash
+      // even before the corrective effects have a chance to run.
+      const cachedColors = untrack(() => {
+        const rp = rail.projects
+        if (rp.length === 0) return undefined
+        const m = new Map<string, string>()
+        for (const p of rp) {
+          if (p.icon?.color) m.set(p.worktree, p.icon.color)
+        }
+        return m.size > 0 ? m : undefined
+      })
       return projects
         .filter((project) => project.worktree !== "/openclaw")
         .map((project) => {
-          const color = project.icon?.color ?? colors[project.worktree]
+          const color =
+            project.icon?.color ?? colors[project.worktree] ?? cachedColors?.get(project.worktree)
           if (!color) return project
           const icon = project.icon ? { ...project.icon, color } : { color }
           return { ...project, icon }
@@ -500,31 +515,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       const current = server.current
       const projects = list()
       if (!current || current.integration === "openclaw") return
-      // After a server switch (e.g. returning from OpenClaw) the enriched()
-      // data temporarily loses server-provided icon metadata because
-      // globalSync.data.project still contains the previous server's records.
-      // Without intervention the colour-assignment effect would pick random
-      // colours, causing a visible flash.  Preserve cached rail icons and
-      // seed the local `colors` store so downstream memos use stable colours.
-      // Read rail and colors with untrack() to avoid a circular dependency
-      // (this effect writes to both).
-      const cached = untrack(() => rail.projects)
-      if (cached.length > 0) {
-        const prev = new Map(cached.map((p) => [p.worktree, p] as const))
-        const patched = projects.map((project) => {
-          const old = prev.get(project.worktree)
-          if (old?.icon?.color && !project.icon?.color) {
-            if (!untrack(() => colors[project.worktree])) {
-              setColors(project.worktree, old.icon.color as AvatarColorKey)
-            }
-            return { ...project, icon: old.icon }
-          }
-          return project
-        })
-        setRail("projects", patched)
-      } else {
-        setRail("projects", projects)
-      }
+      // Keep the rail cache in sync with list() so that visible() can stabilise
+      // project order across server switches and so the rail cache is available as
+      // a colour fallback inside list() and the colour-assignment effect below.
+      setRail("projects", projects)
     })
 
     createEffect(() => {
@@ -547,22 +541,48 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         if (project.icon?.color) colorRequested.delete(project.worktree)
       }
 
+      // When server-provided metadata is transiently lost (e.g. after a server
+      // switch from OpenClaw), use the rail cache to recover previously known
+      // colours instead of picking new random ones.
+      const cachedColors = untrack(() => {
+        const rp = rail.projects
+        if (rp.length === 0) return undefined
+        const m = new Map<string, string>()
+        for (const p of rp) {
+          if (p.icon?.color) m.set(p.worktree, p.icon.color)
+        }
+        return m.size > 0 ? m : undefined
+      })
+
       const used = new Set<string>()
       for (const project of projects) {
-        const color = project.icon?.color ?? colors[project.worktree]
+        const color = project.icon?.color ?? colors[project.worktree] ?? cachedColors?.get(project.worktree)
         if (color) used.add(color)
+      }
+
+      // Batch all setColors writes so list() re-evaluates once, not N times.
+      const pending: Array<[string, AvatarColorKey]> = []
+      for (const project of projects) {
+        if (project.icon?.color) continue
+        const worktree = project.worktree
+        const existing = colors[worktree] ?? (cachedColors?.get(worktree) as AvatarColorKey | undefined)
+        const color = existing ?? pickAvailableColor(used)
+        if (!colors[worktree]) {
+          used.add(color)
+          pending.push([worktree, color as AvatarColorKey])
+        }
+      }
+      if (pending.length > 0) {
+        batch(() => {
+          for (const [worktree, color] of pending) setColors(worktree, color)
+        })
       }
 
       for (const project of projects) {
         if (project.icon?.color) continue
         const worktree = project.worktree
-        const existing = colors[worktree]
-        const color = existing ?? pickAvailableColor(used)
-        if (!existing) {
-          used.add(color)
-          setColors(worktree, color)
-        }
-        if (!project.id) continue
+        const color = colors[worktree]
+        if (!color || !project.id) continue
 
         const requested = colorRequested.get(worktree)
         if (requested === color) continue
@@ -608,8 +628,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           const next = list()
           const cached = rail.projects
           if (!current || current.integration !== "openclaw") {
-            // Reuse the cached order when returning from OpenClaw so icons do not jitter
-            // while fresh project metadata streams back in from the local server.
+            // Reuse the cached order when returning from OpenClaw so icons do not
+            // jitter while fresh project metadata streams back in from the server.
             const live = new Map(next.map((project) => [project.worktree, project] as const))
             const merged = cached.flatMap((project) => {
               const hit = live.get(project.worktree)
