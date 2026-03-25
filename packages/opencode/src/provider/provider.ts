@@ -748,6 +748,19 @@ export namespace Provider {
         },
       }
     },
+    "privatemode-ai": async () => {
+      const endpoint = Env.get("PRIVATEMODE_ENDPOINT") || "http://localhost:8080/v1"
+
+      return {
+        autoload: true,
+        options: {
+          baseURL: endpoint,
+        },
+        async getModel(sdk: any, modelID: string) {
+          return sdk(modelID)
+        },
+      }
+    },
   }
 
   export const Model = z
