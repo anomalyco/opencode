@@ -710,7 +710,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     })
   })
 
-  sdk.event.on(SessionApi.Event.Deleted.type, (evt) => {
+  sdk.event.on("session.deleted", (evt) => {
     if (route.data.type === "session" && route.data.sessionID === evt.properties.info.id) {
       route.navigate({ type: "home" })
       toast.show({
@@ -720,7 +720,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     }
   })
 
-  sdk.event.on(SessionApi.Event.Error.type, (evt) => {
+  sdk.event.on("session.error", (evt) => {
     const error = evt.properties.error
     if (error && typeof error === "object" && error.name === "MessageAbortedError") return
     const message = (() => {
