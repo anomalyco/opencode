@@ -14,6 +14,13 @@ import { Storage } from "@/storage/storage"
 import { ProviderError } from "@/provider/error"
 import { iife } from "@/util/iife"
 import type { SystemError } from "bun"
+
+/** Error shape thrown by Bun's fetch() when gzip/br decompression fails mid-stream */
+interface FetchDecompressionError extends Error {
+  code: "ZlibError"
+  errno: number
+  path: string
+}
 import type { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
 
@@ -897,7 +904,10 @@ export namespace MessageV2 {
     return result
   }
 
-  export function fromError(e: unknown, ctx: { providerID: ProviderID }): NonNullable<Assistant["error"]> {
+  export function fromError(
+    e: unknown,
+    ctx: { providerID: ProviderID; aborted?: boolean },
+  ): NonNullable<Assistant["error"]> {
     switch (true) {
       case e instanceof DOMException && e.name === "AbortError":
         return new MessageV2.AbortedError(
@@ -925,6 +935,21 @@ export namespace MessageV2 {
               code: (e as SystemError).code ?? "",
               syscall: (e as SystemError).syscall ?? "",
               message: (e as SystemError).message ?? "",
+            },
+          },
+          { cause: e },
+        ).toObject()
+      case e instanceof Error && (e as FetchDecompressionError).code === "ZlibError":
+        if (ctx.aborted) {
+          return new MessageV2.AbortedError({ message: e.message }, { cause: e }).toObject()
+        }
+        return new MessageV2.APIError(
+          {
+            message: "Response decompression failed",
+            isRetryable: true,
+            metadata: {
+              code: (e as FetchDecompressionError).code,
+              message: e.message,
             },
           },
           { cause: e },
