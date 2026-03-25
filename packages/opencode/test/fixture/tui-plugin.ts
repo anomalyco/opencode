@@ -188,8 +188,8 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
     },
     plugins: {
       list: () => [],
-      activatePlugin: async () => false,
-      deactivatePlugin: async () => false,
+      activate: async () => false,
+      deactivate: async () => false,
     },
     lifecycle: {
       signal: ctrl.signal,

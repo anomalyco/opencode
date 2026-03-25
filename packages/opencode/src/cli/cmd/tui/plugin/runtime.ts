@@ -568,10 +568,10 @@ function pluginApi(runtime: RuntimeState, load: Loaded, state: Scope, base: stri
       list() {
         return listPluginStatus(runtime)
       },
-      activatePlugin(id) {
+      activate(id) {
         return activatePluginById(runtime, id, true)
       },
-      deactivatePlugin(id) {
+      deactivate(id) {
         return deactivatePluginById(runtime, id, true)
       },
     },

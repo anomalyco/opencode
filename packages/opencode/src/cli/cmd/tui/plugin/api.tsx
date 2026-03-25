@@ -358,10 +358,10 @@ export function createTuiApi(input: Input): TuiHostPluginApi {
       list() {
         return []
       },
-      async activatePlugin() {
+      async activate() {
         return false
       },
-      async deactivatePlugin() {
+      async deactivate() {
         return false
       },
     },

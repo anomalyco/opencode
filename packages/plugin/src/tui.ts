@@ -389,8 +389,8 @@ export type TuiPluginApi = {
   slots: TuiSlots
   plugins: {
     list: () => ReadonlyArray<TuiPluginStatus>
-    activatePlugin: (id: string) => Promise<boolean>
-    deactivatePlugin: (id: string) => Promise<boolean>
+    activate: (id: string) => Promise<boolean>
+    deactivate: (id: string) => Promise<boolean>
   }
   lifecycle: TuiLifecycle
 }
