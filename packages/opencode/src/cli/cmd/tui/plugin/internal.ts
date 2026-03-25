@@ -1,5 +1,4 @@
 import * as HomeTips from "../feature-plugins/home/tips"
-import * as SidebarTitle from "../feature-plugins/sidebar/title"
 import * as SidebarContext from "../feature-plugins/sidebar/context"
 import * as SidebarMcp from "../feature-plugins/sidebar/mcp"
 import * as SidebarLsp from "../feature-plugins/sidebar/lsp"
@@ -18,10 +17,6 @@ export const INTERNAL_TUI_PLUGINS: InternalTuiPlugin[] = [
   {
     name: "home-tips",
     module: HomeTips,
-  },
-  {
-    name: "sidebar-title",
-    module: SidebarTitle,
   },
   {
     name: "sidebar-content-context",
