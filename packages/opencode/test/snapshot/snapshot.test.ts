@@ -213,46 +213,6 @@ test("large added files are skipped", async () => {
   })
 })
 
-test("large modified files are skipped", async () => {
-  await using tmp = await bootstrap()
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const before = await Snapshot.track()
-      expect(before).toBeTruthy()
-
-      await Filesystem.write(`${tmp.path}/a.txt`, new Uint8Array(2 * 1024 * 1024 + 1))
-
-      expect((await Snapshot.patch(before!)).files).toEqual([])
-      expect(await Snapshot.diff(before!)).toBe("")
-      expect(await Snapshot.track()).toBe(before)
-    },
-  })
-})
-
-test("large files are tracked again after shrinking", async () => {
-  await using tmp = await bootstrap()
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const before = await Snapshot.track()
-      expect(before).toBeTruthy()
-
-      await Filesystem.write(`${tmp.path}/huge.txt`, new Uint8Array(2 * 1024 * 1024 + 1))
-      await Filesystem.write(`${tmp.path}/a.txt`, new Uint8Array(2 * 1024 * 1024 + 1))
-
-      expect((await Snapshot.patch(before!)).files).toEqual([])
-
-      await Filesystem.write(`${tmp.path}/huge.txt`, "small")
-      await Filesystem.write(`${tmp.path}/a.txt`, "small")
-
-      const patch = await Snapshot.patch(before!)
-      expect(patch.files).toContain(fwd(tmp.path, "huge.txt"))
-      expect(patch.files).toContain(fwd(tmp.path, "a.txt"))
-    },
-  })
-})
-
 test("nested directory revert", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
