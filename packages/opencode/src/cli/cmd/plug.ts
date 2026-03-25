@@ -22,6 +22,11 @@ import { errorMessage } from "../../util/error"
 import { parsePluginSpecifier, resolvePluginTarget } from "../../plugin/shared"
 
 type Mode = "noop" | "add" | "replace"
+type Kind = "server" | "tui"
+type Target = {
+  kind: Kind
+  opts?: Record<string, unknown>
+}
 
 function pluginSpec(item: unknown) {
   if (typeof item === "string") return item
@@ -30,8 +35,32 @@ function pluginSpec(item: unknown) {
   return item[0]
 }
 
-function patchPluginList(list: unknown[], mod: string, force = false): { mode: Mode; list: unknown[] } {
-  const pkg = parsePluginSpecifier(mod).pkg
+function parseTarget(item: unknown): Target | undefined {
+  if (item === "server" || item === "tui") return { kind: item }
+  if (!Array.isArray(item)) return
+  if (item[0] !== "server" && item[0] !== "tui") return
+  if (item.length < 2) return { kind: item[0] }
+  const opt = item[1]
+  if (!opt || typeof opt !== "object" || Array.isArray(opt)) return { kind: item[0] }
+  return {
+    kind: item[0],
+    opts: opt,
+  }
+}
+
+function parseTargets(raw: unknown) {
+  if (!Array.isArray(raw)) return []
+  const map = new Map<Kind, Target>()
+  for (const item of raw) {
+    const hit = parseTarget(item)
+    if (!hit) continue
+    map.set(hit.kind, hit)
+  }
+  return [...map.values()]
+}
+
+function patchPluginList(list: unknown[], spec: string, next: unknown, force = false): { mode: Mode; list: unknown[] } {
+  const pkg = parsePluginSpecifier(spec).pkg
   const rows = list.map((item, i) => ({
     item,
     i,
@@ -39,7 +68,7 @@ function patchPluginList(list: unknown[], mod: string, force = false): { mode: M
   }))
   const dup = rows.filter((item) => {
     if (!item.spec) return false
-    if (item.spec === mod) return true
+    if (item.spec === spec) return true
     if (item.spec.startsWith("file://")) return false
     return parsePluginSpecifier(item.spec).pkg === pkg
   })
@@ -47,7 +76,7 @@ function patchPluginList(list: unknown[], mod: string, force = false): { mode: M
   if (!dup.length) {
     return {
       mode: "add",
-      list: [...list, mod],
+      list: [...list, next],
     }
   }
 
@@ -66,7 +95,7 @@ function patchPluginList(list: unknown[], mod: string, force = false): { mode: M
     }
   }
 
-  if (dup.length === 1 && keep.spec === mod) {
+  if (dup.length === 1 && keep.spec === spec) {
     return {
       mode: "noop",
       list,
@@ -76,14 +105,14 @@ function patchPluginList(list: unknown[], mod: string, force = false): { mode: M
   const idx = new Set(dup.map((item) => item.i))
   return {
     mode: "replace",
-    list: rows.flatMap((item) => {
-      if (!idx.has(item.i)) return [item.item]
-      if (item.i !== keep.i) return []
-      if (typeof item.item === "string") return [mod]
-      if (Array.isArray(item.item) && typeof item.item[0] === "string") {
-        return [[mod, ...item.item.slice(1)]]
+    list: rows.flatMap((row) => {
+      if (!idx.has(row.i)) return [row.item]
+      if (row.i !== keep.i) return []
+      if (typeof row.item === "string") return [next]
+      if (Array.isArray(row.item) && typeof row.item[0] === "string") {
+        return [[spec, ...row.item.slice(1)]]
       }
-      return [item.item]
+      return [row.item]
     }),
   }
 }
@@ -195,19 +224,19 @@ export function createPlugTask(input: PlugInput, dep: PlugDeps = defaultPlugDeps
     }
 
     const raw = json["oc-plugin"]
-    const kinds = Array.isArray(raw) ? raw.filter((x): x is "server" | "tui" => x === "server" || x === "tui") : []
+    const targets = parseTargets(raw)
 
-    if (!kinds.length) {
+    if (!targets.length) {
       inspect.stop("No plugin targets found", 1)
       dep.log.error(`"${mod}" does not declare supported targets in package.json`)
-      dep.log.info('Expected: "oc-plugin": ["server", "tui"] (or either one).')
+      dep.log.info('Expected: "oc-plugin": ["server", "tui"] or tuples like [["tui", { ... }]].')
       return false
     }
-    inspect.stop(`Detected ${kinds.join(" + ")} target${kinds.length === 1 ? "" : "s"}`)
+    inspect.stop(`Detected ${targets.map((x) => x.kind).join(" + ")} target${targets.length === 1 ? "" : "s"}`)
 
-    const patch = async (name: "opencode" | "tui", kind: "server" | "tui") => {
+    const patch = async (name: "opencode" | "tui", target: Target) => {
       const spin = dep.spinner()
-      spin.start(`Updating ${kind} config...`)
+      spin.start(`Updating ${target.kind} config...`)
 
       await using _ = await Flock.acquire(`plug-config:${Filesystem.resolve(path.join(dir, name))}`)
 
@@ -231,7 +260,7 @@ export function createPlugTask(input: PlugInput, dep: PlugDeps = defaultPlugDeps
         const lines = text.substring(0, err.offset).split("\n")
         const line = lines.length
         const col = lines[lines.length - 1].length + 1
-        spin.stop(`Failed updating ${kind} config`, 1)
+        spin.stop(`Failed updating ${target.kind} config`, 1)
         dep.log.error(`Invalid JSON in ${cfg} (${printParseErrorCode(err.error)} at line ${line}, column ${col})`)
         dep.log.info("Fix the config file and run the command again.")
         return false
@@ -239,7 +268,8 @@ export function createPlugTask(input: PlugInput, dep: PlugDeps = defaultPlugDeps
 
       const list: unknown[] =
         data && typeof data === "object" && !Array.isArray(data) && Array.isArray(data.plugin) ? data.plugin : []
-      const out = patchPluginList(list, mod, force)
+      const item = target.opts ? [mod, target.opts] : mod
+      const out = patchPluginList(list, mod, item, force)
 
       if (out.mode === "noop") {
         spin.stop(`Already configured in ${cfg}`)
@@ -257,13 +287,17 @@ export function createPlugTask(input: PlugInput, dep: PlugDeps = defaultPlugDeps
       return true
     }
 
-    if (kinds.includes("server")) {
-      const ok = await patch("opencode", "server")
+    if (targets.some((x) => x.kind === "server")) {
+      const target = targets.find((x) => x.kind === "server")
+      if (!target) return false
+      const ok = await patch("opencode", target)
       if (!ok) return false
     }
 
-    if (kinds.includes("tui")) {
-      const ok = await patch("tui", "tui")
+    if (targets.some((x) => x.kind === "tui")) {
+      const target = targets.find((x) => x.kind === "tui")
+      if (!target) return false
+      const ok = await patch("tui", target)
       if (!ok) return false
     }
 

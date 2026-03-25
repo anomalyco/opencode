@@ -95,6 +95,28 @@ describe("cli.plug.task", () => {
     expect(tui.plugin).toEqual(["acme@1.2.3"])
   })
 
+  test("writes default options from tuple manifest targets", async () => {
+    await using tmp = await tmpdir()
+    const target = await plugin(tmp.path, [
+      ["server", { custom: true, other: false }],
+      ["tui", { compact: true }],
+    ])
+    const run = createPlugTask(
+      {
+        mod: "acme@1.2.3",
+      },
+      deps(path.join(tmp.path, "global"), target),
+    )
+
+    const ok = await run(ctx(tmp.path))
+    expect(ok).toBe(true)
+
+    const server = await read(path.join(tmp.path, ".opencode", "opencode.jsonc"))
+    const tui = await read(path.join(tmp.path, ".opencode", "tui.jsonc"))
+    expect(server.plugin).toEqual([["acme@1.2.3", { custom: true, other: false }]])
+    expect(tui.plugin).toEqual([["acme@1.2.3", { compact: true }]])
+  })
+
   test("supports resolver target pointing to a file", async () => {
     await using tmp = await tmpdir()
     const target = await plugin(tmp.path, ["server"])
