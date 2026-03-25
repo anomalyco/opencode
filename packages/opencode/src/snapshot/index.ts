@@ -1,8 +1,9 @@
-import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node"
+import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Cause, Duration, Effect, Layer, Schedule, ServiceMap, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import path from "path"
 import z from "zod"
+import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRunPromise } from "@/effect/run-service"
 import { AppFileSystem } from "@/filesystem"
@@ -33,6 +34,7 @@ export namespace Snapshot {
 
   const log = Log.create({ service: "snapshot" })
   const prune = "7.days"
+  const limit = 2 * 1024 * 1024
   const core = ["-c", "core.longpaths=true", "-c", "core.symlinks=true"]
   const cfg = ["-c", "core.autocrlf=false", ...core]
   const quote = [...cfg, "-c", "core.quotepath=false"]
@@ -122,20 +124,69 @@ export namespace Snapshot {
               return file
             })
 
-            const sync = Effect.fnUntraced(function* () {
+            const sync = Effect.fnUntraced(function* (list: string[] = []) {
               const file = yield* excludes()
               const target = path.join(state.gitdir, "info", "exclude")
+              const text = [
+                file ? (yield* read(file)).trimEnd() : "",
+                ...list.map((item) => `/${item.replaceAll("\\", "/")}`),
+              ]
+                .filter(Boolean)
+                .join("\n")
               yield* fs.ensureDir(path.join(state.gitdir, "info")).pipe(Effect.orDie)
-              if (!file) {
-                yield* fs.writeFileString(target, "").pipe(Effect.orDie)
-                return
-              }
-              yield* fs.writeFileString(target, yield* read(file)).pipe(Effect.orDie)
+              yield* fs.writeFileString(target, text ? `${text}\n` : "").pipe(Effect.orDie)
             })
 
             const add = Effect.fnUntraced(function* () {
               yield* sync()
-              yield* git([...cfg, ...args(["add", "."])], { cwd: state.directory })
+              const [diff, other] = yield* Effect.all(
+                [
+                  git([...quote, ...args(["diff-files", "--name-only", "-z", "--", "."])], {
+                    cwd: state.directory,
+                  }),
+                  git([...quote, ...args(["ls-files", "--others", "--exclude-standard", "-z", "--", "."])], {
+                    cwd: state.directory,
+                  }),
+                ],
+                { concurrency: 2 },
+              )
+              if (diff.code !== 0 || other.code !== 0) {
+                log.warn("failed to list snapshot files", {
+                  diffCode: diff.code,
+                  diffStderr: diff.stderr,
+                  otherCode: other.code,
+                  otherStderr: other.stderr,
+                })
+                return
+              }
+
+              const tracked = diff.text.split("\0").filter(Boolean)
+              const all = Array.from(new Set([...tracked, ...other.text.split("\0").filter(Boolean)]))
+              if (!all.length) return
+
+              const large = (yield* Effect.all(
+                all.map((item) =>
+                  fs
+                    .stat(path.join(state.directory, item))
+                    .pipe(Effect.catch(() => Effect.void))
+                    .pipe(
+                      Effect.map((stat) => {
+                        if (!stat || stat.type !== "File") return
+                        const size = typeof stat.size === "bigint" ? Number(stat.size) : stat.size
+                        return size > limit ? item : undefined
+                      }),
+                    ),
+                ),
+                { concurrency: 8 },
+              )).filter((item): item is string => Boolean(item))
+              yield* sync(large)
+              const result = yield* git([...cfg, ...args(["add", "--sparse", "."])], { cwd: state.directory })
+              if (result.code !== 0) {
+                log.warn("failed to add snapshot files", {
+                  exitCode: result.code,
+                  stderr: result.stderr,
+                })
+              }
             })
 
             const cleanup = Effect.fnUntraced(function* () {
@@ -176,7 +227,7 @@ export namespace Snapshot {
             const patch = Effect.fnUntraced(function* (hash: string) {
               yield* add()
               const result = yield* git(
-                [...quote, ...args(["diff", "--no-ext-diff", "--name-only", hash, "--", "."])],
+                [...quote, ...args(["diff", "--cached", "--no-ext-diff", "--name-only", hash, "--", "."])],
                 {
                   cwd: state.directory,
                 },
@@ -244,7 +295,7 @@ export namespace Snapshot {
 
             const diff = Effect.fnUntraced(function* (hash: string) {
               yield* add()
-              const result = yield* git([...quote, ...args(["diff", "--no-ext-diff", hash, "--", "."])], {
+              const result = yield* git([...quote, ...args(["diff", "--cached", "--no-ext-diff", hash, "--", "."])], {
                 cwd: state.worktree,
               })
               if (result.code !== 0) {
@@ -354,9 +405,9 @@ export namespace Snapshot {
     )
 
   export const defaultLayer = layer.pipe(
-    Layer.provide(NodeChildProcessSpawner.layer),
+    Layer.provide(CrossSpawnSpawner.layer),
     Layer.provide(AppFileSystem.defaultLayer),
-    Layer.provide(NodeFileSystem.layer), // needed by NodeChildProcessSpawner
+    Layer.provide(NodeFileSystem.layer), // needed by CrossSpawnSpawner
     Layer.provide(NodePath.layer),
   )
 
