@@ -1,5 +1,5 @@
 import path from "path"
-import { describe, expect, test } from "bun:test"
+import { describe, expect, spyOn, test } from "bun:test"
 import { NamedError } from "@opencode-ai/util/error"
 import { fileURLToPath } from "url"
 import { Instance } from "../../src/project/instance"
@@ -9,8 +9,20 @@ import { MessageV2 } from "../../src/session/message-v2"
 import { SessionPrompt } from "../../src/session/prompt"
 import { Log } from "../../src/util/log"
 import { tmpdir } from "../fixture/fixture"
+import { LLM } from "../../src/session/llm"
+import { Filesystem } from "../../src/util/filesystem"
 
 Log.init({ print: false })
+
+async function loadFixture(providerID: string, modelID: string) {
+  const fixturePath = path.join(import.meta.dir, "../tool/fixtures/models-api.json")
+  const data = await Filesystem.readJson<Record<string, { models: Record<string, unknown> }>>(fixturePath)
+  const provider = data[providerID]
+  if (!provider) throw new Error(`Missing provider in fixture: ${providerID}`)
+  const model = provider.models[modelID]
+  if (!model) throw new Error(`Missing model in fixture: ${modelID}`)
+  return model
+}
 
 describe("session.prompt missing file", () => {
   test("does not fail the prompt when a file part is missing", async () => {
@@ -285,4 +297,74 @@ describe("session.agent-resolution", () => {
       },
     })
   }, 30000)
+})
+
+describe("session title fallback", () => {
+  test("falls back to the first few words when title generation returns nothing", async () => {
+    const model = await loadFixture("openai", "gpt-5.2")
+    const stream = spyOn(LLM, "stream")
+      .mockResolvedValueOnce({
+        text: Promise.resolve(""),
+      } as Awaited<ReturnType<typeof LLM.stream>>)
+      .mockResolvedValueOnce({
+        fullStream: (async function* () {
+          yield { type: "start" }
+          yield {
+            type: "finish-step",
+            finishReason: "stop",
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            providerMetadata: {},
+          }
+          yield { type: "finish" }
+        })(),
+      } as unknown as Awaited<ReturnType<typeof LLM.stream>>)
+
+    await using tmp = await tmpdir({
+      git: true,
+      config: {
+        enabled_providers: ["openai"],
+        provider: {
+          openai: {
+            options: {
+              apiKey: "test-openai-key",
+              models: {
+                "gpt-5.2": model,
+              },
+            },
+          },
+        },
+        agent: {
+          build: {
+            model: "openai/gpt-5.2",
+          },
+        },
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+
+        await SessionPrompt.prompt({
+          sessionID: session.id,
+          agent: "build",
+          parts: [{ type: "text", text: "All of my sessions are names new session is the a telemetry package sideffect?" }],
+        })
+
+        expect(stream).toHaveBeenCalledTimes(2)
+
+        let info = await Session.get(session.id)
+        for (let i = 0; i < 20 && info?.title !== "All of my sessions are"; i++) {
+          await new Promise((resolve) => setTimeout(resolve, 50))
+          info = await Session.get(session.id)
+        }
+        expect(info?.title).toBe("All of my sessions are")
+
+        await Session.remove(session.id)
+      },
+    })
+
+    stream.mockRestore()
+  })
 })

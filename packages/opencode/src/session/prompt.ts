@@ -1978,6 +1978,26 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     providerID: ProviderID
     modelID: ModelID
   }) {
+    function fallback(msg: MessageV2.WithParts) {
+      const line = msg.parts
+        .filter((part) => part.type === "text")
+        .flatMap((part) => part.text.split("\n"))
+        .map((line) => line.trim())
+        .find((line) => line.length > 0)
+      if (!line) return
+      const title = line
+        .replace(/[\s\-:;,.!?]+$/g, "")
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 5)
+        .join(" ")
+      if (!title) return
+      return Session.setTitle({ sessionID: input.session.id, title: title.length > 100 ? title.substring(0, 97) + "..." : title }).catch((err) => {
+        if (NotFoundError.isInstance(err)) return
+        throw err
+      })
+    }
+
     if (input.session.parentID) return
     if (!Session.isDefaultTitle(input.session.title)) return
 
@@ -2045,5 +2065,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         throw err
       })
     }
+
+    return fallback(firstRealUser)
   }
 }
