@@ -430,6 +430,31 @@ If you encounter "I'm sorry, but I cannot assist with that request" errors, try 
    /models
    ```
 
+7. If above steps didn't work,
+
+Create or update your `opencode.json` file in your project directory:
+
+   ```json title="opencode.json" ""myprovider"" {5-15}
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "model": "azure-cognitive-services/{model-name}",
+     "autoupdate": true,
+     "provider": {
+       "azure-cognitive-services": {
+         "options": {
+           "apiKey": "{YOUR_AZURE_API_KEY}",
+           "resourceName": "{YOUR_AZURE_RESOURCE_NAME}"
+         },
+         "models": {
+           "{model-name}": {
+             "name": "{model-name}"
+           }
+         }
+       }
+     }
+  }
+   ```
+
 ---
 
 ### Baseten
