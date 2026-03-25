@@ -164,55 +164,23 @@ export namespace Snapshot {
               const all = Array.from(new Set([...tracked, ...other.text.split("\0").filter(Boolean)]))
               if (!all.length) return
 
-              const large = (
-                yield* Effect.all(
-                  all.map((item) =>
-                    fs
-                      .stat(path.join(state.directory, item))
-                      .pipe(Effect.catch(() => Effect.void))
-                      .pipe(
-                        Effect.map((stat) => {
-                          if (!stat || stat.type !== "File") return
-                          const size = typeof stat.size === "bigint" ? Number(stat.size) : stat.size
-                          return size > limit ? item : undefined
-                        }),
-                      ),
-                  ),
-                  { concurrency: 8 },
-                )
-              )
-                .filter((item): item is string => Boolean(item))
+              const large = (yield* Effect.all(
+                all.map((item) =>
+                  fs
+                    .stat(path.join(state.directory, item))
+                    .pipe(Effect.catch(() => Effect.void))
+                    .pipe(
+                      Effect.map((stat) => {
+                        if (!stat || stat.type !== "File") return
+                        const size = typeof stat.size === "bigint" ? Number(stat.size) : stat.size
+                        return size > limit ? item : undefined
+                      }),
+                    ),
+                ),
+                { concurrency: 8 },
+              )).filter((item): item is string => Boolean(item))
               yield* sync(large)
-              const set = new Set(large)
-              const skip = tracked.filter((item) => set.has(item))
-
-              if (skip.length) {
-                const result = yield* git([...cfg, ...args(["update-index", "--skip-worktree", "--", ...skip])], {
-                  cwd: state.directory,
-                })
-                if (result.code !== 0) {
-                  log.warn("failed to mark snapshot files", {
-                    exitCode: result.code,
-                    stderr: result.stderr,
-                  })
-                  return
-                }
-              }
-
               const result = yield* git([...cfg, ...args(["add", "--sparse", "."])], { cwd: state.directory })
-
-              if (skip.length) {
-                const clear = yield* git([...cfg, ...args(["update-index", "--no-skip-worktree", "--", ...skip])], {
-                  cwd: state.directory,
-                })
-                if (clear.code !== 0) {
-                  log.warn("failed to clear snapshot files", {
-                    exitCode: clear.code,
-                    stderr: clear.stderr,
-                  })
-                }
-              }
-
               if (result.code !== 0) {
                 log.warn("failed to add snapshot files", {
                   exitCode: result.code,
