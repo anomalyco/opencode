@@ -845,8 +845,10 @@ export namespace Session {
 
     const list = rows.flatMap((row) => {
       if (row.data.role !== "assistant") return []
-      if (row.data.time.completed) return []
-      return [{ ...row.data, id: row.id, sessionID: row.sessionID } as MessageV2.Assistant]
+      const msg = row.data as MessageV2.Assistant
+      const completed = "completed" in msg.time ? msg.time.completed : undefined
+      if (completed != null) return []
+      return [{ ...msg, id: row.id, sessionID: row.sessionID } as MessageV2.Assistant]
     })
 
     const count = (await Promise.all(
