@@ -10465,9 +10465,6 @@
               "todowrite": {
                 "$ref": "#/components/schemas/PermissionActionConfig"
               },
-              "todoread": {
-                "$ref": "#/components/schemas/PermissionActionConfig"
-              },
               "question": {
                 "$ref": "#/components/schemas/PermissionActionConfig"
               },
