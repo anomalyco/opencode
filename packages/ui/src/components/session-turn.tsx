@@ -85,7 +85,7 @@ function list<T>(value: T[] | undefined | null, fallback: T[]) {
   return fallback
 }
 
-const hidden = new Set(["todowrite", "todoread"])
+const hidden = new Set(["todowrite"])
 
 function partState(part: PartType, showReasoningSummaries: boolean) {
   if (part.type === "tool") {

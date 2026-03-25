@@ -813,8 +813,6 @@ export const dict = {
   "settings.permissions.tool.skill.description": "Cargar una habilidad por nombre",
   "settings.permissions.tool.lsp.title": "LSP",
   "settings.permissions.tool.lsp.description": "Ejecutar consultas de servidor de lenguaje",
-  "settings.permissions.tool.todoread.title": "Leer Todo",
-  "settings.permissions.tool.todoread.description": "Leer la lista de tareas",
   "settings.permissions.tool.todowrite.title": "Escribir Todo",
   "settings.permissions.tool.todowrite.description": "Actualizar la lista de tareas",
   "settings.permissions.tool.webfetch.title": "Web Fetch",

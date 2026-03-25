@@ -726,8 +726,6 @@ export const dict = {
   "settings.permissions.tool.skill.description": "이름으로 기술 로드",
   "settings.permissions.tool.lsp.title": "LSP",
   "settings.permissions.tool.lsp.description": "언어 서버 쿼리 실행",
-  "settings.permissions.tool.todoread.title": "할 일 읽기",
-  "settings.permissions.tool.todoread.description": "할 일 목록 읽기",
   "settings.permissions.tool.todowrite.title": "할 일 쓰기",
   "settings.permissions.tool.todowrite.description": "할 일 목록 업데이트",
   "settings.permissions.tool.webfetch.title": "웹 가져오기",
