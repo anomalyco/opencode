@@ -509,33 +509,30 @@ export namespace Config {
     return plugins
   }
 
+  const McpJson = z.object({
+    mcpServers: z
+      .record(
+        z.object({
+          command: z.string(),
+          args: z.string().array().optional(),
+          env: z.record(z.string(), z.string()).optional(),
+        }),
+      )
+      .optional(),
+  })
+
   async function loadMcp(dir: string): Promise<NonNullable<Info["mcp"]>> {
     const file = Bun.file(path.join(dir, "mcp.json"))
     if (!(await file.exists())) return {}
 
-    const data = await file.json().catch(() => ({}))
-    const servers = data?.mcpServers
-    if (!servers || typeof servers !== "object" || Array.isArray(servers)) return {}
+    const parsed = McpJson.safeParse(await file.json().catch(() => ({})))
+    if (!parsed.success) return {}
 
     const result: NonNullable<Info["mcp"]> = {}
-    for (const [name, cfg] of Object.entries(servers)) {
-      if (!cfg || typeof cfg !== "object" || Array.isArray(cfg)) continue
-
-      const c = cfg as Record<string, unknown>
-      if (typeof c["command"] !== "string") continue
-
-      const args = Array.isArray(c["args"]) ? c["args"].filter((a): a is string => typeof a === "string") : []
-      const raw = c["env"]
-
-      result[name] = {
-        type: "local",
-        command: [c["command"], ...args],
-      }
-      if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-        result[name]["environment"] = Object.fromEntries(Object.entries(raw as Record<string, unknown>)) as Record<string, string>
-      }
+    for (const [name, cfg] of Object.entries(parsed.data.mcpServers ?? {})) {
+      result[name] = { type: "local", command: [cfg.command, ...(cfg.args ?? [])] }
+      if (cfg.env) result[name].environment = cfg.env
     }
-    log.debug("loaded mcp.json", { dir, count: Object.keys(result).length })
     return result
   }
 
