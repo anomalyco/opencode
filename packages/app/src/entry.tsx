@@ -147,3 +147,7 @@ if (root instanceof HTMLElement) {
     root,
   )
 }
+
+if ("serviceWorker" in navigator && !import.meta.env.DEV) {
+  navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {})
+}
