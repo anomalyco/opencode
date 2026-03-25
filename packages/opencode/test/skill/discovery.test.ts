@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeAll, afterAll } from "bun:test"
+import { describe, test, expect, beforeAll, beforeEach, afterAll } from "bun:test"
 import { Effect } from "effect"
 import { Discovery } from "../../src/skill/discovery"
 import { Global } from "../../src/global"
@@ -6,29 +6,41 @@ import { Filesystem } from "../../src/util/filesystem"
 import { rm } from "fs/promises"
 import path from "path"
 
-let CLOUDFLARE_SKILLS_URL: string
+const oldPath = "/.well-known/skills/"
+const newPath = "/.well-known/agent-skills/"
+
+let oldUrl: string
+let newUrl: string
+let rootUrl: string
 let server: ReturnType<typeof Bun.serve>
-let downloadCount = 0
+let count = 0
+let hits: string[] = []
+let gate = { old: true, new: true }
 
 const fixturePath = path.join(import.meta.dir, "../fixture/skills")
 const cacheDir = path.join(Global.Path.cache, "skills")
 
 beforeAll(async () => {
-  await rm(cacheDir, { recursive: true, force: true })
-
   server = Bun.serve({
     port: 0,
     async fetch(req) {
       const url = new URL(req.url)
+      hits.push(url.pathname)
 
-      // route /.well-known/skills/* to the fixture directory
-      if (url.pathname.startsWith("/.well-known/skills/")) {
-        const filePath = url.pathname.replace("/.well-known/skills/", "")
+      const base =
+        url.pathname.startsWith(newPath) && gate.new
+          ? newPath
+          : url.pathname.startsWith(oldPath) && gate.old
+            ? oldPath
+            : null
+
+      if (base) {
+        const filePath = url.pathname.slice(base.length)
         const fullPath = path.join(fixturePath, filePath)
 
         if (await Filesystem.exists(fullPath)) {
           if (!fullPath.endsWith("index.json")) {
-            downloadCount++
+            count++
           }
           return new Response(Bun.file(fullPath))
         }
@@ -38,7 +50,16 @@ beforeAll(async () => {
     },
   })
 
-  CLOUDFLARE_SKILLS_URL = `http://localhost:${server.port}/.well-known/skills/`
+  oldUrl = `http://localhost:${server.port}${oldPath}`
+  newUrl = `http://localhost:${server.port}${newPath}`
+  rootUrl = `http://localhost:${server.port}/`
+})
+
+beforeEach(async () => {
+  await rm(cacheDir, { recursive: true, force: true })
+  count = 0
+  hits = []
+  gate = { old: true, new: true }
 })
 
 afterAll(async () => {
@@ -49,39 +70,56 @@ afterAll(async () => {
 describe("Discovery.pull", () => {
   const pull = (url: string) =>
     Effect.runPromise(Discovery.Service.use((s) => s.pull(url)).pipe(Effect.provide(Discovery.defaultLayer)))
+  const indexes = () => hits.filter((item) => item.endsWith("/index.json"))
 
-  test("downloads skills from cloudflare url", async () => {
-    const dirs = await pull(CLOUDFLARE_SKILLS_URL)
+  test("downloads skills from legacy well-known url", async () => {
+    const dirs = await pull(oldUrl)
     expect(dirs.length).toBeGreaterThan(0)
     for (const dir of dirs) {
       expect(dir).toStartWith(cacheDir)
       const md = path.join(dir, "SKILL.md")
       expect(await Filesystem.exists(md)).toBe(true)
     }
+    expect(indexes()).toEqual([`${oldPath}index.json`])
   })
 
-  test("url without trailing slash works", async () => {
-    const dirs = await pull(CLOUDFLARE_SKILLS_URL.replace(/\/$/, ""))
+  test("downloads skills from agent-skills url", async () => {
+    const dirs = await pull(newUrl)
     expect(dirs.length).toBeGreaterThan(0)
     for (const dir of dirs) {
       const md = path.join(dir, "SKILL.md")
       expect(await Filesystem.exists(md)).toBe(true)
     }
+    expect(indexes()).toEqual([`${newPath}index.json`])
+  })
+
+  test("legacy url without trailing slash works", async () => {
+    const dirs = await pull(oldUrl.replace(/\/$/, ""))
+    expect(dirs.length).toBeGreaterThan(0)
+    expect(indexes()).toEqual([`${oldPath}index.json`])
+  })
+
+  test("agent-skills url without trailing slash works", async () => {
+    const dirs = await pull(newUrl.replace(/\/$/, ""))
+    expect(dirs.length).toBeGreaterThan(0)
+    expect(indexes()).toEqual([`${newPath}index.json`])
   })
 
   test("returns empty array for invalid url", async () => {
     const dirs = await pull(`http://localhost:${server.port}/invalid-url/`)
     expect(dirs).toEqual([])
+    expect(indexes()).toEqual(["/invalid-url/index.json"])
   })
 
   test("returns empty array for non-json response", async () => {
     // any url not explicitly handled in server returns 404 text "Not Found"
     const dirs = await pull(`http://localhost:${server.port}/some-other-path/`)
     expect(dirs).toEqual([])
+    expect(indexes()).toEqual(["/some-other-path/index.json"])
   })
 
   test("downloads reference files alongside SKILL.md", async () => {
-    const dirs = await pull(CLOUDFLARE_SKILLS_URL)
+    const dirs = await pull(oldUrl)
     // find a skill dir that should have reference files (e.g. agents-sdk)
     const agentsSdk = dirs.find((d) => d.endsWith(path.sep + "agents-sdk"))
     expect(agentsSdk).toBeDefined()
@@ -95,22 +133,28 @@ describe("Discovery.pull", () => {
   })
 
   test("caches downloaded files on second pull", async () => {
-    // clear dir and downloadCount
-    await rm(cacheDir, { recursive: true, force: true })
-    downloadCount = 0
-
-    // first pull to populate cache
-    const first = await pull(CLOUDFLARE_SKILLS_URL)
+    const first = await pull(newUrl)
     expect(first.length).toBeGreaterThan(0)
-    const firstCount = downloadCount
+    const firstCount = count
     expect(firstCount).toBeGreaterThan(0)
 
-    // second pull should return same results from cache
-    const second = await pull(CLOUDFLARE_SKILLS_URL)
+    const second = await pull(newUrl)
     expect(second.length).toBe(first.length)
     expect(second.sort()).toEqual(first.sort())
+    expect(count).toBe(firstCount)
+  })
 
-    // second pull should NOT increment download count
-    expect(downloadCount).toBe(firstCount)
+  test("root url falls back to agent-skills before legacy", async () => {
+    const dirs = await pull(rootUrl)
+    expect(dirs.length).toBeGreaterThan(0)
+    expect(indexes()).toEqual(["/index.json", `${newPath}index.json`])
+  })
+
+  test("root url falls back to legacy when agent-skills is unavailable", async () => {
+    gate = { old: true, new: false }
+
+    const dirs = await pull(rootUrl)
+    expect(dirs.length).toBeGreaterThan(0)
+    expect(indexes()).toEqual(["/index.json", `${newPath}index.json`, `${oldPath}index.json`])
   })
 })

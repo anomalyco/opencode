@@ -9,6 +9,8 @@ import { Log } from "../util/log"
 export namespace Discovery {
   const skillConcurrency = 4
   const fileConcurrency = 8
+  const legacy = "/.well-known/skills/"
+  const modern = "/.well-known/agent-skills/"
 
   class IndexSkill extends Schema.Class<IndexSkill>("IndexSkill")({
     name: Schema.String,
@@ -52,10 +54,8 @@ export namespace Discovery {
           )
         })
 
-        const pull = Effect.fn("Discovery.pull")(function* (url: string) {
-          const base = url.endsWith("/") ? url : `${url}/`
+        const read = Effect.fn("Discovery.read")(function* (base: string) {
           const index = new URL("index.json", base).href
-          const host = base.slice(0, -1)
 
           log.info("fetching index", { url: index })
 
@@ -63,19 +63,44 @@ export namespace Discovery {
             HttpClientRequest.acceptJson,
             http.execute,
             Effect.flatMap(HttpClientResponse.schemaBodyJson(Index)),
-            Effect.catch((err) =>
-              Effect.sync(() => {
-                log.error("failed to fetch index", { url: index, err })
-                return null
-              }),
+            Effect.catch(() => Effect.succeed(null)),
+          )
+
+          return data ? { base, data, index } : null
+        })
+
+        const pull = Effect.fn("Discovery.pull")(function* (url: string) {
+          const next = new URL(url)
+          next.hash = ""
+          next.search = ""
+          if (next.pathname.endsWith("/index.json")) next.pathname = next.pathname.slice(0, -"/index.json".length)
+          if (!next.pathname.endsWith("/")) next.pathname = `${next.pathname}/`
+
+          const bases = Array.from(
+            new Set(
+              next.pathname === "/"
+                ? [next.href, new URL(modern, next).href, new URL(legacy, next).href]
+                : [next.href],
             ),
           )
 
-          if (!data) return []
+          let hit = null as null | { base: string; data: Index; index: string }
+          for (const base of bases) {
+            hit = yield* read(base)
+            if (hit) break
+          }
 
-          const list = data.skills.filter((skill) => {
+          if (!hit) {
+            log.error("failed to fetch index", {
+              url,
+              bases: bases.map((base) => new URL("index.json", base).href),
+            })
+            return []
+          }
+
+          const list = hit.data.skills.filter((skill) => {
             if (!skill.files.includes("SKILL.md")) {
-              log.warn("skill entry missing SKILL.md", { url: index, skill: skill.name })
+              log.warn("skill entry missing SKILL.md", { url: hit.index, skill: skill.name })
               return false
             }
             return true
@@ -89,7 +114,7 @@ export namespace Discovery {
 
                 yield* Effect.forEach(
                   skill.files,
-                  (file) => download(new URL(file, `${host}/${skill.name}/`).href, path.join(root, file)),
+                  (file) => download(new URL(file, `${hit.base}${skill.name}/`).href, path.join(root, file)),
                   {
                     concurrency: fileConcurrency,
                   },
