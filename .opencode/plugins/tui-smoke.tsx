@@ -847,5 +847,6 @@ const tui = async (api: TuiPluginApi, options: Record<string, unknown> | null, m
 }
 
 export default {
+  id: "tui-smoke",
   tui,
 }
