@@ -1136,8 +1136,6 @@ export namespace Config {
     }),
   )
 
-  let _cachedGlobal: Info | undefined
-
   export const layer: Layer.Layer<Service, never, AppFileSystem.Service> = Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -1243,13 +1241,13 @@ export namespace Config {
           )
         }
 
-        _cachedGlobal = result
         return result
       })
 
+      let cachedGlobal = yield* Effect.cached(loadGlobal())
+
       const getGlobal = Effect.fn("Config.getGlobal")(function* () {
-        if (_cachedGlobal) return _cachedGlobal
-        return yield* loadGlobal()
+        return yield* cachedGlobal
       })
 
       const loadInstanceState = Effect.fnUntraced(function* (ctx: InstanceContext) {
@@ -1453,7 +1451,7 @@ export namespace Config {
       })
 
       const invalidate = Effect.fn("Config.invalidate")(function* (wait?: boolean) {
-        _cachedGlobal = undefined
+        cachedGlobal = yield* Effect.cached(loadGlobal())
         const task = Instance.disposeAll()
           .catch(() => undefined)
           .finally(() =>
@@ -1511,10 +1509,6 @@ export namespace Config {
 
   export async function getGlobal() {
     return runPromise((svc) => svc.getGlobal())
-  }
-
-  export function resetGlobal() {
-    _cachedGlobal = undefined
   }
 
   export async function update(config: Info) {
