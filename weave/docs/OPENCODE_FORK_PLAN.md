@@ -25,8 +25,8 @@ This document uses:
   source of truth (adjust to your machine or clone)
 - `/Users/anthonykim/projects/weave/references/volt/...` for the extension
   reference
-- **`weave_opencode/`** at the `weave_mono` repository root as the intended
-  `weave_opencode` once OpenCode is vendored (see [`weave_opencode/README.md`](../../weave_opencode/README.md))
+- **`weave_opencode/`** at the `weave_mono` repository root as the active fork
+  root (see [`weave_opencode/README.md`](../../weave_opencode/README.md))
 
 `weave_opencode` in older paragraphs still means that directory. Replace any
 stale absolute paths when copying this plan to a new machine.

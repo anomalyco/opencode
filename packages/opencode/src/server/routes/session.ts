@@ -21,6 +21,7 @@ import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 import { Bus } from "../../bus"
 import { NamedError } from "@opencode-ai/util/error"
+import { WeaveDB } from "@/session/weave"
 
 const log = Log.create({ service: "server" })
 
@@ -155,6 +156,36 @@ export const SessionRoutes = lazy(() =>
         const sessionID = c.req.valid("param").sessionID
         const session = await Session.children(sessionID)
         return c.json(session)
+      },
+    )
+    .get(
+      "/:sessionID/weave",
+      describeRoute({
+        summary: "Get Weave session state",
+        description: "Retrieve Weave memory state (snapshots, episodes, summaries, thread dispatches) for a session.",
+        operationId: "session.weave",
+        responses: {
+          200: {
+            description: "Weave session state",
+            content: {
+              "application/json": {
+                schema: resolver(z.record(z.string(), z.any())),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod,
+        }),
+      ),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        const state = await WeaveDB.read(sessionID)
+        return c.json(state)
       },
     )
     .get(

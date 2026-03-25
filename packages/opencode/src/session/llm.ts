@@ -66,6 +66,7 @@ export namespace LLM {
     ])
     // TODO: move this to a proper hook
     const isOpenaiOauth = provider.id === "openai" && auth?.type === "oauth"
+    const isAnthropicOauth = provider.id === "anthropic" && auth?.type === "oauth"
 
     const system: string[] = []
     system.push(
@@ -82,6 +83,11 @@ export namespace LLM {
     )
 
     const header = system[0]
+    if (isAnthropicOauth) {
+      const identity = "You are Claude Code, Anthropic's official CLI for Claude."
+      if (!system.length) system.push(identity)
+      else if (!system[0].startsWith(identity)) system[0] = `${identity}\n${system[0]}`
+    }
     await Plugin.trigger(
       "experimental.chat.system.transform",
       { sessionID: input.sessionID, model: input.model },
@@ -167,6 +173,7 @@ export namespace LLM {
         : ProviderTransform.maxOutputTokens(input.model)
 
     const tools = await resolveTools(input)
+    const transformedTools = isAnthropicOauth ? mapToolsToPascalCase(tools) : tools
 
     // LiteLLM and some Anthropic proxies require the tools parameter to be present
     // when message history contains tool calls, even if no tools are being used.
@@ -179,8 +186,8 @@ export namespace LLM {
       input.model.providerID.toLowerCase().includes("litellm") ||
       input.model.api.id.toLowerCase().includes("litellm")
 
-    if (isLiteLLMProxy && Object.keys(tools).length === 0 && hasToolCalls(input.messages)) {
-      tools["_noop"] = tool({
+    if (isLiteLLMProxy && Object.keys(transformedTools).length === 0 && hasToolCalls(input.messages)) {
+      transformedTools["_noop"] = tool({
         description:
           "Placeholder for LiteLLM/Anthropic proxy compatibility - required when message history contains tool calls but no active tools are needed",
         inputSchema: jsonSchema({ type: "object", properties: {} }),
@@ -195,7 +202,7 @@ export namespace LLM {
       const workflowModel = language
       workflowModel.systemPrompt = system.join("\n")
       workflowModel.toolExecutor = async (toolName, argsJson, _requestID) => {
-        const t = tools[toolName]
+        const t = transformedTools[toolName]
         if (!t || !t.execute) {
           return { result: "", error: `Unknown tool: ${toolName}` }
         }
@@ -248,8 +255,8 @@ export namespace LLM {
       topP: params.topP,
       topK: params.topK,
       providerOptions: ProviderTransform.providerOptions(input.model, params.options),
-      activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
-      tools,
+      activeTools: Object.keys(transformedTools).filter((x) => x !== "invalid"),
+      tools: transformedTools,
       toolChoice: input.toolChoice,
       maxOutputTokens,
       abortSignal: input.abort,
@@ -265,6 +272,19 @@ export namespace LLM {
               "User-Agent": `opencode/${Installation.VERSION}`,
             }),
         ...input.model.headers,
+        ...(isAnthropicOauth
+          ? {
+              authorization: `Bearer ${auth!.access}`,
+              accept: "application/json",
+              "content-type": "application/json",
+              "anthropic-version": "2023-06-01",
+              "anthropic-dangerous-direct-browser-access": "true",
+              "anthropic-beta":
+                "claude-code-20250219,oauth-2025-04-20,fine-grained-tool-streaming-2025-05-14,interleaved-thinking-2025-05-14",
+              "x-app": "cli",
+              "user-agent": "claude-cli/2.1.75",
+            }
+          : {}),
         ...headers,
       },
       maxRetries: input.retries ?? 0,
@@ -316,5 +336,21 @@ export namespace LLM {
       }
     }
     return false
+  }
+
+  function toPascalCase(input: string) {
+    return input
+      .split(/[^a-zA-Z0-9]+/)
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join("")
+  }
+
+  function mapToolsToPascalCase(tools: Record<string, Tool>) {
+    const transformed: Record<string, Tool> = {}
+    for (const [name, value] of Object.entries(tools)) {
+      transformed[toPascalCase(name)] = value
+    }
+    return transformed
   }
 }

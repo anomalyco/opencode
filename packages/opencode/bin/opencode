@@ -26,9 +26,11 @@ const scriptPath = fs.realpathSync(__filename)
 const scriptDir = path.dirname(scriptPath)
 
 //
-const cached = path.join(scriptDir, ".opencode")
-if (fs.existsSync(cached)) {
-  run(cached)
+const cachedCandidates = [path.join(scriptDir, ".weave"), path.join(scriptDir, ".opencode")]
+for (const cached of cachedCandidates) {
+  if (fs.existsSync(cached)) {
+    run(cached)
+  }
 }
 
 const platformMap = {

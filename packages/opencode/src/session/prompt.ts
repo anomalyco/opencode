@@ -49,6 +49,7 @@ import { Shell } from "@/shell/shell"
 import { Truncate } from "@/tool/truncate"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
+import { WeaveRuntime, WeaveEpisode, WeaveSummary } from "@/session/weave"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -684,6 +685,13 @@ export namespace SessionPrompt {
         system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
       }
 
+      const weaveContext = await WeaveRuntime.buildModelMessages({
+        sessionID,
+        role: "orchestrator",
+        sourceMessages: msgs,
+        modelMessages: MessageV2.toModelMessages(msgs, model),
+      })
+
       const result = await processor.process({
         user: lastUser,
         agent,
@@ -692,7 +700,7 @@ export namespace SessionPrompt {
         sessionID,
         system,
         messages: [
-          ...MessageV2.toModelMessages(msgs, model),
+          ...weaveContext.modelMessages,
           ...(isLastStep
             ? [
                 {
@@ -707,6 +715,20 @@ export namespace SessionPrompt {
         toolChoice: format.type === "json_schema" ? "required" : undefined,
       })
 
+      const assistantParts = await MessageV2.parts(processor.message.id)
+      const assistantText = assistantParts
+        .filter((part): part is MessageV2.TextPart => part.type === "text")
+        .map((part) => part.text.trim())
+        .filter(Boolean)
+        .join("\n")
+      if (assistantText) {
+        await WeaveSummary.addLeaf({
+          sessionID,
+          text: assistantText,
+          sourceMessageIDs: [lastUser.id, processor.message.id],
+        })
+      }
+
       // If structured output was captured, save it and exit immediately
       // This takes priority because the StructuredOutput tool was called successfully
       if (structuredOutput !== undefined) {
@@ -720,6 +742,11 @@ export namespace SessionPrompt {
       const modelFinished = processor.message.finish && !["tool-calls", "unknown"].includes(processor.message.finish)
 
       if (modelFinished && !processor.message.error) {
+        await WeaveEpisode.create({
+          sessionID,
+          summary: assistantText || "Completed thread execution",
+          sourceMessageIDs: [lastUser.id, processor.message.id],
+        })
         if (format.type === "json_schema") {
           // Model stopped without calling StructuredOutput tool
           processor.message.error = new MessageV2.StructuredOutputError({
@@ -733,6 +760,15 @@ export namespace SessionPrompt {
 
       if (result === "stop") break
       if (result === "compact") {
+        const nodes = await WeaveSummary.list(sessionID)
+        const compactBatch = nodes.slice(0, 4)
+        if (compactBatch.length > 1) {
+          await WeaveSummary.condense({
+            sessionID,
+            nodes: compactBatch,
+            text: compactBatch.map((node) => node.text).join("\n\n").slice(0, 4000),
+          })
+        }
         await SessionCompaction.create({
           sessionID,
           agent: lastUser.agent,

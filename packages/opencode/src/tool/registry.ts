@@ -32,6 +32,13 @@ import { pathToFileURL } from "url"
 import { Effect, Layer, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRunPromise } from "@/effect/run-service"
+import { WeaveGrepTool } from "./weave-grep"
+import { WeaveDescribeTool } from "./weave-describe"
+import { WeaveExpandTool } from "./weave-expand"
+import { DispatchThreadTool } from "./dispatch-thread"
+import { DispatchThreadsTool } from "./dispatch-threads"
+import { LlmMapTool } from "./llm-map"
+import { AgenticMapTool } from "./agentic-map"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -129,6 +136,13 @@ export namespace ToolRegistry {
           CodeSearchTool,
           SkillTool,
           ApplyPatchTool,
+          WeaveGrepTool,
+          WeaveDescribeTool,
+          WeaveExpandTool,
+          DispatchThreadTool,
+          DispatchThreadsTool,
+          LlmMapTool,
+          AgenticMapTool,
           ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
           ...(cfg.experimental?.batch_tool === true ? [BatchTool] : []),
           ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [PlanExitTool] : []),

@@ -11,6 +11,7 @@ import { Process } from "../../util/process"
 import { EOL } from "os"
 import path from "path"
 import { which } from "../../util/which"
+import { WeaveDB } from "@/session/weave"
 
 function pagerCmd(): string[] {
   const lessOptions = ["-R", "-S"]
@@ -42,7 +43,8 @@ function pagerCmd(): string[] {
 export const SessionCommand = cmd({
   command: "session",
   describe: "manage sessions",
-  builder: (yargs: Argv) => yargs.command(SessionListCommand).command(SessionDeleteCommand).demandCommand(),
+  builder: (yargs: Argv) =>
+    yargs.command(SessionListCommand).command(SessionDeleteCommand).command(SessionWeaveCommand).demandCommand(),
   async handler() {},
 })
 
@@ -123,6 +125,43 @@ export const SessionListCommand = cmd({
       } else {
         console.log(output)
       }
+    })
+  },
+})
+
+export const SessionWeaveCommand = cmd({
+  command: "weave <sessionID>",
+  describe: "show weave memory state for a session",
+  builder: (yargs: Argv) =>
+    yargs.positional("sessionID", {
+      describe: "session ID",
+      type: "string",
+      demandOption: true,
+    }),
+  handler: async (args) => {
+    await bootstrap(process.cwd(), async () => {
+      const sessionID = SessionID.make(args.sessionID)
+      try {
+        await Session.get(sessionID)
+      } catch {
+        UI.error(`Session not found: ${args.sessionID}`)
+        process.exit(1)
+      }
+
+      const state = await WeaveDB.read(sessionID)
+      const output = {
+        sessionID: state.sessionID,
+        version: state.version,
+        counts: {
+          snapshots: state.snapshots.length,
+          summaryNodes: state.summaryNodes.length,
+          episodes: state.episodes.length,
+          dispatches: state.dispatches.length,
+          messageLinks: state.messageLinks.length,
+        },
+        updatedAt: state.updatedAt,
+      }
+      console.log(JSON.stringify(output, null, 2))
     })
   },
 })
