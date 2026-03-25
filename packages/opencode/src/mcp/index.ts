@@ -381,16 +381,9 @@ export namespace MCP {
           error,
         })
       })
-      status = {
-        status: "failed",
-        error: "Failed to get tools",
-      }
       return {
         mcpClient: undefined,
-        status: {
-          status: "failed" as const,
-          error: "Failed to get tools",
-        },
+        status: { status: "failed" as const, error: "Failed to get tools" },
       }
     }
 
@@ -610,6 +603,9 @@ export namespace MCP {
           connectedClients,
           ([clientName, client]) =>
             Effect.gen(function* () {
+              const mcpConfig = config[clientName]
+              const entry = mcpConfig && isMcpConfigured(mcpConfig) ? mcpConfig : undefined
+
               const toolsResult = yield* Effect.tryPromise({
                 try: () => client.listTools(),
                 catch: (e: any) => {
@@ -624,10 +620,8 @@ export namespace MCP {
               }).pipe(Effect.option)
 
               if (Option.isNone(toolsResult)) {
-                // Fork background reconnection — tools come back next turn
-                const mcpConfig = config[clientName]
-                if (mcpConfig && isMcpConfigured(mcpConfig)) {
-                  yield* createAndStore(clientName, mcpConfig).pipe(
+                if (entry) {
+                  yield* createAndStore(clientName, entry).pipe(
                     Effect.catch(() => Effect.void),
                     Effect.forkIn(scope),
                   )
@@ -635,8 +629,6 @@ export namespace MCP {
                 return
               }
 
-              const mcpConfig = config[clientName]
-              const entry = isMcpConfigured(mcpConfig) ? mcpConfig : undefined
               const timeout = entry?.timeout ?? defaultTimeout
               for (const mcpTool of toolsResult.value.tools) {
                 const sanitizedClientName = clientName.replace(/[^a-zA-Z0-9_-]/g, "_")
@@ -844,7 +836,6 @@ export namespace MCP {
         yield* auth.remove(mcpName)
         McpOAuthCallback.cancelPending(mcpName)
         pendingOAuthTransports.delete(mcpName)
-        yield* auth.clearOAuthState(mcpName)
         log.info("removed oauth credentials", { mcpName })
       })
 
