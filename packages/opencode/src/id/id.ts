@@ -3,6 +3,7 @@ import { randomBytes } from "crypto"
 
 export namespace Identifier {
   const prefixes = {
+    event: "evt",
     session: "ses",
     message: "msg",
     permission: "per",
