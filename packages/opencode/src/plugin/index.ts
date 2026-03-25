@@ -3,7 +3,6 @@ import { Config } from "../config/config"
 import { Bus } from "../bus"
 import { Log } from "../util/log"
 import { createOpencodeClient } from "@opencode-ai/sdk"
-import { Server } from "../server/server"
 import { BunProc } from "../bun"
 import { Flag } from "../flag/flag"
 import { CodexAuthPlugin } from "./codex"
@@ -58,6 +57,8 @@ export namespace Plugin {
           const hooks: Hooks[] = []
 
           yield* Effect.promise(async () => {
+            const { Server } = await import("../server/server")
+
             const client = createOpencodeClient({
               baseUrl: "http://localhost:4096",
               directory: ctx.directory,
