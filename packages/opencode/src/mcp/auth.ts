@@ -88,60 +88,32 @@ export namespace McpAuth {
         yield* fs.writeJson(filepath, data, 0o600).pipe(Effect.orDie)
       })
 
-      const updateTokens = Effect.fn("McpAuth.updateTokens")(function* (
-        mcpName: string,
-        tokens: Tokens,
-        serverUrl?: string,
-      ) {
-        const entry = (yield* get(mcpName)) ?? {}
-        entry.tokens = tokens
-        yield* set(mcpName, entry, serverUrl)
-      })
+      const updateField = <K extends keyof Entry>(field: K, spanName: string) =>
+        Effect.fn(`McpAuth.${spanName}`)(function* (mcpName: string, value: NonNullable<Entry[K]>, serverUrl?: string) {
+          const entry = (yield* get(mcpName)) ?? {}
+          entry[field] = value
+          yield* set(mcpName, entry, serverUrl)
+        })
 
-      const updateClientInfo = Effect.fn("McpAuth.updateClientInfo")(function* (
-        mcpName: string,
-        clientInfo: ClientInfo,
-        serverUrl?: string,
-      ) {
-        const entry = (yield* get(mcpName)) ?? {}
-        entry.clientInfo = clientInfo
-        yield* set(mcpName, entry, serverUrl)
-      })
+      const clearField = <K extends keyof Entry>(field: K, spanName: string) =>
+        Effect.fn(`McpAuth.${spanName}`)(function* (mcpName: string) {
+          const entry = yield* get(mcpName)
+          if (entry) {
+            delete entry[field]
+            yield* set(mcpName, entry)
+          }
+        })
 
-      const updateCodeVerifier = Effect.fn("McpAuth.updateCodeVerifier")(function* (
-        mcpName: string,
-        codeVerifier: string,
-      ) {
-        const entry = (yield* get(mcpName)) ?? {}
-        entry.codeVerifier = codeVerifier
-        yield* set(mcpName, entry)
-      })
-
-      const clearCodeVerifier = Effect.fn("McpAuth.clearCodeVerifier")(function* (mcpName: string) {
-        const entry = yield* get(mcpName)
-        if (entry) {
-          delete entry.codeVerifier
-          yield* set(mcpName, entry)
-        }
-      })
-
-      const updateOAuthState = Effect.fn("McpAuth.updateOAuthState")(function* (mcpName: string, oauthState: string) {
-        const entry = (yield* get(mcpName)) ?? {}
-        entry.oauthState = oauthState
-        yield* set(mcpName, entry)
-      })
+      const updateTokens = updateField("tokens", "updateTokens")
+      const updateClientInfo = updateField("clientInfo", "updateClientInfo")
+      const updateCodeVerifier = updateField("codeVerifier", "updateCodeVerifier")
+      const updateOAuthState = updateField("oauthState", "updateOAuthState")
+      const clearCodeVerifier = clearField("codeVerifier", "clearCodeVerifier")
+      const clearOAuthState = clearField("oauthState", "clearOAuthState")
 
       const getOAuthState = Effect.fn("McpAuth.getOAuthState")(function* (mcpName: string) {
         const entry = yield* get(mcpName)
         return entry?.oauthState
-      })
-
-      const clearOAuthState = Effect.fn("McpAuth.clearOAuthState")(function* (mcpName: string) {
-        const entry = yield* get(mcpName)
-        if (entry) {
-          delete entry.oauthState
-          yield* set(mcpName, entry)
-        }
       })
 
       const isTokenExpired = Effect.fn("McpAuth.isTokenExpired")(function* (mcpName: string) {
