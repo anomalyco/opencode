@@ -76,6 +76,13 @@ export namespace SessionPrompt {
             resolve(input: MessageV2.WithParts): void
             reject(reason?: any): void
           }[]
+          pending: {
+            resolve(input: MessageV2.WithParts): void
+            parts: MessageV2.Part[]
+            model?: Provider.Model
+            system?: string
+            format?: MessageV2.Format
+          }[]
         }
       > = {}
       return data
@@ -90,6 +97,23 @@ export namespace SessionPrompt {
   export function assertNotBusy(sessionID: SessionID) {
     const match = state()[sessionID]
     if (match) throw new Session.BusyError(sessionID)
+  }
+
+  export function queuePending(
+    sessionID: SessionID,
+    input: {
+      resolve(input: MessageV2.WithParts): void
+      parts: MessageV2.Part[]
+      model?: Provider.Model
+      system?: string
+      format?: MessageV2.Format
+    },
+  ) {
+    const s = state()
+    if (!s[sessionID]) {
+      s[sessionID] = { abort: new AbortController(), callbacks: [], pending: [] }
+    }
+    s[sessionID].pending.push(input)
   }
 
   export const PromptInput = z.object({
@@ -299,6 +323,37 @@ export namespace SessionPrompt {
       await SessionStatus.set(sessionID, { type: "busy" })
       log.info("loop", { step, sessionID })
       if (abort.aborted) break
+
+      // Drain pending messages and inject them as user messages BEFORE loading message history
+      const pending = state()[sessionID]?.pending ?? []
+      if (pending.length > 0) {
+        state()[sessionID].pending = []
+        for (const p of pending) {
+          const agentName = await Agent.defaultAgent()
+          const agent = await Agent.get(agentName)
+          if (!agent) continue
+
+          const model = p.model ?? agent.model ?? (await lastModel(sessionID))
+          const info: MessageV2.Info = {
+            id: MessageID.ascending(),
+            role: "user",
+            sessionID,
+            time: { created: Date.now() },
+            agent: agent.name,
+            model,
+            system: p.system,
+            format: p.format,
+          }
+
+          await Session.updateMessage(info)
+          for (const part of p.parts) {
+            await Session.updatePart({ ...part, messageID: info.id, sessionID })
+          }
+
+          p.resolve({ info, parts: p.parts })
+        }
+      }
+
       let msgs = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
 
       let lastUser: MessageV2.User | undefined

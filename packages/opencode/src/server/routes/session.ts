@@ -816,8 +816,22 @@ export const SessionRoutes = lazy(() =>
         return stream(c, async (stream) => {
           const sessionID = c.req.valid("param").sessionID
           const body = c.req.valid("json")
-          const msg = await SessionPrompt.prompt({ ...body, sessionID })
-          stream.write(JSON.stringify(msg))
+          try {
+            const msg = await SessionPrompt.prompt({ ...body, sessionID })
+            stream.write(JSON.stringify(msg))
+          } catch (err) {
+            if (Session.BusyError.isInstance(err)) {
+              SessionPrompt.queuePending(sessionID, {
+                resolve: (msg) => stream.write(JSON.stringify(msg)),
+                parts: body.parts,
+                model: body.model,
+                system: body.system,
+                format: body.format,
+              })
+            } else {
+              throw err
+            }
+          })
         })
       },
     )
@@ -848,13 +862,26 @@ export const SessionRoutes = lazy(() =>
         return stream(c, async () => {
           const sessionID = c.req.valid("param").sessionID
           const body = c.req.valid("json")
-          SessionPrompt.prompt({ ...body, sessionID }).catch((err) => {
-            log.error("prompt_async failed", { sessionID, error: err })
-            Bus.publish(Session.Event.Error, {
-              sessionID,
-              error: new NamedError.Unknown({ message: err instanceof Error ? err.message : String(err) }).toObject(),
-            })
-          })
+          try {
+            await SessionPrompt.prompt({ ...body, sessionID })
+          } catch (err) {
+            if (Session.BusyError.isInstance(err)) {
+              SessionPrompt.queuePending(sessionID, {
+                resolve: () => {},
+                parts: body.parts,
+                model: body.model,
+                system: body.system,
+                format: body.format,
+              })
+              log.info("prompt_async queued", { sessionID })
+            } else {
+              log.error("prompt_async failed", { sessionID, error: err })
+              Bus.publish(Session.Event.Error, {
+                sessionID,
+                error: new NamedError.Unknown({ message: err instanceof Error ? err.message : String(err) }).toObject(),
+              })
+            }
+          }
         })
       },
     )
