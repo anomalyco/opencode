@@ -622,7 +622,7 @@ export namespace MCP {
               if (Option.isNone(toolsResult)) {
                 if (entry) {
                   yield* createAndStore(clientName, entry).pipe(
-                    Effect.catch(() => Effect.void),
+                    Effect.ignore,
                     Effect.forkIn(scope),
                   )
                 }
