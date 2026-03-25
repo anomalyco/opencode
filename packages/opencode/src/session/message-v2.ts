@@ -14,6 +14,8 @@ import { Storage } from "@/storage/storage"
 import { ProviderError } from "@/provider/error"
 import { iife } from "@/util/iife"
 import type { SystemError } from "bun"
+import type { Provider } from "@/provider/provider"
+import { ModelID, ProviderID } from "@/provider/schema"
 
 /** Error shape thrown by Bun's fetch() when gzip/br decompression fails mid-stream */
 interface FetchDecompressionError extends Error {
@@ -21,8 +23,6 @@ interface FetchDecompressionError extends Error {
   errno: number
   path: string
 }
-import type { Provider } from "@/provider/provider"
-import { ModelID, ProviderID } from "@/provider/schema"
 
 export namespace MessageV2 {
   export function isMedia(mime: string) {
