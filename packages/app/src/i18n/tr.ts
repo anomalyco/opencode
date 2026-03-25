@@ -816,8 +816,6 @@ export const dict = {
   "settings.permissions.tool.skill.description": "Ada göre bir beceri yükle",
   "settings.permissions.tool.lsp.title": "LSP",
   "settings.permissions.tool.lsp.description": "Dil sunucusu sorguları çalıştır",
-  "settings.permissions.tool.todoread.title": "Görev Oku",
-  "settings.permissions.tool.todoread.description": "Görev listesini oku",
   "settings.permissions.tool.todowrite.title": "Görev Yaz",
   "settings.permissions.tool.todowrite.description": "Görev listesini güncelle",
   "settings.permissions.tool.webfetch.title": "Web Getir",
