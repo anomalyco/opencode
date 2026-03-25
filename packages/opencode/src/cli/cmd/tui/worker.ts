@@ -156,7 +156,7 @@ export const rpc = {
     })
   },
   async reload() {
-    Config.global.reset()
+    await Config.global.reset()
     await Instance.disposeAll()
   },
   async setWorkspace(input: { workspaceID?: string }) {
