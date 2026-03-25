@@ -26,9 +26,9 @@ This document uses:
 - `/Users/anthonykim/projects/weave/references/volt/...` for the extension
   reference
 - **`weave_opencode/`** at the `weave_mono` repository root as the intended
-  `<fork-root>` once OpenCode is vendored (see [`weave_opencode/README.md`](../../weave_opencode/README.md))
+  `weave_opencode` once OpenCode is vendored (see [`weave_opencode/README.md`](../../weave_opencode/README.md))
 
-`<fork-root>` in older paragraphs still means that directory. Replace any
+`weave_opencode` in older paragraphs still means that directory. Replace any
 stale absolute paths when copying this plan to a new machine.
 
 ## 2. Core Principle
@@ -123,7 +123,7 @@ implementation starts:
 The smallest workable addition is:
 
 ```text
-/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/weave/
+/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/weave/
   index.ts
   types.ts
   db.ts
@@ -146,7 +146,7 @@ The smallest workable addition is:
 Companion tool files:
 
 ```text
-/Users/anthonykim/projects/weave_mono/weave_opencode/src/tool/
+/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/tool/
   weave-grep.ts
   weave-describe.ts
   weave-expand.ts
@@ -158,7 +158,7 @@ Companion tool files:
 Companion TUI files:
 
 ```text
-/Users/anthonykim/projects/weave_mono/weave_opencode/src/cli/cmd/tui/context/
+/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/cli/cmd/tui/context/
   weave-thread-tree.tsx
   weave-episode-feed.tsx
   weave-dag.tsx
@@ -185,11 +185,11 @@ Files to change:
 
 Files to leave alone:
 
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/index.ts`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/cli/`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/server/`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/tool/`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/index.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/cli/`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/server/`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/tool/`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/`
 
 Deliverables:
 
@@ -251,17 +251,17 @@ Purpose:
 
 Files to add:
 
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/weave/index.ts`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/weave/types.ts`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/weave/runtime.ts`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/weave/context.ts`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/weave/db.ts`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/weave/config.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/weave/index.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/weave/types.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/weave/runtime.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/weave/context.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/weave/db.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/weave/config.ts`
 
 Files to touch lightly:
 
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/index.ts`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/prompt.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/index.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/prompt.ts`
 
 Responsibilities:
 
@@ -330,14 +330,14 @@ Recommended strategy:
 
 Files to add or expand:
 
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/weave/db.ts`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/weave/migration.ts`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/weave/types.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/weave/db.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/weave/migration.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/weave/types.ts`
 
 Possible supporting routes:
 
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/server/routes/session.ts`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/server/routes/file.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/server/routes/session.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/server/routes/file.ts`
 
 Tables or storage domains to introduce:
 
@@ -367,14 +367,14 @@ Purpose:
 
 Files to implement:
 
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/weave/context.ts`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/weave/runtime.ts`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/weave/config.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/weave/context.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/weave/runtime.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/weave/config.ts`
 
 Files to wrap:
 
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/prompt.ts`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/llm.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/prompt.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/llm.ts`
 
 Context assembly contract:
 
@@ -402,23 +402,23 @@ Purpose:
 
 Files to add:
 
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/tool/weave-grep.ts`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/tool/weave-describe.ts`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/tool/weave-expand.ts`
-- optional `/Users/anthonykim/projects/weave_mono/weave_opencode/src/tool/weave-expand-query.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/tool/weave-grep.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/tool/weave-describe.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/tool/weave-expand.ts`
+- optional `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/tool/weave-expand-query.ts`
 
 Files to touch:
 
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/tool/registry.ts`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/tool/tool.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/tool/registry.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/tool/tool.ts`
 - tool docs and prompt descriptions
 
 Dependencies inside Weave engine:
 
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/weave/retrieval.ts`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/weave/retrieval-facade.ts`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/weave/summary.ts`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/weave/db.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/weave/retrieval.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/weave/retrieval-facade.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/weave/summary.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/weave/db.ts`
 
 Design rules:
 
@@ -438,16 +438,16 @@ Purpose:
 
 Files to add:
 
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/weave/thread.ts`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/weave/dispatch.ts`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/weave/scope.ts`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/tool/dispatch-thread.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/weave/thread.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/weave/dispatch.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/weave/scope.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/tool/dispatch-thread.ts`
 
 Files to wrap:
 
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/tool/task.ts`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/tool/tasks.ts`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/index.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/tool/task.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/tool/tasks.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/index.ts`
 
 Thread metadata to introduce:
 
@@ -478,14 +478,14 @@ Purpose:
 
 Files to add:
 
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/weave/episode.ts`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/weave/summary.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/weave/episode.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/weave/summary.ts`
 
 Files to touch:
 
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/index.ts`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/status.ts`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/server/routes/session.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/index.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/status.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/server/routes/session.ts`
 
 Episode payload should include:
 
@@ -510,14 +510,14 @@ Purpose:
 
 Files to add:
 
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/tool/dispatch-threads.ts`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/tool/llm-map.ts`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/tool/agentic-map.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/tool/dispatch-threads.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/tool/llm-map.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/tool/agentic-map.ts`
 
 Files to add inside engine:
 
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/weave/operator.ts`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/weave/worker-pool.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/weave/operator.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/weave/worker-pool.ts`
 
 Files to reuse heavily from Volt references:
 
@@ -546,11 +546,11 @@ Purpose:
 
 Files to add or complete:
 
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/weave/summary.ts`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/weave/summarize.ts`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/weave/condense.ts`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/weave/runtime.ts`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/weave/config.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/weave/summary.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/weave/summarize.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/weave/condense.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/weave/runtime.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/weave/config.ts`
 
 Likely supporting files:
 
@@ -584,15 +584,15 @@ Purpose:
 
 Files to add:
 
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/cli/cmd/tui/context/weave-thread-tree.tsx`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/cli/cmd/tui/context/weave-episode-feed.tsx`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/cli/cmd/tui/context/weave-dag.tsx`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/cli/cmd/tui/context/weave-context-usage.tsx`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/cli/cmd/tui/context/weave-thread-tree.tsx`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/cli/cmd/tui/context/weave-episode-feed.tsx`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/cli/cmd/tui/context/weave-dag.tsx`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/cli/cmd/tui/context/weave-context-usage.tsx`
 
 Files to touch:
 
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/cli/cmd/tui/context/sync.tsx`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/cli/cmd/tui/context/route.tsx`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/cli/cmd/tui/context/sync.tsx`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/cli/cmd/tui/context/route.tsx`
 - existing session/task tree components
 
 First visible surfaces:
@@ -620,12 +620,12 @@ Purpose:
 
 Files to add:
 
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/weave/orchestrator.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/weave/orchestrator.ts`
 
 Files to wrap:
 
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/prompt.ts`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/tool/task.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/prompt.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/tool/task.ts`
 - any agent-role resolution files
 
 Responsibilities:
@@ -654,11 +654,11 @@ Purpose:
 
 Files likely to revisit:
 
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/index.ts`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/prompt.ts`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/tool/task.ts`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/tool/tasks.ts`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/server/routes/session.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/index.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/prompt.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/tool/task.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/tool/tasks.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/server/routes/session.ts`
 - TUI sync layers
 
 Cleanup tasks:
@@ -690,9 +690,9 @@ Weave-specific events will be needed for:
 
 Likely files:
 
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/bus/`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/status.ts`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/server/routes/event.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/bus/`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/status.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/server/routes/event.ts`
 - TUI sync files
 
 ### Permissions
@@ -706,8 +706,8 @@ Weave-specific tools need explicit role-aware gating:
 
 Likely files:
 
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/permission/`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/tool/*.ts`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/permission/`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/tool/*.ts`
 - prompt/tool descriptions
 
 ### Provider Auth
@@ -738,8 +738,8 @@ New prompts will be needed for:
 
 Likely files:
 
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/prompt/`
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/session/weave/prompts/`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/prompt/`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/weave/prompts/`
 
 ### Server And SDK
 
@@ -752,8 +752,8 @@ Once Weave adds new concepts, the TUI and any remote client will need:
 
 Likely files:
 
-- `/Users/anthonykim/projects/weave_mono/weave_opencode/src/server/routes/session.ts`
-- new routes under `/Users/anthonykim/projects/weave_mono/weave_opencode/src/server/routes/`
+- `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/server/routes/session.ts`
+- new routes under `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/server/routes/`
 - generated SDK files
 
 ## 8. Phase Dependencies

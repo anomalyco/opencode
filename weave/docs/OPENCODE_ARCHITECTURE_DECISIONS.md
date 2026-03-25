@@ -4,7 +4,7 @@ Record irreversible choices before persistence and context work on the fork. **P
 
 | Decision | Provisional choice | Notes |
 |----------|-------------------|--------|
-| Fork root directory | [`weave_opencode`](../../weave_opencode/) at monorepo root | Vendor OpenCode here (submodule or copy); replace `<fork-root>` in planning docs. |
+| Fork root directory | [`weave_opencode`](../../weave_opencode/) at monorepo root | OpenCode now runs directly at this repository root; planning docs should reference real `packages/opencode/src/*` paths. |
 | Shared DB vs dedicated Weave store | **Dual store** | Keep OpenCode storage for app/session metadata; add a **Weave memory store** for message lineage, summaries, episodes, DAG (per plan §Phase 3). |
 | Weave message ID ownership | **Weave-owned IDs** in the Weave store | Map/adapt to OpenCode UI message IDs where required for compatibility. |
 | Mirror vs replace for prompt assembly | **Weave-built context** | OpenCode messages are not the sole source of truth for long-context assembly; Weave `context.ts` (or equivalent) builds the prompt payload. |

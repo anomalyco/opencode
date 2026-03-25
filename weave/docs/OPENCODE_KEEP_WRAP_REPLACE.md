@@ -66,17 +66,17 @@ These have no real upstream owner and should be Weave-native from the start:
 
 | New Path | Role |
 |---|---|
-| `/Users/anthonykim/projects/weave/<fork-root>/src/session/weave/` | Weave engine namespace |
-| `/Users/anthonykim/projects/weave/<fork-root>/src/session/weave/context.ts` | active context assembly |
-| `/Users/anthonykim/projects/weave/<fork-root>/src/session/weave/db.ts` | memory persistence |
-| `/Users/anthonykim/projects/weave/<fork-root>/src/session/weave/summary.ts` | summary DAG model |
-| `/Users/anthonykim/projects/weave/<fork-root>/src/session/weave/episode.ts` | episode creation and storage |
-| `/Users/anthonykim/projects/weave/<fork-root>/src/session/weave/orchestrator.ts` | orchestration semantics |
-| `/Users/anthonykim/projects/weave/<fork-root>/src/tool/weave-grep.ts` | memory retrieval |
-| `/Users/anthonykim/projects/weave/<fork-root>/src/tool/weave-describe.ts` | DAG inspection |
-| `/Users/anthonykim/projects/weave/<fork-root>/src/tool/weave-expand.ts` | lossless expansion |
-| `/Users/anthonykim/projects/weave/<fork-root>/src/tool/dispatch-thread.ts` | thread creation |
-| `/Users/anthonykim/projects/weave/<fork-root>/src/tool/dispatch-threads.ts` | batch dispatch |
+| `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/weave/` | Weave engine namespace |
+| `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/weave/context.ts` | active context assembly |
+| `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/weave/db.ts` | memory persistence |
+| `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/weave/summary.ts` | summary DAG model |
+| `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/weave/episode.ts` | episode creation and storage |
+| `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/session/weave/orchestrator.ts` | orchestration semantics |
+| `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/tool/weave-grep.ts` | memory retrieval |
+| `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/tool/weave-describe.ts` | DAG inspection |
+| `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/tool/weave-expand.ts` | lossless expansion |
+| `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/tool/dispatch-thread.ts` | thread creation |
+| `/Users/anthonykim/projects/weave_mono/weave_opencode/packages/opencode/src/tool/dispatch-threads.ts` | batch dispatch |
 
 ## 6. Decision Gates
 
@@ -93,7 +93,7 @@ These rows cannot be finalized until the architecture decision doc exists:
 
 This matrix should next be expanded with:
 
-1. exact target fork paths once `<fork-root>` exists
+1. exact target fork paths once `weave_opencode` exists
 2. one row per `src/session/*` file
 3. one row per `src/tool/*` file touched by Weave
 4. owner column naming the future module or namespace responsible
