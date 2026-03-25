@@ -17,7 +17,7 @@ export interface KiroProvider {
 
 export function createKiro(options: KiroProviderSettings = {}): KiroProvider {
   const region = options.region ?? "us-east-1"
-  const baseURL = options.baseURL ?? `https://codewhisperer.${region}.amazonaws.com`
+  const baseURL = options.baseURL ?? `https://q.${region}.amazonaws.com`
 
   const createLanguageModel = (modelId: string): LanguageModelV2 => {
     return new KiroLanguageModel(modelId, {

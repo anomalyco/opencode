@@ -61,7 +61,7 @@ describe("convertToKiroPayload", () => {
     expect(result.conversationState.conversationId).toBeDefined()
     expect(result.conversationState.currentMessage.userInputMessage.content).toBe("Hello")
     expect(result.conversationState.currentMessage.userInputMessage.modelId).toBe(modelId)
-    expect(result.conversationState.currentMessage.userInputMessage.origin).toBe("KIRO_CLI")
+    expect(result.conversationState.currentMessage.userInputMessage.origin).toBe("AI_EDITOR")
     expect(result.conversationState.history).toHaveLength(0)
   })
 
@@ -559,7 +559,10 @@ describe("variant extraction (mirrors parseModelSelection from acp/agent.ts)", (
   })
 
   test("does not extract variant from unknown models", () => {
-    expect(extractVariant("nonexistent-model/high")).toEqual({ baseModel: "nonexistent-model/high", variant: undefined })
+    expect(extractVariant("nonexistent-model/high")).toEqual({
+      baseModel: "nonexistent-model/high",
+      variant: undefined,
+    })
   })
 })
 
