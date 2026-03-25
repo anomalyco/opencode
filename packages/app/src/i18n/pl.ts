@@ -729,8 +729,6 @@ export const dict = {
   "settings.permissions.tool.skill.description": "Ładowanie umiejętności według nazwy",
   "settings.permissions.tool.lsp.title": "LSP",
   "settings.permissions.tool.lsp.description": "Uruchamianie zapytań serwera językowego",
-  "settings.permissions.tool.todoread.title": "Odczyt Todo",
-  "settings.permissions.tool.todoread.description": "Odczyt listy zadań",
   "settings.permissions.tool.todowrite.title": "Zapis Todo",
   "settings.permissions.tool.todowrite.description": "Aktualizacja listy zadań",
   "settings.permissions.tool.webfetch.title": "Pobieranie z sieci",

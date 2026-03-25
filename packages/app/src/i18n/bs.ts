@@ -806,8 +806,6 @@ export const dict = {
   "settings.permissions.tool.skill.description": "Učitaj vještinu po nazivu",
   "settings.permissions.tool.lsp.title": "LSP",
   "settings.permissions.tool.lsp.description": "Pokreni upite jezičnog servera",
-  "settings.permissions.tool.todoread.title": "Čitanje liste zadataka",
-  "settings.permissions.tool.todoread.description": "Čitanje liste zadataka",
   "settings.permissions.tool.todowrite.title": "Ažuriranje liste zadataka",
   "settings.permissions.tool.todowrite.description": "Ažuriraj listu zadataka",
   "settings.permissions.tool.webfetch.title": "Web preuzimanje",

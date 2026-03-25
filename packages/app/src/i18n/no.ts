@@ -807,8 +807,6 @@ export const dict = {
   "settings.permissions.tool.skill.description": "Last en ferdighet etter navn",
   "settings.permissions.tool.lsp.title": "LSP",
   "settings.permissions.tool.lsp.description": "Kjør språkserverforespørsler",
-  "settings.permissions.tool.todoread.title": "Les gjøremål",
-  "settings.permissions.tool.todoread.description": "Les gjøremålslisten",
   "settings.permissions.tool.todowrite.title": "Skriv gjøremål",
   "settings.permissions.tool.todowrite.description": "Oppdater gjøremålslisten",
   "settings.permissions.tool.webfetch.title": "Webhenting",
