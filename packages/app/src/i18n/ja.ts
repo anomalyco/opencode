@@ -727,8 +727,6 @@ export const dict = {
   "settings.permissions.tool.skill.description": "名前によるスキルの読み込み",
   "settings.permissions.tool.lsp.title": "LSP",
   "settings.permissions.tool.lsp.description": "言語サーバークエリの実行",
-  "settings.permissions.tool.todoread.title": "Todo読み込み",
-  "settings.permissions.tool.todoread.description": "Todoリストの読み込み",
   "settings.permissions.tool.todowrite.title": "Todo書き込み",
   "settings.permissions.tool.todowrite.description": "Todoリストの更新",
   "settings.permissions.tool.webfetch.title": "Web取得",
