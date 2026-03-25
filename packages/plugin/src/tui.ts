@@ -212,6 +212,7 @@ export type TuiState = {
   readonly config: SdkConfig
   readonly provider: ReadonlyArray<Provider>
   session: {
+    count: () => number
     diff: (sessionID: string) => ReadonlyArray<TuiSidebarFileItem>
     todo: (sessionID: string) => ReadonlyArray<TuiSidebarTodoItem>
     messages: (sessionID: string) => ReadonlyArray<Message>
@@ -285,16 +286,7 @@ export type TuiSidebarFileItem = {
 export type TuiSlotMap = {
   app: {}
   home_logo: {}
-  home_tips: {
-    show_tips: boolean
-    tips_hidden: boolean
-    first_time_user: boolean
-  }
-  home_below_tips: {
-    show_tips: boolean
-    tips_hidden: boolean
-    first_time_user: boolean
-  }
+  home_bottom: {}
   sidebar_title: {
     session_id: string
     title: string
