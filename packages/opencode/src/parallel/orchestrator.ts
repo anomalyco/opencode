@@ -602,6 +602,14 @@ export namespace Orchestrator {
 
       await checkSubtaskLimit(subtasks.length)
 
+      const estimate = Metrics.estimatePlanCost({ subtaskCount: subtasks.length })
+      log.info("plan cost estimate", {
+        planID: plan.id,
+        subtaskCount: subtasks.length,
+        estimatedInputTokens: estimate.estimatedInputTokens,
+        estimatedOutputTokens: estimate.estimatedOutputTokens,
+      })
+
       const updated = await PlanStore.update({
         id: plan.id,
         subtasks,
@@ -639,10 +647,20 @@ export namespace Orchestrator {
       await WorkerManager.spawnAll(plan, abort)
     })
 
-    await stage("running", async () => {
+    // Check if workers are still running after spawnAll
+    // spawnAll waits for each worker to complete, so workers may already be done
+    const afterSpawn = await PlanStore.get(planID)
+    const stillRunning = afterSpawn.workers.filter((w) => ["running", "spawning"].includes(w.status))
+
+    if (stillRunning.length > 0) {
+      await stage("running", async () => {
+        await PlanStore.transition({ id: planID, status: "running" })
+        await WorkerManager.waitAll(planID, abort)
+      })
+    } else {
+      log.info("all workers already completed after spawn phase", { planID })
       await PlanStore.transition({ id: planID, status: "running" })
-      await WorkerManager.waitAll(planID, abort)
-    })
+    }
 
     const afterWait = await PlanStore.get(planID)
     const active = inflight(afterWait.workers)

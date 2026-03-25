@@ -509,21 +509,26 @@ Output format: a JSON object with "subtasks" array, optional "sharedContracts" a
     conventions?: ProjectConventions
   }
 
-  export async function decompose(input: {
+  const MAX_DECOMPOSE_RETRIES = 1
+
+  async function decomposeOnce(input: {
     task: string
     model: ModelRef
     codebaseContext?: string
-    profile?: Profile
-  }): Promise<DecomposeResult> {
-    log.info("decomposing task", { task: input.task.slice(0, 100) })
-
+    profile: Profile
+    overlapFeedback?: string
+  }) {
     const fullModel = await Provider.getModel(input.model.providerID, input.model.modelID)
     const language = await Provider.getLanguage(fullModel)
-    const mode = input.profile ?? profile(input.task)
+    const mode = input.profile
 
-    const userContent = input.codebaseContext
+    let userContent = input.codebaseContext
       ? `## Task\n${input.task}\n\n## Task Profile\n- Kind: ${mode.kind}\n- Reason: ${mode.reason}\n\n## Codebase Context\n${input.codebaseContext}`
       : `## Task\n${input.task}\n\n## Task Profile\n- Kind: ${mode.kind}\n- Reason: ${mode.reason}`
+
+    if (input.overlapFeedback) {
+      userContent += `\n\n## FILE SCOPE OVERLAP FEEDBACK (from previous attempt)\nYour previous decomposition had overlapping file scopes which will cause merge conflicts. Fix these overlaps by adjusting the fileScope arrays so each subtask touches a disjoint set of files:\n${input.overlapFeedback}`
+    }
 
     const result = await generateObject({
       model: language,
@@ -543,8 +548,58 @@ Output format: a JSON object with "subtasks" array, optional "sharedContracts" a
       throw new Error(`Invalid dependencies: ${depError.type} - ${depError.details}`)
     }
 
+    return result.object
+  }
+
+  export async function decompose(input: {
+    task: string
+    model: ModelRef
+    codebaseContext?: string
+    profile?: Profile
+  }): Promise<DecomposeResult> {
+    log.info("decomposing task", { task: input.task.slice(0, 100) })
+
+    const mode = input.profile ?? profile(input.task)
+
+    let raw = await decomposeOnce({
+      task: input.task,
+      model: input.model,
+      codebaseContext: input.codebaseContext,
+      profile: mode,
+    })
+
+    // Retry loop: if overlaps are detected, re-prompt with feedback
+    for (let attempt = 0; attempt < MAX_DECOMPOSE_RETRIES; attempt++) {
+      const tempSubtasks = assignSubtaskIDs(
+        raw.subtasks.map((subtask) => ({
+          ...subtask,
+          kind: subtask.kind ?? mode.kind,
+        })),
+      )
+      const conflicts = predictConflicts(tempSubtasks)
+      if (conflicts.length === 0) break
+
+      const feedback = conflicts
+        .map((c) => {
+          const nameA = tempSubtasks.find((s) => s.id === c.subtaskA)?.title ?? String(c.subtaskA)
+          const nameB = tempSubtasks.find((s) => s.id === c.subtaskB)?.title ?? String(c.subtaskB)
+          return `- "${nameA}" and "${nameB}" overlap on: ${c.overlappingFiles.join(", ")}`
+        })
+        .join("\n")
+
+      log.info("re-decomposing to fix overlaps", { attempt: attempt + 1, conflictCount: conflicts.length })
+
+      raw = await decomposeOnce({
+        task: input.task,
+        model: input.model,
+        codebaseContext: input.codebaseContext,
+        profile: mode,
+        overlapFeedback: feedback,
+      })
+    }
+
     let subtasks = assignSubtaskIDs(
-      result.object.subtasks.map((subtask) => ({
+      raw.subtasks.map((subtask) => ({
         ...subtask,
         kind: subtask.kind ?? mode.kind,
       })),
@@ -564,7 +619,7 @@ Output format: a JSON object with "subtasks" array, optional "sharedContracts" a
 
     const sharedContracts = structural
       ? undefined
-      : result.object.sharedContracts?.map((sc) => ({
+      : raw.sharedContracts?.map((sc) => ({
           name: sc.name,
           description: sc.description,
           types: sc.types,
@@ -572,11 +627,11 @@ Output format: a JSON object with "subtasks" array, optional "sharedContracts" a
           consumers: refs(sc.consumerIndices, sc.name, "consumer"),
         }))
 
-    const conventions = structural ? undefined : result.object.conventions
+    const conventions = structural ? undefined : raw.conventions
 
     const conflicts = predictConflicts(subtasks)
     if (conflicts.length > 0) {
-      log.warn("potential merge conflicts detected", {
+      log.warn("potential merge conflicts detected after retries", {
         conflictCount: conflicts.length,
         conflicts: conflicts.map((c) => ({
           subtaskA: subtasks.find((s) => s.id === c.subtaskA)?.title ?? c.subtaskA,

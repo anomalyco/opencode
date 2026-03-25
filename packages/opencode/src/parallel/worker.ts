@@ -14,6 +14,8 @@ import { SessionID } from "@/session/schema"
 import type { Plan, PlanID, SubtaskID, Subtask, WorkerState, SharedContract, ProjectConventions } from "./schema"
 import { ParallelEvent } from "./events"
 import { Metrics } from "./metrics"
+import { buildWaves } from "./scheduler"
+import { outputText } from "./util"
 
 export namespace WorkerManager {
   const log = Log.create({ service: "worker" })
@@ -197,6 +199,13 @@ export namespace WorkerManager {
     let failed: unknown = undefined
     let finished = false
 
+    // Collect dependency outputs before entering worker context
+    const dependencyOutputs = await collectDependencyOutputs(
+      input.subtask,
+      input.plan.subtasks,
+      input.plan.workers,
+    )
+
     const task = Instance.provide({
       directory: input.worktreeDir,
       init: ParallelBootstrap,
@@ -205,6 +214,7 @@ export namespace WorkerManager {
           sharedContracts: input.plan.sharedContracts,
           conventions: input.plan.conventions,
           retry: input.retry,
+          dependencyOutputs: dependencyOutputs || undefined,
         })
         const model = input.subtask.model ?? input.plan.workerModel
         const { SessionPrompt } = await import("../session/prompt")
@@ -249,6 +259,16 @@ export namespace WorkerManager {
       if (current && changed(latest, current)) {
         latest = current
         advanced = Date.now()
+
+        // Emit progress event for TUI visibility
+        Bus.publish(ParallelEvent.WorkerProgress, {
+          planID: input.plan.id,
+          subtaskID: input.subtask.id,
+          files: current.files,
+          additions: current.additions,
+          deletions: current.deletions,
+          elapsedMs: Date.now() - started,
+        })
       }
 
       const reason = detectStalledProgress({
@@ -475,9 +495,21 @@ export namespace WorkerManager {
         ? rawMaxWorkers
         : undefined
     const spawnStartTime = Date.now()
+    const schedulerMode = cfg.parallel?.scheduler_mode ?? "off"
 
     if (rawMaxWorkers !== undefined && maxWorkers === undefined) {
       log.warn("invalid max_workers config, using unlimited", { raw: rawMaxWorkers })
+    }
+
+    // Build wave schedule when scheduler is active
+    const waveAnalysis = schedulerMode === "auto" ? buildWaves(plan.subtasks) : undefined
+    if (waveAnalysis && waveAnalysis.overlaps.length > 0) {
+      log.info("using wave scheduling", {
+        planID: plan.id,
+        waves: waveAnalysis.waves.length,
+        parallel: waveAnalysis.parallelizableCount,
+        serial: waveAnalysis.serialCount,
+      })
     }
 
     // Build dependency graph
@@ -502,13 +534,46 @@ export namespace WorkerManager {
     const failed = new Set<SubtaskID>()
     const running = new Set<SubtaskID>()
 
+    // Wave-aware readiness: in auto mode, respect wave ordering
+    // A subtask is ready if all its dependencies are completed AND
+    // (if wave scheduling) all subtasks in earlier waves are completed
+    const waveIndex = new Map<SubtaskID, number>()
+    if (waveAnalysis) {
+      for (const wave of waveAnalysis.waves) {
+        for (const id of wave.subtasks) {
+          waveIndex.set(id, wave.index)
+        }
+      }
+    }
+
     function getReadySubtasks(): Subtask[] {
       return plan.subtasks.filter((st) => {
         if (completed.has(st.id) || failed.has(st.id) || running.has(st.id)) {
           return false
         }
+        // Check explicit dependencies
         const deps = dependencyGraph.get(st.id) ?? new Set()
-        return Array.from(deps).every((dep) => completed.has(dep))
+        if (!Array.from(deps).every((dep) => completed.has(dep))) return false
+
+        // In wave mode, also check that all earlier waves are complete
+        if (waveAnalysis && waveIndex.has(st.id)) {
+          const myWave = waveIndex.get(st.id)!
+          for (const wave of waveAnalysis.waves) {
+            if (wave.index >= myWave) break
+            // All subtasks in earlier waves must be completed or failed
+            const allDone = wave.subtasks.every((id) => completed.has(id) || failed.has(id))
+            if (!allDone) return false
+          }
+
+          // For serial waves, only one subtask from overlapping set runs at a time
+          if (waveAnalysis.waves[myWave]?.type === "serial") {
+            // If any other subtask in a serial wave at the same index is running, wait
+            const myWaveSubtasks = waveAnalysis.waves[myWave].subtasks
+            if (myWaveSubtasks.some((id) => running.has(id))) return false
+          }
+        }
+
+        return true
       })
     }
 
@@ -516,13 +581,15 @@ export namespace WorkerManager {
       planID: plan.id,
       count: plan.subtasks.length,
       maxWorkers: maxWorkers ?? "unlimited",
+      schedulerMode,
+      waves: waveAnalysis?.waves.length,
     })
 
     // Initialize all workers as pending
     const initialWorkers = plan.workers.map((w) => ({ ...w, status: "pending" as const }))
     await PlanStore.update({ id: plan.id, workers: initialWorkers })
 
-    // Spawn workers respecting dependencies and concurrency
+    // Spawn workers respecting dependencies, waves, and concurrency
     const spawnPromises: Promise<{ subtaskID: SubtaskID; status: "fulfilled" | "rejected"; error?: string }>[] = []
 
     function retryable(msg: string): boolean {
@@ -973,6 +1040,57 @@ export namespace WorkerManager {
     return parts.join("\n")
   }
 
+  async function collectDependencyOutputs(
+    subtask: Subtask,
+    allSubtasks: Subtask[],
+    workers: Plan["workers"],
+  ): Promise<string> {
+    if (subtask.dependencies.length === 0) return ""
+
+    const depOutputs: string[] = []
+    for (const depID of subtask.dependencies) {
+      const dep = allSubtasks.find((st) => st.id === depID)
+      const worker = workers.find((w) => w.subtaskID === depID)
+      const title = dep?.title ?? String(depID)
+
+      if (!worker?.worktreeDir) {
+        depOutputs.push(`- **${title}**: completed (no diff available)`)
+        continue
+      }
+
+      try {
+        const stat = await git(["diff", "--stat", "HEAD"], { cwd: worker.worktreeDir })
+        const statText = outputText(stat.stdout)
+
+        // Also grab a compact name-only list for quick reference
+        const nameOnly = await git(["diff", "--name-only", "HEAD"], { cwd: worker.worktreeDir })
+        const files = outputText(nameOnly.stdout)
+          .split("\n")
+          .filter(Boolean)
+          .slice(0, 15)
+
+        if (files.length > 0) {
+          depOutputs.push(
+            `- **${title}**: modified ${files.length} file(s):\n${files.map((f) => `  - ${f}`).join("\n")}`,
+          )
+        } else {
+          // Try committed diff instead
+          const commitStat = await git(["show", "--stat", "--format=", "HEAD"], { cwd: worker.worktreeDir })
+          const commitText = outputText(commitStat.stdout)
+          depOutputs.push(
+            commitText
+              ? `- **${title}**: ${commitText.split("\n").pop() ?? "completed"}`
+              : `- **${title}**: completed`,
+          )
+        }
+      } catch {
+        depOutputs.push(`- **${title}**: completed (output unavailable)`)
+      }
+    }
+
+    return `\n## Completed Dependencies (what upstream workers actually produced)\n${depOutputs.join("\n")}`
+  }
+
   function buildWorkerPrompt(
     globalTask: string,
     subtask: Subtask,
@@ -981,6 +1099,7 @@ export namespace WorkerManager {
       sharedContracts?: SharedContract[]
       conventions?: ProjectConventions
       retry?: Retry
+      dependencyOutputs?: string
     },
   ): string {
     const depInfo =
@@ -990,7 +1109,7 @@ export namespace WorkerManager {
               const dep = allSubtasks.find((st) => st.id === depID)
               return dep ? `- ${dep.title}` : `- ${depID}`
             })
-            .join("\n")}`
+            .join("\n")}${options?.dependencyOutputs ?? ""}`
         : ""
 
     const constraintInfo =
@@ -1085,11 +1204,6 @@ ${subtask.fileScope.map((f) => `- ${f}`).join("\n")}
       sessionID: update.sessionID ? SessionID.make(update.sessionID) : undefined,
     } as any)
   }
-}
-
-function outputText(input: Uint8Array | undefined): string {
-  if (!input?.length) return ""
-  return new TextDecoder().decode(input).trim()
 }
 
 function parseStat(output: string): { additions: number; deletions: number; files: number } | undefined {

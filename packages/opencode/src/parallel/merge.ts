@@ -10,6 +10,7 @@ import { Log } from "@/util/log"
 import { Worktree } from "../worktree"
 import { Provider } from "@/provider/provider"
 import type { PlanID, ModelRef, SubtaskID } from "./schema"
+import { outputText } from "./util"
 
 export type FileScopeViolation = {
   subtaskID: SubtaskID
@@ -365,11 +366,6 @@ export namespace MergePipeline {
   }
 }
 
-function outputText(input: Uint8Array | undefined): string {
-  if (!input?.length) return ""
-  return new TextDecoder().decode(input).trim()
-}
-
 function mergeError(input: { stdout?: Uint8Array; stderr?: Uint8Array }): string | undefined {
   const err = outputText(input.stderr)
   const out = outputText(input.stdout)
@@ -484,6 +480,12 @@ function mergeChunk(left: string[], right: string[]): string[] | undefined {
   if (isImport(left) && isImport(right)) return uniq(left, right)
   if (isChain(left) && isChain(right)) return uniq(left, right)
   if (isList(left) && isList(right)) return uniq(left, right)
+  // JSON object properties: both sides add different keys to the same object
+  if (isJsonProperties(left) && isJsonProperties(right)) return uniq(left, right)
+  // Array elements within brackets
+  if (isArrayElements(left) && isArrayElements(right)) return uniq(left, right)
+  // Class/object method/function additions (non-overlapping new members)
+  if (isMemberAddition(left) && isMemberAddition(right)) return [...left, "", ...right]
   return undefined
 }
 
@@ -504,6 +506,37 @@ function uniq(left: string[], right: string[]): string[] {
   }
   if (out.length > 0) return out
   return left
+}
+
+function isJsonProperties(rows: string[]): boolean {
+  const list = rows.map((row) => row.trim()).filter(Boolean)
+  if (list.length === 0) return false
+  // Each line should look like a JSON/object property: "key": value, or key: value,
+  return list.every((row) => /^["']?\w+["']?\s*[:=]\s*.+[,;]?$/.test(row))
+}
+
+function isArrayElements(rows: string[]): boolean {
+  const list = rows.map((row) => row.trim()).filter(Boolean)
+  if (list.length === 0) return false
+  // Array elements: values followed by commas, or standalone values
+  // Must not look like function/method definitions
+  return list.every((row) => {
+    if (row.startsWith("function ") || row.startsWith("async ")) return false
+    return row.endsWith(",") || /^["'\[{`\d]/.test(row) || row.startsWith("...")
+  })
+}
+
+function isMemberAddition(rows: string[]): boolean {
+  const list = rows.map((row) => row.trim()).filter(Boolean)
+  if (list.length === 0) return false
+  // Detect function/method definitions being added
+  const firstLine = list[0]
+  return (
+    /^(export\s+)?(async\s+)?function\s+\w+/.test(firstLine) ||
+    /^(export\s+)?(async\s+)?\w+\s*\(/.test(firstLine) ||
+    /^(public|private|protected|static|readonly)\s+/.test(firstLine) ||
+    /^(get|set)\s+\w+\s*\(/.test(firstLine)
+  )
 }
 
 function isImport(rows: string[]): boolean {

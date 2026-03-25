@@ -38,4 +38,24 @@ export const ParallelEvent = {
       overlappingFiles: z.array(z.string()),
     }),
   ),
+  WorkerProgress: BusEvent.define(
+    "parallel.worker.progress",
+    z.object({
+      planID: PlanID.zod,
+      subtaskID: SubtaskID.zod,
+      files: z.number(),
+      additions: z.number(),
+      deletions: z.number(),
+      elapsedMs: z.number(),
+    }),
+  ),
+  PlanCostUpdate: BusEvent.define(
+    "parallel.plan.cost",
+    z.object({
+      planID: PlanID.zod,
+      totalInputTokens: z.number(),
+      totalOutputTokens: z.number(),
+      workerCount: z.number(),
+    }),
+  ),
 }

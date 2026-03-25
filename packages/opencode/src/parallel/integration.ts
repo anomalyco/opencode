@@ -8,6 +8,7 @@ import { PlanStore } from "./plan"
 import { Log } from "@/util/log"
 import { MergePipeline } from "./merge"
 import type { PlanID, Plan } from "./schema"
+import { outputText } from "./util"
 
 export const PublishMode = z.enum(["new-branch", "unstaged", "direct"])
 export type PublishMode = z.infer<typeof PublishMode>
@@ -54,11 +55,6 @@ export namespace Integration {
     merged?: boolean
     error?: string
     success: boolean
-  }
-
-  function outputText(input: Uint8Array | undefined): string {
-    if (!input?.length) return ""
-    return new TextDecoder().decode(input).trim()
   }
 
   async function getCurrentBranch(cwd: string): Promise<string> {
