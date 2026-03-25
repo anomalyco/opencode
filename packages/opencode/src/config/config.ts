@@ -20,7 +20,7 @@ import {
   parse as parseJsonc,
   printParseErrorCode,
 } from "jsonc-parser"
-import { Instance, type Info as InstanceInfo } from "../project/instance"
+import { Instance, type InstanceContext } from "../project/instance"
 import { LSPServer } from "../lsp/server"
 import { BunProc } from "@/bun"
 import { Installation } from "@/installation"
@@ -78,7 +78,7 @@ export namespace Config {
     return merged
   }
 
-  async function loadState(ctx: InstanceInfo) {
+  async function loadState(ctx: InstanceContext) {
     const auth = await Auth.all()
 
     // Config loading order (low -> high precedence): https://opencode.ai/docs/config#precedence-order
@@ -157,8 +157,8 @@ export namespace Config {
 
       deps.push(
         iife(async () => {
-          const ok = await needsInstall(dir)
-          if (ok) await installDependencies(dir)
+          const shouldInstall = await needsInstall(dir)
+          if (shouldInstall) await installDependencies(dir)
         }),
       )
 
@@ -1474,21 +1474,19 @@ export namespace Config {
     })
   }
 
-  function disposed() {
-    GlobalBus.emit("event", {
-      directory: "global",
-      payload: {
-        type: Event.Disposed.type,
-        properties: {},
-      },
-    })
-  }
-
   export async function invalidate(wait = false) {
     resetGlobal()
     const task = Instance.disposeAll()
       .catch(() => undefined)
-      .finally(disposed)
+      .finally(() =>
+        GlobalBus.emit("event", {
+          directory: "global",
+          payload: {
+            type: Event.Disposed.type,
+            properties: {},
+          },
+        }),
+      )
     if (wait) return task
     void task
   }
