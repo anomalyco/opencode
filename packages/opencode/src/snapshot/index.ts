@@ -124,15 +124,17 @@ export namespace Snapshot {
               return file
             })
 
-            const sync = Effect.fnUntraced(function* () {
+            const sync = Effect.fnUntraced(function* (list: string[] = []) {
               const file = yield* excludes()
               const target = path.join(state.gitdir, "info", "exclude")
+              const text = [
+                file ? (yield* read(file)).trimEnd() : "",
+                ...list.map((item) => `/${item.replaceAll("\\", "/")}`),
+              ]
+                .filter(Boolean)
+                .join("\n")
               yield* fs.ensureDir(path.join(state.gitdir, "info")).pipe(Effect.orDie)
-              if (!file) {
-                yield* fs.writeFileString(target, "").pipe(Effect.orDie)
-                return
-              }
-              yield* fs.writeFileString(target, yield* read(file)).pipe(Effect.orDie)
+              yield* fs.writeFileString(target, text ? `${text}\n` : "").pipe(Effect.orDie)
             })
 
             const add = Effect.fnUntraced(function* () {
@@ -158,28 +160,64 @@ export namespace Snapshot {
                 return
               }
 
-              const all = Array.from(new Set([...diff.text.split("\0"), ...other.text.split("\0")].filter(Boolean)))
+              const tracked = diff.text.split("\0").filter(Boolean)
+              const all = Array.from(new Set([...tracked, ...other.text.split("\0").filter(Boolean)]))
               if (!all.length) return
 
-              const [drop, keep] = yield* Effect.partition(
-                all,
-                Effect.fn(function* (item) {
-                  const stat = yield* fs.stat(path.join(state.directory, item)).pipe(Effect.catch(() => Effect.void))
-                  if (!stat) return yield* Effect.fail(item)
-                  const size = typeof stat.size === "bigint" ? Number(stat.size) : stat.size
-                  if (stat.type === "File" && size > limit) return false
-                  return item
-                }),
-                { concurrency: 8 },
+              const large = (
+                yield* Effect.all(
+                  all.map((item) =>
+                    fs
+                      .stat(path.join(state.directory, item))
+                      .pipe(Effect.catch(() => Effect.void))
+                      .pipe(
+                        Effect.map((stat) => {
+                          if (!stat || stat.type !== "File") return
+                          const size = typeof stat.size === "bigint" ? Number(stat.size) : stat.size
+                          return size > limit ? item : undefined
+                        }),
+                      ),
+                  ),
+                  { concurrency: 8 },
+                )
               )
+                .filter((item): item is string => Boolean(item))
+              yield* sync(large)
+              const set = new Set(large)
+              const skip = tracked.filter((item) => set.has(item))
 
-              if (keep.length) {
-                yield* git([...cfg, ...args(["add", "--", ...keep.filter((x) => x !== false)])], {
+              if (skip.length) {
+                const result = yield* git([...cfg, ...args(["update-index", "--skip-worktree", "--", ...skip])], {
                   cwd: state.directory,
                 })
+                if (result.code !== 0) {
+                  log.warn("failed to mark snapshot files", {
+                    exitCode: result.code,
+                    stderr: result.stderr,
+                  })
+                  return
+                }
               }
-              if (drop.length) {
-                yield* git([...cfg, ...args(["add", "-u", "--", ...drop])], { cwd: state.directory })
+
+              const result = yield* git([...cfg, ...args(["add", "--sparse", "."])], { cwd: state.directory })
+
+              if (skip.length) {
+                const clear = yield* git([...cfg, ...args(["update-index", "--no-skip-worktree", "--", ...skip])], {
+                  cwd: state.directory,
+                })
+                if (clear.code !== 0) {
+                  log.warn("failed to clear snapshot files", {
+                    exitCode: clear.code,
+                    stderr: clear.stderr,
+                  })
+                }
+              }
+
+              if (result.code !== 0) {
+                log.warn("failed to add snapshot files", {
+                  exitCode: result.code,
+                  stderr: result.stderr,
+                })
               }
             })
 
