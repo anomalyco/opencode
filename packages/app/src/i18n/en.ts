@@ -781,9 +781,11 @@ export const dict = {
   "settings.desktop.openclaw.enabled.title": "Enable OpenClaw adapter",
   "settings.desktop.openclaw.enabled.description": "Expose OpenClaw as a built-in desktop server target.",
   "settings.desktop.openclaw.url.title": "Gateway URL",
-  "settings.desktop.openclaw.url.description": "OpenClaw gateway websocket or HTTP endpoint used by the local adapter.",
+  "settings.desktop.openclaw.url.description":
+    "OpenClaw gateway websocket or HTTP endpoint used by the local adapter. You can check it with `openclaw gateway status`.",
   "settings.desktop.openclaw.token.title": "Gateway token",
-  "settings.desktop.openclaw.token.description": "Optional gateway token used during the OpenClaw handshake.",
+  "settings.desktop.openclaw.token.description":
+    "Optional gateway token used during the OpenClaw handshake. You can find it in `openclaw.json`.",
   "settings.desktop.openclaw.token.placeholder": "Paste token",
 
   "settings.general.section.appearance": "Appearance",
@@ -1081,7 +1083,9 @@ export const dict = {
   "config.claws.field.enabled": "Enabled",
   "config.claws.field.enabledDescription": "Expose this claw as a desktop server target.",
   "config.claws.field.url": "Gateway URL",
+  "config.claws.field.urlDescription": "You can check it with `openclaw gateway status`.",
   "config.claws.field.token": "Gateway Token",
+  "config.claws.field.tokenDescription": "You can find it in `openclaw.json`.",
   "config.claws.field.tokenPlaceholder": "Paste token",
   "config.claws.action.save": "Save settings",
   "config.claws.action.test": "Test connection",

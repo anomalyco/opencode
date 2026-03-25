@@ -78,12 +78,11 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       list: (dir) => sdk.client.file.list({ path: dir }).then((x) => x.data ?? []),
       onError: (message) => {
         const openclaw = server.current?.integration === "openclaw"
+        if (openclaw) return
         showToast({
           variant: "error",
           title: language.t("toast.file.listFailed.title"),
-          description: openclaw
-            ? [language.t("toast.file.listFailed.openclaw"), message].filter(Boolean).join("\n")
-            : message,
+          description: message,
         })
       },
     })

@@ -110,6 +110,56 @@ const EXAMPLES = [
 
 const NON_EMPTY_TEXT = /[^\s\u200B]/
 
+const OPENCLAW_SLASH = [
+  ["help", "Show help"],
+  ["commands", "List commands"],
+  ["tools", "Show available tools"],
+  ["skill", "Run a skill by name"],
+  ["status", "Show current status"],
+  ["allowlist", "Manage allowlist entries"],
+  ["approve", "Resolve exec approval prompts"],
+  ["context", "Explain current context"],
+  ["btw", "Ask a side question"],
+  ["export-session", "Export current session"],
+  ["whoami", "Show sender id"],
+  ["session", "Manage session settings"],
+  ["subagents", "Inspect or control subagents"],
+  ["acp", "Control ACP runtime sessions"],
+  ["agents", "List session agents"],
+  ["focus", "Bind thread to a target"],
+  ["unfocus", "Remove current thread binding"],
+  ["kill", "Abort subagents"],
+  ["steer", "Steer a running subagent"],
+  ["tell", "Alias for steer"],
+  ["config", "Read or write config"],
+  ["mcp", "Manage MCP config"],
+  ["plugins", "Inspect or toggle plugins"],
+  ["plugin", "Alias for plugins"],
+  ["debug", "Set runtime debug overrides"],
+  ["usage", "Control usage footer"],
+  ["tts", "Control text to speech"],
+  ["stop", "Stop current run"],
+  ["restart", "Restart gateway"],
+  ["dock-telegram", "Switch replies to Telegram"],
+  ["dock-discord", "Switch replies to Discord"],
+  ["dock-slack", "Switch replies to Slack"],
+  ["activation", "Set group activation mode"],
+  ["send", "Control sending behavior"],
+  ["reset", "Start a new session"],
+  ["new", "Start a new session"],
+  ["think", "Set thinking level"],
+  ["fast", "Toggle fast mode"],
+  ["verbose", "Set verbosity"],
+  ["reasoning", "Control reasoning output"],
+  ["elevated", "Control elevated mode"],
+  ["exec", "Show or set exec policy"],
+  ["model", "Select model"],
+  ["models", "Alias for model"],
+  ["queue", "Manage queue mode"],
+  ["bash", "Run a host command"],
+  ["compact", "Compact current context"],
+] as const satisfies ReadonlyArray<readonly [string, string]>
+
 const GitContext = () => {
   const sdk = useSDK()
   const sync = useSync()
@@ -758,6 +808,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   })
 
   const slashCommands = createMemo<SlashCommand[]>(() => {
+    if (openclaw()) {
+      return OPENCLAW_SLASH.map(([trigger, description]) => ({
+        id: `openclaw.${trigger}`,
+        trigger,
+        title: trigger,
+        description,
+        type: "openclaw" as const,
+      }))
+    }
+
     const builtin = command.options
       .filter((opt) => !opt.disabled && !opt.id.startsWith("suggested.") && opt.slash)
       .map((opt) => ({
@@ -785,7 +845,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!cmd) return
     closePopover()
 
-    if (cmd.type === "custom") {
+    if (cmd.type === "custom" || cmd.type === "openclaw") {
       const text = `/${cmd.trigger} `
       setEditorText(text)
       prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)

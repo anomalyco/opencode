@@ -26,6 +26,7 @@ import { type ConfigTreeItem, type ConfigWorkspace, type OpenclawConfig, usePlat
 import { monoFontFamily, useSettings } from "@/context/settings"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
+import { useServer } from "@/context/server"
 import type { Agent, Config, Project } from "@opencode-ai/sdk/v2/client"
 
 type Section = "agents-md" | "providers" | "agents" | "skills" | "plugins" | "claws"
@@ -338,6 +339,11 @@ function sourceKey(source?: string) {
   if (source === "config") return "config.badge.config"
   if (source === "custom") return "config.badge.custom"
   return undefined
+}
+
+function providerEnabled(item?: ProviderItem) {
+  if (!item) return false
+  return item.custom ? item.allowed : item.connected
 }
 
 function home(path: string) {
@@ -953,7 +959,7 @@ function ProviderDetail(props: {
               <div class="text-15-medium text-text-strong">{props.item?.id}</div>
               <Show when={props.item}>
                 <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
-                  {props.item?.connected
+                  {providerEnabled(props.item)
                     ? language.t("config.provider.badge.enabled")
                     : language.t("config.provider.badge.known")}
                 </span>
@@ -1104,6 +1110,7 @@ function ClawEditor(props: {
                   <TextField
                     type="text"
                     label={language.t("config.claws.field.url")}
+                    description={language.t("config.claws.field.urlDescription")}
                     placeholder="ws://127.0.0.1:18789"
                     value={props.form.url}
                     validationState={props.form.err.url ? "invalid" : undefined}
@@ -1114,6 +1121,7 @@ function ClawEditor(props: {
                   <TextField
                     type="password"
                     label={language.t("config.claws.field.token")}
+                    description={language.t("config.claws.field.tokenDescription")}
                     placeholder={language.t("config.claws.field.tokenPlaceholder")}
                     value={props.form.token}
                     disabled={props.busy || props.form.saving || props.form.testing}
@@ -1424,6 +1432,7 @@ export default function ConfigPage() {
   const platform = usePlatform()
   const globalSDK = useGlobalSDK()
   const globalSync = useGlobalSync()
+  const server = useServer()
   const [query] = useSearchParams<{ section?: string; pick?: string }>()
   let skillsList: HTMLDivElement | undefined
   const [state, setState] = createStore({
@@ -1446,11 +1455,23 @@ export default function ConfigPage() {
     skillSaving: false,
     treeClosed: {} as Record<string, boolean>,
     busy: false,
-    tick: 0,
+    workspaceRev: 0,
+    skillRev: 0,
+    agentRev: 0,
+    clawRev: 0,
   })
 
+  function bump(...list: Array<"workspaceRev" | "skillRev" | "agentRev" | "clawRev">) {
+    list.forEach((key) => setState(key, (value) => value + 1))
+  }
+
+  const mode = createMemo(() => state.section)
+  const skillMode = createMemo(() => mode() === "skills")
+  const agentMode = createMemo(() => mode() === "agents")
+  const clawMode = createMemo(() => mode() === "claws")
+
   const [workspace] = createResource(
-    () => state.tick,
+    () => state.workspaceRev,
     async () => {
       if (!platform.getConfigWorkspace) return undefined
       return platform.getConfigWorkspace()
@@ -1458,24 +1479,27 @@ export default function ConfigPage() {
   )
 
   const [rawSkills] = createResource(
-    () => state.tick,
-    async () => {
+    () => (skillMode() ? state.skillRev : -1),
+    async (rev) => {
+      if (rev === -1) return []
       const resp = await globalSDK.client.app.skills({}, { throwOnError: true })
       return resp.data ?? []
     },
   )
 
   const [loaded] = createResource(
-    () => state.tick,
-    async () => {
+    () => (agentMode() ? state.agentRev : -1),
+    async (rev) => {
+      if (rev === -1) return [] as Agent[]
       const resp = await globalSDK.client.app.agents({}, { throwOnError: true })
       return resp.data ?? []
     },
   )
 
   const [openclaw] = createResource(
-    () => state.tick,
-    async () => {
+    () => (clawMode() ? state.clawRev : -1),
+    async (rev) => {
+      if (rev === -1) return undefined
       if (!platform.getOpenclawConfig) return undefined
       return platform.getOpenclawConfig()
     },
@@ -1603,24 +1627,27 @@ export default function ConfigPage() {
   }
 
   const [diskClaude] = createResource(
-    () => [state.tick, claudeRoot()] as const,
-    async ([, root]) => {
+    () => (skillMode() ? ([state.skillRev, claudeRoot()] as const) : ([-1, undefined] as const)),
+    async ([rev, root]) => {
+      if (rev === -1) return [] as SkillItem[]
       if (!root) return [] as SkillItem[]
       return scan(root, { source: "external", group: "claude", origin: ".claude" })
     },
   )
 
   const [diskOpenCode] = createResource(
-    () => [state.tick, space()?.skillsRoot] as const,
-    async ([, root]) => {
+    () => (skillMode() ? ([state.skillRev, space()?.skillsRoot] as const) : ([-1, undefined] as const)),
+    async ([rev, root]) => {
+      if (rev === -1) return [] as SkillItem[]
       if (!root) return [] as SkillItem[]
       return scan(root, { source: "opencode", group: "opencode", origin: ".opencode" })
     },
   )
 
   const [diskProject] = createResource(
-    () => [state.tick, opened()] as const,
-    async ([, list]) => {
+    () => (skillMode() ? ([state.skillRev, opened()] as const) : ([-1, []] as const)),
+    async ([rev, list]) => {
+      if (rev === -1) return [] as SkillItem[]
       return Promise.all(
         list.map(async (item) => {
           const label = item.name ?? name(item.worktree)
@@ -1835,8 +1862,8 @@ export default function ConfigPage() {
   })
 
   const providerList = createMemo(() => providers().filter((item) => fuzzy(item.id, state.query)))
-  const providerOn = createMemo(() => providerList().filter((item) => item.connected))
-  const providerOff = createMemo(() => providerList().filter((item) => !item.connected))
+  const providerOn = createMemo(() => providerList().filter((item) => providerEnabled(item)))
+  const providerOff = createMemo(() => providerList().filter((item) => !providerEnabled(item)))
   const providerVisible = createMemo(() => [...providerOn(), ...providerOff()])
 
   const docs = createMemo(() => {
@@ -2043,7 +2070,7 @@ export default function ConfigPage() {
           title: language.t("toast.server.reloadBackend.success.title"),
           description: language.t("toast.server.reloadBackend.success.description"),
         })
-        setState("tick", (value) => value + 1)
+        bump("workspaceRev", "skillRev", "agentRev", "clawRev")
       })
       .catch((err: unknown) => {
         showToast({
@@ -2073,9 +2100,16 @@ export default function ConfigPage() {
     if (!validateClaw()) return
     setState("claw", "saving", true)
     setState("claw", "test", undefined)
+    if (server.current?.integration === "openclaw" && !state.claw.enabled) {
+      const key = server.lastNonOpenclaw
+      if (key) {
+        console.info("[config] switching away from openclaw before disable", { from: server.key, to: key })
+        server.setActive(key)
+      }
+    }
     await Promise.resolve(platform.setOpenclawConfig(clawInput()))
       .then(async () => {
-        setState("tick", (value) => value + 1)
+        bump("clawRev")
         showToast({ variant: "success", title: t("common.save"), description: selectedClaw()?.label ?? "OpenClaw" })
       })
       .catch((err: unknown) => {
@@ -2277,7 +2311,7 @@ export default function ConfigPage() {
         setState("skillPath", path)
         setState("skillNote", meta.description)
         setState("skillWarn", meta.warn ?? "")
-        setState("tick", (value) => value + 1)
+        bump("skillRev")
         showToast({ variant: "success", title: t("common.save"), description: title })
         await open({
           id: `skill:${path}`,

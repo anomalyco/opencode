@@ -19,6 +19,7 @@ import { useCommand } from "@/context/command"
 import { useFile, type SelectedLineRange } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
+import { useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
 import { FileTabContent } from "@/pages/session/file-tabs"
@@ -37,6 +38,7 @@ export function SessionSidePanel(props: {
   const sync = useSync()
   const file = useFile()
   const language = useLanguage()
+  const server = useServer()
   const command = useCommand()
   const dialog = useDialog()
   const { params, sessionKey, tabs, view } = useSessionLayout()
@@ -112,6 +114,7 @@ export function SessionSidePanel(props: {
     if (!state?.loaded) return false
     return file.tree.children("").length === 0
   })
+  const openclaw = createMemo(() => server.current?.integration === "openclaw")
 
   const normalizeTab = (tab: string) => {
     if (!tab.startsWith("file://")) return tab
@@ -416,6 +419,7 @@ export function SessionSidePanel(props: {
                 </Tabs.Content>
                 <Tabs.Content value="all" class="bg-background-stronger px-3 py-0">
                   <Switch>
+                    <Match when={openclaw()}>{empty(language.t("toast.file.listFailed.openclaw"))}</Match>
                     <Match when={nofiles()}>{empty(language.t("session.files.empty"))}</Match>
                     <Match when={true}>
                       <FileTree

@@ -1409,8 +1409,7 @@ export default function Layout(props: ParentProps) {
       void navigateToProject(last)
       return
     }
-    server.setActive(ServerConnection.key(conn))
-    navigateWithSidebarReset(`/${openclawSlug}/session`)
+    void navigateToProject(openclawDir)
   }
 
   function projectRoot(directory: string) {
@@ -1475,6 +1474,38 @@ export default function Layout(props: ParentProps) {
     if (isOpenclawDir(directory)) {
       const conn = server.list.find((item) => item.integration === "openclaw")
       if (conn) server.setActive(ServerConnection.key(conn))
+      const root = openclawDir
+      const openSession = async (target: { directory: string; id: string }) => {
+        const data = globalSync.child(target.directory, { bootstrap: false })[0]
+        if (data.session.some((item) => item.id === target.id)) {
+          setStore("lastProjectSession", root, { directory: target.directory, id: target.id, at: Date.now() })
+          navigateWithSidebarReset(`/${base64Encode(target.directory)}/session/${target.id}`)
+          return true
+        }
+        const resolved = await globalSDK.client.session
+          .get({ sessionID: target.id })
+          .then((x) => x.data)
+          .catch(() => undefined)
+        if (!resolved?.directory || projectRoot(resolved.directory) !== root) return false
+        setStore("lastProjectSession", root, { directory: resolved.directory, id: resolved.id, at: Date.now() })
+        navigateWithSidebarReset(`/${base64Encode(resolved.directory)}/session/${resolved.id}`)
+        return true
+      }
+
+      const saved = store.lastProjectSession[root]
+      if (saved?.id && (await openSession(saved))) return
+      if (saved?.id) clearLastProjectSession(root)
+
+      const latest = latestRootSession([globalSync.child(root, { bootstrap: false })[0]], Date.now())
+      if (latest && (await openSession(latest))) return
+
+      const fetched = await globalSDK.client.session
+        .list({ directory: root })
+        .then((x) => x.data ?? [])
+        .catch(() => [] as Session[])
+      const next = latestRootSession([{ path: { directory: root }, session: fetched }], Date.now())
+      if (next && (await openSession(next))) return
+
       navigateWithSidebarReset(`/${openclawSlug}/session`)
       return
     }

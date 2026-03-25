@@ -673,9 +673,11 @@ export const dict = {
   "settings.desktop.openclaw.enabled.title": "启用 OpenClaw 适配器",
   "settings.desktop.openclaw.enabled.description": "将 OpenClaw 暴露为桌面端内置服务器目标。",
   "settings.desktop.openclaw.url.title": "Gateway URL",
-  "settings.desktop.openclaw.url.description": "本地适配器使用的 OpenClaw gateway websocket 或 HTTP 地址。",
+  "settings.desktop.openclaw.url.description":
+    "本地适配器使用的 OpenClaw gateway websocket 或 HTTP 地址。可通过 `openclaw gateway status` 查看。",
   "settings.desktop.openclaw.token.title": "Gateway Token",
-  "settings.desktop.openclaw.token.description": "OpenClaw 握手时使用的可选 gateway token。",
+  "settings.desktop.openclaw.token.description":
+    "OpenClaw 握手时使用的可选 gateway token。可在 `openclaw.json` 中查看。",
   "settings.desktop.openclaw.token.placeholder": "粘贴 token",
 
   "settings.general.section.appearance": "外观",
@@ -1050,7 +1052,9 @@ export const dict = {
   "config.claws.field.enabled": "启用",
   "config.claws.field.enabledDescription": "将这个 claw 暴露为桌面端服务器目标。",
   "config.claws.field.url": "Gateway URL",
+  "config.claws.field.urlDescription": "可通过 `openclaw gateway status` 查看。",
   "config.claws.field.token": "Gateway Token",
+  "config.claws.field.tokenDescription": "可在 `openclaw.json` 中查看。",
   "config.claws.field.tokenPlaceholder": "粘贴 token",
   "config.claws.action.save": "保存设置",
   "config.claws.action.test": "测试连接",
