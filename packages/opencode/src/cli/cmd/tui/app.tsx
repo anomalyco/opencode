@@ -1,4 +1,4 @@
-import { render, useKeyboard, useRenderer, useTerminalDimensions, useTerminalFocus } from "@opentui/solid"
+import { onBlur, onFocus, render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
 import { Selection } from "@tui/util/selection"
 import { MouseButton, TextAttributes } from "@opentui/core"
@@ -285,15 +285,19 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     }
   })
 
-  const focused = useTerminalFocus()
-  let prev = true
-  createEffect(() => {
-    const val = focused()
-    if (val === prev) return
-    prev = val
-    const type = val ? "tui.focus.gained" : "tui.focus.lost"
-    sdk.client.tui.publish({ body: { type, properties: {} } } as any).catch(() => {})
-  })
+  let focus: boolean | undefined
+  const publish = (focused: boolean) => {
+    if (focus === focused) return
+    focus = focused
+    sdk.client.tui
+      .publish({ body: { type: TuiEvent.FocusChanged.type, properties: { focused } } } as any)
+      .catch(() => {})
+  }
+
+  // assume focused on mount — no way to query focus state, only transitions (DECSET 1004)
+  onMount(() => publish(true))
+  onFocus(() => publish(true))
+  onBlur(() => publish(false))
 
   const args = useArgs()
   onMount(() => {

@@ -1,5 +1,4 @@
 import { BusEvent } from "@/bus/bus-event"
-import { Bus } from "@/bus"
 import { SessionID } from "@/session/schema"
 import z from "zod"
 
@@ -46,6 +45,5 @@ export const TuiEvent = {
       sessionID: SessionID.zod.describe("Session ID to navigate to"),
     }),
   ),
-  FocusGained: BusEvent.define("tui.focus.gained", z.object({})),
-  FocusLost: BusEvent.define("tui.focus.lost", z.object({})),
+  FocusChanged: BusEvent.define("tui.focus.changed", z.object({ focused: z.boolean() })),
 }
