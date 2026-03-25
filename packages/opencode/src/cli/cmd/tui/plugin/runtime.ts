@@ -47,28 +47,22 @@ type Scope = {
   dispose: () => Promise<void>
 }
 
-type Unit = {
+type PluginEntry = {
   id: string
-  key: string
+  export_name: string
   load: Loaded
   meta: TuiPluginMeta
   plugin: TuiPlugin
-  opts: Config.PluginOptions | undefined
+  options: Config.PluginOptions | undefined
   enabled: boolean
-  active?: Scope
+  scope?: Scope
 }
 
-type Run = {
+type RuntimeState = {
   api: Api
   slots: HostSlots
-  list: Unit[]
-  map: Map<string, Unit>
-}
-
-type Ops = {
-  list: () => ReadonlyArray<TuiPluginStatus>
-  activatePlugin: (id: string) => Promise<boolean>
-  deactivatePlugin: (id: string) => Promise<boolean>
+  plugins: PluginEntry[]
+  plugins_by_id: Map<string, PluginEntry>
 }
 
 const log = Log.create({ service: "tui.plugin" })
@@ -386,23 +380,23 @@ function scope(load: Loaded, name: string) {
   }
 }
 
-function sid(meta: TuiPluginMeta, name: string) {
+function defaultPluginId(meta: TuiPluginMeta, export_name: string) {
   if (meta.source === "internal") {
     const base = `internal:${meta.name}`
-    if (name === "default") return base
-    return `${base}:${name}`
+    if (export_name === "default") return base
+    return `${base}:${export_name}`
   }
-  if (name === "default") return meta.name
-  return `${meta.name}:${name}`
+  if (export_name === "default") return meta.name
+  return `${meta.name}:${export_name}`
 }
 
-function own(value: unknown, load: Loaded, key: string) {
+function readPluginIdFromExport(value: unknown, load: Loaded, export_name: string) {
   if (!isRecord(value)) return
   if (!("id" in value)) return
   if (typeof value.id !== "string") {
     log.warn("ignoring invalid tui plugin id", {
       path: load.spec,
-      name: key,
+      name: export_name,
       type: typeof value.id,
     })
     return
@@ -411,85 +405,93 @@ function own(value: unknown, load: Loaded, key: string) {
   if (id) return id
   log.warn("ignoring empty tui plugin id", {
     path: load.spec,
-    name: key,
+    name: export_name,
   })
 }
 
-function bools(value: unknown) {
+function readPluginEnabledMap(value: unknown) {
   if (!isRecord(value)) return {}
   return Object.fromEntries(
     Object.entries(value).filter((item): item is [string, boolean] => typeof item[1] === "boolean"),
   )
 }
 
-function save(api: Api, id: string, enabled: boolean) {
-  const next = {
-    ...bools(api.kv.get(KV_KEY, {})),
+function writePluginEnabledState(api: Api, id: string, enabled: boolean) {
+  api.kv.set(KV_KEY, {
+    ...readPluginEnabledMap(api.kv.get(KV_KEY, {})),
     [id]: enabled,
-  }
-  api.kv.set(KV_KEY, next)
+  })
 }
 
-function status(run: Run): TuiPluginStatus[] {
-  return run.list.map((item) => ({
-    id: item.id,
-    name: item.meta.name,
-    source: item.meta.source,
-    spec: item.meta.spec,
-    target: item.meta.target,
-    enabled: item.enabled,
-    active: item.active !== undefined,
+function listPluginStatus(state: RuntimeState): TuiPluginStatus[] {
+  return state.plugins.map((plugin) => ({
+    id: plugin.id,
+    name: plugin.meta.name,
+    source: plugin.meta.source,
+    spec: plugin.meta.spec,
+    target: plugin.meta.target,
+    enabled: plugin.enabled,
+    active: plugin.scope !== undefined,
   }))
 }
 
-async function stop(item: Unit, persist: boolean, api: Api) {
-  item.enabled = false
-  if (persist) save(api, item.id, false)
-  if (!item.active) return true
-  const active = item.active
-  item.active = undefined
-  await active.dispose()
+async function deactivatePluginEntry(state: RuntimeState, plugin: PluginEntry, persist: boolean) {
+  plugin.enabled = false
+  if (persist) writePluginEnabledState(state.api, plugin.id, false)
+  if (!plugin.scope) return true
+  const scope_state = plugin.scope
+  plugin.scope = undefined
+  await scope_state.dispose()
   return true
 }
 
-async function start(item: Unit, run: Run, persist: boolean) {
-  item.enabled = true
-  if (persist) save(run.api, item.id, true)
-  if (item.active) return true
+async function activatePluginEntry(state: RuntimeState, plugin: PluginEntry, persist: boolean) {
+  plugin.enabled = true
+  if (persist) writePluginEnabledState(state.api, plugin.id, true)
+  if (plugin.scope) return true
 
-  const active = scope(item.load, item.key)
-  const plugin = pluginApi(run.api, run.slots, item.load, active, item.id, {
-    list() {
-      return status(run)
-    },
-    activatePlugin(id) {
-      return TuiPluginRuntime.activatePlugin(id)
-    },
-    deactivatePlugin(id) {
-      return TuiPluginRuntime.deactivatePlugin(id)
-    },
-  })
-  const ready = await Promise.resolve()
+  const scope_state = scope(plugin.load, plugin.export_name)
+  const api = pluginApi(state, plugin.load, scope_state, plugin.id)
+  const ok = await Promise.resolve()
     .then(async () => {
-      await item.plugin(plugin, item.opts, item.meta)
+      await plugin.plugin(api, plugin.options, plugin.meta)
       return true
     })
     .catch((error) => {
       fail("failed to initialize tui plugin export", {
-        path: item.load.spec,
-        name: item.key,
+        path: plugin.load.spec,
+        name: plugin.export_name,
         error,
       })
       return false
     })
 
-  if (!ready) {
-    await active.dispose()
+  if (!ok) {
+    await scope_state.dispose()
     return false
   }
 
-  item.active = active
+  if (!plugin.enabled) {
+    await scope_state.dispose()
+    return true
+  }
+
+  plugin.scope = scope_state
   return true
+}
+
+async function activatePluginById(state: RuntimeState | undefined, id: string, persist: boolean) {
+  if (!state) return false
+  const plugin = state.plugins_by_id.get(id)
+  if (!plugin) return false
+  return activatePluginEntry(state, plugin, persist)
+}
+
+async function deactivatePluginById(state: RuntimeState | undefined, id: string, persist: boolean) {
+  if (!state) return false
+  const plugin = state.plugins_by_id.get(id)
+  if (!plugin) return false
+  return deactivatePluginEntry(state, plugin, persist)
 }
 
 function plug(plugin: TuiSlotPlugin, id: string): HostSlotPlugin {
@@ -499,7 +501,9 @@ function plug(plugin: TuiSlotPlugin, id: string): HostSlotPlugin {
   }
 }
 
-function pluginApi(api: Api, host: HostSlots, load: Loaded, state: Scope, base: string, ops: Ops): TuiPluginApi {
+function pluginApi(runtime: RuntimeState, load: Loaded, state: Scope, base: string): TuiPluginApi {
+  const api = runtime.api
+  const host = runtime.slots
   const command: TuiPluginApi["command"] = {
     register(cb) {
       return state.wrap(api.command.register(cb))
@@ -561,75 +565,81 @@ function pluginApi(api: Api, host: HostSlots, load: Loaded, state: Scope, base: 
     renderer: api.renderer,
     slots,
     plugins: {
-      list: ops.list,
-      activatePlugin: ops.activatePlugin,
-      deactivatePlugin: ops.deactivatePlugin,
+      list() {
+        return listPluginStatus(runtime)
+      },
+      activatePlugin(id) {
+        return activatePluginById(runtime, id, true)
+      },
+      deactivatePlugin(id) {
+        return deactivatePluginById(runtime, id, true)
+      },
     },
     lifecycle: state.lifecycle,
   }
 }
 
-function units(load: Loaded, meta: TuiPluginMeta) {
-  const list: Unit[] = []
-  const opts = load.item ? Config.pluginOptions(load.item) : undefined
+function collectPluginEntries(load: Loaded, meta: TuiPluginMeta) {
+  const plugins: PluginEntry[] = []
+  const options = load.item ? Config.pluginOptions(load.item) : undefined
 
-  for (const [key, value] of uniqueModuleEntries(load.mod)) {
+  for (const [export_name, value] of uniqueModuleEntries(load.mod)) {
     if (!value || typeof value !== "object") {
       log.warn("ignoring non-object tui plugin export", {
         path: load.spec,
-        name: key,
+        name: export_name,
         type: value === null ? "null" : typeof value,
       })
       continue
     }
 
-    const plugin = getTuiPlugin(value)
-    if (!plugin) continue
-    const id = own(value, load, key) ?? sid(meta, key)
-    list.push({
+    const handler = getTuiPlugin(value)
+    if (!handler) continue
+    const id = readPluginIdFromExport(value, load, export_name) ?? defaultPluginId(meta, export_name)
+    plugins.push({
       id,
-      key,
+      export_name,
       load,
       meta,
-      plugin,
-      opts,
+      plugin: handler,
+      options,
       enabled: true,
     })
   }
 
-  return list
+  return plugins
 }
 
-function push(run: Run, item: Unit) {
-  if (run.map.has(item.id)) {
+function addPluginEntry(state: RuntimeState, plugin: PluginEntry) {
+  if (state.plugins_by_id.has(plugin.id)) {
     fail("duplicate tui plugin id", {
-      id: item.id,
-      path: item.load.spec,
-      name: item.key,
+      id: plugin.id,
+      path: plugin.load.spec,
+      name: plugin.export_name,
     })
     return
   }
 
-  run.map.set(item.id, item)
-  run.list.push(item)
+  state.plugins_by_id.set(plugin.id, plugin)
+  state.plugins.push(plugin)
 }
 
-function mark(run: Run, config: TuiConfig.Info) {
+function applyInitialPluginEnabledState(state: RuntimeState, config: TuiConfig.Info) {
   const map = {
-    ...bools(config.plugin_enabled),
-    ...bools(run.api.kv.get(KV_KEY, {})),
+    ...readPluginEnabledMap(config.plugin_enabled),
+    ...readPluginEnabledMap(state.api.kv.get(KV_KEY, {})),
   }
-  for (const item of run.list) {
-    const hit = map[item.id]
-    if (hit === undefined) continue
-    item.enabled = hit
+  for (const plugin of state.plugins) {
+    const enabled = map[plugin.id]
+    if (enabled === undefined) continue
+    plugin.enabled = enabled
   }
 }
 
 export namespace TuiPluginRuntime {
   let dir = ""
   let loaded: Promise<void> | undefined
-  let run: Run | undefined
+  let runtime: RuntimeState | undefined
   export const Slot = View
 
   export async function init(api: HostPluginApi) {
@@ -647,20 +657,16 @@ export namespace TuiPluginRuntime {
   }
 
   export function list() {
-    if (!run) return []
-    return status(run)
+    if (!runtime) return []
+    return listPluginStatus(runtime)
   }
 
   export async function activatePlugin(id: string) {
-    const item = run?.map.get(id)
-    if (!item || !run) return false
-    return start(item, run, true)
+    return activatePluginById(runtime, id, true)
   }
 
   export async function deactivatePlugin(id: string) {
-    const item = run?.map.get(id)
-    if (!item || !run) return false
-    return stop(item, true, run.api)
+    return deactivatePluginById(runtime, id, true)
   }
 
   export async function dispose() {
@@ -668,25 +674,25 @@ export namespace TuiPluginRuntime {
     loaded = undefined
     dir = ""
     if (task) await task
-    const hit = run
-    run = undefined
-    if (!hit) return
-    const queue = [...hit.list].reverse()
-    for (const item of queue) {
-      await stop(item, false, hit.api)
+    const state = runtime
+    runtime = undefined
+    if (!state) return
+    const queue = [...state.plugins].reverse()
+    for (const plugin of queue) {
+      await deactivatePluginEntry(state, plugin, false)
     }
   }
 
   async function load(api: Api) {
     const cwd = process.cwd()
     const slots = setupSlots(api)
-    const next: Run = {
+    const next: RuntimeState = {
       api,
       slots,
-      list: [],
-      map: new Map(),
+      plugins: [],
+      plugins_by_id: new Map(),
     }
-    run = next
+    runtime = next
 
     await Instance.provide({
       directory: cwd,
@@ -702,8 +708,8 @@ export namespace TuiPluginRuntime {
           log.info("loading internal tui plugin", { name: item.name })
           const entry = prepInternalPlugin(item)
           const meta = createMeta(entry.spec, entry.target, undefined, item.name)
-          for (const plugin of units(entry, meta)) {
-            push(next, plugin)
+          for (const plugin of collectPluginEntries(entry, meta)) {
+            addPluginEntry(next, plugin)
           }
         }
 
@@ -747,15 +753,19 @@ export namespace TuiPluginRuntime {
           }
 
           const row = createMeta(entry.spec, entry.target, hit)
-          for (const plugin of units(entry, row)) {
-            push(next, plugin)
+          for (const plugin of collectPluginEntries(entry, row)) {
+            addPluginEntry(next, plugin)
           }
         }
 
-        mark(next, config)
-        for (const item of next.list) {
-          if (!item.enabled) continue
-          await start(item, next, false)
+        applyInitialPluginEnabledState(next, config)
+        for (const plugin of next.plugins) {
+          if (!plugin.enabled) continue
+          // Keep plugin execution sequential for deterministic side effects:
+          // command registration order affects keybind/command precedence,
+          // route registration is last-wins when ids collide,
+          // and hook chains rely on stable plugin ordering.
+          await activatePluginEntry(next, plugin, false)
         }
       },
     }).catch((error) => {
