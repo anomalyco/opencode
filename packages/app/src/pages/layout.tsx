@@ -49,16 +49,21 @@ import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
 import { Binary } from "@opencode-ai/util/binary"
 import { retry } from "@opencode-ai/util/retry"
-import { playSoundById } from "@/utils/sound"
+import { playSound, soundSrc } from "@/utils/sound"
 import { createAim } from "@/utils/aim"
 import { setNavigate } from "@/utils/notification-click"
 import { Worktree as WorktreeState } from "@/utils/worktree"
 import { setSessionHandoff } from "@/pages/session/handoff"
 
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
+import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
+import { DialogSelectProvider } from "@/components/dialog-select-provider"
+import { DialogSelectServer } from "@/components/dialog-select-server"
+import { DialogSettings } from "@/components/dialog-settings"
 import { useCommand, type CommandOption } from "@/context/command"
 import { ConstrainDragXAxis, getDraggableId } from "@/utils/solid-dnd"
+import { DialogSelectDirectory } from "@/components/dialog-select-directory"
+import { DialogEditProject } from "@/components/dialog-edit-project"
 import { DebugBar } from "@/components/debug-bar"
 import { Titlebar } from "@/components/titlebar"
 import { useServer } from "@/context/server"
@@ -105,8 +110,6 @@ export default function Layout(props: ParentProps) {
   const pageReady = createMemo(() => ready())
 
   let scrollContainerRef: HTMLDivElement | undefined
-  let dialogRun = 0
-  let dialogDead = false
 
   const params = useParams()
   const globalSDK = useGlobalSDK()
@@ -136,7 +139,7 @@ export default function Layout(props: ParentProps) {
       dir: globalSync.peek(dir, { bootstrap: false })[0].path.directory || dir,
     }
   })
-  const availableThemeEntries = createMemo(() => theme.ids().map((id) => [id, theme.themes()[id]] as const))
+  const availableThemeEntries = createMemo(() => Object.entries(theme.themes()))
   const colorSchemeOrder: ColorScheme[] = ["system", "light", "dark"]
   const colorSchemeKey: Record<ColorScheme, "theme.scheme.system" | "theme.scheme.light" | "theme.scheme.dark"> = {
     system: "theme.scheme.system",
@@ -198,8 +201,6 @@ export default function Layout(props: ParentProps) {
   })
 
   onCleanup(() => {
-    dialogDead = true
-    dialogRun += 1
     if (navLeave.current !== undefined) clearTimeout(navLeave.current)
     clearTimeout(sortNowTimeout)
     if (sortNowInterval) clearInterval(sortNowInterval)
@@ -335,9 +336,10 @@ export default function Layout(props: ParentProps) {
     const nextIndex = currentIndex === -1 ? 0 : (currentIndex + direction + ids.length) % ids.length
     const nextThemeId = ids[nextIndex]
     theme.setTheme(nextThemeId)
+    const nextTheme = theme.themes()[nextThemeId]
     showToast({
       title: language.t("toast.theme.title"),
-      description: theme.name(nextThemeId),
+      description: nextTheme?.name ?? nextThemeId,
     })
   }
 
@@ -492,7 +494,7 @@ export default function Layout(props: ParentProps) {
 
         if (e.details.type === "permission.asked") {
           if (settings.sounds.permissionsEnabled()) {
-            void playSoundById(settings.sounds.permissions())
+            playSound(soundSrc(settings.sounds.permissions()))
           }
           if (settings.notifications.permissions()) {
             void platform.notify(title, description, href)
@@ -1152,10 +1154,10 @@ export default function Layout(props: ParentProps) {
       },
     ]
 
-    for (const [id] of availableThemeEntries()) {
+    for (const [id, definition] of availableThemeEntries()) {
       commands.push({
         id: `theme.set.${id}`,
-        title: language.t("command.theme.set", { theme: theme.name(id) }),
+        title: language.t("command.theme.set", { theme: definition.name ?? id }),
         category: language.t("command.category.theme"),
         onSelect: () => theme.commitPreview(),
         onHighlight: () => {
@@ -1206,27 +1208,15 @@ export default function Layout(props: ParentProps) {
   })
 
   function connectProvider() {
-    const run = ++dialogRun
-    void import("@/components/dialog-select-provider").then((x) => {
-      if (dialogDead || dialogRun !== run) return
-      dialog.show(() => <x.DialogSelectProvider />)
-    })
+    dialog.show(() => <DialogSelectProvider />)
   }
 
   function openServer() {
-    const run = ++dialogRun
-    void import("@/components/dialog-select-server").then((x) => {
-      if (dialogDead || dialogRun !== run) return
-      dialog.show(() => <x.DialogSelectServer />)
-    })
+    dialog.show(() => <DialogSelectServer />)
   }
 
   function openSettings() {
-    const run = ++dialogRun
-    void import("@/components/dialog-settings").then((x) => {
-      if (dialogDead || dialogRun !== run) return
-      dialog.show(() => <x.DialogSettings />)
-    })
+    dialog.show(() => <DialogSettings />)
   }
 
   function projectRoot(directory: string) {
@@ -1453,13 +1443,7 @@ export default function Layout(props: ParentProps) {
     layout.sidebar.toggleWorkspaces(project.worktree)
   }
 
-  const showEditProjectDialog = (project: LocalProject) => {
-    const run = ++dialogRun
-    void import("@/components/dialog-edit-project").then((x) => {
-      if (dialogDead || dialogRun !== run) return
-      dialog.show(() => <x.DialogEditProject project={project} />)
-    })
-  }
+  const showEditProjectDialog = (project: LocalProject) => dialog.show(() => <DialogEditProject project={project} />)
 
   async function chooseProject() {
     function resolve(result: string | string[] | null) {
@@ -1480,14 +1464,10 @@ export default function Layout(props: ParentProps) {
       })
       resolve(result)
     } else {
-      const run = ++dialogRun
-      void import("@/components/dialog-select-directory").then((x) => {
-        if (dialogDead || dialogRun !== run) return
-        dialog.show(
-          () => <x.DialogSelectDirectory multiple={true} onSelect={resolve} />,
-          () => resolve(null),
-        )
-      })
+      dialog.show(
+        () => <DialogSelectDirectory multiple={true} onSelect={resolve} />,
+        () => resolve(null),
+      )
     }
   }
 

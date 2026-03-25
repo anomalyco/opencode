@@ -6,9 +6,6 @@ import {
   AppBaseProviders,
   AppInterface,
   handleNotificationClick,
-  loadLocaleDict,
-  normalizeLocale,
-  type Locale,
   type Platform,
   PlatformProvider,
   ServerConnection,
@@ -249,17 +246,6 @@ listenForDeepLinks()
 
 render(() => {
   const platform = createPlatform()
-  const loadLocale = async () => {
-    const current = await platform.storage?.("opencode.global.dat").getItem("language")
-    const legacy = current ? undefined : await platform.storage?.().getItem("language.v1")
-    const raw = current ?? legacy
-    if (!raw) return
-    const locale = raw.match(/"locale"\s*:\s*"([^"]+)"/)?.[1]
-    if (!locale) return
-    const next = normalizeLocale(locale)
-    if (next !== "en") await loadLocaleDict(next)
-    return next satisfies Locale
-  }
 
   const [windowCount] = createResource(() => window.api.getWindowCount())
 
@@ -271,7 +257,6 @@ render(() => {
       if (url) return ServerConnection.key({ type: "http", http: { url } })
     }),
   )
-  const [locale] = createResource(loadLocale)
 
   const servers = () => {
     const data = sidecar()
@@ -324,14 +309,15 @@ render(() => {
 
   return (
     <PlatformProvider value={platform}>
-      <AppBaseProviders locale={locale.latest}>
-        <Show when={!defaultServer.loading && !sidecar.loading && !windowCount.loading && !locale.loading}>
+      <AppBaseProviders>
+        <Show when={!defaultServer.loading && !sidecar.loading && !windowCount.loading}>
           {(_) => {
             return (
               <AppInterface
                 defaultServer={defaultServer.latest ?? ServerConnection.Key.make("sidecar")}
                 servers={servers()}
                 router={MemoryRouter}
+                disableHealthCheck={(windowCount() ?? 0) > 1}
               >
                 <Inner />
               </AppInterface>

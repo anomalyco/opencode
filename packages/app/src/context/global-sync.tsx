@@ -9,7 +9,17 @@ import type {
 } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@opencode-ai/ui/toast"
 import { getFilename } from "@opencode-ai/util/path"
-import { createContext, getOwner, onCleanup, onMount, type ParentProps, untrack, useContext } from "solid-js"
+import {
+  createContext,
+  getOwner,
+  Match,
+  onCleanup,
+  onMount,
+  type ParentProps,
+  Switch,
+  untrack,
+  useContext,
+} from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { Persist, persisted } from "@/utils/persist"
@@ -70,8 +80,6 @@ function createGlobalSync() {
 
   let active = true
   let projectWritten = false
-  let bootedAt = 0
-  let bootingRoot = false
 
   onCleanup(() => {
     active = false
@@ -250,11 +258,6 @@ function createGlobalSync() {
       const sdk = sdkFor(directory)
       await bootstrapDirectory({
         directory,
-        global: {
-          config: globalStore.config,
-          project: globalStore.project,
-          provider: globalStore.provider,
-        },
         sdk,
         store: child[0],
         setStore: child[1],
@@ -275,20 +278,15 @@ function createGlobalSync() {
   const unsub = globalSDK.event.listen((e) => {
     const directory = e.name
     const event = e.details
-    const recent = bootingRoot || Date.now() - bootedAt < 1500
 
     if (directory === "global") {
       applyGlobalEvent({
         event,
         project: globalStore.project,
-        refresh: () => {
-          if (recent) return
-          queue.refresh()
-        },
+        refresh: queue.refresh,
         setGlobalProject: setProjects,
       })
       if (event.type === "server.connected" || event.type === "global.disposed") {
-        if (recent) return
         for (const directory of Object.keys(children.children)) {
           queue.push(directory)
         }
@@ -327,19 +325,17 @@ function createGlobalSync() {
   })
 
   async function bootstrap() {
-    bootingRoot = true
-    try {
-      await bootstrapGlobal({
-        globalSDK: globalSDK.client,
-        requestFailedTitle: language.t("common.requestFailed"),
-        translate: language.t,
-        formatMoreCount: (count) => language.t("common.moreCountSuffix", { count }),
-        setGlobalStore: setBootStore,
-      })
-      bootedAt = Date.now()
-    } finally {
-      bootingRoot = false
-    }
+    await bootstrapGlobal({
+      globalSDK: globalSDK.client,
+      connectErrorTitle: language.t("dialog.server.add.error"),
+      connectErrorDescription: language.t("error.globalSync.connectFailed", {
+        url: globalSDK.url,
+      }),
+      requestFailedTitle: language.t("common.requestFailed"),
+      translate: language.t,
+      formatMoreCount: (count) => language.t("common.moreCountSuffix", { count }),
+      setGlobalStore: setBootStore,
+    })
   }
 
   onMount(() => {
@@ -396,7 +392,13 @@ const GlobalSyncContext = createContext<ReturnType<typeof createGlobalSync>>()
 
 export function GlobalSyncProvider(props: ParentProps) {
   const value = createGlobalSync()
-  return <GlobalSyncContext.Provider value={value}>{props.children}</GlobalSyncContext.Provider>
+  return (
+    <Switch>
+      <Match when={value.ready}>
+        <GlobalSyncContext.Provider value={value}>{props.children}</GlobalSyncContext.Provider>
+      </Match>
+    </Switch>
+  )
 }
 
 export function useGlobalSync() {

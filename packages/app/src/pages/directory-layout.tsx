@@ -2,7 +2,8 @@ import { DataProvider } from "@opencode-ai/ui/context"
 import { showToast } from "@opencode-ai/ui/toast"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
-import { createEffect, createMemo, type ParentProps, Show } from "solid-js"
+import { createMemo, createResource, type ParentProps, Show } from "solid-js"
+import { useGlobalSDK } from "@/context/global-sdk"
 import { useLanguage } from "@/context/language"
 import { LocalProvider } from "@/context/local"
 import { SDKProvider } from "@/context/sdk"
@@ -10,17 +11,9 @@ import { SyncProvider, useSync } from "@/context/sync"
 import { decode64 } from "@/utils/base64"
 
 function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
-  const location = useLocation()
   const navigate = useNavigate()
   const sync = useSync()
   const slug = createMemo(() => base64Encode(props.directory))
-
-  createEffect(() => {
-    const next = sync.data.path.directory
-    if (!next || next === props.directory) return
-    const path = location.pathname.slice(slug().length + 1)
-    navigate(`/${base64Encode(next)}${path}${location.search}${location.hash}`, { replace: true })
-  })
 
   return (
     <DataProvider
@@ -36,31 +29,50 @@ function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
 
 export default function Layout(props: ParentProps) {
   const params = useParams()
+  const location = useLocation()
   const language = useLanguage()
+  const globalSDK = useGlobalSDK()
   const navigate = useNavigate()
   let invalid = ""
 
-  const resolved = createMemo(() => {
-    if (!params.dir) return ""
-    return decode64(params.dir) ?? ""
-  })
+  const [resolved] = createResource(
+    () => {
+      if (params.dir) return [location.pathname, params.dir] as const
+    },
+    async ([pathname, b64Dir]) => {
+      const directory = decode64(b64Dir)
 
-  createEffect(() => {
-    const dir = params.dir
-    if (!dir) return
-    if (resolved()) {
-      invalid = ""
-      return
-    }
-    if (invalid === dir) return
-    invalid = dir
-    showToast({
-      variant: "error",
-      title: language.t("common.requestFailed"),
-      description: language.t("directory.error.invalidUrl"),
-    })
-    navigate("/", { replace: true })
-  })
+      if (!directory) {
+        if (invalid === params.dir) return
+        invalid = b64Dir
+        showToast({
+          variant: "error",
+          title: language.t("common.requestFailed"),
+          description: language.t("directory.error.invalidUrl"),
+        })
+        navigate("/", { replace: true })
+        return
+      }
+
+      return await globalSDK
+        .createClient({
+          directory,
+          throwOnError: true,
+        })
+        .path.get()
+        .then((x) => {
+          const next = x.data?.directory ?? directory
+          invalid = ""
+          if (next === directory) return next
+          const path = pathname.slice(b64Dir.length + 1)
+          navigate(`/${base64Encode(next)}${path}${location.search}${location.hash}`, { replace: true })
+        })
+        .catch(() => {
+          invalid = ""
+          return directory
+        })
+    },
+  )
 
   return (
     <Show when={resolved()} keyed>
