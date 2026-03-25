@@ -4,7 +4,7 @@ import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Tag } from "@opencode-ai/ui/tag"
 import { showToast } from "@opencode-ai/ui/toast"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
-import { createMemo, type Component, For, Show } from "solid-js"
+import { createMemo, createSignal, onMount, type Component, For, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
@@ -12,6 +12,32 @@ import { DialogConnectProvider } from "./dialog-connect-provider"
 import { DialogSelectProvider } from "./dialog-select-provider"
 import { DialogCustomProvider } from "./dialog-custom-provider"
 import { SettingsList } from "./settings-list"
+
+// Quota types from SDK
+interface UsageWindow {
+  usedPercent: number | null
+  remainingPercent: number | null
+  windowSeconds: number | null
+  resetAfterSeconds: number | null
+  resetAt: number | null
+  resetAtFormatted: string | null
+  resetAfterFormatted: string | null
+  valueLabel: string | null
+}
+
+interface ProviderUsage {
+  windows: Record<string, UsageWindow>
+}
+
+interface QuotaResult {
+  providerId: string
+  providerName: string
+  ok: boolean
+  configured: boolean
+  usage: ProviderUsage | null
+  error: string | null
+  fetchedAt: number
+}
 
 type ProviderSource = "env" | "api" | "config" | "custom"
 type ProviderItem = ReturnType<ReturnType<typeof useProviders>["connected"]>[number]
@@ -33,6 +59,42 @@ export const SettingsProviders: Component = () => {
   const globalSDK = useGlobalSDK()
   const globalSync = useGlobalSync()
   const providers = useProviders()
+
+  const [quotaData, setQuotaData] = createSignal<QuotaResult[]>([])
+  const [quotaLoading, setQuotaLoading] = createSignal(false)
+
+  onMount(async () => {
+    setQuotaLoading(true)
+    try {
+      const response = await globalSDK.client.global.quota()
+      if (response.data) {
+        setQuotaData(response.data)
+      }
+    } catch (e) {
+      console.error("Failed to fetch quota:", e)
+    } finally {
+      setQuotaLoading(false)
+    }
+  })
+
+  const getQuotaForProvider = (providerId: string): QuotaResult | undefined => {
+    return quotaData().find((q) => q.providerId === providerId)
+  }
+
+  const formatQuota = (quota: QuotaResult): string => {
+    if (!quota.ok || !quota.usage?.windows) return ""
+    const windows = Object.entries(quota.usage.windows)
+    if (windows.length === 0) return ""
+    const parts: string[] = []
+    for (const [name, win] of windows) {
+      if (win.usedPercent !== null) {
+        parts.push(`${name}: ${win.usedPercent.toFixed(1)}%`)
+      } else if (win.remainingPercent !== null) {
+        parts.push(`${name}: ${win.remainingPercent.toFixed(1)}%`)
+      }
+    }
+    return parts.join(", ")
+  }
 
   const connected = createMemo(() => {
     return providers
@@ -147,27 +209,40 @@ export const SettingsProviders: Component = () => {
               }
             >
               <For each={connected()}>
-                {(item) => (
-                  <div class="group flex flex-wrap items-center justify-between gap-4 min-h-16 py-3 border-b border-border-weak-base last:border-none">
-                    <div class="flex items-center gap-3 min-w-0">
-                      <ProviderIcon id={item.id} class="size-5 shrink-0 icon-strong-base" />
-                      <span class="text-14-medium text-text-strong truncate">{item.name}</span>
-                      <Tag>{type(item)}</Tag>
+                {(item) => {
+                  const quota = () => getQuotaForProvider(item.id)
+                  const quotaDisplay = () => {
+                    const q = quota()
+                    if (!q) return ""
+                    return formatQuota(q)
+                  }
+                  return (
+                    <div class="group flex flex-wrap items-center justify-between gap-4 min-h-16 py-3 border-b border-border-weak-base last:border-none">
+                      <div class="flex flex-col gap-1 min-w-0">
+                        <div class="flex items-center gap-3 min-w-0">
+                          <ProviderIcon id={item.id} class="size-5 shrink-0 icon-strong-base" />
+                          <span class="text-14-medium text-text-strong truncate">{item.name}</span>
+                          <Tag>{type(item)}</Tag>
+                        </div>
+                        <Show when={quotaDisplay()}>
+                          <span class="text-12-regular text-text-weak pl-8">{quotaDisplay()}</span>
+                        </Show>
+                      </div>
+                      <Show
+                        when={canDisconnect(item)}
+                        fallback={
+                          <span class="text-14-regular text-text-base opacity-0 group-hover:opacity-100 transition-opacity duration-200 pr-3 cursor-default">
+                            {language.t("settings.providers.connected.environmentDescription")}
+                          </span>
+                        }
+                      >
+                        <Button size="large" variant="ghost" onClick={() => void disconnect(item.id, item.name)}>
+                          {language.t("common.disconnect")}
+                        </Button>
+                      </Show>
                     </div>
-                    <Show
-                      when={canDisconnect(item)}
-                      fallback={
-                        <span class="text-14-regular text-text-base opacity-0 group-hover:opacity-100 transition-opacity duration-200 pr-3 cursor-default">
-                          {language.t("settings.providers.connected.environmentDescription")}
-                        </span>
-                      }
-                    >
-                      <Button size="large" variant="ghost" onClick={() => void disconnect(item.id, item.name)}>
-                        {language.t("common.disconnect")}
-                      </Button>
-                    </Show>
-                  </div>
-                )}
+                  )
+                }}
               </For>
             </Show>
           </SettingsList>
