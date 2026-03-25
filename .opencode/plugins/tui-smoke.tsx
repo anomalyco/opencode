@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { RGBA, VignetteEffect } from "@opentui/core"
-import type { TuiApi, TuiKeybindSet, TuiPluginApi, TuiPluginMeta, TuiSlotPlugin } from "@opencode-ai/plugin/tui"
+import type { TuiKeybindSet, TuiPluginApi, TuiPluginMeta, TuiSlotPlugin } from "@opencode-ai/plugin/tui"
 
 const tabs = ["overview", "counter", "help"]
 const bind = {
@@ -107,7 +107,7 @@ const look = (map: Record<string, unknown>) => {
   }
 }
 
-const tone = (api: TuiApi) => {
+const tone = (api: TuiPluginApi) => {
   return look(api.theme.current)
 }
 
@@ -152,7 +152,7 @@ const parse = (params: Record<string, unknown> | undefined) => {
   }
 }
 
-const current = (api: TuiApi, route: Route) => {
+const current = (api: TuiPluginApi, route: Route) => {
   const value = api.route.current
   const ok = Object.values(route).includes(value.name)
   if (!ok) return parse(undefined)
@@ -178,7 +178,7 @@ const opts = [
   },
 ]
 
-const host = (api: TuiApi, input: Cfg, skin: Skin) => {
+const host = (api: TuiPluginApi, input: Cfg, skin: Skin) => {
   api.ui.dialog.setSize("medium")
   api.ui.dialog.replace(() => (
     <box paddingBottom={1} paddingLeft={2} paddingRight={2} gap={1} flexDirection="column">
@@ -194,7 +194,7 @@ const host = (api: TuiApi, input: Cfg, skin: Skin) => {
   ))
 }
 
-const warn = (api: TuiApi, route: Route, value: State) => {
+const warn = (api: TuiPluginApi, route: Route, value: State) => {
   const DialogAlert = api.ui.DialogAlert
   api.ui.dialog.setSize("medium")
   api.ui.dialog.replace(() => (
@@ -206,7 +206,7 @@ const warn = (api: TuiApi, route: Route, value: State) => {
   ))
 }
 
-const check = (api: TuiApi, route: Route, value: State) => {
+const check = (api: TuiPluginApi, route: Route, value: State) => {
   const DialogConfirm = api.ui.DialogConfirm
   api.ui.dialog.setSize("medium")
   api.ui.dialog.replace(() => (
@@ -219,7 +219,7 @@ const check = (api: TuiApi, route: Route, value: State) => {
   ))
 }
 
-const entry = (api: TuiApi, route: Route, value: State) => {
+const entry = (api: TuiPluginApi, route: Route, value: State) => {
   const DialogPrompt = api.ui.DialogPrompt
   api.ui.dialog.setSize("medium")
   api.ui.dialog.replace(() => (
@@ -238,7 +238,7 @@ const entry = (api: TuiApi, route: Route, value: State) => {
   ))
 }
 
-const picker = (api: TuiApi, route: Route, value: State) => {
+const picker = (api: TuiPluginApi, route: Route, value: State) => {
   const DialogSelect = api.ui.DialogSelect
   api.ui.dialog.setSize("medium")
   api.ui.dialog.replace(() => (
@@ -260,7 +260,7 @@ const picker = (api: TuiApi, route: Route, value: State) => {
 }
 
 const Screen = (props: {
-  api: TuiApi
+  api: TuiPluginApi
   input: Cfg
   route: Route
   keys: Keys
@@ -553,7 +553,13 @@ const Screen = (props: {
   )
 }
 
-const Modal = (props: { api: TuiApi; input: Cfg; route: Route; keys: Keys; params?: Record<string, unknown> }) => {
+const Modal = (props: {
+  api: TuiPluginApi
+  input: Cfg
+  route: Route
+  keys: Keys
+  params?: Record<string, unknown>
+}) => {
   const Dialog = props.api.ui.Dialog
   const value = parse(props.params)
   const skin = tone(props.api)
@@ -700,7 +706,7 @@ const slot = (input: Cfg): TuiSlotPlugin[] => [
   block(input, 650, "Smoke below", "renders below internal sidebar blocks"),
 ]
 
-const reg = (api: TuiApi, input: Cfg, keys: Keys) => {
+const reg = (api: TuiPluginApi, input: Cfg, keys: Keys) => {
   const route = names(input)
   api.command.register(() => [
     {
