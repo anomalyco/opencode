@@ -732,8 +732,6 @@ export const dict = {
   "settings.permissions.tool.skill.description": "Carregar uma habilidade por nome",
   "settings.permissions.tool.lsp.title": "LSP",
   "settings.permissions.tool.lsp.description": "Executar consultas de servidor de linguagem",
-  "settings.permissions.tool.todoread.title": "Ler Tarefas",
-  "settings.permissions.tool.todoread.description": "Ler a lista de tarefas",
   "settings.permissions.tool.todowrite.title": "Escrever Tarefas",
   "settings.permissions.tool.todowrite.description": "Atualizar a lista de tarefas",
   "settings.permissions.tool.webfetch.title": "Buscar Web",

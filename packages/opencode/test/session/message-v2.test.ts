@@ -927,4 +927,31 @@ describe("session.message-v2.fromError", () => {
       },
     })
   })
+
+  test("classifies ZlibError from fetch as retryable APIError", () => {
+    const zlibError = new Error(
+      'ZlibError fetching "https://opencode.cloudflare.dev/anthropic/messages". For more information, pass `verbose: true` in the second argument to fetch()',
+    )
+    ;(zlibError as any).code = "ZlibError"
+    ;(zlibError as any).errno = 0
+    ;(zlibError as any).path = ""
+
+    const result = MessageV2.fromError(zlibError, { providerID })
+
+    expect(MessageV2.APIError.isInstance(result)).toBe(true)
+    expect((result as MessageV2.APIError).data.isRetryable).toBe(true)
+    expect((result as MessageV2.APIError).data.message).toInclude("decompression")
+  })
+
+  test("classifies ZlibError as AbortedError when abort context is provided", () => {
+    const zlibError = new Error(
+      'ZlibError fetching "https://opencode.cloudflare.dev/anthropic/messages". For more information, pass `verbose: true` in the second argument to fetch()',
+    )
+    ;(zlibError as any).code = "ZlibError"
+    ;(zlibError as any).errno = 0
+
+    const result = MessageV2.fromError(zlibError, { providerID, aborted: true })
+
+    expect(result.name).toBe("MessageAbortedError")
+  })
 })
