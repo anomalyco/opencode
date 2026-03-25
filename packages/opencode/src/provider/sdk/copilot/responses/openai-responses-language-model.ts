@@ -194,7 +194,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
     }
 
     const openaiOptions = await parseProviderOptions({
-      provider: "copilot",
+      provider: "openai",
       providerOptions,
       schema: openaiResponsesProviderOptionsSchema,
     })
