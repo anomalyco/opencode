@@ -614,17 +614,12 @@ export namespace MCP {
                     status: "failed" as const,
                     error: e instanceof Error ? e.message : String(e),
                   }
-                  delete s.clients[clientName]
                   return e
                 },
               }).pipe(Effect.option)
 
               if (Option.isNone(toolsResult)) {
-                // Close the dead client before reconnecting to avoid
-                // orphaned processes (especially for stdio servers)
-                yield* Effect.promise(() =>
-                  client.close().catch(() => {}),
-                )
+                // createAndStore closes the old client before creating a new one
                 if (entry) {
                   yield* createAndStore(clientName, entry).pipe(
                     Effect.ignore,
