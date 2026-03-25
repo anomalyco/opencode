@@ -6718,6 +6718,59 @@
         ]
       }
     },
+    "/vcs/diff": {
+      "get": {
+        "operationId": "vcs.diff",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "mode",
+            "schema": {
+              "type": "string",
+              "enum": ["git", "branch"]
+            },
+            "required": true
+          }
+        ],
+        "summary": "Get VCS diff",
+        "description": "Retrieve the current git diff for the working tree or against the default branch.",
+        "responses": {
+          "200": {
+            "description": "VCS diff",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FileDiff"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.vcs.diff({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/command": {
       "get": {
         "operationId": "command.list",
@@ -12484,9 +12537,11 @@
         "properties": {
           "branch": {
             "type": "string"
+          },
+          "default_branch": {
+            "type": "string"
           }
-        },
-        "required": ["branch"]
+        }
       },
       "Command": {
         "type": "object",
