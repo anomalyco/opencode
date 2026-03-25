@@ -22,7 +22,7 @@ export function useProviders() {
   const providers = () => {
     if (dir()) {
       const [projectStore] = globalSync.child(dir())
-      if (projectStore.provider.all.length > 0) return projectStore.provider
+      return projectStore.provider
     }
     return globalSync.data.provider
   }
