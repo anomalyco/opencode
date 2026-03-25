@@ -126,7 +126,9 @@ describe("session.prompt_async error handling", () => {
     expect(start).toBeGreaterThan(-1)
     expect(end).toBeGreaterThan(start)
     const route = src.slice(start, end)
-    expect(route).toContain(".catch(")
+    // Support both .catch() and try/catch patterns for error handling
+    const hasCatch = route.includes(".catch(") || route.includes("} catch (")
+    expect(hasCatch).toBe(true)
     expect(route).toContain("Bus.publish(Session.Event.Error")
   })
 })
