@@ -1,153 +1,141 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 300" width="260" height="300">
-  <defs>
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#080f1e"/>
-      <stop offset="100%" stop-color="#0c1a30"/>
-    </linearGradient>
-    <linearGradient id="body" x1="20%" y1="0%" x2="80%" y2="100%">
-      <stop offset="0%" stop-color="#0e3060"/>
-      <stop offset="100%" stop-color="#091f42"/>
-    </linearGradient>
-    <linearGradient id="blue" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#00d4ff"/>
-      <stop offset="100%" stop-color="#0066ff"/>
-    </linearGradient>
-    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
-      <feGaussianBlur stdDeviation="4" result="blur"/>
-      <feMerge>
-        <feMergeNode in="blur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
-    <filter id="softglow" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="2" result="blur"/>
-      <feMerge>
-        <feMergeNode in="blur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
-    <!-- Scanline pattern for CRT terminal feel -->
-    <pattern id="lines" x="0" y="0" width="260" height="3" patternUnits="userSpaceOnUse">
-      <rect x="0" y="0" width="260" height="1" fill="black" opacity="0.18"/>
-    </pattern>
-    <!-- Dot grid for terminal aesthetic -->
-    <pattern id="dots" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
-      <circle cx="10" cy="10" r="0.7" fill="#00d4ff" opacity="0.15"/>
-    </pattern>
-  </defs>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 260" width="300" height="260" shape-rendering="crispEdges">
+  <!-- Light warm background matching CobuilderLabs org avatar style -->
+  <rect width="300" height="260" fill="#f3ece6"/>
 
-  <!-- Background panel -->
-  <rect width="260" height="300" rx="16" fill="url(#bg)"/>
-  <!-- Dot grid overlay -->
-  <rect width="260" height="300" rx="16" fill="url(#dots)"/>
+  <!--
+    Pixel grid: 20×20px blocks, offset x=10, y=10
+    14 cols (0–13) × 12 rows (0–11)
+    Dog faces RIGHT. Tail curls up on the LEFT. Ear spikes up on the RIGHT.
 
-  <!-- === TAIL (behind body) === -->
-  <path d="M 180,182 C 216,160 230,126 216,102 C 206,84 188,87 182,102 C 176,118 188,134 190,145"
-        stroke="#0e3060" stroke-width="26" stroke-linecap="round" fill="none"/>
-  <path d="M 180,182 C 216,160 230,126 216,102 C 206,84 188,87 182,102 C 176,118 188,134 190,145"
-        stroke="#00d4ff" stroke-width="3" stroke-linecap="round" fill="none" filter="url(#softglow)" opacity="0.9"/>
+    Main color:  #c08055  (warm fawn — matches GitHub avatar)
+    Dark accent: #5a2808  (eye, nose)
 
-  <!-- === BODY === -->
-  <ellipse cx="120" cy="196" rx="68" ry="60" fill="url(#body)"/>
-  <ellipse cx="120" cy="196" rx="68" ry="60" fill="none" stroke="#00d4ff" stroke-width="1.8" opacity="0.7"/>
+    Layout per row:
+      r0:  tail tip (col 2)           + ear tip (col 9)
+      r1:  tail     (cols 1–2)        + ear     (cols 8–9)
+      r2:  tail     (cols 0–2)        + head    (cols 6–11)
+      r3:  tail     (cols 0–1) | gap  + body+snout (cols 3–13) [col 13 = nose]
+      r4:  body+snout (cols 3–13)     [col 10 = eye, col 13 = nose]
+      r5:  body     (cols 3–11)
+      r6:  body     (cols 3–11)
+      r7:  body     (cols 3–11)
+      r8:  body     (cols 3–11)
+      r9:  legs     (cols 4–5) + legs (cols 9–10)
+      r10: legs     (cols 4–5) + legs (cols 9–10)
+      r11: paws     (cols 3–5) + paws (cols 8–11)
+  -->
 
-  <!-- Chest glow -->
-  <ellipse cx="120" cy="216" rx="34" ry="26" fill="#00d4ff" opacity="0.05"/>
+  <!-- ROW 0 — tail tip + ear tip -->
+  <rect x="50"  y="10" width="20" height="20" fill="#c08055"/>
+  <rect x="190" y="10" width="20" height="20" fill="#c08055"/>
 
-  <!-- === NECK (connects head to body, no seam) === -->
-  <ellipse cx="120" cy="152" rx="34" ry="26" fill="#0e3060"/>
+  <!-- ROW 1 — tail + ear -->
+  <rect x="30"  y="30" width="20" height="20" fill="#c08055"/>
+  <rect x="50"  y="30" width="20" height="20" fill="#c08055"/>
+  <rect x="170" y="30" width="20" height="20" fill="#c08055"/>
+  <rect x="190" y="30" width="20" height="20" fill="#c08055"/>
 
-  <!-- === EARS (drawn before head so head covers base) === -->
-  <!-- Left ear body fill -->
-  <polygon points="78,84  58,24  112,72" fill="#0a2040"/>
-  <!-- Left ear outline -->
-  <polygon points="78,84  58,24  112,72" fill="none" stroke="#00d4ff" stroke-width="1.8" stroke-linejoin="round" filter="url(#softglow)" opacity="0.9"/>
-  <!-- Left ear inner glow -->
-  <polygon points="82,80  68,36  106,72" fill="#00d4ff" opacity="0.12"/>
+  <!-- ROW 2 — tail (0–2) + head (6–11) -->
+  <rect x="10"  y="50" width="20" height="20" fill="#c08055"/>
+  <rect x="30"  y="50" width="20" height="20" fill="#c08055"/>
+  <rect x="50"  y="50" width="20" height="20" fill="#c08055"/>
+  <rect x="130" y="50" width="20" height="20" fill="#c08055"/>
+  <rect x="150" y="50" width="20" height="20" fill="#c08055"/>
+  <rect x="170" y="50" width="20" height="20" fill="#c08055"/>
+  <rect x="190" y="50" width="20" height="20" fill="#c08055"/>
+  <rect x="210" y="50" width="20" height="20" fill="#c08055"/>
+  <rect x="230" y="50" width="20" height="20" fill="#c08055"/>
 
-  <!-- Right ear body fill -->
-  <polygon points="162,84  202,24  148,72" fill="#0a2040"/>
-  <!-- Right ear outline -->
-  <polygon points="162,84  202,24  148,72" fill="none" stroke="#00d4ff" stroke-width="1.8" stroke-linejoin="round" filter="url(#softglow)" opacity="0.9"/>
-  <!-- Right ear inner glow -->
-  <polygon points="158,80  192,36  154,72" fill="#00d4ff" opacity="0.12"/>
+  <!-- ROW 3 — tail (0–1) | gap at col2 | body+snout (3–12) + nose (13, dark) -->
+  <rect x="10"  y="70" width="20" height="20" fill="#c08055"/>
+  <rect x="30"  y="70" width="20" height="20" fill="#c08055"/>
+  <rect x="70"  y="70" width="20" height="20" fill="#c08055"/>
+  <rect x="90"  y="70" width="20" height="20" fill="#c08055"/>
+  <rect x="110" y="70" width="20" height="20" fill="#c08055"/>
+  <rect x="130" y="70" width="20" height="20" fill="#c08055"/>
+  <rect x="150" y="70" width="20" height="20" fill="#c08055"/>
+  <rect x="170" y="70" width="20" height="20" fill="#c08055"/>
+  <rect x="190" y="70" width="20" height="20" fill="#c08055"/>
+  <rect x="210" y="70" width="20" height="20" fill="#c08055"/>
+  <rect x="230" y="70" width="20" height="20" fill="#c08055"/>
+  <rect x="250" y="70" width="20" height="20" fill="#c08055"/>
+  <rect x="270" y="70" width="20" height="20" fill="#5a2808"/>
 
-  <!-- === HEAD === -->
-  <ellipse cx="120" cy="96" rx="52" ry="50" fill="url(#body)"/>
-  <ellipse cx="120" cy="96" rx="52" ry="50" fill="none" stroke="#00d4ff" stroke-width="1.8" opacity="0.7"/>
+  <!-- ROW 4 — body+snout (3–12), eye (10, dark), nose (13, dark) -->
+  <rect x="70"  y="90" width="20" height="20" fill="#c08055"/>
+  <rect x="90"  y="90" width="20" height="20" fill="#c08055"/>
+  <rect x="110" y="90" width="20" height="20" fill="#c08055"/>
+  <rect x="130" y="90" width="20" height="20" fill="#c08055"/>
+  <rect x="150" y="90" width="20" height="20" fill="#c08055"/>
+  <rect x="170" y="90" width="20" height="20" fill="#c08055"/>
+  <rect x="190" y="90" width="20" height="20" fill="#c08055"/>
+  <rect x="210" y="90" width="20" height="20" fill="#5a2808"/>
+  <rect x="230" y="90" width="20" height="20" fill="#c08055"/>
+  <rect x="250" y="90" width="20" height="20" fill="#c08055"/>
+  <rect x="270" y="90" width="20" height="20" fill="#5a2808"/>
 
-  <!-- Head forehead subtle highlight -->
-  <ellipse cx="120" cy="80" rx="26" ry="18" fill="#00d4ff" opacity="0.04"/>
+  <!-- ROW 5 — body (3–11) -->
+  <rect x="70"  y="110" width="20" height="20" fill="#c08055"/>
+  <rect x="90"  y="110" width="20" height="20" fill="#c08055"/>
+  <rect x="110" y="110" width="20" height="20" fill="#c08055"/>
+  <rect x="130" y="110" width="20" height="20" fill="#c08055"/>
+  <rect x="150" y="110" width="20" height="20" fill="#c08055"/>
+  <rect x="170" y="110" width="20" height="20" fill="#c08055"/>
+  <rect x="190" y="110" width="20" height="20" fill="#c08055"/>
+  <rect x="210" y="110" width="20" height="20" fill="#c08055"/>
+  <rect x="230" y="110" width="20" height="20" fill="#c08055"/>
 
-  <!-- === EYES (glowing) === -->
-  <!-- Left eye socket -->
-  <ellipse cx="100" cy="92" rx="10" ry="9" fill="#040c1c"/>
-  <!-- Left iris glow -->
-  <ellipse cx="100" cy="92" rx="6.5" ry="6" fill="#00d4ff" opacity="0.85" filter="url(#glow)"/>
-  <!-- Left pupil -->
-  <ellipse cx="100" cy="92" rx="3" ry="3" fill="#001830"/>
-  <!-- Left eye highlight -->
-  <circle cx="97" cy="89" r="2" fill="white" opacity="0.9"/>
+  <!-- ROW 6 — body (3–11) -->
+  <rect x="70"  y="130" width="20" height="20" fill="#c08055"/>
+  <rect x="90"  y="130" width="20" height="20" fill="#c08055"/>
+  <rect x="110" y="130" width="20" height="20" fill="#c08055"/>
+  <rect x="130" y="130" width="20" height="20" fill="#c08055"/>
+  <rect x="150" y="130" width="20" height="20" fill="#c08055"/>
+  <rect x="170" y="130" width="20" height="20" fill="#c08055"/>
+  <rect x="190" y="130" width="20" height="20" fill="#c08055"/>
+  <rect x="210" y="130" width="20" height="20" fill="#c08055"/>
+  <rect x="230" y="130" width="20" height="20" fill="#c08055"/>
 
-  <!-- Right eye socket -->
-  <ellipse cx="140" cy="92" rx="10" ry="9" fill="#040c1c"/>
-  <!-- Right iris glow -->
-  <ellipse cx="140" cy="92" rx="6.5" ry="6" fill="#00d4ff" opacity="0.85" filter="url(#glow)"/>
-  <!-- Right pupil -->
-  <ellipse cx="140" cy="92" rx="3" ry="3" fill="#001830"/>
-  <!-- Right eye highlight -->
-  <circle cx="137" cy="89" r="2" fill="white" opacity="0.9"/>
+  <!-- ROW 7 — body (3–11) -->
+  <rect x="70"  y="150" width="20" height="20" fill="#c08055"/>
+  <rect x="90"  y="150" width="20" height="20" fill="#c08055"/>
+  <rect x="110" y="150" width="20" height="20" fill="#c08055"/>
+  <rect x="130" y="150" width="20" height="20" fill="#c08055"/>
+  <rect x="150" y="150" width="20" height="20" fill="#c08055"/>
+  <rect x="170" y="150" width="20" height="20" fill="#c08055"/>
+  <rect x="190" y="150" width="20" height="20" fill="#c08055"/>
+  <rect x="210" y="150" width="20" height="20" fill="#c08055"/>
+  <rect x="230" y="150" width="20" height="20" fill="#c08055"/>
 
-  <!-- === SNOUT === -->
-  <ellipse cx="120" cy="116" rx="22" ry="16" fill="#081830" opacity="0.8"/>
-  <ellipse cx="120" cy="116" rx="22" ry="16" fill="none" stroke="#0066ff" stroke-width="1.2" opacity="0.5"/>
+  <!-- ROW 8 — body (3–11) -->
+  <rect x="70"  y="170" width="20" height="20" fill="#c08055"/>
+  <rect x="90"  y="170" width="20" height="20" fill="#c08055"/>
+  <rect x="110" y="170" width="20" height="20" fill="#c08055"/>
+  <rect x="130" y="170" width="20" height="20" fill="#c08055"/>
+  <rect x="150" y="170" width="20" height="20" fill="#c08055"/>
+  <rect x="170" y="170" width="20" height="20" fill="#c08055"/>
+  <rect x="190" y="170" width="20" height="20" fill="#c08055"/>
+  <rect x="210" y="170" width="20" height="20" fill="#c08055"/>
+  <rect x="230" y="170" width="20" height="20" fill="#c08055"/>
 
-  <!-- Nose glow -->
-  <ellipse cx="120" cy="110" rx="9" ry="7" fill="#00d4ff" opacity="0.7" filter="url(#softglow)"/>
-  <ellipse cx="120" cy="110" rx="5" ry="3.5" fill="#e0f8ff"/>
+  <!-- ROW 9 — back legs (4–5) + front legs (9–10) -->
+  <rect x="90"  y="190" width="20" height="20" fill="#c08055"/>
+  <rect x="110" y="190" width="20" height="20" fill="#c08055"/>
+  <rect x="190" y="190" width="20" height="20" fill="#c08055"/>
+  <rect x="210" y="190" width="20" height="20" fill="#c08055"/>
 
-  <!-- Mouth -->
-  <path d="M 120,118 Q 120,122 120,122" stroke="#0066ff" stroke-width="1.5" fill="none" stroke-linecap="round" opacity="0.7"/>
-  <path d="M 113,122 Q 120,128 127,122" stroke="#0066ff" stroke-width="1.5" fill="none" stroke-linecap="round" opacity="0.7"/>
+  <!-- ROW 10 — legs -->
+  <rect x="90"  y="210" width="20" height="20" fill="#c08055"/>
+  <rect x="110" y="210" width="20" height="20" fill="#c08055"/>
+  <rect x="190" y="210" width="20" height="20" fill="#c08055"/>
+  <rect x="210" y="210" width="20" height="20" fill="#c08055"/>
 
-  <!-- === COLLAR === -->
-  <rect x="90" y="163" width="60" height="16" rx="8" fill="url(#blue)" opacity="0.95"/>
-  <!-- Collar text -->
-  <text x="120" y="175" font-family="monospace, 'Courier New'" font-size="7.5" font-weight="bold"
-        fill="white" text-anchor="middle" letter-spacing="0.5">CoBuilder</text>
-  <!-- Tag -->
-  <rect x="112" y="178" width="16" height="12" rx="3" fill="url(#blue)"/>
-  <path d="M 116,190 L 120,196 L 124,190" fill="url(#blue)"/>
-  <text x="120" y="188" font-family="monospace" font-size="6" font-weight="bold"
-        fill="white" text-anchor="middle">&gt;_</text>
-
-  <!-- === FRONT LEGS === -->
-  <!-- Left leg -->
-  <rect x="72" y="240" width="28" height="38" rx="14" fill="#0a2040"/>
-  <rect x="72" y="240" width="28" height="38" rx="14" fill="none" stroke="#00d4ff" stroke-width="1.5" opacity="0.6"/>
-  <ellipse cx="86" cy="279" rx="20" ry="11" fill="#081830"/>
-  <ellipse cx="86" cy="279" rx="20" ry="11" fill="none" stroke="#00d4ff" stroke-width="1.5" opacity="0.5"/>
-
-  <!-- Right leg -->
-  <rect x="160" y="240" width="28" height="38" rx="14" fill="#0a2040"/>
-  <rect x="160" y="240" width="28" height="38" rx="14" fill="none" stroke="#00d4ff" stroke-width="1.5" opacity="0.6"/>
-  <ellipse cx="174" cy="279" rx="20" ry="11" fill="#081830"/>
-  <ellipse cx="174" cy="279" rx="20" ry="11" fill="none" stroke="#00d4ff" stroke-width="1.5" opacity="0.5"/>
-
-  <!-- Paw toe details -->
-  <line x1="78" y1="278" x2="78" y2="282" stroke="#00d4ff" stroke-width="1.2" opacity="0.4"/>
-  <line x1="86" y1="281" x2="86" y2="285" stroke="#00d4ff" stroke-width="1.2" opacity="0.4"/>
-  <line x1="94" y1="278" x2="94" y2="282" stroke="#00d4ff" stroke-width="1.2" opacity="0.4"/>
-  <line x1="166" y1="278" x2="166" y2="282" stroke="#00d4ff" stroke-width="1.2" opacity="0.4"/>
-  <line x1="174" y1="281" x2="174" y2="285" stroke="#00d4ff" stroke-width="1.2" opacity="0.4"/>
-  <line x1="182" y1="278" x2="182" y2="282" stroke="#00d4ff" stroke-width="1.2" opacity="0.4"/>
-
-  <!-- === SCANLINES overlay === -->
-  <rect width="260" height="300" rx="16" fill="url(#lines)"/>
-
-  <!-- Corner bracket decorations (terminal aesthetic) -->
-  <path d="M 12,12 L 12,28 M 12,12 L 28,12" stroke="#00d4ff" stroke-width="1.5" opacity="0.4" fill="none"/>
-  <path d="M 248,12 L 248,28 M 248,12 L 232,12" stroke="#00d4ff" stroke-width="1.5" opacity="0.4" fill="none"/>
-  <path d="M 12,288 L 12,272 M 12,288 L 28,288" stroke="#00d4ff" stroke-width="1.5" opacity="0.4" fill="none"/>
-  <path d="M 248,288 L 248,272 M 248,288 L 232,288" stroke="#00d4ff" stroke-width="1.5" opacity="0.4" fill="none"/>
+  <!-- ROW 11 — paws (wider than legs) -->
+  <rect x="70"  y="230" width="20" height="20" fill="#c08055"/>
+  <rect x="90"  y="230" width="20" height="20" fill="#c08055"/>
+  <rect x="110" y="230" width="20" height="20" fill="#c08055"/>
+  <rect x="170" y="230" width="20" height="20" fill="#c08055"/>
+  <rect x="190" y="230" width="20" height="20" fill="#c08055"/>
+  <rect x="210" y="230" width="20" height="20" fill="#c08055"/>
+  <rect x="230" y="230" width="20" height="20" fill="#c08055"/>
 </svg>
