@@ -3,18 +3,19 @@ import { Effect, Layer, Option, Schema, ServiceMap } from "effect"
 
 import { Database } from "@/storage/db"
 import { AccountStateTable, AccountTable } from "./account.sql"
-import { AccessToken, Account, AccountID, AccountRepoError, OrgID, RefreshToken } from "./schema"
+import { AccessToken, AccountID, AccountRepoError, Info, OrgID, RefreshToken } from "./schema"
 
 export type AccountRow = (typeof AccountTable)["$inferSelect"]
 
 type DbClient = Parameters<typeof Database.use>[0] extends (db: infer T) => unknown ? T : never
+type DbTransactionCallback<A> = Parameters<typeof Database.transaction<A>>[0]
 
 const ACCOUNT_STATE_ID = 1
 
 export namespace AccountRepo {
   export interface Service {
-    readonly active: () => Effect.Effect<Option.Option<Account>, AccountRepoError>
-    readonly list: () => Effect.Effect<Account[], AccountRepoError>
+    readonly active: () => Effect.Effect<Option.Option<Info>, AccountRepoError>
+    readonly list: () => Effect.Effect<Info[], AccountRepoError>
     readonly remove: (accountID: AccountID) => Effect.Effect<void, AccountRepoError>
     readonly use: (accountID: AccountID, orgID: Option.Option<OrgID>) => Effect.Effect<void, AccountRepoError>
     readonly getRow: (accountID: AccountID) => Effect.Effect<Option.Option<AccountRow>, AccountRepoError>
@@ -40,15 +41,15 @@ export class AccountRepo extends ServiceMap.Service<AccountRepo, AccountRepo.Ser
   static readonly layer: Layer.Layer<AccountRepo> = Layer.effect(
     AccountRepo,
     Effect.gen(function* () {
-      const decode = Schema.decodeUnknownSync(Account)
+      const decode = Schema.decodeUnknownSync(Info)
 
-      const query = <A>(f: (db: DbClient) => A) =>
+      const query = <A>(f: DbTransactionCallback<A>) =>
         Effect.try({
           try: () => Database.use(f),
           catch: (cause) => new AccountRepoError({ message: "Database operation failed", cause }),
         })
 
-      const tx = <A>(f: (db: DbClient) => A) =>
+      const tx = <A>(f: DbTransactionCallback<A>) =>
         Effect.try({
           try: () => Database.transaction(f),
           catch: (cause) => new AccountRepoError({ message: "Database operation failed", cause }),
@@ -136,6 +137,8 @@ export class AccountRepo extends ServiceMap.Service<AccountRepo, AccountRepo.Ser
             .onConflictDoUpdate({
               target: AccountTable.id,
               set: {
+                email: input.email,
+                url: input.url,
                 access_token: input.accessToken,
                 refresh_token: input.refreshToken,
                 token_expiry: input.expiry,

@@ -151,7 +151,6 @@ export const SessionReview = (props: SessionReviewProps) => {
 
   const open = () => props.open ?? store.open
   const files = createMemo(() => props.diffs.map((diff) => diff.file))
-  const diffs = createMemo(() => new Map(props.diffs.map((diff) => [diff.file, diff] as const)))
   const diffStyle = () => props.diffStyle ?? (props.split ? "split" : "unified")
   const hasDiffs = () => files().length > 0
 
@@ -282,11 +281,10 @@ export const SessionReview = (props: SessionReviewProps) => {
           <Show when={hasDiffs()} fallback={props.empty}>
             <div class="pb-6">
               <Accordion multiple value={open()} onChange={handleChange}>
-                <For each={files()}>
-                  {(file) => {
+                <For each={props.diffs}>
+                  {(diff) => {
                     let wrapper: HTMLDivElement | undefined
-
-                    const item = createMemo(() => diffs().get(file)!)
+                    const file = diff.file
 
                     const expanded = createMemo(() => open().includes(file))
                     const force = () => !!store.force[file]
@@ -294,9 +292,9 @@ export const SessionReview = (props: SessionReviewProps) => {
                     const comments = createMemo(() => (props.comments ?? []).filter((c) => c.file === file))
                     const commentedLines = createMemo(() => comments().map((c) => c.selection))
 
-                    const beforeText = () => (typeof item().before === "string" ? item().before : "")
-                    const afterText = () => (typeof item().after === "string" ? item().after : "")
-                    const changedLines = () => item().additions + item().deletions
+                    const beforeText = () => (typeof diff.before === "string" ? diff.before : "")
+                    const afterText = () => (typeof diff.after === "string" ? diff.after : "")
+                    const changedLines = () => diff.additions + diff.deletions
                     const mediaKind = createMemo(() => mediaKindFromPath(file))
 
                     const tooLarge = createMemo(() => {
@@ -307,9 +305,9 @@ export const SessionReview = (props: SessionReviewProps) => {
                     })
 
                     const isAdded = () =>
-                      item().status === "added" || (beforeText().length === 0 && afterText().length > 0)
+                      diff.status === "added" || (beforeText().length === 0 && afterText().length > 0)
                     const isDeleted = () =>
-                      item().status === "deleted" || (afterText().length === 0 && beforeText().length > 0)
+                      diff.status === "deleted" || (afterText().length === 0 && beforeText().length > 0)
 
                     const selectedLines = createMemo(() => {
                       const current = selection()
@@ -346,7 +344,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                           file,
                           selection,
                           comment,
-                          preview: selectionPreview(item(), selection),
+                          preview: selectionPreview(diff, selection),
                         })
                       },
                       onUpdate: ({ id, comment, selection }) => {
@@ -355,7 +353,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                           file,
                           selection,
                           comment,
-                          preview: selectionPreview(item(), selection),
+                          preview: selectionPreview(diff, selection),
                         })
                       },
                       onDelete: (comment) => {
@@ -432,7 +430,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                                       <span data-slot="session-review-change" data-type="added">
                                         {i18n.t("ui.sessionReview.change.added")}
                                       </span>
-                                      <DiffChanges changes={item()} />
+                                      <DiffChanges changes={diff} />
                                     </div>
                                   </Match>
                                   <Match when={isDeleted()}>
@@ -446,7 +444,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                                     </span>
                                   </Match>
                                   <Match when={true}>
-                                    <DiffChanges changes={item()} />
+                                    <DiffChanges changes={diff} />
                                   </Match>
                                 </Switch>
                                 <span data-slot="session-review-diff-chevron">
@@ -492,7 +490,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                                   <Dynamic
                                     component={fileComponent}
                                     mode="diff"
-                                    preloadedDiff={item().preloaded}
+                                    preloadedDiff={diff.preloaded}
                                     diffStyle={diffStyle()}
                                     onRendered={() => {
                                       props.onDiffRendered?.()
@@ -509,17 +507,17 @@ export const SessionReview = (props: SessionReviewProps) => {
                                     commentedLines={commentedLines()}
                                     before={{
                                       name: file,
-                                      contents: typeof item().before === "string" ? item().before : "",
+                                      contents: typeof diff.before === "string" ? diff.before : "",
                                     }}
                                     after={{
                                       name: file,
-                                      contents: typeof item().after === "string" ? item().after : "",
+                                      contents: typeof diff.after === "string" ? diff.after : "",
                                     }}
                                     media={{
                                       mode: "auto",
                                       path: file,
-                                      before: item().before,
-                                      after: item().after,
+                                      before: diff.before,
+                                      after: diff.after,
                                       readFile: props.readFile,
                                     }}
                                   />

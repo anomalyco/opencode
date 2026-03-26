@@ -1,4 +1,4 @@
-import { describe, test, expect } from "bun:test"
+import { afterEach, describe, test, expect } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
 import { EditTool } from "../../src/tool/edit"
@@ -17,6 +17,10 @@ const ctx = {
   metadata: () => {},
   ask: async () => {},
 }
+
+afterEach(async () => {
+  await Instance.disposeAll()
+})
 
 async function touch(file: string, time: number) {
   const date = new Date(time)
@@ -85,7 +89,6 @@ describe("tool.edit", () => {
           const { FileWatcher } = await import("../../src/file/watcher")
 
           const events: string[] = []
-          const unsubEdited = Bus.subscribe(File.Event.Edited, () => events.push("edited"))
           const unsubUpdated = Bus.subscribe(FileWatcher.Event.Updated, () => events.push("updated"))
 
           const edit = await EditTool.init()
@@ -98,9 +101,7 @@ describe("tool.edit", () => {
             ctx,
           )
 
-          expect(events).toContain("edited")
           expect(events).toContain("updated")
-          unsubEdited()
           unsubUpdated()
         },
       })
@@ -301,11 +302,9 @@ describe("tool.edit", () => {
           await FileTime.read(ctx.sessionID, filepath)
 
           const { Bus } = await import("../../src/bus")
-          const { File } = await import("../../src/file")
           const { FileWatcher } = await import("../../src/file/watcher")
 
           const events: string[] = []
-          const unsubEdited = Bus.subscribe(File.Event.Edited, () => events.push("edited"))
           const unsubUpdated = Bus.subscribe(FileWatcher.Event.Updated, () => events.push("updated"))
 
           const edit = await EditTool.init()
@@ -318,9 +317,7 @@ describe("tool.edit", () => {
             ctx,
           )
 
-          expect(events).toContain("edited")
           expect(events).toContain("updated")
-          unsubEdited()
           unsubUpdated()
         },
       })

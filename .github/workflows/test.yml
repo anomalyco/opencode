@@ -50,20 +50,17 @@ jobs:
 
   e2e:
     name: e2e (${{ matrix.settings.name }})
-    needs: unit
     strategy:
       fail-fast: false
       matrix:
         settings:
           - name: linux
             host: blacksmith-4vcpu-ubuntu-2404
-            playwright: bunx playwright install --with-deps
           - name: windows
             host: blacksmith-4vcpu-windows-2025
-            playwright: bunx playwright install
     runs-on: ${{ matrix.settings.host }}
     env:
-      PLAYWRIGHT_BROWSERS_PATH: 0
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright-browsers
     defaults:
       run:
         shell: bash
@@ -76,9 +73,28 @@ jobs:
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
 
-      - name: Install Playwright browsers
+      - name: Read Playwright version
+        id: playwright-version
+        run: |
+          version=$(node -e 'console.log(require("./packages/app/package.json").devDependencies["@playwright/test"])')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.playwright-browsers
+          key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright-version.outputs.version }}-chromium
+
+      - name: Install Playwright system dependencies
+        if: runner.os == 'Linux'
         working-directory: packages/app
-        run: ${{ matrix.settings.playwright }}
+        run: bunx playwright install-deps chromium
+
+      - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        working-directory: packages/app
+        run: bunx playwright install chromium
 
       - name: Run app e2e tests
         run: bun --cwd packages/app test:e2e:local

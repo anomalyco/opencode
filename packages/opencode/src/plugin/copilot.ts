@@ -168,7 +168,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
               key: "enterpriseUrl",
               message: "Enter your GitHub Enterprise URL or domain",
               placeholder: "company.ghe.com or https://company.ghe.com",
-              condition: (inputs) => inputs.deploymentType === "enterprise",
+              when: { key: "deploymentType", op: "eq", value: "enterprise" },
               validate: (value) => {
                 if (!value) return "URL or domain is required"
                 try {
