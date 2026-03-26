@@ -2523,29 +2523,29 @@ export default function Layout(props: ParentProps) {
               </main>
             </div>
 
-            <aside
-              classList={{
-                "hidden xl:flex absolute inset-y-0 left-16 z-30": true,
-                "opacity-100 translate-x-0 pointer-events-auto": state.peeked && !layout.sidebar.opened(),
-                "opacity-0 -translate-x-2 pointer-events-none": !state.peeked || layout.sidebar.opened(),
-                "transition-[opacity,transform] motion-reduce:transition-none": true,
-                "duration-180 ease-out": state.peeked && !layout.sidebar.opened(),
-                "duration-120 ease-in": !state.peeked || layout.sidebar.opened(),
-              }}
-              onMouseMove={disarm}
-              onMouseEnter={() => {
-                disarm()
-                aim.reset()
-              }}
-              onPointerDown={disarm}
-              onMouseLeave={() => {
-                arm()
-              }}
-            >
-              <Show when={peekProject()}>
+            <Show when={peekProject() && state.peeked && !layout.sidebar.opened()}>
+              <aside
+                classList={{
+                  "hidden xl:flex absolute inset-y-0 left-16 z-30": true,
+                  "opacity-100 translate-x-0 pointer-events-auto": state.peeked && !layout.sidebar.opened(),
+                  "opacity-0 -translate-x-2 pointer-events-none": !state.peeked || layout.sidebar.opened(),
+                  "transition-[opacity,transform] motion-reduce:transition-none": true,
+                  "duration-180 ease-out": state.peeked && !layout.sidebar.opened(),
+                  "duration-120 ease-in": !state.peeked || layout.sidebar.opened(),
+                }}
+                onMouseMove={disarm}
+                onMouseEnter={() => {
+                  disarm()
+                  aim.reset()
+                }}
+                onPointerDown={disarm}
+                onMouseLeave={() => {
+                  arm()
+                }}
+              >
                 <SidebarPanel project={peekProject} merged={false} />
-              </Show>
-            </aside>
+              </aside>
+            </Show>
 
             <div
               classList={{
