@@ -1205,6 +1205,24 @@ export namespace Config {
             .describe("Token buffer for compaction. Leaves enough window to avoid overflow during compaction."),
         })
         .optional(),
+      security: z
+        .object({
+          ssrf: z.object({ enabled: z.boolean().optional() }).optional(),
+          promptInjection: z.object({ enabled: z.boolean().optional() }).optional(),
+          pathTraversal: z.object({ enabled: z.boolean().optional() }).optional(),
+          auditLog: z.object({ enabled: z.boolean().optional() }).optional(),
+          rateLimiting: z
+            .object({
+              enabled: z.boolean().optional(),
+              maxTokens: z.number().int().positive().optional(),
+              refillRate: z.number().int().positive().optional(),
+              refillIntervalMs: z.number().int().positive().optional(),
+            })
+            .optional(),
+          headers: z.object({ enabled: z.boolean().optional() }).optional(),
+        })
+        .optional()
+        .describe("Per-module security configuration. All modules enabled by default."),
       experimental: z
         .object({
           disable_paste_summary: z.boolean().optional(),

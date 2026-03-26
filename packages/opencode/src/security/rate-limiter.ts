@@ -1,3 +1,10 @@
+// SEC-05: No external call sites found as of 2026-03-26. Guard is in module itself.
+import { Config } from "../config/config"
+
+const DEFAULT_MAX_TOKENS = 100
+const DEFAULT_REFILL_RATE = 10
+const DEFAULT_REFILL_INTERVAL_MS = 1000
+
 interface Bucket {
   tokens: number
   lastRefill: number
@@ -43,5 +50,20 @@ export class RateLimiter {
         this.buckets.delete(key)
       }
     }
+  }
+
+  /**
+   * Consumes a token only if rate limiting is enabled in config (SEC-05).
+   * Returns true (allowed) when rate limiting is disabled.
+   */
+  static async consumeIfEnabled(key: string, cost = 1): Promise<boolean> {
+    const cfg = await Config.get()
+    if (cfg.security?.rateLimiting?.enabled === false) return true
+    const limiter = new RateLimiter({
+      maxTokens: cfg.security?.rateLimiting?.maxTokens ?? DEFAULT_MAX_TOKENS,
+      refillRate: cfg.security?.rateLimiting?.refillRate ?? DEFAULT_REFILL_RATE,
+      refillIntervalMs: cfg.security?.rateLimiting?.refillIntervalMs ?? DEFAULT_REFILL_INTERVAL_MS,
+    })
+    return limiter.consume(key, cost)
   }
 }

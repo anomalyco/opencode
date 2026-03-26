@@ -4,6 +4,7 @@ import { UI } from "../ui"
 import { Global } from "../../global"
 import { Filesystem } from "../../util/filesystem"
 import { validateProviderURL } from "../../security"
+import { Config } from "../../config/config"
 import path from "path"
 
 const NINEROUTER_ID = "9router"
@@ -59,11 +60,14 @@ async function setup9Router() {
 
   const baseURL = (urlInput as string).trim().replace(/\/+$/, "")
 
-  // SSRF validation
-  const ssrfCheck = validateProviderURL(baseURL, { allowLocalhost: true })
-  if (!ssrfCheck.ok) {
-    prompts.log.error(ssrfCheck.reason)
-    process.exit(1)
+  // SSRF validation (default-on: skipped only if explicitly disabled)
+  const cfg = await Config.get()
+  if (cfg.security?.ssrf?.enabled !== false) {
+    const ssrfCheck = validateProviderURL(baseURL, { allowLocalhost: true })
+    if (!ssrfCheck.ok) {
+      prompts.log.error(ssrfCheck.reason)
+      process.exit(1)
+    }
   }
 
   // Step 3: Test connection + fetch models

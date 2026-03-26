@@ -1,3 +1,6 @@
+// SEC-02: No external call sites found as of 2026-03-26. Guard is in module itself.
+import { Config } from "../config/config"
+
 const PATTERNS: Array<{ pattern: RegExp; label: string }> = [
   // Override patterns
   { pattern: /ignore previous instructions/i, label: "override: ignore previous instructions" },
@@ -22,12 +25,16 @@ const PATTERNS: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /jailbreak/i, label: "jailbreak: jailbreak marker" },
 ]
 
-export function scanForInjection(text: string): { safe: boolean; detections: string[] } {
-  const detections: string[] = []
-  for (const { pattern, label } of PATTERNS) {
-    if (pattern.test(text)) {
-      detections.push(label)
+export async function scanForInjection(text: string): Promise<{ safe: boolean; detections: string[] }> {
+  const cfg = await Config.get()
+  if (cfg.security?.promptInjection?.enabled !== false) {
+    const detections: string[] = []
+    for (const { pattern, label } of PATTERNS) {
+      if (pattern.test(text)) {
+        detections.push(label)
+      }
     }
+    return { safe: detections.length === 0, detections }
   }
-  return { safe: detections.length === 0, detections }
+  return { safe: true, detections: [] }
 }

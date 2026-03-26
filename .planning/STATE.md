@@ -1,7 +1,8 @@
 # CoBuilder — Project State
 
 **Last updated:** 2026-03-26
-**Current phase:** Pre-execution (GSD initialized, Phase 1 planning next)
+**Current phase:** Phase 1 — Modular Security System (Plan 1 complete, Plan 2 next)
+**Stopped at:** Completed 01-01-PLAN.md
 
 ## Project Reference
 
@@ -14,7 +15,7 @@ See: `.planning/PROJECT.md` (updated 2026-03-26)
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 1 | Modular Security System | 🔜 Ready to plan |
+| 1 | Modular Security System | 🔄 In progress (1/N plans done) |
 | 2 | Workflow Plugin System | ⏳ Pending Phase 1 |
 
 ## What's Shipped (Phase 0 — already in main)
@@ -45,3 +46,5 @@ See: `.planning/PROJECT.md` (updated 2026-03-26)
 | 2026-03-26 | Security modules default enabled | Backwards compat |
 | 2026-03-26 | Workflow plugins stored in ~/.config/opencode/workflows/ | Consistent with existing config location |
 | 2026-03-26 | GSD ships as separate plugin, not bundled | Keeps core lean; users opt in |
+| 2026-03-26 | !== false guard pattern for all security modules | Absent key = enabled (SEC-07 default-on) |
+| 2026-03-26 | security Zod schema inserted before .strict() | Required for TypeScript to accept the key |
