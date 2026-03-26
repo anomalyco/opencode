@@ -509,6 +509,7 @@ export namespace Worktree {
         }
 
         const worktreePath = entry.path
+        yield* stopFsmonitor(worktreePath)
 
         const remoteList = yield* git(["remote"], { cwd: Instance.worktree })
         if (remoteList.code !== 0) {
