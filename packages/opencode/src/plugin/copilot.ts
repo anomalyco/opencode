@@ -1,12 +1,13 @@
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
 import { Installation } from "@/installation"
 import { iife } from "@/util/iife"
+import { Lock } from "@/util/lock"
 import { setTimeout as sleep } from "node:timers/promises"
 
-const CLIENT_ID = "Ov23li8tweQw6odWQebz"
-// Add a small safety buffer when polling to avoid hitting the server
-// slightly too early due to clock skew / timer drift.
-const OAUTH_POLLING_SAFETY_MARGIN_MS = 3000 // 3 seconds
+const CLIENT_ID = "Iv1.b507a08c87ecfe98"
+const OAUTH_POLLING_SAFETY_MARGIN_MS = 3000
+const COPILOT_TOKEN_REFRESH_MARGIN_MS = 5 * 60 * 1000
+
 function normalizeDomain(url: string) {
   return url.replace(/^https?:\/\//, "").replace(/\/$/, "")
 }
@@ -16,6 +17,60 @@ function getUrls(domain: string) {
     DEVICE_CODE_URL: `https://${domain}/login/device/code`,
     ACCESS_TOKEN_URL: `https://${domain}/login/oauth/access_token`,
   }
+}
+
+async function refreshGitHubAccessToken(
+  refreshToken: string,
+  enterpriseUrl?: string,
+): Promise<{ access_token: string; refresh_token?: string; expires_in?: number }> {
+  const domain = enterpriseUrl ? normalizeDomain(enterpriseUrl) : "github.com"
+  const response = await fetch(`https://${domain}/login/oauth/access_token`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      "User-Agent": `opencode/${Installation.VERSION}`,
+    },
+    body: JSON.stringify({
+      client_id: CLIENT_ID,
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+    }),
+  })
+  if (!response.ok) {
+    throw new Error(`GitHub token refresh failed: ${response.status} ${response.statusText}`)
+  }
+  const data = (await response.json()) as {
+    access_token?: string
+    refresh_token?: string
+    expires_in?: number
+    error?: string
+  }
+  if (data.error || !data.access_token) {
+    throw new Error(`GitHub token refresh failed: ${data.error ?? "no access_token"}`)
+  }
+  return data as { access_token: string; refresh_token?: string; expires_in?: number }
+}
+
+async function exchangeCopilotSessionToken(
+  githubToken: string,
+  enterpriseUrl?: string,
+): Promise<{ token: string; expires_at: number }> {
+  const domain = enterpriseUrl ? normalizeDomain(enterpriseUrl) : "github.com"
+  const response = await fetch(`https://api.${domain}/copilot_internal/v2/token`, {
+    headers: {
+      Accept: "application/json",
+      Authorization: `token ${githubToken}`,
+      "User-Agent": `opencode/${Installation.VERSION}`,
+      "Editor-Version": "vscode/1.107.0",
+      "Editor-Plugin-Version": "copilot-chat/0.35.0",
+      "Copilot-Integration-Id": "vscode-chat",
+    },
+  })
+  if (!response.ok) {
+    throw new Error(`Copilot token exchange failed: ${response.status} ${response.statusText}`)
+  }
+  return response.json() as Promise<{ token: string; expires_at: number }>
 }
 
 export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
@@ -62,8 +117,52 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
           baseURL,
           apiKey: "",
           async fetch(request: RequestInfo | URL, init?: RequestInit) {
-            const info = await getAuth()
-            if (info.type !== "oauth") return fetch(request, init)
+            const currentAuth = await getAuth()
+            if (currentAuth.type !== "oauth") return fetch(request, init)
+
+            const saveAuth = (auth: typeof currentAuth, refresh: string, access: string, expires: number) =>
+              sdk.auth.set({
+                path: { id: "github-copilot" },
+                body: {
+                  type: "oauth",
+                  refresh,
+                  access,
+                  expires,
+                  ...(auth.enterpriseUrl && { enterpriseUrl: auth.enterpriseUrl }),
+                },
+              })
+
+            const isLegacy = currentAuth.refresh.startsWith("gho_")
+            let sessionToken = currentAuth.access
+            if (!isLegacy && (!sessionToken?.startsWith("tid=") || currentAuth.expires < Date.now())) {
+              using _ = await Lock.write(`github-copilot:${currentAuth.enterpriseUrl ?? "github.com"}`)
+
+              const auth = await getAuth()
+              if (auth.type !== "oauth") return fetch(request, init)
+
+              const fresh = auth.access?.startsWith("tid=") && auth.expires >= Date.now()
+              if (fresh) {
+                sessionToken = auth.access
+              } else {
+                const isRawToken = auth.refresh.startsWith("ghu_") || auth.refresh.startsWith("gho_")
+                try {
+                  let githubToken = auth.refresh
+                  let newRefresh = auth.refresh
+                  if (!isRawToken) {
+                    const refreshed = await refreshGitHubAccessToken(githubToken, auth.enterpriseUrl)
+                    githubToken = refreshed.access_token
+                    newRefresh = refreshed.refresh_token || auth.refresh
+                    await saveAuth(auth, newRefresh, auth.access, 0)
+                  }
+
+                  const exchanged = await exchangeCopilotSessionToken(githubToken, auth.enterpriseUrl)
+                  sessionToken = exchanged.token
+                  await saveAuth(auth, newRefresh, exchanged.token, exchanged.expires_at * 1000 - COPILOT_TOKEN_REFRESH_MARGIN_MS)
+                } catch {
+                  sessionToken = isRawToken ? auth.refresh : auth.access || auth.refresh
+                }
+              }
+            }
 
             const url = request instanceof URL ? request.href : request.toString()
             const { isVision, isAgent } = iife(() => {
@@ -123,8 +222,11 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
               "x-initiator": isAgent ? "agent" : "user",
               ...(init?.headers as Record<string, string>),
               "User-Agent": `opencode/${Installation.VERSION}`,
-              Authorization: `Bearer ${info.refresh}`,
+              Authorization: `Bearer ${sessionToken}`,
               "Openai-Intent": "conversation-edits",
+              "Editor-Version": "vscode/1.107.0",
+              "Editor-Plugin-Version": "copilot-chat/0.35.0",
+              "Copilot-Integration-Id": "vscode-chat",
             }
 
             if (isVision) {
@@ -241,30 +343,20 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
 
                   const data = (await response.json()) as {
                     access_token?: string
+                    refresh_token?: string
+                    expires_in?: number
                     error?: string
                     interval?: number
                   }
 
                   if (data.access_token) {
-                    const result: {
-                      type: "success"
-                      refresh: string
-                      access: string
-                      expires: number
-                      provider?: string
-                      enterpriseUrl?: string
-                    } = {
-                      type: "success",
-                      refresh: data.access_token,
+                    return {
+                      type: "success" as const,
+                      refresh: data.refresh_token || data.access_token,
                       access: data.access_token,
-                      expires: 0,
+                      expires: data.expires_in ? Date.now() + data.expires_in * 1000 : 0,
+                      ...(deploymentType === "enterprise" && { enterpriseUrl: domain }),
                     }
-
-                    if (deploymentType === "enterprise") {
-                      result.enterpriseUrl = domain
-                    }
-
-                    return result
                   }
 
                   if (data.error === "authorization_pending") {
