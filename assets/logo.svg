@@ -1,17 +1,102 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 80" width="320" height="80">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 80" width="320" height="80" shape-rendering="crispEdges">
   <defs>
     <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" style="stop-color:#00d4ff;stop-opacity:1" />
       <stop offset="100%" style="stop-color:#0066ff;stop-opacity:1" />
     </linearGradient>
+    <clipPath id="icon-clip">
+      <rect x="4" y="4" width="72" height="72" rx="14" ry="14"/>
+    </clipPath>
   </defs>
 
-  <!-- Icon: terminal prompt bracket -->
-  <rect x="4" y="4" width="72" height="72" rx="14" ry="14" fill="url(#grad)" />
+  <!-- Icon: warm background + gradient border -->
+  <rect x="4" y="4" width="72" height="72" rx="14" ry="14" fill="#f3ece6"/>
+  <rect x="4" y="4" width="72" height="72" rx="14" ry="14" fill="none" stroke="url(#grad)" stroke-width="3"/>
 
-  <!-- > _ symbol -->
-  <text x="16" y="52" font-family="monospace, 'Courier New'" font-size="32" font-weight="bold" fill="white">&gt;_</text>
+  <!-- Jindo mascot pixel art, scaled to 72×72 and clipped -->
+  <g clip-path="url(#icon-clip)">
+    <g transform="translate(4,4) scale(0.2769)">
+      <!-- ROW 0 — ear tips -->
+      <rect x="58"  y="10" width="24" height="24" fill="#c08055"/>
+      <rect x="178" y="10" width="24" height="24" fill="#c08055"/>
+      <!-- ROW 1 — ears -->
+      <rect x="34"  y="34" width="24" height="24" fill="#c08055"/>
+      <rect x="58"  y="34" width="24" height="24" fill="#c08055"/>
+      <rect x="178" y="34" width="24" height="24" fill="#c08055"/>
+      <rect x="202" y="34" width="24" height="24" fill="#c08055"/>
+      <!-- ROW 2 — ears wider -->
+      <rect x="34"  y="58" width="24" height="24" fill="#c08055"/>
+      <rect x="58"  y="58" width="24" height="24" fill="#c08055"/>
+      <rect x="82"  y="58" width="24" height="24" fill="#c08055"/>
+      <rect x="154" y="58" width="24" height="24" fill="#c08055"/>
+      <rect x="178" y="58" width="24" height="24" fill="#c08055"/>
+      <rect x="202" y="58" width="24" height="24" fill="#c08055"/>
+      <!-- ROW 3 — full head -->
+      <rect x="10"  y="82" width="24" height="24" fill="#c08055"/>
+      <rect x="34"  y="82" width="24" height="24" fill="#c08055"/>
+      <rect x="58"  y="82" width="24" height="24" fill="#c08055"/>
+      <rect x="82"  y="82" width="24" height="24" fill="#c08055"/>
+      <rect x="106" y="82" width="24" height="24" fill="#c08055"/>
+      <rect x="130" y="82" width="24" height="24" fill="#c08055"/>
+      <rect x="154" y="82" width="24" height="24" fill="#c08055"/>
+      <rect x="178" y="82" width="24" height="24" fill="#c08055"/>
+      <rect x="202" y="82" width="24" height="24" fill="#c08055"/>
+      <rect x="226" y="82" width="24" height="24" fill="#c08055"/>
+      <!-- ROW 4 — head + eyes -->
+      <rect x="10"  y="106" width="24" height="24" fill="#c08055"/>
+      <rect x="34"  y="106" width="24" height="24" fill="#c08055"/>
+      <rect x="58"  y="106" width="24" height="24" fill="#c08055"/>
+      <rect x="82"  y="106" width="24" height="24" fill="#5a2808"/>
+      <rect x="106" y="106" width="24" height="24" fill="#c08055"/>
+      <rect x="130" y="106" width="24" height="24" fill="#c08055"/>
+      <rect x="154" y="106" width="24" height="24" fill="#c08055"/>
+      <rect x="178" y="106" width="24" height="24" fill="#5a2808"/>
+      <rect x="202" y="106" width="24" height="24" fill="#c08055"/>
+      <rect x="226" y="106" width="24" height="24" fill="#c08055"/>
+      <!-- ROW 5 — full head -->
+      <rect x="10"  y="130" width="24" height="24" fill="#c08055"/>
+      <rect x="34"  y="130" width="24" height="24" fill="#c08055"/>
+      <rect x="58"  y="130" width="24" height="24" fill="#c08055"/>
+      <rect x="82"  y="130" width="24" height="24" fill="#c08055"/>
+      <rect x="106" y="130" width="24" height="24" fill="#c08055"/>
+      <rect x="130" y="130" width="24" height="24" fill="#c08055"/>
+      <rect x="154" y="130" width="24" height="24" fill="#c08055"/>
+      <rect x="178" y="130" width="24" height="24" fill="#c08055"/>
+      <rect x="202" y="130" width="24" height="24" fill="#c08055"/>
+      <rect x="226" y="130" width="24" height="24" fill="#c08055"/>
+      <!-- ROW 6 — slightly narrower -->
+      <rect x="34"  y="154" width="24" height="24" fill="#c08055"/>
+      <rect x="58"  y="154" width="24" height="24" fill="#c08055"/>
+      <rect x="82"  y="154" width="24" height="24" fill="#c08055"/>
+      <rect x="106" y="154" width="24" height="24" fill="#c08055"/>
+      <rect x="130" y="154" width="24" height="24" fill="#c08055"/>
+      <rect x="154" y="154" width="24" height="24" fill="#c08055"/>
+      <rect x="178" y="154" width="24" height="24" fill="#c08055"/>
+      <rect x="202" y="154" width="24" height="24" fill="#c08055"/>
+      <!-- ROW 7 — snout + nose -->
+      <rect x="34"  y="178" width="24" height="24" fill="#c08055"/>
+      <rect x="58"  y="178" width="24" height="24" fill="#c08055"/>
+      <rect x="82"  y="178" width="24" height="24" fill="#c08055"/>
+      <rect x="106" y="178" width="24" height="24" fill="#5a2808"/>
+      <rect x="130" y="178" width="24" height="24" fill="#5a2808"/>
+      <rect x="154" y="178" width="24" height="24" fill="#c08055"/>
+      <rect x="178" y="178" width="24" height="24" fill="#c08055"/>
+      <rect x="202" y="178" width="24" height="24" fill="#c08055"/>
+      <!-- ROW 8 — chin -->
+      <rect x="58"  y="202" width="24" height="24" fill="#c08055"/>
+      <rect x="82"  y="202" width="24" height="24" fill="#c08055"/>
+      <rect x="106" y="202" width="24" height="24" fill="#c08055"/>
+      <rect x="130" y="202" width="24" height="24" fill="#c08055"/>
+      <rect x="154" y="202" width="24" height="24" fill="#c08055"/>
+      <rect x="178" y="202" width="24" height="24" fill="#c08055"/>
+      <!-- ROW 9 — neck stub -->
+      <rect x="82"  y="226" width="24" height="24" fill="#c08055"/>
+      <rect x="106" y="226" width="24" height="24" fill="#c08055"/>
+      <rect x="130" y="226" width="24" height="24" fill="#c08055"/>
+      <rect x="154" y="226" width="24" height="24" fill="#c08055"/>
+    </g>
+  </g>
 
   <!-- Wordmark -->
-  <text x="92" y="55" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="36" font-weight="700" fill="#0f172a" letter-spacing="-1">Co<tspan fill="url(#grad)">Builder</tspan></text>
+  <text x="92" y="55" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="36" font-weight="700" fill="#0f172a" letter-spacing="-1" shape-rendering="auto">Co<tspan fill="url(#grad)">Builder</tspan></text>
 </svg>
