@@ -7,6 +7,7 @@ import type {
   ProviderAuthResponse,
   ProviderListResponse,
   QuestionRequest,
+  Session,
   Todo,
 } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@opencode-ai/ui/toast"
@@ -150,6 +151,40 @@ function projectID(directory: string, projects: Project[]) {
   return projects.find((project) => project.worktree === directory || project.sandboxes?.includes(directory))?.id
 }
 
+function mergeSession(setStore: SetStoreFunction<State>, session: Session) {
+  setStore("session", (list) => {
+    const next = list.slice()
+    const idx = next.findIndex((item) => item.id >= session.id)
+    if (idx === -1) return [...next, session]
+    if (next[idx]?.id === session.id) {
+      next[idx] = session
+      return next
+    }
+    next.splice(idx, 0, session)
+    return next
+  })
+}
+
+function warmSessions(input: {
+  ids: string[]
+  store: Store<State>
+  setStore: SetStoreFunction<State>
+  sdk: OpencodeClient
+}) {
+  const known = new Set(input.store.session.map((item) => item.id))
+  const ids = [...new Set(input.ids)].filter((id) => !!id && !known.has(id))
+  if (ids.length === 0) return Promise.resolve()
+  return Promise.all(
+    ids.map((sessionID) =>
+      retry(() => input.sdk.session.get({ sessionID })).then((x) => {
+        const session = x.data
+        if (!session?.id) return
+        mergeSession(input.setStore, session)
+      }),
+    ),
+  ).then(() => undefined)
+}
+
 export async function bootstrapDirectory(input: {
   directory: string
   sdk: OpencodeClient
@@ -215,47 +250,53 @@ export async function bootstrapDirectory(input: {
     () =>
       retry(() =>
         input.sdk.permission.list().then((x) => {
+          const ids = (x.data ?? []).map((perm) => perm?.sessionID).filter((id): id is string => !!id)
           const grouped = groupBySession(
             (x.data ?? []).filter((perm): perm is PermissionRequest => !!perm?.id && !!perm.sessionID),
           )
-          batch(() => {
-            for (const sessionID of Object.keys(input.store.permission)) {
-              if (grouped[sessionID]) continue
-              input.setStore("permission", sessionID, [])
-            }
-            for (const [sessionID, permissions] of Object.entries(grouped)) {
-              input.setStore(
-                "permission",
-                sessionID,
-                reconcile(
-                  permissions.filter((p) => !!p?.id).sort((a, b) => cmp(a.id, b.id)),
-                  { key: "id" },
-                ),
-              )
-            }
-          })
+          return warmSessions({ ids, store: input.store, setStore: input.setStore, sdk: input.sdk }).then(() =>
+            batch(() => {
+              for (const sessionID of Object.keys(input.store.permission)) {
+                if (grouped[sessionID]) continue
+                input.setStore("permission", sessionID, [])
+              }
+              for (const [sessionID, permissions] of Object.entries(grouped)) {
+                input.setStore(
+                  "permission",
+                  sessionID,
+                  reconcile(
+                    permissions.filter((p) => !!p?.id).sort((a, b) => cmp(a.id, b.id)),
+                    { key: "id" },
+                  ),
+                )
+              }
+            }),
+          )
         }),
       ),
     () =>
       retry(() =>
         input.sdk.question.list().then((x) => {
+          const ids = (x.data ?? []).map((question) => question?.sessionID).filter((id): id is string => !!id)
           const grouped = groupBySession((x.data ?? []).filter((q): q is QuestionRequest => !!q?.id && !!q.sessionID))
-          batch(() => {
-            for (const sessionID of Object.keys(input.store.question)) {
-              if (grouped[sessionID]) continue
-              input.setStore("question", sessionID, [])
-            }
-            for (const [sessionID, questions] of Object.entries(grouped)) {
-              input.setStore(
-                "question",
-                sessionID,
-                reconcile(
-                  questions.filter((q) => !!q?.id).sort((a, b) => cmp(a.id, b.id)),
-                  { key: "id" },
-                ),
-              )
-            }
-          })
+          return warmSessions({ ids, store: input.store, setStore: input.setStore, sdk: input.sdk }).then(() =>
+            batch(() => {
+              for (const sessionID of Object.keys(input.store.question)) {
+                if (grouped[sessionID]) continue
+                input.setStore("question", sessionID, [])
+              }
+              for (const [sessionID, questions] of Object.entries(grouped)) {
+                input.setStore(
+                  "question",
+                  sessionID,
+                  reconcile(
+                    questions.filter((q) => !!q?.id).sort((a, b) => cmp(a.id, b.id)),
+                    { key: "id" },
+                  ),
+                )
+              }
+            }),
+          )
         }),
       ),
   ]

@@ -28,7 +28,9 @@ type Footer = {
 type Probe = {
   dir?: string
   sessionID?: string
-  model?: { providerID: string; modelID: string }
+  agent?: string
+  model?: { providerID: string; modelID: string; name?: string }
+  variant?: string | null
 }
 
 const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
@@ -51,6 +53,15 @@ async function probe(page: Page): Promise<Probe | null> {
 }
 
 async function read(page: Page): Promise<Footer> {
+  const state = await probe(page)
+  if (state?.agent && state.model?.name) {
+    return {
+      agent: state.agent,
+      model: state.model.name,
+      variant: state.variant ?? "Default",
+    }
+  }
+
   return {
     agent: await text(page.locator(`${promptAgentSelector} [data-slot="select-select-trigger-value"]`).first()),
     model: await text(page.locator(`${promptModelSelector} [data-action="prompt-model"] span`).first()),
@@ -83,10 +94,7 @@ async function choose(page: Page, root: string, value: string) {
   const select = page.locator(root)
   await expect(select).toBeVisible()
   await select.locator('[data-action], [data-slot="select-select-trigger"]').first().click()
-  const item = page
-    .locator('[data-slot="select-select-item"]')
-    .filter({ hasText: new RegExp(`^\\s*${escape(value)}\\s*$`) })
-    .first()
+  const item = page.getByRole("option", { name: new RegExp(`^\\s*${escape(value)}\\s*$`) }).first()
   await expect(item).toBeVisible()
   await item.click()
 }
@@ -136,19 +144,14 @@ async function chooseDifferentVariant(page: Page): Promise<Footer> {
   await expect(select).toBeVisible()
   await select.locator('[data-slot="select-select-trigger"]').click()
 
-  const items = page.locator('[data-slot="select-select-item"]')
-  const count = await items.count()
-  if (count < 2) throw new Error("Current model has no alternate variant to select")
+  await expect(page.getByRole("option").first()).toBeVisible()
+  await expect.poll(() => page.getByRole("option").count(), { timeout: 30_000 }).toBeGreaterThanOrEqual(2)
 
-  for (let i = 0; i < count; i++) {
-    const item = items.nth(i)
-    const next = await text(item.locator('[data-slot="select-select-item-label"]').first())
-    if (!next || next === current.variant) continue
-    await item.click()
-    return waitFooter(page, { agent: current.agent, model: current.model, variant: next })
-  }
+  await page.keyboard.press("ArrowDown")
+  await page.keyboard.press("Enter")
 
-  throw new Error("Failed to choose a different variant")
+  await expect.poll(async () => (await read(page)).variant !== current.variant, { timeout: 30_000 }).toBe(true)
+  return read(page)
 }
 
 async function chooseOtherModel(page: Page): Promise<Footer> {
