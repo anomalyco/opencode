@@ -52,6 +52,12 @@ function errors(list: PromiseSettledResult<unknown>[]) {
   return list.filter((item): item is PromiseRejectedResult => item.status === "rejected").map((item) => item.reason)
 }
 
+const providerRev = new Map<string, number>()
+
+export function clearProviderRev(directory: string) {
+  providerRev.delete(directory)
+}
+
 function runAll(list: Array<() => Promise<unknown>>) {
   return Promise.allSettled(list.map((item) => item()))
 }
@@ -154,19 +160,29 @@ export async function bootstrapDirectory(input: {
   translate: (key: string, vars?: Record<string, string | number>) => string
   global: {
     config: Config
+    path: Path
     project: Project[]
     provider: ProviderListResponse
   }
 }) {
   const loading = input.store.status !== "complete"
   const seededProject = projectID(input.directory, input.global.project)
+  const seededPath = input.global.path.directory === input.directory ? input.global.path : undefined
   if (seededProject) input.setStore("project", seededProject)
+  if (seededPath) input.setStore("path", seededPath)
   if (input.store.provider.all.length === 0 && input.global.provider.all.length > 0) {
     input.setStore("provider", input.global.provider)
   }
   if (Object.keys(input.store.config).length === 0 && Object.keys(input.global.config).length > 0) {
     input.setStore("config", input.global.config)
   }
+  if (loading || input.store.provider.all.length === 0) {
+    input.setStore("provider_ready", false)
+  }
+  input.setStore("mcp_ready", false)
+  input.setStore("mcp", {})
+  input.setStore("lsp_ready", false)
+  input.setStore("lsp", [])
   if (loading) input.setStore("status", "partial")
 
   const fast = [
@@ -177,13 +193,15 @@ export async function bootstrapDirectory(input: {
     () => retry(() => input.sdk.app.agents().then((x) => input.setStore("agent", normalizeAgentList(x.data)))),
     () => retry(() => input.sdk.config.get().then((x) => input.setStore("config", x.data!))),
     () =>
-      retry(() =>
-        input.sdk.path.get().then((x) => {
-          input.setStore("path", x.data!)
-          const next = projectID(x.data?.directory ?? input.directory, input.global.project)
-          if (next) input.setStore("project", next)
-        }),
-      ),
+      seededPath
+        ? Promise.resolve()
+        : retry(() =>
+            input.sdk.path.get().then((x) => {
+              input.setStore("path", x.data!)
+              const next = projectID(x.data?.directory ?? input.directory, input.global.project)
+              if (next) input.setStore("project", next)
+            }),
+          ),
     () => retry(() => input.sdk.session.status().then((x) => input.setStore("session_status", x.data!))),
     () =>
       retry(() =>
@@ -243,15 +261,14 @@ export async function bootstrapDirectory(input: {
   ]
 
   const slow = [
+    () => Promise.resolve(input.loadSessions(input.directory)),
     () =>
       retry(() =>
-        input.sdk.provider.list().then((x) => {
-          input.setStore("provider", normalizeProviderList(x.data!))
+        input.sdk.mcp.status().then((x) => {
+          input.setStore("mcp", x.data!)
+          input.setStore("mcp_ready", true)
         }),
       ),
-    () => Promise.resolve(input.loadSessions(input.directory)),
-    () => retry(() => input.sdk.mcp.status().then((x) => input.setStore("mcp", x.data!))),
-    () => retry(() => input.sdk.lsp.status().then((x) => input.setStore("lsp", x.data!))),
   ]
 
   const errs = errors(await runAll(fast))
@@ -278,4 +295,23 @@ export async function bootstrapDirectory(input: {
   }
 
   if (loading && errs.length === 0 && slowErrs.length === 0) input.setStore("status", "complete")
+
+  const rev = (providerRev.get(input.directory) ?? 0) + 1
+  providerRev.set(input.directory, rev)
+  void retry(() => input.sdk.provider.list())
+    .then((x) => {
+      if (providerRev.get(input.directory) !== rev) return
+      input.setStore("provider", normalizeProviderList(x.data!))
+      input.setStore("provider_ready", true)
+    })
+    .catch((err) => {
+      if (providerRev.get(input.directory) !== rev) return
+      console.error("Failed to refresh provider list", err)
+      const project = getFilename(input.directory)
+      showToast({
+        variant: "error",
+        title: input.translate("toast.project.reloadFailed.title", { project }),
+        description: formatServerError(err, input.translate),
+      })
+    })
 }

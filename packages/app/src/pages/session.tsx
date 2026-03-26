@@ -712,7 +712,6 @@ export default function Page() {
             return Date.now() - info.at > SESSION_PREFETCH_TTL
           })()
       const todos = untrack(() => sync.data.todo[id] !== undefined || globalSync.data.session_todo[id] !== undefined)
-
       untrack(() => {
         void sync.session.sync(id)
       })
