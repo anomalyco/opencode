@@ -11,7 +11,7 @@ import { ProjectID } from "./schema"
 import { Effect, Layer, Path, Scope, ServiceMap, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
-import { makeRunPromise } from "@/effect/run-service"
+import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@/filesystem"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 
@@ -462,7 +462,7 @@ export namespace Project {
     Layer.provide(NodeFileSystem.layer),
     Layer.provide(NodePath.layer),
   )
-  const runPromise = makeRunPromise(Service, defaultLayer)
+  const { runPromise } = makeRuntime(Service, defaultLayer)
 
   // ---------------------------------------------------------------------------
   // Promise-based API (delegates to Effect service via runPromise)
