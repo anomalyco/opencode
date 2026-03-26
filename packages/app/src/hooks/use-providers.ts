@@ -12,7 +12,6 @@ export const popularProviders = [
   "google",
   "openrouter",
   "vercel",
-  "llmgateway",
 ]
 const popularProviderSet = new Set(popularProviders)
 

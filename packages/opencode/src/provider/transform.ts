@@ -40,8 +40,6 @@ export namespace ProviderTransform {
         return "gateway"
       case "@openrouter/ai-sdk-provider":
         return "openrouter"
-      case "@llmgateway/ai-sdk-provider":
-        return "llmgateway"
     }
     return undefined
   }

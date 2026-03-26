@@ -328,7 +328,6 @@ export const ProvidersLoginCommand = cmd({
           anthropic: 4,
           openrouter: 5,
           vercel: 6,
-          llmgateway: 7,
         }
         const pluginProviders = resolvePluginProviders({
           hooks: await Plugin.list(),
