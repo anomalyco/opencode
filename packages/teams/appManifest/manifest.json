@@ -1,0 +1,35 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.19/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.19",
+  "version": "1.0.0",
+  "id": "__TEAMS_APP_ID__",
+  "developer": {
+    "name": "OpenCode",
+    "websiteUrl": "https://github.com/anomalyco/opencode",
+    "privacyUrl": "https://github.com/anomalyco/opencode/blob/dev/README.md",
+    "termsOfUseUrl": "https://github.com/anomalyco/opencode/blob/dev/LICENSE"
+  },
+  "icons": {
+    "color": "color.png",
+    "outline": "outline.png"
+  },
+  "name": {
+    "short": "OpenCode",
+    "full": "OpenCode Teams Bot"
+  },
+  "description": {
+    "short": "Chat with OpenCode from Microsoft Teams.",
+    "full": "OpenCode Teams Bot bridges a Teams personal chat to an opencode session running on your machine."
+  },
+  "accentColor": "#111111",
+  "bots": [
+    {
+      "botId": "__TEAMS_APP_ID__",
+      "scopes": ["personal"],
+      "isNotificationOnly": false,
+      "supportsFiles": false
+    }
+  ],
+  "permissions": ["identity", "messageTeamMembers"],
+  "validDomains": ["__TEAMS_DOMAIN__"]
+}
