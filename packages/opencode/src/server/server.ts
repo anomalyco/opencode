@@ -39,7 +39,6 @@ import { websocket } from "hono/bun"
 import { HTTPException } from "hono/http-exception"
 import { errors } from "./error"
 import { Filesystem } from "@/util/filesystem"
-import { Snapshot } from "@/snapshot"
 import { QuestionRoutes } from "./routes/question"
 import { PermissionRoutes } from "./routes/permission"
 import { GlobalRoutes } from "./routes/global"
@@ -57,6 +56,12 @@ initProjectors()
 
 export namespace Server {
   const log = Log.create({ service: "server" })
+  const DEFAULT_CSP =
+    "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:"
+  const embeddedUIPromise = Flag.OPENCODE_DISABLE_EMBEDDED_WEB_UI
+    ? Promise.resolve(null)
+    : // @ts-expect-error - generated file at build time
+      import("opencode-web-ui.gen.ts").then((module) => module.default as Record<string, string>).catch(() => null)
 
   export const Default = lazy(() => createApp({}))
 
@@ -338,38 +343,10 @@ export namespace Server {
           },
         }),
         async (c) => {
-          const [branch, default_branch] = await Promise.all([Vcs.branch(), Vcs.defaultBranch()])
+          const branch = await Vcs.branch()
           return c.json({
             branch,
-            default_branch,
           })
-        },
-      )
-      .get(
-        "/vcs/diff",
-        describeRoute({
-          summary: "Get VCS diff",
-          description: "Retrieve the current git diff for the working tree or against the default branch.",
-          operationId: "vcs.diff",
-          responses: {
-            200: {
-              description: "VCS diff",
-              content: {
-                "application/json": {
-                  schema: resolver(Snapshot.FileDiff.array()),
-                },
-              },
-            },
-          },
-        }),
-        validator(
-          "query",
-          z.object({
-            mode: Vcs.Mode,
-          }),
-        ),
-        async (c) => {
-          return c.json(await Vcs.diff(c.req.valid("query").mode))
         },
       )
       .get(
@@ -533,24 +510,40 @@ export namespace Server {
         },
       )
       .all("/*", async (c) => {
+        const embeddedWebUI = await embeddedUIPromise
         const path = c.req.path
 
-        const response = await proxy(`https://app.opencode.ai${path}`, {
-          ...c.req,
-          headers: {
-            ...c.req.raw.headers,
-            host: "app.opencode.ai",
-          },
-        })
-        const match = response.headers.get("content-type")?.includes("text/html")
-          ? (await response.clone().text()).match(
-              /<script\b(?![^>]*\bsrc\s*=)[^>]*\bid=(['"])oc-theme-preload-script\1[^>]*>([\s\S]*?)<\/script>/i,
-            )
-          : undefined
-        const hash = match ? createHash("sha256").update(match[2]).digest("base64") : ""
-        response.headers.set("Content-Security-Policy", csp(hash))
-        return response
-      })
+        if (embeddedWebUI) {
+          const match = embeddedWebUI[path.replace(/^\//, "")] ?? embeddedWebUI["index.html"] ?? null
+          if (!match) return c.json({ error: "Not Found" }, 404)
+          const file = Bun.file(match)
+          if (await file.exists()) {
+            c.header("Content-Type", file.type)
+            if (file.type.startsWith("text/html")) {
+              c.header("Content-Security-Policy", DEFAULT_CSP)
+            }
+            return c.body(await file.arrayBuffer())
+          } else {
+            return c.json({ error: "Not Found" }, 404)
+          }
+        } else {
+          const response = await proxy(`https://app.opencode.ai${path}`, {
+            ...c.req,
+            headers: {
+              ...c.req.raw.headers,
+              host: "app.opencode.ai",
+            },
+          })
+          const match = response.headers.get("content-type")?.includes("text/html")
+            ? (await response.clone().text()).match(
+                /<script\b(?![^>]*\bsrc\s*=)[^>]*\bid=(['"])oc-theme-preload-script\1[^>]*>([\s\S]*?)<\/script>/i,
+              )
+            : undefined
+          const hash = match ? createHash("sha256").update(match[2]).digest("base64") : ""
+          response.headers.set("Content-Security-Policy", csp(hash))
+          return response
+        }
+      }) as unknown as Hono
   }
 
   export async function openapi() {
