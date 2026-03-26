@@ -594,6 +594,7 @@
     "solid-js@1.9.10": "patches/solid-js@1.9.10.patch",
     "@ai-sdk/xai@2.0.51": "patches/@ai-sdk%2Fxai@2.0.51.patch",
     "@standard-community/standard-openapi@0.2.9": "patches/@standard-community%2Fstandard-openapi@0.2.9.patch",
+    "@opentui/core@0.1.90": "patches/@opentui%2Fcore@0.1.90.patch",
   },
   "overrides": {
     "@types/bun": "catalog:",
