@@ -35,6 +35,7 @@ import path from "path"
 import { Global } from "./global"
 import { JsonMigration } from "./storage/json-migration"
 import { Database } from "./storage/db"
+import { SessionCheckpoint } from "./session/checkpoint"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -46,6 +47,10 @@ process.on("uncaughtException", (e) => {
   Log.Default.error("exception", {
     e: e instanceof Error ? e.message : e,
   })
+})
+
+process.on("exit", (code) => {
+  if (code === 0) SessionCheckpoint.clearSync()
 })
 
 let cli = yargs(hideBin(process.argv))

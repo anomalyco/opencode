@@ -11,6 +11,9 @@ import { Command } from "../command"
 import { Instance } from "./instance"
 import { Log } from "@/util/log"
 import { ShareNext } from "@/share/share-next"
+import { MessageV2 } from "../session/message-v2"
+import { Session } from "../session"
+import { SessionCheckpoint } from "../session/checkpoint"
 
 export async function InstanceBootstrap() {
   Log.Default.info("bootstrapping", { directory: Instance.directory })
@@ -27,5 +30,20 @@ export async function InstanceBootstrap() {
     if (payload.properties.name === Command.Default.INIT) {
       Project.setInitialized(Instance.project.id)
     }
+  })
+
+  Bus.subscribe(MessageV2.Event.Updated, async (evt) => {
+    const info = evt.properties.info
+    if (info.role !== "user") return
+    const sessionID = evt.properties.sessionID
+    const sessionInfo = await Session.get(sessionID).catch(() => null)
+    if (!sessionInfo) return
+    await SessionCheckpoint.write({
+      sessionId: sessionID,
+      sessionTitle: sessionInfo.title ?? null,
+      directory: sessionInfo.directory,
+      lastMessage: null,
+      timestamp: Date.now(),
+    })
   })
 }

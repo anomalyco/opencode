@@ -13,6 +13,7 @@ import { Provider } from "../../provider/provider"
 import { Agent } from "../../agent/agent"
 import { Permission } from "../../permission"
 import { Tool } from "../../tool/tool"
+import { SessionCheckpoint } from "../../session/checkpoint"
 import { GlobTool } from "../../tool/glob"
 import { GrepTool } from "../../tool/grep"
 import { ListTool } from "../../tool/ls"
@@ -352,6 +353,42 @@ export const RunCommand = cmd({
     if (args.fork && !args.continue && !args.session) {
       UI.error("--fork requires --continue or --session")
       process.exit(1)
+    }
+
+    // Auto-dream: detect interrupted session and offer to resume
+    if (!args.session && !args.continue) {
+      const checkpoint = await SessionCheckpoint.read()
+      if (checkpoint) {
+        const age = Date.now() - checkpoint.timestamp
+        const ageMinutes = Math.round(age / 60000)
+        const label = checkpoint.sessionTitle || checkpoint.sessionId
+        const preview = checkpoint.lastMessage ? ` - "${checkpoint.lastMessage}"` : ""
+        process.stderr.write(
+          `${UI.Style.TEXT_WARNING_BOLD}?${UI.Style.TEXT_NORMAL} Interrupted session detected (${ageMinutes}m ago): ${label}${preview}${EOL}`,
+        )
+        process.stderr.write(`${UI.Style.TEXT_DIM}  Resume? [Y/n] ${UI.Style.TEXT_NORMAL}`)
+        const answer = await new Promise<string>((resolve) => {
+          if (!process.stdin.isTTY) {
+            resolve("n")
+            return
+          }
+          process.stdin.setRawMode(true)
+          process.stdin.resume()
+          process.stdin.setEncoding("utf8")
+          process.stdin.once("data", (key: string) => {
+            process.stdin.setRawMode(false)
+            process.stdin.pause()
+            resolve(key)
+          })
+        })
+        process.stderr.write(EOL)
+        const resume = answer.toLowerCase() !== "n" && answer !== "\u0003" // not 'n' and not Ctrl-C
+        if (!resume) {
+          await SessionCheckpoint.clear()
+        } else {
+          args.session = checkpoint.sessionId
+        }
+      }
     }
 
     const rules: Permission.Ruleset = [
