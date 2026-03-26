@@ -133,11 +133,17 @@ export const SessionWeaveCommand = cmd({
   command: "weave <sessionID>",
   describe: "show weave memory state for a session",
   builder: (yargs: Argv) =>
-    yargs.positional("sessionID", {
-      describe: "session ID",
-      type: "string",
-      demandOption: true,
-    }),
+    yargs
+      .positional("sessionID", {
+        describe: "session ID",
+        type: "string",
+        demandOption: true,
+      })
+      .option("full", {
+        type: "boolean",
+        default: false,
+        describe: "print full raw Weave state instead of counts summary",
+      }),
   handler: async (args) => {
     await bootstrap(process.cwd(), async () => {
       const sessionID = SessionID.make(args.sessionID)
@@ -149,6 +155,10 @@ export const SessionWeaveCommand = cmd({
       }
 
       const state = await WeaveDB.read(sessionID)
+      if (args.full) {
+        console.log(JSON.stringify(state, null, 2))
+        return
+      }
       const output = {
         sessionID: state.sessionID,
         version: state.version,
