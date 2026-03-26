@@ -142,6 +142,7 @@ export namespace Config {
 
     for (const dir of unique(directories)) {
       if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
+        result.mcp = mergeDeep(result.mcp ?? {}, await loadMcp(dir))
         for (const file of ["opencode.jsonc", "opencode.json"]) {
           log.debug(`loading config from ${path.join(dir, file)}`)
           result = mergeConfigConcatArrays(result, await loadFile(path.join(dir, file)))
@@ -506,6 +507,40 @@ export namespace Config {
       plugins.push(pathToFileURL(item).href)
     }
     return plugins
+  }
+
+  const McpJson = z.object({
+    mcpServers: z
+      .record(
+        z.string(),
+        z.object({
+          command: z.string(),
+          args: z.string().array().optional(),
+          env: z.record(z.string(), z.string()).optional(),
+        }),
+      )
+      .optional(),
+  })
+
+  async function loadMcp(dir: string): Promise<NonNullable<InfoMcp>> {
+    const source = path.join(dir, "mcp.json")
+    if (!(await Filesystem.exists(source))) return {}
+
+    const text = await Filesystem.readJson(source)
+    const parsed = McpJson.safeParse(text)
+    if (!parsed.success) {
+      throw new InvalidError({
+        path: source,
+        issues: parsed.error.issues,
+      })
+    }
+
+    const result: NonNullable<InfoMcp> = {}
+    for (const [name, cfg] of Object.entries(parsed.data.mcpServers ?? {})) {
+      result[name] = { type: "local", command: [cfg.command, ...(cfg.args ?? [])] }
+      if (cfg.env) result[name].environment = cfg.env
+    }
+    return result
   }
 
   /**
@@ -1035,6 +1070,22 @@ export namespace Config {
     })
   export type Provider = z.infer<typeof Provider>
 
+  export const InfoMcp = z
+    .record(
+      z.string(),
+      z.union([
+        Mcp,
+        z
+          .object({
+            enabled: z.boolean(),
+          })
+          .strict(),
+      ]),
+    )
+    .optional()
+    .describe("MCP (Model Context Protocol) server configurations")
+  export type InfoMcp = z.infer<typeof InfoMcp>
+
   export const Info = z
     .object({
       $schema: z.string().optional().describe("JSON schema reference for configuration validation"),
@@ -1120,20 +1171,7 @@ export namespace Config {
         .record(z.string(), Provider)
         .optional()
         .describe("Custom provider configurations and model overrides"),
-      mcp: z
-        .record(
-          z.string(),
-          z.union([
-            Mcp,
-            z
-              .object({
-                enabled: z.boolean(),
-              })
-              .strict(),
-          ]),
-        )
-        .optional()
-        .describe("MCP (Model Context Protocol) server configurations"),
+      mcp: InfoMcp,
       formatter: z
         .union([
           z.literal(false),
