@@ -40,7 +40,7 @@ import { Lock } from "@/util/lock"
 import { AppFileSystem } from "@/filesystem"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
-import { Effect, Layer, ServiceMap } from "effect"
+import { Duration, Effect, Layer, ServiceMap } from "effect"
 
 export namespace Config {
   const ModelId = z.string().meta({ $ref: "https://models.dev/model-schema.json#/$defs/Model" })
@@ -1241,7 +1241,15 @@ export namespace Config {
         return result
       })
 
-      let cachedGlobal = yield* Effect.cached(loadGlobal().pipe(Effect.orElseSucceed(() => ({}) as Info)))
+      const [cachedGlobal, invalidateGlobal] = yield* Effect.cachedInvalidateWithTTL(
+        loadGlobal().pipe(
+          Effect.tapError((error) =>
+            Effect.sync(() => log.error("failed to load global config, using defaults", { error: String(error) })),
+          ),
+          Effect.orElseSucceed((): Info => ({})),
+        ),
+        Duration.infinity,
+      )
 
       const getGlobal = Effect.fn("Config.getGlobal")(function* () {
         return yield* cachedGlobal
@@ -1446,7 +1454,7 @@ export namespace Config {
       })
 
       const invalidate = Effect.fn("Config.invalidate")(function* (wait?: boolean) {
-        cachedGlobal = yield* Effect.cached(loadGlobal().pipe(Effect.orElseSucceed(() => ({}) as Info)))
+        yield* invalidateGlobal
         const task = Instance.disposeAll()
           .catch(() => undefined)
           .finally(() =>
