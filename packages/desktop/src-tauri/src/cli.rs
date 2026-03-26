@@ -24,6 +24,8 @@ use tracing::Instrument;
 #[cfg(windows)]
 use windows_sys::Win32::System::Threading::{CREATE_NO_WINDOW, CREATE_SUSPENDED};
 
+#[cfg(windows)]
+use crate::os::windows::resolve_windows_app_path;
 use crate::server::get_wsl_config;
 
 #[cfg(windows)]
@@ -363,6 +365,80 @@ fn merge_shell_env(
     merged.into_iter().collect()
 }
 
+#[cfg(windows)]
+fn prepend_path(dir: &Path, base: Option<String>) -> Option<String> {
+    let head = dir.to_string_lossy().to_string();
+    if head.is_empty() {
+        return base;
+    }
+
+    let mut list = vec![dir.to_path_buf()];
+    list.extend(
+        base.into_iter()
+            .flat_map(|value| std::env::split_paths(&value).collect::<Vec<_>>()),
+    );
+
+    let mut seen = HashMap::<String, ()>::new();
+    let mut next = Vec::<std::path::PathBuf>::new();
+    for item in list {
+        let key = item.to_string_lossy().to_ascii_lowercase();
+        if seen.insert(key, ()).is_some() {
+            continue;
+        }
+        next.push(item);
+    }
+
+    std::env::join_paths(next)
+        .ok()
+        .map(|value| value.to_string_lossy().to_string())
+}
+
+#[cfg(windows)]
+fn git_bash_path(git: &Path) -> Option<std::path::PathBuf> {
+    Some(git.parent()?.parent()?.join("bin").join("bash.exe"))
+}
+
+#[cfg(windows)]
+fn windows_env() -> Vec<(String, String)> {
+    let Some(git) = resolve_windows_app_path("git") else {
+        tracing::warn!("Git not found while preparing Windows sidecar environment");
+        return vec![];
+    };
+
+    let git = std::path::PathBuf::from(git);
+    let mut out = vec![];
+
+    if let Some(dir) = git.parent() {
+        if let Some(path) = prepend_path(
+            dir,
+            std::env::var("PATH")
+                .ok()
+                .or_else(|| std::env::var("Path").ok()),
+        ) {
+            out.push(("PATH".to_string(), path));
+        }
+    }
+
+    if let Some(bash) = git_bash_path(&git).filter(|path| path.is_file()) {
+        out.push((
+            "OPENCODE_GIT_BASH_PATH".to_string(),
+            bash.to_string_lossy().to_string(),
+        ));
+    }
+
+    tracing::info!(
+        git = %git.display(),
+        bash = out
+            .iter()
+            .find(|(key, _)| key == "OPENCODE_GIT_BASH_PATH")
+            .map(|(_, value)| value.as_str())
+            .unwrap_or(""),
+        "Prepared Windows sidecar Git environment"
+    );
+
+    out
+}
+
 pub fn spawn_command(
     app: &tauri::AppHandle,
     args: &str,
@@ -433,6 +509,9 @@ pub fn spawn_command(
             let sidecar = get_sidecar_path(app);
             let mut cmd = Command::new(sidecar);
             cmd.args(args.split_whitespace());
+
+            #[cfg(windows)]
+            envs.extend(windows_env());
 
             for (key, value) in envs {
                 cmd.env(key, value);
@@ -737,5 +816,31 @@ mod tests {
         assert!(is_nushell("/opt/homebrew/bin/nu"));
         assert!(is_nushell("C:\\Program Files\\nu.exe"));
         assert!(!is_nushell("/bin/zsh"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn prepend_path_keeps_git_first_and_dedupes() {
+        let next = prepend_path(
+            Path::new(r"C:\Program Files\Git\cmd"),
+            Some(r"C:\Program Files\Git\cmd;C:\Windows\System32".to_string()),
+        )
+        .expect("expected path");
+
+        let list = std::env::split_paths(&next).collect::<Vec<_>>();
+        assert_eq!(list[0], Path::new(r"C:\Program Files\Git\cmd"));
+        assert_eq!(list.len(), 2);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn git_bash_maps_git_cmd_to_bash() {
+        let next = git_bash_path(Path::new(r"C:\Program Files\Git\cmd\git.exe"));
+        assert_eq!(
+            next,
+            Some(std::path::PathBuf::from(
+                r"C:\Program Files\Git\bin\bash.exe"
+            ))
+        );
     }
 }
