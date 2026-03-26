@@ -7,7 +7,7 @@ import { Spinner } from "@opencode-ai/ui/spinner"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useMutation } from "@tanstack/solid-query"
-import { createSignal, For, Show } from "solid-js"
+import { createSignal, For, Match, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
@@ -157,7 +157,7 @@ export function DialogConnect9Router(props: Props) {
         <div class="px-2.5 pb-6 flex flex-col gap-6">
           <p class="text-14-regular text-text-base">
             9Router is a local OpenAI-compatible proxy. Enter the URL of your running 9Router
-            container, then fetch the available models.
+            container and test the connection — available models will appear automatically.
           </p>
 
           <div class="flex gap-2 items-end">
@@ -182,17 +182,30 @@ export function DialogConnect9Router(props: Props) {
               onClick={fetchModels}
               disabled={fetchState.status === "loading"}
             >
-              <Show when={fetchState.status === "loading"} fallback="Fetch Models">
+              <Show when={fetchState.status === "loading"} fallback="Test Connection">
                 <Spinner />
               </Show>
             </Button>
           </div>
 
-          <Show when={fetchState.status === "error"}>
-            <p class="text-13-regular text-text-critical">
-              {(fetchState as Extract<FetchState, { status: "error" }>).message}
-            </p>
-          </Show>
+          <Switch>
+            <Match when={fetchState.status === "error"}>
+              <div class="flex items-center gap-2">
+                <div class="w-2 h-2 rounded-full bg-text-critical shrink-0" />
+                <p class="text-13-regular text-text-critical">
+                  {(fetchState as Extract<FetchState, { status: "error" }>).message}
+                </p>
+              </div>
+            </Match>
+            <Match when={fetchState.status === "done"}>
+              <div class="flex items-center gap-2">
+                <div class="w-2 h-2 rounded-full bg-accent-base shrink-0" />
+                <p class="text-13-regular text-text-base">
+                  Connected — {(fetchState as Extract<FetchState, { status: "done" }>).models.length} models available
+                </p>
+              </div>
+            </Match>
+          </Switch>
 
           <Show when={fetchState.status === "done"}>
             <div class="flex flex-col gap-2">
