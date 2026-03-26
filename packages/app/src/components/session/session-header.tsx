@@ -1,4 +1,4 @@
-import { createEffect, createMemo, onCleanup, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
 import { useParams } from "@solidjs/router"
@@ -8,6 +8,7 @@ import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
+import { useSDK } from "@/context/sdk"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { getFilename } from "@opencode-ai/util/path"
 import { decode64 } from "@/utils/base64"
@@ -24,9 +25,18 @@ import { TextField } from "@opencode-ai/ui/text-field"
 import { Keybind } from "@opencode-ai/ui/keybind"
 import { showToast } from "@opencode-ai/ui/toast"
 import { StatusPopover } from "../status-popover"
+import { IntegrationsPopover } from "../integrations-popover"
+
+type PennylaneHealth = {
+  healthy: boolean
+  configured: boolean
+  code: string
+  message?: string
+}
 
 export function SessionHeader() {
   const globalSDK = useGlobalSDK()
+  const sdk = useSDK()
   const layout = useLayout()
   const params = useParams()
   const command = useCommand()
@@ -34,6 +44,26 @@ export function SessionHeader() {
   const sync = useSync()
   const platform = usePlatform()
   const language = useLanguage()
+
+  const [pennylaneHealth, setPennylaneHealth] = createSignal<PennylaneHealth | undefined>(undefined)
+
+  const refreshPennylane = async () => {
+    try {
+      const result = await sdk.client.plugin.pennylane.health()
+      setPennylaneHealth(result.data ?? undefined)
+    } catch {
+      setPennylaneHealth(undefined)
+    }
+  }
+
+  createEffect(() => {
+    void refreshPennylane()
+    const interval = setInterval(() => void refreshPennylane(), 15_000)
+    onCleanup(() => clearInterval(interval))
+  })
+
+  const pennylaneConfigured = () => pennylaneHealth()?.configured === true
+  const pennylaneHealthy = () => pennylaneHealth()?.healthy === true
 
   const projectDirectory = createMemo(() => decode64(params.dir) ?? "")
   const project = createMemo(() => {
@@ -322,8 +352,13 @@ export function SessionHeader() {
         {(mount) => (
           <Portal mount={mount()}>
             <div class="flex items-center gap-3">
-              <StatusPopover />
-              <Show when={projectDirectory()}>
+              <IntegrationsPopover
+                pennylaneHealth={pennylaneHealth}
+                pennylaneHealthy={pennylaneHealthy}
+                pennylaneConfigured={pennylaneConfigured}
+              />
+              {/* <StatusPopover /> */}
+              {/* <Show when={projectDirectory()}>
                 <div class="hidden xl:flex items-center">
                   <Show
                     when={canOpen()}
@@ -403,7 +438,7 @@ export function SessionHeader() {
                     </div>
                   </Show>
                 </div>
-              </Show>
+              </Show> */}
               <Show when={showShare()}>
                 <div class="flex items-center">
                   <Popover
