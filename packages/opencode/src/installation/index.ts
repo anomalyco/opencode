@@ -118,7 +118,8 @@ export namespace Installation {
             return out
           },
           Effect.scoped,
-          Effect.catch(() => Effect.succeed("")),
+          Effect.timeout("30 seconds"),
+          Effect.catchTag("TimeoutError", () => Effect.succeed("")),
         )
 
         const run = Effect.fnUntraced(
@@ -137,7 +138,8 @@ export namespace Installation {
             return { code, stdout, stderr }
           },
           Effect.scoped,
-          Effect.catch(() => Effect.succeed({ code: ChildProcessSpawner.ExitCode(1), stdout: "", stderr: "" })),
+          Effect.timeout("30 seconds"),
+          Effect.catchTag("TimeoutError", () => Effect.succeed({ code: ChildProcessSpawner.ExitCode(1), stdout: "", stderr: "" })),
         )
 
         const getBrewFormula = Effect.fnUntraced(function* () {
