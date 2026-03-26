@@ -7,16 +7,18 @@ import { Log } from "../util/log"
 import { Instance } from "../project/instance"
 import { lazy } from "@/util/lazy"
 import { Language } from "web-tree-sitter"
+import fs from "fs/promises"
 
-import { $ } from "bun"
 import { Filesystem } from "@/util/filesystem"
 import { fileURLToPath } from "url"
 import { Flag } from "@/flag/flag.ts"
 import { Shell } from "@/shell/shell"
 
 import { BashArity } from "@/permission/arity"
+import { Truncate } from "./truncate"
+import { Plugin } from "@/plugin"
 
-const MAX_OUTPUT_LENGTH = Flag.OPENCODE_EXPERIMENTAL_BASH_MAX_OUTPUT_LENGTH || 30_000
+const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
 
 export const log = Log.create({ service: "bash-tool" })
@@ -55,7 +57,9 @@ export const BashTool = Tool.define("bash", async () => {
   log.info("bash tool using shell", { shell })
 
   return {
-    description: DESCRIPTION.replaceAll("${directory}", Instance.directory),
+    description: DESCRIPTION.replaceAll("${directory}", Instance.directory)
+      .replaceAll("${maxLines}", String(Truncate.MAX_LINES))
+      .replaceAll("${maxBytes}", String(Truncate.MAX_BYTES)),
     parameters: z.object({
       command: z.string().describe("The command to execute"),
       timeout: z.number().describe("Optional timeout in milliseconds").optional(),
@@ -81,13 +85,64 @@ export const BashTool = Tool.define("bash", async () => {
       if (!tree) {
         throw new Error("Failed to parse command")
       }
+
+      // Check for dangerous shell syntax
+      const forbiddenNodes: Record<string, string> = {
+        pipeline: "Pipelines are not allowed",
+        redirected_statement: "Redirections are not allowed",
+        command_substitution: "Command substitution is not allowed",
+        process_substitution: "Process substitution is not allowed",
+        subshell: "Subshells are not allowed",
+        compound_statement: "Compound statements are not allowed",
+        background_command: "Background execution is not allowed",
+        list: "Multiple commands are not allowed",
+      }
+
+      for (const [nodeType, message] of Object.entries(forbiddenNodes)) {
+        const nodes = tree.rootNode.descendantsOfType(nodeType)
+        if (nodes.length > 0) {
+          // Special case: a list can contain a single command. 
+          // We only block it if it actually represents multiple commands.
+          if (nodeType === "list") {
+            const commands = tree.rootNode.descendantsOfType("command")
+            if (commands.length > 1) {
+              throw new Error(message)
+            }
+            continue
+          }
+          throw new Error(message)
+        }
+      }
+
+      // Validate command names and ensure no background execution
+      const commands = tree.rootNode.descendantsOfType("command")
+      if (commands.length > 1) {
+        throw new Error("Multiple commands are not allowed")
+      }
+
+      for (const node of commands) {
+        const nameNode = node.childForFieldName("name") || node.child(0)
+        if (nameNode) {
+          const commandName = nameNode.text
+          // Only allow alphanumeric, underscores, hyphens, and dots in command names
+          // We also allow forward slashes for paths, but not backslashes or other characters
+          if (!/^[a-zA-Z0-9_\-\.\/]+$/.test(commandName)) {
+            throw new Error(`Invalid command name: ${commandName}`)
+          }
+        }
+      }
+
       const directories = new Set<string>()
-      if (!Filesystem.contains(Instance.directory, cwd)) directories.add(cwd)
+      if (!Instance.containsPath(cwd)) directories.add(cwd)
       const patterns = new Set<string>()
       const always = new Set<string>()
 
       for (const node of tree.rootNode.descendantsOfType("command")) {
         if (!node) continue
+
+        // Get full command text including redirects if present
+        let commandText = node.parent?.type === "redirected_statement" ? node.parent.text : node.text
+
         const command = []
         for (let i = 0; i < node.childCount; i++) {
           const child = node.child(i)
@@ -105,39 +160,39 @@ export const BashTool = Tool.define("bash", async () => {
         }
 
         // not an exhaustive list, but covers most common cases
-        if (["cd", "rm", "cp", "mv", "mkdir", "touch", "chmod", "chown"].includes(command[0])) {
+        if (["cd", "rm", "cp", "mv", "mkdir", "touch", "chmod", "chown", "cat"].includes(command[0])) {
           for (const arg of command.slice(1)) {
             if (arg.startsWith("-") || (command[0] === "chmod" && arg.startsWith("+"))) continue
-            const resolved = await $`realpath ${arg}`
-              .cwd(cwd)
-              .quiet()
-              .nothrow()
-              .text()
-              .then((x) => x.trim())
+            const resolved = await fs.realpath(path.resolve(cwd, arg)).catch(() => "")
             log.info("resolved path", { arg, resolved })
             if (resolved) {
-              // Git Bash on Windows returns Unix-style paths like /c/Users/...
               const normalized =
-                process.platform === "win32" && resolved.match(/^\/[a-z]\//)
-                  ? resolved.replace(/^\/([a-z])\//, (_, drive) => `${drive.toUpperCase()}:\\`).replace(/\//g, "\\")
-                  : resolved
-              if (!Filesystem.contains(Instance.directory, normalized)) directories.add(normalized)
+                process.platform === "win32" ? Filesystem.windowsPath(resolved).replace(/\//g, "\\") : resolved
+              if (!Instance.containsPath(normalized)) {
+                const dir = (await Filesystem.isDir(normalized)) ? normalized : path.dirname(normalized)
+                directories.add(dir)
+              }
             }
           }
         }
 
         // cd covered by above check
         if (command.length && command[0] !== "cd") {
-          patterns.add(command.join(" "))
-          always.add(BashArity.prefix(command).join(" ") + "*")
+          patterns.add(commandText)
+          always.add(BashArity.prefix(command).join(" ") + " *")
         }
       }
 
       if (directories.size > 0) {
+        const globs = Array.from(directories).map((dir) => {
+          // Preserve POSIX-looking paths with /s, even on Windows
+          if (dir.startsWith("/")) return `${dir.replace(/[\\/]+$/, "")}/*`
+          return path.join(dir, "*")
+        })
         await ctx.ask({
           permission: "external_directory",
-          patterns: Array.from(directories),
-          always: Array.from(directories).map((x) => path.dirname(x) + "*"),
+          patterns: globs,
+          always: globs,
           metadata: {},
         })
       }
@@ -151,14 +206,33 @@ export const BashTool = Tool.define("bash", async () => {
         })
       }
 
+      const shellEnv = await Plugin.trigger(
+        "shell.env",
+        { cwd, sessionID: ctx.sessionID, callID: ctx.callID },
+        { env: {} },
+      )
+
+      // Sanitize environment variables to ensure a "sane" execution environment
+      const sanitizedEnv = {
+        ...process.env,
+        ...shellEnv.env,
+        TERM: "dumb", // Avoid escape sequences and interactive behaviors
+        PAGER: "cat", // Ensure paginated output doesn't block
+        EDITOR: "true", // Avoid opening editors
+        LC_ALL: "C", // Consistent language/sorting behavior
+      }
+
+      // Remove potentially dangerous environment variables if they exist
+      delete sanitizedEnv.LD_PRELOAD
+      delete sanitizedEnv.DYLD_INSERT_LIBRARIES
+
       const proc = spawn(params.command, {
         shell,
         cwd,
-        env: {
-          ...process.env,
-        },
+        env: sanitizedEnv,
         stdio: ["ignore", "pipe", "pipe"],
         detached: process.platform !== "win32",
+        windowsHide: process.platform === "win32",
       })
 
       let output = ""
@@ -172,15 +246,14 @@ export const BashTool = Tool.define("bash", async () => {
       })
 
       const append = (chunk: Buffer) => {
-        if (output.length <= MAX_OUTPUT_LENGTH) {
-          output += chunk.toString()
-          ctx.metadata({
-            metadata: {
-              output,
-              description: params.description,
-            },
-          })
-        }
+        output += chunk.toString()
+        ctx.metadata({
+          metadata: {
+            // truncate the metadata to avoid GIANT blobs of data (has nothing to do w/ what agent can access)
+            output: output.length > MAX_METADATA_LENGTH ? output.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : output,
+            description: params.description,
+          },
+        })
       }
 
       proc.stdout?.on("data", append)
@@ -228,12 +301,7 @@ export const BashTool = Tool.define("bash", async () => {
         })
       })
 
-      let resultMetadata: String[] = ["<bash_metadata>"]
-
-      if (output.length > MAX_OUTPUT_LENGTH) {
-        output = output.slice(0, MAX_OUTPUT_LENGTH)
-        resultMetadata.push(`bash tool truncated output as it exceeded ${MAX_OUTPUT_LENGTH} char limit`)
-      }
+      const resultMetadata: string[] = []
 
       if (timedOut) {
         resultMetadata.push(`bash tool terminated command after exceeding timeout ${timeout} ms`)
@@ -243,15 +311,14 @@ export const BashTool = Tool.define("bash", async () => {
         resultMetadata.push("User aborted the command")
       }
 
-      if (resultMetadata.length > 1) {
-        resultMetadata.push("</bash_metadata>")
-        output += "\n\n" + resultMetadata.join("\n")
+      if (resultMetadata.length > 0) {
+        output += "\n\n<bash_metadata>\n" + resultMetadata.join("\n") + "\n</bash_metadata>"
       }
 
       return {
         title: params.description,
         metadata: {
-          output,
+          output: output.length > MAX_METADATA_LENGTH ? output.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : output,
           exit: proc.exitCode,
           description: params.description,
         },
