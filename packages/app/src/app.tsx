@@ -61,7 +61,7 @@ const SessionIndexRoute = () => <Navigate href="session" />
 
 function UiI18nBridge(props: ParentProps) {
   const language = useLanguage()
-  return <I18nProvider value={{ locale: language.intl, t: language.t }}>{props.children}</I18nProvider>
+  return <I18nProvider value={{ locale: language.intl, t: language.t, dir: language.dir }}>{props.children}</I18nProvider>
 }
 
 declare global {

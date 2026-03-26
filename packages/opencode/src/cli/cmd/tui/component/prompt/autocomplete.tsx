@@ -359,17 +359,20 @@ export function Autocomplete(props: {
     for (const serverCommand of sync.data.command) {
       if (serverCommand.source === "skill") continue
       const label = serverCommand.source === "mcp" ? ":mcp" : ""
-      results.push({
-        display: "/" + serverCommand.name + label,
-        description: serverCommand.description,
-        onSelect: () => {
-          const newText = "/" + serverCommand.name + " "
-          const cursor = props.input().logicalCursor
-          props.input().deleteRange(0, 0, cursor.row, cursor.col)
-          props.input().insertText(newText)
-          props.input().cursorOffset = Bun.stringWidth(newText)
-        },
-      })
+      const names = [serverCommand.name, ...(serverCommand.aliases ?? [])]
+      for (const name of names) {
+        results.push({
+          display: "/" + name + label,
+          description: serverCommand.description,
+          onSelect: () => {
+            const newText = "/" + name + " "
+            const cursor = props.input().logicalCursor
+            props.input().deleteRange(0, 0, cursor.row, cursor.col)
+            props.input().insertText(newText)
+            props.input().cursorOffset = Bun.stringWidth(newText)
+          },
+        })
+      }
     }
 
     results.sort((a, b) => a.display.localeCompare(b.display))

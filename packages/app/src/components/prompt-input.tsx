@@ -1276,6 +1276,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         onSlashSelect={handleSlashSelect}
         commandKeybind={command.keybind}
         t={(key) => language.t(key as Parameters<typeof language.t>[0])}
+        dir={language.dir()}
       />
       <DockShellForm
         onSubmit={handleSubmit}
@@ -1341,6 +1342,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               aria-multiline="true"
               aria-label={placeholder()}
               contenteditable="true"
+              dir={language.dir()}
               autocapitalize={store.mode === "normal" ? "sentences" : "off"}
               autocorrect={store.mode === "normal" ? "on" : "off"}
               spellcheck={store.mode === "normal"}
@@ -1363,6 +1365,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               <div
                 class="absolute top-0 inset-x-0 pl-3 pr-2 pt-2 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate"
                 classList={{ "font-mono!": store.mode === "shell" }}
+                dir={language.dir()}
                 style={{ "padding-bottom": space }}
               >
                 {placeholder()}

@@ -2006,6 +2006,7 @@ export type Command = {
   template: string
   subtask?: boolean
   hints: Array<string>
+  aliases?: Array<string>
 }
 
 export type Agent = {

@@ -46,7 +46,7 @@ type FollowupSendInput = {
   before?: () => Promise<boolean> | boolean
 }
 
-const draftText = (prompt: Prompt) => prompt.map((part) => ("content" in part ? part.content : "")).join("")
+const draftText = (prompt: Prompt) => prompt.map((part: any) => ("content" in part ? part.content : "")).join("")
 
 const draftImages = (prompt: Prompt) => prompt.filter((part): part is ImageAttachmentPart => part.type === "image")
 
@@ -73,7 +73,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
 
   const [head, ...tail] = text.split(" ")
   const cmd = head?.startsWith("/") ? head.slice(1) : undefined
-  if (cmd && input.sync.data.command.find((item) => item.name === cmd)) {
+  if (cmd && input.sync.data.command.find((item: any) => item.name === cmd || item.aliases?.includes(cmd))) {
     setBusy()
     try {
       if (!(await wait())) {
@@ -97,7 +97,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
         })),
       })
       return true
-    } catch (err) {
+    } catch (err: any) {
       setIdle()
       throw err
     }
@@ -158,7 +158,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
       variant: input.draft.variant,
     })
     return true
-  } catch (err) {
+  } catch (err: any) {
     setIdle()
     remove()
     throw err
@@ -208,7 +208,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
   const language = useLanguage()
   const params = useParams()
 
-  const errorMessage = (err: unknown) => {
+  const errorMessage = (err: any) => {
     if (err && typeof err === "object" && "data" in err) {
       const data = (err as { data?: { message?: string } }).data
       if (data?.message) return data.message
@@ -270,7 +270,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
   const seed = (dir: string, info: Session) => {
     const [, setStore] = globalSync.child(dir)
     setStore("session", (list: Session[]) => {
-      const result = Binary.search(list, info.id, (item) => item.id)
+      const result = Binary.search(list, info.id, (item: Session) => item.id)
       const next = [...list]
       if (result.found) {
         next[result.index] = info
@@ -320,8 +320,8 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       if (worktreeSelection === "create") {
         const createdWorktree = await client.worktree
           .create({ directory: projectDirectory })
-          .then((x) => x.data)
-          .catch((err) => {
+          .then((x: any) => x.data)
+          .catch((err: any) => {
             showToast({
               title: language.t("prompt.toast.worktreeCreateFailed.title"),
               description: errorMessage(err),
@@ -359,8 +359,8 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     if (!session && isNewSession) {
       const created = await client.session
         .create()
-        .then((x) => x.data ?? undefined)
-        .catch((err) => {
+        .then((x: any) => x.data ?? undefined)
+        .catch((err: any) => {
           showToast({
             title: language.t("prompt.toast.sessionCreateFailed.title"),
             description: errorMessage(err),
@@ -370,10 +370,10 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       if (created) {
         seed(sessionDirectory, created)
         session = created
-        if (shouldAutoAccept) permission.enableAutoAccept(session.id, sessionDirectory)
-        local.session.promote(sessionDirectory, session.id)
-        layout.handoff.setTabs(base64Encode(sessionDirectory), session.id)
-        navigate(`/${base64Encode(sessionDirectory)}/session/${session.id}`)
+        if (shouldAutoAccept) permission.enableAutoAccept(created.id, sessionDirectory)
+        local.session.promote(sessionDirectory, created.id)
+        layout.handoff.setTabs(base64Encode(sessionDirectory), created.id)
+        navigate(`/${base64Encode(sessionDirectory)}/session/${created.id}`)
       }
     }
     if (!session) {
@@ -437,7 +437,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           model,
           command: text,
         })
-        .catch((err) => {
+        .catch((err: any) => {
           showToast({
             title: language.t("prompt.toast.shellSendFailed.title"),
             description: errorMessage(err),
@@ -450,18 +450,18 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     if (text.startsWith("/")) {
       const [cmdName, ...args] = text.split(" ")
       const commandName = cmdName.slice(1)
-      const customCommand = sync.data.command.find((c) => c.name === commandName)
+      const customCommand = sync.data.command.find((c: { name: string; aliases?: string[] }) => c.name === commandName || c.aliases?.includes(commandName))
       if (customCommand) {
         clearInput()
         client.session
           .command({
             sessionID: session.id,
-            command: commandName,
+            command: customCommand.name,
             arguments: args.join(" "),
             agent,
             model: `${model.providerID}/${model.modelID}`,
             variant,
-            parts: images.map((attachment) => ({
+            parts: images.map((attachment: ImageAttachmentPart) => ({
               id: Identifier.ascending("part"),
               type: "file" as const,
               mime: attachment.mime,
@@ -469,7 +469,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
               filename: attachment.filename,
             })),
           })
-          .catch((err) => {
+          .catch((err: any) => {
             showToast({
               title: language.t("prompt.toast.commandSendFailed.title"),
               description: formatServerError(err, language.t, language.t("common.requestFailed")),
@@ -480,7 +480,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       }
     }
 
-    const commentItems = context.filter((item) => item.type === "file" && !!item.comment?.trim())
+    const commentItems = context.filter((item: any) => item.type === "file" && !!item.comment?.trim())
     const messageID = Identifier.ascending("message")
 
     const removeOptimisticMessage = () => {
@@ -557,7 +557,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       messageID,
       optimisticBusy: sessionDirectory === projectDirectory,
       before: waitForWorktree,
-    }).catch((err) => {
+    }).catch((err: any) => {
       pending.delete(session.id)
       if (sessionDirectory === projectDirectory) {
         sync.set("session_status", session.id, { type: "idle" })

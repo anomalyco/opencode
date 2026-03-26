@@ -72,8 +72,11 @@
   },
   "devDependencies": {
     "@actions/artifact": "5.0.1",
-    "@tsconfig/bun": "catalog:",
+    "@tsconfig/bun": "1.0.10",
+    "@tsconfig/node22": "22.0.5",
+    "@types/bun": "1.3.11",
     "@types/mime-types": "3.0.1",
+    "@types/node": "22.13.9",
     "@typescript/native-preview": "catalog:",
     "glob": "13.0.5",
     "husky": "9.1.7",

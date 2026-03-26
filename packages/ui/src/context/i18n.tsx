@@ -8,6 +8,7 @@ export type UiI18nParams = Record<string, string | number | boolean>
 export type UiI18n = {
   locale: Accessor<string>
   t: (key: UiI18nKey, params?: UiI18nParams) => string
+  dir: () => "rtl" | "ltr"
 }
 
 function resolveTemplate(text: string, params?: UiI18nParams) {
@@ -25,6 +26,7 @@ const fallback: UiI18n = {
     const value = en[key] ?? String(key)
     return resolveTemplate(value, params)
   },
+  dir: () => "ltr",
 }
 
 const Context = createContext<UiI18n>(fallback)

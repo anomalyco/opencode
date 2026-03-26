@@ -203,6 +203,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
 
     const locale = createMemo<Locale>(() => normalizeLocale(store.locale))
     const intl = createMemo(() => INTL[locale()])
+    const dir = createMemo(() => (locale() === "ar" ? "rtl" : "ltr"))
 
     const [dict] = createResource(locale, loadDict, {
       initialValue: dicts.get(initial) ?? base,
@@ -225,6 +226,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       ready,
       locale,
       intl,
+      dir,
       locales: LOCALES,
       label,
       t,

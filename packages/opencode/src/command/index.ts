@@ -42,6 +42,7 @@ export namespace Command {
       template: z.promise(z.string()).or(z.string()),
       subtask: z.boolean().optional(),
       hints: z.array(z.string()),
+      aliases: z.array(z.string()).optional(),
     })
     .meta({
       ref: "Command",
@@ -65,6 +66,11 @@ export namespace Command {
     REVIEW: "review",
   } as const
 
+  const Aliases: Record<string, string[]> = {
+    [Default.INIT]: ["ابدأ", "تهيئة"],
+    [Default.REVIEW]: ["مراجعة", "فحص"],
+  }
+
   export interface Interface {
     readonly get: (name: string) => Effect.Effect<Info | undefined>
     readonly list: () => Effect.Effect<Info[]>
@@ -87,6 +93,7 @@ export namespace Command {
             return PROMPT_INITIALIZE.replace("${path}", ctx.worktree)
           },
           hints: hints(PROMPT_INITIALIZE),
+          aliases: Aliases[Default.INIT],
         }
         commands[Default.REVIEW] = {
           name: Default.REVIEW,
@@ -97,6 +104,7 @@ export namespace Command {
           },
           subtask: true,
           hints: hints(PROMPT_REVIEW),
+          aliases: Aliases[Default.REVIEW],
         }
 
         for (const [name, command] of Object.entries(cfg.command ?? {})) {
@@ -161,7 +169,8 @@ export namespace Command {
 
       const get = Effect.fn("Command.get")(function* (name: string) {
         const state = yield* InstanceState.get(cache)
-        return state.commands[name]
+        if (state.commands[name]) return state.commands[name]
+        return Object.values(state.commands).find((command: Info) => command.aliases?.includes(name))
       })
 
       const list = Effect.fn("Command.list")(function* () {

@@ -955,7 +955,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
   }
 
   return (
-    <div data-component="user-message">
+    <div data-component="user-message" dir="auto">
       <Show when={attachments().length > 0}>
         <div data-slot="user-message-attachments">
           <For each={attachments()}>
@@ -1376,7 +1376,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
 
   return (
     <Show when={throttledText()}>
-      <div data-component="text-part">
+      <div data-component="text-part" dir="auto">
         <div data-slot="text-part-body">
           <Markdown text={throttledText()} cacheKey={part().id} />
         </div>
