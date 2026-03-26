@@ -39,13 +39,14 @@ jobs:
           PATCH=$(echo "$VERSION" | cut -d. -f3)
 
           if git rev-parse "$TAG" >/dev/null 2>&1; then
-            COMMITS=$(git log "${TAG}..HEAD" --pretty=format:"%s|||%H|||%an")
+            COMMITS=$(git log "${TAG}..HEAD" --pretty=format:"%s|||%H")
           else
-            COMMITS=$(git log --pretty=format:"%s|||%H|||%an")
+            COMMITS=$(git log --pretty=format:"%s|||%H")
           fi
 
-          # Determine bump level
           SUBJECTS=$(echo "$COMMITS" | cut -d'|' -f1)
+
+          # Determine version bump
           if echo "$SUBJECTS" | grep -qE '^.+(\(.+\))?!:|^BREAKING CHANGE'; then
             MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0
           elif echo "$SUBJECTS" | grep -qE '^feat(\(.+\))?:'; then
@@ -56,41 +57,52 @@ jobs:
 
           NEXT_TAG="cb-v${MAJOR}.${MINOR}.${PATCH}"
           NEXT_DISPLAY="v${MAJOR}.${MINOR}.${PATCH}"
+          RELEASE_DATE=$(date -u +"%Y-%m-%d")
+
           echo "tag=${NEXT_TAG}" >> "$GITHUB_OUTPUT"
           echo "display=${NEXT_DISPLAY}" >> "$GITHUB_OUTPUT"
           echo "semver=${MAJOR}.${MINOR}.${PATCH}" >> "$GITHUB_OUTPUT"
           echo "prev_tag=${TAG}" >> "$GITHUB_OUTPUT"
 
-          # Build categorized release notes from commits
-          FEATURES=""
-          FIXES=""
-          CI_CHORE=""
-          BREAKING=""
+          # Strip conventional commit prefix and capitalize first letter
+          strip_prefix() {
+            echo "$1" | sed -E 's/^(feat|fix|chore|ci|docs|refactor|perf|test|style|build|revert)(\([^)]+\))?!?:[[:space:]]*//' | sed 's/\(.\)/\u\1/'
+          }
 
-          while IFS='|||' read -r subject hash author; do
+          BREAKING=""
+          ADDED=""
+          FIXED=""
+          CHANGED=""
+          SECURITY=""
+
+          while IFS='|||' read -r subject hash; do
             [[ -z "$subject" ]] && continue
-            SHORT="${hash:0:7}"
-            LINE="- ${subject} (\`${SHORT}\`)"
+            CLEAN=$(strip_prefix "$subject")
             if echo "$subject" | grep -qE '^.+(\(.+\))?!:|^BREAKING CHANGE'; then
-              BREAKING="${BREAKING}"$'\n'"${LINE}"
+              BREAKING="${BREAKING}"$'\n'"- ${CLEAN}"
             elif echo "$subject" | grep -qE '^feat(\(.+\))?:'; then
-              FEATURES="${FEATURES}"$'\n'"${LINE}"
+              ADDED="${ADDED}"$'\n'"- ${CLEAN}"
             elif echo "$subject" | grep -qE '^fix(\(.+\))?:'; then
-              FIXES="${FIXES}"$'\n'"${LINE}"
+              FIXED="${FIXED}"$'\n'"- ${CLEAN}"
+            elif echo "$subject" | grep -qE '^(perf|refactor)(\(.+\))?:'; then
+              CHANGED="${CHANGED}"$'\n'"- ${CLEAN}"
+            elif echo "$subject" | grep -qE '^(security|sec)(\(.+\))?:'; then
+              SECURITY="${SECURITY}"$'\n'"- ${CLEAN}"
             else
-              CI_CHORE="${CI_CHORE}"$'\n'"${LINE}"
+              CHANGED="${CHANGED}"$'\n'"- ${CLEAN}"
             fi
           done <<< "$COMMITS"
 
-          NOTES="## What's Changed"$'\n'
+          NOTES="## CoBuilder ${NEXT_DISPLAY} — ${RELEASE_DATE}"$'\n'
           [[ -n "$BREAKING" ]] && NOTES+=$'\n'"### ⚠️ Breaking Changes"$'\n'"${BREAKING}"$'\n'
-          [[ -n "$FEATURES" ]] && NOTES+=$'\n'"### ✨ Features"$'\n'"${FEATURES}"$'\n'
-          [[ -n "$FIXES" ]]    && NOTES+=$'\n'"### 🐛 Bug Fixes"$'\n'"${FIXES}"$'\n'
-          [[ -n "$CI_CHORE" ]] && NOTES+=$'\n'"### 🔧 Maintenance"$'\n'"${CI_CHORE}"$'\n'
+          [[ -n "$SECURITY" ]] && NOTES+=$'\n'"### 🔒 Security"$'\n'"${SECURITY}"$'\n'
+          [[ -n "$ADDED" ]]    && NOTES+=$'\n'"### Added"$'\n'"${ADDED}"$'\n'
+          [[ -n "$FIXED" ]]    && NOTES+=$'\n'"### Fixed"$'\n'"${FIXED}"$'\n'
+          [[ -n "$CHANGED" ]]  && NOTES+=$'\n'"### Changed"$'\n'"${CHANGED}"$'\n'
           NOTES+=$'\n'"**Full Changelog**: https://github.com/CobuilderLabs/opencode/compare/${TAG}...${NEXT_TAG}"
 
-          # Write notes to file (avoids shell escaping issues)
           echo "$NOTES" > /tmp/release-notes.md
+          cat /tmp/release-notes.md
           echo "Next release: ${NEXT_TAG}"
 
       - name: Update package version
