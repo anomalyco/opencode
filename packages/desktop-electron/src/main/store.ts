@@ -7,7 +7,7 @@ const cache = new Map<string, Store>()
 export function getStore(name = SETTINGS_STORE) {
   const cached = cache.get(name)
   if (cached) return cached
-  const next = new Store({ name })
+  const next = new Store({ name, fileExtension: "" })
   cache.set(name, next)
   return next
 }

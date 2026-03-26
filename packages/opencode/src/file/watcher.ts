@@ -8,10 +8,10 @@ import z from "zod"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRunPromise } from "@/effect/run-service"
+import { makeRuntime } from "@/effect/run-service"
 import { Flag } from "@/flag/flag"
+import { Git } from "@/git"
 import { Instance } from "@/project/instance"
-import { git } from "@/util/git"
 import { lazy } from "@/util/lazy"
 import { Config } from "../config/config"
 import { FileIgnore } from "./ignore"
@@ -130,7 +130,7 @@ export namespace FileWatcher {
 
             if (Instance.project.vcs === "git") {
               const result = yield* Effect.promise(() =>
-                git(["rev-parse", "--git-dir"], {
+                Git.run(["rev-parse", "--git-dir"], {
                   cwd: Instance.project.worktree,
                 }),
               )
@@ -159,7 +159,7 @@ export namespace FileWatcher {
     }),
   )
 
-  const runPromise = makeRunPromise(Service, layer)
+  const { runPromise } = makeRuntime(Service, layer)
 
   export function init() {
     return runPromise((svc) => svc.init())
