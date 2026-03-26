@@ -1,0 +1,61 @@
+name: CD
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get latest tag
+        id: latest_tag
+        run: |
+          TAG=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1)
+          echo "tag=${TAG:-v0.0.0}" >> "$GITHUB_OUTPUT"
+
+      - name: Determine next version
+        id: next_version
+        run: |
+          TAG="${{ steps.latest_tag.outputs.tag }}"
+          VERSION="${TAG#v}"
+          MAJOR=$(echo "$VERSION" | cut -d. -f1)
+          MINOR=$(echo "$VERSION" | cut -d. -f2)
+          PATCH=$(echo "$VERSION" | cut -d. -f3)
+
+          # Collect commit subjects since last tag (or all commits if no tag)
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            COMMITS=$(git log "${TAG}..HEAD" --pretty=format:"%s")
+          else
+            COMMITS=$(git log --pretty=format:"%s")
+          fi
+
+          # Determine bump level from conventional commits
+          if echo "$COMMITS" | grep -qE '^.+(\(.+\))?!:|^BREAKING CHANGE'; then
+            MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0
+          elif echo "$COMMITS" | grep -qE '^feat(\(.+\))?:'; then
+            MINOR=$((MINOR + 1)); PATCH=0
+          else
+            PATCH=$((PATCH + 1))
+          fi
+
+          NEXT="v${MAJOR}.${MINOR}.${PATCH}"
+          echo "version=${NEXT}" >> "$GITHUB_OUTPUT"
+          echo "Next release: ${NEXT}"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.next_version.outputs.version }}" \
+            --title "Release ${{ steps.next_version.outputs.version }}" \
+            --generate-notes \
+            --latest
