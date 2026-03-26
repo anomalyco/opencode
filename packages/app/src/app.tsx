@@ -21,11 +21,13 @@ import {
   type JSX,
   lazy,
   onCleanup,
+  onMount,
   type ParentProps,
   Show,
   Suspense,
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { CommandProvider } from "@/context/command"
 import { CommentsProvider } from "@/context/comments"
 import { FileProvider } from "@/context/file"
@@ -44,6 +46,7 @@ import { SettingsProvider } from "@/context/settings"
 import { TerminalProvider } from "@/context/terminal"
 import DirectoryLayout from "@/pages/directory-layout"
 import Layout from "@/pages/layout"
+import { DialogOnboarding, wasOnboardingShown } from "./components/dialog-onboarding"
 import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
 
@@ -119,10 +122,29 @@ function SessionProviders(props: ParentProps) {
   )
 }
 
+function OnboardingCheck() {
+  const dialog = useDialog()
+  const globalSync = useGlobalSync()
+
+  onMount(() => {
+    if (wasOnboardingShown()) return
+    // Give sync a moment to populate connected providers
+    setTimeout(() => {
+      const connected = globalSync.data.provider.connected
+      if (connected.length === 0) {
+        dialog.show(() => <DialogOnboarding />)
+      }
+    }, 800)
+  })
+
+  return null
+}
+
 function RouterRoot(props: ParentProps<{ appChildren?: JSX.Element }>) {
   return (
     <AppShellProviders>
       <Suspense fallback={<Loading />}>
+        <OnboardingCheck />
         {props.appChildren}
         {props.children}
       </Suspense>
