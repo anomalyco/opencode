@@ -58,8 +58,6 @@ export class McpOAuthProvider implements OAuthClientProvider {
     // Check stored client info (from dynamic registration)
     // Use getForUrl to validate credentials are for the current server URL
     const entry = await McpAuth.getForUrl(this.mcpName, this.serverUrl)
-    console.log("CLIENT INFO LOOKUP:", this.mcpName, this.serverUrl)
-    console.log("ENTRY:", JSON.stringify(entry, null, 2))
     if (entry?.clientInfo) {
       // Check if client secret has expired
       if (entry.clientInfo.clientSecretExpiresAt && entry.clientInfo.clientSecretExpiresAt < Date.now() / 1000) {
