@@ -81,10 +81,11 @@ export type SessionItemProps = {
   slug: string
   mobile?: boolean
   dense?: boolean
-  showTooltip?: boolean
-  showChild?: boolean
-  level?: number
+  popover?: boolean
   sidebarExpanded: Accessor<boolean>
+  sidebarHovering: Accessor<boolean>
+  hoverSession: Accessor<string | undefined>
+  setHoverSession: (id: string | undefined) => void
   clearHoverProjectSoon: () => void
   prefetchSession: (session: Session, priority?: "high" | "low") => void
   archiveSession: (session: Session) => Promise<void>
@@ -156,6 +157,23 @@ const SessionRow = (props: {
   </A>
 )
 
+const SessionHoverPreview = (props: {
+  mobile?: boolean
+  hoverSession: Accessor<string | undefined>
+  session: Session
+  sidebarHovering: Accessor<boolean>
+  hoverReady: Accessor<boolean>
+  hoverMessages: Accessor<UserMessage[] | undefined>
+  language: ReturnType<typeof useLanguage>
+  isActive: Accessor<boolean>
+  slug: string
+  setHoverSession: (id: string | undefined) => void
+  messageLabel: (message: Message) => string | undefined
+  onMessageSelect: (message: Message) => void
+  trigger: JSX.Element
+}): JSX.Element => {
+  let ref: HTMLDivElement | undefined
+
   return (
     <A
       href={`/${props.slug}/session/${props.session.id}`}
@@ -221,12 +239,13 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
     return childSessionOnPath(sessionStore.session, props.session.id, params.id)
   })
 
-  const hoverMessages = createMemo(() =>
-    sessionStore.message[props.session.id]?.filter((message): message is UserMessage => message.role === "user"),
-  )
-  const hoverReady = createMemo(() => hoverMessages() !== undefined)
   const hoverAllowed = createMemo(() => !props.mobile && props.sidebarExpanded())
   const hoverEnabled = createMemo(() => (props.popover ?? true) && hoverAllowed())
+  const hoverMessages = createMemo(() => {
+    if (!hoverEnabled()) return undefined
+    return sessionStore.message[props.session.id]?.filter((message): message is UserMessage => message.role === "user")
+  })
+  const hoverReady = createMemo(() => hoverMessages() !== undefined)
 
   const warm = (span: number, priority: "high" | "low") => {
     const nav = props.navList?.()
@@ -263,10 +282,16 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
       setHoverSession={props.setHoverSession}
       clearHoverProjectSoon={props.clearHoverProjectSoon}
       sidebarOpened={layout.sidebar.opened}
-      warmHover={scheduleHoverPrefetch}
+      warmHover={() => {
+        if (!hoverEnabled()) return
+        scheduleHoverPrefetch()
+      }}
       warmPress={() => warm(2, "high")}
       warmFocus={() => warm(2, "high")}
-      cancelHoverPrefetch={cancelHoverPrefetch}
+      cancelHoverPrefetch={() => {
+        if (!hoverEnabled()) return
+        cancelHoverPrefetch()
+      }}
     />
   )
 
@@ -301,7 +326,6 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
         >
           <SessionHoverPreview
             mobile={props.mobile}
-            nav={props.nav}
             hoverSession={props.hoverSession}
             session={props.session}
             sidebarHovering={props.sidebarHovering}

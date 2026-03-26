@@ -15,7 +15,6 @@ import { type LocalProject } from "@/context/layout"
 export const SidebarContent = (props: {
   mobile?: boolean
   opened: Accessor<boolean>
-  aimMove: (event: MouseEvent) => void
   projects: Accessor<LocalProject[]>
   renderProject: (project: LocalProject) => JSX.Element
   handleDragStart: (event: unknown) => void
@@ -56,7 +55,6 @@ export const SidebarContent = (props: {
       <div
         data-component="sidebar-rail"
         class="w-16 shrink-0 bg-background-base flex flex-col items-center overflow-hidden"
-        onMouseMove={props.aimMove}
       >
         <div class="flex-1 min-h-0 w-full">
           <DragDropProvider

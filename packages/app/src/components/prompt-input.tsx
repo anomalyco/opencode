@@ -1641,7 +1641,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             editorRef?.focus()
           }}
         >
-          <div class="relative min-h-[104px] max-h-[240px] overflow-y-auto no-scrollbar" ref={(el) => (scrollRef = el)}>
+          <div
+            class="relative min-h-[144px] max-h-[280px] overflow-y-auto no-scrollbar"
+            ref={(el) => (scrollRef = el)}
+            style={{ "scroll-padding-bottom": space }}
+          >
             <div
               data-component="prompt-input"
               ref={(el) => {
@@ -1663,7 +1667,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               onKeyDown={handleKeyDown}
               classList={{
                 "select-text": true,
-                "w-full pl-3 pr-2 pt-2 pb-11 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
+                "w-full pl-4 pr-4 pt-3 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
                 "[&_[data-type=file]]:text-syntax-property": true,
                 "[&_[data-type=agent]]:text-syntax-type": true,
                 "font-mono!": true,
@@ -1671,7 +1675,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             />
             <Show when={!prompt.dirty()}>
               <div
-                class="absolute top-0 inset-x-0 pl-3 pr-2 pt-2 pb-11 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate"
+                class="absolute top-0 inset-x-0 pl-4 pr-4 pt-3 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate"
                 classList={{ "font-mono!": store.mode === "shell" }}
               >
                 {placeholder()}
@@ -1679,65 +1683,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             </Show>
           </div>
 
-          <div class="pointer-events-none absolute bottom-2 right-2 flex items-center gap-2">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept={ACCEPTED_FILE_TYPES.join(",")}
-              class="hidden"
-              onChange={(e) => {
-                const file = e.currentTarget.files?.[0]
-                if (file) addImageAttachment(file)
-                e.currentTarget.value = ""
-              }}
-            />
+          <div
+            aria-hidden="true"
+            class="pointer-events-none absolute inset-x-0 bottom-0"
+            style={{
+              height: space,
+              background:
+                "linear-gradient(to top, var(--surface-raised-stronger-non-alpha) calc(100% - 20px), transparent)",
+            }}
+          />
 
-            <div
-              aria-hidden={store.mode !== "normal"}
-              class="flex items-center gap-1 transition-all duration-200 ease-out"
-              classList={{
-                "opacity-100 translate-y-0 scale-100 pointer-events-auto": store.mode === "normal",
-                "opacity-0 translate-y-2 scale-95 pointer-events-none": store.mode !== "normal",
-              }}
-            >
+          <div class="pointer-events-none absolute inset-x-3 bottom-3 flex items-end justify-between gap-3">
+            <div class="pointer-events-auto flex items-center gap-2.5">
               <TooltipKeybind
-                placement="top"
-                title={language.t("prompt.action.attachFile")}
-                keybind={command.keybind("file.attach")}
-              >
-                <Button
-                  data-action="prompt-attach"
-                  type="button"
-                  variant="ghost"
-                  class="size-8 p-0"
-                  style={buttons()}
-                  onClick={pick}
-                  disabled={store.mode !== "normal"}
-                  tabIndex={store.mode === "normal" ? undefined : -1}
-                  aria-label={language.t("prompt.action.attachFile")}
-                >
-                  <Icon name="plus" class="size-4.5" />
-                </Button>
-              </TooltipKeybind>
-
-              <Show when={platform.platform === "desktop"}>
-                <Tooltip placement="top" value={language.t("prompt.action.expand")}>
-                  <IconButton
-                    data-action="prompt-expand"
-                    type="button"
-                    icon="expand"
-                    variant="ghost"
-                    class="size-8"
-                    style={buttons()}
-                    onClick={expand}
-                    disabled={store.mode !== "normal"}
-                    tabIndex={store.mode === "normal" ? undefined : -1}
-                    aria-label={language.t("prompt.action.expand")}
-                  />
-                </Tooltip>
-              </Show>
-
-              <Tooltip
                 placement="top"
                 inactive={!prompt.dirty() && !working()}
                 value={
@@ -1757,20 +1715,111 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   </Switch>
                 }
               >
-                <IconButton
-                  data-action="prompt-submit"
-                  type="submit"
-                  disabled={store.mode !== "normal" || (!prompt.dirty() && !working() && commentCount() === 0)}
-                  tabIndex={store.mode === "normal" ? undefined : -1}
-                  icon={working() ? "stop" : "arrow-up"}
-                  variant="primary"
-                  class="size-8"
-                  style={buttons()}
-                  aria-label={working() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
-                />
-              </Tooltip>
+                <Button
+                  data-action="prompt-permissions"
+                  variant="ghost"
+                  disabled={!params.id}
+                  onClick={() => {
+                    if (!params.id) return
+                    permission.toggleAutoAccept(params.id, sdk.directory)
+                  }}
+                  classList={{
+                    "size-8 rounded-full flex items-center justify-center": true,
+                    "text-text-base": !accepting(),
+                    "bg-surface-success-weak text-icon-success-base": accepting(),
+                    "hover:bg-surface-success-base": accepting(),
+                  }}
+                  aria-label={
+                    accepting()
+                      ? language.t("command.permissions.autoaccept.disable")
+                      : language.t("command.permissions.autoaccept.enable")
+                  }
+                  aria-pressed={accepting()}
+                >
+                  <Icon
+                    name="chevron-double-right"
+                    size="small"
+                    class="scale-110"
+                    classList={{ "text-icon-success-base": accepting() }}
+                  />
+                </Button>
+              </TooltipKeybind>
             </div>
-          </Show>
+
+            <div class="pointer-events-auto flex items-center gap-2.5">
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept={ACCEPTED_FILE_TYPES.join(",")}
+                class="hidden"
+                onChange={(e) => {
+                  const list = e.currentTarget.files
+                  if (list) void addAttachments(Array.from(list))
+                  e.currentTarget.value = ""
+                }}
+              />
+
+              <div
+                aria-hidden={store.mode !== "normal"}
+                class="flex items-center gap-2.5 transition-all duration-200 ease-out"
+                classList={{
+                  "opacity-100 translate-y-0 scale-100 pointer-events-auto": store.mode === "normal",
+                  "opacity-0 translate-y-2 scale-95 pointer-events-none": store.mode !== "normal",
+                }}
+              >
+                <TooltipKeybind
+                  placement="top"
+                  title={language.t("prompt.action.attachFile")}
+                  keybind={command.keybind("file.attach")}
+                >
+                  <Button
+                    data-action="prompt-attach"
+                    type="button"
+                    variant="ghost"
+                    class="size-9 rounded-full p-0"
+                    style={buttons()}
+                    onClick={pick}
+                    disabled={store.mode !== "normal"}
+                    tabIndex={store.mode === "normal" ? undefined : -1}
+                    aria-label={language.t("prompt.action.attachFile")}
+                  >
+                    <Icon name="plus" class="size-4.5" />
+                  </Button>
+                </TooltipKeybind>
+                <Show when={platform.platform === "desktop"}>
+                  <Tooltip placement="top" value={language.t("prompt.action.expand")}>
+                    <IconButton
+                      data-action="prompt-expand"
+                      type="button"
+                      icon="expand"
+                      variant="ghost"
+                      class="size-9 rounded-full"
+                      style={buttons()}
+                      onClick={expand}
+                      disabled={store.mode !== "normal"}
+                      tabIndex={store.mode === "normal" ? undefined : -1}
+                      aria-label={language.t("prompt.action.expand")}
+                    />
+                  </Tooltip>
+                </Show>
+                <Tooltip placement="top" inactive={!prompt.dirty() && !working()} value={tip()}>
+                  <IconButton
+                    data-action="prompt-submit"
+                    type="submit"
+                    disabled={store.mode !== "normal" || (!prompt.dirty() && !working() && commentCount() === 0)}
+                    tabIndex={store.mode === "normal" ? undefined : -1}
+                    icon={working() ? "stop" : "arrow-up-bold"}
+                    variant="primary"
+                    iconSize={working() ? "normal" : "medium"}
+                    class="size-10 rounded-full shadow-xs-border"
+                    style={buttons()}
+                    aria-label={working() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
+                  />
+                </Tooltip>
+              </div>
+            </div>
+          </div>
         </div>
         <GhostText text={ghostText()} />
         <div class="relative p-3 flex items-center justify-between gap-2">
