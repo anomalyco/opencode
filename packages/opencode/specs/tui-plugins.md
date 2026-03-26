@@ -96,12 +96,32 @@ Example:
   "name": "@acme/opencode-plugin",
   "type": "module",
   "main": "./dist/index.js",
+  "engines": {
+    "opencode": "^1.0.0"
+  },
   "oc-plugin": [
     ["server", { "custom": true }],
     ["tui", { "compact": true }]
   ]
 }
 ```
+
+### Version compatibility
+
+npm plugins can declare a version compatibility range in `package.json` using the standard `engines` field:
+
+```json
+{
+  "engines": {
+    "opencode": "^1.0.0"
+  }
+}
+```
+
+- The value is a semver range checked against the running OpenCode version.
+- If the range is not satisfied, the plugin is skipped with a warning and a session error.
+- If `engines.opencode` is absent, no check is performed (backward compatible).
+- File plugins are never checked; only npm package plugins are validated.
 
 - `opencode plugin <module>` resolves and installs the package first, then reads `oc-plugin`, then patches config.
 - Alias: `opencode plug <module>`.

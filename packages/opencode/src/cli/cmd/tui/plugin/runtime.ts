@@ -18,6 +18,7 @@ import { errorData, errorMessage } from "@/util/error"
 import { isRecord } from "@/util/record"
 import { Instance } from "@/project/instance"
 import {
+  checkPluginCompatibility,
   getDefaultPlugin,
   isDeprecatedPlugin,
   pluginSource,
@@ -32,6 +33,7 @@ import { addTheme, hasTheme } from "../context/theme"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
 import { Flag } from "@/flag/flag"
+import { Installation } from "@/installation"
 import { INTERNAL_TUI_PLUGINS, type InternalTuiPlugin } from "./internal"
 import { setupSlots, Slot as View } from "./slots"
 import type { HostPluginApi, HostSlots } from "./slots"
@@ -182,12 +184,24 @@ async function loadExternalPlugin(
   const spec = Config.pluginSpecifier(item)
   if (isDeprecatedPlugin(spec)) return
   log.info("loading tui plugin", { path: spec, retry })
-  const target = await resolvePluginTarget(spec).catch((error) => {
+  const resolved = await resolvePluginTarget(spec).catch((error) => {
     fail("failed to resolve tui plugin", { path: spec, retry, error })
     return
   })
-  if (!target) return
+  if (!resolved) return
 
+  const source = pluginSource(spec)
+  if (source === "npm") {
+    const ok = await checkPluginCompatibility(resolved, Installation.VERSION)
+      .then(() => true)
+      .catch((error) => {
+        fail("tui plugin incompatible", { path: spec, retry, error })
+        return false
+      })
+    if (!ok) return
+  }
+
+  const target = resolved
   const meta = config.plugin_meta?.[spec]
   if (!meta) {
     log.warn("missing tui plugin metadata", {
@@ -197,7 +211,6 @@ async function loadExternalPlugin(
     return
   }
 
-  const source = pluginSource(spec)
   const root = resolveRoot(source === "file" ? spec : target)
   const install_theme = createThemeInstaller(meta, root, spec)
   const entry = await resolvePluginEntrypoint(spec, target, "tui").catch((error) => {

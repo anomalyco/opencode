@@ -14,10 +14,13 @@ import { Effect, Layer, ServiceMap, Stream } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { errorMessage } from "@/util/error"
+import { Installation } from "@/installation"
 import {
+  checkPluginCompatibility,
   getDefaultPlugin,
   isDeprecatedPlugin,
   parsePluginSpecifier,
+  pluginSource,
   resolvePluginEntrypoint,
   resolvePluginTarget,
 } from "./shared"
@@ -106,9 +109,26 @@ export namespace Plugin {
     const spec = Config.pluginSpecifier(item)
     if (isDeprecatedPlugin(spec)) return
     log.info("loading plugin", { path: spec })
-    const target = await resolvePlugin(spec)
-    if (!target) return
+    const resolved = await resolvePlugin(spec)
+    if (!resolved) return
 
+    if (pluginSource(spec) === "npm") {
+      const incompatible = await checkPluginCompatibility(resolved, Installation.VERSION)
+        .then(() => false)
+        .catch((err) => {
+          const message = errorMessage(err)
+          log.warn("plugin incompatible", { path: spec, error: message })
+          Bus.publish(Session.Event.Error, {
+            error: new NamedError.Unknown({
+              message: `Plugin ${spec} skipped: ${message}`,
+            }).toObject(),
+          })
+          return true
+        })
+      if (incompatible) return
+    }
+
+    const target = resolved
     const entry = await resolvePluginEntrypoint(spec, target, "server").catch((err) => {
       const message = errorMessage(err)
       log.error("failed to resolve plugin server entry", { path: spec, target, error: message })

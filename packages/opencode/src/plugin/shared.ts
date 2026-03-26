@@ -1,5 +1,6 @@
 import path from "path"
 import { fileURLToPath, pathToFileURL } from "url"
+import semver from "semver"
 import { BunProc } from "@/bun"
 import { Filesystem } from "@/util/filesystem"
 import { isRecord } from "@/util/record"
@@ -85,6 +86,18 @@ export async function resolvePathPluginTarget(spec: string) {
     throw new Error(`Plugin directory ${file} must define package.json main`)
   }
   return pathToFileURL(path.resolve(file, pkg.main)).href
+}
+
+export async function checkPluginCompatibility(target: string, opencodeVersion: string) {
+  const pkg = await readPluginPackage(target).catch(() => undefined)
+  if (!pkg) return
+  const engines = pkg.json.engines
+  if (!isRecord(engines)) return
+  const range = engines.opencode
+  if (typeof range !== "string") return
+  if (!semver.satisfies(opencodeVersion, range)) {
+    throw new Error(`Plugin requires opencode ${range} but running ${opencodeVersion}`)
+  }
 }
 
 export async function resolvePluginTarget(spec: string, parsed = parsePluginSpecifier(spec)) {
