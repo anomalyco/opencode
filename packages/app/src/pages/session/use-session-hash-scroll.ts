@@ -2,6 +2,7 @@ import type { UserMessage } from "@opencode-ai/sdk/v2"
 import { useLocation, useNavigate } from "@solidjs/router"
 import { createEffect, createMemo, onCleanup, onMount } from "solid-js"
 import { messageIdFromHash } from "./message-id-from-hash"
+import { targetTop } from "./use-session-scroll-utils"
 
 export const useSessionHashScroll = (input: {
   sessionKey: () => string
@@ -74,13 +75,30 @@ export const useSessionHashScroll = (input: {
     const b = root.getBoundingClientRect()
     const sticky = root.querySelector("[data-session-title]")
     const inset = sticky instanceof HTMLElement ? sticky.offsetHeight : 0
-    const top = Math.max(0, a.top - b.top + root.scrollTop - inset)
+    const top = targetTop({
+      itemTop: a.top,
+      rootTop: b.top,
+      scrollTop: root.scrollTop,
+      inset,
+    })
     root.scrollTo({ top, behavior })
     return true
   }
 
+  const settle = (id: string, left = 4) => {
+    const el = document.getElementById(input.anchor(id))
+    if (el instanceof HTMLElement) scrollToElement(el, "auto")
+    if (left <= 0) return
+    queue(() => {
+      settle(id, left - 1)
+    })
+  }
+
   const seek = (id: string, behavior: ScrollBehavior, left = 4): boolean => {
-    if (input.seekMessage?.(id, behavior)) return true
+    if (input.seekMessage?.(id, behavior)) {
+      settle(id)
+      return true
+    }
     const el = document.getElementById(input.anchor(id))
     if (el) return scrollToElement(el, behavior)
     if (left <= 0) return false

@@ -80,7 +80,6 @@ type SessionHistoryWindowInput = {
   loadMore: (sessionID: string) => Promise<void>
   userScrolled: () => boolean
   scroller: () => HTMLDivElement | undefined
-  virtualized: () => boolean
 }
 
 /**
@@ -100,7 +99,6 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
 
   let prevTop = 0
   let preserveA: number | undefined
-  let preserveB: number | undefined
   let preserving = false
 
   const [state, setState] = createStore({
@@ -147,38 +145,123 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
 
   const clearPreserve = () => {
     if (preserveA !== undefined) cancelAnimationFrame(preserveA)
-    if (preserveB !== undefined) cancelAnimationFrame(preserveB)
     preserveA = undefined
-    preserveB = undefined
     preserving = false
   }
 
-  const preserveScroll = (fn: () => void) => {
-    if (input.virtualized()) {
-      fn()
+  type Pin = {
+    id: string
+    top: number
+  }
+
+  type Hold = {
+    pin: Pin | undefined
+    top: number
+    height: number
+  }
+
+  const snap = () => {
+    const el = input.scroller()
+    if (!el) return
+
+    const box = el.getBoundingClientRect()
+    const line = box.top + 100
+    const list = [...el.querySelectorAll<HTMLElement>("[data-message-id]")]
+      .map((node) => {
+        const id = node.dataset.messageId
+        if (!id) return
+        const rect = node.getBoundingClientRect()
+        return { id, top: rect.top, bottom: rect.bottom }
+      })
+      .filter((item): item is { id: string; top: number; bottom: number } => !!item)
+
+    const shown = list.filter((item) => item.bottom > box.top && item.top < box.bottom)
+    const hit =
+      shown.find((item) => item.top <= line && item.bottom >= line) ??
+      [...shown].sort((a, b) => {
+        const da = Math.abs(a.top - line)
+        const db = Math.abs(b.top - line)
+        if (da !== db) return da - db
+        return a.top - b.top
+      })[0] ??
+      list.filter((item) => item.top <= line).at(-1) ??
+      list[0]
+
+    if (!hit) return
+    return {
+      id: hit.id,
+      top: hit.top - box.top,
+    }
+  }
+
+  const keep = (pin: Pin | undefined, top: number, height: number, left = 4) => {
+    const el = input.scroller()
+    if (!el) {
+      preserving = false
       return
     }
 
+    if (pin) {
+      const key = typeof CSS === "undefined" ? pin.id : CSS.escape(pin.id)
+      const node = el.querySelector<HTMLElement>(`[data-message-id="${key}"]`)
+      if (node) {
+        const box = el.getBoundingClientRect()
+        const next = node.getBoundingClientRect().top - box.top
+        const delta = next - pin.top
+        if (Math.abs(delta) > 1) el.scrollTop += delta
+      }
+    } else {
+      const delta = el.scrollHeight - height
+      if (delta) el.scrollTop = top + delta
+    }
+
+    if (left <= 0) {
+      preserving = false
+      return
+    }
+
+    preserveA = requestAnimationFrame(() => {
+      preserveA = undefined
+      keep(pin, top, height, left - 1)
+    })
+  }
+
+  const hold = (): Hold => {
     const el = input.scroller()
     if (!el) {
-      fn()
+      return {
+        pin: undefined,
+        top: 0,
+        height: 0,
+      }
+    }
+
+    return {
+      pin: snap(),
+      top: el.scrollTop,
+      height: el.scrollHeight,
+    }
+  }
+
+  const restore = (state: Hold, fn?: () => void) => {
+    const el = input.scroller()
+    if (!el) {
+      fn?.()
       return
     }
 
     clearPreserve()
     preserving = true
-    const beforeTop = el.scrollTop
-    const beforeHeight = el.scrollHeight
-    fn()
+    fn?.()
+
     preserveA = requestAnimationFrame(() => {
       preserveA = undefined
-      preserveB = requestAnimationFrame(() => {
-        preserveB = undefined
-        const delta = el.scrollHeight - beforeHeight
-        if (delta) el.scrollTop = beforeTop + delta
-        preserving = false
-      })
+      keep(state.pin, state.top, state.height)
     })
+  }
+
+  const preserveScroll = (fn: () => void) => {
+    restore(hold(), fn)
   }
 
   const backfillTurns = () => {
@@ -247,6 +330,7 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
     }
 
     const start = turnStart()
+    const mark = hold()
     const beforeVisible = input.visibleUserMessages().length
     const beforeRendered = start <= 0 ? beforeVisible : renderedUserMessages().length
     let loaded = input.loaded()
@@ -282,7 +366,7 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
 
     if (opts?.prefetch) {
       const current = turnStart()
-      preserveScroll(() => setTurnStart(current + growth))
+      restore(mark, () => setTurnStart(current + growth))
       return
     }
 
@@ -291,7 +375,7 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
     const currentRendered = renderedUserMessages().length
     const base = Math.max(beforeRendered, currentRendered)
     const target = Math.min(afterVisible, base + turnBatch)
-    preserveScroll(() => setTurnStart(Math.max(0, afterVisible - target)))
+    restore(mark, () => setTurnStart(Math.max(0, afterVisible - target)))
   }
 
   const onScrollerScroll = () => {
@@ -1528,7 +1612,6 @@ export default function Page() {
     loadMore: (sessionID) => sync.session.history.loadMore(sessionID),
     userScrolled: autoScroll.userScrolled,
     scroller: () => scroller,
-    virtualized: () => virtualized,
   })
 
   fill = () => {
