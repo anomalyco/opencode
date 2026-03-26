@@ -7,7 +7,7 @@ const channel = (() => {
 })()
 
 const getBase = (): Configuration => ({
-  artifactName: "opencode-electron-${os}-${arch}.${ext}",
+  artifactName: "cobuilder-${os}-${arch}.${ext}",
   directories: {
     output: "dist",
     buildResources: "resources",
@@ -17,7 +17,7 @@ const getBase = (): Configuration => ({
     {
       from: "resources/",
       to: "",
-      filter: ["opencode-cli*"],
+      filter: ["cobuilder*"],
     },
     {
       from: "native/",
@@ -39,7 +39,7 @@ const getBase = (): Configuration => ({
     sign: true,
   },
   protocols: {
-    name: "OpenCode",
+    name: "CoBuilder",
     schemes: ["opencode"],
   },
   win: {
@@ -66,29 +66,29 @@ function getConfig() {
     case "dev": {
       return {
         ...base,
-        appId: "ai.opencode.desktop.dev",
-        productName: "OpenCode Dev",
-        rpm: { packageName: "opencode-dev" },
+        appId: "ai.cobuilder.desktop.dev",
+        productName: "CoBuilder Dev",
+        rpm: { packageName: "cobuilder-dev" },
       }
     }
     case "beta": {
       return {
         ...base,
-        appId: "ai.opencode.desktop.beta",
-        productName: "OpenCode Beta",
-        protocols: { name: "OpenCode Beta", schemes: ["opencode"] },
-        publish: { provider: "github", owner: "anomalyco", repo: "opencode-beta", channel: "latest" },
-        rpm: { packageName: "opencode-beta" },
+        appId: "ai.cobuilder.desktop.beta",
+        productName: "CoBuilder Beta",
+        protocols: { name: "CoBuilder Beta", schemes: ["opencode"] },
+        publish: { provider: "github", owner: "CobuilderLabs", repo: "opencode", channel: "latest" },
+        rpm: { packageName: "cobuilder-beta" },
       }
     }
     case "prod": {
       return {
         ...base,
-        appId: "ai.opencode.desktop",
-        productName: "OpenCode",
-        protocols: { name: "OpenCode", schemes: ["opencode"] },
-        publish: { provider: "github", owner: "anomalyco", repo: "opencode", channel: "latest" },
-        rpm: { packageName: "opencode" },
+        appId: "ai.cobuilder.desktop",
+        productName: "CoBuilder",
+        protocols: { name: "CoBuilder", schemes: ["opencode"] },
+        publish: { provider: "github", owner: "CobuilderLabs", repo: "opencode", channel: "latest" },
+        rpm: { packageName: "cobuilder" },
       }
     }
   }

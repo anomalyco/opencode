@@ -23,14 +23,14 @@ Pre-built binaries are available for every major platform — [**latest release 
 
 | Platform | Download |
 |----------|---------|
-| macOS (Apple Silicon) | [`opencode-darwin-arm64.zip`](https://github.com/CobuilderLabs/opencode/releases/latest/download/opencode-darwin-arm64.zip) |
-| macOS (Intel) | [`opencode-darwin-x64.zip`](https://github.com/CobuilderLabs/opencode/releases/latest/download/opencode-darwin-x64.zip) |
-| Windows (x64) | [`opencode-windows-x64.zip`](https://github.com/CobuilderLabs/opencode/releases/latest/download/opencode-windows-x64.zip) |
-| Windows (ARM64) | [`opencode-windows-arm64.zip`](https://github.com/CobuilderLabs/opencode/releases/latest/download/opencode-windows-arm64.zip) |
-| Linux (x64) | [`opencode-linux-x64.tar.gz`](https://github.com/CobuilderLabs/opencode/releases/latest/download/opencode-linux-x64.tar.gz) |
-| Linux (ARM64) | [`opencode-linux-arm64.tar.gz`](https://github.com/CobuilderLabs/opencode/releases/latest/download/opencode-linux-arm64.tar.gz) |
+| macOS (Apple Silicon) | [`cobuilder-darwin-arm64.zip`](https://github.com/CobuilderLabs/opencode/releases/latest/download/cobuilder-darwin-arm64.zip) |
+| macOS (Intel) | [`cobuilder-darwin-x64.zip`](https://github.com/CobuilderLabs/opencode/releases/latest/download/cobuilder-darwin-x64.zip) |
+| Windows (x64) | [`cobuilder-windows-x64.zip`](https://github.com/CobuilderLabs/opencode/releases/latest/download/cobuilder-windows-x64.zip) |
+| Windows (ARM64) | [`cobuilder-windows-arm64.zip`](https://github.com/CobuilderLabs/opencode/releases/latest/download/cobuilder-windows-arm64.zip) |
+| Linux (x64) | [`cobuilder-linux-x64.tar.gz`](https://github.com/CobuilderLabs/opencode/releases/latest/download/cobuilder-linux-x64.tar.gz) |
+| Linux (ARM64) | [`cobuilder-linux-arm64.tar.gz`](https://github.com/CobuilderLabs/opencode/releases/latest/download/cobuilder-linux-arm64.tar.gz) |
 
-> **Desktop App** — native GUI coming soon.
+> **Desktop App (BETA)** — Windows and Linux installers available on the [latest release →](https://github.com/CobuilderLabs/opencode/releases/latest) macOS coming soon.
 
 ---
 
