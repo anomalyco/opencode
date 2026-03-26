@@ -87,6 +87,7 @@ export function Autocomplete(props: {
     selected: 0,
     visible: false as AutocompleteRef["visible"],
     input: "keyboard" as "keyboard" | "mouse",
+    browsing: false,
   })
 
   const [positionTick, setPositionTick] = createSignal(0)
@@ -470,6 +471,7 @@ export function Autocomplete(props: {
     const endCursor = input.logicalCursor
 
     input.deleteRange(startCursor.row, startCursor.col, endCursor.row, endCursor.col)
+    setStore("browsing", true)
     input.insertText("@" + path)
 
     setStore("selected", 0)
@@ -495,6 +497,7 @@ export function Autocomplete(props: {
     }
     command.keybinds(true)
     setStore("visible", false)
+    setStore("browsing", false)
   }
 
   onMount(() => {
@@ -508,7 +511,8 @@ export function Autocomplete(props: {
             // Typed text before the trigger
             props.input().cursorOffset <= store.index ||
             // There is a space between the trigger and the cursor
-            props.input().getTextRange(store.index, props.input().cursorOffset).match(/\s/) ||
+            // When browsing directories via tab-complete, allow spaces in file paths
+            props.input().getTextRange(store.index, props.input().cursorOffset).match(store.browsing ? /[\n\r\t]/ : /\s/) ||
             // "/<command>" is not the sole content
             (store.visible === "/" && value.match(/^\S+\s+\S+\s*$/))
           ) {
