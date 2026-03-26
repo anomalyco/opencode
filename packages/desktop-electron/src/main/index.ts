@@ -150,7 +150,10 @@ async function initialize() {
     })
 
     if (needsMigration) {
-      await sqliteDone?.promise
+      await Promise.race([
+        sqliteDone?.promise,
+        delay(30_000),
+      ])
     }
 
     await Promise.race([
@@ -182,7 +185,10 @@ async function initialize() {
   setInitStep({ phase: "done" })
 
   if (overlay) {
-    await loadingComplete.promise
+    await Promise.race([
+      loadingComplete.promise,
+      delay(10_000),
+    ])
   }
 
   mainWindow = createMainWindow(globals)
@@ -301,8 +307,14 @@ async function getSidecarPort() {
 
 function sqliteFileExists() {
   const xdg = process.env.XDG_DATA_HOME
-  const base = xdg && xdg.length > 0 ? xdg : join(homedir(), ".local", "share")
-  return existsSync(join(base, "opencode", "opencode.db"))
+  const base =
+    xdg && xdg.length > 0
+      ? xdg
+      : process.platform === "win32"
+        ? join(process.env.APPDATA || homedir(), "opencode")
+        : join(homedir(), ".local", "share", "opencode")
+  const dbPath = process.platform === "win32" ? join(base, "opencode.db") : join(base, "opencode", "opencode.db")
+  return existsSync(dbPath)
 }
 
 function setupAutoUpdater() {
