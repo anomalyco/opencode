@@ -25,3 +25,4 @@ r44vc0rp
 rekram1-node
 -spider-yamet clawdbot/llm psychosis, spam pinging the team
 thdxr
+-OpenCodeEngineer bot that spams issues

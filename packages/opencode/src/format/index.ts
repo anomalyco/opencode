@@ -1,12 +1,10 @@
 import { Effect, Layer, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRunPromise } from "@/effect/run-service"
+import { makeRuntime } from "@/effect/run-service"
 import path from "path"
 import { mergeDeep } from "remeda"
 import z from "zod"
-import { Bus } from "../bus"
 import { Config } from "../config/config"
-import { File } from "../file"
 import { Instance } from "../project/instance"
 import { Process } from "../util/process"
 import { Log } from "../util/log"
@@ -29,6 +27,7 @@ export namespace Format {
   export interface Interface {
     readonly init: () => Effect.Effect<void>
     readonly status: () => Effect.Effect<Status[]>
+    readonly file: (filepath: string) => Effect.Effect<void>
   }
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Format") {}
@@ -97,53 +96,46 @@ export namespace Format {
             return checks.filter((x) => x.enabled).map((x) => x.item)
           }
 
-          yield* Effect.acquireRelease(
-            Effect.sync(() =>
-              Bus.subscribe(
-                File.Event.Edited,
-                Instance.bind(async (payload) => {
-                  const file = payload.properties.file
-                  log.info("formatting", { file })
-                  const ext = path.extname(file)
+          async function formatFile(filepath: string) {
+            log.info("formatting", { file: filepath })
+            const ext = path.extname(filepath)
 
-                  for (const item of await getFormatter(ext)) {
-                    log.info("running", { command: item.command })
-                    try {
-                      const proc = Process.spawn(
-                        item.command.map((x) => x.replace("$FILE", file)),
-                        {
-                          cwd: Instance.directory,
-                          env: { ...process.env, ...item.environment },
-                          stdout: "ignore",
-                          stderr: "ignore",
-                        },
-                      )
-                      const exit = await proc.exited
-                      if (exit !== 0) {
-                        log.error("failed", {
-                          command: item.command,
-                          ...item.environment,
-                        })
-                      }
-                    } catch (error) {
-                      log.error("failed to format file", {
-                        error,
-                        command: item.command,
-                        ...item.environment,
-                        file,
-                      })
-                    }
-                  }
-                }),
-              ),
-            ),
-            (unsubscribe) => Effect.sync(unsubscribe),
-          )
+            for (const item of await getFormatter(ext)) {
+              log.info("running", { command: item.command })
+              try {
+                const proc = Process.spawn(
+                  item.command.map((x) => x.replace("$FILE", filepath)),
+                  {
+                    cwd: Instance.directory,
+                    env: { ...process.env, ...item.environment },
+                    stdout: "ignore",
+                    stderr: "ignore",
+                  },
+                )
+                const exit = await proc.exited
+                if (exit !== 0) {
+                  log.error("failed", {
+                    command: item.command,
+                    ...item.environment,
+                  })
+                }
+              } catch (error) {
+                log.error("failed to format file", {
+                  error,
+                  command: item.command,
+                  ...item.environment,
+                  file: filepath,
+                })
+              }
+            }
+          }
+
           log.info("init")
 
           return {
             formatters,
             isEnabled,
+            formatFile,
           }
         }),
       )
@@ -166,11 +158,16 @@ export namespace Format {
         return result
       })
 
-      return Service.of({ init, status })
+      const file = Effect.fn("Format.file")(function* (filepath: string) {
+        const { formatFile } = yield* InstanceState.get(state)
+        yield* Effect.promise(() => formatFile(filepath))
+      })
+
+      return Service.of({ init, status, file })
     }),
   )
 
-  const runPromise = makeRunPromise(Service, layer)
+  const { runPromise } = makeRuntime(Service, layer)
 
   export async function init() {
     return runPromise((s) => s.init())
@@ -178,5 +175,9 @@ export namespace Format {
 
   export async function status() {
     return runPromise((s) => s.status())
+  }
+
+  export async function file(filepath: string) {
+    return runPromise((s) => s.file(filepath))
   }
 }
