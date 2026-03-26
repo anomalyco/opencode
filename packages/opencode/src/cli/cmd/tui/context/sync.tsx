@@ -29,17 +29,7 @@ import { batch, onMount } from "solid-js"
 import { Log } from "@/util/log"
 import type { Path } from "@opencode-ai/sdk"
 import type { Workspace } from "@opencode-ai/sdk/v2"
-
-type WeaveState = {
-  sessionID: string
-  version: number
-  snapshots: unknown[]
-  summaryNodes: unknown[]
-  episodes: unknown[]
-  dispatches: unknown[]
-  messageLinks: unknown[]
-  updatedAt: number
-}
+import { fetchWeaveState, type WeaveState } from "./weave-sync"
 
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
@@ -125,16 +115,12 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
     async function refreshWeave(sessionID: string) {
       if (weaveRefreshInFlight.has(sessionID)) return
-      const weaveMethod = (sdk.client.session as any).weave as
-        | ((args: { sessionID: string }) => Promise<{ data?: WeaveState }>)
-        | undefined
-      if (!weaveMethod) return
 
       weaveRefreshInFlight.add(sessionID)
       try {
-        const weave = await weaveMethod({ sessionID })
-        if (!weave?.data) return
-        setStore("weave", sessionID, reconcile(weave.data))
+        const weave = await fetchWeaveState(sdk.client, sessionID)
+        if (!weave) return
+        setStore("weave", sessionID, reconcile(weave))
       } catch {
         // Weave endpoint is additive; keep TUI functional if unavailable.
       } finally {

@@ -4,7 +4,7 @@ This matrix tracks OAuth parity requirements for Anthropic Claude Code identity 
 
 ## Login lifecycle
 
-- [ ] OAuth login flow succeeds end-to-end.
+- [ ] OAuth login flow succeeds end-to-end (blocked in CI-like environment without `SNYK_TOKEN`/interactive OAuth context).
 - [ ] Auth status reflects valid/invalid token state accurately.
 - [ ] Logout clears stored credentials.
 - [ ] Expired token recovery path is validated.
@@ -32,3 +32,11 @@ This matrix tracks OAuth parity requirements for Anthropic Claude Code identity 
 
 - [x] OAuth-only headers are gated to Anthropic OAuth mode.
 - [x] Non-OAuth flows continue using existing provider behavior.
+
+## 2026-03-26 verification notes
+
+- Added/ran `test/session/llm-oauth-contract.test.ts` to assert:
+  - Claude Code identity prefix contract is present.
+  - Required Anthropic beta header set is present.
+  - PascalCase tool transform path is present and wired.
+- Remaining unchecked items require live Anthropic OAuth credentials/session for runtime validation.

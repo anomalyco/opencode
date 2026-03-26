@@ -20,8 +20,15 @@ Use this scorecard for Gate F (`weave_opencode` promotion readiness).
 
 - [x] Package typecheck passes (`packages/opencode`).
 - [ ] Full package test suite green (currently known baseline failures exist upstream in this fork branch).
-- [ ] CLI/TUI parity matrix fully completed.
-- [ ] OAuth conformance matrix fully completed with live validation.
+- [ ] CLI/TUI parity matrix fully completed (partial progress captured in matrix).
+- [ ] OAuth conformance matrix fully completed with live validation (static contract checks passing; live OAuth validation pending).
+
+## 2026-03-26 evidence snapshot
+
+- E2E proof (dispatch -> episode -> weave inspect) covered by `test/cli/session-weave-command.test.ts` and `test/server/session-weave.test.ts`.
+- CLI `--full` contract validated by `test/cli/session-weave-command.test.ts`.
+- TUI Weave fallback validated by `test/config/tui-weave-sync.test.ts`.
+- OAuth contract assertions validated by `test/session/llm-oauth-contract.test.ts`.
 
 ## Go / No-Go rule
 

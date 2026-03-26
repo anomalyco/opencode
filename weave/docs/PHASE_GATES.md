@@ -17,15 +17,15 @@ This checklist operationalizes the execution gates for the OpenCode fork in this
 
 ## Gate C - Weave Seam Activation
 
-- [ ] `packages/opencode/src/session/weave/` namespace exists
-- [ ] prompt assembly routes through Weave context builder seam
+- [x] `packages/opencode/src/session/weave/` namespace exists
+- [x] prompt assembly routes through Weave context builder seam
 - [ ] no baseline command regressions in startup, chat, and tool execution
 
 ## Gate D - Core Weave Runtime
 
-- [ ] dual-store persistence migrations run successfully
-- [ ] context, threads, episodes, and compaction primitives persist to Weave store
-- [ ] retrieval tools operate on Weave-owned records
+- [x] dual-store persistence migrations run successfully
+- [x] context, threads, episodes, and compaction primitives persist to Weave store
+- [x] retrieval tools operate on Weave-owned records
 
 ## Gate E - Parity and OAuth
 

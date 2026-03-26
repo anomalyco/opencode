@@ -1362,9 +1362,28 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   })
 
   const keybind = useKeybind()
+  const hasVisibleContent = createMemo(() => {
+    return props.parts.some((part) => {
+      if (part.type === "text") return part.text.trim().length > 0
+      if (part.type === "reasoning") return part.text.replace("[REDACTED]", "").trim().length > 0
+      if (part.type === "tool") return true
+      return false
+    })
+  })
+  const showPendingCompact = createMemo(() => {
+    if (!props.last) return false
+    if (final()) return false
+    if (props.message.error) return false
+    return !hasVisibleContent()
+  })
 
   return (
     <>
+      <Show when={showPendingCompact()}>
+        <box paddingLeft={3} marginTop={1}>
+          <Spinner color={theme.textMuted}>Thinking...</Spinner>
+        </box>
+      </Show>
       <For each={props.parts}>
         {(part, index) => {
           const component = createMemo(() => PART_MAPPING[part.type as keyof typeof PART_MAPPING])
@@ -1403,7 +1422,12 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
         </box>
       </Show>
       <Switch>
-        <Match when={props.last || final() || props.message.error?.name === "MessageAbortedError"}>
+        <Match
+          when={
+            (props.last || final() || props.message.error?.name === "MessageAbortedError") &&
+            (!showPendingCompact() || final() || props.message.error)
+          }
+        >
           <box paddingLeft={3}>
             <text marginTop={1}>
               <span

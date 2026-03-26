@@ -21,7 +21,13 @@ This matrix is the acceptance checklist for Gate E.
 
 - [ ] Core context panes render without regression.
 - [ ] Thread tree and status bars stay stable under streaming output.
-- [ ] Context sync routes handle Weave state updates.
+- [x] Context sync routes handle Weave state updates.
+
+## 2026-03-26 evidence
+
+- `packages/opencode/src/cli/cmd/tui/context/sync.tsx` now refreshes Weave state on initial sync and message updates.
+- `packages/opencode/src/cli/cmd/tui/routes/session/{header,footer,sidebar}.tsx` surface Weave counters in-session.
+- `test/config/tui-weave-sync.test.ts` validates graceful fallback when `session.weave` is unavailable or throws.
 
 ## State parity
 
