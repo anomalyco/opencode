@@ -19,6 +19,11 @@ function removeLineRange(input: string) {
   return hashIndex !== -1 ? input.substring(0, hashIndex) : input
 }
 
+export function ended(query: string, prefix: string) {
+  const rest = query.startsWith(prefix) ? query.slice(prefix.length) : query
+  return /\s/.test(rest)
+}
+
 function extractLineRange(input: string) {
   const hashIndex = input.lastIndexOf("#")
   if (hashIndex === -1) {
@@ -87,7 +92,7 @@ export function Autocomplete(props: {
     selected: 0,
     visible: false as AutocompleteRef["visible"],
     input: "keyboard" as "keyboard" | "mouse",
-    browsing: false,
+    prefix: "",
   })
 
   const [positionTick, setPositionTick] = createSignal(0)
@@ -471,9 +476,9 @@ export function Autocomplete(props: {
     const endCursor = input.logicalCursor
 
     input.deleteRange(startCursor.row, startCursor.col, endCursor.row, endCursor.col)
-    setStore("browsing", true)
     input.insertText("@" + path)
 
+    setStore("prefix", path)
     setStore("selected", 0)
   }
 
@@ -482,6 +487,7 @@ export function Autocomplete(props: {
     setStore({
       visible: mode,
       index: props.input().cursorOffset,
+      prefix: "",
     })
   }
 
@@ -497,7 +503,7 @@ export function Autocomplete(props: {
     }
     command.keybinds(true)
     setStore("visible", false)
-    setStore("browsing", false)
+    setStore("prefix", "")
   }
 
   onMount(() => {
@@ -507,12 +513,12 @@ export function Autocomplete(props: {
       },
       onInput(value) {
         if (store.visible) {
+          const query = props.input().getTextRange(store.index + 1, props.input().cursorOffset)
           if (
             // Typed text before the trigger
             props.input().cursorOffset <= store.index ||
-            // There is a space between the trigger and the cursor
-            // When browsing directories via tab-complete, allow spaces in file paths
-            props.input().getTextRange(store.index, props.input().cursorOffset).match(store.browsing ? /[\n\r\t]/ : /\s/) ||
+            // Allow spaces in accepted path segments, but not in new input after them.
+            ended(query, store.prefix) ||
             // "/<command>" is not the sole content
             (store.visible === "/" && value.match(/^\S+\s+\S+\s*$/))
           ) {
