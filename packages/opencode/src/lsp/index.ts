@@ -161,7 +161,7 @@ export namespace LSP {
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
-      const cache = yield* InstanceState.make<State>(
+      const state = yield* InstanceState.make<State>(
         Effect.fn("LSP.state")(function* () {
           const cfg = yield* Effect.promise(() => Config.get())
 
@@ -224,7 +224,7 @@ export namespace LSP {
 
       const getClients = Effect.fnUntraced(function* (file: string) {
         if (!Instance.containsPath(file)) return [] as LSPClient.Info[]
-        const s = yield* InstanceState.get(cache)
+        const s = yield* InstanceState.get(state)
         return yield* Effect.promise(async () => {
           const extension = path.parse(file).ext || file
           const result: LSPClient.Info[] = []
@@ -309,22 +309,22 @@ export namespace LSP {
         })
       })
 
-      const runForFile = Effect.fnUntraced(function* <T>(file: string, fn: (client: LSPClient.Info) => Promise<T>) {
+      const run = Effect.fnUntraced(function* <T>(file: string, fn: (client: LSPClient.Info) => Promise<T>) {
         const clients = yield* getClients(file)
         return yield* Effect.promise(() => Promise.all(clients.map((x) => fn(x))))
       })
 
-      const runForAll = Effect.fnUntraced(function* <T>(fn: (client: LSPClient.Info) => Promise<T>) {
-        const s = yield* InstanceState.get(cache)
+      const runAll = Effect.fnUntraced(function* <T>(fn: (client: LSPClient.Info) => Promise<T>) {
+        const s = yield* InstanceState.get(state)
         return yield* Effect.promise(() => Promise.all(s.clients.map((x) => fn(x))))
       })
 
       const init = Effect.fn("LSP.init")(function* () {
-        yield* InstanceState.get(cache)
+        yield* InstanceState.get(state)
       })
 
       const status = Effect.fn("LSP.status")(function* () {
-        const s = yield* InstanceState.get(cache)
+        const s = yield* InstanceState.get(state)
         const result: Status[] = []
         for (const client of s.clients) {
           result.push({
@@ -338,7 +338,7 @@ export namespace LSP {
       })
 
       const hasClients = Effect.fn("LSP.hasClients")(function* (file: string) {
-        const s = yield* InstanceState.get(cache)
+        const s = yield* InstanceState.get(state)
         return yield* Effect.promise(async () => {
           const extension = path.parse(file).ext || file
           for (const server of Object.values(s.servers)) {
@@ -370,7 +370,7 @@ export namespace LSP {
 
       const diagnostics = Effect.fn("LSP.diagnostics")(function* () {
         const results: Record<string, LSPClient.Diagnostic[]> = {}
-        const all = yield* runForAll(async (client) => client.diagnostics)
+        const all = yield* runAll(async (client) => client.diagnostics)
         for (const result of all) {
           for (const [p, diags] of result.entries()) {
             const arr = results[p] || []
@@ -382,7 +382,7 @@ export namespace LSP {
       })
 
       const hover = Effect.fn("LSP.hover")(function* (input: LocInput) {
-        return yield* runForFile(input.file, (client) =>
+        return yield* run(input.file, (client) =>
           client.connection
             .sendRequest("textDocument/hover", {
               textDocument: { uri: pathToFileURL(input.file).href },
@@ -393,7 +393,7 @@ export namespace LSP {
       })
 
       const definition = Effect.fn("LSP.definition")(function* (input: LocInput) {
-        const results = yield* runForFile(input.file, (client) =>
+        const results = yield* run(input.file, (client) =>
           client.connection
             .sendRequest("textDocument/definition", {
               textDocument: { uri: pathToFileURL(input.file).href },
@@ -405,7 +405,7 @@ export namespace LSP {
       })
 
       const references = Effect.fn("LSP.references")(function* (input: LocInput) {
-        const results = yield* runForFile(input.file, (client) =>
+        const results = yield* run(input.file, (client) =>
           client.connection
             .sendRequest("textDocument/references", {
               textDocument: { uri: pathToFileURL(input.file).href },
@@ -418,7 +418,7 @@ export namespace LSP {
       })
 
       const implementation = Effect.fn("LSP.implementation")(function* (input: LocInput) {
-        const results = yield* runForFile(input.file, (client) =>
+        const results = yield* run(input.file, (client) =>
           client.connection
             .sendRequest("textDocument/implementation", {
               textDocument: { uri: pathToFileURL(input.file).href },
@@ -431,14 +431,14 @@ export namespace LSP {
 
       const documentSymbol = Effect.fn("LSP.documentSymbol")(function* (uri: string) {
         const file = fileURLToPath(uri)
-        const results = yield* runForFile(file, (client) =>
+        const results = yield* run(file, (client) =>
           client.connection.sendRequest("textDocument/documentSymbol", { textDocument: { uri } }).catch(() => []),
         )
         return (results.flat() as (LSP.DocumentSymbol | LSP.Symbol)[]).filter(Boolean)
       })
 
       const workspaceSymbol = Effect.fn("LSP.workspaceSymbol")(function* (query: string) {
-        const results = yield* runForAll((client) =>
+        const results = yield* runAll((client) =>
           client.connection
             .sendRequest("workspace/symbol", { query })
             .then((result: any) => result.filter((x: LSP.Symbol) => kinds.includes(x.kind)))
@@ -449,7 +449,7 @@ export namespace LSP {
       })
 
       const prepareCallHierarchy = Effect.fn("LSP.prepareCallHierarchy")(function* (input: LocInput) {
-        const results = yield* runForFile(input.file, (client) =>
+        const results = yield* run(input.file, (client) =>
           client.connection
             .sendRequest("textDocument/prepareCallHierarchy", {
               textDocument: { uri: pathToFileURL(input.file).href },
@@ -464,7 +464,7 @@ export namespace LSP {
         input: LocInput,
         direction: "callHierarchy/incomingCalls" | "callHierarchy/outgoingCalls",
       ) {
-        const results = yield* runForFile(input.file, async (client) => {
+        const results = yield* run(input.file, async (client) => {
           const items = (await client.connection
             .sendRequest("textDocument/prepareCallHierarchy", {
               textDocument: { uri: pathToFileURL(input.file).href },
