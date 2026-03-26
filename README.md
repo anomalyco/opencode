@@ -1,141 +1,345 @@
 <p align="center">
-  <a href="https://opencode.ai">
-    <picture>
-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
-    </picture>
-  </a>
-</p>
-<p align="center">The open source AI coding agent.</p>
-<p align="center">
-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
+  <img src="packages/opencode/src/cli/ui/logo.svg" alt="CoBuilder logo" width="200" />
 </p>
 
-<p align="center">
-  <a href="README.md">English</a> |
-  <a href="README.zh.md">简体中文</a> |
-  <a href="README.zht.md">繁體中文</a> |
-  <a href="README.ko.md">한국어</a> |
-  <a href="README.de.md">Deutsch</a> |
-  <a href="README.es.md">Español</a> |
-  <a href="README.fr.md">Français</a> |
-  <a href="README.it.md">Italiano</a> |
-  <a href="README.da.md">Dansk</a> |
-  <a href="README.ja.md">日本語</a> |
-  <a href="README.pl.md">Polski</a> |
-  <a href="README.ru.md">Русский</a> |
-  <a href="README.bs.md">Bosanski</a> |
-  <a href="README.ar.md">العربية</a> |
-  <a href="README.no.md">Norsk</a> |
-  <a href="README.br.md">Português (Brasil)</a> |
-  <a href="README.th.md">ไทย</a> |
-  <a href="README.tr.md">Türkçe</a> |
-  <a href="README.uk.md">Українська</a> |
-  <a href="README.bn.md">বাংলা</a> |
-  <a href="README.gr.md">Ελληνικά</a> |
-  <a href="README.vi.md">Tiếng Việt</a>
-</p>
+<h1 align="center">CoBuilder</h1>
+<p align="center"><strong>The enterprise-grade, open source AI coding agent.</strong></p>
 
-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+<p align="center">
+  <a href="https://github.com/CobuilderLabs/opencode/releases/latest"><img alt="Latest Release" src="https://img.shields.io/github/v/release/CobuilderLabs/opencode?filter=cb-v*&style=flat-square&label=release" /></a>
+  <a href="https://github.com/CobuilderLabs/opencode/actions/workflows/cd.yml"><img alt="CD status" src="https://img.shields.io/github/actions/workflow/status/CobuilderLabs/opencode/cd.yml?style=flat-square&branch=main&label=build" /></a>
+  <a href="https://github.com/CobuilderLabs/opencode/actions/workflows/ci.yml"><img alt="CI status" src="https://img.shields.io/github/actions/workflow/status/CobuilderLabs/opencode/ci.yml?style=flat-square&label=CI" /></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/CobuilderLabs/opencode?style=flat-square" /></a>
+</p>
 
 ---
 
-### Installation
+CoBuilder is a fork of [opencode](https://github.com/anomalyco/opencode) hardened for enterprise and team use. It adds security, cross-session memory, crash recovery, and a multi-provider onboarding flow — while staying fully open source and provider-agnostic.
+
+## Quick Install
 
 ```bash
-# YOLO
-curl -fsSL https://opencode.ai/install | bash
-
-# Package managers
-npm i -g opencode-ai@latest        # or bun/pnpm/yarn
-scoop install opencode             # Windows
-choco install opencode             # Windows
-brew install anomalyco/tap/opencode # macOS and Linux (recommended, always up to date)
-brew install opencode              # macOS and Linux (official brew formula, updated less)
-sudo pacman -S opencode            # Arch Linux (Stable)
-paru -S opencode-bin               # Arch Linux (Latest from AUR)
-mise use -g opencode               # Any OS
-nix run nixpkgs#opencode           # or github:anomalyco/opencode for latest dev branch
+curl -fsSL https://raw.githubusercontent.com/CobuilderLabs/opencode/main/install.sh | bash
 ```
 
-> [!TIP]
-> Remove versions older than 0.1.x before installing.
+That's it. The installer will:
+1. Detect your OS and architecture
+2. Download the pre-built `cobuilder` binary
+3. Install to `~/.local/bin/`
+4. Launch interactive onboarding to connect your first AI provider
 
-### Desktop App (BETA)
+> **Windows**: Run in Git Bash or WSL. PowerShell support coming soon.
 
-OpenCode is also available as a desktop application. Download directly from the [releases page](https://github.com/anomalyco/opencode/releases) or [opencode.ai/download](https://opencode.ai/download).
-
-| Platform              | Download                              |
-| --------------------- | ------------------------------------- |
-| macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
-| macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
-| Windows               | `opencode-desktop-windows-x64.exe`    |
-| Linux                 | `.deb`, `.rpm`, or AppImage           |
+### Custom install path
 
 ```bash
-# macOS (Homebrew)
-brew install --cask opencode-desktop
-# Windows (Scoop)
-scoop bucket add extras; scoop install extras/opencode-desktop
+COBUILDER_INSTALL_DIR=/usr/local/bin curl -fsSL https://raw.githubusercontent.com/CobuilderLabs/opencode/main/install.sh | bash
 ```
-
-#### Installation Directory
-
-The install script respects the following priority order for the installation path:
-
-1. `$OPENCODE_INSTALL_DIR` - Custom installation directory
-2. `$XDG_BIN_DIR` - XDG Base Directory Specification compliant path
-3. `$HOME/bin` - Standard user binary directory (if it exists or can be created)
-4. `$HOME/.opencode/bin` - Default fallback
-
-```bash
-# Examples
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
-```
-
-### Agents
-
-OpenCode includes two built-in agents you can switch between with the `Tab` key.
-
-- **build** - Default, full-access agent for development work
-- **plan** - Read-only agent for analysis and code exploration
-  - Denies file edits by default
-  - Asks permission before running bash commands
-  - Ideal for exploring unfamiliar codebases or planning changes
-
-Also included is a **general** subagent for complex searches and multistep tasks.
-This is used internally and can be invoked using `@general` in messages.
-
-Learn more about [agents](https://opencode.ai/docs/agents).
-
-### Documentation
-
-For more info on how to configure OpenCode, [**head over to our docs**](https://opencode.ai/docs).
-
-### Contributing
-
-If you're interested in contributing to OpenCode, please read our [contributing docs](./CONTRIBUTING.md) before submitting a pull request.
-
-### Building on OpenCode
-
-If you are working on a project that's related to OpenCode and is using "opencode" as part of its name, for example "opencode-dashboard" or "opencode-mobile", please add a note to your README to clarify that it is not built by the OpenCode team and is not affiliated with us in any way.
-
-### FAQ
-
-#### How is this different from Claude Code?
-
-It's very similar to Claude Code in terms of capability. Here are the key differences:
-
-- 100% open source
-- Not coupled to any provider. Although we recommend the models we provide through [OpenCode Zen](https://opencode.ai/zen), OpenCode can be used with Claude, OpenAI, Google, or even local models. As models evolve, the gaps between them will close and pricing will drop, so being provider-agnostic is important.
-- Out-of-the-box LSP support
-- A focus on TUI. OpenCode is built by neovim users and the creators of [terminal.shop](https://terminal.shop); we are going to push the limits of what's possible in the terminal.
-- A client/server architecture. This, for example, can allow OpenCode to run on your computer while you drive it remotely from a mobile app, meaning that the TUI frontend is just one of the possible clients.
 
 ---
 
-**Join our community** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+## Onboarding
+
+After install, `cobuilder onboard` walks you through provider setup interactively:
+
+```
+$ cobuilder onboard
+
+  ╭───────────────────────────────╮
+  │  Welcome to CoBuilder         │
+  ╰───────────────────────────────╯
+
+? Which provider would you like to use?
+  ❯ 9Router   — Local OpenAI-compatible proxy
+    Anthropic — Claude models via API key
+    OpenAI    — GPT models via API key
+    OpenRouter — Many providers via one API key
+    Google    — Gemini models via API key
+```
+
+Run it again at any time to add more providers.
+
+---
+
+## Features
+
+### Core
+
+| Feature | Description |
+|---|---|
+| **Multi-provider** | Anthropic, OpenAI, OpenRouter, Google, or any OpenAI-compatible endpoint (9Router) |
+| **TUI + Web UI** | Terminal-first interface plus optional browser UI (`cobuilder web`) |
+| **LSP integration** | Real-time diagnostics from your language server piped into context |
+| **Client/server** | Run on a remote machine, drive from anywhere (`cobuilder serve`) |
+| **Built-in agents** | `build` (full access) and `plan` (read-only) — switch with `Tab` |
+| **MCP support** | Connect any Model Context Protocol server |
+| **Shell completion** | `cobuilder completion` for bash/zsh/fish |
+
+### Enterprise Additions
+
+| Feature | Description |
+|---|---|
+| **Cross-session memory** | Sessions are summarized and stored in a local FTS5 index. Relevant context is injected automatically at the start of each session. |
+| **Crash recovery** | Auto-dream pattern: if the server exits unexpectedly, `cobuilder` prompts to resume your exact session on next launch. |
+| **SSRF protection** | All provider URLs validated — blocks cloud metadata endpoints, private IP ranges, and localhost (configurable). |
+| **Prompt injection detection** | Scans incoming content for override/jailbreak/exfiltration patterns before processing. |
+| **Path traversal prevention** | All file operations canonicalized and base-escaped paths rejected. |
+| **Rate limiting** | Per-key token-bucket rate limiter available for server mode. |
+| **Audit log** | Append-only SHA-256 chained audit trail of all sensitive actions. |
+| **Security headers** | CSP, HSTS, X-Frame-Options, X-Content-Type-Options on all HTTP responses. |
+
+---
+
+## Supported Providers
+
+| Provider | Type | Notes |
+|---|---|---|
+| **9Router** | OpenAI-compatible proxy | Local, no cloud required. Ideal for enterprise air-gap. |
+| **Anthropic** | API key | Claude 3.5/4 Sonnet, Haiku, Opus |
+| **OpenAI** | API key | GPT-4o, o1, o3 |
+| **OpenRouter** | API key | 200+ models via one key |
+| **Google** | API key | Gemini 2.0, 2.5 |
+| **Custom** | OpenAI-compatible | Any local/private endpoint |
+
+---
+
+## Platform Support
+
+Pre-built binaries ship for every platform:
+
+| Platform | Architecture | Variant |
+|---|---|---|
+| Linux | x64 | glibc / musl |
+| Linux | arm64 | glibc / musl |
+| macOS | arm64 (Apple Silicon) | — |
+| macOS | x64 (Intel) | — |
+| Windows | x64 | — |
+| Windows | arm64 | — |
+| Any | x64 | `baseline` (no AVX2) |
+
+---
+
+## Usage
+
+```bash
+# Start the TUI (default)
+cobuilder
+
+# Resume last session (auto-suggested on crash)
+cobuilder run --session <id>
+
+# Run a single prompt non-interactively
+cobuilder run "refactor this file to use async/await"
+
+# Start the web server
+cobuilder web
+
+# List available models
+cobuilder models
+
+# Manage providers
+cobuilder providers
+
+# Debug session
+cobuilder debug
+
+# Export/import sessions
+cobuilder export
+cobuilder import
+
+# Shell completion
+cobuilder completion >> ~/.bashrc
+```
+
+### Keyboard Shortcuts (TUI)
+
+| Key | Action |
+|---|---|
+| `Tab` | Switch between agents (build / plan) |
+| `Ctrl+C` | Cancel current operation |
+| `Ctrl+L` | Clear screen |
+| `/` | Open command palette |
+| `Esc` | Back / cancel |
+
+---
+
+## Configuration
+
+CoBuilder stores config at `~/.config/opencode/opencode.json`.
+
+```jsonc
+{
+  "model": "anthropic/claude-sonnet-4-5",
+  "provider": {
+    "anthropic": { /* auto-populated by onboard */ }
+  },
+  // Restrict which providers are active
+  "enabled_providers": ["anthropic", "openai"]
+}
+```
+
+### 9Router (local proxy)
+
+```jsonc
+{
+  "model": "9router/my-model",
+  "provider": {
+    "9router": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "9Router",
+      "options": {
+        "baseURL": "http://localhost:20123/v1",
+        "apiKey": "9router"
+      },
+      "models": {
+        "my-model": { "name": "my-model" }
+      }
+    }
+  }
+}
+```
+
+---
+
+## Development
+
+### Prerequisites
+
+- [Bun](https://bun.sh) >= 1.3.11
+- Node.js >= 18 (for some tooling)
+
+### Setup
+
+```bash
+git clone https://github.com/CobuilderLabs/opencode.git
+cd opencode
+bun install
+
+# Run from source (TUI)
+bun run opencode
+
+# Interactive onboarding
+bun run onboard
+
+# Build binaries for current platform
+cd packages/opencode
+bun run build --single
+```
+
+### Project Structure
+
+```
+packages/
+  opencode/      # CLI + server (TypeScript/Bun)
+    src/
+      cli/       # Commands (run, serve, web, onboard, ...)
+      session/   # Session management + checkpoint (crash recovery)
+      memory/    # Cross-session memory (FTS5 store, inject, summarize)
+      security/  # SSRF, path traversal, prompt injection, audit log
+      provider/  # AI provider adapters
+      storage/   # SQLite DB + migrations
+  app/           # Web UI (SolidJS)
+  console/       # Console app
+```
+
+### Running Tests
+
+```bash
+bun test
+```
+
+### Type Check
+
+```bash
+bun run typecheck
+```
+
+---
+
+## CI/CD
+
+CoBuilder uses GitHub Actions with trunk-based development:
+
+| Workflow | Trigger | Jobs |
+|---|---|---|
+| **CI** | Pull request to `main` | Typecheck, Lint, Unit tests, Dependency audit, Secret scan (TruffleHog), SAST (CodeQL) |
+| **CD** | Push to `main` | Auto-version (semver from conventional commits), GitHub Release, Multi-platform binaries |
+| **Upstream sync** | Weekly (Mon 06:00 UTC) | Pulls latest from `anomalyco/opencode` → `dev` branch; opens PR on conflicts |
+
+### Branching
+
+```
+main      ← trunk (protected, squash merges only)
+dev       ← upstream sync buffer (anomalyco/opencode → here first)
+feature/* ← short-lived feature branches (delete after merge)
+```
+
+### Versioning
+
+Releases follow [Conventional Commits](https://www.conventionalcommits.org/) → [Semantic Versioning](https://semver.org/):
+
+| Commit prefix | Version bump |
+|---|---|
+| `feat:` | minor |
+| `fix:`, `chore:`, etc. | patch |
+| `feat!:` or `BREAKING CHANGE` | major |
+
+Release tags use the `cb-v` prefix (`cb-v0.1.0`) to avoid collisions with upstream opencode tags.
+
+---
+
+## Security
+
+CoBuilder follows responsible disclosure. Please report vulnerabilities to **security@cobuilder.dev**.
+
+We commit to acknowledging reports within 48 hours. See [SECURITY.md](SECURITY.md) for the full policy.
+
+### Security architecture
+
+- **SSRF protection** — provider URL validation with blocklist for cloud metadata and private IPs
+- **Prompt injection scanning** — pattern-based detection before processing external content
+- **Path traversal prevention** — canonicalized paths, base-escape detection
+- **Audit log** — SHA-256 chained append-only log
+- **Rate limiting** — token-bucket per-key limiter
+- **Security headers** — CSP, HSTS, X-Frame-Options on all HTTP endpoints
+- **Secret scanning** — TruffleHog runs on every PR (verified secrets only)
+- **SAST** — CodeQL analysis on every PR
+- **Dependency audit** — `bun audit` on every PR
+
+---
+
+## Enterprise Deployment
+
+CoBuilder is designed for teams that need:
+
+- **Air-gap compatibility** — use 9Router as a local proxy; no external calls required
+- **Audit trail** — append-only chained log of all AI actions
+- **Data locality** — sessions, memory, and checkpoints stored locally in SQLite
+- **Provider flexibility** — switch or mix providers without changing workflows
+- **Crash resilience** — auto-dream recovery means no lost sessions
+- **Self-hosted binaries** — build your own from source; no package registry dependency
+
+For enterprise support or custom deployments, open an issue or reach out directly.
+
+---
+
+## Contributing
+
+1. Fork the repo and create a `feature/your-feature` branch
+2. Make your changes with [Conventional Commit](https://www.conventionalcommits.org/) messages
+3. Open a pull request to `main`
+4. CI must pass (typecheck + secret scan + SAST)
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for more detail.
+
+---
+
+## Upstream
+
+CoBuilder is a fork of [anomalyco/opencode](https://github.com/anomalyco/opencode). Upstream improvements are synced weekly to the `dev` branch and merged to `main` after review. CoBuilder is not affiliated with the opencode team.
+
+---
+
+## License
+
+[MIT](LICENSE) — CoBuilder is free and open source.
