@@ -131,7 +131,13 @@ async function setup9Router() {
     existing = await Filesystem.readJson(configPath)
   } catch {}
 
-  const updated = {
+  // If enabled_providers exists, ensure our provider is in the list
+  const existingEnabled: string[] | undefined = existing?.enabled_providers
+  const enabledProviders = existingEnabled
+    ? Array.from(new Set([...existingEnabled, NINEROUTER_ID]))
+    : undefined
+
+  const updated: any = {
     ...existing,
     model: `${NINEROUTER_ID}/${defaultModelId}`,
     provider: {
@@ -144,6 +150,7 @@ async function setup9Router() {
       },
     },
   }
+  if (enabledProviders) updated.enabled_providers = enabledProviders
 
   await Filesystem.writeJson(configPath, updated)
 
