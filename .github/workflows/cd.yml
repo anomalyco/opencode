@@ -137,6 +137,8 @@ jobs:
       - name: Build and upload binaries
         env:
           OPENCODE_RELEASE: "1"
+          OPENCODE_VERSION: ${{ steps.next_version.outputs.semver }}
+          OPENCODE_CHANNEL: latest
           COBUILDER_RELEASE_TAG: ${{ steps.next_version.outputs.tag }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: CobuilderLabs/opencode
