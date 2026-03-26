@@ -296,37 +296,26 @@ function ConnectionError(props: {
   )
 }
 
-function ServerKey(props: ParentProps) {
-  const server = useServer()
-  return (
-    <Show when={server.key} keyed>
-      {props.children}
-    </Show>
-  )
-}
-
 function ServerScopedApp(props: ParentProps<{ disableHealthCheck?: boolean; router?: Component<BaseRouterProps> }>) {
   const server = useServer()
   return (
     <Show when={server.current}>
       <ConnectionGate disableHealthCheck={props.disableHealthCheck}>
-        <ServerKey>
-          <GlobalSDKProvider>
-            <GlobalSyncProvider>
-              <Dynamic
-                component={props.router ?? Router}
-                root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
-              >
-                <Route path="/" component={HomeRoute} />
-                <Route path="/:dir" component={DirectoryLayout}>
-                  <Route path="/" component={SessionIndexRoute} />
-                  <Route path="/session/:id?" component={SessionRoute} />
-                  <Route path="/config" component={ConfigRoute} />
-                </Route>
-              </Dynamic>
-            </GlobalSyncProvider>
-          </GlobalSDKProvider>
-        </ServerKey>
+        <GlobalSDKProvider>
+          <GlobalSyncProvider>
+            <Dynamic
+              component={props.router ?? Router}
+              root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
+            >
+              <Route path="/" component={HomeRoute} />
+              <Route path="/:dir" component={DirectoryLayout}>
+                <Route path="/" component={SessionIndexRoute} />
+                <Route path="/session/:id?" component={SessionRoute} />
+                <Route path="/config" component={ConfigRoute} />
+              </Route>
+            </Dynamic>
+          </GlobalSyncProvider>
+        </GlobalSDKProvider>
       </ConnectionGate>
     </Show>
   )
