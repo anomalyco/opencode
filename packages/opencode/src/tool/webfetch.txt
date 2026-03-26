@@ -11,4 +11,8 @@ Usage notes:
   - Format options: "markdown" (default), "text", or "html"
   - This tool is read-only and does not modify any files
   - Results may be summarized if the content is very large
-  - For web research tasks, prefer delegating to @haiku which runs this tool cost-efficiently
+
+Performance optimizations:
+  - HTML pages are automatically processed with Readability content extraction to remove navigation chrome, sidebars, and footers — focusing on main article content
+  - Responses are cached per session — calling the same URL twice within a session returns cached content with zero additional tokens
+  - For web research tasks, prefer delegating to @haiku which runs this tool cost-efficiently on Haiku model, returning synthesized answers instead of raw content
