@@ -224,6 +224,42 @@ export function resetPennylaneHealthCache() {
 
 export const PluginRoutes = lazy(() =>
   new Hono()
+    .post(
+      "/pennylane/configure",
+      describeRoute({
+        summary: "Configure Pennylane API key",
+        description: "Set the Pennylane API key for the current server process.",
+        operationId: "plugin.pennylane.configure",
+        responses: {
+          200: {
+            description: "Pennylane health status after configuration",
+            content: {
+              "application/json": {
+                schema: resolver(PennylaneHealthSchema),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        const body = await c.req.json<{ apiKey?: string }>()
+        const apiKey = body?.apiKey
+        if (!apiKey || typeof apiKey !== "string") {
+          return c.json(
+            failure({ code: "auth_error", message: "API key is required" }),
+            400,
+          )
+        }
+        process.env.PENNYLANE_API_KEY = apiKey
+        resetPennylaneHealthCache()
+        try {
+          return c.json(await getPennylaneHealth())
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err)
+          return c.json(failure({ code: "spawn_error", message }))
+        }
+      },
+    )
     .get(
       "/pennylane/health",
       describeRoute({
@@ -267,6 +303,150 @@ export const PluginRoutes = lazy(() =>
               message,
             }),
           )
+        }
+      },
+    )
+    .get(
+      "/pennylane/customers",
+      describeRoute({
+        summary: "List Pennylane customers",
+        description: "Fetch customers from the Pennylane API.",
+        operationId: "plugin.pennylane.customers",
+        responses: {
+          200: {
+            description: "List of customers",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    customers: z.array(z.object({
+                      source_id: z.string(),
+                      name: z.string(),
+                      email: z.string().optional(),
+                      phone: z.string().optional(),
+                      reg_no: z.string().optional(),
+                      vat_number: z.string().optional(),
+                      address: z.string().optional(),
+                      city: z.string().optional(),
+                      postal_code: z.string().optional(),
+                      country: z.string().optional(),
+                    })),
+                    total: z.number(),
+                  }),
+                ),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        const apiKey = process.env.PENNYLANE_API_KEY
+        if (!apiKey) {
+          return c.json({ customers: [], total: 0 })
+        }
+        try {
+          const baseUrl = process.env.PENNYLANE_API_BASE_URL || "https://app.pennylane.com/api/external/v1"
+          const all: Array<Record<string, unknown>> = []
+          let page = 1
+          while (true) {
+            const res = await fetch(`${baseUrl}/customers?per_page=100&page=${page}`, {
+              headers: { Authorization: `Bearer ${apiKey}` },
+            })
+            if (!res.ok) break
+            const data = (await res.json()) as { customers: Array<Record<string, unknown>>; total_pages: number }
+            all.push(...data.customers)
+            if (page >= data.total_pages) break
+            page++
+          }
+          return c.json({
+            customers: all.map((c: Record<string, unknown>) => ({
+              source_id: c.source_id ?? "",
+              name: c.name ?? "",
+              email: Array.isArray(c.emails) && c.emails.length > 0 ? c.emails[0] : "",
+              phone: c.phone ?? "",
+              reg_no: c.reg_no ?? "",
+              vat_number: c.vat_number ?? "",
+              address: (c.billing_address as Record<string, string>)?.address ?? "",
+              city: (c.billing_address as Record<string, string>)?.city ?? "",
+              postal_code: (c.billing_address as Record<string, string>)?.postal_code ?? "",
+              country: (c.billing_address as Record<string, string>)?.country_alpha2 ?? "",
+            })),
+            total: all.length,
+          })
+        } catch {
+          return c.json({ customers: [], total: 0 })
+        }
+      },
+    )
+    .get(
+      "/pennylane/suppliers",
+      describeRoute({
+        summary: "List Pennylane suppliers",
+        description: "Fetch suppliers from the Pennylane API.",
+        operationId: "plugin.pennylane.suppliers",
+        responses: {
+          200: {
+            description: "List of suppliers",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    suppliers: z.array(z.object({
+                      source_id: z.string(),
+                      name: z.string(),
+                      email: z.string().optional(),
+                      phone: z.string().optional(),
+                      reg_no: z.string().optional(),
+                      vat_number: z.string().optional(),
+                      address: z.string().optional(),
+                      city: z.string().optional(),
+                      postal_code: z.string().optional(),
+                      country: z.string().optional(),
+                    })),
+                    total: z.number(),
+                  }),
+                ),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        const apiKey = process.env.PENNYLANE_API_KEY
+        if (!apiKey) {
+          return c.json({ suppliers: [], total: 0 })
+        }
+        try {
+          const baseUrl = process.env.PENNYLANE_API_BASE_URL || "https://app.pennylane.com/api/external/v1"
+          const all: Array<Record<string, unknown>> = []
+          let page = 1
+          while (true) {
+            const res = await fetch(`${baseUrl}/suppliers?per_page=100&page=${page}`, {
+              headers: { Authorization: `Bearer ${apiKey}` },
+            })
+            if (!res.ok) break
+            const data = (await res.json()) as { suppliers: Array<Record<string, unknown>>; total_pages: number }
+            all.push(...data.suppliers)
+            if (page >= data.total_pages) break
+            page++
+          }
+          return c.json({
+            suppliers: all.map((s: Record<string, unknown>) => ({
+              source_id: s.source_id ?? "",
+              name: s.name ?? "",
+              email: Array.isArray(s.emails) && s.emails.length > 0 ? s.emails[0] : "",
+              phone: s.phone ?? "",
+              reg_no: s.reg_no ?? "",
+              vat_number: s.vat_number ?? "",
+              address: (s.billing_address as Record<string, string>)?.address ?? "",
+              city: (s.billing_address as Record<string, string>)?.city ?? "",
+              postal_code: (s.billing_address as Record<string, string>)?.postal_code ?? "",
+              country: (s.billing_address as Record<string, string>)?.country_alpha2 ?? "",
+            })),
+            total: all.length,
+          })
+        } catch {
+          return c.json({ suppliers: [], total: 0 })
         }
       },
     ),

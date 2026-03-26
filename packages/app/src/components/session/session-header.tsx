@@ -8,7 +8,6 @@ import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
-import { useSDK } from "@/context/sdk"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { getFilename } from "@opencode-ai/util/path"
 import { decode64 } from "@/utils/base64"
@@ -24,8 +23,10 @@ import { Popover } from "@opencode-ai/ui/popover"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { Keybind } from "@opencode-ai/ui/keybind"
 import { showToast } from "@opencode-ai/ui/toast"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { StatusPopover } from "../status-popover"
 import { IntegrationsPopover } from "../integrations-popover"
+import { DialogSettings } from "../dialog-settings"
 
 type PennylaneHealth = {
   healthy: boolean
@@ -36,7 +37,7 @@ type PennylaneHealth = {
 
 export function SessionHeader() {
   const globalSDK = useGlobalSDK()
-  const sdk = useSDK()
+  const dialog = useDialog()
   const layout = useLayout()
   const params = useParams()
   const command = useCommand()
@@ -49,7 +50,7 @@ export function SessionHeader() {
 
   const refreshPennylane = async () => {
     try {
-      const result = await sdk.client.plugin.pennylane.health()
+      const result = await globalSDK.client.plugin.pennylane.health()
       setPennylaneHealth(result.data ?? undefined)
     } catch {
       setPennylaneHealth(undefined)
@@ -356,6 +357,7 @@ export function SessionHeader() {
                 pennylaneHealth={pennylaneHealth}
                 pennylaneHealthy={pennylaneHealthy}
                 pennylaneConfigured={pennylaneConfigured}
+                onOpenSettings={() => dialog.show(() => <DialogSettings defaultTab="integrations" />)}
               />
               {/* <StatusPopover /> */}
               {/* <Show when={projectDirectory()}>
@@ -542,6 +544,7 @@ export function SessionHeader() {
                   </Show>
                 </div>
               </Show>
+              {/* Terminal toggle hidden
               <div class="hidden md:flex items-center gap-3 ml-2 shrink-0">
                 <TooltipKeybind
                   title={language.t("command.terminal.toggle")}
@@ -574,7 +577,7 @@ export function SessionHeader() {
                     </div>
                   </Button>
                 </TooltipKeybind>
-              </div>
+              </div> */}
               <div class="hidden md:block shrink-0">
                 <TooltipKeybind title={language.t("command.review.toggle")} keybind={command.keybind("review.toggle")}>
                   <Button

@@ -9,14 +9,15 @@ import { SettingsKeybinds } from "./settings-keybinds"
 import { SettingsPricing } from "./settings-pricing"
 import { SettingsProviders } from "./settings-providers"
 import { SettingsModels } from "./settings-models"
+import { SettingsIntegrations } from "./settings-integrations"
 
-export const DialogSettings: Component = () => {
+export const DialogSettings: Component<{ defaultTab?: string }> = (props) => {
   const language = useLanguage()
   const platform = usePlatform()
 
   return (
     <Dialog size="x-large" transition>
-      <Tabs orientation="vertical" variant="settings" defaultValue="general" class="h-full settings-dialog">
+      <Tabs orientation="vertical" variant="settings" defaultValue={props.defaultTab ?? "general"} class="h-full settings-dialog">
         <Tabs.List>
           <div class="flex flex-col justify-between h-full w-full">
             <div class="flex flex-col gap-3 w-full pt-3">
@@ -52,6 +53,16 @@ export const DialogSettings: Component = () => {
                     </Tabs.Trigger>
                   </div>
                 </div>
+
+                <div class="flex flex-col gap-1.5">
+                  <Tabs.SectionTitle>Integrations</Tabs.SectionTitle>
+                  <div class="flex flex-col gap-1.5 w-full">
+                    <Tabs.Trigger value="integrations">
+                      <Icon name="circle-check" />
+                      Integrations
+                    </Tabs.Trigger>
+                  </div>
+                </div>
               </div>
             </div>
             <div class="flex flex-col gap-1 pl-1 py-1 text-12-medium text-text-weak">
@@ -74,6 +85,9 @@ export const DialogSettings: Component = () => {
         </Tabs.Content>
         <Tabs.Content value="models" class="no-scrollbar">
           <SettingsModels />
+        </Tabs.Content>
+        <Tabs.Content value="integrations" class="no-scrollbar">
+          <SettingsIntegrations />
         </Tabs.Content>
         {/* <Tabs.Content value="agents" class="no-scrollbar"> */}
         {/*   <SettingsAgents /> */}
