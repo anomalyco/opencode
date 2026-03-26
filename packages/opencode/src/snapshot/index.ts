@@ -60,24 +60,28 @@ export namespace Snapshot {
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Snapshot") {}
 
-  export const layer: Layer.Layer<Service, never, AppFileSystem.Service | ChildProcessSpawner.ChildProcessSpawner> =
-    Layer.effect(
-      Service,
-      Effect.gen(function* () {
-        const fs = yield* AppFileSystem.Service
-        const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
-        const locks = new Map<string, Semaphore.Semaphore>()
+  export const layer: Layer.Layer<
+    Service,
+    never,
+    AppFileSystem.Service | ChildProcessSpawner.ChildProcessSpawner | Config.Service
+  > = Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      const fs = yield* AppFileSystem.Service
+      const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+      const config = yield* Config.Service
+      const locks = new Map<string, Semaphore.Semaphore>()
 
-        const lock = (key: string) => {
-          const hit = locks.get(key)
-          if (hit) return hit
+      const lock = (key: string) => {
+        const hit = locks.get(key)
+        if (hit) return hit
 
-          const next = Semaphore.makeUnsafe(1)
-          locks.set(key, next)
-          return next
-        }
+        const next = Semaphore.makeUnsafe(1)
+        locks.set(key, next)
+        return next
+      }
 
-        const state = yield* InstanceState.make<State>(
+      const state = yield* InstanceState.make<State>(
           Effect.fn("Snapshot.state")(function* (ctx) {
             const state = {
               directory: ctx.directory,
@@ -123,7 +127,7 @@ export namespace Snapshot {
 
             const enabled = Effect.fnUntraced(function* () {
               if (state.vcs !== "git") return false
-              return (yield* Effect.promise(() => Config.get())).snapshot !== false
+              return (yield* config.get()).snapshot !== false
             })
 
             const excludes = Effect.fnUntraced(function* () {
@@ -423,40 +427,39 @@ export namespace Snapshot {
           }),
         )
 
-        return Service.of({
-          init: Effect.fn("Snapshot.init")(function* () {
-            yield* InstanceState.get(state)
-          }),
-          cleanup: Effect.fn("Snapshot.cleanup")(function* () {
-            return yield* InstanceState.useEffect(state, (s) => s.cleanup())
-          }),
-          track: Effect.fn("Snapshot.track")(function* () {
-            return yield* InstanceState.useEffect(state, (s) => s.track())
-          }),
-          patch: Effect.fn("Snapshot.patch")(function* (hash: string) {
-            return yield* InstanceState.useEffect(state, (s) => s.patch(hash))
-          }),
-          restore: Effect.fn("Snapshot.restore")(function* (snapshot: string) {
-            return yield* InstanceState.useEffect(state, (s) => s.restore(snapshot))
-          }),
-          revert: Effect.fn("Snapshot.revert")(function* (patches: Snapshot.Patch[]) {
-            return yield* InstanceState.useEffect(state, (s) => s.revert(patches))
-          }),
-          diff: Effect.fn("Snapshot.diff")(function* (hash: string) {
-            return yield* InstanceState.useEffect(state, (s) => s.diff(hash))
-          }),
-          diffFull: Effect.fn("Snapshot.diffFull")(function* (from: string, to: string) {
-            return yield* InstanceState.useEffect(state, (s) => s.diffFull(from, to))
-          }),
-        })
-      }),
-    )
+      return Service.of({
+        init: Effect.fn("Snapshot.init")(function* () {
+          yield* InstanceState.get(state)
+        }),
+        cleanup: Effect.fn("Snapshot.cleanup")(function* () {
+          return yield* InstanceState.useEffect(state, (s) => s.cleanup())
+        }),
+        track: Effect.fn("Snapshot.track")(function* () {
+          return yield* InstanceState.useEffect(state, (s) => s.track())
+        }),
+        patch: Effect.fn("Snapshot.patch")(function* (hash: string) {
+          return yield* InstanceState.useEffect(state, (s) => s.patch(hash))
+        }),
+        restore: Effect.fn("Snapshot.restore")(function* (snapshot: string) {
+          return yield* InstanceState.useEffect(state, (s) => s.restore(snapshot))
+        }),
+        revert: Effect.fn("Snapshot.revert")(function* (patches: Snapshot.Patch[]) {
+          return yield* InstanceState.useEffect(state, (s) => s.revert(patches))
+        }),
+        diff: Effect.fn("Snapshot.diff")(function* (hash: string) {
+          return yield* InstanceState.useEffect(state, (s) => s.diff(hash))
+        }),
+        diffFull: Effect.fn("Snapshot.diffFull")(function* (from: string, to: string) {
+          return yield* InstanceState.useEffect(state, (s) => s.diffFull(from, to))
+        }),
+      })
+    }),
+  )
 
   export const defaultLayer = layer.pipe(
-    Layer.provide(CrossSpawnSpawner.layer),
+    Layer.provide(CrossSpawnSpawner.defaultLayer),
     Layer.provide(AppFileSystem.defaultLayer),
-    Layer.provide(NodeFileSystem.layer), // needed by CrossSpawnSpawner
-    Layer.provide(NodePath.layer),
+    Layer.provide(Config.defaultLayer),
   )
 
   const { runPromise } = makeRuntime(Service, defaultLayer)

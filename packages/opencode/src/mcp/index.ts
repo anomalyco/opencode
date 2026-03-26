@@ -29,8 +29,6 @@ import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
-import { NodeFileSystem } from "@effect/platform-node"
-import * as NodePath from "@effect/platform-node/NodePath"
 
 export namespace MCP {
   const log = Log.create({ service: "mcp" })
@@ -437,6 +435,7 @@ export namespace MCP {
         log.info("create() successfully created client", { key, toolCount: listed.length })
         return { mcpClient, status, defs: listed } satisfies CreateResult
       })
+      const cfgSvc = yield* Config.Service
 
       const descendants = Effect.fnUntraced(
         function* (pid: number) {
@@ -478,11 +477,11 @@ export namespace MCP {
         })
       }
 
-      const getConfig = () => Effect.promise(() => Config.get())
 
       const cache = yield* InstanceState.make<State>(
         Effect.fn("MCP.state")(function* () {
-          const cfg = yield* getConfig()
+
+          const cfg = yield* cfgSvc.get()
           const config = cfg.mcp ?? {}
           const s: State = {
             status: {},
@@ -553,7 +552,8 @@ export namespace MCP {
 
       const status = Effect.fn("MCP.status")(function* () {
         const s = yield* InstanceState.get(cache)
-        const cfg = yield* getConfig()
+
+        const cfg = yield* cfgSvc.get()
         const config = cfg.mcp ?? {}
         const result: Record<string, Status> = {}
 
@@ -613,7 +613,8 @@ export namespace MCP {
       const tools = Effect.fn("MCP.tools")(function* () {
         const result: Record<string, Tool> = {}
         const s = yield* InstanceState.get(cache)
-        const cfg = yield* getConfig()
+
+        const cfg = yield* cfgSvc.get()
         const config = cfg.mcp ?? {}
         const defaultTimeout = cfg.experimental?.mcp_timeout
 
@@ -705,7 +706,8 @@ export namespace MCP {
       })
 
       const getMcpConfig = Effect.fnUntraced(function* (mcpName: string) {
-        const cfg = yield* getConfig()
+
+        const cfg = yield* cfgSvc.get()
         const mcpConfig = cfg.mcp?.[mcpName]
         if (!mcpConfig || !isMcpConfigured(mcpConfig)) return undefined
         return mcpConfig
@@ -876,13 +878,12 @@ export namespace MCP {
 
   // --- Per-service runtime ---
 
-  const defaultLayer = layer.pipe(
+  export const defaultLayer = layer.pipe(
     Layer.provide(McpAuth.layer),
     Layer.provide(Bus.layer),
-    Layer.provide(CrossSpawnSpawner.layer),
+    Layer.provide(Config.defaultLayer),
+    Layer.provide(CrossSpawnSpawner.defaultLayer),
     Layer.provide(AppFileSystem.defaultLayer),
-    Layer.provide(NodeFileSystem.layer),
-    Layer.provide(NodePath.layer),
   )
 
   const { runPromise } = makeRuntime(Service, defaultLayer)

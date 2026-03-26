@@ -40,7 +40,7 @@ import { Lock } from "@/util/lock"
 import { AppFileSystem } from "@/filesystem"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
-import { Duration, Effect, Layer, ServiceMap } from "effect"
+import { Duration, Effect, Layer, Option, ServiceMap } from "effect"
 
 export namespace Config {
   const ModelId = z.string().meta({ $ref: "https://models.dev/model-schema.json#/$defs/Model" })
@@ -1136,10 +1136,12 @@ export namespace Config {
     }),
   )
 
-  export const layer: Layer.Layer<Service, never, AppFileSystem.Service> = Layer.effect(
+  export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Auth.Service | Account.Service> = Layer.effect(
     Service,
     Effect.gen(function* () {
       const fs = yield* AppFileSystem.Service
+      const authSvc = yield* Auth.Service
+      const accountSvc = yield* Account.Service
 
       const readConfigFile = Effect.fnUntraced(function* (filepath: string) {
         return yield* fs.readFileString(filepath).pipe(
@@ -1256,7 +1258,7 @@ export namespace Config {
       })
 
       const loadInstanceState = Effect.fnUntraced(function* (ctx: InstanceContext) {
-        const auth = yield* Effect.promise(() => Auth.all())
+        const auth = yield* authSvc.all().pipe(Effect.orDie)
 
         let result: Info = {}
         for (const [key, value] of Object.entries(auth)) {
@@ -1344,17 +1346,20 @@ export namespace Config {
           log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
         }
 
-        const active = yield* Effect.promise(() => Account.active())
+        const active = Option.getOrUndefined(yield* accountSvc.active().pipe(Effect.orDie))
         if (active?.active_org_id) {
           yield* Effect.gen(function* () {
-            const [config, token] = yield* Effect.promise(() =>
-              Promise.all([Account.config(active.id, active.active_org_id!), Account.token(active.id)]),
+            const [configOpt, tokenOpt] = yield* Effect.all(
+              [accountSvc.config(active.id, active.active_org_id!), accountSvc.token(active.id)],
+              { concurrency: 2 },
             )
+            const token = Option.getOrUndefined(tokenOpt)
             if (token) {
               process.env["OPENCODE_CONSOLE_TOKEN"] = token
               Env.set("OPENCODE_CONSOLE_TOKEN", token)
             }
 
+            const config = Option.getOrUndefined(configOpt)
             if (config) {
               result = mergeConfigConcatArrays(
                 result,
@@ -1365,7 +1370,7 @@ export namespace Config {
               )
             }
           }).pipe(
-            Effect.catchDefect((err) => {
+            Effect.catch((err) => {
               log.debug("failed to fetch remote account config", {
                 error: err instanceof Error ? err.message : String(err),
               })
@@ -1502,7 +1507,11 @@ export namespace Config {
     }),
   )
 
-  export const defaultLayer = layer.pipe(Layer.provide(AppFileSystem.defaultLayer))
+  export const defaultLayer = layer.pipe(
+    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(Auth.layer),
+    Layer.provide(Account.defaultLayer),
+  )
 
   const { runPromise } = makeRuntime(Service, defaultLayer)
 
