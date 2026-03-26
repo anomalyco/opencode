@@ -187,8 +187,9 @@ export class KiroLanguageModel implements LanguageModelV2 {
     const payload = convertToKiroPayload(options.prompt, kiroModelId, functionTools, kiroProviderOptions)
 
     // Pre-flight context overflow check — let the compaction system handle it
-    const KIRO_CONTEXT_LIMIT = 210_000
-    const KIRO_PAYLOAD_BYTE_LIMIT = 450_000
+    const is1M = kiroModelId.includes("4.6")
+    const KIRO_CONTEXT_LIMIT = is1M ? 1_050_000 : 210_000
+    const KIRO_PAYLOAD_BYTE_LIMIT = is1M ? 2_250_000 : 450_000
     const estimated = estimatePayloadTokens(payload)
     const payloadBytes = Buffer.byteLength(JSON.stringify(payload), "utf-8")
     const historyLen = payload.conversationState.history?.length ?? 0
@@ -262,7 +263,20 @@ export class KiroLanguageModel implements LanguageModelV2 {
       const errorText = await response.text()
       const fs = await import("fs")
       const debugPayloadBytes = Buffer.byteLength(JSON.stringify(payload), "utf-8")
-      fs.writeFileSync("/tmp/kiro-payload-error.json", JSON.stringify({ status: response.status, statusText: response.statusText, errorText, payloadBytes: debugPayloadBytes, payload }, null, 2))
+      fs.writeFileSync(
+        "/tmp/kiro-payload-error.json",
+        JSON.stringify(
+          {
+            status: response.status,
+            statusText: response.statusText,
+            errorText,
+            payloadBytes: debugPayloadBytes,
+            payload,
+          },
+          null,
+          2,
+        ),
+      )
       const { APICallError } = await import("ai")
       throw new APICallError({
         message: `${response.status} ${response.statusText}`,
