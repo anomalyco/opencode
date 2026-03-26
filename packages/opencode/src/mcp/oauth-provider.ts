@@ -58,6 +58,8 @@ export class McpOAuthProvider implements OAuthClientProvider {
     // Check stored client info (from dynamic registration)
     // Use getForUrl to validate credentials are for the current server URL
     const entry = await McpAuth.getForUrl(this.mcpName, this.serverUrl)
+    console.log("CLIENT INFO LOOKUP:", this.mcpName, this.serverUrl)
+    console.log("ENTRY:", JSON.stringify(entry, null, 2))
     if (entry?.clientInfo) {
       // Check if client secret has expired
       if (entry.clientInfo.clientSecretExpiresAt && entry.clientInfo.clientSecretExpiresAt < Date.now() / 1000) {
@@ -127,16 +129,26 @@ export class McpOAuthProvider implements OAuthClientProvider {
   }
 
   async saveCodeVerifier(codeVerifier: string): Promise<void> {
-    await McpAuth.updateCodeVerifier(this.mcpName, codeVerifier)
+    // Use get() not getForUrl() — we want existing data regardless of URL
+    const existing = await McpAuth.get(this.mcpName)
+    if (existing?.codeVerifier) return
+    await McpAuth.set(this.mcpName, {
+      ...existing,
+      serverUrl: this.serverUrl,
+      codeVerifier,
+    })
   }
 
   async codeVerifier(): Promise<string> {
-    const entry = await McpAuth.get(this.mcpName)
-    if (!entry?.codeVerifier) {
-      throw new Error(`No code verifier saved for MCP server: ${this.mcpName}`)
-    }
-    return entry.codeVerifier
+  // Use get() not getForUrl() — verifier saved before URL was stored
+  const entry = await McpAuth.get(this.mcpName)
+  
+  if (!entry?.codeVerifier) {
+    throw new Error(`No code verifier found for ${this.mcpName}`)
   }
+  
+  return entry.codeVerifier
+}
 
   async saveState(state: string): Promise<void> {
     await McpAuth.updateOAuthState(this.mcpName, state)
@@ -180,6 +192,62 @@ export class McpOAuthProvider implements OAuthClientProvider {
         break
     }
   }
+}
+
+/**
+ * Normalized fetch that handles non-standard OAuth error responses.
+ * Some servers (e.g. Datadog) return {"errors": [...]} instead of
+ * the RFC 6749 standard {"error": "...", "error_description": "..."}.
+ * This normalizes those responses before the MCP SDK parses them.
+ */
+export async function normalizedOAuthFetch(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<Response> {
+
+  
+  const response = await fetch(input, init)
+
+  
+
+  if (!response.ok) {
+    const body = await response.text()
+
+    try {
+      const json = JSON.parse(body)
+
+      if (!json.error && Array.isArray(json.errors)) {
+        const firstError: string = json.errors[0] ?? ""
+        
+        // Extract OAuth error code from "error_code - description" format
+        // e.g. "invalid_grant - Invalid authorization code" → "invalid_grant"
+        const dashIndex = firstError.indexOf(" - ")
+        const errorCode = dashIndex > 0 
+          ? firstError.substring(0, dashIndex).trim()
+          : "invalid_request"
+      
+        const normalized = {
+          error: errorCode,
+          error_description: json.errors.join(", "),
+        }
+      
+        return new Response(JSON.stringify(normalized), {
+          status: response.status,
+          headers: response.headers,
+        })
+      }
+    } catch {
+      // not JSON → passthrough
+    }
+
+
+    return new Response(body, {
+      status: response.status,
+      headers: response.headers,
+    })
+  }
+
+  return response
 }
 
 export { OAUTH_CALLBACK_PORT, OAUTH_CALLBACK_PATH }

@@ -17,7 +17,7 @@ import { Instance } from "../project/instance"
 import { Installation } from "../installation"
 import { withTimeout } from "@/util/timeout"
 import { AppFileSystem } from "@/filesystem"
-import { McpOAuthProvider } from "./oauth-provider"
+import { McpOAuthProvider,normalizedOAuthFetch } from "./oauth-provider"
 import { McpOAuthCallback } from "./oauth-callback"
 import { McpAuth } from "./auth"
 import { BusEvent } from "../bus/bus-event"
@@ -231,6 +231,7 @@ export namespace MCP {
           name: "StreamableHTTP",
           transport: new StreamableHTTPClientTransport(new URL(mcp.url), {
             authProvider,
+            fetch: normalizedOAuthFetch,
             requestInit: mcp.headers ? { headers: mcp.headers } : undefined,
           }),
         },
@@ -238,6 +239,7 @@ export namespace MCP {
           name: "SSE",
           transport: new SSEClientTransport(new URL(mcp.url), {
             authProvider,
+            fetch: normalizedOAuthFetch,
             requestInit: mcp.headers ? { headers: mcp.headers } : undefined,
           }),
         },
@@ -284,6 +286,11 @@ export namespace MCP {
               }).catch((e) => log.debug("failed to show toast", { error: e }))
             } else {
               // Store transport for later finishAuth call
+              if (pendingOAuthTransports.has(key)) {
+                log.info("oauth flow already in progress, skipping", { key })
+                status = { status: "needs_auth" as const }
+                break
+              }
               pendingOAuthTransports.set(key, transport)
               status = { status: "needs_auth" as const }
               // Show toast for needs_auth
