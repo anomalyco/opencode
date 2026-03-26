@@ -19,6 +19,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const diff = createMemo(() => sync.data.session_diff[props.sessionID] ?? [])
   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
+  const weave = createMemo(() => sync.session.weave(props.sessionID))
 
   const [expanded, setExpanded] = createStore({
     mcp: true,
@@ -106,6 +107,17 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
               <text fg={theme.textMuted}>{context()?.percentage ?? 0}% used</text>
               <text fg={theme.textMuted}>{cost()} spent</text>
             </box>
+            <Show when={weave()}>
+              <box>
+                <text fg={theme.text}>
+                  <b>Weave</b>
+                </text>
+                <text fg={theme.textMuted}>Snapshots: {weave()!.snapshots.length}</text>
+                <text fg={theme.textMuted}>Summaries: {weave()!.summaryNodes.length}</text>
+                <text fg={theme.textMuted}>Episodes: {weave()!.episodes.length}</text>
+                <text fg={theme.textMuted}>Dispatches: {weave()!.dispatches.length}</text>
+              </box>
+            </Show>
             <Show when={mcpEntries().length > 0}>
               <box>
                 <box

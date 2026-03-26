@@ -17,6 +17,15 @@ export function Footer() {
     if (route.data.type !== "session") return []
     return sync.data.permission[route.data.sessionID] ?? []
   })
+  const weave = createMemo(() => {
+    if (route.data.type !== "session") return undefined
+    return sync.session.weave(route.data.sessionID)
+  })
+  const weaveSummary = createMemo(() => {
+    const state = weave()
+    if (!state) return undefined
+    return `W:${state.snapshots.length}/${state.summaryNodes.length}/${state.episodes.length}/${state.dispatches.length}`
+  })
   const directory = useDirectory()
   const connected = useConnected()
 
@@ -64,6 +73,11 @@ export function Footer() {
               <text fg={theme.warning}>
                 <span style={{ fg: theme.warning }}>△</span> {permissions().length} Permission
                 {permissions().length > 1 ? "s" : ""}
+              </text>
+            </Show>
+            <Show when={weaveSummary()}>
+              <text fg={theme.text}>
+                <span style={{ fg: theme.success }}>◉</span> {weaveSummary()}
               </text>
             </Show>
             <text fg={theme.text}>

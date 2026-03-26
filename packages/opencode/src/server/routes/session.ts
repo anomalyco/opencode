@@ -184,6 +184,7 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
+        await Session.get(sessionID)
         const state = await WeaveDB.read(sessionID)
         return c.json(state)
       },

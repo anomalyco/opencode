@@ -501,6 +501,25 @@ export function Session() {
       },
     },
     {
+      title: "Refresh Weave state",
+      value: "session.weave.refresh",
+      category: "Session",
+      onSelect: async (dialog) => {
+        await sync.session
+          .refreshWeave(route.sessionID)
+          .then(() => {
+            toast.show({ message: "Weave state refreshed", variant: "success" })
+          })
+          .catch((error) => {
+            toast.show({
+              message: error instanceof Error ? error.message : "Failed to refresh Weave state",
+              variant: "error",
+            })
+          })
+        dialog.clear()
+      },
+    },
+    {
       title: "Undo previous message",
       value: "session.undo",
       keybind: "messages_undo",

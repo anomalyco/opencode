@@ -41,11 +41,23 @@ const WorkspaceInfo = (props: { workspace: Accessor<string | undefined> }) => {
   )
 }
 
+const WeaveInfo = (props: { summary: Accessor<string | undefined> }) => {
+  const { theme } = useTheme()
+  return (
+    <Show when={props.summary()}>
+      <text fg={theme.textMuted} wrapMode="none" flexShrink={0}>
+        {props.summary()}
+      </text>
+    </Show>
+  )
+}
+
 export function Header() {
   const route = useRouteData("session")
   const sync = useSync()
   const session = createMemo(() => sync.session.get(route.sessionID)!)
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
+  const weave = createMemo(() => sync.session.weave(route.sessionID))
 
   const cost = createMemo(() => {
     const total = pipe(
@@ -77,6 +89,11 @@ export function Header() {
     const info = sync.workspace.get(id)
     if (!info) return `Workspace ${id}`
     return `Workspace ${id} (${info.type})`
+  })
+  const weaveSummary = createMemo(() => {
+    const state = weave()
+    if (!state) return undefined
+    return `Weave S:${state.snapshots.length} N:${state.summaryNodes.length} E:${state.episodes.length} D:${state.dispatches.length}`
   })
 
   const { theme } = useTheme()
@@ -116,7 +133,10 @@ export function Header() {
                   </text>
                 )}
 
-                <ContextInfo context={context} cost={cost} />
+                <box flexDirection="column" alignItems={narrow() ? "flex-start" : "flex-end"}>
+                  <ContextInfo context={context} cost={cost} />
+                  <WeaveInfo summary={weaveSummary} />
+                </box>
               </box>
               <box flexDirection="row" gap={2}>
                 <box
@@ -162,7 +182,10 @@ export function Header() {
               ) : (
                 <Title session={session} />
               )}
-              <ContextInfo context={context} cost={cost} />
+              <box flexDirection="column" alignItems={narrow() ? "flex-start" : "flex-end"}>
+                <ContextInfo context={context} cost={cost} />
+                <WeaveInfo summary={weaveSummary} />
+              </box>
             </box>
           </Match>
         </Switch>

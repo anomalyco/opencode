@@ -30,6 +30,17 @@ import { Log } from "@/util/log"
 import type { Path } from "@opencode-ai/sdk"
 import type { Workspace } from "@opencode-ai/sdk/v2"
 
+type WeaveState = {
+  sessionID: string
+  version: number
+  snapshots: unknown[]
+  summaryNodes: unknown[]
+  episodes: unknown[]
+  dispatches: unknown[]
+  messageLinks: unknown[]
+  updatedAt: number
+}
+
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
   init: () => {
@@ -54,6 +65,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       }
       session_diff: {
         [sessionID: string]: Snapshot.FileDiff[]
+      }
+      weave: {
+        [sessionID: string]: WeaveState
       }
       todo: {
         [sessionID: string]: Todo[]
@@ -93,6 +107,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       session: [],
       session_status: {},
       session_diff: {},
+      weave: {},
       todo: {},
       message: {},
       part: {},
@@ -106,6 +121,26 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     })
 
     const sdk = useSDK()
+    const weaveRefreshInFlight = new Set<string>()
+
+    async function refreshWeave(sessionID: string) {
+      if (weaveRefreshInFlight.has(sessionID)) return
+      const weaveMethod = (sdk.client.session as any).weave as
+        | ((args: { sessionID: string }) => Promise<{ data?: WeaveState }>)
+        | undefined
+      if (!weaveMethod) return
+
+      weaveRefreshInFlight.add(sessionID)
+      try {
+        const weave = await weaveMethod({ sessionID })
+        if (!weave?.data) return
+        setStore("weave", sessionID, reconcile(weave.data))
+      } catch {
+        // Weave endpoint is additive; keep TUI functional if unavailable.
+      } finally {
+        weaveRefreshInFlight.delete(sessionID)
+      }
+    }
 
     async function syncWorkspaces() {
       const result = await sdk.client.experimental.workspace.list().catch(() => undefined)
@@ -212,6 +247,12 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               }),
             )
           }
+          setStore(
+            "weave",
+            produce((draft) => {
+              delete draft[event.properties.info.id]
+            }),
+          )
           break
         }
         case "session.updated": {
@@ -271,6 +312,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               )
             })
           }
+          void refreshWeave(event.properties.info.sessionID)
           break
         }
         case "message.removed": {
@@ -481,14 +523,21 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               if (match.found) draft.session[match.index] = session.data!
               if (!match.found) draft.session.splice(match.index, 0, session.data!)
               draft.todo[sessionID] = todo.data ?? []
-              draft.message[sessionID] = messages.data!.map((x) => x.info)
+              draft.message[sessionID] = messages.data!.map((message) => message.info)
               for (const message of messages.data!) {
                 draft.part[message.info.id] = message.parts
               }
               draft.session_diff[sessionID] = diff.data ?? []
             }),
           )
+          await refreshWeave(sessionID)
           fullSyncedSessions.add(sessionID)
+        },
+        async refreshWeave(sessionID: string) {
+          await refreshWeave(sessionID)
+        },
+        weave(sessionID: string) {
+          return store.weave[sessionID]
         },
       },
       workspace: {
