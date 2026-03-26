@@ -140,3 +140,22 @@ describe("step-finish token propagation via Bus event", () => {
     { timeout: 30000 },
   )
 })
+
+describe("session archive state", () => {
+  test("can clear archived time with null", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const session = await Session.create({})
+
+        await Session.setArchived({ sessionID: session.id, time: Date.now() })
+        expect((await Session.get(session.id)).time.archived).toBeDefined()
+
+        await Session.setArchived({ sessionID: session.id, time: null as never })
+        expect((await Session.get(session.id)).time.archived).toBeUndefined()
+
+        await Session.remove(session.id)
+      },
+    })
+  })
+})

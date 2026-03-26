@@ -33,6 +33,7 @@ import { parseCommentNote, readCommentMetadata } from "@/utils/comment-note"
 import { Virtualizer, type VirtualizerHandle } from "virtua/solid"
 import { messageAgentColor } from "@/utils/agent"
 import { makeTimer } from "@solid-primitives/timer"
+import { active, working } from "./session-working"
 
 type MessageComment = {
   path: string
@@ -267,22 +268,18 @@ export function MessageTimeline(props: {
     if (!id) return emptyMessages
     return sync.data.message[id] ?? emptyMessages
   })
-  const pending = createMemo(() =>
-    sessionMessages().findLast(
-      (item): item is AssistantMessage => item.role === "assistant" && typeof item.time.completed !== "number",
-    ),
-  )
+  const pendingMessage = createMemo(() => active(sessionMessages()))
   const sessionStatus = createMemo(() => {
     const id = sessionID()
     if (!id) return idle
     return sync.data.session_status[id] ?? idle
   })
-  const working = createMemo(() => !!pending() || sessionStatus().type !== "idle")
+  const isWorking = createMemo(() => working(sessionStatus(), sessionMessages()))
   const shouldVirtualize = createMemo(() =>
     virtualize({
       desktop: platform.platform === "desktop",
       count: rendered().length,
-      working: working(),
+      working: isWorking(),
     }),
   )
   createEffect(() => props.onVirtualizedChange?.(shouldVirtualize()))
@@ -291,7 +288,7 @@ export function MessageTimeline(props: {
   const [timeoutDone, setTimeoutDone] = createSignal(true)
 
   const workingStatus = createMemo<"hidden" | "showing" | "hiding">((prev) => {
-    if (working()) return "showing"
+    if (isWorking()) return "showing"
     if (prev === "showing" || !timeoutDone()) return "hiding"
     return "hidden"
   })
@@ -304,7 +301,7 @@ export function MessageTimeline(props: {
   })
 
   const activeMessageID = createMemo(() => {
-    const parentID = pending()?.parentID
+    const parentID = pendingMessage()?.parentID
     if (parentID) {
       const messages = sessionMessages()
       const result = Binary.search(messages, parentID, (message) => message.id)
@@ -696,8 +693,8 @@ export function MessageTimeline(props: {
                       <div
                         class="shrink-0 flex items-center justify-center overflow-hidden transition-[width,margin] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
                         style={{
-                          width: working() ? "16px" : "0px",
-                          "margin-right": working() ? "8px" : "0px",
+                          width: isWorking() ? "16px" : "0px",
+                          "margin-right": isWorking() ? "8px" : "0px",
                         }}
                         aria-hidden="true"
                       >

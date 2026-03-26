@@ -2094,8 +2094,12 @@ export default function Layout(props: ParentProps) {
         const [, setChild] = globalSync.child(session.directory)
         setChild(
           produce((draft) => {
-            draft.session.push(session)
-            draft.session.sort((a, b) => b.time.updated - a.time.updated)
+            const match = Binary.search(draft.session, session.id, (s) => s.id)
+            if (match.found) {
+              draft.session[match.index] = session
+              return
+            }
+            draft.session.splice(match.index, 0, session)
           }),
         )
         remove(session.id)

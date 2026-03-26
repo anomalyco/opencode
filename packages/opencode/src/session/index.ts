@@ -395,7 +395,7 @@ export namespace Session {
   export const setArchived = fn(
     z.object({
       sessionID: SessionID.zod,
-      time: z.number().optional(),
+      time: z.number().nullable().optional(),
     }),
     async (input) => {
       SyncEvent.run(Event.Updated, { sessionID: input.sessionID, info: { time: { archived: input.time } } })
