@@ -17,13 +17,7 @@ import { type LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { NewSessionItem, SessionItem, SessionGroupHeader, SessionSearchBar, SessionSkeleton } from "./sidebar-items"
-import {
-  childMapByParent,
-  sessionGroupBoundaries,
-  sortedRootSessions,
-  type SessionGroupKey,
-  workspaceKey,
-} from "./helpers"
+import { sessionGroupBoundaries, sortedRootSessions, type SessionGroupKey, workspaceKey } from "./helpers"
 
 type InlineEditorComponent = (props: {
   id: string
@@ -258,7 +252,6 @@ const WorkspaceSessionList = (props: {
   showNew: Accessor<boolean>
   loading: Accessor<boolean>
   sessions: Accessor<Session[]>
-  children: Accessor<Map<string, string[]>>
   hasMore: Accessor<boolean>
   loadMore: () => Promise<void>
   language: ReturnType<typeof useLanguage>
@@ -295,10 +288,8 @@ const WorkspaceSessionList = (props: {
                 slug={props.slug()}
                 mobile={props.mobile}
                 popover={props.popover}
-                children={props.children()}
                 sidebarExpanded={props.ctx.sidebarExpanded}
                 sidebarHovering={props.ctx.sidebarHovering}
-                nav={props.ctx.nav}
                 hoverSession={props.ctx.hoverSession}
                 setHoverSession={props.ctx.setHoverSession}
                 clearHoverProjectSoon={props.ctx.clearHoverProjectSoon}
@@ -348,7 +339,6 @@ export const SortableWorkspace = (props: {
   })
   const slug = createMemo(() => base64Encode(props.directory))
   const sessions = createMemo(() => sortedRootSessions(workspaceStore, props.sortNow()))
-  const children = createMemo(() => childMapByParent(workspaceStore.session))
   const local = createMemo(() => props.directory === props.project.worktree)
   const active = createMemo(() => workspaceKey(props.ctx.currentDir()) === workspaceKey(props.directory))
   const workspaceValue = createMemo(() => {
@@ -471,7 +461,6 @@ export const SortableWorkspace = (props: {
             showNew={showNew}
             loading={loading}
             sessions={sessions}
-            children={children}
             hasMore={hasMore}
             loadMore={loadMore}
             language={language}
@@ -504,7 +493,6 @@ export const LocalWorkspace = (props: {
     if (!query) return allSessions()
     return allSessions().filter((s) => s.title?.toLowerCase().includes(query))
   })
-  const children = createMemo(() => childMapByParent(workspace().store.session))
   const booted = createMemo((prev) => prev || workspace().store.status === "complete", false)
   const loading = createMemo(() => !booted() && allSessions().length === 0)
   const hasMore = createMemo(() => !searchQuery() && workspace().store.sessionTotal > allSessions().length)
@@ -533,7 +521,6 @@ export const LocalWorkspace = (props: {
         showNew={() => false}
         loading={loading}
         sessions={sessions}
-        children={children}
         hasMore={hasMore}
         loadMore={loadMore}
         language={language}

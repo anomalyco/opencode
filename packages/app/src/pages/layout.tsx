@@ -53,7 +53,6 @@ import { usePermission } from "@/context/permission"
 import { Binary } from "@opencode-ai/util/binary"
 import { retry } from "@opencode-ai/util/retry"
 import { playSoundById } from "@/utils/sound"
-import { createAim } from "@/utils/aim"
 import { setNavigate } from "@/utils/notification-click"
 import { Worktree as WorktreeState } from "@/utils/worktree"
 import { setSessionHandoff } from "@/pages/session/handoff"
@@ -179,13 +178,10 @@ export default function Layout(props: ParentProps) {
     autoselect: !initialDirectory,
     busyWorkspaces: {} as Record<string, boolean>,
     hoverSession: undefined as string | undefined,
-    hoverProject: undefined as string | undefined,
     scrollSessionKey: undefined as string | undefined,
     nav: undefined as HTMLElement | undefined,
     sortNow: Date.now(),
     sizing: false,
-    peek: undefined as string | undefined,
-    peeked: false,
   })
 
   const [findbar, setFindbar] = createStore({
@@ -250,7 +246,6 @@ export default function Layout(props: ParentProps) {
     )
   }
   const isBusy = (directory: string) => !!state.busyWorkspaces[workspaceKey(directory)]
-  const navLeave = { current: undefined as number | undefined }
   const sortNow = () => state.sortNow
   let sizet: number | undefined
   let sortNowInterval: ReturnType<typeof setInterval> | undefined
@@ -262,26 +257,12 @@ export default function Layout(props: ParentProps) {
     60_000 - (Date.now() % 60_000),
   )
 
-  const aim = createAim({
-    enabled: () => !layout.sidebar.opened(),
-    active: () => state.hoverProject,
-    el: () => state.nav?.querySelector<HTMLElement>("[data-component='sidebar-rail']") ?? state.nav,
-    onActivate: (directory) => {
-      globalSync.child(directory)
-      setState("hoverProject", directory)
-      setState("hoverSession", undefined)
-    },
-  })
-
   onCleanup(() => {
     dialogDead = true
     dialogRun += 1
-    if (navLeave.current !== undefined) clearTimeout(navLeave.current)
     clearTimeout(sortNowTimeout)
     if (sortNowInterval) clearInterval(sortNowInterval)
     if (sizet !== undefined) clearTimeout(sizet)
-    if (peekt !== undefined) clearTimeout(peekt)
-    aim.reset()
   })
 
   onMount(() => {
@@ -305,80 +286,18 @@ export default function Layout(props: ParentProps) {
     })
   })
 
-  const sidebarHovering = createMemo(() => !layout.sidebar.opened() && state.hoverProject !== undefined)
-  const sidebarExpanded = createMemo(() => layout.sidebar.opened() || sidebarHovering())
-  const setHoverProject = (value: string | undefined) => {
-    setState("hoverProject", value)
-    if (value !== undefined) {
-      globalSync.child(value)
-      return
-    }
-    aim.reset()
-  }
-  const clearHoverProjectSoon = () => queueMicrotask(() => setHoverProject(undefined))
+  const sidebarHovering = createMemo(() => false)
+  const sidebarExpanded = createMemo(() => layout.sidebar.opened())
+  const clearHoverProjectSoon = () => undefined
   const setHoverSession = (id: string | undefined) => setState("hoverSession", id)
 
-  const disarm = () => {
-    if (navLeave.current === undefined) return
-    clearTimeout(navLeave.current)
-    navLeave.current = undefined
-  }
-
   const reset = () => {
-    disarm()
     setState("hoverSession", undefined)
-    setHoverProject(undefined)
   }
-
-  const arm = () => {
-    if (layout.sidebar.opened()) return
-    if (state.hoverProject === undefined) return
-    disarm()
-    navLeave.current = window.setTimeout(() => {
-      navLeave.current = undefined
-      setHoverProject(undefined)
-      setState("hoverSession", undefined)
-    }, 300)
-  }
-
-  let peekt: number | undefined
-
-  const hoverProjectData = createMemo(() => {
-    const id = state.hoverProject
-    if (!id) return
-    return layout.projects.list().find((project) => project.worktree === id)
-  })
-
-  const peekProject = createMemo(() => {
-    const id = state.peek
-    if (!id) return
-    return layout.projects.list().find((project) => project.worktree === id)
-  })
-
-  createEffect(() => {
-    const p = hoverProjectData()
-    if (p) {
-      if (peekt !== undefined) {
-        clearTimeout(peekt)
-        peekt = undefined
-      }
-      setState("peek", p.worktree)
-      setState("peeked", true)
-      return
-    }
-
-    setState("peeked", false)
-    if (state.peek === undefined) return
-    if (peekt !== undefined) clearTimeout(peekt)
-    peekt = window.setTimeout(() => {
-      peekt = undefined
-      setState("peek", undefined)
-    }, 180)
-  })
 
   createEffect(() => {
     if (!layout.sidebar.opened()) return
-    setHoverProject(undefined)
+    setState("hoverSession", undefined)
   })
 
   createEffect(() => {
@@ -2394,7 +2313,6 @@ export default function Layout(props: ParentProps) {
   function handleDragStart(event: unknown) {
     const id = getDraggableId(event)
     if (!id) return
-    setHoverProject(undefined)
     setStore("activeProject", id)
   }
 
@@ -2436,9 +2354,6 @@ export default function Layout(props: ParentProps) {
   }
 
   const sidebarProject = createMemo(() => {
-    if (layout.sidebar.opened()) return currentProject()
-    const hovered = hoverProjectData()
-    if (hovered) return hovered
     return currentProject()
   })
 
@@ -2548,38 +2463,13 @@ export default function Layout(props: ParentProps) {
 
   const projectSidebarCtx: ProjectSidebarContext = {
     currentDir,
-    currentProject,
-    sidebarOpened: () => layout.sidebar.opened(),
     sidebarHovering,
-    hoverProject: () => state.hoverProject,
-    nav: () => state.nav,
-    onProjectMouseEnter: (worktree, event) => aim.enter(worktree, event),
-    onProjectMouseLeave: (worktree) => aim.leave(worktree),
-    onProjectFocus: (worktree) => aim.activate(worktree),
-    onHoverOpenChanged: (worktree, hoverOpen) => {
-      if (!hoverOpen && state.hoverProject && state.hoverProject !== worktree) return
-      setState("hoverProject", hoverOpen ? worktree : undefined)
-    },
     navigateToProject,
-    openSidebar: () => layout.sidebar.open(),
     closeProject,
     showEditProjectDialog,
     toggleProjectWorkspaces,
     workspacesEnabled: (project) => project.vcs === "git" && layout.sidebar.workspaces(project.worktree)(),
     workspaceIds,
-    workspaceLabel,
-    sessionProps: {
-      navList: currentSessions,
-      sidebarExpanded,
-      sidebarHovering,
-      nav: () => state.nav,
-      hoverSession: () => state.hoverSession,
-      setHoverSession,
-      clearHoverProjectSoon,
-      prefetchSession,
-      archiveSession,
-    },
-    setHoverSession,
   }
 
   const SidebarPanel = (panelProps: {
@@ -2924,11 +2814,8 @@ export default function Layout(props: ParentProps) {
     <SidebarContent
       mobile={mobile}
       opened={() => layout.sidebar.opened()}
-      aimMove={aim.move}
       projects={projects}
-      renderProject={(project) => (
-        <SortableProject ctx={projectSidebarCtx} project={project} sortNow={sortNow} mobile={mobile} />
-      )}
+      renderProject={(project) => <SortableProject ctx={projectSidebarCtx} project={project} mobile={mobile} />}
       handleDragStart={handleDragStart}
       handleDragEnd={handleDragEnd}
       handleDragOver={handleDragOver}
@@ -2981,15 +2868,6 @@ export default function Layout(props: ParentProps) {
               style={{ width: `${side()}px` }}
               ref={(el) => {
                 setState("nav", el)
-              }}
-              onMouseEnter={() => {
-                disarm()
-              }}
-              onMouseLeave={() => {
-                aim.reset()
-                if (!sidebarHovering()) return
-
-                arm()
               }}
             >
               <div class="@container w-full h-full contain-strict">{sidebarContent()}</div>
@@ -3114,44 +2992,6 @@ export default function Layout(props: ParentProps) {
                   {props.children}
                 </Show>
               </main>
-            </div>
-
-            <div
-              classList={{
-                "hidden xl:flex absolute inset-y-0 left-16 z-30": true,
-                "opacity-100 translate-x-0 pointer-events-auto": state.peeked && !layout.sidebar.opened(),
-                "opacity-0 -translate-x-2 pointer-events-none": !state.peeked || layout.sidebar.opened(),
-                "transition-[opacity,transform] motion-reduce:transition-none": true,
-                "duration-180 ease-out": state.peeked && !layout.sidebar.opened(),
-                "duration-120 ease-in": !state.peeked || layout.sidebar.opened(),
-              }}
-              onMouseMove={disarm}
-              onMouseEnter={() => {
-                disarm()
-                aim.reset()
-              }}
-              onPointerDown={disarm}
-              onMouseLeave={() => {
-                arm()
-              }}
-            >
-              <Show when={peekProject()}>
-                <SidebarPanel project={peekProject} merged={false} />
-              </Show>
-            </div>
-
-            <div
-              classList={{
-                "hidden xl:block pointer-events-none absolute inset-y-0 right-0 z-25 overflow-hidden": true,
-                "opacity-100 translate-x-0": state.peeked && !layout.sidebar.opened(),
-                "opacity-0 -translate-x-2": !state.peeked || layout.sidebar.opened(),
-                "transition-[opacity,transform] motion-reduce:transition-none": true,
-                "duration-180 ease-out": state.peeked && !layout.sidebar.opened(),
-                "duration-120 ease-in": !state.peeked || layout.sidebar.opened(),
-              }}
-              style={{ left: `calc(4rem + ${panel()}px)` }}
-            >
-              <div class="h-full w-px" style={{ "box-shadow": "var(--shadow-sidebar-overlay)" }} />
             </div>
           </div>
         </div>

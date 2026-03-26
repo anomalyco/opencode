@@ -75,10 +75,8 @@ export type SessionItemProps = {
   mobile?: boolean
   dense?: boolean
   popover?: boolean
-  children: Map<string, string[]>
   sidebarExpanded: Accessor<boolean>
   sidebarHovering: Accessor<boolean>
-  nav: Accessor<HTMLElement | undefined>
   hoverSession: Accessor<string | undefined>
   setHoverSession: (id: string | undefined) => void
   clearHoverProjectSoon: () => void
@@ -155,7 +153,6 @@ const SessionRow = (props: {
 
 const SessionHoverPreview = (props: {
   mobile?: boolean
-  nav: Accessor<HTMLElement | undefined>
   hoverSession: Accessor<string | undefined>
   session: Session
   sidebarHovering: Accessor<boolean>
@@ -249,12 +246,13 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
     return messageAgentColor(sessionStore.message[props.session.id], sessionStore.agent)
   })
 
-  const hoverMessages = createMemo(() =>
-    sessionStore.message[props.session.id]?.filter((message): message is UserMessage => message.role === "user"),
-  )
-  const hoverReady = createMemo(() => hoverMessages() !== undefined)
   const hoverAllowed = createMemo(() => !props.mobile && props.sidebarExpanded())
   const hoverEnabled = createMemo(() => (props.popover ?? true) && hoverAllowed())
+  const hoverMessages = createMemo(() => {
+    if (!hoverEnabled()) return undefined
+    return sessionStore.message[props.session.id]?.filter((message): message is UserMessage => message.role === "user")
+  })
+  const hoverReady = createMemo(() => hoverMessages() !== undefined)
 
   const warm = (span: number, priority: "high" | "low") => {
     const nav = props.navList?.()
@@ -315,10 +313,16 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
       setHoverSession={props.setHoverSession}
       clearHoverProjectSoon={props.clearHoverProjectSoon}
       sidebarOpened={layout.sidebar.opened}
-      warmHover={scheduleHoverPrefetch}
+      warmHover={() => {
+        if (!hoverEnabled()) return
+        scheduleHoverPrefetch()
+      }}
       warmPress={() => warm(2, "high")}
       warmFocus={() => warm(2, "high")}
-      cancelHoverPrefetch={cancelHoverPrefetch}
+      cancelHoverPrefetch={() => {
+        if (!hoverEnabled()) return
+        cancelHoverPrefetch()
+      }}
     />
   )
 
@@ -353,7 +357,6 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
         >
           <SessionHoverPreview
             mobile={props.mobile}
-            nav={props.nav}
             hoverSession={props.hoverSession}
             session={props.session}
             sidebarHovering={props.sidebarHovering}

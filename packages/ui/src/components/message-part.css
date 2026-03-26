@@ -75,7 +75,7 @@
     align-items: center;
     justify-content: center;
     min-width: 0;
-    border-radius: 6px;
+    border-radius: 8px;
     overflow: hidden;
     background: var(--surface-weak);
     border: 1px solid var(--border-weak-base);
