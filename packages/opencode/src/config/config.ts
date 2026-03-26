@@ -39,7 +39,7 @@ import { Process } from "@/util/process"
 import { Lock } from "@/util/lock"
 import { AppFileSystem } from "@/filesystem"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRunPromise } from "@/effect/run-service"
+import { makeRuntime } from "@/effect/run-service"
 import { Effect, Layer, ServiceMap } from "effect"
 
 export namespace Config {
@@ -1505,7 +1505,7 @@ export namespace Config {
 
   export const defaultLayer = layer.pipe(Layer.provide(AppFileSystem.defaultLayer))
 
-  const runPromise = makeRunPromise(Service, defaultLayer)
+  const { runPromise } = makeRuntime(Service, defaultLayer)
 
   export async function get() {
     return runPromise((svc) => svc.get())
