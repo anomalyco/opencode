@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test"
-import { createTextFragment, getCursorPosition, getNodeLength, getTextLength, setCursorPosition } from "./editor-dom"
+import {
+  createTextFragment,
+  getCursorPosition,
+  getNodeLength,
+  getTextLength,
+  serialize,
+  setCursorPosition,
+} from "./editor-dom"
 
 describe("prompt-input editor dom", () => {
   test("createTextFragment preserves newlines with consecutive br nodes", () => {
@@ -95,5 +102,19 @@ describe("prompt-input editor dom", () => {
     expect(getCursorPosition(container)).toBe(3)
 
     container.remove()
+  })
+
+  test("serialize keeps blank lines as newlines", () => {
+    const container = document.createElement("div")
+    container.appendChild(document.createTextNode("saffs"))
+    container.appendChild(document.createElement("br"))
+    container.appendChild(document.createElement("br"))
+    container.appendChild(document.createTextNode("```"))
+    container.appendChild(document.createElement("br"))
+    container.appendChild(document.createTextNode("sadf"))
+    container.appendChild(document.createElement("br"))
+    container.appendChild(document.createTextNode("```"))
+
+    expect(serialize(container)).toBe("saffs\n\n```\nsadf\n```")
   })
 })
