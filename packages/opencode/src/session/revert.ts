@@ -29,7 +29,7 @@ export namespace SessionRevert {
     let revert: Session.Info["revert"]
     const patches: Snapshot.Patch[] = []
     for (const msg of all) {
-      if (msg.info.role === "user") lastUser = msg.info
+      if (MessageV2.isRealUserMessage(msg)) lastUser = msg.info
       const remaining = []
       for (const part of msg.parts) {
         if (revert) {

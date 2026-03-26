@@ -307,10 +307,9 @@ export namespace SessionPrompt {
       let tasks: (MessageV2.CompactionPart | MessageV2.SubtaskPart)[] = []
       for (let i = msgs.length - 1; i >= 0; i--) {
         const msg = msgs[i]
-        if (!lastUser && msg.info.role === "user") lastUser = msg.info as MessageV2.User
+        if (!lastUser && MessageV2.isRealUserMessage(msg)) lastUser = msg.info as MessageV2.User
         if (!lastAssistant && msg.info.role === "assistant") lastAssistant = msg.info as MessageV2.Assistant
-        if (!lastFinished && msg.info.role === "assistant" && msg.info.finish)
-          lastFinished = msg.info as MessageV2.Assistant
+        if (!lastFinished && msg.info.role === "assistant" && msg.info.finish) lastFinished = msg.info as MessageV2.Assistant
         if (lastUser && lastFinished) break
         const task = msg.parts.filter((part) => part.type === "compaction" || part.type === "subtask")
         if (task && !lastFinished) {
@@ -621,7 +620,7 @@ export namespace SessionPrompt {
       using _ = defer(() => InstructionPrompt.clear(processor.message.id))
 
       // Check if user explicitly invoked an agent via @ in this turn
-      const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
+      const lastUserMsg = msgs.findLast((m) => MessageV2.isRealUserMessage(m))
       const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
 
       const tools = await resolveTools({
@@ -654,7 +653,7 @@ export namespace SessionPrompt {
       // Ephemerally wrap queued user messages with a reminder to stay on track
       if (step > 1 && lastFinished) {
         for (const msg of msgs) {
-          if (msg.info.role !== "user" || msg.info.id <= lastFinished.id) continue
+          if (!MessageV2.isRealUserMessage(msg) || msg.info.id <= lastFinished.id) continue
           for (const part of msg.parts) {
             if (part.type !== "text" || part.ignored || part.synthetic) continue
             if (!part.text.trim()) continue
@@ -757,7 +756,7 @@ export namespace SessionPrompt {
 
   async function lastModel(sessionID: SessionID) {
     for await (const item of MessageV2.stream(sessionID)) {
-      if (item.info.role === "user" && item.info.model) return item.info.model
+      if (MessageV2.isRealUserMessage(item) && item.info.model) return item.info.model
     }
     return Provider.defaultModel()
   }
@@ -1387,7 +1386,7 @@ export namespace SessionPrompt {
   }
 
   async function insertReminders(input: { messages: MessageV2.WithParts[]; agent: Agent.Info; session: Session.Info }) {
-    const userMessage = input.messages.findLast((msg) => msg.info.role === "user")
+    const userMessage = input.messages.findLast((msg) => MessageV2.isRealUserMessage(msg))
     if (!userMessage) return input.messages
 
     // Original logic when experimental plan mode is disabled
@@ -1982,14 +1981,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     if (!Session.isDefaultTitle(input.session.title)) return
 
     // Find first non-synthetic user message
-    const firstRealUserIdx = input.history.findIndex(
-      (m) => m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic),
-    )
+    const firstRealUserIdx = input.history.findIndex((m) => MessageV2.isRealUserMessage(m))
     if (firstRealUserIdx === -1) return
 
     const isFirst =
-      input.history.filter((m) => m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic))
-        .length === 1
+      input.history.filter((m) => MessageV2.isRealUserMessage(m)).length === 1
     if (!isFirst) return
 
     // Gather all messages up to and including the first real user message for context

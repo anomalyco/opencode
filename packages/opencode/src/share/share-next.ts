@@ -258,7 +258,7 @@ export namespace ShareNext {
       Array.from(
         new Map(
           messages
-            .filter((m) => m.info.role === "user")
+            .filter((m) => MessageV2.isRealUserMessage(m))
             .map((m) => (m.info as SDK.UserMessage).model)
             .map((m) => [`${m.providerID}/${m.modelID}`, m] as const),
         ).values(),

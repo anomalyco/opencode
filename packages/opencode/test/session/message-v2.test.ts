@@ -108,6 +108,52 @@ function basePart(messageID: string, id: string) {
 }
 
 describe("session.message-v2.toModelMessage", () => {
+  test("detects real user messages", () => {
+    const realUser: MessageV2.WithParts = {
+      info: userInfo("m-real"),
+      parts: [
+        {
+          ...basePart("m-real", "p-real"),
+          type: "text",
+          text: "hello",
+        } as MessageV2.Part,
+      ],
+    }
+
+    const syntheticUser: MessageV2.WithParts = {
+      info: userInfo("m-synth"),
+      parts: [
+        {
+          ...basePart("m-synth", "p-synth"),
+          type: "text",
+          text: "synthetic",
+          synthetic: true,
+        } as MessageV2.Part,
+      ],
+    }
+
+    const emptyUser: MessageV2.WithParts = {
+      info: userInfo("m-empty"),
+      parts: [],
+    }
+
+    const assistant: MessageV2.WithParts = {
+      info: assistantInfo("m-assistant", "m-real"),
+      parts: [
+        {
+          ...basePart("m-assistant", "p-assistant"),
+          type: "text",
+          text: "assistant",
+        } as MessageV2.Part,
+      ],
+    }
+
+    expect(MessageV2.isRealUserMessage(realUser)).toBe(true)
+    expect(MessageV2.isRealUserMessage(syntheticUser)).toBe(false)
+    expect(MessageV2.isRealUserMessage(emptyUser)).toBe(false)
+    expect(MessageV2.isRealUserMessage(assistant)).toBe(false)
+  })
+
   test("filters out messages with no parts", () => {
     const input: MessageV2.WithParts[] = [
       {

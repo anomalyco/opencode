@@ -27,6 +27,17 @@ export namespace MessageV2 {
     return mime.startsWith("image/") || mime === "application/pdf"
   }
 
+  export function isRealUserMessage(msg: MessageV2.WithParts): msg is MessageV2.WithParts & { info: MessageV2.User }
+  export function isRealUserMessage<T extends { info: { role: string }; parts: readonly unknown[] }>(
+    msg: T,
+  ): msg is T & { info: T["info"] & { role: "user" } }
+  export function isRealUserMessage(msg: { info: { role: string }; parts: readonly unknown[] }) {
+    return (
+      msg.info.role === "user" &&
+      !msg.parts.every((part) => typeof part === "object" && part !== null && "synthetic" in part && part.synthetic)
+    )
+  }
+
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
   export const AbortedError = NamedError.create("MessageAbortedError", z.object({ message: z.string() }))
   export const StructuredOutputError = NamedError.create(

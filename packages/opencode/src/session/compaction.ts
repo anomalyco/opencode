@@ -73,7 +73,7 @@ export namespace SessionCompaction {
 
     loop: for (let msgIndex = msgs.length - 1; msgIndex >= 0; msgIndex--) {
       const msg = msgs[msgIndex]
-      if (msg.info.role === "user") turns++
+      if (MessageV2.isRealUserMessage(msg)) turns++
       if (turns < 2) continue
       if (msg.info.role === "assistant" && msg.info.summary) break loop
       for (let partIndex = msg.parts.length - 1; partIndex >= 0; partIndex--) {
@@ -120,14 +120,14 @@ export namespace SessionCompaction {
       const idx = input.messages.findIndex((m) => m.info.id === input.parentID)
       for (let i = idx - 1; i >= 0; i--) {
         const msg = input.messages[i]
-        if (msg.info.role === "user" && !msg.parts.some((p) => p.type === "compaction")) {
+        if (MessageV2.isRealUserMessage(msg) && !msg.parts.some((p) => p.type === "compaction")) {
           replay = msg
           messages = input.messages.slice(0, i)
           break
         }
       }
       const hasContent =
-        replay && messages.some((m) => m.info.role === "user" && !m.parts.some((p) => p.type === "compaction"))
+        replay && messages.some((m) => MessageV2.isRealUserMessage(m) && !m.parts.some((p) => p.type === "compaction"))
       if (!hasContent) {
         replay = undefined
         messages = input.messages

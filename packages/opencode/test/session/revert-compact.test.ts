@@ -283,4 +283,70 @@ describe("revert + compact workflow", () => {
       },
     })
   })
+
+  test("uses latest real user for revert anchor when synthetic message is selected", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const sessionID = session.id
+
+        const userMsg = await Session.updateMessage({
+          id: MessageID.ascending(),
+          role: "user",
+          sessionID,
+          agent: "default",
+          model: {
+            providerID: ProviderID.make("openai"),
+            modelID: ModelID.make("gpt-4"),
+          },
+          time: {
+            created: Date.now(),
+          },
+        })
+
+        await Session.updatePart({
+          id: PartID.ascending(),
+          messageID: userMsg.id,
+          sessionID,
+          type: "text",
+          text: "hello",
+        })
+
+        const synthetic = await Session.updateMessage({
+          id: MessageID.ascending(),
+          role: "user",
+          sessionID,
+          agent: "default",
+          model: {
+            providerID: ProviderID.make("openai"),
+            modelID: ModelID.make("gpt-4"),
+          },
+          time: {
+            created: Date.now(),
+          },
+        })
+
+        await Session.updatePart({
+          id: PartID.ascending(),
+          messageID: synthetic.id,
+          sessionID,
+          type: "text",
+          text: "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed.",
+          synthetic: true,
+        })
+
+        await SessionRevert.revert({
+          sessionID,
+          messageID: synthetic.id,
+        })
+
+        const sessionInfo = await Session.get(sessionID)
+        expect(sessionInfo.revert?.messageID).toBe(userMsg.id)
+
+        await Session.remove(sessionID)
+      },
+    })
+  })
 })
