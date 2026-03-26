@@ -294,6 +294,7 @@ export namespace SessionPrompt {
     let structuredOutput: unknown | undefined
 
     let step = 0
+    let naming = Promise.resolve()
     const session = await Session.get(sessionID)
     while (true) {
       await SessionStatus.set(sessionID, { type: "busy" })
@@ -330,11 +331,15 @@ export namespace SessionPrompt {
 
       step++
       if (step === 1)
-        ensureTitle({
+        naming = ensureTitle({
           session,
+          abort,
           modelID: lastUser.model.modelID,
           providerID: lastUser.model.providerID,
           history: msgs,
+        }).catch((err) => {
+          if (err instanceof DOMException && err.name === "AbortError") return
+          log.error("failed to ensure title", { error: err, sessionID })
         })
 
       const model = await Provider.getModel(lastUser.model.providerID, lastUser.model.modelID).catch((e) => {
@@ -743,6 +748,7 @@ export namespace SessionPrompt {
       }
       continue
     }
+    await naming
     SessionCompaction.prune({ sessionID })
     for await (const item of MessageV2.stream(sessionID)) {
       if (item.info.role === "user") continue
@@ -1975,6 +1981,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
   async function ensureTitle(input: {
     session: Session.Info
     history: MessageV2.WithParts[]
+    abort: AbortSignal
     providerID: ProviderID
     modelID: ModelID
   }) {
@@ -2017,7 +2024,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       small: true,
       tools: {},
       model,
-      abort: new AbortController().signal,
+      abort: input.abort,
       sessionID: input.session.id,
       retries: 2,
       messages: [

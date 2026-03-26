@@ -12,6 +12,74 @@ import { tmpdir } from "../fixture/fixture"
 
 Log.init({ print: false })
 
+function stream(chunks: unknown[]) {
+  const payload = [...chunks.map((chunk) => `data: ${JSON.stringify(chunk)}`), "data: [DONE]"].join("\n\n") + "\n\n"
+  const encoder = new TextEncoder()
+  return new ReadableStream<Uint8Array>({
+    start(ctrl) {
+      ctrl.enqueue(encoder.encode(payload))
+      ctrl.close()
+    },
+  })
+}
+
+function response(model: string, text: string) {
+  return new Response(
+    stream([
+      {
+        type: "response.created",
+        response: {
+          id: `${model}-response`,
+          created_at: Math.floor(Date.now() / 1000),
+          model,
+          service_tier: null,
+        },
+      },
+      {
+        type: "response.output_item.added",
+        output_index: 0,
+        item: {
+          type: "message",
+          id: `${model}-item`,
+        },
+      },
+      {
+        type: "response.output_text.delta",
+        item_id: `${model}-item`,
+        output_index: 0,
+        content_index: 0,
+        delta: text,
+        logprobs: null,
+      },
+      {
+        type: "response.output_item.done",
+        output_index: 0,
+        item: {
+          type: "message",
+          id: `${model}-item`,
+        },
+      },
+      {
+        type: "response.completed",
+        response: {
+          incomplete_details: null,
+          usage: {
+            input_tokens: 1,
+            input_tokens_details: null,
+            output_tokens: 1,
+            output_tokens_details: null,
+          },
+          service_tier: null,
+        },
+      },
+    ]),
+    {
+      status: 200,
+      headers: { "Content-Type": "text/event-stream" },
+    },
+  )
+}
+
 describe("session.prompt missing file", () => {
   test("does not fail the prompt when a file part is missing", async () => {
     await using tmp = await tmpdir({
@@ -284,5 +352,78 @@ describe("session.agent-resolution", () => {
         }
       },
     })
+  }, 30000)
+})
+
+describe("session title generation", () => {
+  test("waits for the title before returning", async () => {
+    const seen: string[] = []
+    const server = Bun.serve({
+      port: 0,
+      async fetch(req) {
+        const body = (await req.json()) as { model?: string }
+        const model = String(body.model)
+        seen.push(model)
+
+        if (model === "gpt-5-mini") {
+          await Bun.sleep(200)
+          return response(model, "Debugging session titles")
+        }
+
+        if (model === "gpt-5.2") {
+          return response(model, "OK")
+        }
+
+        return new Response(`unexpected model: ${model}`, { status: 500 })
+      },
+    })
+
+    try {
+      await using tmp = await tmpdir({
+        git: true,
+        config: {
+          enabled_providers: ["openai"],
+          agent: {
+            build: {
+              model: "openai/gpt-5.2",
+            },
+            title: {
+              model: "openai/gpt-5-mini",
+            },
+          },
+          provider: {
+            openai: {
+              options: {
+                apiKey: "test-key",
+                baseURL: `${server.url.origin}/v1`,
+              },
+            },
+          },
+        },
+      })
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const session = await Session.create({})
+          const msg = await SessionPrompt.prompt({
+            sessionID: session.id,
+            agent: "build",
+            parts: [{ type: "text", text: "Help debug session titles" }],
+          })
+
+          expect(msg.info.role).toBe("assistant")
+          expect(seen).toContain("gpt-5.2")
+          expect(seen).toContain("gpt-5-mini")
+
+          const info = await Session.get(session.id)
+          expect(Session.isDefaultTitle(info.title)).toBe(false)
+          expect(info.title).toBe("Debugging session titles")
+        },
+      })
+    } finally {
+      await Bun.sleep(250)
+      server.stop(true)
+    }
   }, 30000)
 })
