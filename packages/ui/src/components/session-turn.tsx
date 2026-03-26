@@ -234,7 +234,7 @@ export function SessionTurn(
 
   const diffs = createMemo(() => {
     const files = message()?.summary?.diffs
-    if (!files?.length) return emptyDiffs
+    if (!Array.isArray(files) || !files.length) return emptyDiffs
 
     const seen = new Set<string>()
     return files

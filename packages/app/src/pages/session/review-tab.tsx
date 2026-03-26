@@ -52,6 +52,11 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
   const sdk = useSDK()
   const layout = useLayout()
 
+  const safeDiffs = () => {
+    const value = props.diffs()
+    return Array.isArray(value) ? value : []
+  }
+
   const readFile = async (path: string) => {
     return sdk.client.file
       .read({ path })
@@ -118,7 +123,7 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
   }
 
   createEffect(() => {
-    props.diffs().length
+    safeDiffs().length
     props.diffStyle
     if (!layout.ready()) return
     queueRestore()
@@ -151,7 +156,7 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
         header: props.classes?.header ?? "px-3",
         container: props.classes?.container ?? "pl-3",
       }}
-      diffs={props.diffs()}
+      diffs={safeDiffs()}
       diffStyle={props.diffStyle}
       onDiffStyleChange={props.onDiffStyleChange}
       onViewFile={props.onViewFile}

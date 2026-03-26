@@ -44,8 +44,13 @@ export function MessageNav(
                   </div>
                 </Match>
                 <Match when={local.size === "normal"}>
+                  {(() => {
+                    const summaryDiffs = message.summary?.diffs
+                    const changes = Array.isArray(summaryDiffs) ? summaryDiffs : []
+
+                    return (
                   <button data-slot="message-nav-message-button" onClick={handleClick} onKeyDown={handleKeyPress}>
-                    <DiffChanges changes={message.summary?.diffs ?? []} variant="bars" />
+                    <DiffChanges changes={changes} variant="bars" />
                     <div
                       data-slot="message-nav-title-preview"
                       data-active={message.id === local.current?.id || undefined}
@@ -58,6 +63,8 @@ export function MessageNav(
                       </Show>
                     </div>
                   </button>
+                    )
+                  })()}
                 </Match>
               </Switch>
             </li>
