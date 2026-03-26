@@ -1,9 +1,9 @@
-import { Effect, Layer, ServiceMap } from "effect"
+import { Effect, Layer, ServiceMap, Stream } from "effect"
 import path from "path"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRunPromise } from "@/effect/run-service"
+import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@/filesystem"
 import { FileWatcher } from "@/file/watcher"
 import { Git } from "@/git"
@@ -139,11 +139,12 @@ export namespace Vcs {
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Vcs") {}
 
-  export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Git.Service> = Layer.effect(
+  export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Git.Service | Bus.Service> = Layer.effect(
     Service,
     Effect.gen(function* () {
       const fs = yield* AppFileSystem.Service
       const git = yield* Git.Service
+      const bus = yield* Bus.Service
       const state = yield* InstanceState.make<State>(
         Effect.fn("Vcs.state")((ctx) =>
           Effect.gen(function* () {
@@ -158,22 +159,22 @@ export namespace Vcs {
             const value = { current, root }
             log.info("initialized", { branch: value.current, default_branch: value.root?.name })
 
-            yield* Effect.acquireRelease(
-              Effect.sync(() =>
-                Bus.subscribe(
-                  FileWatcher.Event.Updated,
-                  Instance.bind(async (evt) => {
-                    if (!evt.properties.file.endsWith("HEAD")) return
-                    const next = await get()
-                    if (next === value.current) return
-                    log.info("branch changed", { from: value.current, to: next })
-                    value.current = next
-                    Bus.publish(Event.BranchUpdated, { branch: next })
+            yield* bus
+              .subscribe(FileWatcher.Event.Updated)
+              .pipe(
+                Stream.filter((evt) => evt.properties.file.endsWith("HEAD")),
+                Stream.runForEach((_evt) =>
+                  Effect.gen(function* () {
+                    const next = yield* Effect.promise(() => get())
+                    if (next !== value.current) {
+                      log.info("branch changed", { from: value.current, to: next })
+                      value.current = next
+                      yield* bus.publish(Event.BranchUpdated, { branch: next })
+                    }
                   }),
                 ),
-              ),
-              (unsubscribe) => Effect.sync(unsubscribe),
-            )
+                Effect.forkScoped,
+              )
 
             return value
           }),
@@ -212,9 +213,13 @@ export namespace Vcs {
     }),
   )
 
-  export const defaultLayer = layer.pipe(Layer.provide(Git.defaultLayer), Layer.provide(AppFileSystem.defaultLayer))
+  export const defaultLayer = layer.pipe(
+    Layer.provide(Git.defaultLayer),
+    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(Bus.layer),
+  )
 
-  const runPromise = makeRunPromise(Service, defaultLayer)
+  const { runPromise } = makeRuntime(Service, defaultLayer)
 
   export function init() {
     return runPromise((svc) => svc.init())
