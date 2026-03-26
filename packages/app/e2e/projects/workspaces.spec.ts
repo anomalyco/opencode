@@ -3,6 +3,7 @@ import os from "node:os"
 import path from "node:path"
 import { base64Decode } from "@opencode-ai/util/encode"
 import type { Page } from "@playwright/test"
+import type { WorkspaceProbeState } from "../../src/testing/workspace"
 
 import { test, expect } from "../fixtures"
 
@@ -22,7 +23,66 @@ import {
 import { dropdownMenuContentSelector, inlineInputSelector, workspaceItemSelector } from "../selectors"
 import { createSdk, dirSlug } from "../utils"
 
-async function setupWorkspaceTest(page: Page, project: { slug: string }) {
+type WorkspaceWindow = Window & {
+  __opencode_e2e?: {
+    workspace?: {
+      current?: WorkspaceProbeState
+      controls?: Record<string, { reorder?: (input: { from: string; to: string }) => boolean }>
+    }
+  }
+}
+
+async function workspaceState(page: Page) {
+  return page.evaluate(() => {
+    const state = (window as WorkspaceWindow).__opencode_e2e?.workspace?.current
+    if (!state) return null
+    return {
+      root: state.root,
+      current: state.current,
+      enabled: state.enabled,
+      items: state.items.map((item) => ({ ...item })),
+    }
+  })
+}
+
+async function waitWorkspace(page: Page, input: { slug: string; busy?: boolean; timeout?: number }) {
+  await expect
+    .poll(
+      async () => {
+        const state = await workspaceState(page)
+        const item = state?.items.find((item) => item.slug === input.slug)
+        if (!item) return false
+        if (input.busy !== undefined && item.busy !== input.busy) return false
+        return true
+      },
+      { timeout: input.timeout ?? 60_000 },
+    )
+    .toBe(true)
+}
+
+async function waitWorkspaceGone(page: Page, input: { slug: string; timeout?: number }) {
+  await expect
+    .poll(
+      async () => {
+        const state = await workspaceState(page)
+        return state?.items.some((item) => item.slug === input.slug) ?? false
+      },
+      { timeout: input.timeout ?? 60_000 },
+    )
+    .toBe(false)
+}
+
+async function reorderWorkspace(page: Page, input: { root: string; from: string; to: string }) {
+  const ok = await page.evaluate((input) => {
+    return (window as WorkspaceWindow).__opencode_e2e?.workspace?.controls?.[input.root]?.reorder?.({
+      from: input.from,
+      to: input.to,
+    })
+  }, input)
+  expect(ok).toBe(true)
+}
+
+async function setupWorkspaceTest(page: Page, project: { slug: string; trackDirectory: (directory: string) => void }) {
   const rootSlug = project.slug
   await openSidebar(page)
 
@@ -31,23 +91,11 @@ async function setupWorkspaceTest(page: Page, project: { slug: string }) {
   await page.getByRole("button", { name: "New workspace" }).first().click()
   const next = await resolveSlug(await waitSlug(page, [rootSlug]))
   await waitDir(page, next.directory)
+  project.trackDirectory(next.directory)
 
   await openSidebar(page)
-
-  await expect
-    .poll(
-      async () => {
-        const item = page.locator(workspaceItemSelector(next.slug)).first()
-        try {
-          await item.hover({ timeout: 500 })
-          return true
-        } catch {
-          return false
-        }
-      },
-      { timeout: 60_000 },
-    )
-    .toBe(true)
+  await waitWorkspace(page, { slug: next.slug, busy: false })
+  await expect(page.locator(workspaceItemSelector(next.slug)).first()).toBeVisible()
 
   return { rootSlug, slug: next.slug, directory: next.directory }
 }
@@ -74,36 +122,9 @@ test("can enable and disable workspaces from project menu", async ({ page, withP
 test("can create a workspace", async ({ page, withProject }) => {
   await page.setViewportSize({ width: 1400, height: 800 })
 
-  await withProject(async ({ slug }) => {
-    await openSidebar(page)
-    await setWorkspacesEnabled(page, slug, true)
-
-    await expect(page.getByRole("button", { name: "New workspace" }).first()).toBeVisible()
-
-    await page.getByRole("button", { name: "New workspace" }).first().click()
-    const next = await resolveSlug(await waitSlug(page, [slug]))
-    await waitDir(page, next.directory)
-
-    await openSidebar(page)
-
-    await expect
-      .poll(
-        async () => {
-          const item = page.locator(workspaceItemSelector(next.slug)).first()
-          try {
-            await item.hover({ timeout: 500 })
-            return true
-          } catch {
-            return false
-          }
-        },
-        { timeout: 60_000 },
-      )
-      .toBe(true)
-
+  await withProject(async (project) => {
+    const next = await setupWorkspaceTest(page, project)
     await expect(page.locator(workspaceItemSelector(next.slug)).first()).toBeVisible()
-
-    await cleanupTestProject(next.directory)
   })
 })
 
@@ -126,13 +147,18 @@ test("non-git projects keep workspace mode disabled", async ({ page, withProject
 
       await openSidebar(page)
       await expect(page.getByRole("button", { name: "New workspace" })).toHaveCount(0)
+      await expect(page.locator('[data-component="workspace-item"]')).toHaveCount(0)
+
+      await expect
+        .poll(async () => {
+          return (await workspaceState(page))?.enabled ?? false
+        })
+        .toBe(false)
 
       const trigger = page.locator('[data-action="project-menu"]').first()
-      const hasMenu = await trigger
-        .isVisible()
-        .then((x) => x)
-        .catch(() => false)
-      if (!hasMenu) return
+      if ((await trigger.count()) === 0) return
+
+      await expect(trigger).toBeVisible()
 
       await trigger.click({ force: true })
 
@@ -276,6 +302,7 @@ test("can delete a workspace", async ({ page, withProject }) => {
     await project.gotoSession()
 
     await openSidebar(page)
+    await waitWorkspaceGone(page, { slug })
     await expect(page.locator(workspaceItemSelector(slug))).toHaveCount(0, { timeout: 60_000 })
     await expect(page.locator(workspaceItemSelector(rootSlug)).first()).toBeVisible()
   })
@@ -283,7 +310,8 @@ test("can delete a workspace", async ({ page, withProject }) => {
 
 test("can reorder workspaces by drag and drop", async ({ page, withProject }) => {
   await page.setViewportSize({ width: 1400, height: 800 })
-  await withProject(async ({ slug: rootSlug }) => {
+  await withProject(async (project) => {
+    const rootSlug = project.slug
     const workspaces = [] as { directory: string; slug: string }[]
 
     const listSlugs = async () => {
@@ -294,82 +322,60 @@ test("can reorder workspaces by drag and drop", async ({ page, withProject }) =>
       return slugs
     }
 
-    const waitReady = async (slug: string) => {
-      await expect
-        .poll(
-          async () => {
-            const item = page.locator(workspaceItemSelector(slug)).first()
-            try {
-              await item.hover({ timeout: 500 })
-              return true
-            } catch {
-              return false
-            }
-          },
-          { timeout: 60_000 },
-        )
-        .toBe(true)
+    const listed = async (a: string, b: string) => {
+      const state = await workspaceState(page)
+      if (state?.root !== project.directory) return []
+      return state.items.filter((item) => !item.local && (item.slug === a || item.slug === b)).map((item) => item.slug)
     }
 
-    const drag = async (from: string, to: string) => {
-      const src = page.locator(workspaceItemSelector(from)).first()
-      const dst = page.locator(workspaceItemSelector(to)).first()
+    await openSidebar(page)
 
-      const a = await src.boundingBox()
-      const b = await dst.boundingBox()
-      if (!a || !b) throw new Error("Failed to resolve workspace drag bounds")
+    await setWorkspacesEnabled(page, rootSlug, true)
 
-      await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2)
-      await page.mouse.down()
-      await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 12 })
-      await page.mouse.up()
-    }
+    for (const _ of [0, 1]) {
+      const prev = slugFromUrl(page.url())
+      await page.getByRole("button", { name: "New workspace" }).first().click()
+      const next = await resolveSlug(await waitSlug(page, [rootSlug, prev]))
+      await waitDir(page, next.directory)
+      project.trackDirectory(next.directory)
+      workspaces.push(next)
+      await waitWorkspace(page, { slug: next.slug, busy: false })
 
-    try {
       await openSidebar(page)
-
-      await setWorkspacesEnabled(page, rootSlug, true)
-
-      for (const _ of [0, 1]) {
-        const prev = slugFromUrl(page.url())
-        await page.getByRole("button", { name: "New workspace" }).first().click()
-        const next = await resolveSlug(await waitSlug(page, [rootSlug, prev]))
-        await waitDir(page, next.directory)
-        workspaces.push(next)
-
-        await openSidebar(page)
-      }
-
-      if (workspaces.length !== 2) throw new Error("Expected two created workspaces")
-
-      const a = workspaces[0].slug
-      const b = workspaces[1].slug
-
-      await waitReady(a)
-      await waitReady(b)
-
-      const list = async () => {
-        const slugs = await listSlugs()
-        return slugs.filter((s) => s !== rootSlug && (s === a || s === b)).slice(0, 2)
-      }
-
-      await expect
-        .poll(async () => {
-          const slugs = await list()
-          return slugs.length === 2
-        })
-        .toBe(true)
-
-      const before = await list()
-      const from = before[1]
-      const to = before[0]
-      if (!from || !to) throw new Error("Failed to resolve initial workspace order")
-
-      await drag(from, to)
-
-      await expect.poll(async () => await list()).toEqual([from, to])
-    } finally {
-      await Promise.all(workspaces.map((w) => cleanupTestProject(w.directory)))
     }
+
+    if (workspaces.length !== 2) throw new Error("Expected two created workspaces")
+
+    const a = workspaces[0].slug
+    const b = workspaces[1].slug
+
+    await expect.poll(async () => await listed(a, b)).toHaveLength(2)
+
+    const list = async () => {
+      const slugs = await listSlugs()
+      return slugs.filter((s) => s !== rootSlug && (s === a || s === b)).slice(0, 2)
+    }
+
+    await expect
+      .poll(async () => {
+        const slugs = await list()
+        return slugs.length === 2
+      })
+      .toBe(true)
+
+    const before = await list()
+    const from = before[1]
+    const to = before[0]
+    if (!from || !to) throw new Error("Failed to resolve initial workspace order")
+
+    const dirs = new Map(workspaces.map((item) => [item.slug, item.directory]))
+    const fromDir = dirs.get(from)
+    const toDir = dirs.get(to)
+    if (!fromDir || !toDir) throw new Error("Failed to resolve workspace directories for reorder")
+
+    await reorderWorkspace(page, { root: project.directory, from: fromDir, to: toDir })
+
+    await expect.poll(async () => await listed(a, b)).toEqual([from, to])
+    await expect.poll(async () => await list()).toEqual([from, to])
   })
 })

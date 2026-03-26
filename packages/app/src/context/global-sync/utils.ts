@@ -27,13 +27,23 @@ export function normalizeProviderList(input: ProviderListResponse): ProviderList
 }
 
 export function sanitizeProject(project: Project) {
-  if (!project.icon?.url && !project.icon?.override) return project
   return {
     ...project,
-    icon: {
-      ...project.icon,
-      url: undefined,
-      override: undefined,
+    sandboxes: [...project.sandboxes],
+    commands: project.commands
+      ? {
+          ...project.commands,
+        }
+      : undefined,
+    time: {
+      ...project.time,
     },
+    icon: project.icon
+      ? {
+          ...project.icon,
+          url: undefined,
+          override: undefined,
+        }
+      : undefined,
   }
 }

@@ -135,6 +135,9 @@ async function seedStorage(page: Page, input: { directory: string; extra?: strin
       prompt: {
         enabled: true,
       },
+      workspace: {
+        enabled: true,
+      },
       terminal: {
         enabled: true,
         terminals: {},

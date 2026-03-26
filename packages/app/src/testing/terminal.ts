@@ -24,6 +24,11 @@ export type E2EWindow = Window & {
       enabled?: boolean
       current?: import("./prompt").PromptProbeState
     }
+    workspace?: {
+      enabled?: boolean
+      current?: import("./workspace").WorkspaceProbeState
+      controls?: Record<string, { reorder?: (input: { from: string; to: string }) => boolean }>
+    }
     terminal?: {
       enabled?: boolean
       terminals?: Record<string, TerminalProbeState>

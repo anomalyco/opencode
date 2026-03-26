@@ -54,6 +54,7 @@ import { createAim } from "@/utils/aim"
 import { setNavigate } from "@/utils/notification-click"
 import { Worktree as WorktreeState } from "@/utils/worktree"
 import { setSessionHandoff } from "@/pages/session/handoff"
+import { workspaceEnabled, workspaceProbe } from "@/testing/workspace"
 
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
@@ -1900,6 +1901,85 @@ export default function Layout(props: ParentProps) {
     return currentProject()
   })
 
+  const reorderWorkspaces = (project: LocalProject, from: string, to: string) => {
+    const ids = workspaceIds(project)
+    const fromIndex = ids.findIndex((dir) => dir === from)
+    const toIndex = ids.findIndex((dir) => dir === to)
+    if (fromIndex === -1 || toIndex === -1) return false
+    if (fromIndex === toIndex) return true
+
+    const result = ids.slice()
+    const [item] = result.splice(fromIndex, 1)
+    if (!item) return false
+    result.splice(toIndex, 0, item)
+    setStore(
+      "workspaceOrder",
+      project.worktree,
+      result.filter((directory) => workspaceKey(directory) !== workspaceKey(project.worktree)),
+    )
+    return true
+  }
+
+  const workspaceState = createMemo(() => {
+    if (!workspaceEnabled()) return
+
+    const project = currentProject()
+    if (!project) return
+
+    return {
+      root: project.worktree,
+      current: currentDir(),
+      enabled: project.vcs === "git" && layout.sidebar.workspaces(project.worktree)(),
+      items: workspaceIds(project).map((directory) => {
+        const key = workspaceKey(directory)
+        return {
+          directory,
+          slug: base64Encode(directory),
+          busy: isBusy(directory),
+          expanded:
+            store.workspaceExpanded[key] ?? store.workspaceExpanded[directory] ?? directory === project.worktree,
+          local: key === workspaceKey(project.worktree),
+        }
+      }),
+      reorder: ({ from, to }: { from: string; to: string }) => reorderWorkspaces(project, from, to),
+    }
+  })
+
+  let workspaceControl: string | undefined
+  createEffect(() => {
+    if (!workspaceEnabled()) return
+
+    const next = workspaceState()
+    if (!next) {
+      if (workspaceControl) workspaceProbe.control(workspaceControl)
+      workspaceControl = undefined
+      workspaceProbe.clear()
+      return
+    }
+
+    if (workspaceControl && workspaceControl !== next.root) {
+      workspaceProbe.control(workspaceControl)
+    }
+    workspaceControl = next.root
+
+    workspaceProbe.control(next.root, {
+      reorder: next.reorder,
+    })
+
+    workspaceProbe.set({
+      root: next.root,
+      current: next.current,
+      enabled: next.enabled,
+      items: next.items,
+    })
+  })
+
+  onCleanup(() => {
+    if (!workspaceEnabled()) return
+    if (workspaceControl) workspaceProbe.control(workspaceControl)
+    workspaceProbe.clear()
+  })
+
   function handleWorkspaceDragStart(event: unknown) {
     const id = getDraggableId(event)
     if (!id) return
@@ -1912,22 +1992,7 @@ export default function Layout(props: ParentProps) {
 
     const project = sidebarProject()
     if (!project) return
-
-    const ids = workspaceIds(project)
-    const fromIndex = ids.findIndex((dir) => dir === draggable.id.toString())
-    const toIndex = ids.findIndex((dir) => dir === droppable.id.toString())
-    if (fromIndex === -1 || toIndex === -1) return
-    if (fromIndex === toIndex) return
-
-    const result = ids.slice()
-    const [item] = result.splice(fromIndex, 1)
-    if (!item) return
-    result.splice(toIndex, 0, item)
-    setStore(
-      "workspaceOrder",
-      project.worktree,
-      result.filter((directory) => workspaceKey(directory) !== workspaceKey(project.worktree)),
-    )
+    reorderWorkspaces(project, draggable.id.toString(), droppable.id.toString())
   }
 
   function handleWorkspaceDragEnd() {
