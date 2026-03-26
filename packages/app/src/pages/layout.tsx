@@ -2671,7 +2671,8 @@ export default function Layout(props: ParentProps) {
                         <Button
                           size="large"
                           icon="new-session"
-                          class="w-full"
+                          variant="ghost"
+                          class="w-full border border-border-weak-base"
                           onClick={() => {
                             const dir = worktree()
                             if (!dir) return
