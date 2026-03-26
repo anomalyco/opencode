@@ -1,113 +1,153 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 290" width="240" height="290">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 300" width="260" height="300">
   <defs>
-    <linearGradient id="fur" x1="20%" y1="0%" x2="80%" y2="100%">
-      <stop offset="0%" stop-color="#f7e8c0"/>
-      <stop offset="100%" stop-color="#dba84a"/>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#080f1e"/>
+      <stop offset="100%" stop-color="#0c1a30"/>
     </linearGradient>
-    <linearGradient id="furDark" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#dba84a"/>
-      <stop offset="100%" stop-color="#b8860b"/>
+    <linearGradient id="body" x1="20%" y1="0%" x2="80%" y2="100%">
+      <stop offset="0%" stop-color="#0e3060"/>
+      <stop offset="100%" stop-color="#091f42"/>
     </linearGradient>
-    <linearGradient id="furLight" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#fff8e8"/>
-      <stop offset="100%" stop-color="#f5e3b0"/>
-    </linearGradient>
-    <linearGradient id="earPink" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#ffb5b5"/>
-      <stop offset="100%" stop-color="#e07878"/>
-    </linearGradient>
-    <linearGradient id="cbBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+    <linearGradient id="blue" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#00d4ff"/>
       <stop offset="100%" stop-color="#0066ff"/>
     </linearGradient>
-    <filter id="softShadow">
-      <feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="#00000018"/>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
     </filter>
+    <filter id="softglow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <!-- Scanline pattern for CRT terminal feel -->
+    <pattern id="lines" x="0" y="0" width="260" height="3" patternUnits="userSpaceOnUse">
+      <rect x="0" y="0" width="260" height="1" fill="black" opacity="0.18"/>
+    </pattern>
+    <!-- Dot grid for terminal aesthetic -->
+    <pattern id="dots" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
+      <circle cx="10" cy="10" r="0.7" fill="#00d4ff" opacity="0.15"/>
+    </pattern>
   </defs>
 
-  <!-- === TAIL (drawn behind body) === -->
-  <!-- Tail base to curl — thick outer -->
-  <path d="M 168,170 C 198,148 212,118 200,96 C 192,80 176,82 170,96 C 164,110 174,126 176,136"
-        stroke="#dba84a" stroke-width="24" stroke-linecap="round" fill="none"/>
-  <!-- Tail inner highlight -->
-  <path d="M 168,170 C 198,148 212,118 200,96 C 192,80 176,82 170,96 C 164,110 174,126 176,136"
-        stroke="#f7e8c0" stroke-width="12" stroke-linecap="round" fill="none" opacity="0.55"/>
+  <!-- Background panel -->
+  <rect width="260" height="300" rx="16" fill="url(#bg)"/>
+  <!-- Dot grid overlay -->
+  <rect width="260" height="300" rx="16" fill="url(#dots)"/>
+
+  <!-- === TAIL (behind body) === -->
+  <path d="M 180,182 C 216,160 230,126 216,102 C 206,84 188,87 182,102 C 176,118 188,134 190,145"
+        stroke="#0e3060" stroke-width="26" stroke-linecap="round" fill="none"/>
+  <path d="M 180,182 C 216,160 230,126 216,102 C 206,84 188,87 182,102 C 176,118 188,134 190,145"
+        stroke="#00d4ff" stroke-width="3" stroke-linecap="round" fill="none" filter="url(#softglow)" opacity="0.9"/>
 
   <!-- === BODY === -->
-  <ellipse cx="116" cy="192" rx="64" ry="56" fill="url(#fur)" filter="url(#softShadow)"/>
+  <ellipse cx="120" cy="196" rx="68" ry="60" fill="url(#body)"/>
+  <ellipse cx="120" cy="196" rx="68" ry="60" fill="none" stroke="#00d4ff" stroke-width="1.8" opacity="0.7"/>
 
-  <!-- Chest lighter patch -->
-  <ellipse cx="116" cy="205" rx="36" ry="30" fill="url(#furLight)" opacity="0.85"/>
+  <!-- Chest glow -->
+  <ellipse cx="120" cy="216" rx="34" ry="26" fill="#00d4ff" opacity="0.05"/>
 
-  <!-- === NECK === -->
-  <ellipse cx="116" cy="148" rx="30" ry="24" fill="url(#fur)"/>
+  <!-- === NECK (connects head to body, no seam) === -->
+  <ellipse cx="120" cy="152" rx="34" ry="26" fill="#0e3060"/>
 
-  <!-- === EARS (drawn before head so head overlaps base) === -->
-  <!-- Left ear outer -->
-  <polygon points="78,82  60,22  106,70" fill="url(#furDark)"/>
-  <!-- Left ear inner pink -->
-  <polygon points="80,78  67,34  100,70" fill="url(#earPink)" opacity="0.9"/>
+  <!-- === EARS (drawn before head so head covers base) === -->
+  <!-- Left ear body fill -->
+  <polygon points="78,84  58,24  112,72" fill="#0a2040"/>
+  <!-- Left ear outline -->
+  <polygon points="78,84  58,24  112,72" fill="none" stroke="#00d4ff" stroke-width="1.8" stroke-linejoin="round" filter="url(#softglow)" opacity="0.9"/>
+  <!-- Left ear inner glow -->
+  <polygon points="82,80  68,36  106,72" fill="#00d4ff" opacity="0.12"/>
 
-  <!-- Right ear outer -->
-  <polygon points="154,82  176,22  130,70" fill="url(#furDark)"/>
-  <!-- Right ear inner pink -->
-  <polygon points="152,78  169,34  136,70" fill="url(#earPink)" opacity="0.9"/>
+  <!-- Right ear body fill -->
+  <polygon points="162,84  202,24  148,72" fill="#0a2040"/>
+  <!-- Right ear outline -->
+  <polygon points="162,84  202,24  148,72" fill="none" stroke="#00d4ff" stroke-width="1.8" stroke-linejoin="round" filter="url(#softglow)" opacity="0.9"/>
+  <!-- Right ear inner glow -->
+  <polygon points="158,80  192,36  154,72" fill="#00d4ff" opacity="0.12"/>
 
   <!-- === HEAD === -->
-  <ellipse cx="116" cy="92" rx="48" ry="46" fill="url(#fur)" filter="url(#softShadow)"/>
+  <ellipse cx="120" cy="96" rx="52" ry="50" fill="url(#body)"/>
+  <ellipse cx="120" cy="96" rx="52" ry="50" fill="none" stroke="#00d4ff" stroke-width="1.8" opacity="0.7"/>
 
-  <!-- Forehead lighter patch -->
-  <ellipse cx="116" cy="78" rx="22" ry="18" fill="url(#furLight)" opacity="0.7"/>
+  <!-- Head forehead subtle highlight -->
+  <ellipse cx="120" cy="80" rx="26" ry="18" fill="#00d4ff" opacity="0.04"/>
 
-  <!-- === EYES === -->
-  <!-- Left eye -->
-  <ellipse cx="98" cy="90" rx="9" ry="8" fill="#1a0e04"/>
-  <ellipse cx="98" cy="90" rx="5.5" ry="5" fill="#3d2008"/>
-  <circle cx="94" cy="86" r="2.8" fill="white"/>
-  <circle cx="101" cy="93" r="1.2" fill="white" opacity="0.5"/>
-  <!-- Right eye -->
-  <ellipse cx="134" cy="90" rx="9" ry="8" fill="#1a0e04"/>
-  <ellipse cx="134" cy="90" rx="5.5" ry="5" fill="#3d2008"/>
-  <circle cx="130" cy="86" r="2.8" fill="white"/>
-  <circle cx="137" cy="93" r="1.2" fill="white" opacity="0.5"/>
+  <!-- === EYES (glowing) === -->
+  <!-- Left eye socket -->
+  <ellipse cx="100" cy="92" rx="10" ry="9" fill="#040c1c"/>
+  <!-- Left iris glow -->
+  <ellipse cx="100" cy="92" rx="6.5" ry="6" fill="#00d4ff" opacity="0.85" filter="url(#glow)"/>
+  <!-- Left pupil -->
+  <ellipse cx="100" cy="92" rx="3" ry="3" fill="#001830"/>
+  <!-- Left eye highlight -->
+  <circle cx="97" cy="89" r="2" fill="white" opacity="0.9"/>
+
+  <!-- Right eye socket -->
+  <ellipse cx="140" cy="92" rx="10" ry="9" fill="#040c1c"/>
+  <!-- Right iris glow -->
+  <ellipse cx="140" cy="92" rx="6.5" ry="6" fill="#00d4ff" opacity="0.85" filter="url(#glow)"/>
+  <!-- Right pupil -->
+  <ellipse cx="140" cy="92" rx="3" ry="3" fill="#001830"/>
+  <!-- Right eye highlight -->
+  <circle cx="137" cy="89" r="2" fill="white" opacity="0.9"/>
 
   <!-- === SNOUT === -->
-  <ellipse cx="116" cy="112" rx="21" ry="15" fill="url(#furDark)" opacity="0.55"/>
+  <ellipse cx="120" cy="116" rx="22" ry="16" fill="#081830" opacity="0.8"/>
+  <ellipse cx="120" cy="116" rx="22" ry="16" fill="none" stroke="#0066ff" stroke-width="1.2" opacity="0.5"/>
 
-  <!-- Nose -->
-  <path d="M 107,106 Q 116,101 125,106 Q 125,114 116,116 Q 107,114 107,106 Z" fill="#1a0e04"/>
-  <!-- Nose shine -->
-  <ellipse cx="111" cy="107" rx="3.5" ry="2.2" fill="white" opacity="0.35"/>
+  <!-- Nose glow -->
+  <ellipse cx="120" cy="110" rx="9" ry="7" fill="#00d4ff" opacity="0.7" filter="url(#softglow)"/>
+  <ellipse cx="120" cy="110" rx="5" ry="3.5" fill="#e0f8ff"/>
 
   <!-- Mouth -->
-  <line x1="116" y1="116" x2="116" y2="120" stroke="#1a0e04" stroke-width="1.8" stroke-linecap="round"/>
-  <path d="M 109,120 Q 116,126 123,120" stroke="#1a0e04" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+  <path d="M 120,118 Q 120,122 120,122" stroke="#0066ff" stroke-width="1.5" fill="none" stroke-linecap="round" opacity="0.7"/>
+  <path d="M 113,122 Q 120,128 127,122" stroke="#0066ff" stroke-width="1.5" fill="none" stroke-linecap="round" opacity="0.7"/>
+
+  <!-- === COLLAR === -->
+  <rect x="90" y="163" width="60" height="16" rx="8" fill="url(#blue)" opacity="0.95"/>
+  <!-- Collar text -->
+  <text x="120" y="175" font-family="monospace, 'Courier New'" font-size="7.5" font-weight="bold"
+        fill="white" text-anchor="middle" letter-spacing="0.5">CoBuilder</text>
+  <!-- Tag -->
+  <rect x="112" y="178" width="16" height="12" rx="3" fill="url(#blue)"/>
+  <path d="M 116,190 L 120,196 L 124,190" fill="url(#blue)"/>
+  <text x="120" y="188" font-family="monospace" font-size="6" font-weight="bold"
+        fill="white" text-anchor="middle">&gt;_</text>
 
   <!-- === FRONT LEGS === -->
   <!-- Left leg -->
-  <rect x="68" y="232" width="28" height="38" rx="14" fill="url(#furDark)"/>
-  <ellipse cx="82" cy="270" rx="20" ry="11" fill="#b8860b"/>
+  <rect x="72" y="240" width="28" height="38" rx="14" fill="#0a2040"/>
+  <rect x="72" y="240" width="28" height="38" rx="14" fill="none" stroke="#00d4ff" stroke-width="1.5" opacity="0.6"/>
+  <ellipse cx="86" cy="279" rx="20" ry="11" fill="#081830"/>
+  <ellipse cx="86" cy="279" rx="20" ry="11" fill="none" stroke="#00d4ff" stroke-width="1.5" opacity="0.5"/>
+
   <!-- Right leg -->
-  <rect x="136" y="232" width="28" height="38" rx="14" fill="url(#furDark)"/>
-  <ellipse cx="150" cy="270" rx="20" ry="11" fill="#b8860b"/>
+  <rect x="160" y="240" width="28" height="38" rx="14" fill="#0a2040"/>
+  <rect x="160" y="240" width="28" height="38" rx="14" fill="none" stroke="#00d4ff" stroke-width="1.5" opacity="0.6"/>
+  <ellipse cx="174" cy="279" rx="20" ry="11" fill="#081830"/>
+  <ellipse cx="174" cy="279" rx="20" ry="11" fill="none" stroke="#00d4ff" stroke-width="1.5" opacity="0.5"/>
 
-  <!-- Toe lines left -->
-  <line x1="74" y1="268" x2="74" y2="272" stroke="#a07008" stroke-width="1.5" stroke-linecap="round"/>
-  <line x1="82" y1="270" x2="82" y2="274" stroke="#a07008" stroke-width="1.5" stroke-linecap="round"/>
-  <line x1="90" y1="268" x2="90" y2="272" stroke="#a07008" stroke-width="1.5" stroke-linecap="round"/>
-  <!-- Toe lines right -->
-  <line x1="142" y1="268" x2="142" y2="272" stroke="#a07008" stroke-width="1.5" stroke-linecap="round"/>
-  <line x1="150" y1="270" x2="150" y2="274" stroke="#a07008" stroke-width="1.5" stroke-linecap="round"/>
-  <line x1="158" y1="268" x2="158" y2="272" stroke="#a07008" stroke-width="1.5" stroke-linecap="round"/>
+  <!-- Paw toe details -->
+  <line x1="78" y1="278" x2="78" y2="282" stroke="#00d4ff" stroke-width="1.2" opacity="0.4"/>
+  <line x1="86" y1="281" x2="86" y2="285" stroke="#00d4ff" stroke-width="1.2" opacity="0.4"/>
+  <line x1="94" y1="278" x2="94" y2="282" stroke="#00d4ff" stroke-width="1.2" opacity="0.4"/>
+  <line x1="166" y1="278" x2="166" y2="282" stroke="#00d4ff" stroke-width="1.2" opacity="0.4"/>
+  <line x1="174" y1="281" x2="174" y2="285" stroke="#00d4ff" stroke-width="1.2" opacity="0.4"/>
+  <line x1="182" y1="278" x2="182" y2="282" stroke="#00d4ff" stroke-width="1.2" opacity="0.4"/>
 
-  <!-- === COLLAR with CoBuilder tag === -->
-  <rect x="90" y="158" width="52" height="15" rx="7.5" fill="url(#cbBlue)"/>
-  <!-- Collar buckle -->
-  <circle cx="116" cy="166" r="5" fill="#0044cc"/>
-  <circle cx="116" cy="166" r="3" fill="url(#cbBlue)"/>
-  <!-- Tag -->
-  <rect x="108" y="172" width="16" height="13" rx="3" fill="url(#cbBlue)"/>
-  <path d="M 112,185 L 116,190 L 120,185" fill="url(#cbBlue)"/>
-  <text x="116" y="181" font-family="monospace, 'Courier New'" font-size="6.5" font-weight="bold"
-        fill="white" text-anchor="middle">CB</text>
+  <!-- === SCANLINES overlay === -->
+  <rect width="260" height="300" rx="16" fill="url(#lines)"/>
+
+  <!-- Corner bracket decorations (terminal aesthetic) -->
+  <path d="M 12,12 L 12,28 M 12,12 L 28,12" stroke="#00d4ff" stroke-width="1.5" opacity="0.4" fill="none"/>
+  <path d="M 248,12 L 248,28 M 248,12 L 232,12" stroke="#00d4ff" stroke-width="1.5" opacity="0.4" fill="none"/>
+  <path d="M 12,288 L 12,272 M 12,288 L 28,288" stroke="#00d4ff" stroke-width="1.5" opacity="0.4" fill="none"/>
+  <path d="M 248,288 L 248,272 M 248,288 L 232,288" stroke="#00d4ff" stroke-width="1.5" opacity="0.4" fill="none"/>
 </svg>
