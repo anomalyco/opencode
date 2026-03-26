@@ -89,6 +89,7 @@ export async function resolvePathPluginTarget(spec: string) {
 }
 
 export async function checkPluginCompatibility(target: string, opencodeVersion: string) {
+  if (!semver.valid(opencodeVersion) || semver.eq(opencodeVersion, "0.0.0")) return
   const pkg = await readPluginPackage(target).catch(() => undefined)
   if (!pkg) return
   const engines = pkg.json.engines
