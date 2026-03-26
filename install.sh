@@ -59,13 +59,13 @@ fi
 info "Latest release: ${LATEST}"
 
 # ── Build asset name ─────────────────────────────────────────────────────────
-# Asset naming: opencode-<platform>-<arch>.tar.gz (linux) or .zip (others)
-PKG_NAME="opencode-${PLATFORM}-${ARCH}"
+# Asset naming: cobuilder-<platform>-<arch>.tar.gz (linux) or .zip (others)
+PKG_NAME="cobuilder-${PLATFORM}-${ARCH}"
 
 if [[ "$PLATFORM" == "linux" ]]; then
   # Detect musl
   if ldd --version 2>&1 | grep -qi musl || [[ -f /etc/alpine-release ]]; then
-    PKG_NAME="opencode-${PLATFORM}-${ARCH}-musl"
+    PKG_NAME="cobuilder-${PLATFORM}-${ARCH}-musl"
   fi
   ASSET="${PKG_NAME}.tar.gz"
 else

@@ -20,7 +20,7 @@
     "db": "bun drizzle-kit"
   },
   "bin": {
-    "cobuilder": "./bin/opencode"
+    "cobuilder": "./bin/cobuilder"
   },
   "randomField": "this-is-a-random-value-12345",
   "exports": {
