@@ -1,4 +1,7 @@
 import { Ripgrep } from "../file/ripgrep"
+import fs from "fs/promises"
+import path from "path"
+import { Global } from "../global"
 
 import { Instance } from "../project/instance"
 
@@ -74,6 +77,23 @@ export namespace SystemPrompt {
       // the agents seem to ingest the information about skills a bit better if we present a more verbose
       // version of them here and a less verbose version in tool description, rather than vice versa.
       Skill.fmt(list, { verbose: true }),
+    ].join("\n")
+  }
+
+  export async function installedCommands(): Promise<string> {
+    const commandsDir = path.join(Global.Path.config, "commands")
+    let packages: string[] = []
+    try {
+      const entries = await fs.readdir(commandsDir, { withFileTypes: true })
+      packages = entries.filter((e) => e.isDirectory()).map((e) => e.name)
+    } catch {
+      return ""
+    }
+    if (packages.length === 0) return ""
+    return [
+      `Installed command packages (available as slash commands):`,
+      packages.map((p) => `  - /${p}:<command> (installed at ${commandsDir}/${p}/)`).join("\n"),
+      `To check if a package is installed, look in ${commandsDir}/ — NOT in ~/.claude/skills/.`,
     ].join("\n")
   }
 }
