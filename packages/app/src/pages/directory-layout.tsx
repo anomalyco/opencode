@@ -2,7 +2,7 @@ import { DataProvider } from "@opencode-ai/ui/context"
 import { showToast } from "@opencode-ai/ui/toast"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
-import { createEffect, createMemo, type ParentProps, Show } from "solid-js"
+import { createEffect, createMemo, on, type ParentProps, Show } from "solid-js"
 import { useLayout } from "@/context/layout"
 import { useLanguage } from "@/context/language"
 import { LocalProvider } from "@/context/local"
@@ -72,9 +72,11 @@ export default function Layout(props: ParentProps) {
     navigate("/", { replace: true })
   })
 
-  createEffect(() => {
-    syncProject(resolved(), layout.projects.open)
-  })
+  createEffect(
+    on(resolved, (directory) => {
+      syncProject(directory, layout.projects.open)
+    }),
+  )
 
   return (
     <Show when={resolved()} keyed>
