@@ -17,7 +17,8 @@ import { usePermission } from "@/context/permission"
 import { messageAgentColor } from "@/utils/agent"
 import { sessionTitle } from "@/utils/session-title"
 import { sessionPermissionRequest } from "../session/composer/session-request-tree"
-import { childSessionOnPath, getProjectAvatarSource, hasProjectPermissions } from "./helpers"
+import { working } from "../session/session-working"
+import { hasProjectPermissions } from "./helpers"
 
 export const ProjectIcon = (props: {
   project: LocalProject
@@ -228,7 +229,8 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   })
   const isWorking = createMemo(() => {
     if (hasPermissions()) return false
-    return sessionStore.session_working(props.session.id)
+    const status = sessionStore.session_status[props.session.id]
+    return working(status, sessionStore.message[props.session.id])
   })
   const isActive = createMemo(() => props.session.id === params.id)
 

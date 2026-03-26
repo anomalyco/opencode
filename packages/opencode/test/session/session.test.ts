@@ -170,18 +170,21 @@ describe("step-finish token propagation via Bus event", () => {
   )
 })
 
-describe("Session", () => {
-  it.live("remove works without an instance", () =>
-    Effect.gen(function* () {
-      const session = yield* SessionNs.Service
-      const dir = yield* tmpdirScoped({ git: true })
-      const info = yield* provideInstance(dir)(session.create({ title: "remove-without-instance" }))
+describe("session archive state", () => {
+  test("can clear archived time with null", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const session = await Session.create({})
 
-      const removeExit = yield* remove(info.id).pipe(Effect.exit)
-      expect(Exit.isSuccess(removeExit)).toBe(true)
+        await Session.setArchived({ sessionID: session.id, time: Date.now() })
+        expect((await Session.get(session.id)).time.archived).toBeDefined()
 
-      const getExit = yield* session.get(info.id).pipe(Effect.exit)
-      expect(Exit.isFailure(getExit)).toBe(true)
-    }),
-  )
+        await Session.setArchived({ sessionID: session.id, time: null as never })
+        expect((await Session.get(session.id)).time.archived).toBeUndefined()
+
+        await Session.remove(session.id)
+      },
+    })
+  })
 })

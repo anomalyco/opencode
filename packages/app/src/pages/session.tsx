@@ -57,6 +57,7 @@ import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { syncSessionModel } from "@/pages/session/session-model-helpers"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
+import { working } from "@/pages/session/session-working"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
@@ -1835,7 +1836,9 @@ export default function Page() {
       return out
     })
 
-  const busy = (sessionID: string) => sync.data.session_working(sessionID)
+  const busy = (sessionID: string) => {
+    return working(sync.data.session_status[sessionID], sync.data.message[sessionID])
+  }
 
   const queuedFollowups = createMemo(() => {
     const id = params.id
