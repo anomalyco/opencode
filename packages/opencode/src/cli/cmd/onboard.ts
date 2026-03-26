@@ -275,8 +275,6 @@ async function setupWorkflows() {
     message: "Which workflow plugins would you like to install?",
     options: [
       { value: "gsd", label: "GSD", hint: "Get Shit Done — structured planning and execution methodology" },
-      { value: "ralph-loop", label: "Ralph Loop", hint: "Continuous iterative development with retrospectives" },
-      { value: "gstack", label: "GStack", hint: "Full-stack project scaffolding and architecture workflows" },
     ],
     initialValues: [],
     required: false,
