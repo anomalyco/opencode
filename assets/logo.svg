@@ -30,44 +30,44 @@
     <rect x="178" y="82" width="24" height="24" fill="#c08055"/>
     <rect x="202" y="82" width="24" height="24" fill="#c08055"/>
     <rect x="226" y="82" width="24" height="24" fill="#c08055"/>
-    <!-- ROW 4 — head + eyes -->
+    <!-- ROW 4 — eyes on cream background -->
     <rect x="10"  y="106" width="24" height="24" fill="#c08055"/>
     <rect x="34"  y="106" width="24" height="24" fill="#c08055"/>
     <rect x="58"  y="106" width="24" height="24" fill="#c08055"/>
     <rect x="82"  y="106" width="24" height="24" fill="#5a2808"/>
-    <rect x="106" y="106" width="24" height="24" fill="#c08055"/>
-    <rect x="130" y="106" width="24" height="24" fill="#c08055"/>
-    <rect x="154" y="106" width="24" height="24" fill="#c08055"/>
-    <rect x="178" y="106" width="24" height="24" fill="#5a2808"/>
+    <rect x="106" y="106" width="24" height="24" fill="#e8c4a0"/>
+    <rect x="130" y="106" width="24" height="24" fill="#e8c4a0"/>
+    <rect x="154" y="106" width="24" height="24" fill="#5a2808"/>
+    <rect x="178" y="106" width="24" height="24" fill="#c08055"/>
     <rect x="202" y="106" width="24" height="24" fill="#c08055"/>
     <rect x="226" y="106" width="24" height="24" fill="#c08055"/>
-    <!-- ROW 5 — full head -->
+    <!-- ROW 5 — cream face patch -->
     <rect x="10"  y="130" width="24" height="24" fill="#c08055"/>
     <rect x="34"  y="130" width="24" height="24" fill="#c08055"/>
-    <rect x="58"  y="130" width="24" height="24" fill="#c08055"/>
-    <rect x="82"  y="130" width="24" height="24" fill="#c08055"/>
-    <rect x="106" y="130" width="24" height="24" fill="#c08055"/>
-    <rect x="130" y="130" width="24" height="24" fill="#c08055"/>
-    <rect x="154" y="130" width="24" height="24" fill="#c08055"/>
-    <rect x="178" y="130" width="24" height="24" fill="#c08055"/>
+    <rect x="58"  y="130" width="24" height="24" fill="#e8c4a0"/>
+    <rect x="82"  y="130" width="24" height="24" fill="#e8c4a0"/>
+    <rect x="106" y="130" width="24" height="24" fill="#e8c4a0"/>
+    <rect x="130" y="130" width="24" height="24" fill="#e8c4a0"/>
+    <rect x="154" y="130" width="24" height="24" fill="#e8c4a0"/>
+    <rect x="178" y="130" width="24" height="24" fill="#e8c4a0"/>
     <rect x="202" y="130" width="24" height="24" fill="#c08055"/>
     <rect x="226" y="130" width="24" height="24" fill="#c08055"/>
-    <!-- ROW 6 — slightly narrower -->
+    <!-- ROW 6 — cream face narrows -->
     <rect x="34"  y="154" width="24" height="24" fill="#c08055"/>
-    <rect x="58"  y="154" width="24" height="24" fill="#c08055"/>
-    <rect x="82"  y="154" width="24" height="24" fill="#c08055"/>
-    <rect x="106" y="154" width="24" height="24" fill="#c08055"/>
-    <rect x="130" y="154" width="24" height="24" fill="#c08055"/>
-    <rect x="154" y="154" width="24" height="24" fill="#c08055"/>
-    <rect x="178" y="154" width="24" height="24" fill="#c08055"/>
+    <rect x="58"  y="154" width="24" height="24" fill="#e8c4a0"/>
+    <rect x="82"  y="154" width="24" height="24" fill="#e8c4a0"/>
+    <rect x="106" y="154" width="24" height="24" fill="#e8c4a0"/>
+    <rect x="130" y="154" width="24" height="24" fill="#e8c4a0"/>
+    <rect x="154" y="154" width="24" height="24" fill="#e8c4a0"/>
+    <rect x="178" y="154" width="24" height="24" fill="#e8c4a0"/>
     <rect x="202" y="154" width="24" height="24" fill="#c08055"/>
-    <!-- ROW 7 — snout + nose -->
+    <!-- ROW 7 — snout + nose on cream -->
     <rect x="34"  y="178" width="24" height="24" fill="#c08055"/>
     <rect x="58"  y="178" width="24" height="24" fill="#c08055"/>
-    <rect x="82"  y="178" width="24" height="24" fill="#c08055"/>
+    <rect x="82"  y="178" width="24" height="24" fill="#e8c4a0"/>
     <rect x="106" y="178" width="24" height="24" fill="#5a2808"/>
     <rect x="130" y="178" width="24" height="24" fill="#5a2808"/>
-    <rect x="154" y="178" width="24" height="24" fill="#c08055"/>
+    <rect x="154" y="178" width="24" height="24" fill="#e8c4a0"/>
     <rect x="178" y="178" width="24" height="24" fill="#c08055"/>
     <rect x="202" y="178" width="24" height="24" fill="#c08055"/>
     <!-- ROW 8 — chin -->
