@@ -94,7 +94,7 @@ type GitHubPullRequest = {
   }
   headRepository: {
     nameWithOwner: string
-  }
+  } | null
   commits: {
     totalCount: number
     nodes: Array<{
@@ -606,8 +606,8 @@ export const GithubRunCommand = cmd({
           issueEvent?.issue.pull_request
         ) {
           const prData = await fetchPR()
-          // Local PR
-          if (prData.headRepository.nameWithOwner === prData.baseRepository.nameWithOwner) {
+          // Local PR (headRepository is null when the fork has been deleted)
+          if (prData.headRepository?.nameWithOwner === prData.baseRepository.nameWithOwner) {
             await checkoutLocalBranch(prData)
             const head = await gitText(["rev-parse", "HEAD"])
             const dataPrompt = buildPromptDataForPR(prData)
@@ -1114,6 +1114,9 @@ export const GithubRunCommand = cmd({
         const localBranch = generateBranchName("pr")
         const depth = Math.max(pr.commits.totalCount, 20)
 
+        if (!pr.headRepository?.nameWithOwner) {
+          throw new Error("Cannot checkout fork branch: headRepository is not available (the fork may have been deleted)")
+        }
         await gitRun(["remote", "add", "fork", `https://github.com/${pr.headRepository.nameWithOwner}.git`])
         await gitRun(["fetch", "fork", `--depth=${depth}`, remoteBranch])
         await gitRun(["checkout", "-b", localBranch, `fork/${remoteBranch}`])
