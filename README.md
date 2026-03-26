@@ -93,6 +93,8 @@ CoBuilder works with any of the following out of the box. You are never locked i
 
 **OpenRouter** — a single API key that routes to 200+ models from Anthropic, OpenAI, Meta, Mistral, and others. Good for teams that want to compare models or manage cost centrally.
 
+**GitHub Copilot** — Use your existing Copilot Individual, Business, or Enterprise subscription. No API key needed — CoBuilder authenticates via GitHub's Device Code OAuth flow. Supports both GitHub.com and GitHub Enterprise (GHE) deployments. All requests are covered by your Copilot subscription at no additional cost.
+
 **Google** — Gemini 2.0 Flash, Gemini 2.5 Pro. Requires a Google AI API key.
 
 **Custom endpoint** — any server that speaks the OpenAI API format works. Point CoBuilder at it via 9Router or configure it directly in `opencode.json`.
