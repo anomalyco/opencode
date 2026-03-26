@@ -65,17 +65,26 @@ const baselineFlag = process.argv.includes("--baseline")
 const skipInstall = process.argv.includes("--skip-install")
 const skipEmbedWebUi = process.argv.includes("--skip-embed-web-ui")
 
+// Exclude optional font files — only keep core UI fonts (Inter + IBM Plex Mono).
+// This saves ~27MB since users only use one of 12+ optional monospace fonts.
+// Excluded fonts fall through to the CDN proxy at runtime.
+const CORE_FONT = /\/(inter|BlexMono)/i
+const OPTIONAL_FONT = /\.(woff2|woff|ttf)$/
+
 const createEmbeddedWebUIBundle = async () => {
   console.log(`Building Web UI to embed in the binary`)
   const appDir = path.join(import.meta.dirname, "../../app")
   await $`bun run --cwd ${appDir} build`
   const allFiles = await Array.fromAsync(new Bun.Glob("**/*").scan({ cwd: path.join(appDir, "dist") }))
+  const filtered = allFiles.filter((f) => !OPTIONAL_FONT.test(f) || CORE_FONT.test(f))
+  const excluded = allFiles.length - filtered.length
+  console.log(`Embedding ${filtered.length} web UI assets (${excluded} optional fonts externalized to CDN)`)
   const fileMap = `
-    // Import all files as file_$i with type: "file" 
-    ${allFiles.map((filePath, i) => `import file_${i} from "${path.join(appDir, "dist", filePath)}" with { type: "file" };`).join("\n")}
+    // Import all files as file_$i with type: "file"
+    ${filtered.map((filePath, i) => `import file_${i} from "${path.join(appDir, "dist", filePath)}" with { type: "file" };`).join("\n")}
     // Export with original mappings
     export default {
-      ${allFiles.map((filePath, i) => `"${filePath}": file_${i},`).join("\n")}
+      ${filtered.map((filePath, i) => `"${filePath}": file_${i},`).join("\n")}
     }
     `.trim()
   return fileMap
