@@ -121,6 +121,32 @@ yield *
 
 The key insight: don't split init into a separate method with a `started` flag. Put everything in the `InstanceState.make` closure and let `ScopedCache` handle the run-once semantics.
 
+## Effect.cached for deduplication
+
+Use `Effect.cached` when multiple concurrent callers should share a single in-flight computation. It memoizes the result and deduplicates concurrent fibers — second caller joins the first caller's fiber instead of starting a new one.
+
+```ts
+// Inside the layer — yield* to initialize the memo
+let cached = yield * Effect.cached(loadExpensive())
+
+const get = Effect.fn("Foo.get")(function* () {
+  return yield* cached // concurrent callers share the same fiber
+})
+
+// To invalidate: swap in a fresh memo
+const invalidate = Effect.fn("Foo.invalidate")(function* () {
+  cached = yield* Effect.cached(loadExpensive())
+})
+```
+
+Prefer `Effect.cached` over these patterns:
+
+- Storing a `Fiber.Fiber | undefined` with manual check-and-fork (e.g. `file/index.ts` `ensure`)
+- Storing a `Promise<void>` task for deduplication (e.g. `skill/index.ts` `ensure`)
+- `let cached: X | undefined` with check-and-load (races when two callers see `undefined` before either resolves)
+
+`Effect.cached` handles the run-once + concurrent-join semantics automatically. For invalidatable caches, reassign with `yield* Effect.cached(...)` — the old memo is discarded.
+
 ## Scheduled Tasks
 
 For loops or periodic work, use `Effect.repeat` or `Effect.schedule` with `Effect.forkScoped` in the layer definition.
@@ -179,12 +205,12 @@ Still open and likely worth migrating:
 - [x] `Worktree`
 - [x] `Bus`
 - [x] `Command`
-- [ ] `Config`
+- [x] `Config`
 - [ ] `Session`
 - [ ] `SessionProcessor`
 - [ ] `SessionPrompt`
 - [ ] `SessionCompaction`
 - [ ] `Provider`
 - [x] `Project`
-- [ ] `LSP`
+- [x] `LSP`
 - [x] `MCP`
