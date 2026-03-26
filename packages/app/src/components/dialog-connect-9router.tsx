@@ -53,7 +53,7 @@ export function DialogConnect9Router(props: Props) {
     }
     setUrlErr(undefined)
     setFetchState({ status: "loading" })
-    setSelected(new Set())
+    setSelected(new Set<string>())
 
     try {
       // Strip trailing slash, then append /models
@@ -171,7 +171,7 @@ export function DialogConnect9Router(props: Props) {
                   setBaseURL(v)
                   setUrlErr(undefined)
                   setFetchState({ status: "idle" })
-                  setSelected(new Set())
+                  setSelected(new Set<string>())
                 }}
                 validationState={urlErr() ? "invalid" : undefined}
                 error={urlErr()}
@@ -218,7 +218,7 @@ export function DialogConnect9Router(props: Props) {
                   class="text-12-regular text-text-weak hover:text-text-base transition-colors"
                   onClick={() => {
                     const all = (fetchState as Extract<FetchState, { status: "done" }>).models
-                    setSelected(selected().size === all.length ? new Set() : new Set(all))
+                    setSelected(selected().size === all.length ? new Set<string>() : new Set<string>(all))
                   }}
                 >
                   {selected().size ===
