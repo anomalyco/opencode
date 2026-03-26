@@ -132,7 +132,7 @@ echo ""
 # so interactive prompts (arrow keys etc.) work seamlessly.
 if [ -t 0 ]; then
   "$COBUILDER_BIN" onboard
-elif [ -e /dev/tty ] && (exec </dev/tty) 2>/dev/null; then
+elif { true </dev/tty; } 2>/dev/null; then
   "$COBUILDER_BIN" onboard </dev/tty
 else
   echo ""
