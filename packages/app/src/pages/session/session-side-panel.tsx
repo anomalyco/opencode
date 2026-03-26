@@ -338,62 +338,14 @@ export function SessionSidePanel(props: {
                   <span>{uploading() ? props.language.t("common.loading") + props.language.t("common.loading.ellipsis") : props.language.t("session.files.upload")}</span>
                 </button>
               </div>
-              <Tabs
-                variant="pill"
-                value={props.fileTreeTab()}
-                onChange={props.setFileTreeTabValue}
-                class="flex-1 min-h-0"
-                data-scope="filetree"
-              >
-                <Tabs.List>
-                  <Tabs.Trigger value="changes" class="flex-1" classes={{ button: "w-full" }}>
-                    {props.reviewCount}{" "}
-                    {props.language.t(
-                      props.reviewCount === 1 ? "session.review.change.one" : "session.review.change.other",
-                    )}
-                  </Tabs.Trigger>
-                  <Tabs.Trigger value="all" class="flex-1" classes={{ button: "w-full" }}>
-                    {props.language.t("session.files.all")}
-                  </Tabs.Trigger>
-                </Tabs.List>
-                <Tabs.Content value="changes" class="bg-background-base px-3 py-0">
-                  <Switch>
-                    <Match when={props.hasReview}>
-                      <Show
-                        when={props.diffsReady}
-                        fallback={
-                          <div class="px-2 py-2 text-12-regular text-text-weak">
-                            {props.language.t("common.loading")}
-                            {props.language.t("common.loading.ellipsis")}
-                          </div>
-                        }
-                      >
-                        <FileTree
-                          path=""
-                          allowed={props.diffFiles}
-                          kinds={props.kinds}
-                          draggable={false}
-                          active={props.activeDiff}
-                          onFileClick={(node) => props.focusReviewDiff(node.path)}
-                        />
-                      </Show>
-                    </Match>
-                    <Match when={true}>
-                      <div class="mt-8 text-center text-12-regular text-text-weak">
-                        {props.language.t("session.review.noChanges")}
-                      </div>
-                    </Match>
-                  </Switch>
-                </Tabs.Content>
-                <Tabs.Content value="all" class="bg-background-base px-3 py-0">
-                  <FileTree
-                    path=""
-                    modified={props.diffFiles}
-                    kinds={props.kinds}
-                    onFileClick={(node) => props.openPreviewFile(node.path)}
-                  />
-                </Tabs.Content>
-              </Tabs>
+              <div class="flex-1 min-h-0 bg-background-base px-3 py-0 overflow-auto">
+                <FileTree
+                  path=""
+                  modified={props.diffFiles}
+                  kinds={props.kinds}
+                  onFileClick={(node) => props.openPreviewFile(node.path)}
+                />
+              </div>
             </div>
             <ResizeHandle
               direction="horizontal"
