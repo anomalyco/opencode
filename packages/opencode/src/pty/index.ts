@@ -1,7 +1,7 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRunPromise } from "@/effect/run-service"
+import { makeRuntime } from "@/effect/run-service"
 import { Instance } from "@/project/instance"
 import { type IPty } from "bun-pty"
 import z from "zod"
@@ -361,7 +361,7 @@ export namespace Pty {
     }),
   )
 
-  const runPromise = makeRunPromise(Service, layer)
+  const { runPromise } = makeRuntime(Service, layer)
 
   export async function list() {
     return runPromise((svc) => svc.list())
