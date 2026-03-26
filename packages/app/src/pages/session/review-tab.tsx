@@ -112,7 +112,7 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
   }
 
   createEffect(() => {
-    props.diffs().length
+    (props.diffs() ?? []).length
     props.diffStyle
     if (!layout.ready()) return
     queueRestore()
@@ -152,7 +152,7 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
         header: props.classes?.header ?? "px-3",
         container: props.classes?.container ?? "pl-3",
       }}
-      diffs={props.diffs()}
+      diffs={props.diffs() ?? []}
       diffStyle={props.diffStyle}
       onDiffStyleChange={props.onDiffStyleChange}
       onViewFile={props.onViewFile}

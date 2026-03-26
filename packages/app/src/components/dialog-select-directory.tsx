@@ -29,7 +29,7 @@ function cleanInput(value: string) {
 }
 
 function normalizePath(input: string) {
-  const v = input.replaceAll("\\", "/")
+  const v = (input ?? "").replaceAll("\\", "/")
   if (v.startsWith("//") && !v.startsWith("///")) return "//" + v.slice(2).replace(/\/+/g, "/")
   return v.replace(/\/+/g, "/")
 }
