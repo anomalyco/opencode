@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/ui",
-  "version": "1.3.2",
+  "version": "1.3.3",
   "type": "module",
   "license": "MIT",
   "exports": {
@@ -12,7 +12,6 @@
     "./hooks": "./src/hooks/index.ts",
     "./context": "./src/context/index.ts",
     "./context/*": "./src/context/*.tsx",
-    "./font-loader": "./src/font-loader.ts",
     "./styles": "./src/styles/index.css",
     "./styles/tailwind": "./src/styles/tailwind/index.css",
     "./theme": "./src/theme/index.ts",
