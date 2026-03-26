@@ -82,31 +82,38 @@ The `InstanceState.make` init callback receives a `Scope`, so you can use `Effec
 - **Subscriptions**: Yield `Bus.Service` at the layer level, then use `Stream` + `forkScoped` inside the init closure. The fiber is automatically interrupted when the instance scope closes:
 
 ```ts
-const bus = yield* Bus.Service
+const bus = yield * Bus.Service
 
-const cache = yield* InstanceState.make<State>(
-  Effect.fn("Foo.state")(function* (ctx) {
-    // ... load state ...
+const cache =
+  yield *
+  InstanceState.make<State>(
+    Effect.fn("Foo.state")(function* (ctx) {
+      // ... load state ...
 
-    yield* bus
-      .subscribeAll()
-      .pipe(
-        Stream.runForEach((event) => Effect.sync(() => { /* handle */ })),
+      yield* bus.subscribeAll().pipe(
+        Stream.runForEach((event) =>
+          Effect.sync(() => {
+            /* handle */
+          }),
+        ),
         Effect.forkScoped,
       )
 
-    return { /* state */ }
-  }),
-)
+      return {
+        /* state */
+      }
+    }),
+  )
 ```
 
 - **Resource cleanup**: Use `Effect.acquireRelease` or `Effect.addFinalizer` for resources that need teardown (native watchers, process handles, etc.):
 
 ```ts
-yield* Effect.acquireRelease(
-  Effect.sync(() => nativeAddon.watch(dir)),
-  (watcher) => Effect.sync(() => watcher.close()),
-)
+yield *
+  Effect.acquireRelease(
+    Effect.sync(() => nativeAddon.watch(dir)),
+    (watcher) => Effect.sync(() => watcher.close()),
+  )
 ```
 
 - **Background fibers**: Use `Effect.forkScoped` — the fiber is interrupted on disposal.

@@ -404,15 +404,11 @@ export namespace File {
         s.cache = next
       })
 
-      let cachedScan = yield* Effect.cached(
-        scan().pipe(Effect.catchCause(() => Effect.void)),
-      )
+      let cachedScan = yield* Effect.cached(scan().pipe(Effect.catchCause(() => Effect.void)))
 
       const ensure = Effect.fn("File.ensure")(function* () {
         yield* cachedScan
-        cachedScan = yield* Effect.cached(
-          scan().pipe(Effect.catchCause(() => Effect.void)),
-        )
+        cachedScan = yield* Effect.cached(scan().pipe(Effect.catchCause(() => Effect.void)))
       })
 
       const init = Effect.fn("File.init")(function* () {

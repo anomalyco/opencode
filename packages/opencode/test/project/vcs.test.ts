@@ -162,10 +162,7 @@ describe("Vcs diff", () => {
     await $`git worktree add -b feature/test ${dir} HEAD`.cwd(tmp.path).quiet()
 
     await withVcsOnly(dir, async () => {
-      const [branch, base] = await Promise.all([
-        Vcs.branch(),
-        Vcs.defaultBranch(),
-      ])
+      const [branch, base] = await Promise.all([Vcs.branch(), Vcs.defaultBranch()])
       expect(branch).toBe("feature/test")
       expect(base).toBe("main")
     })

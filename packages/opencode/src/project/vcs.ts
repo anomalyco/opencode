@@ -159,22 +159,20 @@ export namespace Vcs {
             const value = { current, root }
             log.info("initialized", { branch: value.current, default_branch: value.root?.name })
 
-            yield* bus
-              .subscribe(FileWatcher.Event.Updated)
-              .pipe(
-                Stream.filter((evt) => evt.properties.file.endsWith("HEAD")),
-                Stream.runForEach((_evt) =>
-                  Effect.gen(function* () {
-                    const next = yield* Effect.promise(() => get())
-                    if (next !== value.current) {
-                      log.info("branch changed", { from: value.current, to: next })
-                      value.current = next
-                      yield* bus.publish(Event.BranchUpdated, { branch: next })
-                    }
-                  }),
-                ),
-                Effect.forkScoped,
-              )
+            yield* bus.subscribe(FileWatcher.Event.Updated).pipe(
+              Stream.filter((evt) => evt.properties.file.endsWith("HEAD")),
+              Stream.runForEach((_evt) =>
+                Effect.gen(function* () {
+                  const next = yield* Effect.promise(() => get())
+                  if (next !== value.current) {
+                    log.info("branch changed", { from: value.current, to: next })
+                    value.current = next
+                    yield* bus.publish(Event.BranchUpdated, { branch: next })
+                  }
+                }),
+              ),
+              Effect.forkScoped,
+            )
 
             return value
           }),

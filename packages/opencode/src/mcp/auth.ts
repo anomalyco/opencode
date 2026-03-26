@@ -3,7 +3,7 @@ import z from "zod"
 import { Global } from "../global"
 import { Effect, Layer, ServiceMap } from "effect"
 import { AppFileSystem } from "@/filesystem"
-import { makeRunPromise } from "@/effect/run-service"
+import { makeRuntime } from "@/effect/run-service"
 
 export namespace McpAuth {
   export const Tokens = z.object({
@@ -143,7 +143,7 @@ export namespace McpAuth {
 
   const defaultLayer = layer.pipe(Layer.provide(AppFileSystem.defaultLayer))
 
-  const runPromise = makeRunPromise(Service, defaultLayer)
+  const { runPromise } = makeRuntime(Service, defaultLayer)
 
   // Async facades for backward compat (used by McpOAuthProvider, CLI)
 
