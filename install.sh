@@ -46,18 +46,6 @@ info "Platform: ${PLATFORM}-${ARCH}"
 # Primary path: download pre-built binary — no bun required at runtime
 # bun is only needed as a dev tool for contributors
 
-# ── Fetch latest release ─────────────────────────────────────────────────────
-step "Fetching latest release…"
-
-LATEST=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
-  | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"\(.*\)".*/\1/')
-
-if [[ -z "$LATEST" ]]; then
-  error "Could not determine latest release. Check your internet connection."
-fi
-
-info "Latest release: ${LATEST}"
-
 # ── Build asset name ─────────────────────────────────────────────────────────
 # Asset naming: cobuilder-<platform>-<arch>.tar.gz (linux) or .zip (others)
 PKG_NAME="cobuilder-${PLATFORM}-${ARCH}"
@@ -72,7 +60,35 @@ else
   ASSET="${PKG_NAME}.zip"
 fi
 
-DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${LATEST}/${ASSET}"
+# ── Fetch latest release that has the expected asset ─────────────────────────
+# Each CD run creates a release before uploading binaries, so "latest" may
+# temporarily have no assets. Walk recent releases to find one that does.
+step "Fetching latest release…"
+
+RELEASES=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases?per_page=10" \
+  | grep '"tag_name"' | sed 's/.*"tag_name": *"\(.*\)".*/\1/')
+
+if [[ -z "$RELEASES" ]]; then
+  error "Could not fetch releases. Check your internet connection."
+fi
+
+LATEST=""
+DOWNLOAD_URL=""
+for TAG in $RELEASES; do
+  URL="https://github.com/${REPO}/releases/download/${TAG}/${ASSET}"
+  STATUS=$(curl -o /dev/null -sI -w "%{http_code}" "$URL")
+  if [[ "$STATUS" == "200" || "$STATUS" == "302" ]]; then
+    LATEST="$TAG"
+    DOWNLOAD_URL="$URL"
+    break
+  fi
+done
+
+if [[ -z "$LATEST" ]]; then
+  error "No release found with asset ${ASSET}. Try again in a few minutes while the build completes."
+fi
+
+info "Latest release: ${LATEST}"
 
 # ── Download ─────────────────────────────────────────────────────────────────
 step "Downloading ${ASSET}…"
