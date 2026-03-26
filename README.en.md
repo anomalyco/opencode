@@ -178,9 +178,9 @@ OpenCode is an open source AI coding agent with the following characteristics:
 
 ## 📝 Version info
 
-- **Based on**: OpenCode v1.2.1
-- **Custom build**: v1.2.1-custom
-- **Last synced**: 2026-02-15
+- **Based on**: OpenCode v1.3.2
+- **Custom build**: v1.3.2-custom
+- **Last synced**: 2026-03-27
 
 ## 🔄 Relationship to upstream
 
