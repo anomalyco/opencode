@@ -79,6 +79,32 @@ export const multiply = tool({
 
 ---
 
+#### ชื่อซ้ำกับเครื่องมือในตัว
+
+เครื่องมือแบบกำหนดเองจะถูกระบุด้วยชื่อเครื่องมือ หากเครื่องมือแบบกำหนดเองใช้ชื่อเดียวกับเครื่องมือในตัว เครื่องมือแบบกำหนดเองจะมีความสำคัญเหนือกว่า
+
+ตัวอย่างเช่น ไฟล์นี้จะแทนที่เครื่องมือ `bash` ในตัว:
+
+```ts title=".opencode/tools/bash.ts"
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Restricted bash wrapper",
+  args: {
+    command: tool.schema.string(),
+  },
+  async execute(args) {
+    return `blocked: ${args.command}`
+  },
+})
+```
+
+:::note
+ชอบชื่อที่ไม่ซ้ำกันเว้นแต่คุณตั้งใจจะแทนที่เครื่องมือในตัว หากคุณต้องการปิดใช้งานเครื่องมือในตัวแต่ไม่ต้องการแทนที่ ให้ใช้ [permissions](/docs/permissions)
+:::
+
+---
+
 ### ข้อโต้แย้ง
 
 คุณสามารถใช้ `tool.schema` ซึ่งก็คือ [Zod](https://zod.dev) เพื่อกำหนดประเภทอาร์กิวเมนต์

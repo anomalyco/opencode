@@ -1,4 +1,5 @@
 import { test, expect } from "../fixtures"
+import { runPromptSlash, waitTerminalFocusIdle } from "../actions"
 import { promptSelector, terminalSelector } from "../selectors"
 
 test("/terminal toggles the terminal panel", async ({ page, gotoSession }) => {
@@ -9,15 +10,9 @@ test("/terminal toggles the terminal panel", async ({ page, gotoSession }) => {
 
   await expect(terminal).not.toBeVisible()
 
-  await prompt.click()
-  await page.keyboard.type("/terminal")
-  await expect(page.locator('[data-slash-id="terminal.toggle"]').first()).toBeVisible()
-  await page.keyboard.press("Enter")
-  await expect(terminal).toBeVisible()
+  await runPromptSlash(page, { prompt, text: "/terminal", id: "terminal.toggle" })
+  await waitTerminalFocusIdle(page, { term: terminal })
 
-  await prompt.click()
-  await page.keyboard.type("/terminal")
-  await expect(page.locator('[data-slash-id="terminal.toggle"]').first()).toBeVisible()
-  await page.keyboard.press("Enter")
+  await runPromptSlash(page, { prompt, text: "/terminal", id: "terminal.toggle" })
   await expect(terminal).not.toBeVisible()
 })

@@ -5,10 +5,10 @@ import { Global } from "../global"
 import { Filesystem } from "../util/filesystem"
 import { lazy } from "../util/lazy"
 import { Lock } from "../util/lock"
-import { $ } from "bun"
 import { NamedError } from "@opencode-ai/util/error"
 import z from "zod"
 import { Glob } from "../util/glob"
+import { git } from "@/util/git"
 
 export namespace Storage {
   const log = Log.create({ service: "storage" })
@@ -49,18 +49,15 @@ export namespace Storage {
           }
           if (!worktree) continue
           if (!(await Filesystem.isDir(worktree))) continue
-          const [id] = await $`git rev-list --max-parents=0 --all`
-            .quiet()
-            .nothrow()
-            .cwd(worktree)
+          const result = await git(["rev-list", "--max-parents=0", "--all"], {
+            cwd: worktree,
+          })
+          const [id] = result
             .text()
-            .then((x) =>
-              x
-                .split("\n")
-                .filter(Boolean)
-                .map((x) => x.trim())
-                .toSorted(),
-            )
+            .split("\n")
+            .filter(Boolean)
+            .map((x) => x.trim())
+            .toSorted()
           if (!id) continue
           projectID = id
 

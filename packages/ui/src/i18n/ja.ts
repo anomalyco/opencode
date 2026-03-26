@@ -3,6 +3,9 @@ export const dict = {
   "ui.sessionReview.title.lastTurn": "前回ターンの変更",
   "ui.sessionReview.diffStyle.unified": "Unified",
   "ui.sessionReview.diffStyle.split": "Split",
+  "ui.sessionReview.openFile": "ファイルを開く",
+  "ui.sessionReview.selection.line": "{{line}} 行目",
+  "ui.sessionReview.selection.lines": "{{start}}-{{end}} 行目",
   "ui.sessionReview.expandAll": "すべて展開",
   "ui.sessionReview.collapseAll": "すべて折りたたむ",
 
@@ -36,6 +39,9 @@ export const dict = {
 
   "ui.sessionTurn.retry.retrying": "再試行中",
   "ui.sessionTurn.retry.inSeconds": "{{seconds}}秒後",
+  "ui.sessionTurn.retry.attempt": "{{attempt}}回目",
+  "ui.sessionTurn.retry.attemptLine": "{{line}} - {{attempt}}回目",
+  "ui.sessionTurn.retry.geminiHot": "gemini が混雑しています",
   "ui.sessionTurn.error.freeUsageExceeded": "無料使用制限に達しました",
   "ui.sessionTurn.error.addCredits": "クレジットを追加",
 
@@ -52,6 +58,14 @@ export const dict = {
   "ui.sessionTurn.status.gatheringThoughts": "考えをまとめています",
   "ui.sessionTurn.status.consideringNextSteps": "次のステップを検討中",
 
+  "ui.messagePart.questions.dismissed": "質問をスキップしました",
+  "ui.messagePart.compaction": "セッションを圧縮しました",
+  "ui.messagePart.context.read.one": "{{count}} 件の読み取り",
+  "ui.messagePart.context.read.other": "{{count}} 件の読み取り",
+  "ui.messagePart.context.search.one": "{{count}} 件の検索",
+  "ui.messagePart.context.search.other": "{{count}} 件の検索",
+  "ui.messagePart.context.list.one": "{{count}} 件のリスト",
+  "ui.messagePart.context.list.other": "{{count}} 件のリスト",
   "ui.messagePart.diagnostic.error": "エラー",
   "ui.messagePart.title.edit": "編集",
   "ui.messagePart.title.write": "作成",
@@ -71,6 +85,7 @@ export const dict = {
   "ui.textField.copied": "コピーしました",
 
   "ui.imagePreview.alt": "画像プレビュー",
+  "ui.scrollView.ariaLabel": "スクロール可能なコンテンツ",
 
   "ui.tool.read": "読み込み",
   "ui.tool.loaded": "読み込み済み",
@@ -78,12 +93,15 @@ export const dict = {
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
   "ui.tool.webfetch": "Webfetch",
+  "ui.tool.websearch": "Web検索",
+  "ui.tool.codesearch": "コード検索",
   "ui.tool.shell": "Shell",
   "ui.tool.patch": "Patch",
   "ui.tool.todos": "Todo",
   "ui.tool.todos.read": "Todo読み込み",
   "ui.tool.questions": "質問",
   "ui.tool.agent": "{{type}}エージェント",
+  "ui.tool.agent.default": "エージェント",
 
   "ui.common.file.one": "ファイル",
   "ui.common.file.other": "ファイル",
@@ -107,9 +125,12 @@ export const dict = {
   "ui.message.collapse": "メッセージを折りたたむ",
   "ui.message.copy": "コピー",
   "ui.message.copyMessage": "メッセージをコピー",
+  "ui.message.forkMessage": "新しいセッションにフォーク",
+  "ui.message.revertMessage": "この時点までリセット",
   "ui.message.copyResponse": "応答をコピー",
   "ui.message.copied": "コピーしました！",
   "ui.message.interrupted": "中断",
+  "ui.message.queued": "待機中",
   "ui.message.attachment.alt": "添付ファイル",
 
   "ui.patch.action.deleted": "削除済み",
@@ -123,4 +144,16 @@ export const dict = {
   "ui.question.multiHint": "該当するものをすべて選択",
   "ui.question.singleHint": "1 つ選択",
   "ui.question.custom.placeholder": "回答を入力...",
+
+  "ui.fileSearch.placeholder": "検索",
+  "ui.fileSearch.previousMatch": "前の一致",
+  "ui.fileSearch.nextMatch": "次の一致",
+  "ui.fileSearch.close": "検索を閉じる",
+  "ui.tool.task": "タスク",
+  "ui.tool.skill": "スキル",
+  "ui.basicTool.called": "`{{tool}}` を呼び出しました",
+  "ui.toolErrorCard.failed": "失敗",
+  "ui.toolErrorCard.copyError": "エラーをコピー",
+  "ui.message.duration.seconds": "{{count}}秒",
+  "ui.message.duration.minutesSeconds": "{{minutes}}分 {{seconds}}秒",
 }
