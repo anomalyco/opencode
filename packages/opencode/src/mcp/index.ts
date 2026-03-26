@@ -26,7 +26,7 @@ import { TuiEvent } from "@/cli/cmd/tui/event"
 import open from "open"
 import { Effect, Layer, Option, ServiceMap, Stream } from "effect"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRunPromise } from "@/effect/run-service"
+import { makeRuntime } from "@/effect/run-service"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 import { NodeFileSystem } from "@effect/platform-node"
@@ -893,7 +893,7 @@ export namespace MCP {
     Layer.provide(NodePath.layer),
   )
 
-  const runPromise = makeRunPromise(Service, defaultLayer)
+  const { runPromise } = makeRuntime(Service, defaultLayer)
 
   // --- Async facade functions ---
 
