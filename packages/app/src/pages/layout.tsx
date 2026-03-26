@@ -54,9 +54,11 @@ import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { DialogEditProject } from "@/components/dialog-edit-project"
 import { DialogCreateProject } from "@/components/dialog-create-project"
 import { DialogAddProject } from "@/components/dialog-add-project"
+import { DialogRegisterWorkspace } from "@/components/dialog-register-workspace"
 import { Titlebar } from "@/components/titlebar"
 import { useServer } from "@/context/server"
 import { useLanguage, type Locale } from "@/context/language"
+import { useHosted } from "@/context/hosted"
 import {
   childMapByParent,
   displayName,
@@ -113,6 +115,7 @@ export default function Layout(props: ParentProps) {
   const command = useCommand()
   const theme = useTheme()
   const language = useLanguage()
+  const hosted = useHosted()
   const initialDirectory = decode64(params.dir)
   const availableThemeEntries = createMemo(() => Object.entries(theme.themes()))
   const colorSchemeOrder: ColorScheme[] = ["system", "light", "dark"]
@@ -123,6 +126,10 @@ export default function Layout(props: ParentProps) {
   }
   const colorSchemeLabel = (scheme: ColorScheme) => language.t(colorSchemeKey[scheme])
   const currentDir = createMemo(() => decode64(params.dir) ?? "")
+  const canChooseProject = createMemo(() => server.isLocal() || !hosted.enabled() || hosted.isAdmin())
+  const openProjectLabel = createMemo(() =>
+    hosted.enabled() && !server.isLocal() && hosted.isAdmin() ? "Register workspace" : language.t("command.project.open"),
+  )
 
   const [state, setState] = createStore({
     autoselect: !initialDirectory,
@@ -1174,6 +1181,13 @@ export default function Layout(props: ParentProps) {
   const showEditProjectDialog = (project: LocalProject) => dialog.show(() => <DialogEditProject project={project} />)
 
   async function chooseProject() {
+    if (!canChooseProject()) return
+    if (hosted.enabled() && !server.isLocal()) {
+      if (!hosted.isAdmin()) return
+      dialog.show(() => <DialogRegisterWorkspace onCreated={openProject} />)
+      return
+    }
+
     function resolve(result: string | string[] | null) {
       if (Array.isArray(result)) {
         for (const directory of result) {
@@ -1923,7 +1937,8 @@ export default function Layout(props: ParentProps) {
               handleDragStart={handleDragStart}
               handleDragEnd={handleDragEnd}
               handleDragOver={handleDragOver}
-              openProjectLabel={language.t("command.project.open")}
+              canOpenProject={canChooseProject()}
+              openProjectLabel={openProjectLabel()}
               openProjectKeybind={() => command.keybind("project.open")}
               onOpenProject={chooseProject}
               renderProjectOverlay={() => (
@@ -1986,7 +2001,8 @@ export default function Layout(props: ParentProps) {
               handleDragStart={handleDragStart}
               handleDragEnd={handleDragEnd}
               handleDragOver={handleDragOver}
-              openProjectLabel={language.t("command.project.open")}
+              canOpenProject={canChooseProject()}
+              openProjectLabel={openProjectLabel()}
               openProjectKeybind={() => command.keybind("project.open")}
               onOpenProject={chooseProject}
               renderProjectOverlay={() => (

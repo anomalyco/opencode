@@ -10,6 +10,7 @@ import { Log } from "../../util/log"
 import { lazy } from "../../util/lazy"
 import { Config } from "../../config/config"
 import { errors } from "../error"
+import { HostedAuth } from "@/hosted/auth"
 
 const log = Log.create({ service: "server" })
 
@@ -65,6 +66,7 @@ export const GlobalRoutes = lazy(() =>
         },
       }),
       async (c) => {
+        if (HostedAuth.enabled() && !HostedAuth.trusted()) HostedAuth.requireUser()
         log.info("global event connected")
         return streamSSE(c, async (stream) => {
           stream.writeSSE({
@@ -123,6 +125,7 @@ export const GlobalRoutes = lazy(() =>
         },
       }),
       async (c) => {
+        if (HostedAuth.enabled() && !HostedAuth.trusted()) HostedAuth.requireUser()
         return c.json(await Config.getGlobal())
       },
     )
@@ -146,6 +149,7 @@ export const GlobalRoutes = lazy(() =>
       }),
       validator("json", Config.Info),
       async (c) => {
+        if (HostedAuth.enabled() && !HostedAuth.trusted()) HostedAuth.requireAdmin()
         const config = c.req.valid("json")
         const next = await Config.updateGlobal(config)
         return c.json(next)
@@ -169,6 +173,7 @@ export const GlobalRoutes = lazy(() =>
         },
       }),
       async (c) => {
+        if (HostedAuth.enabled() && !HostedAuth.trusted()) HostedAuth.requireAdmin()
         await Instance.disposeAll()
         GlobalBus.emit("event", {
           directory: "global",

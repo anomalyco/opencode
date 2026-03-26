@@ -6,6 +6,9 @@ import { Project } from "../../project/project"
 import z from "zod"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
+import { HostedAuth } from "@/hosted/auth"
+import { HostedWorkspace } from "@/hosted/workspace"
+import { HTTPException } from "hono/http-exception"
 
 export const ProjectRoutes = lazy(() =>
   new Hono()
@@ -28,7 +31,17 @@ export const ProjectRoutes = lazy(() =>
       }),
       async (c) => {
         const projects = await Project.list()
-        return c.json(projects)
+        if (!HostedAuth.enabled() || HostedAuth.trusted()) return c.json(projects)
+
+        HostedAuth.requireUser()
+        const workspaces = await HostedWorkspace.list({ enabled: true })
+        const visible = new Set(workspaces.map((workspace) => workspace.path))
+        return c.json(
+          projects.filter(
+            (project) =>
+              visible.has(project.worktree) || project.sandboxes.some((sandbox) => visible.has(sandbox)),
+          ),
+        )
       },
     )
     .get(
@@ -49,6 +62,15 @@ export const ProjectRoutes = lazy(() =>
         },
       }),
       async (c) => {
+        if (HostedAuth.enabled() && !HostedAuth.trusted()) {
+          HostedAuth.requireUser()
+          const allowed = await HostedWorkspace.allowed(Instance.directory)
+          if (!allowed) {
+            throw new HTTPException(403, {
+              message: "Workspace access denied",
+            })
+          }
+        }
         return c.json(Instance.project)
       },
     )

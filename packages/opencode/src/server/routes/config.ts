@@ -7,6 +7,7 @@ import { mapValues } from "remeda"
 import { errors } from "../error"
 import { Log } from "../../util/log"
 import { lazy } from "../../util/lazy"
+import { HostedAuth } from "@/hosted/auth"
 
 const log = Log.create({ service: "server" })
 
@@ -53,6 +54,7 @@ export const ConfigRoutes = lazy(() =>
       }),
       validator("json", Config.Info),
       async (c) => {
+        if (HostedAuth.enabled() && !HostedAuth.trusted()) HostedAuth.requireAdmin()
         const config = c.req.valid("json")
         await Config.update(config)
         return c.json(config)

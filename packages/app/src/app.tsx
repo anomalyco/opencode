@@ -35,6 +35,7 @@ import Home from "@/pages/home"
 import Session from "@/pages/session"
 import { ErrorPage } from "./pages/error"
 import { Suspense, JSX } from "solid-js"
+import { HostedGate, HostedProvider } from "@/context/hosted"
 
 const Loading = () => <div class="size-full" />
 
@@ -120,66 +121,70 @@ export function AppInterface(props: { defaultUrl?: string; children?: JSX.Elemen
   return (
     <ServerProvider defaultUrl={defaultServerUrl()} isSidecar={props.isSidecar}>
       <ServerKey>
-        <GlobalSDKProvider>
-          <GlobalSyncProvider>
-            <Router
-              root={(routerProps) => (
-                <SettingsProvider>
-                  <LicenseProvider>
-                    <LicenseKey>
-                      <PermissionProvider>
-                        <LayoutProvider>
-                          <NotificationProvider>
-                            <ModelsProvider>
-                              <CommandProvider>
-                                <HighlightsProvider>
-                                  <Layout>
-                                    {props.children}
-                                    {routerProps.children}
-                                  </Layout>
-                                </HighlightsProvider>
-                              </CommandProvider>
-                            </ModelsProvider>
-                          </NotificationProvider>
-                        </LayoutProvider>
-                      </PermissionProvider>
-                    </LicenseKey>
-                  </LicenseProvider>
-                </SettingsProvider>
-              )}
-            >
-              <Route
-                path="/"
-                component={() => (
-                  <Suspense fallback={<Loading />}>
-                    <Home />
-                  </Suspense>
-                )}
-              />
-              <Route path="/:dir" component={DirectoryLayout}>
-                <Route path="/" component={() => <Navigate href="session" />} />
-                <Route
-                  path="/session/:id?"
-                  component={(p) => (
-                    <Show when={p.params.id ?? "new"}>
-                      <TerminalProvider>
-                        <FileProvider>
-                          <PromptProvider>
-                            <CommentsProvider>
-                              <Suspense fallback={<Loading />}>
-                                <Session />
-                              </Suspense>
-                            </CommentsProvider>
-                          </PromptProvider>
-                        </FileProvider>
-                      </TerminalProvider>
-                    </Show>
+        <HostedProvider>
+          <HostedGate>
+            <GlobalSDKProvider>
+              <GlobalSyncProvider>
+                <Router
+                  root={(routerProps) => (
+                    <SettingsProvider>
+                      <LicenseProvider>
+                        <LicenseKey>
+                          <PermissionProvider>
+                            <LayoutProvider>
+                              <NotificationProvider>
+                                <ModelsProvider>
+                                  <CommandProvider>
+                                    <HighlightsProvider>
+                                      <Layout>
+                                        {props.children}
+                                        {routerProps.children}
+                                      </Layout>
+                                    </HighlightsProvider>
+                                  </CommandProvider>
+                                </ModelsProvider>
+                              </NotificationProvider>
+                            </LayoutProvider>
+                          </PermissionProvider>
+                        </LicenseKey>
+                      </LicenseProvider>
+                    </SettingsProvider>
                   )}
-                />
-              </Route>
-            </Router>
-          </GlobalSyncProvider>
-        </GlobalSDKProvider>
+                >
+                  <Route
+                    path="/"
+                    component={() => (
+                      <Suspense fallback={<Loading />}>
+                        <Home />
+                      </Suspense>
+                    )}
+                  />
+                  <Route path="/:dir" component={DirectoryLayout}>
+                    <Route path="/" component={() => <Navigate href="session" />} />
+                    <Route
+                      path="/session/:id?"
+                      component={(p) => (
+                        <Show when={p.params.id ?? "new"}>
+                          <TerminalProvider>
+                            <FileProvider>
+                              <PromptProvider>
+                                <CommentsProvider>
+                                  <Suspense fallback={<Loading />}>
+                                    <Session />
+                                  </Suspense>
+                                </CommentsProvider>
+                              </PromptProvider>
+                            </FileProvider>
+                          </TerminalProvider>
+                        </Show>
+                      )}
+                    />
+                  </Route>
+                </Router>
+              </GlobalSyncProvider>
+            </GlobalSDKProvider>
+          </HostedGate>
+        </HostedProvider>
       </ServerKey>
     </ServerProvider>
   )

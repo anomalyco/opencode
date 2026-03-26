@@ -6,7 +6,7 @@ It uses:
 
 - one Numeral container
 - one Caddy container for HTTPS
-- one bind mount for the customer workspace
+- one bind mount for the customer workspaces root
 - one persistent Docker volume for Numeral state
 
 The Numeral container must include `git`, because session versioning and worktrees depend on real Git operations inside the running app container.
@@ -33,8 +33,9 @@ Install Docker and the Docker Compose plugin.
 Create the directories used by the runner and deployment:
 
 ```bash
-sudo mkdir -p /srv/numeral/customer1/workspace
-sudo mkdir -p /srv/numeral/app
+sudo mkdir -p /srv/numeral/customer1/app
+sudo mkdir -p /srv/numeral/customer1/workspaces
+sudo mkdir -p /srv/numeral/customer1/backups
 ```
 
 Only mount paths that this customer is allowed to access. Numeral is not a security sandbox.
@@ -65,7 +66,7 @@ Keep the runner workspace separate from the mounted customer workspace.
 You can install it with the helper script in this folder:
 
 ```bash
-cd /srv/numeral/app
+cd /srv/numeral/customer1/app
 cp deploy/vps-single-customer/github-runner.env.example /tmp/github-runner.env
 # edit /tmp/github-runner.env
 set -a
@@ -79,38 +80,32 @@ Get `GITHUB_RUNNER_TOKEN` from the repository runner setup screen in GitHub.
 
 ## 5. Prepare the workspace on the VPS
 
-Create the dedicated customer repo or workspace mount if you have not already:
+Create the shared workspaces root and place customer repos or worktrees under it:
 
 ```bash
-mkdir -p /srv/numeral/customer1/workspace
+mkdir -p /srv/numeral/customer1/workspaces
+mkdir -p /srv/numeral/customer1/workspaces/app-repo
+mkdir -p /srv/numeral/customer1/workspaces/docs-repo
 ```
 
-<<<<<<< Updated upstream
-## 6. Configure environment variables
-=======
 Ensure the directory is writable by the user running `docker compose`. Only mount paths that this customer is allowed to access. Numeral is not a security sandbox.
 
 ## 3. Configure environment variables
->>>>>>> Stashed changes
 
 Copy `.env.example` to `.env` and fill in:
 
 - `NUMERAL_DOMAIN`
 - `LETSENCRYPT_EMAIL`
-<<<<<<< Updated upstream
-- `OPENCODE_SERVER_PASSWORD`
-- `OPENCODE_SERVER_USERNAME`
+- `OPENCODE_SERVER_PASSWORD` and `OPENCODE_SERVER_USERNAME` if you want optional outer HTTP Basic Auth
+- `OPENCODE_BOOTSTRAP_ADMIN_EMAIL`
+- `OPENCODE_BOOTSTRAP_ADMIN_PASSWORD`
 - `VITE_OPENCODE_LICENSE_URL`
-- `CUSTOMER_WORKSPACE`
-=======
-- `OPENCODE_SERVER_PASSWORD` (required; without it the server runs without authentication)
-- `CUSTOMER_WORKSPACE` (use an absolute path; `~` is not expanded in `.env`)
->>>>>>> Stashed changes
+- `CUSTOMER_WORKSPACES_ROOT`
 
 The workflow and deploy script read this file from:
 
 ```text
-/srv/numeral/app/deploy/vps-single-customer/.env
+/srv/numeral/customer1/app/deploy/vps-single-customer/.env
 ```
 
 The deploy script requires these environment variables every time it runs:
@@ -127,18 +122,18 @@ The deploy script requires these environment variables every time it runs:
 Clone the repo into the fixed deployment path used by the workflow:
 
 ```bash
-git clone https://github.com/anomalyco/opencode.git /srv/numeral/app
+git clone https://github.com/anomalyco/opencode.git /srv/numeral/customer1/app
 ```
 
 The deploy workflow keeps this checkout on the `pro` branch and resets it to the exact commit being deployed.
 
 ## 8. Manual first start
 
-From `/srv/numeral/app`:
+From `/srv/numeral/customer1/app`:
 
 ```bash
-cd /srv/numeral/app
-DEPLOY_ROOT=/srv/numeral/app \
+cd /srv/numeral/customer1/app
+DEPLOY_ROOT=/srv/numeral/customer1/app \
 DEPLOY_BRANCH=pro \
 DEPLOY_REPO_URL=https://github.com/anomalyco/opencode.git \
 DEPLOY_COMPOSE_FILE=deploy/vps-single-customer/docker-compose.yml \
@@ -155,7 +150,14 @@ Open:
 https://<NUMERAL_DOMAIN>
 ```
 
-The server should require HTTP Basic Auth using:
+On first boot, sign in with the bootstrap admin account:
+
+- email: `OPENCODE_BOOTSTRAP_ADMIN_EMAIL`
+- password: `OPENCODE_BOOTSTRAP_ADMIN_PASSWORD`
+
+After sign-in, register shared workspaces from the app using absolute paths under `CUSTOMER_WORKSPACES_ROOT`.
+
+If you also enabled outer HTTP Basic Auth, the server will require:
 
 - username: `OPENCODE_SERVER_USERNAME` or `opencode`
 - password: `OPENCODE_SERVER_PASSWORD`
@@ -192,3 +194,6 @@ If follow-up messages still stall only in production:
 - The web app bakes in `VITE_OPENCODE_LICENSE_URL` at build time and uses it for `POST /v1/licenses/activate` and `POST /v1/licenses/refresh`.
 - If no local web build is present, the server falls back to proxying `app.opencode.ai`.
 - The Numeral container runs as root. If the workspace directory is owned by a different host user, ensure it has appropriate permissions (e.g. `chmod 755`) so the container can read and write.
+- Customers should add their own model/provider credentials inside the running app.
+- Customer users share the same instance state in `/data`, but access is limited to workspaces registered under `CUSTOMER_WORKSPACES_ROOT`.
+- Back up both the Docker volume for `/data` and the bind-mounted `CUSTOMER_WORKSPACES_ROOT`.

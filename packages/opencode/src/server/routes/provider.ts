@@ -8,6 +8,7 @@ import { ProviderAuth } from "../../provider/auth"
 import { mapValues } from "remeda"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
+import { HostedAuth } from "@/hosted/auth"
 
 export const ProviderRoutes = lazy(() =>
   new Hono()
@@ -111,6 +112,7 @@ export const ProviderRoutes = lazy(() =>
         }),
       ),
       async (c) => {
+        if (HostedAuth.enabled() && !HostedAuth.trusted()) HostedAuth.requireAdmin()
         const providerID = c.req.valid("param").providerID
         const { method } = c.req.valid("json")
         const result = await ProviderAuth.authorize({
@@ -152,6 +154,7 @@ export const ProviderRoutes = lazy(() =>
         }),
       ),
       async (c) => {
+        if (HostedAuth.enabled() && !HostedAuth.trusted()) HostedAuth.requireAdmin()
         const providerID = c.req.valid("param").providerID
         const { method, code } = c.req.valid("json")
         await ProviderAuth.callback({

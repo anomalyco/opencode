@@ -9,12 +9,15 @@ services:
     environment:
       OPENCODE_SERVER_PASSWORD: ${OPENCODE_SERVER_PASSWORD}
       OPENCODE_SERVER_USERNAME: ${OPENCODE_SERVER_USERNAME:-opencode}
+      OPENCODE_BOOTSTRAP_ADMIN_EMAIL: ${OPENCODE_BOOTSTRAP_ADMIN_EMAIL}
+      OPENCODE_BOOTSTRAP_ADMIN_PASSWORD: ${OPENCODE_BOOTSTRAP_ADMIN_PASSWORD}
+      OPENCODE_WORKSPACES_ROOT: /workspaces
       OPENCODE_WEB_DIST: /app/packages/app/dist
       XDG_DATA_HOME: /data/share
       XDG_CONFIG_HOME: /data/config
       XDG_STATE_HOME: /data/state
       XDG_CACHE_HOME: /data/cache
-    working_dir: /workspace
+    working_dir: /workspaces
     command:
       - bun
       - --preload
@@ -27,7 +30,7 @@ services:
       - "4096"
     volumes:
       - numeral-data:/data
-      - ${CUSTOMER_WORKSPACE}:/workspace
+      - ${CUSTOMER_WORKSPACES_ROOT}:/workspaces
 
   caddy:
     image: caddy:2.8-alpine

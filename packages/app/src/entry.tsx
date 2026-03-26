@@ -7,6 +7,11 @@ import { dict as zh } from "@/i18n/zh"
 import pkg from "../package.json"
 
 const DEFAULT_SERVER_URL_KEY = "opencode.settings.dat:defaultServerUrl"
+const cookieFetch = ((input: RequestInfo | URL, init?: RequestInit) =>
+  fetch(input, {
+    ...init,
+    credentials: "include",
+  })) as typeof fetch
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
@@ -28,6 +33,7 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
 const platform: Platform = {
   platform: "web",
   version: pkg.version,
+  fetch: cookieFetch,
   openLink(url: string) {
     window.open(url, "_blank")
   },

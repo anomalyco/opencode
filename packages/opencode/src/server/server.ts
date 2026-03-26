@@ -43,6 +43,10 @@ import { PermissionRoutes } from "./routes/permission"
 import { GlobalRoutes } from "./routes/global"
 import { MDNS } from "./mdns"
 import { validateWorkspace } from "../project/workspace"
+import { HostedAuth } from "@/hosted/auth"
+import { HostedWorkspace } from "@/hosted/workspace"
+import { UserRoutes } from "./routes/user"
+import { WorkspaceRoutes } from "./routes/workspace"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -121,6 +125,7 @@ export namespace Server {
           const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
           return basicAuth({ username, password })(c, next)
         })
+        .use((c, next) => HostedAuth.provide(c, next))
         .use(async (c, next) => {
           const skipLogging = c.req.path === "/log"
           if (!skipLogging) {
@@ -140,6 +145,7 @@ export namespace Server {
         })
         .use(
           cors({
+            credentials: true,
             origin(input) {
               if (!input) return
 
@@ -160,6 +166,8 @@ export namespace Server {
           }),
         )
         .route("/global", GlobalRoutes())
+        .route("/user", UserRoutes())
+        .route("/workspace", WorkspaceRoutes())
         .get(
           "/fs/list",
           describeRoute({
@@ -192,6 +200,9 @@ export namespace Server {
             }),
           ),
           async (c) => {
+            if (HostedAuth.enabled() && !HostedAuth.trusted()) {
+              HostedAuth.requireAdmin()
+            }
             const fs = await import("fs/promises")
             const os = await import("os")
             const requested = c.req.valid("query").path || os.homedir()
@@ -240,6 +251,7 @@ export namespace Server {
           ),
           validator("json", Auth.Info),
           async (c) => {
+            if (HostedAuth.enabled() && !HostedAuth.trusted()) HostedAuth.requireAdmin()
             const providerID = c.req.valid("param").providerID
             const info = c.req.valid("json")
             await Auth.set(providerID, info)
@@ -271,6 +283,7 @@ export namespace Server {
             }),
           ),
           async (c) => {
+            if (HostedAuth.enabled() && !HostedAuth.trusted()) HostedAuth.requireAdmin()
             const providerID = c.req.valid("param").providerID
             await Auth.remove(providerID)
             return c.json(true)
@@ -278,29 +291,54 @@ export namespace Server {
         )
         .use(async (c, next) => {
           if (c.req.path === "/log") return next()
-          const raw = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
+          const hosted = HostedAuth.enabled() && !HostedAuth.trusted()
+          if (hosted) HostedAuth.requireUser()
+
+          const rawWorkspace = c.req.query("workspaceID") || c.req.header("x-opencode-workspace")
+          const rawDirectory = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
           const requested = (() => {
             try {
-              return decodeURIComponent(raw)
+              return decodeURIComponent(rawDirectory)
             } catch {
-              return raw
+              return rawDirectory
             }
           })()
-          const checked = await validateWorkspace(requested)
-          let directory = checked.valid ? checked.directory : requested
+          const workspace = rawWorkspace ? await HostedWorkspace.get(rawWorkspace) : undefined
+          if (rawWorkspace && !workspace) {
+            throw new HTTPException(404, {
+              message: "Workspace not found",
+            })
+          }
+          const target = workspace?.path ?? requested
+          const checked = await validateWorkspace(target)
+          let directory = checked.valid ? checked.directory : target
+
+          if (hosted) {
+            const allowed = await HostedWorkspace.allowed(target)
+            if (!allowed) {
+              throw new HTTPException(403, {
+                message: "Workspace access denied",
+              })
+            }
+            if (!checked.valid) {
+              throw new HTTPException(400, {
+                message: checked.reason,
+              })
+            }
+          }
 
           if (!checked.valid) {
             // Check if the requested path is a valid existing directory (non-git)
             const fs = await import("fs/promises")
-            const resolved = await fs.realpath(path.resolve(requested)).catch(() => undefined)
+            const resolved = await fs.realpath(path.resolve(target)).catch(() => undefined)
             const stat = resolved ? await fs.stat(resolved).catch(() => undefined) : undefined
             if (resolved && stat?.isDirectory()) {
               directory = resolved
-            } else if (requested !== process.cwd()) {
+            } else if (target !== process.cwd()) {
               const fallback = await validateWorkspace(process.cwd())
               if (fallback.valid) {
                 log.warn("invalid workspace, falling back to process cwd", {
-                  requested,
+                  requested: target,
                   reason: checked.reason,
                   fallback: fallback.directory,
                 })
@@ -329,7 +367,7 @@ export namespace Server {
             },
           }),
         )
-        .use(validator("query", z.object({ directory: z.string().optional() })))
+        .use(validator("query", z.object({ directory: z.string().optional(), workspaceID: z.string().optional() })))
         .route("/project", ProjectRoutes())
         .route("/pty", PtyRoutes())
         .route("/config", ConfigRoutes())
@@ -360,6 +398,7 @@ export namespace Server {
             },
           }),
           async (c) => {
+            if (HostedAuth.enabled() && !HostedAuth.trusted()) HostedAuth.requireAdmin()
             await Instance.dispose()
             return c.json(true)
           },

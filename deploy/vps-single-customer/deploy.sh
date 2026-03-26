@@ -64,6 +64,11 @@ set +a
 
 user="${OPENCODE_SERVER_USERNAME:-opencode}"
 url="${DEPLOY_HEALTHCHECK_URL:-https://${NUMERAL_DOMAIN}/global/health}"
+auth=()
+
+if [ -n "${OPENCODE_SERVER_PASSWORD:-}" ]; then
+  auth=(--user "$user:$OPENCODE_SERVER_PASSWORD")
+fi
 
 docker compose -f "$compose_file" up -d --build --remove-orphans
 
@@ -74,7 +79,7 @@ curl \
   --retry 10 \
   --retry-delay 3 \
   --retry-all-errors \
-  --user "$user:$OPENCODE_SERVER_PASSWORD" \
+  "${auth[@]}" \
   "$url"
 
 status
