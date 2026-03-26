@@ -32,6 +32,7 @@ import { SessionCommand } from "./cli/cmd/session"
 import { DbCommand } from "./cli/cmd/db"
 import { OnboardCommand } from "./cli/cmd/onboard"
 import { WorkflowCommand } from "./cli/cmd/workflow"
+import { SkillsCommand } from "./cli/cmd/skills"
 import path from "path"
 import { Global } from "./global"
 import { JsonMigration } from "./storage/json-migration"
@@ -154,6 +155,7 @@ let cli = yargs(hideBin(process.argv))
   .command(DbCommand)
   .command(OnboardCommand)
   .command(WorkflowCommand)
+  .command(SkillsCommand)
 
 if (Installation.isLocal()) {
   cli = cli.command(WorkspaceServeCommand)
