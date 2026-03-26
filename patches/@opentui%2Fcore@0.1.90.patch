@@ -1,0 +1,12 @@
+diff --git a/index-e89anq5x.js b/index-e89anq5x.js
+--- a/index-e89anq5x.js
++++ b/index-e89anq5x.js
+@@ -6690,7 +6690,7 @@
+ function registerEnvVar(config) {
+   const existing = envRegistry[config.name];
+   if (existing) {
+-    if (existing.description !== config.description || existing.type !== config.type || existing.default !== config.default) {
++    if (existing.type !== config.type || existing.default !== config.default) {
+       throw new Error(`Environment variable "${config.name}" is already registered with different configuration. ` + `Existing: ${JSON.stringify(existing)}, New: ${JSON.stringify(config)}`);
+     }
+     return;
