@@ -83,20 +83,20 @@ export namespace ShareNext {
           data: evt.properties.info,
         },
       ])
-      if (info.role === "user") {
-        await sync(info.sessionID, [
-          {
-            type: "model",
-            data: [await Provider.getModel(info.model.providerID, info.model.modelID).then((m) => m)],
-          },
-        ])
-      }
     })
     Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
       await sync(evt.properties.part.sessionID, [
         {
           type: "part",
           data: evt.properties.part,
+        },
+      ])
+      const msg = await MessageV2.get({ sessionID: evt.properties.part.sessionID, messageID: evt.properties.part.messageID })
+      if (!MessageV2.isRealUserMessage(msg)) return
+      await sync(evt.properties.part.sessionID, [
+        {
+          type: "model",
+          data: [await Provider.getModel(msg.info.model.providerID, msg.info.model.modelID).then((m) => m)],
         },
       ])
     })
