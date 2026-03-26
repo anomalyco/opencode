@@ -75,7 +75,7 @@ export type TuiKeybindSet = {
 }
 
 export type TuiDialogProps = {
-  size?: "medium" | "large"
+  size?: "medium" | "large" | "xlarge"
   onClose: () => void
   children?: JSX.Element
 }
@@ -83,8 +83,8 @@ export type TuiDialogProps = {
 export type TuiDialogStack = {
   replace: (render: () => JSX.Element, onClose?: () => void) => void
   clear: () => void
-  setSize: (size: "medium" | "large") => void
-  readonly size: "medium" | "large"
+  setSize: (size: "medium" | "large" | "xlarge") => void
+  readonly size: "medium" | "large" | "xlarge"
   readonly depth: number
   readonly open: boolean
 }

@@ -1,12 +1,18 @@
 import { Keybind } from "@/util/keybind"
 import type { TuiPlugin, TuiPluginApi, TuiPluginStatus } from "@opencode-ai/plugin/tui"
+import { useTerminalDimensions } from "@opentui/solid"
+import { fileURLToPath } from "url"
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
-import { createMemo, createSignal } from "solid-js"
+import { createEffect, createMemo, createSignal } from "solid-js"
 
 const id = "internal:plugin-manager"
 const key = Keybind.parse("space").at(0)
 
 function state(api: TuiPluginApi, item: TuiPluginStatus) {
+  if (!item.enabled) {
+    return <span style={{ fg: api.theme.current.textMuted }}>disabled</span>
+  }
+
   return (
     <span style={{ fg: item.active ? api.theme.current.success : api.theme.current.error }}>
       {item.active ? "active" : "inactive"}
@@ -14,21 +20,51 @@ function state(api: TuiPluginApi, item: TuiPluginStatus) {
   )
 }
 
-function row(api: TuiPluginApi, item: TuiPluginStatus): DialogSelectOption<string> {
+function source(spec: string) {
+  if (!spec.startsWith("file://")) return
+  return fileURLToPath(spec)
+}
+
+function meta(item: TuiPluginStatus, width: number) {
+  if (item.source === "internal") {
+    if (width >= 120) return "Built-in plugin"
+    return "Built-in"
+  }
+  const next = source(item.spec)
+  if (next) return next
+  return item.spec
+}
+
+function row(api: TuiPluginApi, item: TuiPluginStatus, width: number): DialogSelectOption<string> {
   return {
     title: item.id,
     value: item.id,
     category: item.source === "internal" ? "Internal" : "External",
-    description: item.source === "internal" ? "Built-in" : item.spec,
+    description: meta(item, width),
     footer: state(api, item),
     disabled: item.id === id,
   }
 }
 
 function View(props: { api: TuiPluginApi }) {
+  const size = useTerminalDimensions()
   const [list, setList] = createSignal(props.api.plugins.list())
   const [cur, setCur] = createSignal<string | undefined>()
   const [lock, setLock] = createSignal(false)
+
+  createEffect(() => {
+    const width = size().width
+    if (width >= 128) {
+      props.api.ui.dialog.setSize("xlarge")
+      return
+    }
+    if (width >= 96) {
+      props.api.ui.dialog.setSize("large")
+      return
+    }
+    props.api.ui.dialog.setSize("medium")
+  })
+
   const rows = createMemo(() =>
     [...list()]
       .sort((a, b) => {
@@ -37,7 +73,7 @@ function View(props: { api: TuiPluginApi }) {
         if (x !== y) return x - y
         return a.id.localeCompare(b.id)
       })
-      .map((item) => row(props.api, item)),
+      .map((item) => row(props.api, item, size().width)),
   )
 
   const flip = (x: string) => {
