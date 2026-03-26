@@ -117,8 +117,14 @@ export namespace Server {
       })
       .use(async (c, next) => {
         await next()
-        const cfg = await Config.get()
-        if (cfg.security?.headers?.enabled !== false) {
+        let headersEnabled = true
+        try {
+          const cfg = await Config.get()
+          headersEnabled = cfg.security?.headers?.enabled !== false
+        } catch {
+          // Instance context not yet available (early startup requests) — apply headers by default
+        }
+        if (headersEnabled) {
           const headers = getSecurityHeaders()
           for (const [key, value] of Object.entries(headers)) {
             c.res.headers.set(key, value)
