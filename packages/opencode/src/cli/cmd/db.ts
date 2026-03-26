@@ -1,6 +1,7 @@
 import type { Argv } from "yargs"
 import { spawn } from "child_process"
 import { Database } from "../../storage/db"
+import { drizzle } from "drizzle-orm/bun-sqlite"
 import { Database as BunDatabase } from "bun:sqlite"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
@@ -74,7 +75,7 @@ const MigrateCommand = cmd({
     let last = -1
     if (tty) process.stderr.write("\x1b[?25l")
     try {
-      const stats = await JsonMigration.run(sqlite, {
+      const stats = await JsonMigration.run(drizzle({ client: sqlite }), {
         progress: (event) => {
           const percent = Math.floor((event.current / event.total) * 100)
           if (percent === last) return

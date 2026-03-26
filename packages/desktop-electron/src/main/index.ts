@@ -24,8 +24,6 @@ const { autoUpdater } = pkg
 
 import type { InitStep, ServerReadyData, SqliteMigrationProgress, WslConfig } from "../preload/types"
 import { checkAppExists, resolveAppPath, wslPath } from "./apps"
-import type { CommandChild } from "./cli"
-import { installCli, syncCli } from "./cli"
 import { CHANNEL, UPDATER_ENABLED } from "./constants"
 import { registerIpcHandlers, sendDeepLinks, sendMenuCommand, sendSqliteMigrationProgress } from "./ipc"
 import { initLogging } from "./logging"
@@ -33,12 +31,13 @@ import { parseMarkdown } from "./markdown"
 import { createMenu } from "./menu"
 import { getDefaultServerUrl, getWslConfig, setDefaultServerUrl, setWslConfig, spawnLocalServer } from "./server"
 import { createLoadingWindow, createMainWindow, setBackgroundColor, setDockIcon } from "./windows"
+import { Server } from "virtual:opencode-server"
 
 const initEmitter = new EventEmitter()
 let initStep: InitStep = { phase: "server_waiting" }
 
 let mainWindow: BrowserWindow | null = null
-let sidecar: CommandChild | null = null
+let server: Server.Listener | null = null
 const loadingComplete = defer<void>()
 
 const pendingDeepLinks: string[] = []
@@ -93,11 +92,9 @@ function setupApp() {
   }
 
   void app.whenReady().then(async () => {
-    // migrate()
     app.setAsDefaultProtocolClient("opencode")
     setDockIcon()
     setupAutoUpdater()
-    syncCli()
     await initialize()
   })
 }
@@ -131,8 +128,8 @@ async function initialize() {
   const password = randomUUID()
 
   logger.log("spawning sidecar", { url })
-  const { child, health, events } = spawnLocalServer(hostname, port, password)
-  sidecar = child
+  const { listener, health } = await spawnLocalServer(hostname, port, password)
+  server = listener
   serverReady.resolve({
     url,
     username: "opencode",
@@ -142,7 +139,7 @@ async function initialize() {
   const loadingTask = (async () => {
     logger.log("sidecar connection started", { url })
 
-    events.on("sqlite", (progress: SqliteMigrationProgress) => {
+    initEmitter.on("sqlite", (progress: SqliteMigrationProgress) => {
       setInitStep({ phase: "sqlite_waiting" })
       if (overlay) sendSqliteMigrationProgress(overlay, progress)
       if (mainWindow) sendSqliteMigrationProgress(mainWindow, progress)
@@ -195,9 +192,6 @@ function wireMenu() {
   if (!mainWindow) return
   createMenu({
     trigger: (id) => mainWindow && sendMenuCommand(mainWindow, id),
-    installCli: () => {
-      void installCli()
-    },
     checkForUpdates: () => {
       void checkForUpdates(true)
     },
@@ -212,7 +206,6 @@ function wireMenu() {
 
 registerIpcHandlers({
   killSidecar: () => killSidecar(),
-  installCli: async () => installCli(),
   awaitInitialization: async (sendStep) => {
     sendStep(initStep)
     const listener = (step: InitStep) => sendStep(step)
@@ -244,16 +237,9 @@ registerIpcHandlers({
 })
 
 function killSidecar() {
-  if (!sidecar) return
-  const pid = sidecar.pid
-  sidecar.kill()
-  sidecar = null
-  // tree-kill is async; also send process group signal as immediate fallback
-  if (pid && process.platform !== "win32") {
-    try {
-      process.kill(-pid, "SIGTERM")
-    } catch {}
-  }
+  if (!server) return
+  server.stop()
+  server = null
 }
 
 function ensureLoopbackNoProxy() {

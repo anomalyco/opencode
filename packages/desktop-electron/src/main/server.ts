@@ -1,4 +1,4 @@
-import { serve, type CommandChild } from "./cli"
+import { Server } from "virtual:opencode-server"
 import { DEFAULT_SERVER_URL_KEY, WSL_ENABLED_KEY } from "./constants"
 import { store } from "./store"
 
@@ -29,8 +29,13 @@ export function setWslConfig(config: WslConfig) {
   store.set(WSL_ENABLED_KEY, config.enabled)
 }
 
-export function spawnLocalServer(hostname: string, port: number, password: string) {
-  const { child, exit, events } = serve(hostname, port, password)
+export async function spawnLocalServer(hostname: string, port: number, password: string) {
+  const listener = await Server.listen({
+    port,
+    hostname,
+    username: "opencode",
+    password,
+  })
 
   const wait = (async () => {
     const url = `http://${hostname}:${port}`
@@ -42,19 +47,10 @@ export function spawnLocalServer(hostname: string, port: number, password: strin
       }
     }
 
-    const terminated = async () => {
-      const payload = await exit
-      throw new Error(
-        `Sidecar terminated before becoming healthy (code=${payload.code ?? "unknown"} signal=${
-          payload.signal ?? "unknown"
-        })`,
-      )
-    }
-
-    await Promise.race([ready(), terminated()])
+    await ready()
   })()
 
-  return { child, health: { wait }, events }
+  return { listener, health: { wait } }
 }
 
 export async function checkHealth(url: string, password?: string | null): Promise<boolean> {
@@ -82,5 +78,3 @@ export async function checkHealth(url: string, password?: string | null): Promis
     return false
   }
 }
-
-export type { CommandChild }

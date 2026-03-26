@@ -30,6 +30,7 @@
     "@solid-primitives/storage": "catalog:",
     "@solidjs/meta": "catalog:",
     "@solidjs/router": "0.15.4",
+    "@valibot/to-json-schema": "1.6.0",
     "effect": "catalog:",
     "electron-log": "^5",
     "electron-store": "^10",
@@ -37,7 +38,9 @@
     "electron-window-state": "^5.0.3",
     "marked": "^15",
     "solid-js": "catalog:",
-    "tree-kill": "^1.2.2"
+    "sury": "11.0.0-alpha.4",
+    "tree-kill": "^1.2.2",
+    "zod-openapi": "5.4.6"
   },
   "devDependencies": {
     "@actions/artifact": "4.0.0",
