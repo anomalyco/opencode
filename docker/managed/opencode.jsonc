@@ -1,0 +1,39 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  // Managed config — highest priority, overrides all user/project settings.
+  // Deployed to /etc/opencode/ in the Docker container.
+  //
+  // Skills are loaded ONLY from /app/.opencode/skill/ (baked into the image).
+  // External skills (.claude/, .agents/, ~/.config/opencode/) are disabled via
+  // OPENCODE_DISABLE_EXTERNAL_SKILLS=true in docker-compose.
+
+  "provider": {
+    "opencode": {
+      "options": {}
+    }
+  },
+  "permission": {
+    "bash": {
+      "apt *": "deny",
+      "apt-get *": "deny",
+      "apk *": "deny",
+      "bun add *": "deny",
+      "npm ci *": "deny",
+      "npm install *": "deny",
+      "pip install *": "deny",
+      "pip3 install *": "deny",
+      "pnpm add *": "deny",
+      "pnpm install *": "deny",
+      "poetry add *": "deny",
+      "python -m pip install *": "deny",
+      "python3 -m pip install *": "deny",
+      "uv add *": "deny",
+      "uv pip install *": "deny"
+    }
+  },
+  "mcp": {},
+  "tools": {
+    "github-triage": false,
+    "github-pr-search": false
+  }
+}

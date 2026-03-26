@@ -8,6 +8,7 @@ It uses:
 - one Caddy container for HTTPS
 - one bind mount for the customer workspaces root
 - one persistent Docker volume for Numeral state
+- one prebuilt Python/data-analysis sandbox image so sessions do not need runtime package installs
 
 The Numeral container must include `git`, because session versioning and worktrees depend on real Git operations inside the running app container.
 
@@ -194,6 +195,8 @@ If follow-up messages still stall only in production:
 - The web app bakes in `VITE_OPENCODE_LICENSE_URL` at build time and uses it for `POST /v1/licenses/activate` and `POST /v1/licenses/refresh`.
 - If no local web build is present, the server falls back to proxying `app.opencode.ai`.
 - The Numeral container runs as root. If the workspace directory is owned by a different host user, ensure it has appropriate permissions (e.g. `chmod 755`) so the container can read and write.
-- Customers should add their own model/provider credentials inside the running app.
 - Customer users share the same instance state in `/data`, but access is limited to workspaces registered under `CUSTOMER_WORKSPACES_ROOT`.
 - Back up both the Docker volume for `/data` and the bind-mounted `CUSTOMER_WORKSPACES_ROOT`.
+- The container bakes in Python plus a curated data/accounting package set and blocks runtime package installs in sandbox mode.
+- Managed sandbox permissions deny common package-manager install commands such as `pip install`, `uv pip install`, `npm install`, `pnpm install`, and `bun add`.
+- Customers should add their own model/provider credentials inside the running app.

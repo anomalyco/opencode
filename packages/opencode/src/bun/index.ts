@@ -8,6 +8,7 @@ import { readableStreamToText } from "bun"
 import { Lock } from "../util/lock"
 import { PackageRegistry } from "./registry"
 import { proxied } from "@/util/proxied"
+import { Flag } from "@/flag/flag"
 
 export namespace BunProc {
   const log = Log.create({ service: "bun" })
@@ -62,6 +63,10 @@ export namespace BunProc {
   )
 
   export async function install(pkg: string, version = "latest") {
+    if (Flag.OPENCODE_SANDBOX_PREINSTALLED) {
+      throw new Error(`Sandbox image blocks runtime package installs: ${pkg}@${version}. Rebuild the image to add it.`)
+    }
+
     // Use lock to ensure only one install at a time
     using _ = await Lock.write("bun-install")
 

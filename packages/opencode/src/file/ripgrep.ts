@@ -9,6 +9,7 @@ import { $ } from "bun"
 
 import { ZipReader, BlobReader, BlobWriter } from "@zip.js/zip.js"
 import { Log } from "@/util/log"
+import { Flag } from "@/flag/flag"
 
 export namespace Ripgrep {
   const log = Log.create({ service: "ripgrep" })
@@ -133,6 +134,10 @@ export namespace Ripgrep {
 
     const file = Bun.file(filepath)
     if (!(await file.exists())) {
+      if (Flag.OPENCODE_SANDBOX_PREINSTALLED) {
+        throw new Error("Sandbox image is missing ripgrep. Install rg in the container image.")
+      }
+
       const platformKey = `${process.arch}-${process.platform}` as keyof typeof PLATFORM
       const config = PLATFORM[platformKey]
       if (!config) throw new UnsupportedPlatformError({ platform: platformKey })
