@@ -1,141 +1,105 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 260" width="300" height="260" shape-rendering="crispEdges">
-  <!-- Light warm background matching CobuilderLabs org avatar style -->
-  <rect width="300" height="260" fill="#f3ece6"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 260" width="260" height="260" shape-rendering="crispEdges">
+  <!-- Warm light background matching CobuilderLabs org avatar style -->
+  <rect width="260" height="260" fill="#f3ece6"/>
 
   <!--
-    Pixel grid: 20×20px blocks, offset x=10, y=10
-    14 cols (0–13) × 12 rows (0–11)
-    Dog faces RIGHT. Tail curls up on the LEFT. Ear spikes up on the RIGHT.
+    Jindo headshot — pixel art, front-facing
+    Grid: 10 cols × 10 rows, 24px per pixel, 10px padding
+    Pixel x = 10 + col*24 | Pixel y = 10 + row*24
 
-    Main color:  #c08055  (warm fawn — matches GitHub avatar)
-    Dark accent: #5a2808  (eye, nose)
+    Two pointed ears with U-notch at top (mirrors CobuilderLabs logo shape)
+    Eyes at row 4, cols 3 & 7
+    Nose at row 7, cols 4–5
 
-    Layout per row:
-      r0:  tail tip (col 2)           + ear tip (col 9)
-      r1:  tail     (cols 1–2)        + ear     (cols 8–9)
-      r2:  tail     (cols 0–2)        + head    (cols 6–11)
-      r3:  tail     (cols 0–1) | gap  + body+snout (cols 3–13) [col 13 = nose]
-      r4:  body+snout (cols 3–13)     [col 10 = eye, col 13 = nose]
-      r5:  body     (cols 3–11)
-      r6:  body     (cols 3–11)
-      r7:  body     (cols 3–11)
-      r8:  body     (cols 3–11)
-      r9:  legs     (cols 4–5) + legs (cols 9–10)
-      r10: legs     (cols 4–5) + legs (cols 9–10)
-      r11: paws     (cols 3–5) + paws (cols 8–11)
+    Main:  #c08055  (warm fawn)
+    Dark:  #5a2808  (eyes, nose)
   -->
 
-  <!-- ROW 0 — tail tip + ear tip -->
-  <rect x="50"  y="10" width="20" height="20" fill="#c08055"/>
-  <rect x="190" y="10" width="20" height="20" fill="#c08055"/>
+  <!-- ROW 0 — ear tips (cols 2, 7) -->
+  <rect x="58"  y="10" width="24" height="24" fill="#c08055"/>
+  <rect x="178" y="10" width="24" height="24" fill="#c08055"/>
 
-  <!-- ROW 1 — tail + ear -->
-  <rect x="30"  y="30" width="20" height="20" fill="#c08055"/>
-  <rect x="50"  y="30" width="20" height="20" fill="#c08055"/>
-  <rect x="170" y="30" width="20" height="20" fill="#c08055"/>
-  <rect x="190" y="30" width="20" height="20" fill="#c08055"/>
+  <!-- ROW 1 — ears (cols 1–2, 7–8) -->
+  <rect x="34"  y="34" width="24" height="24" fill="#c08055"/>
+  <rect x="58"  y="34" width="24" height="24" fill="#c08055"/>
+  <rect x="178" y="34" width="24" height="24" fill="#c08055"/>
+  <rect x="202" y="34" width="24" height="24" fill="#c08055"/>
 
-  <!-- ROW 2 — tail (0–2) + head (6–11) -->
-  <rect x="10"  y="50" width="20" height="20" fill="#c08055"/>
-  <rect x="30"  y="50" width="20" height="20" fill="#c08055"/>
-  <rect x="50"  y="50" width="20" height="20" fill="#c08055"/>
-  <rect x="130" y="50" width="20" height="20" fill="#c08055"/>
-  <rect x="150" y="50" width="20" height="20" fill="#c08055"/>
-  <rect x="170" y="50" width="20" height="20" fill="#c08055"/>
-  <rect x="190" y="50" width="20" height="20" fill="#c08055"/>
-  <rect x="210" y="50" width="20" height="20" fill="#c08055"/>
-  <rect x="230" y="50" width="20" height="20" fill="#c08055"/>
+  <!-- ROW 2 — ears wider (cols 1–3, 6–8), gap in middle -->
+  <rect x="34"  y="58" width="24" height="24" fill="#c08055"/>
+  <rect x="58"  y="58" width="24" height="24" fill="#c08055"/>
+  <rect x="82"  y="58" width="24" height="24" fill="#c08055"/>
+  <rect x="154" y="58" width="24" height="24" fill="#c08055"/>
+  <rect x="178" y="58" width="24" height="24" fill="#c08055"/>
+  <rect x="202" y="58" width="24" height="24" fill="#c08055"/>
 
-  <!-- ROW 3 — tail (0–1) | gap at col2 | body+snout (3–12) + nose (13, dark) -->
-  <rect x="10"  y="70" width="20" height="20" fill="#c08055"/>
-  <rect x="30"  y="70" width="20" height="20" fill="#c08055"/>
-  <rect x="70"  y="70" width="20" height="20" fill="#c08055"/>
-  <rect x="90"  y="70" width="20" height="20" fill="#c08055"/>
-  <rect x="110" y="70" width="20" height="20" fill="#c08055"/>
-  <rect x="130" y="70" width="20" height="20" fill="#c08055"/>
-  <rect x="150" y="70" width="20" height="20" fill="#c08055"/>
-  <rect x="170" y="70" width="20" height="20" fill="#c08055"/>
-  <rect x="190" y="70" width="20" height="20" fill="#c08055"/>
-  <rect x="210" y="70" width="20" height="20" fill="#c08055"/>
-  <rect x="230" y="70" width="20" height="20" fill="#c08055"/>
-  <rect x="250" y="70" width="20" height="20" fill="#c08055"/>
-  <rect x="270" y="70" width="20" height="20" fill="#5a2808"/>
+  <!-- ROW 3 — full head width (cols 0–9) -->
+  <rect x="10"  y="82" width="24" height="24" fill="#c08055"/>
+  <rect x="34"  y="82" width="24" height="24" fill="#c08055"/>
+  <rect x="58"  y="82" width="24" height="24" fill="#c08055"/>
+  <rect x="82"  y="82" width="24" height="24" fill="#c08055"/>
+  <rect x="106" y="82" width="24" height="24" fill="#c08055"/>
+  <rect x="130" y="82" width="24" height="24" fill="#c08055"/>
+  <rect x="154" y="82" width="24" height="24" fill="#c08055"/>
+  <rect x="178" y="82" width="24" height="24" fill="#c08055"/>
+  <rect x="202" y="82" width="24" height="24" fill="#c08055"/>
+  <rect x="226" y="82" width="24" height="24" fill="#c08055"/>
 
-  <!-- ROW 4 — body+snout (3–12), eye (10, dark), nose (13, dark) -->
-  <rect x="70"  y="90" width="20" height="20" fill="#c08055"/>
-  <rect x="90"  y="90" width="20" height="20" fill="#c08055"/>
-  <rect x="110" y="90" width="20" height="20" fill="#c08055"/>
-  <rect x="130" y="90" width="20" height="20" fill="#c08055"/>
-  <rect x="150" y="90" width="20" height="20" fill="#c08055"/>
-  <rect x="170" y="90" width="20" height="20" fill="#c08055"/>
-  <rect x="190" y="90" width="20" height="20" fill="#c08055"/>
-  <rect x="210" y="90" width="20" height="20" fill="#5a2808"/>
-  <rect x="230" y="90" width="20" height="20" fill="#c08055"/>
-  <rect x="250" y="90" width="20" height="20" fill="#c08055"/>
-  <rect x="270" y="90" width="20" height="20" fill="#5a2808"/>
+  <!-- ROW 4 — head + eyes (cols 0–9, dark at cols 3 & 7) -->
+  <rect x="10"  y="106" width="24" height="24" fill="#c08055"/>
+  <rect x="34"  y="106" width="24" height="24" fill="#c08055"/>
+  <rect x="58"  y="106" width="24" height="24" fill="#c08055"/>
+  <rect x="82"  y="106" width="24" height="24" fill="#5a2808"/>
+  <rect x="106" y="106" width="24" height="24" fill="#c08055"/>
+  <rect x="130" y="106" width="24" height="24" fill="#c08055"/>
+  <rect x="154" y="106" width="24" height="24" fill="#c08055"/>
+  <rect x="178" y="106" width="24" height="24" fill="#5a2808"/>
+  <rect x="202" y="106" width="24" height="24" fill="#c08055"/>
+  <rect x="226" y="106" width="24" height="24" fill="#c08055"/>
 
-  <!-- ROW 5 — body (3–11) -->
-  <rect x="70"  y="110" width="20" height="20" fill="#c08055"/>
-  <rect x="90"  y="110" width="20" height="20" fill="#c08055"/>
-  <rect x="110" y="110" width="20" height="20" fill="#c08055"/>
-  <rect x="130" y="110" width="20" height="20" fill="#c08055"/>
-  <rect x="150" y="110" width="20" height="20" fill="#c08055"/>
-  <rect x="170" y="110" width="20" height="20" fill="#c08055"/>
-  <rect x="190" y="110" width="20" height="20" fill="#c08055"/>
-  <rect x="210" y="110" width="20" height="20" fill="#c08055"/>
-  <rect x="230" y="110" width="20" height="20" fill="#c08055"/>
+  <!-- ROW 5 — full head (cols 0–9) -->
+  <rect x="10"  y="130" width="24" height="24" fill="#c08055"/>
+  <rect x="34"  y="130" width="24" height="24" fill="#c08055"/>
+  <rect x="58"  y="130" width="24" height="24" fill="#c08055"/>
+  <rect x="82"  y="130" width="24" height="24" fill="#c08055"/>
+  <rect x="106" y="130" width="24" height="24" fill="#c08055"/>
+  <rect x="130" y="130" width="24" height="24" fill="#c08055"/>
+  <rect x="154" y="130" width="24" height="24" fill="#c08055"/>
+  <rect x="178" y="130" width="24" height="24" fill="#c08055"/>
+  <rect x="202" y="130" width="24" height="24" fill="#c08055"/>
+  <rect x="226" y="130" width="24" height="24" fill="#c08055"/>
 
-  <!-- ROW 6 — body (3–11) -->
-  <rect x="70"  y="130" width="20" height="20" fill="#c08055"/>
-  <rect x="90"  y="130" width="20" height="20" fill="#c08055"/>
-  <rect x="110" y="130" width="20" height="20" fill="#c08055"/>
-  <rect x="130" y="130" width="20" height="20" fill="#c08055"/>
-  <rect x="150" y="130" width="20" height="20" fill="#c08055"/>
-  <rect x="170" y="130" width="20" height="20" fill="#c08055"/>
-  <rect x="190" y="130" width="20" height="20" fill="#c08055"/>
-  <rect x="210" y="130" width="20" height="20" fill="#c08055"/>
-  <rect x="230" y="130" width="20" height="20" fill="#c08055"/>
+  <!-- ROW 6 — slightly narrower (cols 1–8) -->
+  <rect x="34"  y="154" width="24" height="24" fill="#c08055"/>
+  <rect x="58"  y="154" width="24" height="24" fill="#c08055"/>
+  <rect x="82"  y="154" width="24" height="24" fill="#c08055"/>
+  <rect x="106" y="154" width="24" height="24" fill="#c08055"/>
+  <rect x="130" y="154" width="24" height="24" fill="#c08055"/>
+  <rect x="154" y="154" width="24" height="24" fill="#c08055"/>
+  <rect x="178" y="154" width="24" height="24" fill="#c08055"/>
+  <rect x="202" y="154" width="24" height="24" fill="#c08055"/>
 
-  <!-- ROW 7 — body (3–11) -->
-  <rect x="70"  y="150" width="20" height="20" fill="#c08055"/>
-  <rect x="90"  y="150" width="20" height="20" fill="#c08055"/>
-  <rect x="110" y="150" width="20" height="20" fill="#c08055"/>
-  <rect x="130" y="150" width="20" height="20" fill="#c08055"/>
-  <rect x="150" y="150" width="20" height="20" fill="#c08055"/>
-  <rect x="170" y="150" width="20" height="20" fill="#c08055"/>
-  <rect x="190" y="150" width="20" height="20" fill="#c08055"/>
-  <rect x="210" y="150" width="20" height="20" fill="#c08055"/>
-  <rect x="230" y="150" width="20" height="20" fill="#c08055"/>
+  <!-- ROW 7 — snout (cols 1–8), nose dark at cols 4–5 -->
+  <rect x="34"  y="178" width="24" height="24" fill="#c08055"/>
+  <rect x="58"  y="178" width="24" height="24" fill="#c08055"/>
+  <rect x="82"  y="178" width="24" height="24" fill="#c08055"/>
+  <rect x="106" y="178" width="24" height="24" fill="#5a2808"/>
+  <rect x="130" y="178" width="24" height="24" fill="#5a2808"/>
+  <rect x="154" y="178" width="24" height="24" fill="#c08055"/>
+  <rect x="178" y="178" width="24" height="24" fill="#c08055"/>
+  <rect x="202" y="178" width="24" height="24" fill="#c08055"/>
 
-  <!-- ROW 8 — body (3–11) -->
-  <rect x="70"  y="170" width="20" height="20" fill="#c08055"/>
-  <rect x="90"  y="170" width="20" height="20" fill="#c08055"/>
-  <rect x="110" y="170" width="20" height="20" fill="#c08055"/>
-  <rect x="130" y="170" width="20" height="20" fill="#c08055"/>
-  <rect x="150" y="170" width="20" height="20" fill="#c08055"/>
-  <rect x="170" y="170" width="20" height="20" fill="#c08055"/>
-  <rect x="190" y="170" width="20" height="20" fill="#c08055"/>
-  <rect x="210" y="170" width="20" height="20" fill="#c08055"/>
-  <rect x="230" y="170" width="20" height="20" fill="#c08055"/>
+  <!-- ROW 8 — chin (cols 2–7) -->
+  <rect x="58"  y="202" width="24" height="24" fill="#c08055"/>
+  <rect x="82"  y="202" width="24" height="24" fill="#c08055"/>
+  <rect x="106" y="202" width="24" height="24" fill="#c08055"/>
+  <rect x="130" y="202" width="24" height="24" fill="#c08055"/>
+  <rect x="154" y="202" width="24" height="24" fill="#c08055"/>
+  <rect x="178" y="202" width="24" height="24" fill="#c08055"/>
 
-  <!-- ROW 9 — back legs (4–5) + front legs (9–10) -->
-  <rect x="90"  y="190" width="20" height="20" fill="#c08055"/>
-  <rect x="110" y="190" width="20" height="20" fill="#c08055"/>
-  <rect x="190" y="190" width="20" height="20" fill="#c08055"/>
-  <rect x="210" y="190" width="20" height="20" fill="#c08055"/>
-
-  <!-- ROW 10 — legs -->
-  <rect x="90"  y="210" width="20" height="20" fill="#c08055"/>
-  <rect x="110" y="210" width="20" height="20" fill="#c08055"/>
-  <rect x="190" y="210" width="20" height="20" fill="#c08055"/>
-  <rect x="210" y="210" width="20" height="20" fill="#c08055"/>
-
-  <!-- ROW 11 — paws (wider than legs) -->
-  <rect x="70"  y="230" width="20" height="20" fill="#c08055"/>
-  <rect x="90"  y="230" width="20" height="20" fill="#c08055"/>
-  <rect x="110" y="230" width="20" height="20" fill="#c08055"/>
-  <rect x="170" y="230" width="20" height="20" fill="#c08055"/>
-  <rect x="190" y="230" width="20" height="20" fill="#c08055"/>
-  <rect x="210" y="230" width="20" height="20" fill="#c08055"/>
-  <rect x="230" y="230" width="20" height="20" fill="#c08055"/>
+  <!-- ROW 9 — neck stub (cols 3–6) -->
+  <rect x="82"  y="226" width="24" height="24" fill="#c08055"/>
+  <rect x="106" y="226" width="24" height="24" fill="#c08055"/>
+  <rect x="130" y="226" width="24" height="24" fill="#c08055"/>
+  <rect x="154" y="226" width="24" height="24" fill="#c08055"/>
 </svg>
