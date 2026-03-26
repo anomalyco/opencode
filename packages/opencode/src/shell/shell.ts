@@ -15,7 +15,10 @@ export namespace Shell {
 
     if (process.platform === "win32") {
       await new Promise<void>((resolve) => {
-        const killer = spawn("taskkill", ["/pid", String(pid), "/f", "/t"], { stdio: "ignore" })
+        const killer = spawn("taskkill", ["/pid", String(pid), "/f", "/t"], {
+          stdio: "ignore",
+          windowsHide: true,
+        })
         killer.once("exit", () => resolve())
         killer.once("error", () => resolve())
       })

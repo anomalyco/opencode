@@ -1,11 +1,10 @@
 import z from "zod"
-import { Identifier } from "../id/id"
+import { SessionID, MessageID, PartID } from "./schema"
 import { Snapshot } from "../snapshot"
 import { MessageV2 } from "./message-v2"
 import { Session } from "."
 import { Log } from "../util/log"
-import { Database, eq } from "../storage/db"
-import { MessageTable, PartTable } from "./session.sql"
+import { SyncEvent } from "../sync"
 import { Storage } from "@/storage/storage"
 import { Bus } from "../bus"
 import { SessionPrompt } from "./prompt"
@@ -15,9 +14,9 @@ export namespace SessionRevert {
   const log = Log.create({ service: "session.revert" })
 
   export const RevertInput = z.object({
-    sessionID: Identifier.schema("session"),
-    messageID: Identifier.schema("message"),
-    partID: Identifier.schema("part").optional(),
+    sessionID: SessionID.zod,
+    messageID: MessageID.zod,
+    partID: PartID.zod.optional(),
   })
   export type RevertInput = z.infer<typeof RevertInput>
 
@@ -79,7 +78,7 @@ export namespace SessionRevert {
     return session
   }
 
-  export async function unrevert(input: { sessionID: string }) {
+  export async function unrevert(input: { sessionID: SessionID }) {
     log.info("unreverting", input)
     SessionPrompt.assertNotBusy(input.sessionID)
     const session = await Session.get(input.sessionID)
@@ -113,8 +112,10 @@ export namespace SessionRevert {
       remove.push(msg)
     }
     for (const msg of remove) {
-      Database.use((db) => db.delete(MessageTable).where(eq(MessageTable.id, msg.info.id)).run())
-      await Bus.publish(MessageV2.Event.Removed, { sessionID: sessionID, messageID: msg.info.id })
+      SyncEvent.run(MessageV2.Event.Removed, {
+        sessionID: sessionID,
+        messageID: msg.info.id,
+      })
     }
     if (session.revert.partID && target) {
       const partID = session.revert.partID
@@ -124,8 +125,7 @@ export namespace SessionRevert {
         const removeParts = target.parts.slice(removeStart)
         target.parts = preserveParts
         for (const part of removeParts) {
-          Database.use((db) => db.delete(PartTable).where(eq(PartTable.id, part.id)).run())
-          await Bus.publish(MessageV2.Event.PartRemoved, {
+          SyncEvent.run(MessageV2.Event.PartRemoved, {
             sessionID: sessionID,
             messageID: target.info.id,
             partID: part.id,

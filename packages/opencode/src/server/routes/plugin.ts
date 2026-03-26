@@ -8,7 +8,7 @@ import { lazy } from "../../util/lazy"
 
 const log = Log.create({ service: "server" })
 
-const item = z.object({
+const sidebarItem = z.object({
   id: z.string(),
   label: z.string(),
   icon: z.string(),
@@ -17,7 +17,7 @@ const item = z.object({
 })
 
 const result = z.object({
-  items: item.array(),
+  items: sidebarItem.array(),
 })
 
 function sort(a: SidebarItem, b: SidebarItem) {
@@ -48,7 +48,7 @@ export const PluginRoutes = lazy(() =>
       const body = await Plugin.trigger("ui.sidebar", {}, { items: [] as SidebarItem[] })
         .then((output) => {
           const map = new Map<string, SidebarItem>()
-          for (const item of output.items) map.set(item.id, item)
+          for (const sidebarItem of output.items) map.set(sidebarItem.id, sidebarItem)
           return {
             items: [...map.values()].sort(sort),
           }

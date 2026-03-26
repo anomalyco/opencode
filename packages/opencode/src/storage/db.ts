@@ -1,5 +1,4 @@
-import { Database as BunDatabase } from "bun:sqlite"
-import { drizzle, type SQLiteBunDatabase } from "drizzle-orm/bun-sqlite"
+import { type SQLiteBunDatabase } from "drizzle-orm/bun-sqlite"
 import { migrate } from "drizzle-orm/bun-sqlite/migrator"
 import { type SQLiteTransaction } from "drizzle-orm/sqlite-core"
 export * from "drizzle-orm"
@@ -11,10 +10,10 @@ import { NamedError } from "@opencode-ai/util/error"
 import z from "zod"
 import path from "path"
 import { readFileSync, readdirSync, existsSync } from "fs"
-import * as schema from "./schema"
 import { Installation } from "../installation"
 import { Flag } from "../flag/flag"
 import { iife } from "@/util/iife"
+import { init } from "#db"
 
 declare const OPENCODE_MIGRATIONS: { sql: string; timestamp: number; name: string }[] | undefined
 
@@ -28,24 +27,27 @@ export const NotFoundError = NamedError.create(
 const log = Log.create({ service: "db" })
 
 export namespace Database {
-  export const Path = iife(() => {
+  export function getChannelPath() {
     const channel = Installation.CHANNEL
     if (["latest", "beta"].includes(channel) || Flag.OPENCODE_DISABLE_CHANNEL_DB)
       return path.join(Global.Path.data, "opencode.db")
     const safe = channel.replace(/[^a-zA-Z0-9._-]/g, "-")
     return path.join(Global.Path.data, `opencode-${safe}.db`)
+  }
+
+  export const Path = iife(() => {
+    if (Flag.OPENCODE_DB) {
+      if (Flag.OPENCODE_DB === ":memory:" || path.isAbsolute(Flag.OPENCODE_DB)) return Flag.OPENCODE_DB
+      return path.join(Global.Path.data, Flag.OPENCODE_DB)
+    }
+    return getChannelPath()
   })
 
-  type Schema = typeof schema
-  export type Transaction = SQLiteTransaction<"sync", void, Schema>
+  export type Transaction = SQLiteTransaction<"sync", void>
 
   type Client = SQLiteBunDatabase
 
   type Journal = { sql: string; timestamp: number; name: string }[]
-
-  const state = {
-    sqlite: undefined as BunDatabase | undefined,
-  }
 
   function time(tag: string) {
     const match = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/.exec(tag)
@@ -83,17 +85,14 @@ export namespace Database {
   export const Client = lazy(() => {
     log.info("opening database", { path: Path })
 
-    const sqlite = new BunDatabase(Path, { create: true })
-    state.sqlite = sqlite
+    const db = init(Path)
 
-    sqlite.run("PRAGMA journal_mode = WAL")
-    sqlite.run("PRAGMA synchronous = NORMAL")
-    sqlite.run("PRAGMA busy_timeout = 5000")
-    sqlite.run("PRAGMA cache_size = -64000")
-    sqlite.run("PRAGMA foreign_keys = ON")
-    sqlite.run("PRAGMA wal_checkpoint(PASSIVE)")
-
-    const db = drizzle({ client: sqlite })
+    db.run("PRAGMA journal_mode = WAL")
+    db.run("PRAGMA synchronous = NORMAL")
+    db.run("PRAGMA busy_timeout = 5000")
+    db.run("PRAGMA cache_size = -64000")
+    db.run("PRAGMA foreign_keys = ON")
+    db.run("PRAGMA wal_checkpoint(PASSIVE)")
 
     // Apply schema migrations
     const entries =
@@ -117,14 +116,11 @@ export namespace Database {
   })
 
   export function close() {
-    const sqlite = state.sqlite
-    if (!sqlite) return
-    sqlite.close()
-    state.sqlite = undefined
+    Client().$client.close()
     Client.reset()
   }
 
-  export type TxOrDb = SQLiteTransaction<"sync", void, any, any> | Client
+  export type TxOrDb = Transaction | Client
 
   const ctx = Context.create<{
     tx: TxOrDb
@@ -153,17 +149,27 @@ export namespace Database {
     }
   }
 
-  export function transaction<T>(callback: (tx: TxOrDb) => T): T {
+  type NotPromise<T> = T extends Promise<any> ? never : T
+
+  export function transaction<T>(
+    callback: (tx: TxOrDb) => NotPromise<T>,
+    options?: {
+      behavior?: "deferred" | "immediate" | "exclusive"
+    },
+  ): NotPromise<T> {
     try {
       return callback(ctx.use().tx)
     } catch (err) {
       if (err instanceof Context.NotFound) {
         const effects: (() => void | Promise<void>)[] = []
-        const result = (Client().transaction as any)((tx: TxOrDb) => {
-          return ctx.provide({ tx, effects }, () => callback(tx))
-        })
+        const result = Client().transaction(
+          (tx: TxOrDb) => {
+            return ctx.provide({ tx, effects }, () => callback(tx))
+          },
+          { behavior: options?.behavior },
+        )
         for (const effect of effects) effect()
-        return result
+        return result as NotPromise<T>
       }
       throw err
     }

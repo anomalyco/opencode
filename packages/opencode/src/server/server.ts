@@ -1,10 +1,8 @@
-import { BusEvent } from "@/bus/bus-event"
-import { Bus } from "@/bus"
+import { createHash } from "node:crypto"
 import { Log } from "../util/log"
 import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler } from "hono-openapi"
 import { Hono } from "hono"
 import { cors } from "hono/cors"
-import { streamSSE } from "hono/streaming"
 import { proxy } from "hono/proxy"
 import { basicAuth } from "hono/basic-auth"
 import z from "zod"
@@ -16,12 +14,14 @@ import { TuiRoutes } from "./routes/tui"
 import { Instance } from "../project/instance"
 import { Vcs } from "../project/vcs"
 import { Agent } from "../agent/agent"
-import { Skill } from "../skill/skill"
+import { Skill } from "../skill"
 import { Auth } from "../auth"
 import { Flag } from "../flag/flag"
 import { Command } from "../command"
 import { Global } from "../global"
 import { WorkspaceContext } from "../control-plane/workspace-context"
+import { WorkspaceID } from "../control-plane/schema"
+import { ProviderID } from "../provider/schema"
 import { WorkspaceRouterMiddleware } from "../control-plane/workspace-router-middleware"
 import { ProjectRoutes } from "./routes/project"
 import { SessionRoutes } from "./routes/session"
@@ -31,6 +31,7 @@ import { FileRoutes } from "./routes/file"
 import { ConfigRoutes } from "./routes/config"
 import { ExperimentalRoutes } from "./routes/experimental"
 import { ProviderRoutes } from "./routes/provider"
+import { EventRoutes } from "./routes/event"
 import { InstanceBootstrap } from "../project/bootstrap"
 import { NotFoundError } from "../storage/db"
 import type { ContentfulStatusCode } from "hono/utils/http-status"
@@ -38,15 +39,22 @@ import { websocket } from "hono/bun"
 import { HTTPException } from "hono/http-exception"
 import { errors } from "./error"
 import { Filesystem } from "@/util/filesystem"
+import { Snapshot } from "@/snapshot"
 import { QuestionRoutes } from "./routes/question"
 import { PermissionRoutes } from "./routes/permission"
 import { GlobalRoutes } from "./routes/global"
 import { PluginRoutes } from "./routes/plugin"
 import { MDNS } from "./mdns"
 import { lazy } from "@/util/lazy"
+import { initProjectors } from "./projectors"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
+
+const csp = (hash = "") =>
+  `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'${hash ? ` 'sha256-${hash}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:`
+
+initProjectors()
 
 export namespace Server {
   const log = Log.create({ service: "server" })
@@ -64,6 +72,7 @@ export namespace Server {
           let status: ContentfulStatusCode
           if (err instanceof NotFoundError) status = 404
           else if (err instanceof Provider.ModelNotFoundError) status = 400
+          else if (err.name === "ProviderAuthValidationFailed") status = 400
           else if (err.name.startsWith("Worktree")) status = 400
           else status = 500
           return c.json(err.toObject(), { status })
@@ -148,10 +157,10 @@ export namespace Server {
         validator(
           "param",
           z.object({
-            providerID: z.string(),
+            providerID: ProviderID.zod,
           }),
         ),
-        validator("json", Auth.Info),
+        validator("json", Auth.Info.zod),
         async (c) => {
           const providerID = c.req.valid("param").providerID
           const info = c.req.valid("json")
@@ -180,7 +189,7 @@ export namespace Server {
         validator(
           "param",
           z.object({
-            providerID: z.string(),
+            providerID: ProviderID.zod,
           }),
         ),
         async (c) => {
@@ -191,7 +200,7 @@ export namespace Server {
       )
       .use(async (c, next) => {
         if (c.req.path === "/log") return next()
-        const workspaceID = c.req.query("workspace") || c.req.header("x-opencode-workspace")
+        const rawWorkspaceID = c.req.query("workspace") || c.req.header("x-opencode-workspace")
         const raw = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
         const directory = Filesystem.resolve(
           (() => {
@@ -204,7 +213,7 @@ export namespace Server {
         )
 
         return WorkspaceContext.provide({
-          workspaceID,
+          workspaceID: rawWorkspaceID ? WorkspaceID.make(rawWorkspaceID) : undefined,
           async fn() {
             return Instance.provide({
               directory,
@@ -249,6 +258,7 @@ export namespace Server {
       .route("/provider", ProviderRoutes())
       .route("/plugin", PluginRoutes())
       .route("/", FileRoutes())
+      .route("/", EventRoutes())
       .route("/mcp", McpRoutes())
       .route("/tui", TuiRoutes())
       .post(
@@ -330,10 +340,38 @@ export namespace Server {
           },
         }),
         async (c) => {
-          const branch = await Vcs.branch()
+          const [branch, default_branch] = await Promise.all([Vcs.branch(), Vcs.defaultBranch()])
           return c.json({
             branch,
+            default_branch,
           })
+        },
+      )
+      .get(
+        "/vcs/diff",
+        describeRoute({
+          summary: "Get VCS diff",
+          description: "Retrieve the current git diff for the working tree or against the default branch.",
+          operationId: "vcs.diff",
+          responses: {
+            200: {
+              description: "VCS diff",
+              content: {
+                "application/json": {
+                  schema: resolver(Snapshot.FileDiff.array()),
+                },
+              },
+            },
+          },
+        }),
+        validator(
+          "query",
+          z.object({
+            mode: Vcs.Mode,
+          }),
+        ),
+        async (c) => {
+          return c.json(await Vcs.diff(c.req.valid("query").mode))
         },
       )
       .get(
@@ -496,64 +534,6 @@ export namespace Server {
           return c.json(await Format.status())
         },
       )
-      .get(
-        "/event",
-        describeRoute({
-          summary: "Subscribe to events",
-          description: "Get events",
-          operationId: "event.subscribe",
-          responses: {
-            200: {
-              description: "Event stream",
-              content: {
-                "text/event-stream": {
-                  schema: resolver(BusEvent.payloads()),
-                },
-              },
-            },
-          },
-        }),
-        async (c) => {
-          log.info("event connected")
-          c.header("X-Accel-Buffering", "no")
-          c.header("X-Content-Type-Options", "nosniff")
-          return streamSSE(c, async (stream) => {
-            stream.writeSSE({
-              data: JSON.stringify({
-                type: "server.connected",
-                properties: {},
-              }),
-            })
-            const unsub = Bus.subscribeAll(async (event) => {
-              await stream.writeSSE({
-                data: JSON.stringify(event),
-              })
-              if (event.type === Bus.InstanceDisposed.type) {
-                stream.close()
-              }
-            })
-
-            // Send heartbeat every 10s to prevent stalled proxy streams.
-            const heartbeat = setInterval(() => {
-              stream.writeSSE({
-                data: JSON.stringify({
-                  type: "server.heartbeat",
-                  properties: {},
-                }),
-              })
-            }, 10_000)
-
-            await new Promise<void>((resolve) => {
-              stream.onAbort(() => {
-                clearInterval(heartbeat)
-                unsub()
-                resolve()
-                log.info("event disconnected")
-              })
-            })
-          })
-        },
-      )
       .all("/*", async (c) => {
         const path = c.req.path
 
@@ -564,10 +544,13 @@ export namespace Server {
             host: "app.opencode.ai",
           },
         })
-        response.headers.set(
-          "Content-Security-Policy",
-          "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:",
-        )
+        const match = response.headers.get("content-type")?.includes("text/html")
+          ? (await response.clone().text()).match(
+              /<script\b(?![^>]*\bsrc\s*=)[^>]*\bid=(['"])oc-theme-preload-script\1[^>]*>([\s\S]*?)<\/script>/i,
+            )
+          : undefined
+        const hash = match ? createHash("sha256").update(match[2]).digest("base64") : ""
+        response.headers.set("Content-Security-Policy", csp(hash))
         return response
       })
   }
@@ -587,6 +570,9 @@ export namespace Server {
     return result
   }
 
+  /** @deprecated do not use this dumb shit */
+  export let url: URL
+
   export function listen(opts: {
     port: number
     hostname: string
@@ -594,6 +580,7 @@ export namespace Server {
     mdnsDomain?: string
     cors?: string[]
   }) {
+    url = new URL(`http://${opts.hostname}:${opts.port}`)
     const app = createApp(opts)
     const args = {
       hostname: opts.hostname,
