@@ -3,6 +3,7 @@ import {
   type TuiDispose,
   type TuiPlugin,
   type TuiPluginApi,
+  type TuiPluginModule,
   type TuiPluginMeta,
   type TuiPluginStatus,
   type TuiTheme,
@@ -16,7 +17,7 @@ import { Log } from "@/util/log"
 import { errorData, errorMessage } from "@/util/error"
 import { isRecord } from "@/util/record"
 import { Instance } from "@/project/instance"
-import { isDeprecatedPlugin, resolvePluginTarget, uniqueModuleEntries } from "@/plugin/shared"
+import { getDefaultPlugin, isDeprecatedPlugin, resolvePluginTarget } from "@/plugin/shared"
 import { PluginMeta } from "@/plugin/meta"
 import { addTheme, hasTheme } from "../context/theme"
 import { Global } from "@/global"
@@ -45,7 +46,6 @@ type PluginScope = {
 
 type PluginEntry = {
   id: string
-  export_name: string
   load: PluginLoad
   meta: TuiPluginMeta
   plugin: TuiPlugin
@@ -102,14 +102,9 @@ function runCleanup(fn: () => unknown, ms: number): Promise<CleanupResult> {
   })
 }
 
-function getTuiPlugin(value: unknown) {
-  if (!isRecord(value) || !("tui" in value)) return
-  if (typeof value.tui !== "function") return
-  return value.tui as TuiPlugin
-}
-
 function isTheme(value: unknown) {
   if (!isRecord(value)) return false
+  if (!("theme" in value)) return false
   if (!isRecord(value.theme)) return false
   return true
 }
@@ -249,7 +244,7 @@ function loadInternalPlugin(item: InternalTuiPlugin): PluginLoad {
     spec,
     target,
     retry: false,
-    exports: item.module,
+    exports: { default: item.module },
     install_theme: createThemeInstaller(
       {
         scope: "global",
@@ -341,32 +336,24 @@ function createPluginScope(load: PluginLoad, name: string) {
   }
 }
 
-function defaultPluginId(meta: TuiPluginMeta, export_name: string) {
-  if (meta.source === "internal") {
-    const base = `internal:${meta.name}`
-    if (export_name === "default") return base
-    return `${base}:${export_name}`
-  }
-  if (export_name === "default") return meta.name
-  return `${meta.name}:${export_name}`
+function defaultPluginId(meta: TuiPluginMeta) {
+  if (meta.source === "internal") return `internal:${meta.name}`
+  return meta.name
 }
 
-function readPluginIdFromExport(value: unknown, load: PluginLoad, export_name: string) {
-  if (!isRecord(value)) return
-  if (!("id" in value)) return
-  if (typeof value.id !== "string") {
+function readPluginId(mod: TuiPluginModule, load: PluginLoad) {
+  if (mod.id === undefined) return
+  if (typeof mod.id !== "string") {
     log.warn("ignoring invalid tui plugin id", {
       path: load.spec,
-      name: export_name,
-      type: typeof value.id,
+      type: typeof mod.id,
     })
     return
   }
-  const id = value.id.trim()
+  const id = mod.id.trim()
   if (id) return id
   log.warn("ignoring empty tui plugin id", {
     path: load.spec,
-    name: export_name,
   })
 }
 
@@ -411,7 +398,7 @@ async function activatePluginEntry(state: RuntimeState, plugin: PluginEntry, per
   if (persist) writePluginEnabledState(state.api, plugin.id, true)
   if (plugin.scope) return true
 
-  const scope = createPluginScope(plugin.load, plugin.export_name)
+  const scope = createPluginScope(plugin.load, plugin.id)
   const api = pluginApi(state, plugin.load, scope, plugin.id)
   const ok = await Promise.resolve()
     .then(async () => {
@@ -419,9 +406,9 @@ async function activatePluginEntry(state: RuntimeState, plugin: PluginEntry, per
       return true
     })
     .catch((error) => {
-      fail("failed to initialize tui plugin export", {
+      fail("failed to initialize tui plugin", {
         path: plugin.load.spec,
-        name: plugin.export_name,
+        id: plugin.id,
         error,
       })
       return false
@@ -534,34 +521,20 @@ function pluginApi(runtime: RuntimeState, load: PluginLoad, scope: PluginScope, 
 }
 
 function collectPluginEntries(load: PluginLoad, meta: TuiPluginMeta) {
-  const plugins: PluginEntry[] = []
+  // TUI stays default-only so plugin ids, lifecycle, and errors remain stable.
+  const mod = getDefaultPlugin(load.exports) as TuiPluginModule | undefined
+  if (!mod?.tui) return []
   const options = load.item ? Config.pluginOptions(load.item) : undefined
-
-  for (const [export_name, value] of uniqueModuleEntries(load.exports)) {
-    if (!value || typeof value !== "object") {
-      log.warn("ignoring non-object tui plugin export", {
-        path: load.spec,
-        name: export_name,
-        type: value === null ? "null" : typeof value,
-      })
-      continue
-    }
-
-    const handler = getTuiPlugin(value)
-    if (!handler) continue
-    const id = readPluginIdFromExport(value, load, export_name) ?? defaultPluginId(meta, export_name)
-    plugins.push({
-      id,
-      export_name,
+  return [
+    {
+      id: readPluginId(mod, load) ?? defaultPluginId(meta),
       load,
       meta,
-      plugin: handler,
+      plugin: mod.tui,
       options,
       enabled: true,
-    })
-  }
-
-  return plugins
+    },
+  ]
 }
 
 function addPluginEntry(state: RuntimeState, plugin: PluginEntry) {
@@ -569,7 +542,6 @@ function addPluginEntry(state: RuntimeState, plugin: PluginEntry) {
     fail("duplicate tui plugin id", {
       id: plugin.id,
       path: plugin.load.spec,
-      name: plugin.export_name,
     })
     return
   }

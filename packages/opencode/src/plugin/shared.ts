@@ -1,4 +1,5 @@
 import { BunProc } from "@/bun"
+import { isRecord } from "@/util/record"
 
 // Old npm package names for plugins that are now built-in
 export const DEPRECATED_PLUGIN_PACKAGES = ["opencode-openai-codex-auth", "opencode-copilot-auth"]
@@ -19,15 +20,14 @@ export async function resolvePluginTarget(spec: string, parsed = parsePluginSpec
   return BunProc.install(parsed.pkg, parsed.version)
 }
 
-export function uniqueModuleEntries(mod: Record<string, unknown>) {
-  const seen = new Set<unknown>()
-  const entries: [string, unknown][] = []
-
-  for (const [name, entry] of Object.entries(mod)) {
-    if (seen.has(entry)) continue
-    seen.add(entry)
-    entries.push([name, entry])
-  }
-
-  return entries
+export function getDefaultPlugin(mod: Record<string, unknown>) {
+  // A single default object keeps v1 detection explicit and avoids scanning exports.
+  const value = mod.default
+  if (!isRecord(value)) return
+  const server = "server" in value ? value.server : undefined
+  const tui = "tui" in value ? value.tui : undefined
+  if (server !== undefined && typeof server !== "function") return
+  if (tui !== undefined && typeof tui !== "function") return
+  if (server === undefined && tui === undefined) return
+  return value
 }

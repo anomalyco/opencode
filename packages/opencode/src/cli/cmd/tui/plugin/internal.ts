@@ -1,15 +1,16 @@
-import * as HomeTips from "../feature-plugins/home/tips"
-import * as SidebarContext from "../feature-plugins/sidebar/context"
-import * as SidebarMcp from "../feature-plugins/sidebar/mcp"
-import * as SidebarLsp from "../feature-plugins/sidebar/lsp"
-import * as SidebarTodo from "../feature-plugins/sidebar/todo"
-import * as SidebarFiles from "../feature-plugins/sidebar/files"
-import * as SidebarFooter from "../feature-plugins/sidebar/footer"
-import * as PluginManager from "../feature-plugins/system/plugins"
+import HomeTips from "../feature-plugins/home/tips"
+import SidebarContext from "../feature-plugins/sidebar/context"
+import SidebarMcp from "../feature-plugins/sidebar/mcp"
+import SidebarLsp from "../feature-plugins/sidebar/lsp"
+import SidebarTodo from "../feature-plugins/sidebar/todo"
+import SidebarFiles from "../feature-plugins/sidebar/files"
+import SidebarFooter from "../feature-plugins/sidebar/footer"
+import PluginManager from "../feature-plugins/system/plugins"
+import type { TuiPluginModule } from "@opencode-ai/plugin/tui"
 
 export type InternalTuiPlugin = {
   name: string
-  module: Record<string, unknown>
+  module: TuiPluginModule
   root?: string
 }
 

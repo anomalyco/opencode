@@ -15,7 +15,7 @@ import type {
 } from "@opencode-ai/sdk/v2"
 import type { CliRenderer, ParsedKey, RGBA } from "@opentui/core"
 import type { JSX, SolidPlugin } from "@opentui/solid"
-import type { Config as PluginConfig, Plugin, PluginOptions } from "./index.js"
+import type { Config as PluginConfig, Plugin, PluginModule, PluginOptions } from "./index.js"
 
 export type { CliRenderer, SlotMode } from "@opentui/core"
 
@@ -397,8 +397,6 @@ export type TuiPluginApi = {
 
 export type TuiPlugin = (api: TuiPluginApi, options: PluginOptions | undefined, meta: TuiPluginMeta) => Promise<void>
 
-export type TuiPluginModule = {
-  id?: string
-  server?: Plugin
+export type TuiPluginModule = PluginModule & {
   tui?: TuiPlugin
 }

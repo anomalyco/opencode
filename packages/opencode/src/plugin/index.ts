@@ -1,4 +1,4 @@
-import type { Hooks, PluginInput, Plugin as PluginInstance } from "@opencode-ai/plugin"
+import type { Hooks, PluginInput, Plugin as PluginInstance, PluginModule } from "@opencode-ai/plugin"
 import { Config } from "../config/config"
 import { Bus } from "../bus"
 import { Log } from "../util/log"
@@ -14,7 +14,7 @@ import { Effect, Layer, ServiceMap, Stream } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { errorMessage } from "@/util/error"
-import { isDeprecatedPlugin, parsePluginSpecifier, resolvePluginTarget, uniqueModuleEntries } from "./shared"
+import { getDefaultPlugin, isDeprecatedPlugin, parsePluginSpecifier, resolvePluginTarget } from "./shared"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
@@ -64,6 +64,21 @@ export namespace Plugin {
     return value.server
   }
 
+  function getLegacyPlugins(mod: Record<string, unknown>) {
+    const seen = new Set<unknown>()
+    const result: PluginInstance[] = []
+
+    for (const entry of Object.values(mod)) {
+      if (seen.has(entry)) continue
+      seen.add(entry)
+      const plugin = getServerPlugin(entry)
+      if (!plugin) throw new TypeError("Plugin export is not a function")
+      result.push(plugin)
+    }
+
+    return result
+  }
+
   async function resolvePlugin(spec: string) {
     const parsed = parsePluginSpecifier(spec)
     const target = await resolvePluginTarget(spec, parsed).catch((err) => {
@@ -108,12 +123,15 @@ export namespace Plugin {
   }
 
   async function applyPlugin(load: Loaded, input: PluginInput, hooks: Hooks[]) {
-    // Prevent duplicate initialization when plugins export the same function
-    // as both a named export and default export (e.g., `export const X` and `export default X`).
-    // uniqueModuleEntries keeps only the first export for each shared value reference.
-    for (const [, entry] of uniqueModuleEntries(load.mod)) {
-      const server = getServerPlugin(entry)
-      if (!server) throw new TypeError("Plugin export is not a function")
+    const plugin = getDefaultPlugin(load.mod) as PluginModule | undefined
+    // A v1 default export must win so server plugins do not mix two loading models.
+    if (plugin?.server) {
+      hooks.push(await plugin.server(input, Config.pluginOptions(load.item)))
+      return
+    }
+
+    // v0 stays as the fallback for existing server plugins that enumerate exports.
+    for (const server of getLegacyPlugins(load.mod)) {
       hooks.push(await server(input, Config.pluginOptions(load.item)))
     }
   }

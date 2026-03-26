@@ -40,6 +40,11 @@ export type Config = Omit<SDKConfig, "plugin"> & {
 
 export type Plugin = (input: PluginInput, options?: PluginOptions) => Promise<Hooks>
 
+export type PluginModule = {
+  id?: string
+  server?: Plugin
+}
+
 type Rule = {
   key: string
   op: "eq" | "neq"

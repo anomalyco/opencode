@@ -80,12 +80,12 @@ async function load(): Promise<Data> {
 
       await Bun.write(
         localPluginPath,
-        `export default async (_input, options) => {
+        `export const ignored = async (_input, options) => {
   if (!options?.fn_marker) return
   await Bun.write(options.fn_marker, "called")
 }
 
-export const object_plugin = {
+export default {
   tui: async (api, options) => {
     if (!options?.marker) return
     const cfg_theme = api.tuiConfig.theme
@@ -420,7 +420,7 @@ describe("tui.plugin.loader", () => {
     data = await load()
   })
 
-  test("passes keybind, kv, state, and dialog APIs to object plugins", () => {
+  test("passes keybind, kv, state, and dialog APIs to v1 plugins", () => {
     expect(data.local.key_modal).toBe("ctrl+alt+m")
     expect(data.local.key_close).toBe("q")
     expect(data.local.key_unknown).toBe("ctrl+k")

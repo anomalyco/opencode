@@ -81,20 +81,20 @@ test("disposes tracked event, route, and command hooks", async () => {
     expect(count.event_drop).toBe(0)
     expect(count.route_add).toBe(1)
     expect(count.route_drop).toBe(0)
-    expect(count.command_add).toBe(2)
+    expect(count.command_add).toBe(3)
     expect(count.command_drop).toBe(1)
 
     await TuiPluginRuntime.dispose()
 
     expect(count.event_drop).toBe(1)
     expect(count.route_drop).toBe(1)
-    expect(count.command_drop).toBe(2)
+    expect(count.command_drop).toBe(3)
 
     await TuiPluginRuntime.dispose()
 
     expect(count.event_drop).toBe(1)
     expect(count.route_drop).toBe(1)
-    expect(count.command_drop).toBe(2)
+    expect(count.command_drop).toBe(3)
 
     const marker = await fs.readFile(tmp.extra.marker, "utf8")
     expect(marker).toContain("custom")
@@ -275,7 +275,7 @@ export default {
     expect(marker).toContain(`id:${name}:1`)
 
     const hit = err.mock.calls.find(
-      (item) => typeof item[0] === "string" && item[0].includes("failed to initialize tui plugin export"),
+      (item) => typeof item[0] === "string" && item[0].includes("failed to initialize tui plugin"),
     )
     expect(hit).toBeUndefined()
   } finally {

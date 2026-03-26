@@ -91,6 +91,7 @@ describe("plugin.loader.shared", () => {
       init: async (dir) => {
         const file = path.join(dir, "plugin.ts")
         const mark = path.join(dir, "count.txt")
+        await Bun.write(mark, "")
         await Bun.write(
           file,
           [
@@ -116,6 +117,41 @@ describe("plugin.loader.shared", () => {
 
     await load(tmp.path)
     expect(await fs.readFile(tmp.extra.mark, "utf8")).toBe("1")
+  })
+
+  test("uses only default v1 server plugin when present", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const file = path.join(dir, "plugin.ts")
+        const mark = path.join(dir, "count.txt")
+        await Bun.write(
+          file,
+          [
+            "export default {",
+            "  server: async () => {",
+            `    await Bun.write(${JSON.stringify(mark)}, "default")`,
+            "    return {}",
+            "  },",
+            "}",
+            "export const named = async () => {",
+            `  await Bun.write(${JSON.stringify(mark)}, "named")`,
+            "  return {}",
+            "}",
+            "",
+          ].join("\n"),
+        )
+
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({ plugin: [pathToFileURL(file).href] }, null, 2),
+        )
+
+        return { mark }
+      },
+    })
+
+    await load(tmp.path)
+    expect(await Bun.file(tmp.extra.mark).text()).toBe("default")
   })
 
   test("resolves npm plugin specs with explicit and default versions", async () => {
