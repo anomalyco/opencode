@@ -14,17 +14,19 @@ async function load() {
 describe("autocomplete", () => {
   test("allows spaces inside an accepted path prefix", async () => {
     const { ended } = await load()
-    expect(ended("dir with space/", "dir with space/")).toBe(false)
-    expect(ended("dir with space/file.ts", "dir with space/")).toBe(false)
+    expect(ended("dir with space/")).toBe(false)
+    expect(ended("dir with space/file.ts")).toBe(false)
   })
 
-  test("ends once whitespace appears after an accepted path prefix", async () => {
+  test("allows editing a spaced path after tab completion", async () => {
     const { ended } = await load()
-    expect(ended("dir with space/ note", "dir with space/")).toBe(true)
+    expect(ended("dir with space")).toBe(false)
+    expect(ended("dir with spce/")).toBe(false)
   })
 
-  test("ends when the query no longer matches the accepted prefix", async () => {
+  test("ends when a delimiter space is typed at the end", async () => {
     const { ended } = await load()
-    expect(ended("dir with space", "dir with space/")).toBe(true)
+    expect(ended("dir with space/ ")).toBe(true)
+    expect(ended("foobar ")).toBe(true)
   })
 })

@@ -19,9 +19,8 @@ function removeLineRange(input: string) {
   return hashIndex !== -1 ? input.substring(0, hashIndex) : input
 }
 
-export function ended(query: string, prefix: string) {
-  const rest = query.startsWith(prefix) ? query.slice(prefix.length) : query
-  return /\s/.test(rest)
+export function ended(query: string) {
+  return /[\n\r\t]/.test(query) || query.endsWith(" ")
 }
 
 function extractLineRange(input: string) {
@@ -92,7 +91,6 @@ export function Autocomplete(props: {
     selected: 0,
     visible: false as AutocompleteRef["visible"],
     input: "keyboard" as "keyboard" | "mouse",
-    prefix: "",
   })
 
   const [positionTick, setPositionTick] = createSignal(0)
@@ -477,8 +475,6 @@ export function Autocomplete(props: {
 
     input.deleteRange(startCursor.row, startCursor.col, endCursor.row, endCursor.col)
     input.insertText("@" + path)
-
-    setStore("prefix", path)
     setStore("selected", 0)
   }
 
@@ -487,7 +483,6 @@ export function Autocomplete(props: {
     setStore({
       visible: mode,
       index: props.input().cursorOffset,
-      prefix: "",
     })
   }
 
@@ -503,7 +498,6 @@ export function Autocomplete(props: {
     }
     command.keybinds(true)
     setStore("visible", false)
-    setStore("prefix", "")
   }
 
   onMount(() => {
@@ -517,8 +511,8 @@ export function Autocomplete(props: {
           if (
             // Typed text before the trigger
             props.input().cursorOffset <= store.index ||
-            // Allow spaces in accepted path segments, but not in new input after them.
-            ended(query, store.prefix) ||
+            // Allow internal spaces in path queries, but close on delimiter whitespace.
+            ended(query) ||
             // "/<command>" is not the sole content
             (store.visible === "/" && value.match(/^\S+\s+\S+\s*$/))
           ) {
