@@ -22,8 +22,8 @@ function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
   createEffect(
     on(
       () => sync.data.path.worktree,
-      (directory) => {
-        syncProject(directory, layout.projects.open)
+      (worktree) => {
+        syncProject(sync.data.path.directory, worktree, layout.projects.open)
       },
     ),
   )
