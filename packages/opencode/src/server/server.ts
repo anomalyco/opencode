@@ -19,7 +19,6 @@ import { Auth } from "../auth"
 import { Flag } from "../flag/flag"
 import { Command } from "../command"
 import { Global } from "../global"
-import { WorkspaceContext } from "../control-plane/workspace-context"
 import { WorkspaceID } from "../control-plane/schema"
 import { ProviderID } from "../provider/schema"
 import { WorkspaceRouterMiddleware } from "../control-plane/workspace-router-middleware"
@@ -204,7 +203,6 @@ export namespace Server {
       )
       .use(async (c, next) => {
         if (c.req.path === "/log") return next()
-        const rawWorkspaceID = c.req.query("workspace") || c.req.header("x-opencode-workspace")
         const raw = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
         const directory = Filesystem.resolve(
           (() => {
@@ -216,20 +214,14 @@ export namespace Server {
           })(),
         )
 
-        return WorkspaceContext.provide({
-          workspaceID: rawWorkspaceID ? WorkspaceID.make(rawWorkspaceID) : undefined,
+        return Instance.provide({
+          directory,
+          init: InstanceBootstrap,
           async fn() {
-            return Instance.provide({
-              directory,
-              init: InstanceBootstrap,
-              async fn() {
-                return next()
-              },
-            })
+            return next()
           },
         })
       })
-      .use(WorkspaceRouterMiddleware)
       .get(
         "/doc",
         openAPIRouteHandler(app, {
@@ -252,6 +244,7 @@ export namespace Server {
           }),
         ),
       )
+      .use(WorkspaceRouterMiddleware)
       .route("/project", ProjectRoutes())
       .route("/pty", PtyRoutes())
       .route("/config", ConfigRoutes())
