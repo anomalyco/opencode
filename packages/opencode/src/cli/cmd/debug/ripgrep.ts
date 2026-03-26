@@ -6,12 +6,14 @@ import { cmd } from "../cmd"
 
 export const RipgrepCommand = cmd({
   command: "rg",
+  describe: "ripgrep debugging utilities",
   builder: (yargs) => yargs.command(TreeCommand).command(FilesCommand).command(SearchCommand).demandCommand(),
   async handler() {},
 })
 
 const TreeCommand = cmd({
   command: "tree",
+  describe: "show file tree using ripgrep",
   builder: (yargs) =>
     yargs.option("limit", {
       type: "number",
@@ -25,6 +27,7 @@ const TreeCommand = cmd({
 
 const FilesCommand = cmd({
   command: "files",
+  describe: "list files using ripgrep",
   builder: (yargs) =>
     yargs
       .option("query", {
@@ -56,6 +59,7 @@ const FilesCommand = cmd({
 
 const SearchCommand = cmd({
   command: "search <pattern>",
+  describe: "search file contents using ripgrep",
   builder: (yargs) =>
     yargs
       .positional("pattern", {

@@ -1,0 +1,282 @@
+---
+title: サーバー
+description: HTTP 経由で OpenCode サーバーと通信します。
+---
+
+import config from "../../../../config.mjs"
+export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
+
+`opencode serve` コマンドは、OpenCode クライアントが使用できる OpenAPI エンドポイントを公開するヘッドレス HTTP サーバーを実行します。
+
+---
+
+### 使用法
+
+```bash
+opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+```
+
+#### オプション
+
+| フラグ          | 説明                              | デフォルト       |
+| --------------- | --------------------------------- | ---------------- |
+| `--port`        | リッスンするポート                | `4096`           |
+| `--hostname`    | リッスンするホスト名              | `127.0.0.1`      |
+| `--mdns`        | mDNS 検出を有効にする             | `false`          |
+| `--mdns-domain` | mDNS サービスのカスタムドメイン名 | `opencode.local` |
+| `--cors`        | 許可する追加のブラウザーオリジン  | `[]`             |
+
+`--cors` は複数回渡すことができます。
+
+```bash
+opencode serve --cors http://localhost:5173 --cors https://app.example.com
+```
+
+---
+
+### 認証
+
+HTTP 基本認証でサーバーを保護するには、`OPENCODE_SERVER_PASSWORD` を設定します。ユーザー名はデフォルトで `opencode` になるか、`OPENCODE_SERVER_USERNAME` を設定してオーバーライドします。これは、`opencode serve` と `opencode web` の両方に当てはまります。
+
+```bash
+OPENCODE_SERVER_PASSWORD=your-password opencode serve
+```
+
+---
+
+### 仕組み
+
+`opencode` を実行すると、TUI とサーバーが起動します。 TUI はサーバーと通信するクライアントです。サーバーは OpenAPI 3.1 仕様のエンドポイントを公開します。このエンドポイントは、[SDK](/docs/sdk) を使用してアクセスできます。
+
+:::tip
+OpenCode サーバーを使用して、プログラムで OpenCode と対話します。
+:::
+
+`opencode serve` を実行してスタンドアロンサーバーを起動できます。すでに OpenCode TUI を実行している場合でも、`opencode serve` は新しいサーバーを起動します。
+
+---
+
+#### 既存のサーバーに接続する
+
+TUI を起動すると、ポートとホスト名がランダムに割り当てられます。代わりに、`--hostname` と `--port` [フラグ](/docs/cli) を使用して固定できます。次に、これを使用してサーバーに接続します。
+
+[`/tui`](#tui) エンドポイントは、サーバー経由で TUI を駆動するために使用できます。たとえば、プロンプトを事前入力したり、実行したりできます。この設定は、OpenCode [IDE](/docs/ide) プラグインによって使用されます。
+
+---
+
+## 仕様
+
+サーバーは、次の場所で閲覧できる OpenAPI 3.1 仕様を公開しています。
+
+```
+http://<hostname>:<port>/doc
+```
+
+たとえば、`http://localhost:4096/doc`。この仕様を使用して、クライアントを生成したり、要求と応答のタイプを検査したりできます。または、Swagger エクスプローラーで表示します。
+
+---
+
+## API
+
+OpenCode サーバーは次の API を公開します。
+
+---
+
+### Global
+
+| メソッド | パス             | 説明                                      | レスポンス                           |
+| -------- | ---------------- | ----------------------------------------- | ------------------------------------ |
+| `GET`    | `/global/health` | サーバーの健全性とバージョンを取得する    | `{ healthy: true, version: string }` |
+| `GET`    | `/global/event`  | グローバルイベントの取得 (SSE ストリーム) | イベントストリーム                   |
+
+---
+
+### Project
+
+| メソッド | パス               | 説明                             | レスポンス                                    |
+| -------- | ------------------ | -------------------------------- | --------------------------------------------- |
+| `GET`    | `/project`         | すべてのプロジェクトをリストする | <a href={typesUrl}><code>Project[]</code></a> |
+| `GET`    | `/project/current` | 現在のプロジェクトを取得         | <a href={typesUrl}><code>Project</code></a>   |
+
+---
+
+### Path and VCS
+
+| メソッド | パス    | 説明                                    | レスポンス                                  |
+| -------- | ------- | --------------------------------------- | ------------------------------------------- |
+| `GET`    | `/path` | 現在のパスを取得する                    | <a href={typesUrl}><code>Path</code></a>    |
+| `GET`    | `/vcs`  | 現在のプロジェクトの VCS 情報を取得する | <a href={typesUrl}><code>VcsInfo</code></a> |
+
+---
+
+### Instance
+
+| メソッド | パス                | 説明                         | レスポンス |
+| -------- | ------------------- | ---------------------------- | ---------- |
+| `POST`   | `/instance/dispose` | 現在のインスタンスを破棄する | void       |
+
+---
+
+### Config
+
+| メソッド | パス                | 説明                                         | レスポンス                                                                                            |
+| -------- | ------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `GET`    | `/config`           | 設定情報を取得する                           | <a href={typesUrl}><code>Config</code></a>                                                            |
+| `PATCH`  | `/config`           | 設定を更新する                               | <a href={typesUrl}><code>Config</code></a>                                                            |
+| `GET`    | `/config/providers` | プロバイダーとデフォルトのモデルをリストする | `{ providers: `<a href={typesUrl}><code>Provider[]</code></a>`, default: { [key: string]: string } }` |
+
+---
+
+### プロバイダー
+
+| メソッド | パス                             | 説明                                        | レスポンス                                                                                       |
+| -------- | -------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `GET`    | `/provider`                      | すべてのプロバイダーをリストする            | `{ all: `<a href={typesUrl}><code>Provider[]</code></a>`, default: {...}, connected: string[] }` |
+| `GET`    | `/provider/auth`                 | プロバイダーの認証方法を取得する            | `{ [providerID: string]: `<a href={typesUrl}><code>ProviderAuthMethod[]</code></a>` }`           |
+| `POST`   | `/provider/{id}/oauth/authorize` | OAuth を使用してプロバイダーを認証する      | <a href={typesUrl}><code>ProviderAuthAuthorization</code></a>                                    |
+| `POST`   | `/provider/{id}/oauth/callback`  | プロバイダーの OAuth コールバックを処理する | void                                                                                             |
+
+---
+
+### Session
+
+| メソッド | パス                                     | 説明                                               | 詳細                                                                                    |
+| -------- | ---------------------------------------- | -------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `GET`    | `/session`                               | すべてのセッションをリストする                     | 戻り値 <a href={typesUrl}><code>Session[]</code></a>                                    |
+| `POST`   | `/session`                               | 新しいセッションを作成する                         | 本文: `{ parentID?, title? }`、<a href={typesUrl}><code>Session</code></a> を返します。 |
+| `GET`    | `/session/status`                        | すべてのセッションのセッションステータスを取得する | 戻り値 `{ [sessionID: string]: `<a href={typesUrl}><code>SessionStatus</code></a>` }`   |
+| `GET`    | `/session/:id`                           | セッションの詳細を取得する                         | 戻り値 <a href={typesUrl}><code>Session</code></a>                                      |
+| `DELETE` | `/session/:id`                           | セッションとそのすべてのデータを削除する           | 戻り値 `boolean`                                                                        |
+| `PATCH`  | `/session/:id`                           | セッションのプロパティを更新する                   | 本文: `{ title? }`、<a href={typesUrl}><code>Session</code></a> を返します。            |
+| `GET`    | `/session/:id/children`                  | セッションの子セッションを取得する                 | 戻り値 <a href={typesUrl}><code>Session[]</code></a>                                    |
+| `GET`    | `/session/:id/todo`                      | セッションの ToDo リストを取得する                 | 戻り値 <a href={typesUrl}><code>Todo[]</code></a>                                       |
+| `POST`   | `/session/:id/init`                      | アプリを分析して `AGENTS.md` を作成する            | 本文: `{ messageID, providerID, modelID }`、`boolean` を返します。                      |
+| `POST`   | `/session/:id/fork`                      | メッセージで既存のセッションをフォークする         | 本文: `{ messageID? }`、<a href={typesUrl}><code>Session</code></a> を返します。        |
+| `POST`   | `/session/:id/abort`                     | 実行中のセッションを中止する                       | 戻り値 `boolean`                                                                        |
+| `POST`   | `/session/:id/share`                     | セッションを共有する                               | 戻り値 <a href={typesUrl}><code>Session</code></a>                                      |
+| `DELETE` | `/session/:id/share`                     | セッションの共有を解除する                         | 戻り値 <a href={typesUrl}><code>Session</code></a>                                      |
+| `GET`    | `/session/:id/diff`                      | このセッションの差分を取得する                     | クエリ: `messageID?`、<a href={typesUrl}><code>FileDiff[]</code></a> を返します。       |
+| `POST`   | `/session/:id/summarize`                 | セッションを要約する                               | 本文: `{ providerID, modelID }`、`boolean` を返します。                                 |
+| `POST`   | `/session/:id/revert`                    | メッセージを元に戻す                               | 本文: `{ messageID, partID? }`、`boolean` を返します。                                  |
+| `POST`   | `/session/:id/unrevert`                  | 元に戻したすべてのメッセージを復元する             | 戻り値 `boolean`                                                                        |
+| `POST`   | `/session/:id/permissions/:permissionID` | 許可リクエストに応答する                           | 本文: `{ response, remember? }`、`boolean` を返します。                                 |
+
+---
+
+### Message
+
+| メソッド | パス                              | 説明                                    | 詳細                                                                                                                                                                                               |
+| -------- | --------------------------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`    | `/session/:id/message`            | セッション内のメッセージをリストする    | クエリ: `limit?`、`{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}[]` を返します。                                                     |
+| `POST`   | `/session/:id/message`            | メッセージを送信して応答を待ちます      | 本文: `{ messageID?, model?, agent?, noReply?, system?, tools?, parts }`、`{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}` を返します |
+| `GET`    | `/session/:id/message/:messageID` | メッセージの詳細を取得する              | 戻り値 `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                                                                               |
+| `POST`   | `/session/:id/prompt_async`       | メッセージを非同期に送信する (待機なし) | body: `/session/:id/message` と同じ、`204 No Content` を返します。                                                                                                                                 |
+| `POST`   | `/session/:id/command`            | スラッシュコマンドを実行します          | 本文: `{ messageID?, agent?, model?, command, arguments }`、`{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}` を返します               |
+| `POST`   | `/session/:id/shell`              | シェルコマンドを実行する                | 本文: `{ agent, model?, command }`、`{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}` を返します                                       |
+
+---
+
+### Command
+
+| メソッド | パス       | 説明                         | レスポンス                                    |
+| -------- | ---------- | ---------------------------- | --------------------------------------------- |
+| `GET`    | `/command` | すべてのコマンドをリストする | <a href={typesUrl}><code>Command[]</code></a> |
+
+---
+
+### File
+
+| メソッド | パス                     | 説明                                     | レスポンス                                                                                   |
+| -------- | ------------------------ | ---------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `GET`    | `/find?pattern=<pat>`    | ファイル内のテキストを検索               | `path`、`lines`、`line_number`、`absolute_offset`、`submatches` と一致するオブジェクトの配列 |
+| `GET`    | `/find/file?query=<q>`   | ファイルとディレクトリを名前で検索する   | `string[]` (パス)                                                                            |
+| `GET`    | `/find/symbol?query=<q>` | ワークスペースのシンボルを検索する       | <a href={typesUrl}><code>Symbol[]</code></a>                                                 |
+| `GET`    | `/file?path=<path>`      | ファイルとディレクトリをリストする       | <a href={typesUrl}><code>FileNode[]</code></a>                                               |
+| `GET`    | `/file/content?path=<p>` | ファイルを読む                           | <a href={typesUrl}><code>FileContent</code></a>                                              |
+| `GET`    | `/file/status`           | 追跡されたファイルのステータスを取得する | <a href={typesUrl}><code>File[]</code></a>                                                   |
+
+#### `/find/file` クエリパラメータ
+
+- `query` (必須) — 検索文字列 (あいまい一致)
+- `type` (オプション) — 結果を `"file"` または `"directory"` に制限します
+- `directory` (オプション) — 検索用のプロジェクトルートをオーバーライドします。
+- `limit` (オプション) — 最大結果 (1 ～ 200)
+- `dirs` (オプション) — 従来のフラグ (`"false"` はファイルのみを返します)
+
+---
+
+### Tool (Experimental)
+
+| メソッド | パス                                        | 説明                                           | レスポンス                                   |
+| -------- | ------------------------------------------- | ---------------------------------------------- | -------------------------------------------- |
+| `GET`    | `/experimental/tool/ids`                    | すべてのツール ID をリストする                 | <a href={typesUrl}><code>ToolIDs</code></a>  |
+| `GET`    | `/experimental/tool?provider=<p>&model=<m>` | モデルの JSON スキーマを含むツールをリストする | <a href={typesUrl}><code>ToolList</code></a> |
+
+---
+
+### LSP, Formatter, MCP
+
+| メソッド | パス         | 説明                               | レスポンス                                                            |
+| -------- | ------------ | ---------------------------------- | --------------------------------------------------------------------- |
+| `GET`    | `/lsp`       | LSP サーバーのステータスを取得     | <a href={typesUrl}><code>LSPStatus[]</code></a>                       |
+| `GET`    | `/formatter` | フォーマッタのステータスを取得する | <a href={typesUrl}><code>FormatterStatus[]</code></a>                 |
+| `GET`    | `/mcp`       | MCP サーバーのステータスを取得する | `{ [name: string]: `<a href={typesUrl}><code>MCPStatus</code></a>` }` |
+| `POST`   | `/mcp`       | MCP サーバーを動的に追加する       | 本文: `{ name, config }`、MCP ステータスオブジェクトを返します。      |
+
+---
+
+### Agent
+
+| メソッド | パス     | 説明                                       | レスポンス                                  |
+| -------- | -------- | ------------------------------------------ | ------------------------------------------- |
+| `GET`    | `/agent` | 利用可能なすべてのエージェントをリストする | <a href={typesUrl}><code>Agent[]</code></a> |
+
+---
+
+### Logging
+
+| メソッド | パス   | 説明                                                                   | レスポンス |
+| -------- | ------ | ---------------------------------------------------------------------- | ---------- |
+| `POST`   | `/log` | ログエントリを書き込みます。本体:`{ service, level, message, extra? }` | void       |
+
+---
+
+### TUI
+
+| メソッド | パス                    | 説明                                            | レスポンス                 |
+| -------- | ----------------------- | ----------------------------------------------- | -------------------------- |
+| `POST`   | `/tui/append-prompt`    | プロンプトにテキストを追加します                | void                       |
+| `POST`   | `/tui/open-help`        | ヘルプダイアログを開く                          | void                       |
+| `POST`   | `/tui/open-sessions`    | セッションセレクターを開く                      | void                       |
+| `POST`   | `/tui/open-themes`      | テーマセレクターを開く                          | void                       |
+| `POST`   | `/tui/open-models`      | モデルセレクターを開く                          | void                       |
+| `POST`   | `/tui/submit-prompt`    | 現在のプロンプトを送信します                    | void                       |
+| `POST`   | `/tui/clear-prompt`     | プロンプトをクリア                              | void                       |
+| `POST`   | `/tui/execute-command`  | コマンドを実行する (`{ command }`)              | void                       |
+| `POST`   | `/tui/show-toast`       | トーストを表示 (`{ title?, message, variant }`) | void                       |
+| `GET`    | `/tui/control/next`     | 次の制御リクエストを待ちます                    | 制御リクエストオブジェクト |
+| `POST`   | `/tui/control/response` | 制御リクエストに応答する (`{ body }`)           | void                       |
+
+---
+
+### Auth
+
+| メソッド | パス        | 説明                                                                           | レスポンス |
+| -------- | ----------- | ------------------------------------------------------------------------------ | ---------- |
+| `PUT`    | `/auth/:id` | 認証資格情報を設定します。本文はプロバイダーのスキーマと一致する必要があります | void       |
+
+---
+
+### Event
+
+| メソッド | パス     | 説明                                                                                  | レスポンス                     |
+| -------- | -------- | ------------------------------------------------------------------------------------- | ------------------------------ |
+| `GET`    | `/event` | サーバー送信イベントストリーム。最初のイベントは `server.connected`、次にバスイベント | サーバー送信イベントストリーム |
+
+---
+
+### Documentation
+
+| メソッド | パス   | 説明             | レスポンス                       |
+| -------- | ------ | ---------------- | -------------------------------- |
+| `GET`    | `/doc` | OpenAPI 3.1 仕様 | OpenAPI 仕様を備えた HTML ページ |

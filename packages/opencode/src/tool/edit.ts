@@ -10,16 +10,28 @@ import { LSP } from "../lsp"
 import { createTwoFilesPatch, diffLines } from "diff"
 import DESCRIPTION from "./edit.txt"
 import { File } from "../file"
+import { FileWatcher } from "../file/watcher"
 import { Bus } from "../bus"
+import { Format } from "../format"
 import { FileTime } from "../file/time"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Snapshot } from "@/snapshot"
+import { assertExternalDirectory } from "./external-directory"
 
 const MAX_DIAGNOSTICS_PER_FILE = 20
 
 function normalizeLineEndings(text: string): string {
   return text.replaceAll("\r\n", "\n")
+}
+
+function detectLineEnding(text: string): "\n" | "\r\n" {
+  return text.includes("\r\n") ? "\r\n" : "\n"
+}
+
+function convertToLineEnding(text: string, ending: "\n" | "\r\n"): string {
+  if (ending === "\n") return text
+  return text.replaceAll("\n", "\r\n")
 }
 
 export const EditTool = Tool.define("edit", {
@@ -36,28 +48,18 @@ export const EditTool = Tool.define("edit", {
     }
 
     if (params.oldString === params.newString) {
-      throw new Error("oldString and newString must be different")
+      throw new Error("No changes to apply: oldString and newString are identical.")
     }
 
     const filePath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
-    if (!Filesystem.contains(Instance.directory, filePath)) {
-      const parentDir = path.dirname(filePath)
-      await ctx.ask({
-        permission: "external_directory",
-        patterns: [parentDir, path.join(parentDir, "*")],
-        always: [parentDir + "/*"],
-        metadata: {
-          filepath: filePath,
-          parentDir,
-        },
-      })
-    }
+    await assertExternalDirectory(ctx, filePath)
 
     let diff = ""
     let contentOld = ""
     let contentNew = ""
     await FileTime.withLock(filePath, async () => {
       if (params.oldString === "") {
+        const existed = await Filesystem.exists(filePath)
         contentNew = params.newString
         diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
         await ctx.ask({
@@ -69,21 +71,28 @@ export const EditTool = Tool.define("edit", {
             diff,
           },
         })
-        await Bun.write(filePath, params.newString)
-        await Bus.publish(File.Event.Edited, {
+        await Filesystem.write(filePath, params.newString)
+        await Format.file(filePath)
+        Bus.publish(File.Event.Edited, { file: filePath })
+        await Bus.publish(FileWatcher.Event.Updated, {
           file: filePath,
+          event: existed ? "change" : "add",
         })
-        FileTime.read(ctx.sessionID, filePath)
+        await FileTime.read(ctx.sessionID, filePath)
         return
       }
 
-      const file = Bun.file(filePath)
-      const stats = await file.stat().catch(() => {})
+      const stats = Filesystem.stat(filePath)
       if (!stats) throw new Error(`File ${filePath} not found`)
       if (stats.isDirectory()) throw new Error(`Path is a directory, not a file: ${filePath}`)
       await FileTime.assert(ctx.sessionID, filePath)
-      contentOld = await file.text()
-      contentNew = replace(contentOld, params.oldString, params.newString, params.replaceAll)
+      contentOld = await Filesystem.readText(filePath)
+
+      const ending = detectLineEnding(contentOld)
+      const old = convertToLineEnding(normalizeLineEndings(params.oldString), ending)
+      const next = convertToLineEnding(normalizeLineEndings(params.newString), ending)
+
+      contentNew = replace(contentOld, old, next, params.replaceAll)
 
       diff = trimDiff(
         createTwoFilesPatch(filePath, filePath, normalizeLineEndings(contentOld), normalizeLineEndings(contentNew)),
@@ -98,15 +107,18 @@ export const EditTool = Tool.define("edit", {
         },
       })
 
-      await file.write(contentNew)
-      await Bus.publish(File.Event.Edited, {
+      await Filesystem.write(filePath, contentNew)
+      await Format.file(filePath)
+      Bus.publish(File.Event.Edited, { file: filePath })
+      await Bus.publish(FileWatcher.Event.Updated, {
         file: filePath,
+        event: "change",
       })
-      contentNew = await file.text()
+      contentNew = await Filesystem.readText(filePath)
       diff = trimDiff(
         createTwoFilesPatch(filePath, filePath, normalizeLineEndings(contentOld), normalizeLineEndings(contentNew)),
       )
-      FileTime.read(ctx.sessionID, filePath)
+      await FileTime.read(ctx.sessionID, filePath)
     })
 
     const filediff: Snapshot.FileDiff = {
@@ -129,7 +141,7 @@ export const EditTool = Tool.define("edit", {
       },
     })
 
-    let output = ""
+    let output = "Edit applied successfully."
     await LSP.touchFile(filePath, true)
     const diagnostics = await LSP.diagnostics()
     const normalizedFilePath = Filesystem.normalizePath(filePath)
@@ -139,7 +151,7 @@ export const EditTool = Tool.define("edit", {
       const limited = errors.slice(0, MAX_DIAGNOSTICS_PER_FILE)
       const suffix =
         errors.length > MAX_DIAGNOSTICS_PER_FILE ? `\n... and ${errors.length - MAX_DIAGNOSTICS_PER_FILE} more` : ""
-      output += `\nThis file has errors, please fix\n<file_diagnostics>\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</file_diagnostics>\n`
+      output += `\n\nLSP errors detected in this file, please fix:\n<diagnostics file="${filePath}">\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</diagnostics>`
     }
 
     return {
@@ -617,7 +629,7 @@ export function trimDiff(diff: string): string {
 
 export function replace(content: string, oldString: string, newString: string, replaceAll = false): string {
   if (oldString === newString) {
-    throw new Error("oldString and newString must be different")
+    throw new Error("No changes to apply: oldString and newString are identical.")
   }
 
   let notFound = true
@@ -647,9 +659,9 @@ export function replace(content: string, oldString: string, newString: string, r
   }
 
   if (notFound) {
-    throw new Error("oldString not found in content")
+    throw new Error(
+      "Could not find oldString in the file. It must match exactly, including whitespace, indentation, and line endings.",
+    )
   }
-  throw new Error(
-    "Found multiple matches for oldString. Provide more surrounding lines in oldString to identify the correct match.",
-  )
+  throw new Error("Found multiple matches for oldString. Provide more surrounding context to make the match unique.")
 }

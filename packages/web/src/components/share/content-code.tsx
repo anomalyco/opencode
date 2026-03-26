@@ -1,6 +1,5 @@
 import { codeToHtml, bundledLanguages } from "shiki"
 import { createResource, Suspense } from "solid-js"
-import { transformerNotationDiff } from "@shikijs/transformers"
 import style from "./content-code.module.css"
 
 interface Props {
@@ -20,7 +19,6 @@ export function ContentCode(props: Props) {
           light: "github-light",
           dark: "github-dark",
         },
-        transformers: [transformerNotationDiff()],
       })) as string
     },
   )

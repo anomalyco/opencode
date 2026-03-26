@@ -1,7 +1,32 @@
-# Tauri + Vanilla TS
+# OpenCode Desktop
 
-This template should help get you started developing with Tauri in vanilla HTML, CSS and Typescript.
+Native OpenCode desktop app, built with Tauri v2.
 
-## Recommended IDE Setup
+## Prerequisites
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+Building the desktop app requires additional Tauri dependencies (Rust toolchain, platform-specific libraries). See the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for setup instructions.
+
+## Development
+
+From the repo root:
+
+```bash
+bun install
+bun run --cwd packages/desktop tauri dev
+```
+
+## Build
+
+```bash
+bun run --cwd packages/desktop tauri build
+```
+
+## Troubleshooting
+
+### Rust compiler not found
+
+If you see errors about Rust not being found, install it via [rustup](https://rustup.rs/):
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```

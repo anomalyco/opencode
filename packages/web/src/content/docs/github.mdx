@@ -57,12 +57,13 @@ Or you can set it up manually.
        permissions:
          id-token: write
        steps:
-         - name: Checkout repository
-           uses: actions/checkout@v4
-           with:
-             fetch-depth: 1
+          - name: Checkout repository
+            uses: actions/checkout@v6
+            with:
+              fetch-depth: 1
+              persist-credentials: false
 
-         - name: Run OpenCode
+          - name: Run OpenCode
            uses: anomalyco/opencode/github@latest
            env:
              ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -134,7 +135,9 @@ jobs:
       issues: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Run OpenCode
         uses: anomalyco/opencode/github@latest
@@ -171,12 +174,16 @@ jobs:
       pull-requests: read
       issues: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - uses: anomalyco/opencode/github@latest
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           model: anthropic/claude-sonnet-4-20250514
+          use_github_token: true
           prompt: |
             Review this pull request:
             - Check for code quality issues
@@ -221,8 +228,10 @@ jobs:
             return days >= 30;
           result-encoding: string
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         if: steps.check.outputs.result == 'true'
+        with:
+          persist-credentials: false
 
       - uses: anomalyco/opencode/github@latest
         if: steps.check.outputs.result == 'true'

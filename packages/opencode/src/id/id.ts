@@ -3,12 +3,16 @@ import { randomBytes } from "crypto"
 
 export namespace Identifier {
   const prefixes = {
+    event: "evt",
     session: "ses",
     message: "msg",
     permission: "per",
+    question: "que",
     user: "usr",
     part: "prt",
     pty: "pty",
+    tool: "tool",
+    workspace: "wrk",
   } as const
 
   export function schema(prefix: keyof typeof prefixes) {
@@ -69,5 +73,13 @@ export namespace Identifier {
     }
 
     return prefixes[prefix] + "_" + timeBytes.toString("hex") + randomBase62(LENGTH - 12)
+  }
+
+  /** Extract timestamp from an ascending ID. Does not work with descending IDs. */
+  export function timestamp(id: string): number {
+    const prefix = id.split("_")[0]
+    const hex = id.slice(prefix.length + 1, prefix.length + 13)
+    const encoded = BigInt("0x" + hex)
+    return Number(encoded / BigInt(0x1000))
   }
 }

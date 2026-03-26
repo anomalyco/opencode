@@ -213,7 +213,7 @@ export const BashTool = Tool.define("bash", async () => {
       )
 
       // Sanitize environment variables to ensure a "sane" execution environment
-      const sanitizedEnv = {
+      const sanitizedEnv: any = {
         ...process.env,
         ...shellEnv.env,
         TERM: "dumb", // Avoid escape sequences and interactive behaviors
@@ -226,7 +226,7 @@ export const BashTool = Tool.define("bash", async () => {
       delete sanitizedEnv.LD_PRELOAD
       delete sanitizedEnv.DYLD_INSERT_LIBRARIES
 
-      const proc = spawn(params.command, {
+      const proc = spawn(params.command, [], {
         shell,
         cwd,
         env: sanitizedEnv,

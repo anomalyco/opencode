@@ -148,10 +148,10 @@ body {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        gap: 48px;
+        gap: 32px;
 
         @media (max-width: 55rem) {
-          gap: 32px;
+          gap: 24px;
         }
 
         @media (max-width: 48rem) {
@@ -177,6 +177,7 @@ body {
             border-radius: 4px;
             font-weight: 500;
             text-decoration: none;
+            white-space: nowrap;
 
             @media (max-width: 55rem) {
               display: none;

@@ -23,6 +23,7 @@
   --color-text-strong: hsl(0, 5%, 12%);
   --color-text-inverted: hsl(0, 20%, 99%);
   --color-text-success: hsl(119, 100%, 35%);
+  --color-text-error: hsl(4, 72%, 45%);
 
   --color-border: hsl(30, 2%, 81%);
   --color-border-weak: hsl(0, 1%, 85%);
@@ -50,6 +51,7 @@
     --color-text-strong: hsl(0, 15%, 94%);
     --color-text-inverted: hsl(0, 9%, 7%);
     --color-text-success: hsl(119, 60%, 72%);
+    --color-text-error: hsl(4, 76%, 72%);
 
     --color-border: hsl(0, 3%, 28%);
     --color-border-weak: hsl(0, 4%, 23%);
@@ -85,10 +87,10 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
-        gap: 48px;
+        gap: 32px;
 
         @media (max-width: 55rem) {
-          gap: 32px;
+          gap: 24px;
         }
 
         @media (max-width: 48rem) {
@@ -117,6 +119,7 @@
             display: flex;
             align-items: center;
             gap: 8px;
+            white-space: nowrap;
 
             @media (max-width: 55rem) {
               display: none;
@@ -451,6 +454,13 @@
         margin-top: 1rem;
         padding: 1rem 0;
         color: var(--color-text-success);
+        text-align: left;
+      }
+
+      [data-component="error-message"] {
+        margin-top: 1rem;
+        padding: 1rem 0;
+        color: var(--color-text-error);
         text-align: left;
       }
     }

@@ -1,8 +1,8 @@
-import { SyntaxStyle, RGBA, type TerminalColors } from "@opentui/core"
+import { CliRenderEvents, SyntaxStyle, RGBA, type TerminalColors } from "@opentui/core"
 import path from "path"
-import { createEffect, createMemo, onMount } from "solid-js"
-import { useSync } from "@tui/context/sync"
+import { createEffect, createMemo, onCleanup, onMount } from "solid-js"
 import { createSimpleContext } from "./helper"
+import { Glob } from "../../../../util/glob"
 import aura from "./theme/aura.json" with { type: "json" }
 import ayu from "./theme/ayu.json" with { type: "json" }
 import catppuccin from "./theme/catppuccin.json" with { type: "json" }
@@ -35,11 +35,13 @@ import tokyonight from "./theme/tokyonight.json" with { type: "json" }
 import vercel from "./theme/vercel.json" with { type: "json" }
 import vesper from "./theme/vesper.json" with { type: "json" }
 import zenburn from "./theme/zenburn.json" with { type: "json" }
+import carbonfox from "./theme/carbonfox.json" with { type: "json" }
 import { useKV } from "./kv"
 import { useRenderer } from "@opentui/solid"
 import { createStore, produce } from "solid-js/store"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
+import { useTuiConfig } from "./tui-config"
 
 type ThemeColors = {
   primary: RGBA
@@ -101,15 +103,16 @@ type Theme = ThemeColors & {
   thinkingOpacity: number
 }
 
-export function selectedForeground(theme: Theme): RGBA {
+export function selectedForeground(theme: Theme, bg?: RGBA): RGBA {
   // If theme explicitly defines selectedListItemText, use it
   if (theme._hasSelectedListItemText) {
     return theme.selectedListItemText
   }
 
-  // For transparent backgrounds, calculate contrast based on primary color
+  // For transparent backgrounds, calculate contrast based on the actual bg (or fallback to primary)
   if (theme.background.a === 0) {
-    const { r, g, b } = theme.primary
+    const targetColor = bg ?? theme.primary
+    const { r, g, b } = targetColor
     const luminance = 0.299 * r + 0.587 * g + 0.114 * b
     return luminance > 0.5 ? RGBA.fromInts(0, 0, 0) : RGBA.fromInts(255, 255, 255)
   }
@@ -168,6 +171,7 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   vesper,
   vercel,
   zenburn,
+  carbonfox,
 }
 
 function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
@@ -276,22 +280,29 @@ function ansiToRgba(code: number): RGBA {
 export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   name: "Theme",
   init: (props: { mode: "dark" | "light" }) => {
-    const sync = useSync()
+    const renderer = useRenderer()
+    const config = useTuiConfig()
     const kv = useKV()
+    const pick = (value: unknown) => {
+      if (value === "dark" || value === "light") return value
+      return
+    }
+    const lock = pick(kv.get("theme_mode_lock"))
     const [store, setStore] = createStore({
       themes: DEFAULT_THEMES,
-      mode: kv.get("theme_mode", props.mode),
-      active: (sync.data.config.theme ?? kv.get("theme", "opencode")) as string,
+      mode: lock ?? pick(kv.get("theme_mode", props.mode)) ?? props.mode,
+      lock,
+      active: (config.theme ?? kv.get("theme", "opencode")) as string,
       ready: false,
     })
 
     createEffect(() => {
-      const theme = sync.data.config.theme
-      console.log("theme", theme)
+      const theme = config.theme
       if (theme) setStore("active", theme)
     })
 
-    createEffect(() => {
+    function init() {
+      resolveSystemTheme(store.mode)
       getCustomThemes()
         .then((custom) => {
           setStore(
@@ -308,37 +319,74 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
             setStore("ready", true)
           }
         })
-    })
+    }
 
-    const renderer = useRenderer()
-    renderer
-      .getPalette({
-        size: 16,
-      })
-      .then((colors) => {
-        if (!colors.palette[0]) {
-          if (store.active === "system") {
-            setStore(
-              produce((draft) => {
-                draft.active = "opencode"
-                draft.ready = true
-              }),
-            )
-          }
-          return
-        }
-        setStore(
-          produce((draft) => {
-            draft.themes.system = generateSystem(colors, store.mode)
+    onMount(init)
+
+    function resolveSystemTheme(mode: "dark" | "light" = store.mode) {
+      renderer
+        .getPalette({
+          size: 16,
+        })
+        .then((colors) => {
+          if (!colors.palette[0]) {
             if (store.active === "system") {
-              draft.ready = true
+              setStore(
+                produce((draft) => {
+                  draft.active = "opencode"
+                  draft.ready = true
+                }),
+              )
             }
-          }),
-        )
-      })
+            return
+          }
+          setStore(
+            produce((draft) => {
+              draft.themes.system = generateSystem(colors, mode)
+              if (store.active === "system") {
+                draft.ready = true
+              }
+            }),
+          )
+        })
+    }
+
+    function apply(mode: "dark" | "light") {
+      kv.set("theme_mode", mode)
+      if (store.mode === mode) return
+      setStore("mode", mode)
+      renderer.clearPaletteCache()
+      resolveSystemTheme(mode)
+    }
+
+    function pin(mode: "dark" | "light" = store.mode) {
+      setStore("lock", mode)
+      kv.set("theme_mode_lock", mode)
+      apply(mode)
+    }
+
+    function free() {
+      setStore("lock", undefined)
+      kv.set("theme_mode_lock", undefined)
+      const mode = renderer.themeMode
+      if (mode) apply(mode)
+    }
+
+    const handle = (mode: "dark" | "light") => {
+      if (store.lock) return
+      apply(mode)
+    }
+    renderer.on(CliRenderEvents.THEME_MODE, handle)
+    onCleanup(() => {
+      renderer.off(CliRenderEvents.THEME_MODE, handle)
+    })
 
     const values = createMemo(() => {
       return resolveTheme(store.themes[store.active] ?? store.themes.opencode, store.mode)
+    })
+
+    createEffect(() => {
+      renderer.setBackgroundColor(values().background)
     })
 
     const syntax = createMemo(() => generateSyntax(values()))
@@ -362,9 +410,17 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       mode() {
         return store.mode
       },
+      locked() {
+        return store.lock !== undefined
+      },
+      lock() {
+        pin(store.mode)
+      },
+      unlock() {
+        free()
+      },
       setMode(mode: "dark" | "light") {
-        setStore("mode", mode)
-        kv.set("theme_mode", mode)
+        pin(mode)
       },
       set(theme: string) {
         setStore("active", theme)
@@ -377,7 +433,6 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   },
 })
 
-const CUSTOM_THEME_GLOB = new Bun.Glob("themes/*.json")
 async function getCustomThemes() {
   const directories = [
     Global.Path.config,
@@ -391,35 +446,36 @@ async function getCustomThemes() {
 
   const result: Record<string, ThemeJson> = {}
   for (const dir of directories) {
-    for await (const item of CUSTOM_THEME_GLOB.scan({
-      absolute: true,
-      followSymlinks: true,
-      dot: true,
+    for (const item of await Glob.scan("themes/*.json", {
       cwd: dir,
+      absolute: true,
+      dot: true,
+      symlink: true,
     })) {
       const name = path.basename(item, ".json")
-      result[name] = await Bun.file(item).json()
+      result[name] = await Filesystem.readJson(item)
     }
   }
   return result
 }
 
+export function tint(base: RGBA, overlay: RGBA, alpha: number): RGBA {
+  const r = base.r + (overlay.r - base.r) * alpha
+  const g = base.g + (overlay.g - base.g) * alpha
+  const b = base.b + (overlay.b - base.b) * alpha
+  return RGBA.fromInts(Math.round(r * 255), Math.round(g * 255), Math.round(b * 255))
+}
+
 function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJson {
   const bg = RGBA.fromHex(colors.defaultBackground ?? colors.palette[0]!)
   const fg = RGBA.fromHex(colors.defaultForeground ?? colors.palette[7]!)
+  const transparent = RGBA.fromValues(bg.r, bg.g, bg.b, 0)
   const isDark = mode == "dark"
 
   const col = (i: number) => {
     const value = colors.palette[i]
     if (value) return RGBA.fromHex(value)
     return ansiToRgba(i)
-  }
-
-  const tint = (base: RGBA, overlay: RGBA, alpha: number) => {
-    const r = base.r + (overlay.r - base.r) * alpha
-    const g = base.g + (overlay.g - base.g) * alpha
-    const b = base.b + (overlay.b - base.b) * alpha
-    return RGBA.fromInts(Math.round(r * 255), Math.round(g * 255), Math.round(b * 255))
   }
 
   // Generate gray scale based on terminal background
@@ -464,8 +520,8 @@ function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJs
       textMuted,
       selectedListItemText: bg,
 
-      // Background colors
-      background: bg,
+      // Background colors - use transparent to respect terminal transparency
+      background: transparent,
       backgroundPanel: grays[2],
       backgroundElement: grays[3],
       backgroundMenu: grays[3],

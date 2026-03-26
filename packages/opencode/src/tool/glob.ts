@@ -1,9 +1,11 @@
 import z from "zod"
 import path from "path"
 import { Tool } from "./tool"
+import { Filesystem } from "../util/filesystem"
 import DESCRIPTION from "./glob.txt"
 import { Ripgrep } from "../file/ripgrep"
 import { Instance } from "../project/instance"
+import { assertExternalDirectory } from "./external-directory"
 
 export const GlobTool = Tool.define("glob", {
   description: DESCRIPTION,
@@ -29,6 +31,7 @@ export const GlobTool = Tool.define("glob", {
 
     let search = params.path ?? Instance.directory
     search = path.isAbsolute(search) ? search : path.resolve(Instance.directory, search)
+    await assertExternalDirectory(ctx, search, { kind: "directory" })
 
     const limit = 100
     const files = []
@@ -36,16 +39,14 @@ export const GlobTool = Tool.define("glob", {
     for await (const file of Ripgrep.files({
       cwd: search,
       glob: [params.pattern],
+      signal: ctx.abort,
     })) {
       if (files.length >= limit) {
         truncated = true
         break
       }
       const full = path.resolve(search, file)
-      const stats = await Bun.file(full)
-        .stat()
-        .then((x) => x.mtime.getTime())
-        .catch(() => 0)
+      const stats = Filesystem.stat(full)?.mtime.getTime() ?? 0
       files.push({
         path: full,
         mtime: stats,
@@ -59,7 +60,9 @@ export const GlobTool = Tool.define("glob", {
       output.push(...files.map((f) => f.path))
       if (truncated) {
         output.push("")
-        output.push("(Results are truncated. Consider using a more specific path or pattern.)")
+        output.push(
+          `(Results are truncated: showing first ${limit} results. Consider using a more specific path or pattern.)`,
+        )
       }
     }
 

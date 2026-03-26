@@ -1,0 +1,287 @@
+---
+title: Serwer
+description: Interakcja z serwerem opencode za pośrednictwem protokołu HTTP.
+---
+
+import config from "../../../../config.mjs"
+export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
+
+Komenda `opencode serve` uruchamia bezgłowy serwer HTTP, który udostępnia punkt końcowy OpenAPI, z którego może korzystać klient opencode.
+
+---
+
+### Użycie
+
+```bash
+opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+```
+
+#### Opcje
+
+| Flaga           | Opis                                         | Domyślne         |
+| --------------- | -------------------------------------------- | ---------------- |
+| `--port`        | Port nasłuchiwania                           | `4096`           |
+| `--hostname`    | Nazwa hosta do nasłuchiwania                 | `127.0.0.1`      |
+| `--mdns`        | Włącz wykrywanie mDNS                        | `false`          |
+| `--mdns-domain` | Niestandardowa nazwa domeny dla usługi mDNS  | `opencode.local` |
+| `--cors`        | Dodatkowe originy przeglądarki do dozwolenia | `[]`             |
+
+`--cors` można przekazać wiele razy:
+
+```bash
+opencode serve --cors http://localhost:5173 --cors https://app.example.com
+```
+
+---
+
+### Uwierzytelnianie
+
+Ustaw `OPENCODE_SERVER_PASSWORD`, aby chronić serwer za pomocą podstawowego uwierzytelniania HTTP. Domyślną nazwą użytkownika jest `opencode` lub ustaw `OPENCODE_SERVER_USERNAME`, aby ją zastąpić. Dotyczy to zarówno `opencode serve`, jak i `opencode web`.
+
+```bash
+OPENCODE_SERVER_PASSWORD=your-password opencode serve
+```
+
+---
+
+### Jak to działa
+
+Kiedy uruchomisz `opencode`, uruchomi się TUI i serwer. Gdzie jest TUI
+klient komunikujący się z serwerem. Serwer udostępnia specyfikację OpenAPI 3.1
+punkt końcowy. Ten punkt końcowy jest również używany do generowania [SDK](/docs/sdk).
+
+:::tip
+Użyj serwera opencode do programowej interakcji z opencode.
+:::
+
+Ta architektura umożliwia obsługę wielu klientów przez opencode i programową interakcję z kodem otwartym.
+
+Możesz uruchomić `opencode serve`, aby uruchomić samodzielny serwer. Jeśli masz
+opencode TUI działa, `opencode serve` uruchomi nowy serwer.
+
+---
+
+#### Połączenie z istniejącym serwerem
+
+Po uruchomieniu TUI losowo przypisuje port i nazwę hosta. Zamiast tego możesz przekazać `--hostname` i `--port` [flagi](/docs/cli). Następnie użyj tego, aby połączyć się z serwerem.
+
+Punktu końcowego [`/tui`](#TUI) można użyć do sterowania TUI przez serwer. Można na przykład wstępnie wypełnić lub uruchomić monit. Ta konfiguracja jest używana przez wtyczki opencode [IDE](/docs/ide).
+
+---
+
+## Specyfikacja
+
+Serwer publikuje specyfikację OpenAPI 3.1, którą można obejrzeć pod adresem:
+
+```
+http://<hostname>:<port>/doc
+```
+
+Na przykład `http://localhost:4096/doc`. Użyj specyfikacji, aby wygenerować klientów lub sprawdzić typy żądań i odpowiedzi. Możesz też wyświetlić go w eksploratorze Swagger.
+
+---
+
+## API
+
+Serwer opencode udostępnia następujące interfejsy API.
+
+---
+
+### Globalne
+
+| Method | Path             | Description                    | Response                             |
+| ------ | ---------------- | ------------------------------ | ------------------------------------ |
+| `GET`  | `/global/health` | Uzyskaj stan i wersję serwera  | `{ healthy: true, version: string }` |
+| `GET`  | `/global/event`  | Get global events (SSE stream) | Event stream                         |
+
+---
+
+### Projekt
+
+| Method | Path               | Description                | Response                                      |
+| ------ | ------------------ | -------------------------- | --------------------------------------------- |
+| `GET`  | `/project`         | Lista wszystkich projektów | <a href={typesUrl}><code>Project[]</code></a> |
+| `GET`  | `/project/current` | Pobierz bieżący projekt    | <a href={typesUrl}><code>Project</code></a>   |
+
+---
+
+### Ścieżka i VCS
+
+| Method | Path    | Description                                   | Response                                    |
+| ------ | ------- | --------------------------------------------- | ------------------------------------------- |
+| `GET`  | `/path` | Pobierz bieżącą ścieżkę                       | <a href={typesUrl}><code>Path</code></a>    |
+| `GET`  | `/vcs`  | Uzyskaj informacje VCS dla bieżącego projektu | <a href={typesUrl}><code>VcsInfo</code></a> |
+
+---
+
+### Instancja
+
+| Method | Path                | Description            | Response  |
+| ------ | ------------------- | ---------------------- | --------- |
+| `POST` | `/instance/dispose` | Usuń bieżącą instancję | `boolean` |
+
+---
+
+### Konfiguracja
+
+| Method  | Path                | Description                         | Response                                                                                 |
+| ------- | ------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------- |
+| `GET`   | `/config`           | Get config info                     | <a href={typesUrl}><code>Config</code></a>                                               |
+| `PATCH` | `/config`           | Update config                       | <a href={typesUrl}><code>Config</code></a>                                               |
+| `GET`   | `/config/providers` | Lista dostawców i modeli domyślnych | `{ providers: `<a href={typesUrl}>Dostawca[]</a>`, default: { [key: string]: string } }` |
+
+---
+
+### Dostawca
+
+| Method | Path                             | Description                                    | Response                                                                            |
+| ------ | -------------------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `GET`  | `/provider`                      | Lista wszystkich dostawców                     | `{ all: `<a href={typesUrl}>Dostawca[]</a>`, default: {...}, connected: string[] }` |
+| `GET`  | `/provider/auth`                 | Uzyskaj metody uwierzytelniania dostawcy       | `{ [providerID: string]: `<a href={typesUrl}>ProviderAuthMethod[]</a>` }`           |
+| `POST` | `/provider/{id}/oauth/authorize` | Autoryzuj dostawcę za pomocą protokołu OAuth   | <a href={typesUrl}><code>ProviderAuthAuthorization</code></a>                       |
+| `POST` | `/provider/{id}/oauth/callback`  | Obsługa wywołania zwrotnego OAuth dla dostawcy | `boolean`                                                                           |
+
+---
+
+### Sesje
+
+| Method   | Path                                     | Description                                 | Notes                                                                              |
+| -------- | ---------------------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `GET`    | `/session`                               | Lista wszystkich sesji                      | Zwraca <a href={typesUrl}><code>Session[]</code></a>                               |
+| `POST`   | `/session`                               | Utwórz nową sesję                           | treść: `{ parentID?, title? }`, zwraca <a href={typesUrl}><code>Session</code></a> |
+| `GET`    | `/session/status`                        | Uzyskaj status sesji dla wszystkich sesji   | Zwraca `{ [sessionID: string]: `<a href={typesUrl}>Status sesji</a>` }`            |
+| `GET`    | `/session/:id`                           | Uzyskaj szczegóły sesji                     | Zwraca <a href={typesUrl}><code>Session</code></a>                                 |
+| `DELETE` | `/session/:id`                           | Usuń sesję i wszystkie jej dane             | Zwraca `boolean`                                                                   |
+| `PATCH`  | `/session/:id`                           | Aktualizuj właściwości sesji                | treść: `{ title? }`, zwraca <a href={typesUrl}><code>Session</code></a>            |
+| `GET`    | `/session/:id/children`                  | Pobierz sesje podrzędne sesji               | Zwraca <a href={typesUrl}><code>Session[]</code></a>                               |
+| `GET`    | `/session/:id/todo`                      | Pobierz listę rzeczy do zrobienia dla sesji | Zwraca <a href={typesUrl}><code>Todo[]</code></a>                                  |
+| `POST`   | `/session/:id/init`                      | Przeanalizuj aplikację i utwórz `AGENTS.md` | treść: `{ messageID, providerID, modelID }`, zwraca `boolean`                      |
+| `POST`   | `/session/:id/fork`                      | Rozwiń istniejącą sesję w wiadomości        | treść: `{ messageID? }`, zwraca <a href={typesUrl}><code>Session</code></a>        |
+| `POST`   | `/session/:id/abort`                     | Przerwij trwającą sesję                     | Zwraca `boolean`                                                                   |
+| `POST`   | `/session/:id/share`                     | Udostępnij sesję                            | Zwraca <a href={typesUrl}><code>Session</code></a>                                 |
+| `DELETE` | `/session/:id/share`                     | Anuluj udostępnianie sesji                  | Zwraca <a href={typesUrl}><code>Session</code></a>                                 |
+| `GET`    | `/session/:id/diff`                      | Pobierz różnicę dla tej sesji               | zapytanie: `messageID?`, zwraca <a href={typesUrl}><code>FileDiff[]</code></a>     |
+| `POST`   | `/session/:id/summarize`                 | Podsumuj sesję                              | treść: `{ providerID, modelID }`, zwraca `boolean`                                 |
+| `POST`   | `/session/:id/revert`                    | Przywróć wiadomość                          | treść: `{ messageID, partID? }`, zwraca `boolean`                                  |
+| `POST`   | `/session/:id/unrevert`                  | Przywróć wszystkie przywrócone wiadomości   | Zwraca `boolean`                                                                   |
+| `POST`   | `/session/:id/permissions/:permissionID` | Odpowiedz na prośbę o pozwolenie            | treść: `{ response, remember? }`, zwraca `boolean`                                 |
+
+---
+
+### Wiadomości
+
+| Method | Path                              | Description                                     | Notes                                                                                                                                                                    |
+| ------ | --------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET`  | `/session/:id/message`            | Lista wiadomości w sesji                        | zapytanie: `limit?`, zwraca `{ info: `<a href={typesUrl}>Wiadomość</a>`, parts: `<a href={typesUrl}>Część[]</a>`}[]`                                                     |
+| `POST` | `/session/:id/message`            | Wyślij wiadomość i poczekaj na odpowiedź        | treść: `{ messageID?, model?, agent?, noReply?, system?, tools?, parts }`, zwraca `{ info: `<a href={typesUrl}>Wiadomość</a>`, parts: `<a href={typesUrl}>Część[]</a>`}` |
+| `GET`  | `/session/:id/message/:messageID` | Uzyskaj szczegóły wiadomości                    | Zwraca `{ info: `<a href={typesUrl}>Wiadomość</a>`, parts: `<a href={typesUrl}>Część[]</a>`}`                                                                            |
+| `POST` | `/session/:id/prompt_async`       | Wyślij wiadomość asynchronicznie (bez czekania) | treść: taka sama jak `/session/:id/message`, zwraca `204 No Content`                                                                                                     |
+| `POST` | `/session/:id/command`            | Wykonaj slash command                           | treść: `{ messageID?, agent?, model?, command, arguments }`, zwraca `{ info: `<a href={typesUrl}>Wiadomość</a>`, parts: `<a href={typesUrl}>Część[]</a>`}`               |
+| `POST` | `/session/:id/shell`              | Uruchom polecenie shell                         | treść: `{ agent, model?, command }`, zwraca `{ info: `<a href={typesUrl}>Wiadomość</a>`, parts: `<a href={typesUrl}>Część[]</a>`}`                                       |
+
+---
+
+### Polecenia
+
+| Metoda | Ścieżka    | Opis                     | Odpowiedź                                     |
+| ------ | ---------- | ------------------------ | --------------------------------------------- |
+| `GET`  | `/command` | Lista wszystkich poleceń | <a href={typesUrl}><code>Command[]</code></a> |
+
+---
+
+### Pliki
+
+| Method | Path                     | Description                          | Response                                                                                       |
+| ------ | ------------------------ | ------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| `GET`  | `/find?pattern=<pat>`    | Szukaj tekstu w plikach              | Tablica obiektów dopasowania z `path`, `lines`, `line_number`, `absolute_offset`, `submatches` |
+| `GET`  | `/find/file?query=<q>`   | Znajdź pliki i katalogi według nazwy | `string[]` (ścieżki)                                                                           |
+| `GET`  | `/find/symbol?query=<q>` | Find workspace symbols               | <a href={typesUrl}><code>Symbol[]</code></a>                                                   |
+| `GET`  | `/file?path=<path>`      | Lista plików i katalogów             | <a href={typesUrl}><code>FileNode[]</code></a>                                                 |
+| `GET`  | `/file/content?path=<p>` | Read a file                          | <a href={typesUrl}><code>FileContent</code></a>                                                |
+| `GET`  | `/file/status`           | Uzyskaj status śledzonych plików     | <a href={typesUrl}><code>File[]</code></a>                                                     |
+
+#### `/find/file` query parameters
+
+- `query` (required) — search string (fuzzy match)
+- `type` (optional) — limit results to `"file"` or `"directory"`
+- `directory` (opcjonalnie) — zastąp katalog główny projektu dla wyszukiwania
+- `limit` (optional) — max results (1–200)
+- `dirs` (optional) — legacy flag (`"false"` returns only files)
+
+---
+
+### Narzędzia (Eksperymentalne)
+
+| Method | Path                                        | Description                                  | Response                                     |
+| ------ | ------------------------------------------- | -------------------------------------------- | -------------------------------------------- |
+| `GET`  | `/experimental/tool/ids`                    | Lista wszystkich identyfikatorów narzędzi    | <a href={typesUrl}><code>ToolIDs</code></a>  |
+| `GET`  | `/experimental/tool?provider=<p>&model=<m>` | Lista narzędzi ze schematami JSON dla modelu | <a href={typesUrl}><code>ToolList</code></a> |
+
+---
+
+### LSP, Formatery i MCP
+
+| Method | Path         | Description                  | Response                                                 |
+| ------ | ------------ | ---------------------------- | -------------------------------------------------------- |
+| `GET`  | `/lsp`       | Uzyskaj status serwera LSP   | <a href={typesUrl}><code>LSPStatus[]</code></a>          |
+| `GET`  | `/formatter` | Get formatter status         | <a href={typesUrl}><code>FormatterStatus[]</code></a>    |
+| `GET`  | `/mcp`       | Uzyskaj status serwera MCP   | `{ [name: string]: `<a href={typesUrl}>MCPStatus</a>` }` |
+| `POST` | `/mcp`       | Dodaj dynamicznie serwer MCP | treść: `{ name, config }`, zwraca obiekt stanu MCP       |
+
+---
+
+### Agenci
+
+| Method | Path     | Description                         | Response                                    |
+| ------ | -------- | ----------------------------------- | ------------------------------------------- |
+| `GET`  | `/agent` | Lista wszystkich dostępnych agentów | <a href={typesUrl}><code>Agent[]</code></a> |
+
+---
+
+### Logowanie
+
+| Method | Path   | Description                                                  | Response  |
+| ------ | ------ | ------------------------------------------------------------ | --------- |
+| `POST` | `/log` | Write log entry. Body: `{ service, level, message, extra? }` | `boolean` |
+
+---
+
+### TUI
+
+| Method | Path                    | Description                                  | Response                |
+| ------ | ----------------------- | -------------------------------------------- | ----------------------- |
+| `POST` | `/tui/append-prompt`    | Dołącz tekst do promptu                      | `boolean`               |
+| `POST` | `/tui/open-help`        | Otwórz okno pomocy                           | `boolean`               |
+| `POST` | `/tui/open-sessions`    | Otwórz selektor sesji                        | `boolean`               |
+| `POST` | `/tui/open-themes`      | Otwórz selektor motywów                      | `boolean`               |
+| `POST` | `/tui/open-models`      | Otwórz selektor modelu                       | `boolean`               |
+| `POST` | `/tui/submit-prompt`    | Prześlij bieżący prompt                      | `boolean`               |
+| `POST` | `/tui/clear-prompt`     | Wyczyść prompt                               | `boolean`               |
+| `POST` | `/tui/execute-command`  | Wykonaj polecenie (`{ command }`)            | `boolean`               |
+| `POST` | `/tui/show-toast`       | Pokaż toast (`{ title?, message, variant }`) | `boolean`               |
+| `GET`  | `/tui/control/next`     | Poczekaj na następne żądanie kontroli        | Obiekt żądania kontroli |
+| `POST` | `/tui/control/response` | Respond to a control request (`{ body }`)    | `boolean`               |
+
+---
+
+### Uwierzytelnianie
+
+| Method | Path        | Description                                                           | Response  |
+| ------ | ----------- | --------------------------------------------------------------------- | --------- |
+| `PUT`  | `/auth/:id` | Ustaw dane uwierzytelniające. Treść musi pasować do schematu dostawcy | `boolean` |
+
+---
+
+### Zdarzenia
+
+| Method | Path     | Description                                                                                                          | Response                                |
+| ------ | -------- | -------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| `GET`  | `/event` | Strumień zdarzeń wysyłanych przez serwer. Pierwsze wydarzenie to `server.connected`, następnie wydarzenia autobusowe | Strumień zdarzeń wysłanych przez serwer |
+
+---
+
+### Dokumentacja
+
+| Method | Path   | Description              | Response                            |
+| ------ | ------ | ------------------------ | ----------------------------------- |
+| `GET`  | `/doc` | Specyfikacja OpenAPI 3.1 | Strona HTML ze specyfikacją OpenAPI |

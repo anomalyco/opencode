@@ -3,32 +3,39 @@ title: Keybinds
 description: Customize your keybinds.
 ---
 
-OpenCode has a list of keybinds that you can customize through the OpenCode config.
+OpenCode has a list of keybinds that you can customize through `tui.json`.
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/tui.json",
   "keybinds": {
     "leader": "ctrl+x",
     "app_exit": "ctrl+c,ctrl+d,<leader>q",
     "editor_open": "<leader>e",
     "theme_list": "<leader>t",
     "sidebar_toggle": "<leader>b",
+    "scrollbar_toggle": "none",
     "username_toggle": "none",
     "status_view": "<leader>s",
+    "tool_details": "none",
     "session_export": "<leader>x",
     "session_new": "<leader>n",
     "session_list": "<leader>l",
     "session_timeline": "<leader>g",
+    "session_fork": "none",
+    "session_rename": "none",
     "session_share": "none",
     "session_unshare": "none",
     "session_interrupt": "escape",
     "session_compact": "<leader>c",
-    "session_child_cycle": "<leader>right",
-    "session_child_cycle_reverse": "<leader>left",
-    "session_parent": "<leader>up",
-    "messages_page_up": "pageup",
-    "messages_page_down": "pagedown",
+    "session_child_first": "<leader>down",
+    "session_child_cycle": "right",
+    "session_child_cycle_reverse": "left",
+    "session_parent": "up",
+    "messages_page_up": "pageup,ctrl+alt+b",
+    "messages_page_down": "pagedown,ctrl+alt+f",
+    "messages_line_up": "ctrl+alt+y",
+    "messages_line_down": "ctrl+alt+e",
     "messages_half_page_up": "ctrl+alt+u",
     "messages_half_page_down": "ctrl+alt+d",
     "messages_first": "ctrl+g,home",
@@ -43,6 +50,8 @@ OpenCode has a list of keybinds that you can customize through the OpenCode conf
     "model_list": "<leader>m",
     "model_cycle_recent": "f2",
     "model_cycle_recent_reverse": "shift+f2",
+    "model_cycle_favorite": "none",
+    "model_cycle_favorite_reverse": "none",
     "variant_cycle": "ctrl+t",
     "command_list": "ctrl+p",
     "agent_list": "<leader>a",
@@ -87,7 +96,10 @@ OpenCode has a list of keybinds that you can customize through the OpenCode conf
     "input_delete_word_backward": "ctrl+w,ctrl+backspace,alt+backspace",
     "history_previous": "up",
     "history_next": "down",
-    "terminal_suspend": "ctrl+z"
+    "terminal_suspend": "ctrl+z",
+    "terminal_title_toggle": "none",
+    "tips_toggle": "<leader>h",
+    "display_thinking": "none"
   }
 }
 ```
@@ -102,15 +114,17 @@ By default, `ctrl+x` is the leader key and most actions require you to first pre
 
 You don't need to use a leader key for your keybinds but we recommend doing so.
 
+Some navigation keybinds intentionally do not use the leader key by default. For subagent sessions, the defaults are `session_child_first` = `\<leader>down`, `session_child_cycle` = `right`, `session_child_cycle_reverse` = `left`, and `session_parent` = `up`.
+
 ---
 
 ## Disable keybind
 
-You can disable a keybind by adding the key to your config with a value of "none".
+You can disable a keybind by adding the key to `tui.json` with a value of "none".
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/tui.json",
   "keybinds": {
     "session_compact": "none"
   }
@@ -136,7 +150,6 @@ The OpenCode desktop app prompt input supports common Readline/Emacs-style short
 | `ctrl+u` | Kill to start of line                    |
 | `ctrl+w` | Kill previous word                       |
 | `alt+d`  | Kill next word                           |
-| `ctrl+y` | Yank (paste) last killed text            |
 | `ctrl+t` | Transpose characters                     |
 | `ctrl+g` | Cancel popovers / abort running response |
 

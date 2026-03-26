@@ -1,0 +1,57 @@
+---
+title: 網路
+description: 設定代理伺服器和自訂憑證。
+---
+
+OpenCode 支援標準代理環境變數和自訂憑證，適用於企業網路環境。
+
+---
+
+## 代理伺服器
+
+OpenCode 遵循標準代理環境變數。
+
+```bash
+# HTTPS proxy (recommended)
+export HTTPS_PROXY=https://proxy.example.com:8080
+
+# HTTP proxy (if HTTPS not available)
+export HTTP_PROXY=http://proxy.example.com:8080
+
+# Bypass proxy for local server (required)
+export NO_PROXY=localhost,127.0.0.1
+```
+
+:::caution
+TUI 與本地 HTTP 伺服器進行通訊。您必須為此連線繞過代理，以防止路由迴圈。
+:::
+
+您可以使用 [CLI 旗標](/docs/cli#run)來設定伺服器的連接埠和主機名稱。
+
+---
+
+### 身分驗證
+
+如果您的代理需要基本身分驗證，請在 URL 中包含憑證。
+
+```bash
+export HTTPS_PROXY=http://username:password@proxy.example.com:8080
+```
+
+:::caution
+避免將密碼寫死在程式碼中。請使用環境變數或安全的憑證儲存方式。
+:::
+
+對於需要進階身分驗證（如 NTLM 或 Kerberos）的代理，建議使用支援相應身分驗證方式的 LLM 閘道。
+
+---
+
+## 自訂憑證
+
+如果您的企業使用自訂 CA 進行 HTTPS 連線，請設定 OpenCode 以信任這些憑證。
+
+```bash
+export NODE_EXTRA_CA_CERTS=/path/to/ca-cert.pem
+```
+
+此設定同時適用於代理連線和直接 API 存取。

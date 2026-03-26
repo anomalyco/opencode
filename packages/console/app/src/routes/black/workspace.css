@@ -1,0 +1,214 @@
+[data-page="black"] {
+  background: #000;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: stretch;
+  font-family: var(--font-mono);
+  color: #fff;
+
+  [data-component="header-gradient"] {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 288px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.16) 0%, rgba(0, 0, 0, 0) 100%);
+  }
+
+  [data-component="header"] {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding-top: 40px;
+    flex-shrink: 0;
+
+    /* [data-component="header-logo"] { */
+    /* } */
+  }
+
+  [data-component="content"] {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    flex-grow: 1;
+
+    [data-slot="hero-black"] {
+      margin-top: 110px;
+
+      @media (min-width: 768px) {
+        margin-top: 150px;
+      }
+    }
+
+    [data-slot="select-workspace"] {
+      display: flex;
+      margin-top: -24px;
+      width: 100%;
+      max-width: 480px;
+      height: 305px;
+      padding: 32px 20px 0 20px;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 24px;
+
+      border: 1px solid #303030;
+      background: #0a0a0a;
+      box-shadow:
+        0 100px 80px 0 rgba(0, 0, 0, 0.04),
+        0 41.778px 33.422px 0 rgba(0, 0, 0, 0.05),
+        0 22.336px 17.869px 0 rgba(0, 0, 0, 0.06),
+        0 12.522px 10.017px 0 rgba(0, 0, 0, 0.08),
+        0 6.65px 5.32px 0 rgba(0, 0, 0, 0.09),
+        0 2.767px 2.214px 0 rgba(0, 0, 0, 0.13);
+
+      [data-slot="select-workspace-title"] {
+        flex-shrink: 0;
+        align-self: stretch;
+        color: rgba(255, 255, 255, 0.59);
+        text-align: center;
+        font-size: 16px;
+        font-style: normal;
+        font-weight: 400;
+        line-height: 160%; /* 25.6px */
+      }
+
+      [data-slot="workspaces"] {
+        width: 100%;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+        align-self: stretch;
+        outline: none;
+        overflow-y: auto;
+        flex: 1;
+        min-height: 0;
+
+        scrollbar-width: none;
+        &::-webkit-scrollbar {
+          display: none;
+        }
+
+        [data-slot="workspace"] {
+          width: 100%;
+          display: flex;
+          padding: 8px 12px;
+          align-items: center;
+          gap: 8px;
+          align-self: stretch;
+          cursor: pointer;
+
+          [data-slot="selected-icon"] {
+            visibility: hidden;
+            color: rgba(255, 255, 255, 0.39);
+            font-family: "IBM Plex Mono";
+            font-size: 16px;
+            font-style: normal;
+            font-weight: 400;
+            line-height: 160%; /* 25.6px */
+          }
+
+          a {
+            color: rgba(255, 255, 255, 0.92);
+            font-size: 16px;
+            font-style: normal;
+            font-weight: 400;
+            line-height: 160%; /* 25.6px */
+            text-decoration: none;
+          }
+        }
+
+        [data-slot="workspace"]:hover,
+        [data-slot="workspace"][data-active="true"] {
+          background: #161616;
+
+          [data-slot="selected-icon"] {
+            visibility: visible;
+          }
+        }
+      }
+    }
+  }
+
+  [data-component="footer"] {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    justify-content: center;
+    align-items: center;
+    gap: 24px;
+    flex-shrink: 0;
+
+    @media (min-width: 768px) {
+      height: 120px;
+    }
+
+    [data-slot="footer-content"] {
+      display: flex;
+      gap: 24px;
+      align-items: center;
+      justify-content: center;
+
+      @media (min-width: 768px) {
+        gap: 40px;
+      }
+
+      span,
+      a {
+        color: rgba(255, 255, 255, 0.39);
+        font-family: "JetBrains Mono Nerd Font";
+        font-size: 16px;
+        font-style: normal;
+        font-weight: 400;
+        line-height: normal;
+        text-decoration: none;
+      }
+
+      [data-slot="github-stars"] {
+        color: rgba(255, 255, 255, 0.25);
+        font-family: "JetBrains Mono Nerd Font";
+        font-size: 16px;
+        font-style: normal;
+        font-weight: 400;
+        line-height: normal;
+      }
+
+      [data-slot="anomaly"] {
+        display: none;
+
+        @media (min-width: 768px) {
+          display: block;
+        }
+      }
+    }
+    [data-slot="anomaly-alt"] {
+      color: rgba(255, 255, 255, 0.39);
+      font-family: "JetBrains Mono Nerd Font";
+      font-size: 16px;
+      font-style: normal;
+      font-weight: 400;
+      line-height: normal;
+      text-decoration: none;
+      margin-bottom: 24px;
+
+      a {
+        color: rgba(255, 255, 255, 0.39);
+        font-family: "JetBrains Mono Nerd Font";
+        font-size: 16px;
+        font-style: normal;
+        font-weight: 400;
+        line-height: normal;
+        text-decoration: none;
+      }
+
+      @media (min-width: 768px) {
+        display: none;
+      }
+    }
+  }
+}

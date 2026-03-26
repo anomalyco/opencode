@@ -79,6 +79,22 @@ a {
   color: inherit;
   -webkit-text-decoration: inherit;
   text-decoration: inherit;
+  cursor: default;
+}
+
+*[data-tauri-drag-region] {
+  app-region: drag;
+}
+
+*[data-tauri-drag-region] button,
+*[data-tauri-drag-region] a,
+*[data-tauri-drag-region] input,
+*[data-tauri-drag-region] textarea,
+*[data-tauri-drag-region] select,
+*[data-tauri-drag-region] [role="button"],
+*[data-tauri-drag-region] [role="menuitem"],
+*[data-tauri-drag-region] [contenteditable] {
+  app-region: no-drag;
 }
 
 /*
@@ -371,4 +387,18 @@ input:where([type="button"], [type="reset"], [type="submit"]),
 
 [hidden]:where(:not([hidden="until-found"])) {
   display: none !important;
+}
+
+/*
+  Prevent iOS Safari from auto-zooming on input focus.
+  iOS WebKit zooms on any input with font-size < 16px as an accessibility feature.
+*/
+
+@media (hover: none) and (pointer: coarse) {
+  input,
+  select,
+  textarea,
+  [contenteditable="true"] {
+    font-size: 16px !important;
+  }
 }

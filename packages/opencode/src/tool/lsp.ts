@@ -5,6 +5,8 @@ import { LSP } from "../lsp"
 import DESCRIPTION from "./lsp.txt"
 import { Instance } from "../project/instance"
 import { pathToFileURL } from "url"
+import { assertExternalDirectory } from "./external-directory"
+import { Filesystem } from "../util/filesystem"
 
 const operations = [
   "goToDefinition",
@@ -27,14 +29,15 @@ export const LspTool = Tool.define("lsp", {
     character: z.number().int().min(1).describe("The character offset (1-based, as shown in editors)"),
   }),
   execute: async (args, ctx) => {
+    const file = path.isAbsolute(args.filePath) ? args.filePath : path.join(Instance.directory, args.filePath)
+    await assertExternalDirectory(ctx, file)
+
     await ctx.ask({
       permission: "lsp",
       patterns: ["*"],
       always: ["*"],
       metadata: {},
     })
-
-    const file = path.isAbsolute(args.filePath) ? args.filePath : path.join(Instance.directory, args.filePath)
     const uri = pathToFileURL(file).href
     const position = {
       file,
@@ -45,7 +48,7 @@ export const LspTool = Tool.define("lsp", {
     const relPath = path.relative(Instance.worktree, file)
     const title = `${args.operation} ${relPath}:${args.line}:${args.character}`
 
-    const exists = await Bun.file(file).exists()
+    const exists = await Filesystem.exists(file)
     if (!exists) {
       throw new Error(`File not found: ${file}`)
     }
