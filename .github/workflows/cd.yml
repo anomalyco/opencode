@@ -185,7 +185,7 @@ jobs:
           OPENCODE_CHANNEL: prod
 
       - name: Package
-        run: cd packages/desktop-electron && bun run package:linux
+        run: cd packages/desktop-electron && bun run package:linux -- --publish never
         env:
           OPENCODE_CHANNEL: prod
 
@@ -229,7 +229,7 @@ jobs:
           OPENCODE_CHANNEL: prod
 
       - name: Package
-        run: cd packages/desktop-electron && bun run package:win
+        run: cd packages/desktop-electron && bun run package:win -- --publish never
         env:
           OPENCODE_CHANNEL: prod
 
