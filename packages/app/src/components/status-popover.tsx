@@ -17,6 +17,17 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { ServerRow } from "@/components/server/server-row"
 import { checkServerHealth, type ServerHealth } from "@/utils/server-health"
 
+type PennylaneHealth = {
+  healthy: boolean
+  configured: boolean
+  code: string
+  message?: string
+  error?: string
+  hint?: string
+  details?: Record<string, string>
+  latency_ms?: number
+}
+
 function getPluginName(plugin: string): string {
   if (plugin.startsWith("file://")) {
     try {
@@ -48,11 +59,11 @@ export function StatusPopover() {
   const navigate = useNavigate()
 
   const [store, setStore] = createStore({
-    status: {} as Record<string, ServerHealth | undefined>,
-    loading: null as string | null,
-    defaultServerUrl: undefined as string | undefined,
-    pennylaneHealth: undefined as { healthy: boolean; error?: string } | undefined,
-  })
+      status: {} as Record<string, ServerHealth | undefined>,
+      loading: null as string | null,
+      defaultServerUrl: undefined as string | undefined,
+      pennylaneHealth: undefined as PennylaneHealth | undefined,
+    })
   const fetcher = platform.fetch ?? globalThis.fetch
 
   const servers = createMemo(() => {
@@ -100,10 +111,7 @@ export function StatusPopover() {
   })
 
   const plugins = createMemo(() => sync.data.config.plugin ?? [])
-  const pennylaneFromServer = createMemo(
-    () =>
-      store.pennylaneHealth !== undefined && store.pennylaneHealth.error !== "not configured",
-  )
+  const pennylaneFromServer = createMemo(() => store.pennylaneHealth?.configured === true)
   const pennylaneConfigured = createMemo(
     () => isPennylaneConfigured(plugins()) || pennylaneFromServer(),
   )
@@ -118,13 +126,20 @@ export function StatusPopover() {
       const result = await sdk.client.plugin.pennylane.health()
       setStore("pennylaneHealth", result.data ?? undefined)
     } catch {
-      setStore("pennylaneHealth", { healthy: false, error: "request failed" })
+      setStore("pennylaneHealth", {
+        healthy: false,
+        configured: isPennylaneConfigured(plugins()),
+        code: "spawn_error",
+        message: "request failed",
+        error: "request failed",
+      })
     }
   }
 
   createEffect(() => {
-    refreshPennylaneHealth()
-    const interval = setInterval(refreshPennylaneHealth, 10_000)
+    void refreshPennylaneHealth()
+    if (!pennylaneConfigured()) return
+    const interval = setInterval(() => void refreshPennylaneHealth(), 10_000)
     onCleanup(() => clearInterval(interval))
   })
 
@@ -175,8 +190,7 @@ export function StatusPopover() {
   const overallHealthy = createMemo(() => {
     const serverHealthy = server.healthy() === true
     const anyMcpIssue = mcpItems().some((m) => m.status !== "connected" && m.status !== "disabled")
-    const pennylaneIssue =
-      pennylaneConfigured() && store.pennylaneHealth !== undefined && store.pennylaneHealth.healthy === false
+    const pennylaneIssue = store.pennylaneHealth?.configured === true && store.pennylaneHealth.healthy === false
     return serverHealthy && !anyMcpIssue && !pennylaneIssue
   })
 
@@ -418,34 +432,40 @@ export function StatusPopover() {
                 >
                   <For each={pluginsWithDisplay()}>
                     {(item) => {
+                      const health = () => (item.isPennylane ? store.pennylaneHealth : undefined)
                       const statusDot = () => {
                         if (!item.isPennylane) return "bg-icon-success-base"
-                        const health = store.pennylaneHealth
-                        if (health === undefined) return "bg-border-weak-base"
-                        return health.healthy ? "bg-icon-success-base" : "bg-icon-critical-base"
+                        if (health() === undefined) return "bg-border-weak-base"
+                        if (health()!.configured === false) return "bg-border-weak-base"
+                        return health()!.healthy ? "bg-icon-success-base" : "bg-icon-critical-base"
                       }
                       const statusLabel = () => {
-                        if (!item.isPennylane) return null
-                        const health = store.pennylaneHealth
-                        if (health === undefined) return null
-                        return health.healthy
-                          ? language.t("status.pennylane.connected")
-                          : language.t("status.pennylane.disconnected")
+                        if (!item.isPennylane || health() === undefined) return null
+                        if (health()!.configured === false) return language.t("status.pennylane.notConfigured")
+                        if (health()!.healthy) return language.t("status.pennylane.connected")
+                        return health()!.message ?? health()!.error ?? language.t("status.pennylane.disconnected")
+                      }
+                      const hint = () => {
+                        if (!item.isPennylane || health() === undefined || health()!.healthy) return null
+                        return health()!.hint ?? null
                       }
                       return (
-                        <div class="flex items-center gap-2 w-full px-2 py-1">
+                        <div class="flex items-start gap-2 w-full px-2 py-1">
                           <div
                             classList={{
-                              "size-1.5 rounded-full shrink-0": true,
+                              "size-1.5 rounded-full shrink-0 mt-1.5": true,
                               [statusDot()]: true,
                             }}
                           />
-                          <span class="text-14-regular text-text-base truncate flex-1">
-                            {item.name}
-                            {statusLabel() && (
-                              <span class="text-12-regular text-text-weak ml-1">({statusLabel()})</span>
-                            )}
-                          </span>
+                          <div class="min-w-0 flex-1">
+                            <div class="text-14-regular text-text-base truncate">
+                              {item.name}
+                              {statusLabel() && (
+                                <span class="text-12-regular text-text-weak ml-1">({statusLabel()})</span>
+                              )}
+                            </div>
+                            {hint() && <div class="text-12-regular text-text-weak mt-0.5">{hint()}</div>}
+                          </div>
                         </div>
                       )
                     }}

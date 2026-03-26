@@ -7,6 +7,14 @@ import { useSDK } from "@tui/context/sdk"
 import { For, Match, Switch, Show, createMemo, createSignal, onMount } from "solid-js"
 
 export type DialogStatusProps = {}
+type PennylaneHealth = {
+  healthy: boolean
+  configured: boolean
+  code: string
+  message?: string
+  error?: string
+  hint?: string
+}
 
 function isPennylaneConfigured(plugins: { name: string }[]): boolean {
   return plugins.some((p) => p.name === "pennylane")
@@ -19,7 +27,7 @@ export function DialogStatus() {
   const dialog = useDialog()
 
   const [pennylaneHealth, setPennylaneHealth] = createSignal<
-    { healthy: boolean; error?: string } | undefined
+    PennylaneHealth | undefined
   >(undefined)
 
   const enabledFormatters = createMemo(() => sync.data.formatter.filter((f) => f.enabled))
@@ -56,7 +64,15 @@ export function DialogStatus() {
     sdk.client.plugin.pennylane
       .health()
       .then((result) => setPennylaneHealth(result.data ?? undefined))
-      .catch(() => setPennylaneHealth({ healthy: false, error: "request failed" }))
+      .catch(() =>
+        setPennylaneHealth({
+          healthy: false,
+          configured: true,
+          code: "spawn_error",
+          message: "request failed",
+          error: "request failed",
+        }),
+      )
   })
 
   return (
@@ -184,7 +200,14 @@ export function DialogStatus() {
                   {item.name === "pennylane" && pennylaneHealth() && (
                     <span style={{ fg: theme.textMuted }}>
                       {" "}
-                      ({pennylaneHealth()!.healthy ? "Connected" : pennylaneHealth()!.error ?? "Disconnected"})
+                      (
+                      {pennylaneHealth()!.configured === false
+                        ? "Not configured"
+                        : pennylaneHealth()!.healthy
+                          ? "Connected"
+                          : pennylaneHealth()!.message ?? pennylaneHealth()!.error ?? "Disconnected"}
+                      )
+                      {pennylaneHealth()!.healthy || !pennylaneHealth()!.hint ? "" : ` - ${pennylaneHealth()!.hint}`}
                     </span>
                   )}
                 </text>

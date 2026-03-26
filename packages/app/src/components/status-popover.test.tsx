@@ -108,7 +108,7 @@ describe("StatusPopover", () => {
     expect(() =>
       createRoot((dispose) => {
         try {
-          StatusPopover({})
+          StatusPopover()
         } finally {
           dispose()
         }
