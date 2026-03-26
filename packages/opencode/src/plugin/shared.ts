@@ -31,35 +31,35 @@ function hasEntrypoint(json: Record<string, unknown>, kind: PluginKind) {
   return `./${kind}` in json.exports
 }
 
-function readEntrypointName(source: PluginSource, spec: string, json: Record<string, unknown>) {
-  if (source === "npm") return parsePluginSpecifier(spec).pkg
-  if (typeof json.name !== "string") return
-  const value = json.name.trim()
-  if (!value) return
-  return value
+function resolveExportPath(raw: string, dir: string) {
+  if (raw.startsWith("./") || raw.startsWith("../")) return path.resolve(dir, raw)
+  if (raw.startsWith("file://")) return fileURLToPath(raw)
+  return raw
 }
 
-function readEntrypointPath(file: string) {
-  if (file.startsWith("file://")) return fileURLToPath(file)
-  if (path.isAbsolute(file) || /^[A-Za-z]:[\\/]/.test(file)) return file
-  throw new TypeError(`Plugin entry "${file}" is not a file path`)
+function extractExportValue(value: unknown): string | undefined {
+  if (typeof value === "string") return value
+  if (!isRecord(value)) return undefined
+  for (const key of ["import", "default"]) {
+    const nested = value[key]
+    if (typeof nested === "string") return nested
+  }
+  return undefined
 }
 
 export async function resolvePluginEntrypoint(spec: string, target: string, kind: PluginKind) {
-  const source = pluginSource(spec)
   const pkg = await readPluginPackage(target).catch(() => undefined)
   if (!pkg) return target
   if (!hasEntrypoint(pkg.json, kind)) return target
 
-  const name = readEntrypointName(source, spec, pkg.json)
-  if (!name) {
-    throw new TypeError(`Plugin package ${pkg.pkg} must define package.json name to export ./${kind}`)
-  }
+  const exports = pkg.json.exports
+  if (!isRecord(exports)) return target
+  const raw = extractExportValue(exports[`./${kind}`])
+  if (!raw) return target
 
-  const ref = pathToFileURL(pkg.pkg).href
-  const entry = import.meta.resolve!(`${name}/${kind}`, ref)
+  const resolved = resolveExportPath(raw, pkg.dir)
   const root = Filesystem.resolve(pkg.dir)
-  const next = Filesystem.resolve(readEntrypointPath(entry))
+  const next = Filesystem.resolve(resolved)
   if (!Filesystem.contains(root, next)) {
     throw new Error(`Plugin ${spec} resolved ${kind} entry outside plugin directory`)
   }
