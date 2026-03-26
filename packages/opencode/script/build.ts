@@ -262,7 +262,8 @@ if (Script.release) {
       await $`zip -r ../../${key}.zip *`.cwd(`dist/${key}/bin`)
     }
   }
-  await $`gh release upload cb-v${Script.version} ./dist/*.zip ./dist/*.tar.gz --clobber --repo ${process.env.GH_REPO}`
+  const releaseTag = process.env.COBUILDER_RELEASE_TAG ?? `cb-v${Script.version}`
+  await $`gh release upload ${releaseTag} ./dist/*.zip ./dist/*.tar.gz --clobber --repo ${process.env.GH_REPO}`
 }
 
 export { binaries }
