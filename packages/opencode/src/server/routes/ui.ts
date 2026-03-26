@@ -18,8 +18,41 @@ const csp = (hash = "") =>
 
 export const UIRoutes = (): Hono =>
   new Hono().all("/*", async (c) => {
-    const embeddedWebUI = await embeddedUIPromise
     const path = c.req.path
+
+    // Allow local app dist override for development/testing
+    const appDist = process.env.OPENCODE_APP_DIST
+    if (appDist) {
+      const filePath = path === "/" || path === "" ? "/index.html" : path
+      const localFile = Bun.file(appDist + filePath)
+      const exists = await localFile.exists()
+      if (exists) {
+        const content = await localFile.arrayBuffer()
+        const mimeType = (() => {
+          if (filePath.endsWith(".js")) return "text/javascript;charset=UTF-8"
+          if (filePath.endsWith(".css")) return "text/css;charset=UTF-8"
+          if (filePath.endsWith(".html")) return "text/html;charset=UTF-8"
+          if (filePath.endsWith(".svg")) return "image/svg+xml"
+          if (filePath.endsWith(".png")) return "image/png"
+          if (filePath.endsWith(".ico")) return "image/x-icon"
+          if (filePath.endsWith(".json")) return "application/json"
+          if (filePath.endsWith(".woff2")) return "font/woff2"
+          if (filePath.endsWith(".woff")) return "font/woff"
+          if (filePath.endsWith(".aac")) return "audio/aac"
+          return "application/octet-stream"
+        })()
+        c.header("Content-Type", mimeType)
+        return c.body(new Uint8Array(content))
+      }
+      // Fall through to serve index.html for SPA routing
+      const indexFile = Bun.file(appDist + "/index.html")
+      if (await indexFile.exists()) {
+        c.header("Content-Type", "text/html;charset=UTF-8")
+        return c.body(new Uint8Array(await indexFile.arrayBuffer()))
+      }
+    }
+
+    const embeddedWebUI = await embeddedUIPromise
 
     if (embeddedWebUI) {
       const match = embeddedWebUI[path.replace(/^\//, "")] ?? embeddedWebUI["index.html"] ?? null
