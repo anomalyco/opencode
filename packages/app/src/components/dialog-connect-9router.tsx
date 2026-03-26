@@ -61,7 +61,7 @@ export function DialogConnect9Router(props: Props) {
         valid = false
       }
       if (!apiKey) {
-        setForm("err", "apiKey", "JWT token is required")
+        setForm("err", "apiKey", "API key is required")
         valid = false
       }
       if (!valid) return null
@@ -133,8 +133,8 @@ export function DialogConnect9Router(props: Props) {
 
         <form onSubmit={save} class="px-2.5 pb-6 flex flex-col gap-6">
           <p class="text-14-regular text-text-base">
-            9Router is a local OpenAI-compatible proxy that routes AI requests through Paperclip.
-            Enter your 9Router URL and Paperclip JWT token below.
+            9Router is a local OpenAI-compatible proxy for routing AI requests.
+            Enter your 9Router URL and API key below.
           </p>
 
           <div class="flex flex-col gap-4">
@@ -152,9 +152,9 @@ export function DialogConnect9Router(props: Props) {
               error={form.err.baseURL}
             />
             <TextField
-              label="JWT Token"
-              placeholder="eyJ..."
-              description="Your Paperclip API token — find it in your Paperclip agent settings or PAPERCLIP_API_KEY env var."
+              label="API Key"
+              placeholder="sk-..."
+              description="Your 9Router API key. Find it in your 9Router configuration."
               type="password"
               value={form.apiKey}
               onChange={(v) => {
