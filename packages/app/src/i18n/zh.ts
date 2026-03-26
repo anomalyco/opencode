@@ -659,7 +659,6 @@ export const dict = {
   "settings.updates.toast.latest.title": "已是最新版本",
   "settings.updates.toast.latest.description": "你正在使用最新版本的 OpenCode。",
 
-
   "sound.option.none": "无",
   "sound.option.alert01": "警报 01",
   "sound.option.alert02": "警报 02",

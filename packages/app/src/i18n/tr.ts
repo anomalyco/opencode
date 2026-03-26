@@ -679,7 +679,6 @@ export const dict = {
   "settings.updates.toast.latest.title": "Güncelsiniz",
   "settings.updates.toast.latest.description": "OpenCode'un en son sürümünü kullanıyorsunuz.",
 
-
   "sound.option.none": "Yok",
   "sound.option.alert01": "Uyarı 01",
   "sound.option.alert02": "Uyarı 02",
