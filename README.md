@@ -85,7 +85,7 @@ cobuilder web      # open in browser
 
 CoBuilder works with any of the following out of the box. You are never locked in to one.
 
-**9Router** — a local OpenAI-compatible proxy you run yourself. No data leaves your machine. Ideal for air-gapped or regulated environments. During onboarding, CoBuilder connects to your 9Router instance, fetches the available models, and lets you pick which ones to activate.
+**[9Router](https://github.com/decolua/9router)** — a local OpenAI-compatible proxy that runs on your machine and routes requests to any model backend. No data leaves your machine. Ideal for air-gapped or regulated environments. During onboarding, CoBuilder connects to your 9Router instance, fetches the available models, and lets you pick which ones to activate.
 
 **Anthropic** — Claude 3.5 Sonnet, Claude 3 Haiku, Claude Opus. Best-in-class reasoning and code generation. Requires an Anthropic API key.
 
