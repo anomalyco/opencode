@@ -3,13 +3,13 @@ import { createStore } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Icon } from "@opencode-ai/ui/icon"
+import { Icon, type IconProps } from "@opencode-ai/ui/icon"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { Switch as Toggle } from "@opencode-ai/ui/switch"
 import { showToast } from "@opencode-ai/ui/toast"
 import { applyEdits, modify } from "jsonc-parser"
-import { useSearchParams } from "@solidjs/router"
+import { useNavigate, useParams, useSearchParams } from "@solidjs/router"
 import { paint } from "@/components/prompt-input/expand"
 import { DialogConnectProvider } from "@/components/dialog-connect-provider"
 import {
@@ -520,7 +520,16 @@ function fuzzy(text: string, query: string) {
   return a.includes(b)
 }
 
-function SectionButton(props: { current: boolean; title: string; onClick: () => void }) {
+function sectionIcon(section: Section): IconProps["name"] {
+  if (section === "agents-md") return "review"
+  if (section === "providers") return "providers"
+  if (section === "agents") return "robot"
+  if (section === "skills") return "brain"
+  if (section === "plugins") return "code"
+  return "openclaw"
+}
+
+function SectionButton(props: { current: boolean; title: string; icon: IconProps["name"]; onClick: () => void }) {
   return (
     <button
       type="button"
@@ -531,14 +540,25 @@ function SectionButton(props: { current: boolean; title: string; onClick: () => 
       }}
       onClick={props.onClick}
     >
-      <div
-        class="text-15-medium transition-colors"
-        classList={{
-          "text-text-strong": !props.current,
-          "text-text-on-success-base": props.current,
-        }}
-      >
-        {props.title}
+      <div class="flex min-w-0 items-center gap-2.5">
+        <div
+          class="flex size-7 shrink-0 items-center justify-center rounded-lg border transition-colors"
+          classList={{
+            "border-border-weak-base bg-background-base text-text-weak": !props.current,
+            "border-border-success-base/60 bg-surface-success-base text-text-on-success-base": props.current,
+          }}
+        >
+          <Icon name={props.icon} size="small" />
+        </div>
+        <div
+          class="truncate text-15-medium transition-colors"
+          classList={{
+            "text-text-strong": !props.current,
+            "text-text-on-success-base": props.current,
+          }}
+        >
+          {props.title}
+        </div>
       </div>
       <div
         class="size-2 rounded-full transition-colors"
@@ -1443,6 +1463,8 @@ export default function ConfigPage() {
   const globalSDK = useGlobalSDK()
   const globalSync = useGlobalSync()
   const server = useServer()
+  const navigate = useNavigate()
+  const params = useParams()
   const [query] = useSearchParams<{ section?: string; pick?: string }>()
   const cache = new Map<string, string>()
   const pending = new Map<string, Promise<string>>()
@@ -1517,6 +1539,15 @@ export default function ConfigPage() {
   const space = createMemo(() => workspace() as ConfigWorkspace | undefined)
   const cfg = createMemo(() => globalSync.data.config)
   const t = language.t
+
+  function back() {
+    if (window.history.length > 1) {
+      window.history.back()
+      return
+    }
+    if (!params.dir) return
+    navigate(`/${params.dir}/session`)
+  }
   const clawsEnabled = createMemo(
     () => !!platform.getOpenclawConfig && !!platform.setOpenclawConfig && !!platform.testOpenclawConfig,
   )
@@ -2608,44 +2639,63 @@ export default function ConfigPage() {
         <aside class="shrink-0 border-b border-border-weak-base bg-surface-base/92 backdrop-blur xl:w-[200px] xl:border-r xl:border-b-0">
           <div class="flex h-full min-h-0 flex-col">
             <div class="border-b border-border-weak-base px-4 py-4">
-              <div class="text-18-medium text-text-strong">{t("config.title")}</div>
-              <div class="mt-1 text-12-regular text-text-weak">{t("config.description")}</div>
+              <div class="min-w-0">
+                <div class="text-18-medium text-text-strong">{t("config.title")}</div>
+                <div class="mt-1 text-12-regular text-text-weak">{t("config.description")}</div>
+              </div>
             </div>
             <div class="flex-1 overflow-y-auto p-3">
               <div class="flex flex-col">
                 <SectionButton
                   current={state.section === "agents-md"}
                   title="AGENTS.md"
+                  icon={sectionIcon("agents-md")}
                   onClick={() => jump("agents-md")}
                 />
                 <SectionButton
                   current={state.section === "providers"}
                   title={t("config.providers.title")}
+                  icon={sectionIcon("providers")}
                   onClick={() => jump("providers")}
                 />
                 <SectionButton
                   current={state.section === "agents"}
                   title={t("config.agents.title")}
+                  icon={sectionIcon("agents")}
                   onClick={() => jump("agents")}
                 />
                 {clawsEnabled() && (
                   <SectionButton
                     current={state.section === "claws"}
                     title={t("config.claws.title")}
+                    icon={sectionIcon("claws")}
                     onClick={() => jump("claws")}
                   />
                 )}
                 <SectionButton
                   current={state.section === "skills"}
                   title={t("config.skills.title")}
+                  icon={sectionIcon("skills")}
                   onClick={() => jump("skills")}
                 />
                 <SectionButton
                   current={state.section === "plugins"}
                   title={t("config.plugins.title")}
+                  icon={sectionIcon("plugins")}
                   onClick={() => jump("plugins")}
                 />
               </div>
+            </div>
+            <div class="border-t border-border-weak-base p-3">
+              <Button
+                variant="ghost"
+                class="h-10 w-full justify-start gap-2 rounded-lg border border-border-weak-base bg-background-base px-3 text-13-medium text-text-weak hover:border-border-strong hover:bg-surface-base-hover hover:text-text-strong active:border-border-base active:bg-surface-base-active"
+                onClick={back}
+                aria-label={language.t("common.goBack")}
+              >
+                <Icon name="arrow-left" size="small" />
+                {language.t("common.goBack")}
+              </Button>
             </div>
           </div>
         </aside>
