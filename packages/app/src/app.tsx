@@ -93,7 +93,7 @@ function ServerKey(props: ParentProps) {
 
 function LicenseKey(props: ParentProps) {
   const license = useLicense()
-  return <Show when={license.ready() && license.licensed()} fallback={<LicenseGate />}>{props.children}</Show>
+  return <Show when={import.meta.env.DEV || (license.ready() && license.licensed())} fallback={<LicenseGate />}>{props.children}</Show>
 }
 
 export function AppInterface(props: { defaultUrl?: string; children?: JSX.Element; isSidecar?: boolean }) {

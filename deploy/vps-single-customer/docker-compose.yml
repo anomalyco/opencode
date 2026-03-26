@@ -17,9 +17,8 @@ services:
     working_dir: /workspace
     command:
       - bun
-      - run
       - --preload
-      - "@opentui/solid/preload"
+      - /app/packages/opencode/node_modules/@opentui/solid/scripts/preload.ts
       - /app/packages/opencode/src/index.ts
       - serve
       - --hostname

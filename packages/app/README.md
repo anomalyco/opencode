@@ -17,7 +17,7 @@ In the project directory, you can run:
 ### `npm run dev` or `npm start`
 
 Runs the app in the development mode.<br>
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+Open [http://localhost:5174](http://localhost:5174) to view it in the browser.
 
 The page will reload if you make edits.<br>
 
@@ -70,7 +70,7 @@ bun run test:e2e:local -- --grep "settings"
 Environment options:
 
 - `PLAYWRIGHT_SERVER_HOST` / `PLAYWRIGHT_SERVER_PORT` (backend address, default: `localhost:4096`)
-- `PLAYWRIGHT_PORT` (Vite dev server port, default: `3000`)
+- `PLAYWRIGHT_PORT` (Vite dev server port, default: `5174`)
 - `PLAYWRIGHT_BASE_URL` (override base URL, default: `http://localhost:<PLAYWRIGHT_PORT>`)
 
 ## Deployment
