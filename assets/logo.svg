@@ -1,17 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 80" width="320" height="80" shape-rendering="crispEdges">
-  <defs>
-    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#00d4ff;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#0066ff;stop-opacity:1" />
-    </linearGradient>
-  </defs>
-
-  <!-- Icon background + gradient border -->
-  <rect x="4" y="4" width="72" height="72" rx="14" ry="14" fill="#f3ece6"/>
-  <rect x="4" y="4" width="72" height="72" rx="14" ry="14" fill="none" stroke="url(#grad)" stroke-width="3"/>
-
-  <!-- Jindo mascot pixel art — scaled 0.2769x to fit 72×72 icon, no clipPath needed -->
-  <g transform="translate(4,4) scale(0.2769)">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 120" width="420" height="120" shape-rendering="crispEdges">
+  <!--
+    Jindo mascot as logomark — scale 0.42 gives 10px per pixel cell,
+    large enough to read as a dog. No container box. Warm tones throughout.
+  -->
+  <g transform="translate(10,10) scale(0.42)">
     <!-- ROW 0 — ear tips -->
     <rect x="58"  y="10" width="24" height="24" fill="#c08055"/>
     <rect x="178" y="10" width="24" height="24" fill="#c08055"/>
@@ -92,6 +84,8 @@
     <rect x="154" y="226" width="24" height="24" fill="#c08055"/>
   </g>
 
-  <!-- Wordmark -->
-  <text x="92" y="55" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="36" font-weight="700" fill="#0f172a" letter-spacing="-1" shape-rendering="auto">Co<tspan fill="url(#grad)">Builder</tspan></text>
+  <!-- Wordmark — warm palette unified with mascot, no gradient -->
+  <text x="124" y="80" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="46" font-weight="700" letter-spacing="-1" shape-rendering="auto">
+    <tspan fill="#1a0a04">Co</tspan><tspan fill="#c08055">Builder</tspan>
+  </text>
 </svg>

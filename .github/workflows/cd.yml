@@ -3,6 +3,12 @@ name: CD
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "**.txt"
+      - "assets/**"
+      - "docs/**"
+      - ".github/*.md"
 
 permissions:
   contents: write
