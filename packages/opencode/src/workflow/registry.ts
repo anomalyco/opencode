@@ -2,11 +2,7 @@
 // Built-in alias registry — maps short names to canonical GitHub URLs.
 // User config (opencode.json) only stores installed paths, never alias mappings.
 
-export const REGISTRY: Record<string, string> = {
-  "gsd": "https://github.com/CobuilderLabs/gsd-workflow",
-  "ralph-loop": "https://github.com/CobuilderLabs/ralph-loop-workflow",
-  "gstack": "https://github.com/CobuilderLabs/gstack-workflow",
-}
+export const REGISTRY: Record<string, string> = {}
 
 /**
  * Given a source string (alias or full URL), return the canonical URL to clone.
