@@ -1,4 +1,4 @@
-import { getCursorPosition, setCursorPosition } from "./editor-dom"
+import { getCursorPosition, serialize, setCursorPosition } from "./editor-dom"
 
 const PAIRS: Record<string, string> = {
   "(": ")",
@@ -30,8 +30,7 @@ export function createPromptPair(input: PromptPairInput) {
     const editor = input.editor()
     if (!editor.contains(range.startContainer)) return null
 
-    // Get full text content of the editor (excluding zero-width spaces)
-    const full = editor.textContent?.replace(/\u200B/g, "") ?? ""
+    const full = serialize(editor)
     const pos = getCursorPosition(editor)
     return { before: full.slice(0, pos), after: full.slice(pos), pos, full }
   }

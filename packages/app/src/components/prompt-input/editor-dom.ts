@@ -32,6 +32,12 @@ export function getNodeLength(node: Node): number {
   return (node.textContent ?? "").replace(/\u200B/g, "").length
 }
 
+export function serialize(node: Node): string {
+  if (node.nodeType === Node.TEXT_NODE) return (node.textContent ?? "").replace(/\u200B/g, "")
+  if (node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "BR") return "\n"
+  return Array.from(node.childNodes).map(serialize).join("")
+}
+
 export function getTextLength(node: Node): number {
   if (node.nodeType === Node.TEXT_NODE) return (node.textContent ?? "").replace(/\u200B/g, "").length
   if (node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "BR") return 1
