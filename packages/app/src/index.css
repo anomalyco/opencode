@@ -2,8 +2,8 @@
 
 @layer components {
   [data-dock-surface="shell"][data-slot="prompt-shell"] {
-    border-top-left-radius: 30px;
-    border-top-right-radius: 30px;
+    border-top-left-radius: 28px;
+    border-top-right-radius: 28px;
   }
 
   [data-component="button"].prompt-pick,
