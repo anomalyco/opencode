@@ -12,26 +12,6 @@ function withInstance(directory: string, fn: () => Promise<any>) {
   return Instance.provide({ directory, fn })
 }
 
-async function ready() {
-  const { GlobalBus } = await import("../../src/bus/global")
-
-  return await new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      GlobalBus.off("event", on)
-      reject(new Error("timed out waiting for worktree.ready"))
-    }, 10_000)
-
-    function on(evt: { payload: { type: string } }) {
-      if (evt.payload.type !== Worktree.Event.Ready.type) return
-      clearTimeout(timer)
-      GlobalBus.off("event", on)
-      resolve()
-    }
-
-    GlobalBus.on("event", on)
-  })
-}
-
 describe("Worktree.reset", () => {
   afterEach(() => Instance.disposeAll())
 
@@ -43,9 +23,11 @@ describe("Worktree.reset", () => {
     await $`git add README.md`.cwd(root).quiet()
     await $`git commit -m "add readme"`.cwd(root).quiet()
 
-    const wait = ready()
-    const info = await withInstance(root, () => Worktree.create({ name: `reset-${Date.now().toString(36)}` }))
-    await wait
+    const info = await withInstance(root, async () => {
+      const info = await Worktree.makeWorktreeInfo(`reset-${Date.now().toString(36)}`)
+      await Worktree.createFromInfo(info)
+      return info
+    })
 
     const readme = path.join(info.directory, "README.md")
     const extra = path.join(info.directory, `extra-${Date.now().toString(36)}.txt`)
@@ -69,9 +51,11 @@ describe("Worktree.reset", () => {
     await $`git add README.md`.cwd(root).quiet()
     await $`git commit -m "add readme"`.cwd(root).quiet()
 
-    const wait = ready()
-    const info = await withInstance(root, () => Worktree.create({ name: `reset-fsmonitor-${Date.now().toString(36)}` }))
-    await wait
+    const info = await withInstance(root, async () => {
+      const info = await Worktree.makeWorktreeInfo(`reset-fsmonitor-${Date.now().toString(36)}`)
+      await Worktree.createFromInfo(info)
+      return info
+    })
 
     const readme = path.join(info.directory, "README.md")
     const extra = path.join(info.directory, `extra-${Date.now().toString(36)}.txt`)
