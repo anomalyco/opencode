@@ -21,7 +21,7 @@ import { Plugin } from "@/plugin"
 import { Skill } from "../skill"
 import { Effect, ServiceMap, Layer } from "effect"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRunPromise } from "@/effect/run-service"
+import { makeRuntime } from "@/effect/run-service"
 
 export namespace Agent {
   export const Info = z
@@ -148,7 +148,6 @@ export namespace Agent {
               permission: Permission.merge(
                 defaults,
                 Permission.fromConfig({
-                  todoread: "deny",
                   todowrite: "deny",
                 }),
                 user,
@@ -394,7 +393,7 @@ export namespace Agent {
 
   export const defaultLayer = layer.pipe(Layer.provide(Auth.layer))
 
-  const runPromise = makeRunPromise(Service, defaultLayer)
+  const { runPromise } = makeRuntime(Service, defaultLayer)
 
   export async function get(agent: string) {
     return runPromise((svc) => svc.get(agent))
