@@ -3,10 +3,14 @@ import { Tool } from "./tool"
 import TurndownService from "turndown"
 import DESCRIPTION from "./webfetch.txt"
 import { abortAfterAny } from "../util/abort"
+import { Readability } from "@mozilla/readability"
+import { parseHTML } from "linkedom"
 
 const MAX_RESPONSE_SIZE = 5 * 1024 * 1024 // 5MB
 const DEFAULT_TIMEOUT = 30 * 1000 // 30 seconds
 const MAX_TIMEOUT = 120 * 1000 // 2 minutes
+
+const cache = new Map<string, string>()
 
 export const WebFetchTool = Tool.define("webfetch", {
   description: DESCRIPTION,
@@ -23,6 +27,10 @@ export const WebFetchTool = Tool.define("webfetch", {
     if (!params.url.startsWith("http://") && !params.url.startsWith("https://")) {
       throw new Error("URL must start with http:// or https://")
     }
+
+    const cacheKey = `${ctx.sessionID}:${params.format}:${params.url}`
+    const cached = cache.get(cacheKey)
+    if (cached) return { output: cached, title: params.url, metadata: {} }
 
     await ctx.ask({
       permission: "webfetch",
@@ -113,51 +121,14 @@ export const WebFetchTool = Tool.define("webfetch", {
     const content = new TextDecoder().decode(arrayBuffer)
 
     // Handle content based on requested format and actual content type
-    switch (params.format) {
-      case "markdown":
-        if (contentType.includes("text/html")) {
-          const markdown = convertHTMLToMarkdown(content)
-          return {
-            output: markdown,
-            title,
-            metadata: {},
-          }
-        }
-        return {
-          output: content,
-          title,
-          metadata: {},
-        }
+    const isHtml = contentType.includes("text/html")
+    const output =
+      params.format === "markdown" && isHtml ? convertHTMLToMarkdown(content)
+      : params.format === "text" && isHtml ? await extractTextFromHTML(content)
+      : content
 
-      case "text":
-        if (contentType.includes("text/html")) {
-          const text = await extractTextFromHTML(content)
-          return {
-            output: text,
-            title,
-            metadata: {},
-          }
-        }
-        return {
-          output: content,
-          title,
-          metadata: {},
-        }
-
-      case "html":
-        return {
-          output: content,
-          title,
-          metadata: {},
-        }
-
-      default:
-        return {
-          output: content,
-          title,
-          metadata: {},
-        }
-    }
+    cache.set(cacheKey, output)
+    return { output, title, metadata: {} }
   },
 })
 
@@ -202,5 +173,10 @@ function convertHTMLToMarkdown(html: string): string {
     emDelimiter: "*",
   })
   turndownService.remove(["script", "style", "meta", "link"])
+  try {
+    const { document } = parseHTML(html)
+    const article = new Readability(document as unknown as Document).parse()
+    if (article?.content) return turndownService.turndown(article.content)
+  } catch {}
   return turndownService.turndown(html)
 }
