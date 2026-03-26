@@ -1589,6 +1589,27 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
         <Match when={props.part.tool === "skill"}>
           <Skill {...toolprops} />
         </Match>
+        <Match when={props.part.tool === "weave_describe"}>
+          <WeaveDescribe {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "weave_grep"}>
+          <WeaveGrep {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "weave_expand"}>
+          <WeaveExpand {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "dispatch_thread"}>
+          <DispatchThread {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "dispatch_threads"}>
+          <DispatchThreads {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "llm_map"}>
+          <LlmMap {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "agentic_map"}>
+          <AgenticMap {...toolprops} />
+        </Match>
         <Match when={true}>
           <GenericTool {...toolprops} />
         </Match>
@@ -1986,6 +2007,75 @@ function WebSearch(props: ToolProps<any>) {
   return (
     <InlineTool icon="◈" pending="Searching web..." complete={input.query} part={props.part}>
       Exa Web Search "{input.query}" <Show when={metadata.numResults}>({metadata.numResults} results)</Show>
+    </InlineTool>
+  )
+}
+
+function WeaveDescribe(props: ToolProps<any>) {
+  const m = props.metadata as any
+  return (
+    <InlineTool icon="◉" pending="Reading Weave state..." complete={true} part={props.part}>
+      Weave describe [snapshots={m.snapshots ?? 0}, summaries={m.summaries ?? 0}, episodes={m.episodes ?? 0}, dispatches={m.dispatches ?? 0}]
+    </InlineTool>
+  )
+}
+
+function WeaveGrep(props: ToolProps<any>) {
+  const m = props.metadata as any
+  const input = props.input as any
+  return (
+    <InlineTool icon="⌕" pending="Searching Weave memory..." complete={input.query} part={props.part}>
+      Weave grep "{input.query}" <Show when={m.matches !== undefined}>({m.matches} matches)</Show>
+    </InlineTool>
+  )
+}
+
+function WeaveExpand(props: ToolProps<any>) {
+  const m = props.metadata as any
+  const input = props.input as any
+  return (
+    <InlineTool icon="↳" pending="Expanding Weave message..." complete={input.weave_message_id} part={props.part}>
+      Weave expand {input.weave_message_id} <Show when={m.found !== undefined}>({m.found ? "found" : "missing"})</Show>
+    </InlineTool>
+  )
+}
+
+function DispatchThread(props: ToolProps<any>) {
+  const m = props.metadata as any
+  const input = props.input as any
+  return (
+    <InlineTool icon="⇢" pending="Dispatching thread..." complete={input.description} part={props.part}>
+      Dispatch thread "{input.description}" <Show when={m.threadID}>({m.threadID})</Show>
+    </InlineTool>
+  )
+}
+
+function DispatchThreads(props: ToolProps<any>) {
+  const m = props.metadata as any
+  const input = props.input as any
+  return (
+    <InlineTool icon="⇉" pending="Dispatching thread batch..." complete={true} part={props.part}>
+      Dispatch threads [{m.count ?? input.items?.length ?? 0} items]
+    </InlineTool>
+  )
+}
+
+function LlmMap(props: ToolProps<any>) {
+  const m = props.metadata as any
+  const input = props.input as any
+  return (
+    <InlineTool icon="▦" pending="Running LLM map..." complete={true} part={props.part}>
+      LLM map [{m.count ?? input.items?.length ?? 0} items]
+    </InlineTool>
+  )
+}
+
+function AgenticMap(props: ToolProps<any>) {
+  const m = props.metadata as any
+  const input = props.input as any
+  return (
+    <InlineTool icon="▩" pending="Running agentic map..." complete={true} part={props.part}>
+      Agentic map [{m.count ?? input.items?.length ?? 0} items]
     </InlineTool>
   )
 }
