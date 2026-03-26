@@ -14,6 +14,7 @@ import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@/filesystem"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
+import { Hash } from "@/util/hash"
 
 export namespace Project {
   const log = Log.create({ service: "project" })
@@ -162,6 +163,29 @@ export namespace Project {
         )
       })
 
+      const rootsFor = Effect.fnUntraced(function* (cwd: string) {
+        const result = yield* git(["rev-list", "--max-parents=0", "HEAD"], { cwd })
+        if (result.code !== 0) return [] as string[]
+        return result.text
+          .split("\n")
+          .filter(Boolean)
+          .map((x) => x.trim())
+          .toSorted()
+      })
+
+      const chainFor = Effect.fnUntraced(function* (cwd: string, supertree: string) {
+        const chain: { roots: string[]; rel: string }[] = []
+        let child = cwd
+        let dir: string | undefined = supertree
+        while (dir) {
+          chain.push({ roots: yield* rootsFor(dir), rel: pathSvc.relative(dir, child) })
+          const next: GitResult = yield* git(["rev-parse", "--show-superproject-working-tree"], { cwd: dir })
+          child = dir
+          dir = next.text.trim() ? resolveGitPath(child, next.text.trim()) : undefined
+        }
+        return chain
+      })
+
       const fromDirectory = Effect.fn("Project.fromDirectory")(function* (directory: string) {
         log.info("fromDirectory", { directory })
 
@@ -194,8 +218,15 @@ export namespace Project {
             }
           }
 
-          const commonDir = yield* git(["rev-parse", "--git-common-dir"], { cwd: sandbox })
-          if (commonDir.code !== 0) {
+          const [commonDir, gitDir, superDir] = yield* Effect.all(
+            [
+              git(["rev-parse", "--git-common-dir"], { cwd: sandbox }),
+              git(["rev-parse", "--git-dir"], { cwd: sandbox }),
+              git(["rev-parse", "--show-superproject-working-tree"], { cwd: sandbox }),
+            ],
+            { concurrency: 3 },
+          )
+          if (commonDir.code !== 0 || gitDir.code !== 0) {
             return {
               id: id ?? ProjectID.global,
               worktree: sandbox,
@@ -203,26 +234,26 @@ export namespace Project {
               vcs: fakeVcs,
             }
           }
-          const worktree = (() => {
-            const common = resolveGitPath(sandbox, commonDir.text.trim())
-            return common === sandbox ? sandbox : pathSvc.dirname(common)
-          })()
+          const common = resolveGitPath(sandbox, commonDir.text.trim())
+          const gitdir = resolveGitPath(sandbox, gitDir.text.trim())
+          const cache = common === gitdir ? gitdir : common
+          const worktree = common === gitdir ? sandbox : pathSvc.dirname(common)
+          const supertree = superDir.text.trim() ? resolveGitPath(sandbox, superDir.text.trim()) : undefined
 
-          if (id == null) {
-            id = yield* readCachedProjectId(pathSvc.join(worktree, ".git"))
+          if (id == null && !supertree) {
+            id = yield* readCachedProjectId(cache)
           }
 
           if (!id) {
-            const revList = yield* git(["rev-list", "--max-parents=0", "HEAD"], { cwd: sandbox })
-            const roots = revList.text
-              .split("\n")
-              .filter(Boolean)
-              .map((x) => x.trim())
-              .toSorted()
+            const roots = yield* rootsFor(sandbox)
 
-            id = roots[0] ? ProjectID.make(roots[0]) : undefined
+            if (roots[0] && supertree) {
+              id = ProjectID.make(Hash.fast(JSON.stringify({ roots, chain: yield* chainFor(sandbox, supertree) })))
+            }
+
+            if (!id) id = roots[0] ? ProjectID.make(roots[0]) : undefined
             if (id) {
-              yield* fsys.writeFileString(pathSvc.join(worktree, ".git", "opencode"), id).pipe(Effect.ignore)
+              yield* fsys.writeFileString(pathSvc.join(cache, "opencode"), id).pipe(Effect.ignore)
             }
           }
 

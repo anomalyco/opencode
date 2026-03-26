@@ -8,6 +8,7 @@ import { usePlatform } from "./platform"
 import { Project } from "@opencode-ai/sdk/v2"
 import { Persist, persisted, removePersisted } from "@/utils/persist"
 import { decode64 } from "@/utils/base64"
+import { sandboxRoots } from "@/utils/project"
 import { same } from "@/utils/same"
 import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
 import { createPathHelpers } from "./file/path"
@@ -425,14 +426,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     }
 
     const roots = createMemo(() => {
-      const map = new Map<string, string>()
-      for (const project of globalSync.data.project) {
-        const sandboxes = project.sandboxes ?? []
-        for (const sandbox of sandboxes) {
-          map.set(sandbox, project.worktree)
-        }
-      }
-      return map
+      return sandboxRoots(globalSync.data.project)
     })
 
     const rootFor = (directory: string) => {

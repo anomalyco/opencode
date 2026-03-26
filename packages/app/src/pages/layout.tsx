@@ -52,6 +52,7 @@ import { retry } from "@opencode-ai/util/retry"
 import { playSoundById } from "@/utils/sound"
 import { createAim } from "@/utils/aim"
 import { setNavigate } from "@/utils/notification-click"
+import { projectForDirectory } from "@/utils/project"
 import { Worktree as WorktreeState } from "@/utils/worktree"
 import { setSessionHandoff } from "@/pages/session/handoff"
 
@@ -569,11 +570,11 @@ export default function Layout(props: ParentProps) {
 
     const projects = layout.projects.list()
 
-    const sandbox = projects.find((p) => p.sandboxes?.some((item) => workspaceKey(item) === key))
-    if (sandbox) return sandbox
-
     const direct = projects.find((p) => workspaceKey(p.worktree) === key)
     if (direct) return direct
+
+    const sandbox = projects.find((p) => p.sandboxes?.some((item) => workspaceKey(item) === key))
+    if (sandbox) return sandbox
 
     const [child] = globalSync.child(directory, { bootstrap: false })
     const id = child.project
@@ -1231,12 +1232,7 @@ export default function Layout(props: ParentProps) {
 
   function projectRoot(directory: string) {
     const key = workspaceKey(directory)
-    const project = layout.projects
-      .list()
-      .find(
-        (item) =>
-          workspaceKey(item.worktree) === key || item.sandboxes?.some((sandbox) => workspaceKey(sandbox) === key),
-      )
+    const project = projectForDirectory(layout.projects.list(), directory, workspaceKey)
     if (project) return project.worktree
 
     const known = Object.entries(store.workspaceOrder).find(

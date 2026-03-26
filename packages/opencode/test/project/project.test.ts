@@ -242,6 +242,157 @@ describe("Project.fromDirectory with worktrees", () => {
   })
 })
 
+describe("Project.fromDirectory with submodules", () => {
+  test("should set worktree to the submodule root", async () => {
+    await using root = await tmpdir({ git: true })
+    await using sub = await tmpdir({ git: true })
+
+    const rel = path.join("deps", "sub")
+    const dir = path.join(root.path, rel)
+    await $`git -c protocol.file.allow=always submodule add ${sub.path} ${rel}`.cwd(root.path).quiet()
+
+    const { project, sandbox } = await Project.fromDirectory(dir)
+
+    expect(project.worktree).toBe(dir)
+    expect(sandbox).toBe(dir)
+  })
+
+  test("should keep two top-level submodules as separate projects", async () => {
+    await using root = await tmpdir({ git: true })
+    await using leftSrc = await tmpdir({ git: true })
+    await using rightSrc = await tmpdir({ git: true })
+
+    const leftRel = path.join("deps", "left")
+    const rightRel = path.join("deps", "right")
+    const left = path.join(root.path, leftRel)
+    const right = path.join(root.path, rightRel)
+
+    // Root repo with two submodules. Open both repos and ensure they stay distinct.
+    await $`git -c protocol.file.allow=always submodule add ${leftSrc.path} ${leftRel}`.cwd(root.path).quiet()
+    await $`git -c protocol.file.allow=always submodule add ${rightSrc.path} ${rightRel}`.cwd(root.path).quiet()
+
+    const a = await Project.fromDirectory(left)
+    const b = await Project.fromDirectory(right)
+
+    expect(a.project.worktree).toBe(left)
+    expect(b.project.worktree).toBe(right)
+    expect(a.project.id).not.toBe(b.project.id)
+  })
+
+  test("should keep sibling submodules as separate projects", async () => {
+    await using root = await tmpdir({ git: true })
+
+    const seed = root.path + "-seed"
+    const bare = root.path + "-bare"
+    const leftRel = path.join("deps", "left")
+    const rightRel = path.join("deps", "right")
+    const left = path.join(root.path, leftRel)
+    const right = path.join(root.path, rightRel)
+
+    try {
+      await $`git clone ${root.path} ${seed}`.quiet()
+      await $`git clone --bare ${seed} ${bare}`.quiet()
+
+      await $`git -c protocol.file.allow=always submodule add ${bare} ${leftRel}`.cwd(root.path).quiet()
+      await $`git -c protocol.file.allow=always submodule add ${bare} ${rightRel}`.cwd(root.path).quiet()
+
+      const a = await Project.fromDirectory(left)
+      const b = await Project.fromDirectory(right)
+
+      expect(a.project.worktree).toBe(left)
+      expect(b.project.worktree).toBe(right)
+      expect(a.project.id).not.toBe(b.project.id)
+    } finally {
+      await $`rm -rf ${seed} ${bare}`.quiet().nothrow()
+    }
+  })
+
+  test("should ignore stale cached ids for submodules", async () => {
+    await using root = await tmpdir({ git: true })
+
+    const seed = root.path + "-seed"
+    const bare = root.path + "-bare"
+    const leftRel = path.join("deps", "left")
+    const rightRel = path.join("deps", "right")
+    const left = path.join(root.path, leftRel)
+    const right = path.join(root.path, rightRel)
+
+    try {
+      await $`git clone ${root.path} ${seed}`.quiet()
+      await $`git clone --bare ${seed} ${bare}`.quiet()
+
+      await $`git -c protocol.file.allow=always submodule add ${bare} ${leftRel}`.cwd(root.path).quiet()
+      await $`git -c protocol.file.allow=always submodule add ${bare} ${rightRel}`.cwd(root.path).quiet()
+
+      const leftGit = (await $`git rev-parse --git-dir`.cwd(left).text()).trim()
+      const rightGit = (await $`git rev-parse --git-dir`.cwd(right).text()).trim()
+      await Bun.write(path.join(left, leftGit, "opencode"), "stale")
+      await Bun.write(path.join(right, rightGit, "opencode"), "stale")
+
+      const a = await Project.fromDirectory(left)
+      const b = await Project.fromDirectory(right)
+
+      expect(a.project.id).not.toBe("stale")
+      expect(b.project.id).not.toBe("stale")
+      expect(a.project.id).not.toBe(b.project.id)
+    } finally {
+      await $`rm -rf ${seed} ${bare}`.quiet().nothrow()
+    }
+  })
+
+  test("should keep repeated nested submodules as separate projects", async () => {
+    await using root = await tmpdir({ git: true })
+    await using parent = await tmpdir({ git: true })
+    await using grand = await tmpdir({ git: true })
+
+    const left = path.join(root.path, "deps", "left", "nested", "grand")
+    const right = path.join(root.path, "deps", "right", "nested", "grand")
+
+    await $`git -c protocol.file.allow=always submodule add ${grand.path} nested/grand`.cwd(parent.path).quiet()
+    await $`git add .gitmodules nested/grand && git commit -m add-nested`.cwd(parent.path).quiet()
+    await $`git -c protocol.file.allow=always submodule add ${parent.path} deps/left`.cwd(root.path).quiet()
+    await $`git -c protocol.file.allow=always submodule add ${parent.path} deps/right`.cwd(root.path).quiet()
+    await $`git -c protocol.file.allow=always submodule update --init --recursive`.cwd(root.path).quiet()
+
+    const a = await Project.fromDirectory(left)
+    const b = await Project.fromDirectory(right)
+
+    expect(a.project.worktree).toBe(left)
+    expect(b.project.worktree).toBe(right)
+    expect(a.project.id).not.toBe(b.project.id)
+  })
+
+  test("should keep separate submodules distinct inside a project submodule", async () => {
+    await using root = await tmpdir({ git: true })
+    await using parent = await tmpdir({ git: true })
+    await using leftSrc = await tmpdir({ git: true })
+    await using rightSrc = await tmpdir({ git: true })
+
+    const parentRel = path.join("deps", "parent")
+    const parentDir = path.join(root.path, parentRel)
+    const left = path.join(parentDir, "nested", "left")
+    const right = path.join(parentDir, "nested", "right")
+
+    await $`git -c protocol.file.allow=always submodule add ${leftSrc.path} nested/left`.cwd(parent.path).quiet()
+    await $`git -c protocol.file.allow=always submodule add ${rightSrc.path} nested/right`.cwd(parent.path).quiet()
+    await $`git add .gitmodules nested/left nested/right && git commit -m add-nested`.cwd(parent.path).quiet()
+
+    await $`git -c protocol.file.allow=always submodule add ${parent.path} ${parentRel}`.cwd(root.path).quiet()
+    await $`git -c protocol.file.allow=always submodule update --init --recursive`.cwd(parentDir).quiet()
+
+    const parentProject = await Project.fromDirectory(parentDir)
+    const a = await Project.fromDirectory(left)
+    const b = await Project.fromDirectory(right)
+
+    expect(parentProject.project.worktree).toBe(parentDir)
+    expect(a.project.worktree).toBe(left)
+    expect(b.project.worktree).toBe(right)
+    expect(parentProject.project.id).not.toBe(a.project.id)
+    expect(parentProject.project.id).not.toBe(b.project.id)
+    expect(a.project.id).not.toBe(b.project.id)
+  })
+})
+
 describe("Project.discover", () => {
   test("should discover favicon.png in root", async () => {
     await using tmp = await tmpdir({ git: true })

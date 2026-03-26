@@ -18,6 +18,7 @@ import { reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type { State, VcsCache } from "./types"
 import { cmp, normalizeAgentList, normalizeProviderList } from "./utils"
 import { formatServerError } from "@/utils/server-errors"
+import { projectForDirectory } from "@/utils/project"
 
 type GlobalStore = {
   ready: boolean
@@ -148,7 +149,7 @@ function groupBySession<T extends { id: string; sessionID: string }>(input: T[])
 }
 
 function projectID(directory: string, projects: Project[]) {
-  return projects.find((project) => project.worktree === directory || project.sandboxes?.includes(directory))?.id
+  return projectForDirectory(projects, directory)?.id
 }
 
 function mergeSession(setStore: SetStoreFunction<State>, session: Session) {
