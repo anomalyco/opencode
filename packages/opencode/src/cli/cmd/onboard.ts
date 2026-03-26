@@ -5,11 +5,22 @@ import { Global } from "../../global"
 import { Filesystem } from "../../util/filesystem"
 import { validateProviderURL } from "../../security"
 import { Config } from "../../config/config"
+import { Workflow } from "../../workflow"
+import { RECOMMENDED_TOOLS } from "../../mcp/recommended"
 import path from "path"
 
 const NINEROUTER_ID = "9router"
 const NINEROUTER_NAME = "9Router"
 const NINEROUTER_DEFAULT_URL = "http://localhost:20123/v1"
+
+const ALL_SECURITY_MODULES = [
+  { value: "ssrf", label: "SSRF protection", hint: "Blocks requests to internal IPs and cloud metadata endpoints" },
+  { value: "promptInjection", label: "Prompt injection detection", hint: "Scans input for override and jailbreak patterns" },
+  { value: "pathTraversal", label: "Path traversal prevention", hint: "Blocks ../ escapes and NUL byte injection" },
+  { value: "auditLog", label: "Audit log", hint: "SHA-256 chained append-only log of sensitive operations" },
+  { value: "rateLimiting", label: "Rate limiting", hint: "Token-bucket rate limiting in server mode" },
+  { value: "headers", label: "Security headers", hint: "CSP, X-Frame-Options, HSTS, and more" },
+] as const
 
 export const OnboardCommand = cmd({
   command: "onboard",
@@ -39,6 +50,12 @@ export const OnboardCommand = cmd({
     } else {
       await setupApiKeyProvider(providerChoice as string)
     }
+
+    await setupSecurity()
+    await setupWorkflows()
+    await setupRecommendedTools()
+
+    prompts.outro("All set! Run  cobuilder  to start coding.")
   },
 })
 
@@ -168,7 +185,6 @@ async function setup9Router() {
 
   prompts.log.success(`${chosenIds.length} model${chosenIds.length !== 1 ? "s" : ""} registered`)
   prompts.log.success(`Default model: ${NINEROUTER_ID}/${defaultModelId}`)
-  prompts.outro("All set! Run  opencode  to start coding.")
 }
 
 async function setupApiKeyProvider(providerId: string) {
@@ -204,5 +220,151 @@ async function setupApiKeyProvider(providerId: string) {
   await Filesystem.writeJson(authPath, existing, 0o600)
 
   prompts.log.success(`${name} connected`)
-  prompts.outro("All set! Run  opencode  to start coding.")
+}
+
+async function setupSecurity() {
+  prompts.log.step("Security modules — configure which are active")
+
+  const selected = await prompts.multiselect({
+    message: "Which security modules should be enabled?",
+    options: ALL_SECURITY_MODULES.map((m) => ({ ...m })),
+    initialValues: ALL_SECURITY_MODULES.map((m) => m.value),
+    required: false,
+  })
+
+  if (prompts.isCancel(selected)) return
+
+  const enabledSet = new Set(selected as string[])
+  const allKeys = ALL_SECURITY_MODULES.map((m) => m.value)
+
+  const disabled = allKeys.filter((k) => !enabledSet.has(k))
+
+  if (disabled.length === 0) {
+    prompts.log.info("All security modules enabled (default)")
+    return
+  }
+
+  // Only write entries for explicitly disabled modules — enabled is the default
+  const securityConfig: Record<string, { enabled: false }> = {}
+  for (const mod of disabled) {
+    securityConfig[mod] = { enabled: false }
+  }
+
+  const configPath = path.join(Global.Path.config, "opencode.json")
+  let existing: any = {}
+  try {
+    existing = await Filesystem.readJson(configPath)
+  } catch {}
+
+  await Filesystem.writeJson(configPath, {
+    ...existing,
+    security: { ...existing?.security, ...securityConfig },
+  })
+
+  prompts.log.success(
+    `${disabled.length} module${disabled.length !== 1 ? "s" : ""} disabled: ${disabled.join(", ")}`,
+  )
+}
+
+async function setupWorkflows() {
+  prompts.log.step("Workflow plugins — install methodology tooling (optional)")
+
+  const selected = await prompts.multiselect({
+    message: "Which workflow plugins would you like to install?",
+    options: [
+      { value: "gsd", label: "GSD", hint: "Get Shit Done — structured planning and execution methodology" },
+      { value: "ralph-loop", label: "Ralph Loop", hint: "Continuous iterative development with retrospectives" },
+      { value: "gstack", label: "GStack", hint: "Full-stack project scaffolding and architecture workflows" },
+    ],
+    initialValues: [],
+    required: false,
+  })
+
+  if (prompts.isCancel(selected) || (selected as string[]).length === 0) {
+    prompts.log.info("No workflow plugins installed — run  cobuilder workflow add <name>  anytime")
+    return
+  }
+
+  const toInstall = selected as string[]
+
+  for (const alias of toInstall) {
+    const spin = prompts.spinner()
+    spin.start(`Installing ${alias}…`)
+    try {
+      await Workflow.install(alias)
+      spin.stop(`${alias} installed`)
+    } catch (e) {
+      spin.stop(`${alias} failed`)
+      prompts.log.warn(e instanceof Error ? e.message : `Could not install ${alias} — try  cobuilder workflow add ${alias}  later`)
+    }
+  }
+}
+
+async function setupRecommendedTools() {
+  const configPath = path.join(Global.Path.config, "opencode.json")
+
+  // Read current config to skip already-installed tools
+  let existing: any = {}
+  try {
+    existing = await Filesystem.readJson(configPath)
+  } catch {}
+
+  const alreadyConfigured = new Set(Object.keys(existing?.mcp ?? {}))
+  const available = RECOMMENDED_TOOLS.filter((t) => !alreadyConfigured.has(t.id))
+
+  if (available.length === 0) {
+    prompts.log.info("Recommended tools — all already installed")
+    return
+  }
+
+  prompts.log.step("Recommended tools — extend CoBuilder with community extensions")
+
+  const selected = await prompts.multiselect({
+    message: "Which recommended tools would you like to install?",
+    options: available.map((t) => ({
+      value: t.id,
+      label: `${t.label}  ${t.source}`,
+      hint: t.hint,
+    })),
+    initialValues: [],
+    required: false,
+  })
+
+  if (prompts.isCancel(selected) || (selected as string[]).length === 0) {
+    prompts.log.info("No tools installed — you can add them anytime via  cobuilder mcp")
+    return
+  }
+
+  const toInstall = RECOMMENDED_TOOLS.filter((t) => (selected as string[]).includes(t.id))
+
+  for (const tool of toInstall) {
+    const spin = prompts.spinner()
+    spin.start(`Installing ${tool.label}…`)
+    try {
+      if (tool.type === "mcp" && tool.mcpConfig) {
+        // Write MCP config to opencode.json
+        let cfg: any = {}
+        try { cfg = await Filesystem.readJson(configPath) } catch {}
+        await Filesystem.writeJson(configPath, {
+          ...cfg,
+          mcp: { ...cfg?.mcp, [tool.id]: tool.mcpConfig },
+        })
+        spin.stop(`${tool.label} configured`)
+      } else if (tool.type === "cli" && tool.installCommands) {
+        // Run install commands sequentially
+        for (const cmd of tool.installCommands) {
+          const parts = cmd.split(" ")
+          const proc = Bun.spawn(parts, { stdout: "pipe", stderr: "pipe" })
+          const code = await proc.exited
+          if (code !== 0) throw new Error(`Command failed: ${cmd}`)
+        }
+        spin.stop(`${tool.label} installed`)
+      }
+    } catch (e) {
+      spin.stop(`${tool.label} failed`)
+      prompts.log.warn(
+        `Could not install ${tool.label} automatically.\n  Manual install: ${tool.manualInstall}\n  Source: ${tool.source}`,
+      )
+    }
+  }
 }
