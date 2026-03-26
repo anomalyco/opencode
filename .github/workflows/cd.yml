@@ -115,7 +115,17 @@ jobs:
             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
           "
 
-      - name: Build binaries
+      # Create release BEFORE build so build.ts can upload assets to it via gh release upload
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.next_version.outputs.tag }}" \
+            --title "CoBuilder ${{ steps.next_version.outputs.display }}" \
+            --notes-file /tmp/release-notes.md \
+            --latest
+
+      - name: Build and upload binaries
         env:
           OPENCODE_RELEASE: "1"
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -123,18 +133,3 @@ jobs:
         run: |
           cd packages/opencode
           bun run build
-
-      - name: Create GitHub release with binaries
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release create "${{ steps.next_version.outputs.tag }}" \
-            --title "CoBuilder ${{ steps.next_version.outputs.display }}" \
-            --notes-file /tmp/release-notes.md \
-            --latest \
-            packages/opencode/dist/*.tar.gz \
-            packages/opencode/dist/*.zip 2>/dev/null || \
-          gh release create "${{ steps.next_version.outputs.tag }}" \
-            --title "CoBuilder ${{ steps.next_version.outputs.display }}" \
-            --notes-file /tmp/release-notes.md \
-            --latest
