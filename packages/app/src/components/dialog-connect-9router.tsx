@@ -6,9 +6,7 @@ import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useMutation } from "@tanstack/solid-query"
-import { batch } from "solid-js"
 import { createStore } from "solid-js/store"
-import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { DialogSelectProvider } from "./dialog-select-provider"
@@ -30,16 +28,11 @@ const DEFAULT_MODELS: Record<string, { name: string }> = {
 export function DialogConnect9Router(props: Props) {
   const dialog = useDialog()
   const globalSync = useGlobalSync()
-  const globalSDK = useGlobalSDK()
   const language = useLanguage()
 
   const [form, setForm] = createStore({
     baseURL: DEFAULT_BASE_URL,
-    apiKey: "",
-    err: {
-      baseURL: undefined as string | undefined,
-      apiKey: undefined as string | undefined,
-    },
+    err: { baseURL: undefined as string | undefined },
   })
 
   const goBack = () => {
@@ -53,32 +46,26 @@ export function DialogConnect9Router(props: Props) {
   const saveMutation = useMutation(() => ({
     mutationFn: async () => {
       const baseURL = form.baseURL.trim()
-      const apiKey = form.apiKey.trim()
 
-      let valid = true
       if (!baseURL || !/^https?:\/\//.test(baseURL)) {
         setForm("err", "baseURL", "A valid http/https URL is required")
-        valid = false
+        return null
       }
-      if (!apiKey) {
-        setForm("err", "apiKey", "API key is required")
-        valid = false
-      }
-      if (!valid) return null
 
       const disabledProviders = globalSync.data.config.disabled_providers ?? []
       const nextDisabled = disabledProviders.filter((id) => id !== NINEROUTER_ID)
 
-      await globalSDK.client.auth.set({
-        providerID: NINEROUTER_ID,
-        auth: { type: "api", key: apiKey },
-      })
       await globalSync.updateConfig({
         provider: {
           [NINEROUTER_ID]: {
             npm: "@ai-sdk/openai-compatible",
             name: NINEROUTER_NAME,
-            options: { baseURL },
+            options: {
+              baseURL,
+              // openai-compatible SDK requires a non-empty apiKey even for
+              // local servers that don't enforce auth
+              apiKey: "9router",
+            },
             models: DEFAULT_MODELS,
           },
         },
@@ -105,10 +92,7 @@ export function DialogConnect9Router(props: Props) {
   const save = (e: SubmitEvent) => {
     e.preventDefault()
     if (saveMutation.isPending) return
-    batch(() => {
-      setForm("err", "baseURL", undefined)
-      setForm("err", "apiKey", undefined)
-    })
+    setForm("err", "baseURL", undefined)
     saveMutation.mutate()
   }
 
@@ -133,38 +117,22 @@ export function DialogConnect9Router(props: Props) {
 
         <form onSubmit={save} class="px-2.5 pb-6 flex flex-col gap-6">
           <p class="text-14-regular text-text-base">
-            9Router is a local OpenAI-compatible proxy for routing AI requests.
-            Enter your 9Router URL and API key below.
+            9Router is a local OpenAI-compatible proxy. Enter the URL of your running 9Router container.
           </p>
 
-          <div class="flex flex-col gap-4">
-            <TextField
-              autofocus
-              label="Base URL"
-              placeholder={DEFAULT_BASE_URL}
-              description="Your local 9Router endpoint (default: http://localhost:20123/v1)"
-              value={form.baseURL}
-              onChange={(v) => {
-                setForm("baseURL", v)
-                setForm("err", "baseURL", undefined)
-              }}
-              validationState={form.err.baseURL ? "invalid" : undefined}
-              error={form.err.baseURL}
-            />
-            <TextField
-              label="API Key"
-              placeholder="sk-..."
-              description="Your 9Router API key. Find it in your 9Router configuration."
-              type="password"
-              value={form.apiKey}
-              onChange={(v) => {
-                setForm("apiKey", v)
-                setForm("err", "apiKey", undefined)
-              }}
-              validationState={form.err.apiKey ? "invalid" : undefined}
-              error={form.err.apiKey}
-            />
-          </div>
+          <TextField
+            autofocus
+            label="9Router URL"
+            placeholder={DEFAULT_BASE_URL}
+            description="The base URL of your 9Router container (e.g. http://localhost:20123/v1)"
+            value={form.baseURL}
+            onChange={(v) => {
+              setForm("baseURL", v)
+              setForm("err", "baseURL", undefined)
+            }}
+            validationState={form.err.baseURL ? "invalid" : undefined}
+            error={form.err.baseURL}
+          />
 
           <p class="text-12-regular text-text-weak">
             Pre-configured models: Claude Sonnet 4.6, Claude Opus 4.6, Claude Haiku 4.5
