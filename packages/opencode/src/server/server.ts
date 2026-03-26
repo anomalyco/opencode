@@ -95,7 +95,7 @@ export namespace Server {
         if (c.req.method === "OPTIONS") return next()
         const password = Flag.OPENCODE_SERVER_PASSWORD
         if (!password) return next()
-        const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
+        const username = Flag.OPENCODE_SERVER_USERNAME ?? "cobuilder"
         return basicAuth({ username, password })(c, next)
       })
       .use(async (c, next) => {
