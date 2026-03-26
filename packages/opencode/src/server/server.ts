@@ -160,6 +160,60 @@ export namespace Server {
           }),
         )
         .route("/global", GlobalRoutes())
+        .get(
+          "/fs/list",
+          describeRoute({
+            summary: "List filesystem directories",
+            description: "List directories at any absolute path. Not scoped to a project.",
+            operationId: "fs.list",
+            responses: {
+              200: {
+                description: "Directory entries",
+                content: {
+                  "application/json": {
+                    schema: resolver(
+                      z
+                        .object({
+                          name: z.string(),
+                          path: z.string(),
+                          type: z.enum(["directory", "file"]),
+                        })
+                        .array(),
+                    ),
+                  },
+                },
+              },
+            },
+          }),
+          validator(
+            "query",
+            z.object({
+              path: z.string().optional(),
+            }),
+          ),
+          async (c) => {
+            const fs = await import("fs/promises")
+            const os = await import("os")
+            const requested = c.req.valid("query").path || os.homedir()
+            const resolved = path.resolve(requested)
+            try {
+              const stat = await fs.stat(resolved)
+              if (!stat.isDirectory()) return c.json([], 200)
+              const entries = await fs.readdir(resolved, { withFileTypes: true })
+              const result = entries
+                .filter((e) => e.isDirectory())
+                .map((e) => ({
+                  name: e.name,
+                  path: path.join(resolved, e.name),
+                  type: "directory" as const,
+                }))
+                .sort((a, b) => a.name.localeCompare(b.name))
+              return c.json(result)
+            } catch {
+              return c.json([])
+            }
+          },
+        )
         .put(
           "/auth/:providerID",
           describeRoute({
@@ -235,15 +289,23 @@ export namespace Server {
           const checked = await validateWorkspace(requested)
           let directory = checked.valid ? checked.directory : requested
 
-          if (!checked.valid && requested !== process.cwd()) {
-            const fallback = await validateWorkspace(process.cwd())
-            if (fallback.valid) {
-              log.warn("invalid workspace, falling back to process cwd", {
-                requested,
-                reason: checked.reason,
-                fallback: fallback.directory,
-              })
-              directory = fallback.directory
+          if (!checked.valid) {
+            // Check if the requested path is a valid existing directory (non-git)
+            const fs = await import("fs/promises")
+            const resolved = await fs.realpath(path.resolve(requested)).catch(() => undefined)
+            const stat = resolved ? await fs.stat(resolved).catch(() => undefined) : undefined
+            if (resolved && stat?.isDirectory()) {
+              directory = resolved
+            } else if (requested !== process.cwd()) {
+              const fallback = await validateWorkspace(process.cwd())
+              if (fallback.valid) {
+                log.warn("invalid workspace, falling back to process cwd", {
+                  requested,
+                  reason: checked.reason,
+                  fallback: fallback.directory,
+                })
+                directory = fallback.directory
+              }
             }
           }
           return Instance.provide({

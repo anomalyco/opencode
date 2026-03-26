@@ -8,6 +8,7 @@ import { createMemo, createResource, createSignal } from "solid-js"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
+import { usePlatform } from "@/context/platform"
 import type { ListRef } from "@opencode-ai/ui/list"
 
 interface DialogSelectDirectoryProps {
@@ -26,6 +27,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   const sdk = useGlobalSDK()
   const dialog = useDialog()
   const language = useLanguage()
+  const platform = usePlatform()
 
   const [filter, setFilter] = createSignal("")
 
@@ -171,18 +173,21 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     const existing = cache.get(key)
     if (existing) return existing
 
-    const request = sdk.client.file
-      .list({ directory: key, path: "" })
-      .then((x) => x.data ?? [])
-      .catch(() => [])
-      .then((nodes) =>
-        nodes
-          .filter((n) => n.type === "directory")
-          .map((n) => ({
-            name: n.name,
-            absolute: trimTrailing(normalizeDriveRoot(n.absolute)),
-          })),
-      )
+    const request = (async () => {
+      try {
+        const res = await (platform.fetch ?? fetch)(`${sdk.url}/fs/list?path=${encodeURIComponent(key)}`, {
+          cache: "no-store",
+        })
+        if (!res.ok) return []
+        const entries = (await res.json()) as Array<{ name: string; path: string; type: string }>
+        return entries.map((e) => ({
+          name: e.name,
+          absolute: trimTrailing(normalizeDriveRoot(e.path)),
+        }))
+      } catch {
+        return []
+      }
+    })()
 
     cache.set(key, request)
     return request
